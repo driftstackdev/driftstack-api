@@ -19,13 +19,19 @@
 //
 // V-1006 — SCHEDULING IS THE DESIGN, NOT THE STATE. ADR-006 designs a
 // monthly cron to call this on the 1st at 02:00 UTC, and the sentence
-// here used to assert that as though it happens. It does not: nothing
-// constructs AuditArchiveService, `archiveAll()` below takes NO
-// arguments (so "archiveAll(now)" never described a real call either),
-// and `audit_archive_runs` has ZERO rows. `tick-services-are-wired`
-// lists this service in NOT_WIRED_PENDING_DECISION for exactly that
-// reason, and `db/audit-archive-repo.ts` carries the honest qualifier
-// this file omitted — two files knew while this one claimed otherwise.
+// here used to assert that as though it happens. It does not: `archiveAll()`
+// below takes NO arguments (so "archiveAll(now)" never described a real call
+// either) and nothing invokes it — that much still holds.
+//
+// ⛔ V-2021 — the rest of this paragraph went stale and kept being cited. It
+// asserted the service had no constructor anywhere, and cited
+// `tick-services-are-wired` as recording it among the deliberately-unwired for
+// that reason.
+// V-1591 wired it: bootstrap constructs the service and schedules
+// archiveTable('session_events'). Both guards named here carry an arm that
+// FORCES a newly-wired service off their list, so each citation began refuting
+// the sentence that made it the day V-1591 landed. The guards corrected
+// themselves; the prose citing them could not.
 //
 // The consequence is not a doc nit: the five tables ADR-006 covers have
 // NO retention bound today, and the privacy policy's "session metadata

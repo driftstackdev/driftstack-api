@@ -155,6 +155,27 @@ describe('W551.B /docs/adr/ADR-006-audit-log-retention-export.md content parity'
     expect(body).toMatch(/## Decision authority/);
   });
 
+  // V-2021 — the 2026-08-19 reality check went half-stale and nothing held the
+  // correction. V-1591 wired AuditArchiveService for session_events, so "nothing
+  // constructs it" and "no recurring job claims it" stopped being true — while the
+  // note above still says them, and the arms above still pin them, deliberately:
+  // the convention preserves the original and adds a dated note beside it.
+  //
+  // ⛔ This is a DEBT TRACKER, not a freeze. The 2026-08-27 note distinguishes the
+  // half of §3 that still holds (the monthly archiveAll() cadence has never run,
+  // and archiveAll() is invoked nowhere in src) from the half that does not (the
+  // service IS constructed in bootstrap, a recurring job DOES claim it). Without
+  // this arm a tidy-up could delete the correction and leave only the stale
+  // bullets, which is the state a diligence reader would meet cold.
+  it('CRITICAL the 2026-08-27 note recording that V-1591 partly wired the archiver is still present, and still distinguishes the cadence from the wiring', () => {
+    expect(body).toMatch(/### ⚠️ 2026-08-27 update \(V-2021\)/);
+    expect(body).toContain('V-1591 wired the service — for one table, by one method.');
+    // The half that still holds must keep being stated, or the note reads as
+    // "ADR-006 is implemented", which is a different and equally wrong claim.
+    expect(body).toContain("§3's HEADLINE still holds");
+    expect(body).toContain('four-of-five-audit-tables-are-still-not-archived');
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

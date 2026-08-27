@@ -13790,3 +13790,59 @@ size pin — so the reciprocal drift was already covered and now has a second wi
 nil only while some invariant holds — and that invariant is usually a relationship between two constants
 in different files.** Writing the relationship down is worth less than asserting it, and the assertion is
 generally three lines.
+
+## V-2021 — the guards corrected themselves; the prose that cited them could not (2026-08-27)
+
+2026-08-27. V-2020's lesson turned into a sweep: **53 recorded "cannot fire / unreachable / inert"
+conclusions across both logs**, each resting on an invariant nobody asserted. Working them found one
+already fully closed and one whose premise had quietly become false.
+
+**V-1653 — nothing to do, and better covered than I expected.** Its trap (a `clientReferenceId` branch that
+would take precedence over the derived customer id, with no cross-check) is still unreachable — all five
+call sites pass `null`, verified — **and it is tested against real Postgres**:
+`db-stripe-webhook-attribution-drizzle` drives the unwired branch's precedence, and pins the seam
+explicitly — _"a NON-UUID client_reference_id THROWS against Postgres, where the in-memory double returns
+null"_ — with a further arm freezing that disagreement deliberately.
+
+### V-1524(c): the premise fired, and three documents did not notice
+
+That entry parked an item as unreachable because "nothing constructs `AuditArchiveService`". **V-1591 wired
+it.** `bootstrap.ts` constructs the service and `registerSessionEventsArchiveJob` +
+`enqueueNextSessionEventsArchive` claim it on a recurring chain.
+
+⭐ **Precision matters more than the finding here, and the first framing overstated it.** The job takes
+`Pick<AuditArchiveService, 'archiveTable'>` and calls `archiveTable('session_events', …)`. **Post-condition:
+`archiveAll()` is invoked nowhere in `apps/server/src`** — so ADR-006 §3's HEADLINE, "a cadence that has
+never run", still holds exactly. What went stale is the evidence offered for it, in three places:
+
+```
+ADR-006 top note   "nothing constructs it: bootstrap never calls it"
+ADR-006 §3         "not constructed in bootstrap.ts, no recurring job claims it,
+                    and every-service-is-wired-or-recorded-as-dormant lists it as dormant"
+services/audit-archive.ts   the same claim + "tick-services-are-wired lists this service
+                            in NOT_WIRED_PENDING_DECISION for exactly that reason"
+db/audit-archive-repo.ts    "it has never run: no scheduler was ever added"
+```
+
+⛔⛔ **Every one of those cites a guard that now says the opposite — and each guard carries an arm that
+FORCED its own correction.** `every-service-is-wired-or-recorded-as-dormant`: _"a recorded-dormant service
+that becomes wired must leave the list"_. `tick-services-are-wired-invariant` records the removal in its own
+comment — _"V-1591 — was THREE. AuditArchiveService is wired now"_. The top note even closes _"this note and
+that guard move together"_. **The guard moved. The note did not.** The executable half of the record
+self-corrected on the day it changed; the prose half had no mechanism and drifted for days, on a privacy
+retention promise, where the reader who meets it cold is a diligence or counsel review.
+
+**Corrected per the repo's contradicted-ADR convention** — the 2026-08-19 note is PRESERVED and a dated
+2026-08-27 note added beside it, so the record shows what was true when written; `Status` untouched, because
+`docs/adr/README.md` requires a superseding ADR for `Superseded by`. Both source headers corrected. A
+debt-tracker arm pins the new note and, deliberately, pins that it still states the half that holds —
+without that, a future reader could take "V-1591 wired it" for "ADR-006 is implemented", which is a
+different wrong answer. Mutation-proved: deleting the note reds exactly that arm; restored byte-identical.
+11 files / 109 tests green across the ADR, both sources, and the four wiring guards.
+
+⛔ **My first retraction quoted the phrase it retracted, and my own post-condition caught it.** Grepping
+`apps/server/src` for the retracted clause returned two hits — both inside the corrections I had just
+written. That is precisely why the standing rule is _retraction paraphrases, sentinel quotes_: a quoted
+retraction leaves the false sentence findable and indistinguishable from a live claim. Reworded to
+paraphrase; the post-condition then returns zero. **The ADR is the deliberate exception** — that convention
+preserves the original text, so a grep finding it there is the convention working, not a leak.

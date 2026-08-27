@@ -6,11 +6,17 @@
 // column per `tableName` argument. This header said "four" until
 // 2026-08-17 — session_events was added by W438 and the count was not.
 //
-// Lifecycle as DESIGNED (ADR-006 §3) — note that it has never run: no
-// scheduler was ever added, nothing constructs AuditArchiveService, and
-// V-865 marks the ADR section accordingly. The sentence here used to say
-// the scheduler was simply "not in this commit", which read as pending
-// when it was permanent. When wired, a monthly cron-driven service
+// Lifecycle as DESIGNED (ADR-006 §3). The monthly archiveAll() cadence has
+// still never run — nothing calls archiveAll() anywhere in src.
+//
+// ⛔ V-2021 — this header used to add a clause asserting the service had no
+// constructor anywhere, and that clause is stale: V-1591 constructs it in bootstrap.ts and schedules
+// archiveTable('session_events') on a recurring chain. ONE of the five tables,
+// by a different method than the cadence below. The four legal/financial tables
+// stay unscheduled deliberately. The design is unimplemented AS DESIGNED; the
+// evidence this header offered for that had stopped being true.
+//
+// When the full cadence is wired, a monthly cron-driven service
 // calls AuditArchiveService.archiveAll(), which
 // iterates AUDIT_TABLES and calls archiveTable(tableName) per table.
 // Each archiveTable() call:

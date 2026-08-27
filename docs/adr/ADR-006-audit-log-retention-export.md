@@ -24,6 +24,45 @@ parts is live and the other two are built and unrun; see the reality check below
 > same export above promises data subjects their full audit history. Choosing one
 > narrows the other. `tick-services-are-wired-invariant` carries the same finding
 > against the code (V-1049), so this note and that guard move together.
+>
+> ### ⚠️ 2026-08-27 update (V-2021) — the retention half is now PARTLY enforced
+>
+> The note above is correct on its FIRST bullet and stale on the other two. It is left
+> in place rather than edited, per the contradicted-ADR convention: the record shows what
+> was true when it was written, and this says what changed.
+>
+> **V-1591 wired the service — for one table, by one method.** `bootstrap.ts` constructs
+> `new AuditArchiveService({...})` and `registerSessionEventsArchiveJob` +
+> `enqueueNextSessionEventsArchive` claim it on a recurring chain. So "nothing constructs it",
+> "bootstrap never calls it" and "no recurring job claims it" are no longer true.
+>
+> ⚠️ **Which half of §3 is stale, precisely.** The job takes
+> `Pick<AuditArchiveService, 'archiveTable'>` and calls `archiveTable('session_events', …)`, so
+> §3's HEADLINE still holds: the monthly `archiveAll()` cadence this ADR designs has still
+> never run, and `archiveAll()` is still invoked by nothing. What is stale is the supporting
+> sentence underneath it — the service IS constructed in `bootstrap.ts`, a recurring job DOES
+> claim it, and the dormant list no longer names it. Saying "the ADR is wrong" would overstate
+> it; the decision is unimplemented as designed, and the evidence offered for that is not.
+>
+> - **`session_events` — ARCHIVED.** Scheduled deliberately as the only one of the five with
+>   genuinely unbounded growth: its cascade from `sessions` never fires, because sessions are
+>   marked-destroyed rather than row-deleted, and the wired retention scrub does not touch it.
+>   Guarded by `session-events-are-actually-archived`.
+> - **The other four — STILL NOT ARCHIVED**, and that is a decision, not an oversight:
+>   `admin_audit_log`, `processed_stripe_events`, `legal_acceptances` and `webhook_deliveries`
+>   are legal and financial records that grow slowly, and deleting them has consequences well
+>   past disk usage. Guarded by `four-of-five-audit-tables-are-still-not-archived`.
+> - The service is registered UNCONDITIONALLY; when R2 is unconfigured the service is null and
+>   the tick reports that, rather than an unset env var silently switching off a published
+>   retention promise.
+>
+> ⛔ **The stale half was self-announcing and still went unnoticed for days.** The note above
+> ends "this note and that guard move together", naming `tick-services-are-wired-invariant`,
+> and §3 cites `every-service-is-wired-or-recorded-as-dormant` as listing the service dormant
+> "for exactly this reason". That guard carries an arm requiring a recorded-dormant service to
+> LEAVE the list once it becomes wired — so the moment V-1591 landed, the citation began
+> refuting the sentence that made it. **A document that names the guard it depends on has told
+> you how to check it; nothing checks it on the document's behalf.**
 > **Tier:** Architectural (workflow + storage decision; surfaces for review per Decision authority)
 > **Related V-entry:** V-095 (this proposal). Touches `admin_audit_log` (D-025), `processed_stripe_events` (V-080), `legal_acceptances` (V-046), `webhook_deliveries` (Phase 5).
 
