@@ -19051,3 +19051,50 @@ own mutation proof rather than being folded into a ratchet validation.
 one machine, so this establishes concentration on that test and its workload, not a rate, and not
 which contended resource produces the stall — I refuted I/O and did not replace it with a measured
 cause. Ratchets unchanged at 3062/3238.
+
+## V-1934 — the cause was never in the suite: the machine was at load 24 (2026-08-27)
+
+V-1927 through V-1933 chased a timeout through five entries and never named a mechanism. It was
+measurable the whole time, one command away, and my pre-flight does not look at it.
+
+**The confirming run took 678.57s** against the usual ~380s — 1.8× slower — and timed out on the
+same test again. That is a suite-wide slowdown, not a test-specific one, so the question was never
+"what is wrong with that test".
+
+```
+load averages: 16.36 26.63 24.12     8 users, two accounts
+```
+
+Sampled over 40s it held at 12–25, with a 15-minute average of ~23, so it is sustained rather than
+transient. The top consumers are all peer work: a WebKit fork process at **83%**, three Python
+capture processes at **67–72%** each, and — in this very repository — `node
+.../driftstack-api/node_modules/.bin/tsc` at **71%**, which is A2's W-12 typechecking.
+
+### What this explains, and what it retires
+
+| entry  | claim                                                            | status                                                                                                                            |
+| ------ | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| V-1928 | no test exceeds 17.7% of its own ceiling                         | **stands** — measured on a quiet machine, which is exactly why the margins looked huge                                            |
+| V-1929 | 1 red in 5 runs; failures land "wherever the scheduler squeezes" | rate stands; the unlocalised reading was already corrected in V-1933                                                              |
+| V-1933 | concentrated on the suite's heaviest reader                      | **stands, and now has its cause** — 3053 files / 26.3 MB makes it the most exposed member under saturation, not the defective one |
+
+So the timeouts are neither a suite defect nor a test defect. They are the expected consequence of
+running a 3238-file suite on a machine already saturated by other agents' work, and the same test
+fails each time because it is the largest reader in it.
+
+⛔ **The procedural gap is mine.** My pre-flight checks three things — no second `vitest`, no dirty
+tree, no writes in the last 90 seconds — and the standing order explains why each matters. **None of
+them looks at machine load.** A gate launched at load 24 is expected to flake, so a red under those
+conditions carries no information about the commit, and re-running it to "confirm" is worse than
+useless: it burns ten minutes and adds to the contention. `uptime` before `verify-suite` costs
+nothing and would have ended this thread five entries ago.
+
+**The ratchet is validated regardless**, which is what the run existed for: **3238 collected**
+against `EXPECTED_TEST_FILES_ALL = 3238`, with 3237 files passing and the single failure being the
+known offender.
+
+**Boundary:** load average and the process table are a snapshot of this machine over roughly one
+minute, so this identifies the contention and its owners at 07:18 and does not establish that every
+earlier red in this thread had the same load behind it — V-1928's durations run, by contrast, was
+demonstrably taken quiet, since nothing in it exceeded 17.7%. Ratchets unchanged at 3062/3238; no
+source change.
