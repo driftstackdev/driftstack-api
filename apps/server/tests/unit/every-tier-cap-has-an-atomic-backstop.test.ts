@@ -212,4 +212,32 @@ describe('every tier cap has an atomic backstop', () => {
       'countByAccount is the LIVE-only population the pre-check and /v1/account/me report',
     ).toContain('notDeleted');
   });
+  // ⛔ V-1990 — the pairing above is derived from `*LimitFor` HELPERS, and that is
+  // a fraction of the capped surface. Measured 2026-08-27: exactly two helpers
+  // exist, so the guard watches FOUR files — while `routes/account-me.ts` (proxy
+  // cap, reads PROXIES_PER_TIER directly) and `services/webhooks.ts` (flat
+  // MAX_ENDPOINTS_PER_ACCOUNT = 10) enforce real per-account caps and are watched
+  // by none of it. Both are correct today; neither is covered.
+  //
+  // This arm covers them from the other end. Every conditional-insert method the
+  // repos expose must be REACHED by something outside db/. If a caller drifts back
+  // to a naive count-then-insert, its backstop goes orphaned and this fails — even
+  // for a resource whose limit is not a tier helper, which the arm above cannot see.
+  it('CRITICAL every conditional-insert backstop still has a caller. A resource whose cap is a flat constant is invisible to the helper-derived pairing above, so an orphaned enforcement method is the only trace left when its caller reverts to reading a count and hoping', () => {
+    const enforcement = enforcementMethods();
+    expect(enforcement.length, 'enforcement methods found').toBeGreaterThanOrEqual(3);
+
+    const callers = sourceFiles().filter((f) => !f.includes('/db/'));
+    expect(callers.length, 'non-db source files scanned').toBeGreaterThan(20);
+
+    const orphaned = enforcement
+      .filter(
+        (m) => !callers.some((f) => new RegExp(`\\.${m}\\s*\\(`).test(readFileSync(f, 'utf8'))),
+      )
+      .sort();
+    expect(
+      orphaned,
+      'enforcement method(s) no caller reaches — its cap is now enforced by a read-then-act check, or not at all:',
+    ).toEqual([]);
+  });
 });

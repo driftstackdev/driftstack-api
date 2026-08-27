@@ -12140,3 +12140,54 @@ launch gate refuses for real customers — the same class of call as `profile_co
 and not a sweep's to make. Recorded here for the owner; `docs/internal/OPEN-ITEMS.md` does not exist in
 this tree. No guard added either: pinning the current numerator would freeze a choice that has not been
 made.
+
+## V-1990 — the cap-population sweep came back clean, and the guard watching it covers four files (2026-08-27)
+
+Generalising V-1988's axis: for every capped resource, **which population does the enforcement count,
+and is that population right?** Enumerated the enforcement methods by naming convention
+(`*IfUnder*` / `*WithLimit` / `*Atomic`) across `apps/server/src/db` — 9 methods — and read each one's
+count.
+
+| resource        | counts                     | verdict                                                                        |
+| --------------- | -------------------------- | ------------------------------------------------------------------------------ |
+| sessions        | `isNull(destroyedAt)`      | ✓ a destroyed session must not hold a slot                                     |
+| agent-sessions  | `status = 'active'`        | ✓                                                                              |
+| webhooks        | `active = true`            | ✓ a disabled endpoint delivers nothing                                         |
+| profiles ×2     | every row (LIVE + TRASHED) | ✓ deliberate anti-abuse, pinned in V-1988                                      |
+| account-proxies | every row                  | ✓ the table has **no** soft-delete column, so every row is live                |
+| api-keys ×2     | —                          | not cap gates; atomic revoke/rotate that match the name                        |
+| team-members    | —                          | not a cap gate; a compare-and-swap on the invite. **No team seat cap exists.** |
+
+Widened past the naming convention with a count-then-compare **shape** sweep (112 candidates across
+`apps/server/src`) to catch caps enforced by hand. The three that were per-account row/spend caps all
+resolved sound: the second `account-proxies` site is the **in-memory test double**; the monthly import
+cap is a soft anti-churn ceiling (2× the tier limit) behind which the hard row cap still applies
+atomically; and the bundled-LLM monthly spend cap is a **documented** read-then-act soft cap whose
+comment names the race and bounds it with a per-account in-flight limiter — "the overshoot past the cap
+is bounded by `limit`, not unbounded".
+
+⛔ **So no cap is mis-counted. What the sweep did find is how little of that surface the guard sees.**
+`every-tier-cap-has-an-atomic-backstop` derives its subjects from `export function *LimitFor(`
+declarations. Replicating that derivation: **exactly 2 helpers exist, so it watches 4 files.**
+`routes/account-me.ts` (proxy cap, reads `PROXIES_PER_TIER` directly) and `services/webhooks.ts`
+(flat `MAX_ENDPOINTS_PER_ACCOUNT = 10`) enforce real per-account caps correctly and are watched by
+none of it.
+
+A new arm covers them from the other end: every conditional-insert backstop must be **reached** by a
+caller outside `db/`. A resource whose cap is a flat constant is invisible to the helper-derived
+pairing, so an orphaned enforcement method is the only trace left when its caller drifts back to
+reading a count and hoping. **Mutation-proved two-sided**: pointing `services/webhooks.ts` at a naive
+insert reddens the new arm while **all four pre-existing arms pass** — which is the blind spot,
+demonstrated rather than argued. Source restored byte-identical.
+
+⛔ **Three of my own detectors failed inside this one sweep, each caught by demanding a known
+positive.** The first missed four methods because it matched drizzle's `count()` helper and they use
+`sql\`count(\*)::int\``. The second returned **0** count-then-compare candidates because its alternation
+listed `LIMIT|Limit|CAP|Cap|MAX|Max`and the code says`>= limit`, lowercase. The third still returned
+0 after that fix, because `\b`before`>=`can never match — there is no word boundary between a space
+and`>`. The control (`if (current >= limit)`exists in`services/profiles.ts`) is what exposed all
+three; without it each zero would have read as "no unguarded caps".
+
+Boundary: enforcement enumerated by naming convention in `apps/server/src/db` plus a shape sweep over
+all of `apps/server/src`; caps outside both — enforced in a route with no count and no convention —
+would still be missed.
