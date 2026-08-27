@@ -19249,3 +19249,87 @@ the hard-delete scope must survive. A guard from me would have duplicated that.
 and tests; it does not evaluate whether leaving avatars in place is the right posture, which is D-2
 and not mine, and it does not check the R2 bucket's actual ACL — "public" here is what `lib/config.ts`
 and `lib/r2.ts` call it, not something I queried. No source change; no ratchet movement.
+
+## V-1938 — the summary cap the file declared and four of five branches ignored (2026-08-27)
+
+`services/agent-intent-result.ts` maps a harness result into the customer-facing `IntentResult`.
+Zero mentions in this log; ranked by size against coverage, it was the purest unaudited surface on
+the list. Its header states the property exactly: _"Result summaries and failure reasons cross two
+customer-data boundaries: the message response and the encrypted agent transcript … Harness output
+is internal, but it can reflect a final redirect URL, WebDriver diagnostic, or page-controlled text.
+Bound it before redaction."_
+
+`safeResultText` implements that — bound to 4096, `redactText`, bound to `RESULT_SUMMARY_MAX_LENGTH
+= 512`, all surrogate-safe. **It was called on two paths out of six.**
+
+| summary branch                              | sanitised |
+| ------------------------------------------- | --------- |
+| `navigated to ${url}` (harness output)      | yes       |
+| harness `errorMessage`                      | yes       |
+| `tapped ${intent.selector}`                 | **no**    |
+| `typed into ${intent.selector}`             | **no**    |
+| `pressed ${intent.value}`                   | **no**    |
+| `condition met: ${intent.selector} visible` | **no**    |
+
+**The unsanitised four are not harness output, which is why they read as safe** — they interpolate
+the intent the server dispatched. That is the right distinction, and it does not hold: `AgentIntent`
+declares `selector: z.string().optional()` and `value: z.string().optional()` with **`.max(` appearing
+zero times in the whole file**, and the only transitive bound is the dispatch schema's
+`HARNESS_SCRIPT_MAX_CHARS = 262_144`. A selector is customer- and decomposer-supplied, so a summary
+of **512× the cap this module declares** could reach the message response and the durable encrypted
+transcript, carrying whatever the selector carried.
+
+Verified nothing closes it downstream: `IntentResult.summary` is a bare `z.string()` in api-types
+(the `.max(4096)` nearby is a different, session-level summary), and the transcript writer does not
+touch it.
+
+**The file's own tests state the intent and confirm the gap.** One arm redacts credentials from a
+returned redirect URL "before customer and transcript boundaries"; another caps an over-long harness
+message. The selector arm asserts only that the selector is _included_.
+
+Fixed at the **boundary**, not per producer: `intentResultToCustomer` now wraps `summarize(...)` in
+`safeResultText`. One site covers every branch including ones added later — the same fail-safe
+direction this file already argues for in `REPLAY_SAFE_INTENT_KINDS`, where listing the safe kinds
+means a new kind is effectful until someone says otherwise. It is idempotent for the navigate path
+that already sanitises internally.
+
+⛔ **My first proving fixture asserted nothing.** I wrote a fake token, `ds_live_sk_0123456789abcdef`,
+and the arm failed — not because the fix was wrong but because the redactor's body class is
+`[A-Za-z0-9]{12,}`, no underscores, so `sk_` immediately after the prefix breaks the run. A
+made-up secret shape tests the fixture, not the redactor. Corrected to a real minted shape, the arm
+asserts both halves — the cap and the `[redacted]` substitution. Mutation-proven: reverting the
+source kills exactly this arm and no other.
+
+**Boundary:** this bounds and redacts the SUMMARY string; it does not bound `AgentIntent.selector`
+itself, which remains `z.string()` in api-types and is still admitted at 262_144 by the dispatch
+schema — narrowing that is a published-contract change and not this fix. `it(` 18 → 19 in an
+existing file, so no ratchet moves.
+
+### ⛔ Two self-inflicted failures while landing this, both caught by post-conditions
+
+**1. My own cleanup trap reverted the fix after I reapplied it.** The mutation proof ran
+`trap 'cp <snapshot> <source>' EXIT` so the pre-fix source would be restored however the command
+ended. Inside that same command I proved the arm red, then reapplied the fix — and **the trap fired
+at command exit and overwrote it**. The test then passed (19/19, measured before exit), and the
+source silently went back to unfixed. A trap that guarantees a clean state also guarantees it
+against the state you meant to keep; the reapply has to happen in a later command, or the trap has
+to be cleared first.
+
+**2. The commit captured four of a peer's files.** I staged three explicit paths, and between the
+`git add` and the `git commit` A2 staged their own in-progress updater work; `git commit` takes the
+index, not my pathspec, so it swept in `apps/gui-client/**` — which my standing rules forbid
+outright. Undone with `git reset --soft HEAD~1` (nothing was pushed), their four files unstaged with
+`git restore --staged apps/gui-client`, and their content verified **byte-identical** by SHA-256
+before and after, with their `M/M/M/??` working-tree status restored.
+
+Both were caught the same way: a **post-condition on the artefact**, not a derivation from the
+action. `grep -c 'safeResultText(summarize'` returned **0** after a commit I believed had landed the
+fix, and `git show --stat` listed six files where I had staged three. Neither "the edit succeeded"
+nor "the commit succeeded" would have revealed either. The orphaned commit `9023c4fc8` confirms it:
+it carries the new test and **not** the source change, so the arm proving the fix was committed
+against code without it — a state the pre-commit hook cannot see, because it runs typecheck and
+lint, not the suite.
+
+**The rule that generalises: `git add <paths>` does not scope `git commit`.** With a peer writing in
+the same tree, the index is shared mutable state between those two commands. Verify
+`git diff --cached --name-only` immediately before committing, and read `git show --stat` after.

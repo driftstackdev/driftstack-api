@@ -87,6 +87,44 @@ describe('intentResultToCustomer — success summaries', () => {
     ).toBe('scrolled');
   });
 
+  it('bounds and redacts a selector-derived summary at the customer + transcript boundary', () => {
+    // The dispatch schema admits a selector up to HARNESS_SCRIPT_MAX_CHARS
+    // (262_144), which is 512x the summary cap this module declares, and the
+    // summary crosses both the message response and the encrypted transcript.
+    // Only the navigate branch sanitised; tap/type/press/wait interpolated the
+    // raw selector.
+    const huge = 'x'.repeat(5000);
+    const tapped = intentResultToCustomer(
+      { kind: 'interact', action: 'tap', selector: huge },
+      ok(),
+    ) as { summary: string };
+    expect(tapped.summary.length).toBeLessThanOrEqual(512);
+    expect(tapped.summary.startsWith('tapped ')).toBe(true);
+
+    // Redaction, not only length: a selector can carry credential-shaped text
+    // (an attribute value matched on), and it reaches the durable transcript.
+    const secret = intentResultToCustomer(
+      { kind: 'interact', action: 'type', selector: "input[value='ds_live_0123456789abcdef']" },
+      ok(),
+    ) as { summary: string };
+    // The redactor's body class is [A-Za-z0-9]{12,} — no underscores — so the
+    // token has to be a real minted shape for this to assert anything.
+    expect(secret.summary).not.toContain('ds_live_0123456789abcdef');
+    expect(secret.summary).toContain('[redacted]');
+
+    // Every other selector-bearing branch goes through the same boundary.
+    const waited = intentResultToCustomer(
+      { kind: 'wait', condition: 'selector_visible', selector: huge },
+      ok(),
+    ) as { summary: string };
+    expect(waited.summary.length).toBeLessThanOrEqual(512);
+    const pressed = intentResultToCustomer(
+      { kind: 'interact', action: 'press', value: huge },
+      ok(),
+    ) as { summary: string };
+    expect(pressed.summary.length).toBeLessThanOrEqual(512);
+  });
+
   it('wait:selector_visible names the selector; capture variants are descriptive', () => {
     expect(
       (

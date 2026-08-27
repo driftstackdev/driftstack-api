@@ -84,7 +84,19 @@ export function intentResultToCustomer(
   parsed: ParsedIntentResult,
 ): IntentResult {
   if (parsed.success) {
-    return { kind: 'success', intent, summary: summarize(intent, parsed.outputData) };
+    // Sanitise at the BOUNDARY, not in each producer. `summarize` interpolates
+    // `intent.selector` / `intent.value` — customer- and decomposer-supplied, and
+    // bounded only by the dispatch schema's HARNESS_SCRIPT_MAX_CHARS (262_144),
+    // which is 512x the RESULT_SUMMARY_MAX_LENGTH this file declares. Only the
+    // navigate path passed through safeResultText, so a selector reached the
+    // message response and the encrypted transcript unbounded and unredacted.
+    // Applying it here covers every branch, including ones added later, and is
+    // idempotent for the navigate path that already sanitises internally.
+    return {
+      kind: 'success',
+      intent,
+      summary: safeResultText(summarize(intent, parsed.outputData), RESULT_SUMMARY_MAX_LENGTH),
+    };
   }
   return {
     kind: 'failure',
