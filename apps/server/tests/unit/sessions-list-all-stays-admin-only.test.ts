@@ -16,9 +16,18 @@
 // `rate-limit-overrides.listAll` via a behavioural refusal arm. This closes an
 // inconsistency, not an absence, and copies the better of the two instruments.
 //
-// The route gates on the same scope (`admin-sessions.ts` preHandler) and that
-// layer is covered by `route-auth-coverage-invariant`, so this was never a live
-// exposure — it is the second line that nothing verified.
+// The route gates on the same scope (`admin-sessions.ts:70,104` —
+// `requireScope('driftstack_internal_admin')`), so this was never a live exposure
+// — it is the second line that nothing verified.
+//
+// ⛔ CORRECTED 2026-08-26 (V-1855): this originally credited
+// `route-auth-coverage-invariant` for the route layer, and that guard is the wrong
+// one to cite. It derives every route file and asserts each route HAS structural
+// caller authority — presence of a gate, not WHICH scope — so it would stay green
+// if this route's `driftstack_internal_admin` became `account_owner`. The guard
+// that actually pins the specific scope is `admin-scope-refusal-coverage`, whose
+// `EXPECTED_STAFF_ROUTES` lists `GET /v1/admin/sessions` and drives a real refusal
+// for a non-staff caller. The conclusion above was right and the reason was not.
 
 import { describe, expect, it } from 'vitest';
 import type { ApiKeyScope } from '@driftstack/api-types';

@@ -15656,3 +15656,46 @@ regression fails, and `expect(skipped).toBeGreaterThan(0)` keeps the skip counte
 explicit marker. A guard that states its scope further down, or states it in prose I did not enumerate,
 is missed — this is a lower bound on declared blind spots, not the set of blind spots, and the
 undeclared ones are by construction invisible to it.
+
+## V-1855 — "verify the delegation", a check class that found a wrong claim of mine first
+
+2026-08-26. The aim-map (V-1854) produced a new check, and the first thing it caught was my own.
+
+⭐⭐ **THE CHECK CLASS.** Guards here routinely do a STRUCTURAL half and delegate CORRECTNESS
+elsewhere — three of the 46 say so outright: `every-tier-cap-has-an-atomic-backstop` ("does not verify
+the locking is CORRECT... the db-\* integration suites exercise that against a real Postgres"),
+`every-lifecycle-email-is-send-once` ("proves a claim is REACHED, not that the claim is correct...
+`db-stripe-event-idempotency-drizzle` drives the real ON CONFLICT clause"), and
+`sessions-list-all-stays-admin-only`. **A broken delegation is invisible from BOTH sides: the
+delegator says it is covered, and the target does not know it is supposed to cover it.**
+
+⭐ THAT ARCHITECTURE ALSO EXPLAINS TODAY'S RESULTS. Multiple structural guards delegate correctness to
+the `db-*` suites, so that layer carries the correctness burden for several guards at once — and it is
+the layer excluded from the coverage gate. All nine arms I landed today are in `src/db/**`. The
+guards' own delegations point at the layer where the gaps were.
+
+**Verified the delegations that name a target.** `every-lifecycle-email-is-send-once` →
+`db-stripe-event-idempotency-drizzle:106` asserts `expect(second.inserted, 'the replay must lose, not
+raise').toBe(false)` — delivered, exactly as claimed.
+
+⛔⛔ **AND MINE DID NOT.** `sessions-list-all-stays-admin-only` (mine, earlier today) said the route
+layer "is covered by `route-auth-coverage-invariant`". That guard derives every route file and asserts
+each route **HAS structural caller authority** — presence of a gate, not WHICH scope. It would stay
+green if `admin-sessions.ts`'s `requireScope('driftstack_internal_admin')` became `account_owner`.
+
+The guard that actually pins the specific scope is `admin-scope-refusal-coverage`, whose
+`EXPECTED_STAFF_ROUTES` lists `GET /v1/admin/sessions` and drives a real refusal for a non-staff
+caller. ⭐ **The conclusion was right and the reason was wrong** — "never a live exposure" holds, but
+on the strength of a different guard than the one I credited. Corrected in place, where the next reader
+trips over it, rather than only here. `it(` unchanged at 2, tsc 0, 2/2 green, and nothing pins that
+file's text.
+
+⭐ WHY THIS ONE MATTERS MORE THAN ITS SIZE. It is the wrong-claim class again — structurally not
+self-detectable, published in a header a future reader would trust, and caught only because I went back
+to verify my own restatement rather than the claim I was checking. That is the seventh wrong claim of
+mine today and the first I caught unprompted by anything except a method built for the purpose.
+
+⚠️ BOUNDARY: the harvest found 18 delegation-shaped phrases in guard headers and only 3 name a
+checkable target; the rest are prose my regex over-caught ("proven in production", "left to discover").
+So this is 3 delegations verified, not a sweep of delegations — and an unstated delegation, where a
+guard silently assumes another covers something, is invisible to it entirely.
