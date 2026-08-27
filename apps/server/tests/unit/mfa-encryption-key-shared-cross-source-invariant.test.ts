@@ -7,7 +7,7 @@
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -27,9 +27,16 @@ function read(p: string): string {
 }
 
 /** Every `*_AAD_PURPOSE` constant declared anywhere under apps/server/src, keyed
- *  by `<file>:<constant>`. Derived rather than listed because the drift worth
+ *  by `<relative path>:<constant>`. Derived rather than listed because the drift worth
  *  catching is an ADDITION — a new consumer of the shared key reusing a label
- *  that already means something else. */
+ *  that already means something else.
+ *
+ *  Keyed by the path RELATIVE TO SRC_ROOT, never the basename: 18 of the 342 files under
+ *  apps/server/src share a basename with another (`auth.ts` x3, plus the routes/X.ts +
+ *  services/X.ts pairing used throughout). Two same-named files each declaring the bare
+ *  `AAD_PURPOSE` collapse to ONE map entry, and the collision arm then passes by losing the
+ *  evidence — planting lib/ + services/ copies that share one label was reported 9/9 GREEN
+ *  under the old basename key. */
 function aadPurposes(): Map<string, string> {
   const out = new Map<string, string>();
   const walk = (dir: string): void => {
@@ -41,7 +48,7 @@ function aadPurposes(): Map<string, string> {
       }
       if (!entry.name.endsWith('.ts')) continue;
       for (const m of read(p).matchAll(/const\s+([A-Z0-9_]*AAD_PURPOSE)\s*=\s*'([^']*)'/g)) {
-        out.set(`${entry.name}:${m[1] ?? ''}`, m[2] ?? '');
+        out.set(`${relative(SRC_ROOT, p)}:${m[1] ?? ''}`, m[2] ?? '');
       }
     }
   };
@@ -177,7 +184,7 @@ describe('MFA_ENCRYPTION_KEY shared 4-class cross-source invariant', () => {
     ).toBeGreaterThan(9);
   });
 
-  it('CRITICAL no two AAD purpose labels in apps/server/src are equal. Keyed by file+constant, not constant name: account-proxy declares its label under the BARE name `AAD_PURPOSE`, so a census keyed by name alone would drop a second bare declaration and pass by losing the evidence. A duplicate is the one drift the per-module text pins structurally cannot see — each pin asserts its own literal in isolation and has no view of the other eleven.', () => {
+  it('CRITICAL no two AAD purpose labels in apps/server/src are equal. Keyed by relative PATH + constant — not by constant name, and not by basename: account-proxy declares its label under the BARE name `AAD_PURPOSE`, and 18 basenames under apps/server/src are non-unique, so a census keyed by either alone drops a second bare declaration and passes by losing the evidence. A duplicate is the one drift the per-module text pins structurally cannot see — each pin asserts its own literal in isolation and has no view of the other eleven.', () => {
     const byValue = new Map<string, string[]>();
     for (const [where, value] of purposes) {
       byValue.set(value, [...(byValue.get(value) ?? []), where]);

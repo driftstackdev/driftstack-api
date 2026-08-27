@@ -13976,3 +13976,71 @@ the flag was unpinned; it was pinned twice, in files I had not opened, and mutat
 **No code changed.** Recorded because "eight hand-copied wrappers on the audit path" is exactly the shape
 that usually yields, and this time the copies agree and every one is held — worth knowing before someone
 spends another sweep on it.
+
+## V-2025 — the AAD-purpose census was keyed by basename, and 18 basenames are not unique (2026-08-27)
+
+Started from the cross-file duplicate-name census (V-2024's boundary: 342 tracked `.ts` files under
+`apps/server/src`, comment lines stripped) and picked `buildAdditionalAuthenticatedData`, 6 copies, as the
+sharpest candidate — an AAD binds a ciphertext to its context, so disagreeing copies mean decrypt failures
+or context confusion.
+
+**The premise was wrong, and reading refuted it.** The 6 are not copies of one function. They are six
+per-domain builders that share a name, each binding a different tuple:
+
+```
+lib/byok-anthropic-encryption.ts            [PURPOSE, 2, accountId]
+lib/platform-secret-value-encryption.ts     [PURPOSE, 2, name, ROLE]
+lib/webhook-secret-encryption.ts            [PURPOSE, 2, accountId, endpointId, ROLE]
+lib/gui-control-key-encryption.ts           [PURPOSE, accountId, sessionId]      + field-width validation
+services/agent-session-transcript-…ts       [PURPOSE, accountId, sessionId]      + field-width validation
+services/recipe-payload-encryption.ts       [purpose, 2, accountId, recipeId, slot]
+```
+
+Divergence is the design. Two conventions coexist — nine bind the version as its own element, two spell it
+into the label (`…v2`) — and `gui-control-key` uses colon separators where the rest use dots. Both bind the
+version; the split is stylistic, not a defect.
+
+⛔⛔ **My census printed a verdict over an empty set.** `git grep -hoE "AAD_PURPOSE\s*=\s*'[^']+'"` returned
+**0 rows**, and my template still printed `COLLISIONS: none — every domain has its own purpose ✓`. **`git
+grep -E` is POSIX ERE, where `\s` is not a class**; the same pattern with a literal space returns 12. A
+zero population is the one input on which a distinctness check cannot fail, and I wrote the conclusion into
+the print template rather than deriving it. Re-measured with a Python walker, proved against an injected
+duplicate: **12 `*AAD_PURPOSE` constants under `apps/server/src`, 12 distinct values, no collisions.**
+
+⛔⛔ **The guard I was about to write already exists, and anticipated that exact error.**
+`mfa-encryption-key-shared-cross-source-invariant.test.ts` carries `aadPurposes()` — the same walk — plus a
+non-vacuity arm whose stated job is that _"the distinctness arm below cannot fail on an empty map"_, a
+distinctness arm, and an arm pinning that the four modules sharing `MFA_ENCRYPTION_KEY` carry four
+different labels, because byok-anthropic and mfa-totp build identically shaped `[purpose, 2, accountId]`
+AAD from the same key — there the label is the entire cryptographic distance between a stored Anthropic
+API key and that account's TOTP secret. Found by opening prior art before writing, not after.
+
+### The real finding: the census key
+
+The walker keyed its map `` `${entry.name}:${constant}` `` — **basename**, not path. Measured: **18 of the
+342 files under `apps/server/src` share a basename with another** (`auth.ts` x3, and the `routes/X.ts` +
+`services/X.ts` pairing this repo uses throughout). Two same-named files each declaring the bare
+`AAD_PURPOSE` collapse to one entry, and the collision disappears with the evidence.
+
+The arm's own title had already reasoned one level down — _"a census keyed by name alone would drop a
+second bare declaration and pass by losing the evidence"_ — and a basename is not unique either.
+
+**Mutation-proved both directions** by planting `lib/zz-aad-probe.ts` + `services/zz-aad-probe.ts`, same
+basename, same constant name, same label:
+
+| census key                      | result against the plant                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `entry.name` (before)           | **9/9 GREEN** — blind                                                                |
+| `relative(SRC_ROOT, p)` (after) | reds, naming `lib/zz-aad-probe.ts:AAD_PURPOSE, services/zz-aad-probe.ts:AAD_PURPOSE` |
+
+Re-proved against the final prettier-formatted bytes; plants removed; 9/9 green on the clean tree; `it(`
+count 9 at HEAD and 9 in the tree.
+
+⚠️ The non-vacuity arm is a floor (`> 9`) against a population of 12, so a silent drop of one entry would
+not have redded it either. Left as-is — the floor follows the repo's just-under-measured-N convention, and
+the path key removes the mechanism that would drop an entry.
+
+⛔ **An aborted edit script printed like a success.** My first patch asserted on JSDoc line-wrapping I had
+typed from memory rather than derived; it died on the first `assert`, edited nothing — and the `prettier`
+and `9/9 passed` lines that followed printed exactly as they would have on success. The assert is the only
+reason that was visible. Same shape as V-1976/V-1986/V-1988.
