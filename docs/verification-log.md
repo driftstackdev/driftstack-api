@@ -18825,3 +18825,48 @@ look _closer_ to its ceiling than it is, never further, so it cannot be conceali
 test — but it does mean the 58 non-default ceilings are a floor on that count, not an exact census.
 The mechanism behind the stalls is still unidentified; this rules out thin margins and child
 processes, and does not replace them with a cause.
+
+## V-1929 — the prior art I should have read before concluding, and a second flake class (2026-08-27)
+
+V-1928 ended with the mechanism "unidentified". A prior-art check afterwards found
+`feedback_flaky_tests_are_defects_not_noise`, written from this repo, which says two things I had
+not applied:
+
+1. **"when a gate is red in a sweep and green on re-run, the re-run proves nothing."** That is
+   exactly the inference V-1927 rested on. I did better than a bare re-run — I read the captured
+   log and found the timeouts — but I then ran the two tests **in isolation**, and the same note
+   records that these "pass 5/5 in isolation" so isolation proves nothing either.
+2. The reproduction method is **repeated whole-suite runs**, not single files.
+
+It also asserts that every load-dependent flake here traced to a **real test defect — a timing
+assumption**. That is a stronger claim than "scheduling variance", and worth testing rather than
+waving away.
+
+**Tested. There is no timing assumption, and its absence is the diagnosis.** Both timing-out files
+are purely synchronous scanners: `setTimeout`, `waitFor`, `Date.now`, `sleep` and `async` all count
+**zero** in each. A test that awaits nothing cannot hold a timing assumption; it can only miss a
+deadline by being denied CPU. So this is a **second class**, not a counterexample to the first —
+and the two have opposite remedies, which is why telling them apart matters.
+
+**Three causes refuted, which is what leaves contention standing rather than assumed:**
+
+| candidate                | verdict                                                                                                                                                |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| a timing assumption      | no timing construct in either file                                                                                                                     |
+| child processes          | `execFileSync`/`execSync`/`spawnSync` zero in both — though such files ARE disproportionately slow, 7 of the top-20 ratios against 135 of 32 137 tests |
+| my own five added guards | the scanner selects only files defining `function X(re: RegExp): boolean`; none of mine does, and they cost **5 reads of ~3236**                       |
+
+**And the rate V-1928 said it could not give.** Three further full runs at the same commit, by the
+documented method: all three green, zero timeouts, no failing files. Counting every `verify-suite`
+execution at `18e579f24`: **1 red in 5**. A sixth full pass (the JSON-reporter run) was also clean.
+
+**What stands, and what does not.** V-1928's measurement stands — nothing exceeds 17.7% of its own
+ceiling, so quiet-machine profiling cannot find these, and raising a timeout is not the remedy when
+the margin is already 5.6×. What does not stand is stopping at "unidentified" before reading the
+repo's own note on the subject; the note did not solve it, but it named the reproduction method and
+a rival hypothesis worth eliminating, and both were a single grep away.
+
+**Boundary:** six full-suite executions on one otherwise-idle machine at one commit, so 1-in-5 is an
+observed frequency on this hardware and not a CI rate; and the refutations rule three candidates out
+without establishing which contended resource — CPU, page cache, or worker scheduling — actually
+starves the scanners.
