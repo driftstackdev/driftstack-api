@@ -20097,3 +20097,38 @@ a mechanism only as an example.
 
 No action. Recording it because a conditional deferral is the easiest kind of item to lose: it is neither
 open nor closed at the moment it is written, and nothing fires when its precondition arrives.
+
+## V-1958 — a migration's "cannot collide" argument, verified to its premise (2026-08-27)
+
+Swept absolute concurrency claims in `apps/server/src` — `race-free` (3 sites) and `no race` (1),
+chosen over `atomic` (97) because an absolute claim is falsifiable and a hedged one is not. **All four
+are sound.** Three are the same claim: the signup canonical-email dedup is race-free because
+`accounts_canonical_email_unique` backstops the pre-check, and that index is real —
+`CREATE UNIQUE INDEX IF NOT EXISTS` in migration `0096_accounts_canonical_email.sql:67`. The fourth is
+an SSE slot cap incremented synchronously between check and use, which single-threaded Node makes safe.
+
+**The interesting part is `0102`, which backfills a uniquely-indexed column and defends itself with an
+argument rather than a mechanism:** _"idempotent and cannot introduce a new unique collision — 0096's
+stricter canonical form already prevented two non-Gmail values differing only by a plus suffix from
+coexisting; this migration only expands each affected canonical value back to its already-unique
+literal email."_
+
+**The argument depends on a premise it does not state: that `lower(email)` is injective over the table
+— i.e. no two rows differ only by case.** `accounts_email_unique` is on the RAW column, so it permits
+`A@x.com` and `a@x.com`; 0102 writes `lower(email)` into the unique canonical column, where they would
+collide. **Enumerated every writer rather than sampling: there are exactly two `insert(accounts)` sites**
+— `db/auth-flows-repo.ts:125`, which writes `args.email.trim().toLowerCase()`, and `db/seed.ts:39`,
+whose `SEED_EMAIL` is already lowercase. OAuth signup is not a third writer; it routes through the same
+repo dependency. **So the premise holds for every row the current code can create, and the argument is
+sound.**
+
+⛔ **Boundary, and it is the whole caveat: this verifies the CODE, not the DATA.** A row inserted before
+lowercasing was introduced would keep a mixed-case `email`, and two such rows differing only by case
+would fail 0102's index. I cannot check production data from here. **0096 is honest about exactly this
+— "a human should reconcile any such existing duplicate accounts before this migration can land; this
+was NOT verified against production data" — while 0102's flatter "cannot introduce a new unique
+collision" reads as unconditional.** The two comments are about the same hazard at different confidence,
+and only the earlier one carries the caveat.
+
+No action: both migrations are single-transaction with an auto-revert path in `db/migrate.ts`, so the
+failure mode is a rolled-back deploy rather than a half-applied schema.
