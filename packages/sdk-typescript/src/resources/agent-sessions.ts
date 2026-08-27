@@ -513,14 +513,33 @@ export class AgentSessionsResource {
    * DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
    * through the schema unchanged but the harness decoder drops them.
    *
-   * No deployment forwards input events. This endpoint returns
-   * `FeatureUnavailableError` (503) on every call, in every mode —
-   * the harness transport has no control-plane surface.
+   * No deployment forwards input events — the harness transport has no
+   * control-plane surface. ⚠️ That does NOT make every call a 503, which
+   * is what this comment claimed until V-1987. The response is a
+   * discriminated union and one arm is live today:
    *
-   * Throws `ConflictError` (409) if the session is not 'active' OR
-   * is in mode='ai' (input-event requires manual or pair mode).
-   * Throws `FeatureUnavailableError` (503) on every call — input
-   * forwarding is unavailable everywhere, not per-deployment.
+   * - `'pair-mode-takeover-fired'` (200) — the FIRST input-event in a
+   *   mode='pair' session whose `pair_mode_state.kind` is `ai-driving`
+   *   fires the takeover-request transition and returns the new state.
+   *   It forwards nothing, which is why "no deployment forwards input
+   *   events" stays true. Reachable on any normally-booted deployment:
+   *   the Redis pair-mode lock it needs is wired unconditionally.
+   *   `client_id` is REQUIRED on this path.
+   * - `'forwarded'` — genuinely unreachable, for a reason one level
+   *   deeper than "no transport": it sits behind the `human-driving`
+   *   state, which only a `takeover-grant` transition produces, and
+   *   nothing emits that. Branching on it is dead code. See the module
+   *   comment above.
+   *
+   * Everything else reaches the harness-forward path and throws
+   * `FeatureUnavailableError` (503): mode='manual' always, and
+   * mode='pair' once the state has left `ai-driving`.
+   *
+   * Throws `ConflictError` (409) if the session is not 'active', OR is
+   * in mode='ai' (input-event requires manual or pair mode), OR the
+   * pair-mode state is mid-transition.
+   * Throws `ValidationError` (400) when the pair-mode `ai-driving` path
+   * is taken without `client_id`.
    */
   sendInputEvent(
     id: string,

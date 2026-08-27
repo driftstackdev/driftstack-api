@@ -47,10 +47,16 @@ describe('SDK and OpenAPI current-state copy', () => {
   });
 
   it("CRITICAL EVERY SDK says input forwarding is unavailable everywhere, not per-deployment. Checked per file rather than over the joined corpus: 'forwarded' is unreachable in all three SDKs for the same reason, so one of them carrying the sentence says nothing about the other two.", () => {
-    // The route throws FeatureUnavailable unconditionally, and the one code path that
-    // constructs { kind: 'forwarded' } sits behind the pair-mode `human-driving` state,
-    // which only `takeover-grant` produces and nothing emits. So a customer branching on
-    // `'forwarded'` is writing dead code, in every SDK, on every deployment.
+    // The HARNESS-FORWARD path throws FeatureUnavailable unconditionally, and the one code
+    // path that constructs { kind: 'forwarded' } sits behind the pair-mode `human-driving`
+    // state, which only `takeover-grant` produces and nothing emits. So a customer branching
+    // on `'forwarded'` is writing dead code, in every SDK, on every deployment.
+    //
+    // ⛔ V-1987 — this is about FORWARDING, not about the whole endpoint. The TS and Go docs
+    // had widened it to "503 on every call, in every mode", which is false: the
+    // `pair-mode-takeover-fired` arm returns 200 and is reachable on any normally-booted
+    // deployment. The arm below pins the true sentence; the one after it pins that nobody
+    // re-widens it.
     const SDK_SURFACES = [
       'packages/sdk-go/agent_sessions.go',
       'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
@@ -66,5 +72,26 @@ describe('SDK and OpenAPI current-state copy', () => {
       silent,
       "SDK(s) not stating that input forwarding is unavailable on every deployment — do not reintroduce 'a deployment without a compatible harness', which implies another one forwards:",
     ).toEqual([]);
+  });
+
+  it('CRITICAL and no SDK re-widens that into "every call 503s". The endpoint returns 200 pair-mode-takeover-fired for the first input-event in a pair-mode ai-driving session, on any deployment that boots — the Redis pair-mode lock it needs is wired unconditionally. A doc claiming otherwise tells a customer a live feature is dead', () => {
+    const SDK_SURFACES = [
+      'packages/sdk-go/agent_sessions.go',
+      'packages/sdk-python/src/driftstack/resources/agent_sessions.py',
+      'packages/sdk-typescript/src/resources/agent-sessions.ts',
+    ] as const;
+
+    for (const path of SDK_SURFACES) {
+      const body = readFileSync(resolve(ROOT, path), 'utf8');
+      // Sweep the SHAPE, not the token. The first draft matched
+      // /503\)? on every call/ and a re-widened doc reading "Returns 503
+      // FeatureUnavailableError on every call" sailed straight through it —
+      // the words between "503" and "on every call" defeated the adjacency.
+      // The phrase itself is what no correct doc here contains.
+      expect(body, `${path} must not claim every call 503s`).not.toMatch(/on every call/i);
+      expect(body, `${path} must name the live takeover-fired arm`).toContain(
+        'pair-mode-takeover-fired',
+      );
+    }
   });
 });

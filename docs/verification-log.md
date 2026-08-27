@@ -11996,3 +11996,57 @@ Post-conditions: `go vet`, `go test -count=1` and `gofmt` clean; Go account meth
 **21 of the 34 methods in V-1979's list remain.** ⚠️ `apps/gui-client/src/views/ProfilesView.tsx` is
 A2's and dirty in the shared tree; excluded from this commit, and the full gate is deferred until the
 tree is quiescent.
+
+## V-1987 — "503 on every call" told customers a live feature was dead (2026-08-27)
+
+Auditing `agent-sessions.sendInputEvent`, one of V-1979's untested methods, by the V-1980 method:
+take each sentence of the doc as an assertion about the route.
+
+The TypeScript and Go docs both said the endpoint "returns `FeatureUnavailableError` (503) **on every
+call, in every mode**" and is "unavailable **everywhere, not per-deployment**". **Both are false.**
+Traced through the route:
+
+- `mode='ai'` → **409**, not 503.
+- `mode='pair'` + `pair_mode_state.kind === 'ai-driving'` + `client_id` → **200
+  `{kind:'pair-mode-takeover-fired', pair_mode_state}`** (routes/agent-sessions.ts:3964). It fires the
+  takeover-request transition, commits it, audits it and records a heartbeat.
+- only `mode='manual'`, and `mode='pair'` once the state has left `ai-driving`, reach the 503.
+
+⭐ **And the 200 is reachable everywhere**, which is what makes "not per-deployment" wrong in the
+direction that matters: `pairModeLock` is constructed **unconditionally** at `bootstrap.ts:1383`, with
+no env gate. A customer reading the TS or Go SDK would conclude the whole endpoint is dead and never
+build the pair-mode takeover trigger — a flow that works today and that the customer dashboard's
+ManualControlOverlay is built on.
+
+⛔ **Both files contradicted themselves.** The TS module comment (lines 42-45) documents
+`'pair-mode-takeover-fired'` correctly as a real 200; the method doc 470 lines later says everything
+503s. Go says "503 on every call" and, **three lines down**, explains the `client_id` "required when
+the first input-event in a pair-mode ai-driving session fires the takeover-request transition".
+Python was the only SDK that had it right.
+
+⛔ **My first reading of this was wrong and further reading refuted it.** I took the `ping` branch
+(:4025, returns 200 `{kind:'forwarded'}`) as a second live path. It is not: it sits inside
+`currentState.kind === 'human-driving'`, and `human-driving` is produced only by a `takeover-grant`
+transition that **nothing emits** — verified by grep (`kind: 'takeover-grant'` appears only as a
+type-union member) and stated outright at `bootstrap.ts:1410`. So `'forwarded'` really is dead code,
+exactly as the TS module comment and Python say. **I read a branch without checking whether its
+enclosing guard could ever be entered.**
+
+⭐ **The existing pin was sound and stays.** `sdk-current-state-copy-parity` requires each SDK to carry
+"No deployment forwards input events" — which is TRUE, and remains true beside the corrected text: the
+takeover-fired arm forwards nothing, it fires a state transition. What was false was the wording the
+TS and Go docs had grown _around_ that sentence. The pin's own comment said "the route throws
+FeatureUnavailable unconditionally"; it is the harness-FORWARD path that does, and the comment now
+says so.
+
+⭐⭐ **A new arm pins that nobody re-widens it — and its first draft was half vacuous.** It matched
+`/503\)? on every call/`, so a re-widened doc reading "Returns 503 FeatureUnavailableError on every
+call" **passed straight through**: the words between `503` and `on every call` defeated the adjacency.
+Caught by mutating the Go doc back and seeing green. Widened to the phrase itself, which then
+**self-tripped** on my own corrected Python text "NOT on every call" — a phrase guard cannot parse a
+negation — so the doc was reworded to "not a blanket 503" instead. Both mutations are now caught:
+re-widening any SDK reddens it, and renaming the `pair-mode-takeover-fired` mention reddens it.
+
+Post-condition: **0 occurrences** of "on every call, in every mode" or of the phrase in any of the
+three SDK surfaces; the pinned sentence intact in all three. Python 400 passed, ruff + mypy clean; Go
+vet, test, gofmt clean; `tsc` clean on the SDK and test projects. No behaviour changed.

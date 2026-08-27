@@ -263,19 +263,28 @@ class AgentSessionsResource:
 
         Response is a discriminated union — branch on ``["kind"]``:
 
-        - ``pair-mode-takeover-fired`` (Slice 5 takeover-trigger) —
-          ``pair_mode_state`` populated with the new state kind.
+        - ``pair-mode-takeover-fired`` (200, Slice 5 takeover-trigger) —
+          ``pair_mode_state`` populated with the new state kind. LIVE
+          today: reachable on any normally-booted deployment, because the
+          Redis pair-mode lock it needs is wired unconditionally. It
+          forwards nothing, which is why "no deployment forwards input
+          events" stays true alongside it.
         - ``forwarded`` (Slice 4 forward-to-harness) — ``duration_ms``
-          populated. No deployment forwards input events, so this
-          variant is UNREACHABLE and every call returns 503.
+          populated. No deployment forwards input events, and this variant
+          is UNREACHABLE for a reason one level deeper: it sits behind the
+          ``human-driving`` state, which only a ``takeover-grant``
+          transition produces, and nothing emits that. Branching on it is
+          dead code.
 
         Raises ``ConflictError`` (409) if the session is not active OR
         is in mode='ai' (input-event requires manual or pair mode), OR
         the pair_mode_state is mid-transition.
         Raises ``ValidationError`` (400) when pair-mode ai-driving
         path is taken without ``client_id``.
-        Raises ``FeatureUnavailableError`` (503) when input forwarding
-        is unavailable on the selected deployment.
+        Raises ``FeatureUnavailableError`` (503) on the harness-forward
+        path — mode='manual' always, and mode='pair' once the state has
+        left ``ai-driving``. It is not a blanket 503 — the takeover-fired
+        arm above returns 200.
         """
         body: dict[str, Any] = {"event": event}
         if client_id is not None:
