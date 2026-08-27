@@ -16992,3 +16992,39 @@ that control the "no" was unreadable in either direction.
 **Mutation safety:** snapshot proven by size and `cmp` before the edit, the file asserted to have
 actually changed, a single-path restore trap, and afterwards verified byte-identical against the
 snapshot with the tree clean against HEAD.
+
+## V-1886 — the route whose job is putting client data in the logs, and why the class is contained
+
+2026-08-27. No defect. The second-thinnest route audited end to end, and the structural reason the
+"client input reaches the logs" class this ledger has been circling stays contained.
+
+**THE ROUTE.** `POST /v1/agent-sessions/:id/transport-report` — 188 lines, one path, 6 referencing test
+files on the corrected ranking. It exists to take ICE/media telemetry from the gui-client and
+**structured-log it**: no table, no migration, "the founder's before/after is a log query, not a
+schema". So its entire purpose is the shape V-1883 through V-1885 kept probing — customer-supplied
+values landing in a log pipeline.
+
+✅ **AND IT IS BUILT CORRECTLY ON EVERY AXIS THAT MATTERS HERE:**
+
+- It logs `parsed.data`, never `req.body`, so `.strict()` has already stripped unknown keys and the
+  numeric bounds have already applied.
+- ⭐ **Every logged field is enumerated by hand** — seven of them — rather than spread. That is the real
+  protection: if the schema were relaxed, or gained a field tomorrow, the log line would still carry
+  only those seven. A spread would inherit whatever the schema happens to allow.
+- The log call sits AFTER the authorization check, so a caller who cannot reach the session cannot
+  inject a log line for it. The body IS parsed before that check, which is deliberate and stated: a
+  malformed report must be a 400 regardless of whether the session exists, or the error type leaks
+  existence. Validation is not a side effect, so this does not conflict with V-1876's ordering result.
+- The session read precedes authorization because it must — you cannot check ownership of a row you
+  have not loaded, the same necessary-read pattern V-1876 measured across 28 refusals.
+
+⭐⭐ **THE DISCIPLINE HOLDS REPO-WIDE, and that is the finding worth carrying.** Swept `apps/server/src`
+for any `log.{info,warn,error,debug}` whose object argument spreads a request body: **0**. The sweep is
+brace-matched over the argument rather than line-anchored, because a log call wraps and a single-line
+regex would have returned a confident zero for the wrong reason — and it was proved on a planted
+multi-line spread before its zero was believed.
+
+⚠️ **BOUNDARY:** this covers log calls in `apps/server/src` that take a request body directly. It does
+not cover Sentry captures (scrubbed separately), response bodies (covered by
+`no-response-leaks-a-credential`), or a body handed to a service that logs it further down — that last
+one is reachable by the same brace-matched method and was not run here.
