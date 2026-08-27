@@ -14803,3 +14803,45 @@ which the summary reporter does not carry.
 order. They are Stmts | Branch | Funcs | Lines, so the db layer is 90.05 LINES and 88.12 STATEMENTS,
 not the reverse. Both numbers were present and I transposed the labels; corrected in place because
 that row exists to inform a decision someone else makes.
+
+## V-1836 — the region-blind dispatch fallback: two predicates, only fakes
+
+2026-08-26. First finding produced by the INTERSECTION rule V-1835 established, applied deliberately.
+
+**How it was found, and why only this candidate was pursued.** The coverage summary reports
+`fleet-nodes-repo` with exactly TWO uncovered functions; the retired name census had named exactly TWO
+fleet-nodes methods. Coverage measures execution, the census measures mention, and where both point at
+the same pair the intersection is a finding rather than an artifact. It was — every reference to
+`findAnyWithLivekit` in the test tree is a FAKE (`findAnyWithLivekit: () => Promise.resolve(mac)`)
+standing in for it at the route layer, and the Drizzle implementation had never executed.
+
+⭐ THE ODD ONE OUT IN A FAMILY, the same signal that found V-1834. Three siblings resolve a Mac:
+`getDetailByNodeIdOrId` has a real-PG arm asserting it excludes a revoked node (V-1003),
+`findNearestWithLivekit` has this whole spec file, and `findAnyWithLivekit` had nothing — while
+carrying the SAME `isNull(revokedAt)` predicate the sibling's arm exists to protect. It is the
+fallback dispatch path (`routes/agent-sessions.ts` at two sites, plus sessionEnd when node_id is
+null), so it decides which Mac is handed LiveKit credentials and serves a customer session.
+
+**FIXED** — two arms in the existing spec, so no new file and no ratchet movement. Both pin the
+ordering with an explicit far-future `registeredAt` instead of wall-clock, because this query is
+GLOBAL: with no region to scope it, every other fixture's node on a shared database is a competitor.
+
+⭐⭐ THE SECOND PREDICATE IS SHARPER THAN IT LOOKS, and reading the ordering is what showed it.
+`livekit_registered_at` is NULL for a node that never registered credentials, and Postgres sorts
+NULLS FIRST under DESC — verified directly, not assumed. So an uncredentialled node sits at the TOP
+of the candidate list, and `livekit_api_key IS NOT NULL` is the only thing keeping it out. Drop that
+conjunct and the query does not merely admit a bad node, it PREFERS one.
+
+Mutation-proved per conjunct. Dropping `isNull(revokedAt)` fails with "a REVOKED node was selected to
+serve a session". Dropping the IS NOT NULL fails with "the credentialled fixture should have been
+selected" — an uncredentialled node came back instead.
+
+⚠️ ONE ASSERTION IS WEAKER THAN I WROTE IT. The arm also asserts the result is not the specific bare
+node it seeded, and under the mutation that assertion PASSED: a different uncredentialled node won the
+ordering first. The exact-match assertion is what actually holds the property; the `not.toBe(bare.id)`
+sibling can pass vacuously on a shared database. Kept because it is true and cheap, recorded because
+it is not the arm doing the work.
+
+⛔ INSTRUMENT NOTE — the `it(` count rule needs an anchored pattern in this file. A bare `grep -c 'it('`
+reads 16 because `findNearestWithLivekit('eu')` contains the substring; `grep -cE '^\s+it\('` reads 8
+against HEAD's 6, which is the +2 actually added.

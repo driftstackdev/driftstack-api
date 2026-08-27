@@ -301,5 +301,107 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         'a revoked node must not resolve by its uuid either',
       ).toBeNull();
     });
+
+    // ── findAnyWithLivekit — the region-blind fallback ─────────────────
+    //
+    // V-1836. The third member of this family and the only one nothing executed:
+    // `getDetailByNodeIdOrId` has the arm above and `findNearestWithLivekit` has
+    // this file, while every reference to `findAnyWithLivekit` in the test tree
+    // was a FAKE (`findAnyWithLivekit: () => Promise.resolve(mac)`) standing in
+    // for it at the route layer. Coverage agreed independently — this repo
+    // reported exactly two uncovered functions and this was one of them.
+    //
+    // It is the fallback dispatch path (`routes/agent-sessions.ts` twice, and
+    // sessionEnd when node_id is null), so it decides which Mac is handed LiveKit
+    // credentials and serves a customer session.
+    //
+    // Both arms pin ordering with an explicit far-future `registeredAt` rather
+    // than wall-clock, because this query is GLOBAL — it has no region to scope
+    // it, so on a shared database any other fixture's node is a competitor.
+
+    it('CRITICAL findAnyWithLivekit refuses a REVOKED node even when that node would otherwise WIN the selection. Revocation is how a Mac is taken out of the fleet; a revoked box still being handed LiveKit credentials serves customer sessions from hardware someone deliberately removed.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      const node = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `any-revoke-${randomUUID().slice(0, 8)}`,
+        region: 'us',
+        hardwareClass: 'm2pro',
+        nodeId: `test-node-${randomUUID()}`,
+      });
+      seededIds.push(node.id);
+      // Far-future registration: this node now sorts ahead of every other
+      // livekit node in the database, so it is unambiguously the one the
+      // `ORDER BY livekit_registered_at DESC` picks.
+      await repo.setLivekitCredentials({
+        nodeId: node.id,
+        apiKey: 'key-any-revoke',
+        apiSecretCiphertextBase64: 'ct',
+        wsUrl: 'ws://any-revoke',
+        registeredAt: new Date('2099-01-01T00:00:00.000Z'),
+      });
+
+      // Positive control: without it the refusal below is satisfied by a query
+      // that returns some other node for reasons having nothing to do with
+      // revocation.
+      expect(
+        (await repo.findAnyWithLivekit())?.id,
+        'the fixture did not win the selection, so the refusal below would prove nothing',
+      ).toBe(node.id);
+
+      await repo.revoke({ nodeId: node.id, reason: 'test' });
+
+      expect(
+        (await repo.findAnyWithLivekit())?.id,
+        'a REVOKED node was selected to serve a session',
+      ).not.toBe(node.id);
+    });
+
+    it('CRITICAL findAnyWithLivekit refuses a node with NO LiveKit credentials, which is the case the ordering actively works against: livekit_registered_at is NULL for such a node and Postgres sorts NULLS FIRST under DESC, so it sits at the top of the candidate list and only the IS NOT NULL predicate keeps it out.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      // A properly registered node, so the query has something legitimate to
+      // return and a null result cannot pass for a refusal.
+      const wired = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `any-wired-${randomUUID().slice(0, 8)}`,
+        region: 'us',
+        hardwareClass: 'm2pro',
+        nodeId: `test-node-${randomUUID()}`,
+      });
+      seededIds.push(wired.id);
+      await repo.setLivekitCredentials({
+        nodeId: wired.id,
+        apiKey: 'key-any-wired',
+        apiSecretCiphertextBase64: 'ct',
+        wsUrl: 'ws://any-wired',
+        registeredAt: new Date('2099-01-01T00:00:00.000Z'),
+      });
+
+      // Never given credentials: livekit_registered_at stays NULL.
+      const bare = await repo.register({
+        publicKeyBase64Url: pk(),
+        displayName: `any-bare-${randomUUID().slice(0, 8)}`,
+        region: 'us',
+        hardwareClass: 'm2pro',
+        nodeId: `test-node-${randomUUID()}`,
+      });
+      seededIds.push(bare.id);
+
+      const got = await repo.findAnyWithLivekit();
+      expect(
+        got,
+        'a livekit-capable node exists, so a null result is itself the defect',
+      ).not.toBeNull();
+      expect(
+        got?.id,
+        'a node with NO LiveKit credentials was selected to serve a session',
+      ).not.toBe(bare.id);
+      expect(got?.id, 'the credentialled fixture should have been selected').toBe(wired.id);
+    });
   },
 );
