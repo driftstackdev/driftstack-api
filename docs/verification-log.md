@@ -17101,3 +17101,45 @@ Nothing felt off in either case.
 ⚠️ BOUNDARY: this covers template-literal constructions of `ApiError` subclasses in `apps/server/src`.
 Errors built by string concatenation, or raised by libraries and mapped later, are outside it — the
 mapping layer is the error handler, whose own no-leak path has separate coverage.
+
+## V-1889 — auditing my own instruments: three of five sweeps were narrow, and the tell is uniform
+
+2026-08-27. No defect. The scope check run across every sweep I published this session, rather than
+waiting for the next one to surface by accident.
+
+**WHY DO IT AT ALL.** V-1887 and V-1888 each found a published sweep covering roughly a sixth of its
+stated population, one turn apart. Two is a pattern, and the alternative to checking the rest is
+discovering them one entry at a time while the ledger reads as though they were settled.
+
+**EVERY SWEEP, WITH ITS ANCHOR AND VERDICT:**
+
+- **V-1873, envelope versioning** — anchored on the constant NAME `_V2_PREFIX`. ⛔ Narrow: the strictest
+  surface names its marker `_V2_MAGIC`. Caught and corrected inside that turn.
+- **V-1875, no refusal after a side effect** — anchored on handler parameter spellings. ✅ **Sound, and
+  re-verified here.** Derived, the first parameters are `request` 114, `req` 108, `_req` 4, `_request`
+  2 — the pattern covered 222 of 228, and the six it missed are underscore-prefixed, i.e. deliberately
+  unused, so they cannot hold a request-derived gate. Re-run with all four spellings: all seven handler
+  gates located, **0 with a preceding await**. The claim stands on the widened scope.
+- **V-1882, roster guards without a count** — anchored on a filename glob. Moot: that entry retired the
+  measurement as the wrong instrument (a census of files, not rosters), so narrowing it changes nothing.
+- **V-1884, errors interpolating a value** — anchored on a hand-typed class list. ⛔ 5 of 32. Corrected
+  in V-1888.
+- **V-1886, log calls spreading a body** — anchored on one receiver spelling. ⛔ 49 of 273. Corrected in
+  V-1887.
+
+⭐⭐ **THREE OF FIVE WERE NARROW, AND EVERY CONCLUSION SURVIVED — which is the uncomfortable part.** Not
+one of these was discovered because a result looked wrong. They were found by checking the anchor, and
+the corrected sweeps returned the same verdicts. **A sweep at a sixth of its scope produces exactly the
+output a complete one does**, so the error can only ever be caught by examining the instrument, never
+by examining the answer.
+
+⭐⭐⭐ **AND THE TELL IS UNIFORM, which makes it cheap to apply.** All three narrow anchors were a
+DISJUNCTION I TYPED — class names, a receiver spelling, a constant-name suffix. Both sound anchors were
+either a single universal token (`await `) or a list read out of the source. **If a pattern's anchor is
+an alternation written by hand, treat it as a guess until the sum of a derived enumeration equals the
+sweep's match count.** That equality is the whole check, and V-1887 is where it first paid: an
+independent receiver enumeration summing to 273 against a sweep matching 273.
+
+⚠️ BOUNDARY: this covers the sweeps published in this session's entries. Sweeps from earlier sessions
+carry the same risk and were not re-run; the same equality check applies to any of them that a future
+claim leans on.
