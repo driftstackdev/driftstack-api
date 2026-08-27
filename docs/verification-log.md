@@ -15925,3 +15925,35 @@ prediction today was a positive I had not yet mutated.**
 ⚠️ BOUNDARY: the agent-sessions mutation was killed mid-run, so this entry rests on READING those arms,
 not on their failing. That is the weaker evidence, and by the rule above it is the right strength for
 the claim being made — a negative.
+
+## V-1861 — correcting V-1860: I had the rule already, and that is the finding
+
+2026-08-26. Correction to the entry directly above, published minutes earlier.
+
+⛔ **V-1860 presents the message-grep blind spot as something learned today. It was not.** A memory
+written 2026-08-23 already records that a refusal message absent from the test tree is weak evidence
+the refusal is untested, and already prescribes the remedy — use it to generate candidates, verify
+each by reading, and do not publish the number. I then spent today making the same mistake six times.
+
+**Two things ARE new, and they are why the rule failed to protect me:**
+
+⭐ **A second mechanism, which the earlier rule does not name.** That memory's failure mode is an arm
+asserting a _pattern_ or an error class instead of the literal string — so a refined grep, searching
+message patterns rather than exact text, still finds it. That made the technique feel repairable by
+tuning. The agent-sessions arms are different in kind: they assert the STATUS CODE and never touch the
+message. **No message-based search, however refined, can see them.** The technique is not weak at the
+margin; it is blind to an entire style of well-written test.
+
+⭐⭐ **The rule was scoped to counts, and the error I actually made was per-site.** "Do not publish the
+number" reads as a caution about aggregates. So I stopped publishing aggregates — and published two
+specific `file:line` claims instead, which is the identical error at finer granularity. An aggregate
+feels like a statistic and invites hedging; a named line number feels like a fact and does not. The
+rule needed to say per-SITE, and now does.
+
+⚠️ The practical form, which is cheap enough that there is no excuse: before searching for a witness
+by its message, ask what an arm that asserted only BEHAVIOUR would look like — route plus expected
+status, no prose — and search for that too.
+
+⭐ Recorded because the correction is worth more than the original entry. A blind spot found twice is
+a fact about the instrument; a rule that was written down, was correct, and did not fire is a fact
+about how I read my own notes, and only the second one changes anything.
