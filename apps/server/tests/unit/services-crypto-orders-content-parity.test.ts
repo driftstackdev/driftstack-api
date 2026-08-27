@@ -329,4 +329,78 @@ describe('W405.C apps/server/src/services/crypto-orders.ts content parity', () =
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
+  // V-2014 — four methods here bound a scan window; three say so and one does not.
+  //
+  //   listForAdminPage           1_000    no `truncated`
+  //   getDailyBreakdownForAdmin  10_000   truncated
+  //   getStatsForAdmin           10_000   truncated
+  //   getPendingAgeHistogram     10_000   truncated
+  //
+  // The published shapes agree: /v1/admin/crypto-orders returns
+  // { orders, next_cursor } while its three siblings on the same resource
+  // publish `truncated` (two also `scanned`).
+  //
+  // ⛔ The undisclosed one is the case where it matters most. The other three
+  // return an aggregate — a truncated total is wrong but visibly a total. This
+  // one PAGINATES, and when the cursor's anchor falls outside the scan window it
+  // returns `{ orders: [], nextCursor: null }`, which is byte-identical to "you
+  // have reached the end". Three states collapse into one response: no more rows,
+  // a malformed cursor, and a list longer than the window.
+  //
+  // Not fixed here: adding a field to a published admin response is a contract
+  // change and belongs with the owner (same disposition as W-10). This arm is the
+  // unblocked half — it puts the exception on a list somebody had to look at, the
+  // way V-1048 does for a route that can never succeed, so a FIFTH bounded scan
+  // cannot land silently on the undisclosed side.
+  it('CRITICAL every scan-bounded method discloses truncation, except the one listed. A bounded scan that does not say it was bounded reports a partial answer as a complete one.', () => {
+    const src = readFileSync(LIB, 'utf8');
+    const lines = src.split('\n');
+    const UNDISCLOSED_BY_DECISION = new Set(['listForAdminPage']);
+
+    const bounded: Array<{ method: string; discloses: boolean }> = [];
+    lines.forEach((line, i) => {
+      if (!/scanLimit\s*\?\?\s*[\d_]+/.test(line)) return;
+      let owner = '<none>';
+      for (let j = i; j >= 0; j -= 1) {
+        const m = /^ {2}(?:async )?([A-Za-z_$][\w$]*)\(/.exec(lines[j] as string);
+        if (m) {
+          owner = m[1] as string;
+          break;
+        }
+      }
+      let end = i;
+      while (
+        end < lines.length &&
+        !/^ {2}(?:async )?[A-Za-z_$][\w$]*\(/.test(lines[end] as string)
+      ) {
+        end += 1;
+      }
+      const start = lines.findIndex(
+        (l, k) => k <= i && new RegExp(`^ {2}(?:async )?${owner.replace(/\$/g, '\\$')}\\(`).test(l),
+      );
+      bounded.push({
+        method: owner,
+        discloses: lines.slice(start, end).join('\n').includes('truncated:'),
+      });
+    });
+
+    // Non-vacuity: an empty scan satisfies the emptiness assertion below.
+    expect(bounded.length, 'methods establishing a scan bound').toBeGreaterThanOrEqual(4);
+    expect(
+      bounded
+        .filter((b) => !b.discloses && !UNDISCLOSED_BY_DECISION.has(b.method))
+        .map((b) => b.method),
+      'a method bounds its scan without publishing a truncation flag — either return one, or add it to the list with a reason',
+    ).toEqual([]);
+    // And the exemption cannot rot: the file it names must still be bounded and still silent.
+    const named = bounded.find((b) => b.method === 'listForAdminPage');
+    expect(
+      named,
+      'listForAdminPage no longer bounds a scan — drop it from the exemption',
+    ).toBeDefined();
+    expect(
+      named?.discloses,
+      'listForAdminPage now discloses truncation — remove it from UNDISCLOSED_BY_DECISION',
+    ).toBe(false);
+  });
 });

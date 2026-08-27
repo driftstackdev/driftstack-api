@@ -13431,3 +13431,61 @@ structurally and fail on data, which no source scan of throw-sites reaches. **No
 detecting "the backing table has no writer" statically is fragile, and the state is temporary by
 construction. Recorded instead as the conditional deferral it is — nothing fires when the contract phase
 lands, which is exactly why V-1957 argued such items are the easiest kind to lose.
+
+## V-2014 — four bounded scans, three say so: the one that stays silent is the one that paginates (2026-08-27)
+
+2026-08-27. Ran the post-condition on the _other_ half of V-1565 — it fixed id filters (swept in V-2005)
+**and** a cursor shape, and the cursor half had never been re-asked.
+
+**The cursor class is sound, and the fail-soft is deliberate.** `lib/keyset-cursor.ts` is shared by seven
+repos with one call shape, and its header states the property rather than leaving it to be inferred: a
+malformed cursor yields `undefined` so the caller "skips the keyset anchor and starts from the first page…
+turning a malformed-cursor 500 into a graceful first-page response. The downstream `WHERE account_id = …`
+filter is independent of the cursor, so this is purely a robustness fix — **it never widens what a caller
+can read**." That supersedes V-1565's "clean 400" intent with a documented decision. `crypto-orders` has
+its own private codec, and it is also correct — composite `{ts, id}`, both types validated on decode,
+compared in memory against a JS array, so it never reaches a `uuid` column.
+
+### What the sweep actually found
+
+**Boundary: `services/crypto-orders.ts`, the four sites that establish a scan bound (`scanLimit ?? <n>`),
+each mapped to its enclosing method.**
+
+```
+listForAdminPage            1_000    discloses truncated: NO
+getDailyBreakdownForAdmin  10_000    discloses truncated: YES
+getStatsForAdmin           10_000    discloses truncated: YES
+getPendingAgeHistogram     10_000    discloses truncated: YES
+```
+
+**The published shapes agree.** `GET /v1/admin/crypto-orders` publishes `{ orders, next_cursor }`; its
+three siblings on the same resource publish `truncated`, two of them `scanned` as well. `truncated` occurs
+10 times in the spec, so disclosure is the established convention and this is the exception to it.
+
+⛔ **The silent one is the case where silence costs most.** The other three return an aggregate — a
+truncated total is wrong, but it is visibly a total. This one **paginates**, and when the cursor's anchor
+falls outside the 1000-row window it returns `{ orders: [], nextCursor: null }` — byte-identical to "you
+have reached the end", which its own comment names as the caller's stop signal. **Three states collapse
+into one response**: no more rows, a malformed cursor, and a list longer than the window. `scanLimit` is
+service-internal, so an admin cannot widen it from the route.
+
+**Latent, not live**, and stated as such: it needs more than 1000 crypto orders, and the operator runbook
+records that there is no live merchant account. **Not fixed here** — adding a field to a published admin
+response is a contract change and belongs with the owner, the same disposition as W-10 and V-1988.
+
+**The unblocked half landed instead**: a roster arm on the drift guard asserting that every scan-bounded
+method discloses truncation _except_ the one named, with the exemption unable to rot — if
+`listForAdminPage` ever starts disclosing, or stops bounding, the arm says so. That is V-1048's philosophy
+(a thing that cannot succeed is on a list somebody had to look at) applied to a thing that cannot tell you
+it was cut short, and it stops a **fifth** bounded scan landing silently on the undisclosed side.
+
+⛔ **My guard was a rubber stamp on its first mutation, and only mutating caught it.** Planting a fifth
+bounded scan left it **green**. The attribution walk-back used `/^ {2}(?:async )?([a-zA-Z]\w*)\(/`, which
+cannot match a name beginning with `_`, so the probe method was invisible and its bound was misattributed
+to an earlier, disclosing method. Widened to `[A-Za-z_$][\w$]*` and re-proved with **two** plants — one
+underscore-prefixed, one ordinary (`listRecentForAudit`) — each now redding with the offender named. The
+floor was probed rather than trusted: forcing it reports 4, the exact population.
+
+⭐ The transferable half: **an arm whose subject is "methods matching a shape" needs a plant whose NAME is
+ordinary.** I chose `__probeBoundedScan` because it looked obviously synthetic and easy to spot in a diff,
+and that choice is precisely what made the mutation land in the one blind spot my regex had.
