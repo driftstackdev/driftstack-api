@@ -32,9 +32,18 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
 /** `if (!existsSync(x)) return ...` — the shape that turns a missing root into []. */
 const SWALLOWS = /if\s*\(\s*!\s*existsSync\([^)]*\)\s*\)\s*return\b/;
+/** Global twin of SWALLOWS — `match` needs /g to count every site in a file. */
+const SWALLOWS_G = /if\s*\(\s*!\s*existsSync\([^)]*\)\s*\)\s*return\b/g;
 
-// Measured 2026-08-27. Ceiling, not a pin: shrinking is the goal.
-const CEILING = 89;
+// Measured 2026-08-27: 92 occurrences across 89 files. Ceiling, not a pin —
+// shrinking is the goal.
+//
+// The unit is OCCURRENCES, not files, and that distinction is load-bearing: two
+// files carry more than one swallow site (3 and 2). A file-count ceiling cannot
+// see a file it already counts gaining another occurrence, so the population
+// could grow with the number unchanged — a population expressed in one unit and
+// enforced in another.
+const CEILING = 92;
 
 function testFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -56,28 +65,33 @@ function testFiles(dir: string, out: string[] = []): string[] {
  */
 const SELF = fileURLToPath(import.meta.url);
 
-function scan(): { swallowers: string[]; filesScanned: number } {
-  const swallowers: string[] = [];
+function scan(): { occurrences: number; files: string[]; filesScanned: number } {
+  const files: string[] = [];
+  let occurrences = 0;
   let filesScanned = 0;
   for (const base of ['apps', 'packages']) {
     for (const file of testFiles(resolve(REPO_ROOT, base))) {
       if (file === SELF) continue;
       filesScanned += 1;
       const src = readFileSync(file, 'utf8');
-      if (SWALLOWS.test(src) && src.includes('readdirSync')) {
-        swallowers.push(file.slice(REPO_ROOT.length + 1));
+      if (src.includes('readdirSync')) {
+        const hits = src.match(SWALLOWS_G)?.length ?? 0;
+        if (hits > 0) {
+          occurrences += hits;
+          files.push(file.slice(REPO_ROOT.length + 1));
+        }
       }
     }
   }
-  return { swallowers, filesScanned };
+  return { occurrences, files, filesScanned };
 }
 
 describe('a walk helper that swallows a missing root does not spread', () => {
   it('CRITICAL the swallowing-walk population does not grow', () => {
-    const { swallowers } = scan();
+    const { occurrences, files } = scan();
     expect(
-      swallowers.length,
-      `walk helpers that return [] for a missing directory: ${swallowers.length} (ceiling ${CEILING}).\n` +
+      occurrences,
+      `walk sites that return [] for a missing directory: ${occurrences} across ${files.length} files (ceiling ${CEILING}).\n` +
         `A new one makes another sweep pass silently when its source tree moves.\n` +
         `Fix by throwing on a missing root, not by adding a floor.`,
     ).toBeLessThanOrEqual(CEILING);

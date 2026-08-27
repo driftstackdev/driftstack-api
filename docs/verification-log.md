@@ -19846,3 +19846,35 @@ Classified my 13 apps/server members for the follow-up: all but one name a sourc
 git-tracked and present on a fresh checkout, so making those helpers throw is safe. The exception reads
 `dist/`, which is gitignored and legitimately absent — **skip is correct there, and the count is a debt
 marker, not a defect list.**
+
+## V-1952 — the ceiling counted the wrong unit, and I edited a file off a dead list (2026-08-27)
+
+**Two errors of mine, both caught by proofs rather than by review.**
+
+**The ceiling from V-1951 counted FILES when the population is OCCURRENCES.** A peer's observation — a
+population expressed in one unit and enforced in another — applies to it directly: two files carry more
+than one swallow site (3 and 2), so **a file already inside the population could gain another occurrence
+with the count unchanged.** Switched to occurrences, measured at **92 across 89 files**. Mutation-proven
+in the form that justifies the change: adding a second site to an already-counted file yields
+`93 across 89 files (ceiling 92)` and reddens — **the file count stays 89 throughout, so the previous
+version could not have seen it.**
+
+**The second error is worse and produced a commit-shaped near-miss.** Continuing the remediation, I
+picked `public-route-has-a-consumer-invariant`, added a non-vacuity arm, and mutation-proved it by
+vanishing the walk root — **and the proof showed three arms reddening, one of which I had not
+written.** The file already had `it('CRITICAL the scan found the route surface and a consumer
+corpus…')` flooring both corpora and asserting a known member, `routes).toContain('/v1/sessions')`.
+**My addition was a duplicate of a better arm.** Reverted byte-identical.
+
+**How I chose a target that did not qualify: I read it off a list my own correction had already
+invalidated.** An earlier sweep printed 44 "genuine walkers"; I then corrected the classifier and
+re-ran, and the corrected run reported **`apps/server residue: 0`**. Both sat in the same scroll-back
+looking equally authoritative. **A correction retracts the NUMBER and leaves every artifact derived
+from it in place** — the stale-marker problem one level up, a list and its retraction in different tool
+calls rather than on different lines. The cheap guard is to re-confirm a target still qualifies before
+editing it; one grep would have shown the existing arm.
+
+**Consequence for the scope I proposed: it was sized from that dead list.** apps/server residue is
+genuinely zero — my 13 files already have floors or are correct as they stand. The peer applied the
+same check to their share and found **13 of 28 already floored**, so that side is 15 files rather than 28. **The remediation is roughly half what both of us estimated, and neither estimate came from
+counting the thing being remediated.**
