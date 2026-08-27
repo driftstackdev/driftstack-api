@@ -20,7 +20,10 @@
 //       incident.resolved
 //     - V-295c3-tombstone: status_subscriber.force_unsubscribed /
 //       status_subscriber.purged
-//   (15 total values; comment groups them by V-NNN feature anchor.)
+//   (The bullet list above names the subset this file pins, not the whole
+//   enum; the enum carries 33 values — see the W862 roster guard, which
+//   pins every one and asserts the counts. Corrected 2026-08-27: both
+//   places here said '15', a number stale by eighteen.)
 //
 //   Vocabulary closure framing — 'Adding a new admin endpoint
 //   requires a migration; this is intentional — it forces deliberate
@@ -84,7 +87,7 @@ describe('W936 D-025 admin-audit cross-source invariant', () => {
     expect(p).toMatch(/queries a free index hit/);
   });
 
-  // ─── AdminAuditAction 15-value enum (grouped by V-NNN anchor) ─
+  // ─── AdminAuditAction — the subset this file pins, grouped by V-NNN ─
 
   it('CRITICAL base AdminAuditAction values — account.tier_changed, account.suspended, account.unsuspended, webhook_delivery.replayed, webhook_delivery.requeued, rate_limit_override.set, rate_limit_override.cleared. The 7 base actions cover tier + suspension + webhook + rate-limit admin endpoints.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/admin-audit.ts'));

@@ -16793,3 +16793,40 @@ resolved to "covered by audit X", "documented as entry Y", or "read at HEAD". Th
 resolved by date alone and one by a log reference; only one needed an audit. That ratio is the argument
 for doing it — it is cheap, and it is the difference between "the verdict expired" and "here is what
 replaced it".
+
+## V-1881 — two drift guards described a 33-value enum as 21 and as 15
+
+2026-08-27. No defect in the product. Three stale counts across two guards whose own job is catching
+drift, and a post-condition that found the occurrence I had not enumerated.
+
+⛔ **THE ENUM HAS 33 VALUES.** Measured exactly, parsing `pgEnum('admin_audit_action', [...])` to its
+closing bracket rather than through a fixed-line window — the window said 26 and was a truncated read.
+Against that:
+
+- `admin-audit-action-cross-source-invariant` (W862) opens **"AdminAuditAction 21-value"**.
+- `admin-audit-d025-cross-source-invariant` says **"(15 total values…)"** and again
+  **"AdminAuditAction 15-value enum"**, three lines apart from a correct sentence in the same header
+  reading "33 values as of V-1007 — the '14-value' this header carried was stale by nineteen".
+
+⭐ **A CORRECTION THAT UPDATED ONE MENTION AND LEFT ITS SIBLINGS.** V-1007 fixed the lead number in the
+D-025 guard and missed the two below it, so one comment now asserted 33 and 15 simultaneously. That is
+the exact failure the standing rule about enumerating EVERY frozen occurrence exists to prevent, and it
+happened inside a drift guard.
+
+⭐⭐ **THE ARMS WERE NEVER WRONG, WHICH IS WHY NOTHING RED.** W862 carries twelve count assertions and
+they pass; the D-025 guard pins values individually with no count at all. So the roster was maintained
+by tests while the prose describing it rotted — the stale-header-over-correct-arms shape, in the file
+family most likely to be read as authoritative about the roster.
+
+⚠️ **THE GROUP BREAKDOWN LOOKS WRONG AND IS NOT, so the correction says why.** W862's groups sum to 34
+mentions against a 33-value enum. `account.deleted` is deliberately listed twice, under Lifecycle and
+again under its GDPR Article 17 anchor, and the Secrets row writes four values in slash form
+(`secret.created/updated/deleted/revealed`) that a naive scan counts once. 34 mentions, 33 distinct.
+Written into the header so the next reader does not "fix" the arithmetic by deleting a real entry.
+
+⭐⭐ **THE POST-CONDITION EARNED ITS KEEP.** After both edits I swept BOTH spellings repo-wide rather
+than declaring two edits done: `21-value` → 0, `15-value` → **1 remaining**. The survivor is
+`docs/verification-log.md:3437`, an entry from an earlier scan describing "a closed 15-value Postgres
+enum". ⭐ **Left unchanged deliberately** — a log entry records what was true when it was written, and
+the point it supports does not depend on the enum's size. Editing it would falsify the record. Zero
+stale in the guards; one in history, where it belongs.

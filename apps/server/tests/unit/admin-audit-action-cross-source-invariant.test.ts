@@ -1,4 +1,4 @@
-// W862 — AdminAuditAction 21-value cross-source invariant. One-
+// W862 — AdminAuditAction 33-value cross-source invariant. One-
 // hundred-eighty-eighth in the drift-guard series. Pins the
 // admin-audit closed-action roster:
 //
@@ -28,6 +28,13 @@
 //   endpoints.
 //   GDPR Article 17 (1, migration 0094): account.deleted — admin-triggered
 //   account termination.
+//
+// 2026-08-27 — title corrected 21 → 33. The GROUPS above were current the whole
+// time; only this line rotted, which is why the count assertions below stayed
+// green. Two things make the group list look like it disagrees: `account.deleted`
+// is listed TWICE on purpose (under Lifecycle and again under its GDPR anchor),
+// and the Secrets row writes four values in slash form
+// (`secret.created/updated/deleted/revealed`). 34 mentions, 33 distinct.
 //
 // 2026-06-04 — corrected from 16 → 20: migrations 0057/0061/0062/0063
 // had added the last value of operational/incident/subscriber + the
