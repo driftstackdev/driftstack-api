@@ -67,6 +67,9 @@ function obj(uuid: string, hoursAgo: number): Obj {
   return { key: profileSealedBlobKey(uuid), lastModified: new Date(NOW - hoursAgo * HOUR_MS) };
 }
 
+const DASHES_36 = '------------------------------------';
+const HEX_36_NO_DASHES = '0123456789abcdef0123456789abcdef0123';
+
 describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
   it('(a) reaps an old blob with NO profile row (genuine orphan)', async () => {
     const { r2, deleted } = fakeR2({ objects: [obj(U_ORPHAN, 5)] });
@@ -145,6 +148,12 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
     const { r2, deleted } = fakeR2({
       objects: [
         { key: 'profiles/not-a-uuid.sealed', lastModified: new Date(NOW - 5 * HOUR_MS) },
+        // V-2007 — `not-a-uuid` is TEN characters, so the old `[0-9a-f-]{36}` rejected
+        // it on WIDTH and never on shape: this arm passed identically whether the
+        // pattern was loose or strict. These two are exactly 36 characters, which is
+        // the only length that reaches the shape check at all.
+        { key: `profiles/${DASHES_36}.sealed`, lastModified: new Date(NOW - 5 * HOUR_MS) },
+        { key: `profiles/${HEX_36_NO_DASHES}.sealed`, lastModified: new Date(NOW - 5 * HOUR_MS) },
         { key: 'profiles/index.json', lastModified: new Date(NOW - 5 * HOUR_MS) },
         { key: `profiles/${U_ORPHAN}.sealed.bak`, lastModified: new Date(NOW - 5 * HOUR_MS) },
         obj(U_ORPHAN, 5), // the one real orphan
@@ -158,8 +167,12 @@ describe('ProfileBlobOrphanSweeperService.tickOnce', () => {
       graceMs: 2 * HOUR_MS,
       nowFn: () => NOW,
     });
+    // The lengths are the point of the two fixtures above; assert them here so a
+    // later tidy-up of the literals cannot silently stop exercising the branch.
+    expect(DASHES_36.length, 'must be 36 to reach the shape check').toBe(36);
+    expect(HEX_36_NO_DASHES.length, 'must be 36 to reach the shape check').toBe(36);
     const res = await svc.tickOnce();
-    expect(res.scanned).toBe(4);
+    expect(res.scanned).toBe(6);
     expect(res.reaped).toBe(1);
     expect(deleted).toEqual([profileSealedBlobKey(U_ORPHAN)]);
   });

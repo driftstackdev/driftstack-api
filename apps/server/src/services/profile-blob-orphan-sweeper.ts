@@ -69,8 +69,27 @@ export interface ProfileBlobOrphanExistenceRepo {
   findExistingProfileIds(ids: string[]): Promise<Set<string>>;
 }
 
-/** `profiles/<uuid>.sealed` — anchored, lowercase hex + dashes, exactly 36 chars. */
-const SEALED_KEY_RE = /^profiles\/([0-9a-f-]{36})\.sealed$/;
+/**
+ * `profiles/<uuid>.sealed` — anchored, and the uuid shape is spelled out rather
+ * than approximated by a width.
+ *
+ * V-2007 — this was `[0-9a-f-]{36}`, which is 36 characters of hex-or-dash in ANY
+ * arrangement: `------------------------------------` and 36 undashed hex digits
+ * both matched. The captured value goes to `findExistingProfileIds`, which runs
+ * `inArray(profiles.id, chunk)` against a Postgres `uuid` column, so one such key
+ * makes the query throw. The throw is swallowed and the chain re-arms (by design,
+ * so a bad pass cannot kill the reaper) — which means a single malformed key would
+ * stop ALL reclamation permanently and silently, every tick failing on the same
+ * listing. `profiles-repo.ts` already records that half: "that sweeper is wrapped
+ * to never throw, so the failure would have been a log line and a reap pass that
+ * silently did nothing."
+ *
+ * The app only ever writes `profileSealedBlobKey(<real uuid>)`, so this is a
+ * poison-key hazard rather than a live defect — but the blast radius is total and
+ * silent, and a key can enter the bucket from outside the app.
+ */
+const SEALED_KEY_RE =
+  /^profiles\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.sealed$/;
 
 const SEALED_PREFIX = 'profiles/';
 

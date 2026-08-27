@@ -253,4 +253,43 @@ describe('the copied id parsers must agree', () => {
         'or a regex that pins the uuid shape, so a malformed id is a 400 and not a Postgres cast error',
     ).toEqual([]);
   });
+  // V-2007 — the arms above, and the length-check arm, all scan ROUTES. V-1565
+  // fixed the loose `[0-9a-fA-F-]{36}` class and guarded it "as a shape, not a
+  // filename" — but the scope was route files, so the same class survived in
+  // `services/profile-blob-orphan-sweeper.ts` as `[0-9a-f-]{36}`, matching 36
+  // dashes and feeding them to `inArray(profiles.id, …)` on a `uuid` column.
+  // A shape guard scoped to one directory is a filename guard wearing a shape's
+  // clothes. This one walks the whole server source.
+  //
+  // Comment lines are dropped before matching, and that is load-bearing here:
+  // three files legitimately QUOTE the old class while explaining why they no
+  // longer use it, including the sweeper this arm was written for.
+  it('CRITICAL no server source approximates a uuid with a wide hex-or-dash character class. V-1565 fixed this class in routes and guarded it there; the same spelling survived in services until V-2007.', () => {
+    const LOOSE_UUID_CLASS = /\[[0-9a-fA-F\\d-]{6,}\]\{36\}/g;
+    const SRC = resolve(REPO_ROOT, 'apps/server/src');
+    const walk = (dir: string, out: string[] = []): string[] => {
+      for (const e of readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules' || e.name === 'dist') continue;
+        const full = join(dir, e.name);
+        if (e.isDirectory()) walk(full, out);
+        else if (e.name.endsWith('.ts')) out.push(full);
+      }
+      return out;
+    };
+    const files = walk(SRC);
+    const offenders: string[] = [];
+    for (const f of files) {
+      const code = readFileSync(f, 'utf8')
+        .split('\n')
+        .filter((l) => !/^\s*(\*|\/\/)/.test(l))
+        .join(' ');
+      const n = code.match(LOOSE_UUID_CLASS)?.length ?? 0;
+      if (n > 0) offenders.push(`${f.slice(REPO_ROOT.length + 1)} (${String(n)})`);
+    }
+    expect(files.length, 'server source files walked').toBeGreaterThanOrEqual(300);
+    expect(
+      offenders,
+      'a uuid approximated by width — 36 hex-or-dash characters admits 36 dashes, which reaches a Postgres uuid column as an invalid cast; spell the 8-4-4-4-12 shape out',
+    ).toEqual([]);
+  });
 });

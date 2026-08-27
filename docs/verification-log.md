@@ -13084,3 +13084,72 @@ count against HEAD after every pin edit. `grep -c 'it('` reported 6 → **8** fo
 extra match is `.split('\n')` — **`split(` ends with `it(`**. The precise count is `^\s+it\(`, which reads
 6 → 7. It has never mattered before only because no line in the files I touched contained `split(`; a
 count that can silently gain a phantom is exactly the instrument this log exists to distrust.
+
+## V-2007 — V-1565's class survived outside the directory its guard walks (2026-08-27)
+
+2026-08-27. Ran a **post-condition** on a fix from months ago rather than trusting it: does the loose
+hex-or-dash class V-1565 removed still exist anywhere? **Boundary: `apps/server/src` and `packages/*/src`,
+every spelling of a 36-wide hex-or-dash character class (`[0-9a-fA-F-]`, `[a-fA-F0-9-]`, `[\da-fA-F-]`,
+`[0-9a-f-]`), detector proved against three known-positive spellings and correctly rejecting the strict
+8-4-4-4-12 form.**
+
+Three hits. Two are comments explaining why the file no longer uses it. **One is code:**
+
+```
+apps/server/src/services/profile-blob-orphan-sweeper.ts:73
+const SEALED_KEY_RE = /^profiles\/([0-9a-f-]{36})\.sealed$/;
+```
+
+⭐ **V-1565 guarded this "as a shape, not a filename" — and scoped the walk to route files.** A shape
+guard scoped to one directory is a filename guard wearing a shape's clothes. `services/` was never in
+range, so the identical class sat there untouched.
+
+### The consequence chain, verified link by link
+
+The captured value goes to `findExistingProfileIds`, which runs `inArray(profiles.id, chunk)`; `profiles.id`
+is a `uuid` column (checked in `schema.ts`). A 36-character non-uuid therefore makes the query throw. The
+sweeper swallows a per-tick failure and re-arms **by design** — its header says so: _"one bad pass can never
+silently stop the reaper forever."_ **For a poison key the design inverts: every tick lists the same key,
+throws on the same query, and is swallowed identically, so reclamation stops permanently and silently.**
+`profiles-repo.ts` already records the other half of this — _"that sweeper is wrapped to never throw, so the
+failure would have been a log line and a reap pass that silently did nothing."_
+
+⛔ **Mechanism is not reachability, and this one is latent.** The only writer is
+`profileSealedBlobKey(<real uuid>)` in `lib/r2.ts:238`, so the app cannot produce a malformed key. It needs
+one entering the bucket from outside. **Fixed anyway because the blast radius is total and silent while the
+fix is one character class** — and because the comment above it already claimed the strict property
+(`profiles/<uuid>.sealed`) that the pattern did not enforce.
+
+⛔ **Third instance in two days of an arm that cannot reach the branch it is named for.** The sweeper's
+test carries _"ignores non-sealed keys + malformed uuids under the prefix"_ — and its malformed input is
+`profiles/not-a-uuid.sealed`. **`not-a-uuid` is TEN characters**, so `{36}` rejected it on WIDTH and never
+on shape: that arm passed identically whether the class was loose or strict. V-2005 was the same shape (9
+and 40 characters against a 36-length branch). **A refusal fixture has to be the width the pattern
+accepts, or it is testing the length check.**
+
+Extended with both 36-character forms — 36 dashes and 36 undashed hex — and the arm now asserts their
+length, so a later tidy-up of the literals cannot quietly stop exercising the branch.
+
+**Mutation-proved, and the mutation shows something worth stating.** Restoring the loose class makes the
+arm report `reaped` **3** instead of 1: the two garbage keys are treated as orphaned profile blobs and
+deleted. **That is the test double's behaviour, not production's** — `findExistingProfileIds` is faked here
+and does not cast, whereas real Postgres throws on the `inArray` first and the tick aborts before any
+delete. So production's consequence is the silent stall, not data loss; the double reaches a different
+failure through the same defect.
+
+### The scope fix
+
+A new arm on `twelve-copies-of-the-id-parser-must-agree` walks **all of `apps/server/src`**, not routes.
+Comment lines are dropped before matching, which is load-bearing: three files quote the old class while
+explaining why they abandoned it, including the sweeper this arm was written for. Detector proved 1/1 on
+the pre-fix source and 0 on all three comment-only mentions; floor probed rather than trusted — forcing it
+reports **342 server source files walked**, so the floor of 300 carries ~12% slack. Restoring the loose
+class reds the arm naming the sweeper.
+
+### Two sweeps that came back clean, stated so they are not re-run
+
+**Prefix-stripping** (`startsWith('acc_')` / `.slice(4)` / `.replace(/^acc_/)`) across routes, services and
+lib: every site validates before stripping — `profiles.ts:526` runs a full strict regex on the whole
+`acc_<uuid>` before `.slice(4)`; `account-web-sessions.ts` checks the prefix then a strict uuid;
+`currentWebSessionIdFromRequest` strips a server-side auth-context value, not caller input. `admin-cost.ts`
+is the V-1580 site, already fixed. **No unvalidated strip anywhere.**
