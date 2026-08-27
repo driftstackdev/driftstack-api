@@ -20175,6 +20175,21 @@ mechanism can only be verified against the implementation its author imagined.**
 parity pin freezing text rather than truth: the wording is what the next reader checks, and it is not
 itself under test.
 
+**Enumeration completed rather than sampled: all 13 non-sweeper sites read.** Each is a design statement
+that holds — a compiler-enforced taint brand (`BYOKAnthropicKeyPlaintext`), a deliberate refusal to
+fabricate a second terminal when storage rejects, a `ConflictError` on a concurrent profile transfer, a
+single funnel so outcome counting cannot drift, a boolean return that IS the once-ness
+(`markEmailVerified`), the CAS-backed paid transition, re-arm safety, paired terminal fields, and a
+`close()` idempotency flag.
+
+⭐ **`services/email.ts:886` is the positive example the rest of today lacked, because it scopes its own
+claim:** _"Every other template — and every non-transient category even on a security-critical template
+— sends exactly once."_ The retried path is security-critical templates hitting a TRANSIENT category,
+and that path is deliberately at-least-once — a lost Postmark acknowledgement re-sends, because the
+alternative is a password reset that never arrives. **The comment carves out precisely the case where
+its guarantee does not hold, so a reader can trust the sentence without reading the loop.** Every
+inaccurate comment found today failed at exactly that step.
+
 No action.
 
 ## V-1960 — a pin froze the value; the CAS needed the relationship (2026-08-27)
