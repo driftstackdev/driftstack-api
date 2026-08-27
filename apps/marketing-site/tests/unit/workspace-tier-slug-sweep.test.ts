@@ -27,6 +27,40 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+/**
+ * The pages this sweep is about, with the walk's roots asserted.
+ *
+ * ⛔ Both arms below assert `offenders` is empty, and `[]` is ALSO what a walk over a
+ * MISSING root produces — `walk` opens with `if (!existsSync(dir)) return out;`. So a
+ * renamed or moved pages directory turns these guards silent and green in the same
+ * instant, reporting every page clean because it read none.
+ *
+ * ⚠️ The root check lives HERE rather than inside `walk`, deliberately. `walk`
+ * recurses, so its existsSync guards every descent and not just the entry — making it
+ * throw would also kill the walk on a subdirectory that vanishes mid-iteration or a
+ * broken symlink, neither of which is the failure being caught. Assert the roots once,
+ * at the call site; leave the recursive tolerance alone.
+ */
+function collectPages(): string[] {
+  const targets = [
+    resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
+    resolve(REPO_ROOT, 'apps/docs/src/pages'),
+  ];
+  for (const dir of targets) {
+    expect(existsSync(dir), `walk root missing, this sweep would pass over nothing: ${dir}`).toBe(
+      true,
+    );
+  }
+  const files = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+  // A floor as well as a root check: a root that exists but yields nothing — a broken
+  // extension filter, an emptied directory — is the same silent pass by another route.
+  expect(
+    files.length,
+    'the page walk found nothing — an empty sweep is not a clean one',
+  ).toBeGreaterThan(20);
+  return files;
+}
+
 // Narrowly target only `*_growth`, `*_pro`, `*_plus`, `*_premium`, and
 // `*_starter|builder|scale` paired with team/solo/agency/enterprise —
 // suffix patterns that look like a tier slug but are NOT in the live enum.
@@ -36,11 +70,7 @@ const liveTiers = new Set(AccountTierSchema.options);
 
 describe('W267.B workspace-wide tier-slug sweep', () => {
   it('no marketing-site / docs page resurrects a fictional tier-suffix pattern', () => {
-    const targets = [
-      resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
-      resolve(REPO_ROOT, 'apps/docs/src/pages'),
-    ];
-    const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+    const allFiles = collectPages();
 
     const offenders: { file: string; slug: string }[] = [];
     for (const f of allFiles) {
@@ -56,11 +86,7 @@ describe('W267.B workspace-wide tier-slug sweep', () => {
   });
 
   it('no page resurrects the fictional team_growth / solo_pro / enterprise_plus slugs', () => {
-    const targets = [
-      resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
-      resolve(REPO_ROOT, 'apps/docs/src/pages'),
-    ];
-    const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+    const allFiles = collectPages();
     const offenders: string[] = [];
     for (const f of allFiles) {
       const body = read(f);
