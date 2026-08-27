@@ -17562,3 +17562,42 @@ condition that then aborted the next run.
 `lint-staged` runs the same prettier binary on `*.md`, and `docs/verification-log.md` is not in
 `.prettierignore` — only the two frozen archives are — so the two ought to agree and do not. Recorded as
 open rather than resolved, since the operational fix does not depend on the answer.
+
+## V-1902 — the bespoke internal auth path, and the pre-flight fix confirmed
+
+2026-08-27. No defect. The largest unaudited route surface, whose interest is that it does not use the
+customer auth system at all — plus a post-condition on V-1901's change.
+
+✅ **THE PRE-FLIGHT FIX IS CONFIRMED, not merely argued.** The gate at `84cae1ee9` reported
+`worktree==HEAD, recent-writes=0, porcelain=''` — **empty porcelain**, where every previous run left the
+`MM`. Dropping the `git add` from the pre-flight removed the artifact, which is the post-condition
+V-1901 predicted. 3228 files, 32109 tests, exit 0, 42KB captured to a file rather than a pipe.
+
+**THE SURFACE.** `/v1/internal/atlas-priority/*` — six routes called by fleet tooling, not customers,
+and gated by a shared-secret bearer rather than `requireScope`. A second auth mechanism is where a gap
+hides, so it is worth reading rather than counting.
+
+⭐⭐ **THREE PROPERTIES, ALL SOUND, AND THE THIRD IS THE ONE MOST OFTEN MISSED:**
+
+1. **Fail-closed activation.** With `DRIFTSTACK_FLEET_INTERNAL_TOKEN` unset, `validate()` rejects EVERY
+   request rather than admitting them — "surface unavailable rather than silently accept all requests
+   when the secret isn't set". The absent-config case is the one that usually opens a door.
+2. **Constant-time compare** on the token via `timingSafeEqual`.
+3. ⭐ **A length pre-check, with its reason recorded.** `timingSafeEqual` THROWS on different-length
+   buffers, so without the pre-check a wrong-LENGTH token produces a TypeError — a 500 — while a
+   wrong-VALUE token produces 401. **The difference between those two responses is an oracle for the
+   token's length.** Converting it into a uniform "mismatch" 401 is the fix, and the comment says so.
+
+⭐ **AND THE RATE LIMIT DOES NOT LEAK WHAT IT MEASURES.** The per-token bucket key is
+`atlas_priority_token:<sha256(token)[0:16]>`, hashed deliberately "so the plaintext never lands in the
+in-memory bucket map / Redis key namespace / Prometheus labels". Key namespaces and metric labels get
+exported and scraped; a limiter keyed on the raw credential would publish it.
+
+⚠️ One line reads like a hole and is not: the preHandler returns early on an empty token, which would
+skip the rate limit. It is unreachable — an empty candidate has length 0, so `validate()`'s length check
+throws before the preHandler continues. Traced rather than assumed, because "defensive" comments are
+sometimes load-bearing.
+
+⚠️ BOUNDARY: this audits the auth path and the limiter wrapping these six routes. The handlers' own
+input validation and the queue semantics behind them were not read; the atlas memories in my notes are
+all fork-side font work and cover none of this.
