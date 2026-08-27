@@ -17785,3 +17785,36 @@ fail-closed control decays into a fail-open one.
 `.env`'s current contents are outside this repo and I did not inspect them**, which is the right scope:
 the note's claim was that a running server could be misconfigured, and that is now impossible regardless
 of what the file says.
+
+## V-1908 — mutation-proving that a fail-closed rate-limit branch is now covered, and one ill-typed mutation
+
+2026-08-27. No defect. A post-condition on V-968's fix, answered with the only sound instrument, plus a
+mutation of mine that inflated its own result.
+
+**WHY MUTATE AT ALL.** V-968 found `middleware/rate-limit.ts`'s control-key authority-lookup branch
+failing closed with **zero coverage**, and proved it by making it fail open — 200 instead of 429,
+invisible to three suites. The question a prior entry cannot answer is whether that is still true, and
+grep cannot answer it either: **my first attempt searched for `loadLiveOwnerAuthority` and
+`guiControlKeyRateLimitAccountId`, found nothing, and nearly concluded the gap was open again.** Those
+are the internals V-968 described as UNREFERENCED BEFORE its fix; it also named the injection point the
+fix uses, and I grepped for the wrong half of its own text.
+
+⭐ **THE TARGETED RUN REPRODUCED V-968's EXACT BLINDNESS.** With the branch failing open, the
+effective-owner integration file and the store-outage unit file pass **13 tests between them** — the same
+13 that entry reported as blind. A subset negative is a statement about the subset, so it settled nothing.
+
+✅ **THE FULL SUITE CATCHES IT, and the catching assertion names the property**:
+`agent-sessions-cookies-set-route.test.ts` fails with **"the request is refused, not admitted
+unmetered"**. V-968's fix is present and effective — the branch that stops an authority-lookup outage
+from admitting control-key traffic unmetered is now guarded.
+
+⛔⛔ **BUT TWO OF THE THREE FAILURES WERE MY MUTATION BEING BROKEN, NOT THE BRANCH BEING COVERED.**
+Replacing the `throw` with `return;` made the callback yield `void` where `OwnerAuthority` was required,
+so `the-server-source-type-checks` failed twice with `TS2322`. **A broken mutation looks exactly like a
+caught one** — and here it looked like two extra catchers. V-968 avoided this by replacing the throw with
+a PERMISSIVE AUTHORITY, which is type-correct and isolates the behaviour; mine was the cruder edit and
+the count paid for it. The behavioural catch stands on its own, but the "3 failures" headline does not.
+
+⚠️ **Mutation safety**: snapshot proven by size and `cmp` before the edit, file asserted to differ after,
+single-path restore trap, and afterwards verified byte-identical with zero markers and a clean worktree.
+Exposure was one full-suite run in a shared tree with no peer writes and the tree quiescent at the start.
