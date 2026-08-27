@@ -17523,3 +17523,42 @@ that goes blind is worse than a documented convention, because it reports green 
 ⚠️ BOUNDARY: measured over the six Astro apps' `src` trees and their shipped `_headers`. A token-landing
 page rendered by the API rather than a static app, or one reading its token from a path segment rather
 than the query, is outside both the derivation and the existing guard.
+
+## V-1901 — the recurring MM explained enough to act on: runs read the worktree, commits read the index
+
+2026-08-27. No defect. The artifact from V-1895 recurred, was traced far enough to fix, and the fix is
+to stop doing something my own pre-flight was doing.
+
+**IT CAME BACK, LARGER.** After a commit, `git status` showed `MM docs/verification-log.md` again. Using
+the blob-level instrument V-1895 established rather than a line diff: worktree matches HEAD, index does
+not, and the index blob is **7 bytes shorter** — where last time it was 1.
+
+⭐ **THE 7 BYTES ARE A MARKDOWN REFLOW OF MY OWN ENTRY.** `cmp` puts the first difference at line 17,503
+and the index blob has one line fewer. Read at `LC_ALL=C` — `sed` refuses the multi-byte characters my
+entries are full of — the index copy has a blank line before a numbered item removed and two 3-space
+continuation indents stripped. One newline plus six spaces is exactly seven.
+
+⛔ **AND MY FIRST TEST OF THE CAUSE WAS A FALSE NEGATIVE I CREATED.** I ran
+`npx prettier --write … > /dev/null 2>&1`, saw no byte change, and concluded prettier was not involved.
+**Discarding stderr is the filter mistake again**, one entry after recording it. Re-run without
+silencing, prettier genuinely reports "(unchanged)" on the current worktree — so the cause is not as
+simple as "prettier reformats the log", and I am not claiming a mechanism I have not pinned down.
+
+⭐⭐ **WHAT IS CERTAIN IS ENOUGH TO ACT ON, AND IT RESOLVES A TENSION WITH V-1895.** That entry concluded
+the dirty guard was RIGHT to abort, because the index really differed. Both are true, because they are
+different questions:
+
+- **A suite run reads the WORKTREE.** An index-only difference cannot affect it. The right check before
+  a run is `git diff --raw HEAD -- <paths>` — zero paths means the tree the suite will read matches HEAD.
+- **A commit can read the INDEX.** There the porcelain `MM` matters, which is why this repo commits by
+  pathspec and why V-1895's abort was correct.
+
+⭐⭐⭐ **THE FIX IS TO REMOVE A LINE FROM MY OWN PRE-FLIGHT: it ran `git add -- apps/server scripts docs
+packages` before the gate.** That stages content a suite run never consults, and staging is the
+precondition for the hook to leave a rewritten copy behind. The `git add` served nothing and created the
+condition that then aborted the next run.
+
+⚠️ BOUNDARY: I have explained the artifact's SHAPE and its consequences, not its precise producer.
+`lint-staged` runs the same prettier binary on `*.md`, and `docs/verification-log.md` is not in
+`.prettierignore` — only the two frozen archives are — so the two ought to agree and do not. Recorded as
+open rather than resolved, since the operational fix does not depend on the answer.
