@@ -20846,3 +20846,45 @@ Post-conditions: Go `go test -count=1` (cache-busted, because the first restore 
 skipped** (was 365), ruff check and format clean, mypy clean. ⭐ And ruff's scope was proved rather
 than trusted: a deliberately misformatted function in one of the two files is caught with
 `Would reformat`, so "already formatted" is a real pass and not a silent exclusion.
+
+## V-1977 — the SDK surfaces are identical; what diverged is what their tests check (2026-08-27)
+
+Having found the same pagination hole in all three SDKs (V-1974, V-1976), the question one level up
+is whether the surfaces themselves diverge. **They do not.** Measured across
+`packages/sdk-{typescript,python,go}`:
+
+- **19 / 19 resources present in all three.**
+- Every TypeScript method has a counterpart in Python and Go.
+
+⛔ **Every apparent gap the first pass produced was my own naming model, not a real one** — five in a
+row, each refuted by reading:
+
+| flagged as missing                    | reality                                                                            |
+| ------------------------------------- | ---------------------------------------------------------------------------------- |
+| `profiles.import` absent from Python  | Python spells it `import_` — `import` is a **keyword**                             |
+| `usage.current` absent from Python/Go | Python `current_period`, Go `CurrentPeriod`                                        |
+| `cryptoOrders.listAll` absent         | Python/Go spell that walk `iterate`                                                |
+| `api-keys` resource absent from Go    | Go names the type `APIKeysResource` — **idiomatic initialism caps**, not `ApiKeys` |
+| 19 × `constructor` "missing"          | a TS-only construct with no Python `def`                                           |
+
+⭐ **And the two genuinely TS-only methods are deliberate, documented cross-SDK aliases**, which is the
+opposite of a defect. `UsageResource.currentPeriod` is a synonym for `current`, and its doc says why:
+
+> "The Python (`current_period`) and Go (`CurrentPeriod`) SDKs name this operation after the billing
+> period it reads; TS keeps the historical `current` name and exposes `currentPeriod` as a thin
+> synonym so the three SDKs share a vocabulary and a customer porting between them does not hit a
+> rename."
+
+`cryptoOrders.listAll` beside `iterate` is the same pattern, and `iterate` delegates to the shared
+paginator specifically so the endpoint inherits the non-advancing-cursor guard.
+
+⭐ **The finding is the contrast, and it is what makes V-1974/V-1976 worth having done.** Surface
+parity was already **100%** while _test_ parity had a four-cell hole: `recipes` and `agent_sessions`
+pagination was asserted in no SDK before V-1974 and in only one after it. **The three SDKs implement
+the same product faithfully; what drifted was what each language's tests were willing to check.** A
+cross-SDK parity guard that compares _surfaces_ would have reported green throughout — surface
+symmetry is not evidence about assertions.
+
+**Boundary, stated with the result:** this measures the public _method surface_ by name only. It says
+nothing about behavioural equivalence, argument shapes, or return types, and nothing about test
+coverage — which is precisely where the real divergence was.
