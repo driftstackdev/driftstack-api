@@ -30,6 +30,26 @@ function findReadmes(dir: string, out: string[] = [], depth = 0): string[] {
 const readmes = findReadmes(REPO_ROOT);
 
 describe('W278.D repo README relative-link integrity', () => {
+  // ⛔ `findReadmes` returns [] for a MISSING root, and [] is also the pass condition
+  // for the emptiness assertion below — so a moved REPO_ROOT would report every README
+  // link valid because it read no READMEs at all.
+  //
+  // ⚠️ This file has TWO `!existsSync(...)` sites and they are NOT the same thing. The
+  // one at the top of `findReadmes` is the walker guard this arm compensates for. The
+  // one in the arm below — `if (!existsSync(abs))` on a link target — IS the assertion,
+  // and turning it into a throw would invert the test into passing on broken links. A
+  // scripted pass over "silent existsSync" would have done exactly that, which is why
+  // this file was read rather than batched.
+  it('non-vacuous: the walk found real READMEs, so an empty result is a finding and not a clean bill', () => {
+    expect(existsSync(REPO_ROOT), `walk root missing — this sweep read nothing: ${REPO_ROOT}`).toBe(
+      true,
+    );
+    expect(
+      readmes.length,
+      'no READMEs found; an empty link sweep is not a clean one',
+    ).toBeGreaterThan(3);
+  });
+
   it('every relative [label](./path) or (../path) link resolves to a real file', () => {
     const offenders: { file: string; href: string }[] = [];
     for (const f of readmes) {

@@ -59,6 +59,24 @@ const FORBIDDEN_PATTERNS: { pattern: RegExp; reason: string }[] = [
 ];
 
 describe('W280.C workspace-wide product-version overclaim sweep', () => {
+  // ⛔ walk() returns [] for a MISSING root, and [] is also the pass condition for the
+  // emptiness assertions below — so a renamed or moved root turns this sweep silent
+  // and green in the same instant, reporting the corpus clean because it read none.
+  //
+  // ⚠️ Its own arm rather than at the walk: the collection runs at MODULE scope, where
+  // a throw removes the file from collection instead of failing a test, and walk()'s
+  // own guard covers every recursive descent — making THAT throw would kill the walk
+  // on a vanishing subdirectory or a broken symlink, a different failure entirely.
+  it('non-vacuous: the sweep read a real corpus, so an empty result is a finding and not a clean bill', () => {
+    for (const dir of targets) {
+      expect(existsSync(dir), `walk root missing — this sweep read nothing: ${dir}`).toBe(true);
+    }
+    expect(
+      allFiles.length,
+      'the walk found no files; an empty sweep is not a clean one',
+    ).toBeGreaterThan(5);
+  });
+
   for (const { pattern, reason } of FORBIDDEN_PATTERNS) {
     it(`no page uses an overclaim — ${reason}`, () => {
       const offenders: string[] = [];

@@ -53,6 +53,23 @@ describe('W262.D workspace-wide locked-archetype label sweep', () => {
       return e === '.astro' || e === '.md';
     });
 
+  // ⛔ walk() returns [] for a MISSING root, and [] is also the pass condition for the
+  // emptiness assertions below — so a renamed or moved root turns this sweep silent
+  // and green in the same instant, reporting every page clean because it read none.
+  //
+  // ⚠️ Its own arm, not a throw inside walk(): that guard covers every recursive
+  // descent, so making it throw would kill the walk on a vanishing subdirectory or a
+  // broken symlink — a different failure from the one being caught.
+  it('non-vacuous: the sweep read a real corpus, so an empty result is a finding and not a clean bill', () => {
+    for (const dir of targets) {
+      expect(existsSync(dir), `walk root missing — this sweep read nothing: ${dir}`).toBe(true);
+    }
+    expect(
+      allFiles.length,
+      'the walk found no files; an empty sweep is not a clean one',
+    ).toBeGreaterThan(5);
+  });
+
   it('no page conflates iOS + Safari into "iOS 26.4"', () => {
     const offenders: string[] = [];
     for (const f of allFiles) {
