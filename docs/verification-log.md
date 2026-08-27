@@ -18087,3 +18087,46 @@ change to a 965-line AST guard for a hypothetical file.
 **Boundary:** this is a static audit of two guards' own logic and scope at `dfe1dd136`; I did
 not construct a fifth route file to demonstrate the seam empirically, so the claim is about what
 the guards read, not about an observed miss. Gate green at 3229 files / 32112 tests, exit 0.
+
+## V-1915 — the rule behind V-1912's one-token fix, proven in both directions (2026-08-27)
+
+V-1912 fixed a bare call to a `never`-returning helper and justified it with a heuristic:
+the hazard is being _bare among returns_, since a uniformly-bare helper "fails loudly". That
+heuristic happened to sort this repo correctly, and it is not the actual rule. Establishing the
+real one, because `mapAuthFlowError` in `routes/auth.ts` is bare at **all 8** of its sites and
+I had waved it through on the strength of that heuristic alone.
+
+**The real criterion, proven:** a bare call to a `never` helper is caught by the compiler iff
+removing the annotation would leave a code path returning no value — i.e. the call is terminal
+in a function that must return one. `noImplicitReturns` (`tsconfig.base.json:21`) is what fires,
+not the `never` type.
+
+Two mutations against `mapAuthFlowError`, each restored byte-identical from a PATH-keyed
+snapshot proven identical before use:
+
+| arm                       | mutation                                | result                                                                         |
+| ------------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
+| a new error code appears  | add a 6th member to `AuthFlowErrorCode` | **exactly 1** error — `TS2534` at `routes/auth.ts:107`, the helper itself      |
+| the annotation is removed | drop `: never` from the helper          | **8** errors — `TS7030` "Not all code paths return a value", one per call site |
+
+So `mapAuthFlowError` is guarded from both directions, and its 5-case switch needs no `default`
+or exhaustiveness marker: the annotation _is_ the exhaustiveness check. Sound as written.
+
+**Why site 318 was genuinely different**, which the heuristic could not express: its bare call
+sat in a **void-returning** handler and was followed by more statements that ran to completion.
+Removing the annotation there leaves every path still returning nothing-in-particular, so
+`TS7030` cannot fire — the annotation really was the sole protection. The 8 auth sites are
+terminal in value-returning handlers, so the compiler covers them twice over.
+
+**The population, closed by reading rather than inference.** All 15 `never`-returning helpers at
+HEAD: the ten route `stub`s and atlas-priority's `reject` are _passed as handler references_
+(`app.post(path, stub)`, `handler: stub`) and never called, so no continuation exists — verified
+by listing every non-comment use in all eleven files, after a truncated grep had shown only
+comment matches for three of them and read exactly like a complete answer. `session-proxy`'s two
+inline `(req): never =>` are handlers themselves. That leaves `mapAuthFlowError` (proven above)
+and `rejectEffectiveOwner` (all six sites `return` since V-1912).
+
+**Boundary:** this is a compile-time claim about `apps/server` under `tsconfig.test.json` at
+`8b6499083`; it says nothing about runtime behaviour if a helper is invoked through a value
+whose type is widened, and I did not sweep `packages/**` for the same shape. No source change —
+the audit found the code sound and corrects the reasoning recorded in V-1912.
