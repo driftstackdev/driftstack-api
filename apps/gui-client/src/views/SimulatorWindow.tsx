@@ -4216,6 +4216,17 @@ export function SimulatorWindow(): JSX.Element {
   // set true when a 'loaded' frame arrives. A ref (not state): the data-channel + poll
   // callbacks read it synchronously and it must never itself trigger a re-render.
   const pageReachedLoadedRef = useRef(false);
+  // ⛔ A branded start page that fails to load is treated as GRACEFUL — no error
+  // overlay — because a blank new tab must not read as a hard navigation failure.
+  // That intent is right and is kept. What was wrong is that it produced SILENCE:
+  // the customer sees an empty tab, is told nothing, and the panel that would have
+  // shown their exit IP and timezone simply is not there. Owner-reported as
+  // "it shows nothin here".
+  //
+  // Keyed by TAB id rather than a bare boolean: the page-state poll re-reports
+  // 'errored' every couple of seconds, so a boolean would either notify once per
+  // session or repeat forever. Keyed, each tab says it exactly once.
+  const newTabLoadNoticedRef = useRef<Set<string>>(new Set());
   // #135 — the current top-level nav target (normalized), so a stale/superseded
   // page_state frame from a DIFFERENT page can't drive the load-gate or error overlay.
   // Set on an operator navigate + on each box 'loading' frame (which tracks link-clicks
@@ -5158,6 +5169,21 @@ export function SimulatorWindow(): JSX.Element {
             currentNavTargetRef.current = norm;
             pageReachedLoadedRef.current = false;
           }
+        }
+        // Say it, once per tab. The overlay stays suppressed and the tab remains
+        // usable — the operator can type an address — so this is a transient line
+        // rather than a blocking error. Silence was the defect, not the suppression.
+        if (
+          isHarnessState &&
+          msg.state === 'errored' &&
+          isNewTabLoadError(msg.url) &&
+          !newTabLoadNoticedRef.current.has(activeTabIdRef.current)
+        ) {
+          newTabLoadNoticedRef.current.add(activeTabIdRef.current);
+          showNotice(
+            "Start page couldn't load through this proxy — type an address to continue",
+            5000,
+          );
         }
         const loading = isHarnessState ? msg.state === 'loading' : msg.loading;
         if (typeof loading === 'boolean') {
