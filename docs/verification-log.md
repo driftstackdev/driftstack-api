@@ -17715,3 +17715,38 @@ absence lasted one command.
 ⚠️ BOUNDARY: the DLQ audit's delta is now fully accounted for — every commit since 2026-06-07 resolved to
 "covered by a prior entry" or "read at HEAD". The other prior headings on this surface (11 of 13) were
 not re-read, because nothing in the delta touches what they cover.
+
+## V-1906 — a recorded publisher over-grant, resolved by deleting the route
+
+2026-08-27. No defect. The fifth stale open-issue note this week, and the one whose fix was removal
+rather than repair.
+
+**THE NOTE.** A 2026-06-08 memory recorded two wired LiveKit token routes diverging: the older
+`/v1/sessions/:id` **over-granted — a customer could mint a PUBLISHER token** — and used
+`identity=sessionId`, which collides in LiveKit when two participants share an identity. Six commits
+have landed on the canonical route since, so the premise was worth checking rather than citing.
+
+✅ **BOTH DIVERGENCE POINTS ARE CLOSED, AND THE FIX WAS DELETION.**
+
+- `routes/sessions-livekit-token.ts` does not exist. `58a0a2521` removed it, and its subject names the
+  reason — "publisher over-grant" — with owner approval recorded.
+- The path is registered nowhere, and `lib/app.ts` keeps a comment at the old registration site saying
+  what it did: "it let the body pick `role:'publisher'` (canPublish:true)". ⭐ **The removal is
+  documented where someone would look for the route**, not only in a commit message.
+- The surviving route grants `canSubscribe` + `canPublishData` with `canPublish: false`, and identity
+  `customer-<account-id>` — so the collision is gone with it.
+
+⚠️ **ONE `canPublish: true` SURVIVES AND IS THE CORRECT ONE.** `agent-sessions.ts` mints
+`identity: harness-<mac.id>` for the fleet node that publishes the browser stream, and the code states
+the split rather than leaving it to be inferred: "a PUBLISHER token for the harness — distinct from the
+SUBSCRIBER token `maybeMintLivekit` gives the customer's viewer". **Publisher to the node, subscriber to
+the customer** — a post-condition grep for `canPublish` that ignored identity would have flagged it.
+
+⭐ **FIFTH STALE NOTE, AND THE PATTERN IS NOW WORTH STATING AS A RATE.** Of the open-issue notes I have
+re-checked this week — SOCKS5 SSRF, unauthenticated rate limits, navigate scheme, bundled-LLM cap, and
+this — **none described a live problem**, and each had been closed or bounded months before without the
+note being touched. The notes are reliable about what was true; they are silent about what changed.
+
+⚠️ BOUNDARY: this verifies the deletion, the registration absence, and the grant/identity split on the
+surviving route. The canonical route's own end-to-end behaviour was audited separately (V-1876 covered
+its ordering); its handler internals beyond the grants were not re-read here.
