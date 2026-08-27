@@ -16080,3 +16080,31 @@ data, not dependencies. **No defect — recorded so the next sweep does not re-r
 / 16 skipped, exit 0, and no NOTE at all** — there is nothing left to caveat. **829 tests that had not
 been running executed, and every one passes.** The earlier green was real but partial; this is the
 first full green I have taken this session, at `bceb7c38b`.
+
+## V-1864 — nine test files whose validating gate never ran them
+
+2026-08-26. Follow-on from V-1863, and the part that actually cost something.
+
+⛔⛔ **Of the ten test files I committed this session, nine are DB-gated** — `db-fleet-nodes-…`,
+`team-members-repo-contract`, `db-agent-sessions-concurrency`, `db-terminated-account-recipe-purge`,
+`stripe-webhooks-repo-contract`, `db-mfa-recovery-codes-tenant-scope`,
+`db-auth-flows-web-session-revoke` among them. Each gates through
+`RUN_DB_TESTS = Boolean(process.env.CI || process.env.DATABASE_URL)`, so with the variable unset the
+`describe.skipIf` skips the block outright.
+
+**Every full-suite run I cited as validation for those commits had those files switched off.** The
+tests were written to exercise real Postgres and were the entire point of the commits; the gate I
+pointed at afterwards could not see them. **Adding a DB-gated test and validating with a blind gate
+is a no-op validation** — it confirms the rest of the suite still passes, which was never in question,
+and says nothing whatever about the thing just added.
+
+✅ **Outcome is clean, and only because it was checked.** The DB-wired run at `bceb7c38b` executed all
+3228 files with zero skipped, 32109 tests passing. All nine are green against real Postgres. Nothing
+needs fixing — but that is the result of a measurement, not something the earlier greens established,
+and it would have read identically had one of them been broken.
+
+⭐ **The rule, which is narrow and cheap:** when a commit adds a test that gates on a dependency,
+the validating run must have that dependency wired, and the way to know is that the file COUNT moves.
+A gate whose skip count does not drop after adding a gated test did not run it. That is a
+post-condition on the validation itself, in the spirit of preferring "no occurrence remains" over
+"the change was applied" — the same reasoning one level up.
