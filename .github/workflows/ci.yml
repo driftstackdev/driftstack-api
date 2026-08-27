@@ -292,7 +292,10 @@ jobs:
           # packaging error dropping crypto_orders, mfa, team, audit_log or
           # agent_sessions shipped a green wheel. Catching that is what a wheel
           # smoke test is for, and the count in the message made it read complete.
-          EXPECTED=$(python3 -c "import re;print(' '.join(sorted(set(re.findall(r'self[.]([a-z_]+)\\s*=\\s*\\w+Resource[(]', open('packages/sdk-python/src/driftstack/client.py').read())))))")
+          # ⛔ Path is relative to `working-directory` above, NOT the repo root.
+          # It was repo-relative and this step had NEVER run: ci.yml triggers on
+          # push/PR to main, and main had not moved in 661 commits.
+          EXPECTED=$(python3 -c "import re;print(' '.join(sorted(set(re.findall(r'self[.]([a-z_]+)\\s*=\\s*\\w+Resource[(]', open('src/driftstack/client.py').read())))))")
           echo "source-declared accessors: $EXPECTED"
           /tmp/smoke/bin/python -c "
           import sys
