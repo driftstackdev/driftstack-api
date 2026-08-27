@@ -16425,3 +16425,40 @@ is what I changed. Deleting the pair is the owner's call, not a silent removal f
 
 ⭐⭐ Checked and NOT stale, stated because a class finding is worthless if I only report confirmations:
 that guard's own "5 encrypt and 5 decrypt call sites" is exactly right today.
+
+## V-1872 — the profile DEK hierarchy, re-audited because its verdict said to on a code change
+
+2026-08-26. No defect. A security surface whose stored verdict named its own expiry condition, and the
+condition had been met.
+
+⭐ **THE MEMORY WAS BETTER-SCOPED THAN THE ONES IN V-1871.** The 2026-06-23 adversarial review of
+`profile-key-hierarchy.ts` concludes "don't re-audit it **without a code change**" — a verdict with a
+stated trigger rather than an open-ended one. Checked rather than assumed: three commits since, and one
+is `76e4e6dc9 security: bind profile keys to record identity`. **The condition the memory set was met,
+so the re-audit is the memory being obeyed, not overridden.**
+
+✅ **THE RECORD-IDENTITY BINDING IS SOUND, verified as a post-condition rather than as a change.** The
+question is never "was a migration written" but "can the old shape still be produced":
+
+- **No legacy write path exists.** `wrapProfileDek` is the only writer and unconditionally emits
+  `PROFILE_DEK_V2_PREFIX`, binding an AAD built from the normalised `{accountId, profileId}` pair. The
+  prefix has five occurrences: the declaration, that write, the v2 requirement, its slice, and the
+  legacy reader's refusal.
+- **The two readers are mutually exclusive, both fail-closed.** `unwrapProfileDek` throws unless the
+  blob is v2; `unwrapLegacyProfileDek` throws if it IS v2. Neither can be pointed at the other's
+  format, so a caller cannot silently downgrade by picking the wrong function.
+- **Legacy is reachable only through a migration that authenticates before it writes.**
+  `profiles-repo.ts:140` selects legacy rows, unwraps and authenticates EVERY one before the first
+  UPDATE — "wrong key, malformed base64 or wrong-length plaintext leaves the whole selected page
+  byte-for-byte intact" — then re-wraps bound to `row.id`, with the update guarded on both `id` and
+  `accountId`, and `updatedAt` deliberately preserved because a rewrap is not a customer-visible edit.
+
+⭐ **A THIRD CALLER-LESS PAIR, same shape as V-1871's.** `wrapDek`/`unwrapDek` take no AAD at all and
+have no production callers either; they are thin exported wrappers over the payload helpers that the
+bound paths use internally. Recorded rather than changed — V-1871 already carries the warning against
+reaching for a key-only primitive, and repeating it in a second header would be noise.
+
+⚠️ **BOUNDARY.** This audits the binding introduced after the stored verdict, not the whole hierarchy:
+HKDF derivation, IV freshness, tag verification and key-length validation were the 2026-06-23 review's
+three dimensions and are unchanged by these commits, so that verdict still covers them. What I add is
+the layer it could not have seen.
