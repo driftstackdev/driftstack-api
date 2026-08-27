@@ -15171,3 +15171,51 @@ Mutation-proved per predicate, and the property census was 2 occurrences of `eq(
 ⭐ THE RENAME ARM ASSERTS THE WRITE, NOT THE RETURN. Refusing to return the row is not the property;
 not WRITING is. The third assertion reads the row back and confirms the stranger's name never landed
 — the same distinction V-1837 needed an isolating mutation to earn.
+
+## V-1844 — the scoping-predicate axis set, enumerated and closed, with the part it cannot see stated
+
+2026-08-26. Three tenancy axes were found by accident today. That says the ENUMERATION is the thing
+to distrust, so I enumerated it instead of waiting for a fourth.
+
+**Every column appearing in an `eq(<table>.<col>, …)` across `apps/server/src/db` (55 files), filtered
+to scoping-shaped names:**
+
+    accountId 127 (24 files) · ownerAccountId 8 (1) · nodeId 7 (2) · adminAccountId 2 (1)
+    createdByAccountId 2 (2) · targetAccountId 1 (1) · memberAccountId 1 (1)          = 148
+
+**RECENCY CHECK ON THE BIG AXIS — clean.** V-1822 swept 126 `accountId` predicates; there are now 127
+across 100 functions, and **zero** sit in a function coverage reports as never executed. Nothing
+drifted in behind that sweep. (Boundary: `src/db` only, `apps/server/tests` only, one regex form.)
+
+**THE OTHER SIX AXES — 16 functions carry one, and the sweep is now closed:**
+12 were already covered; V-1843 covered `renameTeam` + `listTeamsOwnedBy`; `removeMember` is the
+superseded orphan with its own mutation ledger (V-1842) and is deliberately not covered; this entry
+closes the last, `fleet-nodes-repo::recordHeartbeat`.
+
+⭐ **AND READING IT RECLASSIFIED IT, which is the lesson for anyone re-running this.**
+`eq(fleetNodes.nodeId, nodeId)` is an IDENTITY KEY, not a tenancy boundary — my regex caught it on the
+column NAME. **An axis enumeration by column name hands you identity keys dressed as boundaries.**
+The consequence is still real and still worth an arm, but it belongs to the bulk-mutation class
+(V-1838): the statement is an UPDATE with no id in the WHERE, so if the predicate stopped binding, one
+Mac beating would stamp its `last_seen_at` and CPU snapshot onto EVERY fleet row — a dead fleet reads
+as alive to the watchdog and in the admin listing that surfaces `last_seen_at`.
+
+**FIXED** — one arm in the existing fleet spec, no new file and no ratchet movement. Two nodes, one
+beats; the quiet one is asserted to have a NULL `last_seen_at` FIRST, because a witness that already
+had a timestamp could not show a stray write. Mutation-proved: removing the predicate fails with "a
+heartbeat from ANOTHER node marked this one as seen — the fleet would read as alive". Property census
+run before mutating (2 occurrences of that predicate; the other is in a covered method).
+
+⛔⛔ **WHAT THIS MEASUREMENT CANNOT SEE, stated because a clean axis set is exactly the reassuring zero
+that has burned me all day.** The enumeration is one regex over one directory. It cannot see a
+predicate assembled into a variable or array, built by a helper, written as a raw `sql` fragment, or
+carried by `inArray` / join conditions — and it does not look outside `src/db` at all.
+
+⭐ MEASURED RATHER THAN CONCEDED: **34 `eq()` predicate sites live OUTSIDE `src/db`**, in exactly two
+files (`services/durable-webhook-delivery.ts`, `services/email.ts` — the only two importing
+`drizzle-orm` outside the db layer). One of them is BOTH blind spots at once:
+`durable-webhook-delivery.ts:174` assembles `const conditions = [eq(webhookDeliveries.webhookId, …)]`
+and pushes to it. ⚠️ **Every coverage figure I have reported today was produced with
+`--coverage.include='apps/server/src/db/**'`, so those 34 have no execution data from me.** Prior art
+partly answers it — `db-durable-webhook-list-keyset` asserts "another endpoint's delivery id cannot be
+used as a page cursor" — but that is one arm, not a sweep.

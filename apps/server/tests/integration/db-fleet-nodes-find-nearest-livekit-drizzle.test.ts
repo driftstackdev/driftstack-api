@@ -403,5 +403,59 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       ).not.toBe(bare.id);
       expect(got?.id, 'the credentialled fixture should have been selected').toBe(wired.id);
     });
+
+    it('CRITICAL recordHeartbeat writes to the beating node ONLY. It is an UPDATE with no id in the WHERE — `node_id` is the whole thing bounding it — so if that predicate stopped binding, one Mac beating would stamp its own last_seen_at and CPU snapshot onto every row in the fleet, and a dead fleet would read as alive to the watchdog and in the admin listing.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleFleetNodesRepo({ client, db, close: async () => {} });
+
+      const beatingNodeId = `test-node-beat-${randomUUID()}`;
+      const quietNodeId = `test-node-quiet-${randomUUID()}`;
+      for (const [nodeId, label] of [
+        [beatingNodeId, 'beating'],
+        [quietNodeId, 'quiet'],
+      ] as const) {
+        const n = await repo.register({
+          publicKeyBase64Url: pk(),
+          displayName: `hb-${label}-${randomUUID().slice(0, 8)}`,
+          region: 'us',
+          hardwareClass: 'm2pro',
+          nodeId,
+        });
+        seededIds.push(n.id);
+      }
+
+      // The quiet node has never beaten, so its last_seen_at is NULL. That is
+      // what makes it a usable witness: any write that reaches it is visible.
+      expect(
+        (await repo.getDetailByNodeIdOrId(quietNodeId))?.lastSeenAt,
+        'the quiet fixture already had a last_seen_at, so it cannot witness a stray write',
+      ).toBeNull();
+
+      await repo.recordHeartbeat(
+        beatingNodeId,
+        {
+          beatAt: '2026-08-26T12:00:00.000Z',
+          cpuPercent: 42,
+          memoryPercent: 7,
+          activeSessionCount: 1,
+        },
+        new Date('2026-08-26T12:00:01.000Z'),
+      );
+
+      // Positive control: the beat landed where it was addressed.
+      const beat = await repo.getDetailByNodeIdOrId(beatingNodeId);
+      expect(beat?.lastSeenAt, 'the beating node did not record its own heartbeat').not.toBeNull();
+      expect(beat?.lastHeartbeat?.cpuPercent, 'the snapshot was not stored').toBe(42);
+
+      expect(
+        (await repo.getDetailByNodeIdOrId(quietNodeId))?.lastSeenAt,
+        'a heartbeat from ANOTHER node marked this one as seen — the fleet would read as alive',
+      ).toBeNull();
+      expect(
+        (await repo.getDetailByNodeIdOrId(quietNodeId))?.lastHeartbeat,
+        "a heartbeat from ANOTHER node overwrote this one's snapshot",
+      ).toBeNull();
+    });
   },
 );
