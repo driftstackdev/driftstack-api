@@ -12383,3 +12383,49 @@ Boundary: unique indexes classified from `schema.ts` with each definition bounde
 declaration, `onConflict` sites enumerated across `apps/server/src`, migrations cross-checked for
 partial uniques. **No defect found, no code changed, no guard added — the existing one is better than
 the one I would have written.**
+
+## V-1996 — the flag I planned a rollout around was already on, and had been for four days (2026-08-27)
+
+A2 found a root cryptominer on the fleet box (planted 08-21, running 08-23 → 08-27, ~600% of twelve
+cores, disguised as `com.apple.airportd`; write-up in
+`docs/runbooks/box-access-and-2026-08-27-incident.md`). Two consequences land on work of mine, and one
+does not.
+
+⛔ **The rollout plan I wrote this morning rested on a false premise.**
+`docs/internal/warm-tabs-rollback-rehearsal-and-watched-enable.md` opens "gated default-OFF, and never
+validated under load", and its Phase 0 is "rehearse the rollback **with the flag still OFF**". Warm
+tabs was **already enabled** — `DRIFTSTACK_WARM_TABS=1`, durable in `node.env`, for four days. **Phase
+0 as written would have flipped a flag that was already set**, and captured a "before" state that
+never existed. Corrected in place: a banner at the top, the Phase 0 heading fixed, and the one
+remaining in-body claim annotated so it cannot be acted on by a reader who skips the banner.
+Post-condition checked — every surviving "still off" occurrence now carries the correction.
+
+⭐ **The question I refused to collapse is what made it answerable.** That doc recorded: a bus post
+shows a daemon carrying `DRIFTSTACK_WARM_TABS=1`, but the flag appears in **zero** ops records
+(`ops=0 bus=8`), and _"'off on the box' and 'never ran anywhere' are different claims and only the
+first is established"_. It resolved the way the ledger did not: **it ran enabled; the ops record was
+simply never written.** `ops=0` meant "nobody wrote a record", not "the flag was never on". Had I
+treated the ledger's silence as evidence of absence, the plan would have shipped with the wrong
+premise and no trace of why.
+
+⭐⭐ **The lesson A2 draws is the inverse of the one I spent the day on, and it is the sharper of the
+two.** `harnessd.err.log` carried **43,661 lines** of `[HOST-CORES] busiest core 99% — single-core
+saturation; per-session timing may diverge` out of 212,089 — **one line in five, for six days,
+unread**. I spent today hand-verifying twenty-odd detectors that over-reported; here a detector
+reported perfectly, named its own consequence, and got no attention at all. **Distrusting the
+instrument has to mean both directions**, and only the noisy direction announces itself.
+
+⛔ **What is contaminated, stated narrowly.** Fleet-box **timing** measurements from 2026-08-21 onward
+are unreliable — a host missing half its CPU makes bursty delivery more likely, so a timing-derived
+cause may be a symptom of the miner. That does **not** touch V-1965: "the inbound gate releases on a
+clock, not on pressure clearing" is arithmetic over declared constants
+(`min(256, tokens + elapsed × 32)`), true at any host load. And the burst-causation hypothesis A2
+flags was never written into this log at all — it lived in a turn, so there is nothing to retract.
+The `inbound_admission_refused` log added earlier is worth **more** now: it is the only way to tell
+budget exhaustion from host starvation, and a clean host is the baseline to measure it against.
+
+⚠️ Credential rotation remains OPEN and is **not mine**: something held root for six days, so the
+fleet key, the `administrator` password and any token that lived on that box are to be treated as
+exposed. My standing rules forbid credential mutation, and a peer cannot lift that — flagged here and
+answered to A2 rather than acted on. SSH is now key-only
+(`ssh -i ~/.ssh/driftstack_fleet_ed25519 -o BatchMode=yes …`).

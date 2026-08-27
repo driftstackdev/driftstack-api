@@ -1,8 +1,31 @@
 # Warm tabs: rehearse the rollback, then a watched enable
 
+> ⛔⛔ **CORRECTION 2026-08-27 (V-1996) — this plan's premise was false when it was written.**
+> Warm tabs was **already enabled on the box, and had been for four days**: `DRIFTSTACK_WARM_TABS=1`,
+> durable in `node.env` (found by A2). Everything below that says "the flag is still off" is wrong,
+> and **Phase 0 as written would have flipped a flag that was already set** while capturing a
+> before-state that never existed.
+>
+> ⭐ The "unresolved" question at the end of Phase 0 is now answered, and it resolved the way the
+> stale ledger did not: **it ran enabled; the ops record was simply never written.** `ops=0` meant
+> "nobody wrote a record", not "the flag was never on" — which is exactly why those two claims were
+> kept separate rather than collapsed into the ledger's silence.
+>
+> ⚠️ Those four enabled days overlap the root-cryptominer window on the same host
+> (`docs/runbooks/box-access-and-2026-08-27-incident.md`; ~600% of twelve cores, 08-23 → 08-27), so
+> warm tabs ran on a machine missing half its CPU. **Any conclusion about its behaviour under load
+> from that period is contaminated** — which is not a reason to skip a watched enable, it is the
+> reason to do one against a clean host and get a baseline that means something.
+>
+> **What survives unchanged:** the rehearse-the-rollback-first argument below. A rollback that has
+> never executed is still a plan rather than a control, and that is _more_ true now that the feature
+> has been live and unwatched for four days on a compromised host. Phase 0 should be re-scoped from
+> "rehearse while off" to "rehearse the disable path against a host that is currently serving with it
+> ON" — the same steps, with a real blast radius, which is what the rehearsal was always for.
+
 Owner decision, 2026-08-27. Warm tabs (`DRIFTSTACK_WARM_TABS`, doc-151 Route A) is built, gated
 default-OFF, and **never validated under load**. The chosen path is: **prove the rollback works while
-the flag is still off, and only then enable on one node under watch.**
+the flag is still off, and only then enable on one node under watch.** ⛔ **(The premise is false — it was already on; see the correction above.)**
 
 ⛔ **Why the rehearsal comes first, in one sentence:** a rollback that has never executed is a plan, not
 a control — and this repo produced three separate cases in a single day of a documented mechanism that
@@ -10,7 +33,7 @@ was never actually built (a "v1.1 classifier" that does not exist, a "GET + DEL 
 written, a `credentials: true` justified by a cookie session that does not exist). **The escape hatch is
 exactly the kind of artifact that gets written down and never run.**
 
-## Phase 0 — rehearse the rollback with the flag still OFF
+## Phase 0 — rehearse the rollback ⛔ (heading is wrong: the flag was ON — see the correction above)
 
 The documented procedure is `DRIFTSTACK_WARM_TABS=0` + kickstart + revert. Run it end to end **now**,
 while warm tabs is off, so a failure costs nothing:
@@ -23,10 +46,13 @@ while warm tabs is off, so a failure costs nothing:
 4. **Post-condition, not a derivation:** assert the running daemon's env shows `DRIFTSTACK_WARM_TABS=0`
    — do not infer it from "the command exited 0".
 
-⚠️ **Unresolved, and Phase 0 is the cheapest place to answer it:** a bus post records a daemon carrying
-`DRIFTSTACK_WARM_TABS=1`, but the flag appears in **zero** ops records (`ops=0 bus=8`). **"Off on the
-box" and "never ran anywhere" are different claims and only the first is established.** Whatever Phase 0
-captures of the daemon env should be written to an ops record so the next person is not guessing.
+⛔ **RESOLVED 2026-08-27 — see the correction at the top.** This section read: a bus post records a
+daemon carrying `DRIFTSTACK_WARM_TABS=1`, but the flag appears in **zero** ops records (`ops=0 bus=8`),
+so "off on the box" and "never ran anywhere" are different claims and only the first is established.
+**The answer is that it was ON, for four days.** The bus post was a fact, not an intent; `ops=0` meant
+the record was never written. The instruction that still stands is the last one: whatever is captured
+of the daemon env **must** be written to an ops record, because the missing record is what made a live
+flag look unset for four days.
 
 ## Phase 1 — watched enable, ONE node
 
