@@ -21128,3 +21128,45 @@ comes from the other file, not that one.
 Boundary: this audited the four routes, the tester service and the scope-resolution rule by reading,
 and verified each documented claim against them. No code changed; nothing was executed against a live
 Anthropic endpoint.
+
+## V-1982 — the agent-session control surface documents eight things; all eight are true (2026-08-27)
+
+Same method as V-1981, applied to `agent-sessions.{setMode, resume}` — the human-takeover control
+surface, and two more of the methods V-1979 left untested in Python and Go. Each sentence of the SDK
+doc comment was taken as a testable assertion about the server and traced to the code that
+implements it.
+
+**`setMode` — five claims, five verified.**
+
+| claim                                                                        | where it holds                                                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| "atomic dual-column write of `mode` + `pair_mode_state`"                     | `setModeIfActive` is one `.set({ mode, pairModeState, updatedAt })`                                           |
+| "…and the lifecycle predicate is part of the same UPDATE"                    | `.where(and(eq(id), eq(status …)))` — a close winner gets neither a late overwrite nor the audit entry        |
+| "transitioning INTO 'pair' initializes to `{kind:'ai-driving'}`"             | `target === 'pair' ? initialPairModeState() : null`, and that helper returns exactly `{ kind: 'ai-driving' }` |
+| "transitioning OUT clears it to null"                                        | the `: null` arm of the same expression                                                                       |
+| "idempotent — a no-op returns the existing row, `pair_mode_state` preserved" | `if (rec.mode === target)` returns `rec` untouched **before** any write                                       |
+
+⭐ The idempotency claim is the one that would matter most if it were false: a no-op `pair → pair`
+that re-initialised the state would clobber a live takeover back to `ai-driving`. It returns early,
+before the write, so it cannot.
+
+**`resume` — three claims, three verified.** Returns exactly
+`202 { status: 'resume_requested', session_id }`; 409 when the session is not active; and the 404
+genuinely does not leak existence — `rec === null || !callerCanAccessAgentSession(...)` raises the
+**same** `NotFoundError`, so an unknown id and another account's id are indistinguishable.
+
+⭐ The route also carries a tier gate the SDK doc does not mention, and the comment explains why it
+exists: without it "a free/personal account creates a `mode:'manual'` session (open on every tier) and
+flips it LLM-driven here, bypassing the tier matrix entirely". Manual-ward flips stay open on every
+tier deliberately — "handing back to a human must never be tier-refused, even after a mid-session
+downgrade." Undocumented in the SDK, but that is server-side enforcement, not a customer promise.
+
+**Tallying the three audits this session: ~17 documented claims checked across a credential surface,
+a control surface and an ownership transfer. Sixteen were accurate. One was not** — `transfer`'s
+"Mints a copy in the recipient's account", fixed in V-1980. That ratio is the useful result: the SDK
+doc comments in this repo are load-bearing and generally trustworthy, which is exactly why the one
+misleading sentence was worth correcting rather than shrugging at.
+
+Boundary: all three audits verified documented claims against the route, service and repository code
+by reading. None executed against a live database or a live provider endpoint; the existing
+integration suites do that, and none of them asserts the specific doc claims checked here.
