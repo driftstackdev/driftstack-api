@@ -16108,3 +16108,44 @@ the validating run must have that dependency wired, and the way to know is that 
 A gate whose skip count does not drop after adding a gated test did not run it. That is a
 post-condition on the validation itself, in the spirit of preferring "no occurrence remains" over
 "the change was applied" — the same reasoning one level up.
+
+## V-1865 — the e2e corpus, run locally: green, not dark, and one more false instrument
+
+2026-08-26. No defect. One stale self-description corrected, one instrument retired before it published
+anything, and a corpus confirmed rather than assumed.
+
+✅ **THE WHOLE e2e CORPUS RUNS AND PASSES LOCALLY: 233 tests, 52.9s, exit 0** at `61af88884`, against
+an isolated Postgres and Redis index. Together with the DB-wired vitest gate (3228 files, 32109 tests)
+that is the first time this session both halves have been executed.
+
+⛔ **I NEARLY REPORTED IT AS A DARK CORPUS, AND IT IS NOT.** A memory of mine says e2e specs "rot
+invisibly, because nobody runs them". `ci.yml` has a full `e2e` job — real Postgres and Redis services,
+`needs: build-test`, no `continue-on-error` — so it gates every push. The corpus was dark **to my local
+loop**, which is a different and much smaller claim. Checked before writing it down rather than after.
+
+⚠️ **First attempt was thrown away deliberately.** The CI job sets `DRIVER: mock` and `CI: 'true'`; my
+run set neither. A failure under a different environment is uninterpretable, so I stopped the run and
+re-launched with the environment reproduced. **A harness that does not reproduce what it audits cannot
+be read either way** — a pass would have been as meaningless as a fail.
+
+⛔⛔ **AND THE NINTH INSTRUMENT FAILURE OF THE DAY, caught before it became a claim.** I built a census
+of e2e specs asserting a 4xx without asserting a problem TYPE, and it flagged 22 of 30 files. Reading
+two of them killed it: `one-account-cannot-reach-another-by-id` pairs every 404 with a positive control
+("the owner's own read" → 200, "the owner's profile survived B's delete attempt" → 200), and
+`account-mfa` interleaves its 400s with the 200s of the surrounding flow. **A refusal is disambiguated
+by its positive arm, not by a problem type** — which is a discipline I already hold and had just
+applied to the eleven role gates. My census measured the wrong property, so the 22 are not a finding
+and are not reported as one.
+
+⭐ **THE ONE REAL DEFECT WAS PROSE.** `profile-limit.spec.ts` still described itself as a "placeholder
+until the /v1/profiles route lands", instructing a future reader to convert it into a create-N-then-N+1
+HTTP test. The route landed; `routes/profiles.ts` registers it. Worse, the conversion it asks for would
+rebuild coverage that exists and is stronger: `db-profile-cap-lock-is-taken-drizzle` proves
+`insertWithLimit` BLOCKS on the account row lock against real Postgres, which is precisely the property
+an HTTP-level race cannot observe, because the count-to-insert window is too narrow to hit by racing
+requests. Header corrected to say what the file is actually for — the published per-tier NUMBERS, a
+contract with the pricing page that no locking test pins.
+
+⭐⭐ Two stale self-descriptions in one day, both instructing redundant work, both silently decayed
+because **nothing reds when the gap a comment describes gets closed.** That is now a class worth
+watching rather than two coincidences.

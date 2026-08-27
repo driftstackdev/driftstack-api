@@ -7,6 +7,28 @@
 // V-814 corrected this from 402 + a profile-cap-reached body, neither of
 // which the server has ever produced).
 //
+// ⛔ 2026-08-26 — THE ROUTE LANDED, AND THE CONVERSION THIS DESCRIBES IS ALREADY
+// DONE ELSEWHERE. `POST /v1/profiles` is registered in `routes/profiles.ts`, and
+// the cap it applies is enforced under a lock rather than by the count-then-insert
+// this header anticipated. Following the instruction above would rebuild coverage
+// that exists:
+//
+//   • `db-profile-cap-lock-is-taken-drizzle` — insertWithLimit BLOCKS while another
+//     session holds the account row lock, against real Postgres. That is the
+//     property an HTTP-level "create N, then N+1" test cannot observe, because the
+//     count-to-insert window is too narrow to hit by racing requests.
+//   • `db-profiles-repo-keyset-drizzle` — the same cap under real concurrency.
+//   • `every-tier-cap-has-an-atomic-backstop` — that every tier-limit helper is
+//     paired with a conditional-insert method, derived rather than listed.
+//
+// What stays worth having HERE is exactly what is below: the published per-tier
+// NUMBERS. Those are a contract with the pricing page, they are cheap to assert,
+// and no locking test pins them. So this file is not a placeholder — it is the
+// value half of a cap whose enforcement half lives against a real database.
+//
+// ⚠️ It makes no HTTP call, which is why it reads as unfinished. Left in the e2e
+// project because moving it would change nothing about what it proves.
+//
 // Per ADR-004 + V-073:
 //   free:    1
 //   solo_manual:   10
