@@ -17818,3 +17818,43 @@ the count paid for it. The behavioural catch stands on its own, but the "3 failu
 ⚠️ **Mutation safety**: snapshot proven by size and `cmp` before the edit, file asserted to differ after,
 single-path restore trap, and afterwards verified byte-identical with zero markers and a clean worktree.
 Exposure was one full-suite run in a shared tree with no peer writes and the tree quiescent at the start.
+
+## V-1909 — the type system is the first layer holding these fail-closed branches shut
+
+2026-08-27. No defect. An attempt to finish the fail-closed population that produced a better finding
+than the one it was chasing, and one question left open on purpose.
+
+**THE POPULATION.** `middleware/rate-limit.ts` has SIX "failing CLOSED" sites. V-1908 mutation-proved
+one is covered. Heading-checked the four siblings V-968 names (V-961/963/966/967) — all different
+subjects, so the other five were genuinely unverified. Five of them funnel through one shared helper,
+so one edit should have answered all five at once.
+
+⛔⛔ **IT DID NOT COMPILE, AND THAT IS THE FINDING.** `rejectEffectiveOwner` is declared
+`(reply, retryAfterSeconds): never` and throws. Changing it to return a tier produced **12 tsc errors**,
+because its call sites are NOT one type context: some sit in a `.catch()` that must yield an
+`OwnerAuthority`, and downstream code reads `.account` off the result. **`never` is assignable
+everywhere precisely because the function cannot return** — so a fail-open edit has to satisfy every
+call site's real type, individually.
+
+⭐⭐ **TWO LAYERS, AND NAMING THEM SEPARATELY IS THE POINT:**
+
+1. **A careless fail-open is caught by the compiler.** A bare `return;` (V-1908's mutation) and a
+   wrong-typed value (this one) both fail tsc — 2 and 12 errors respectively. Neither could ship.
+2. **A deliberate fail-open is not.** V-968 got a clean behavioural regression by substituting a
+   PERMISSIVE AUTHORITY — a valid `OwnerAuthority` — which typechecks fine. That is the edit tests must
+   catch, and for the control-key branch V-1908 proved they do.
+
+⭐ **AND THIS EXPLAINS WHY BOTH MY MUTATIONS MISFIRED.** I read their tsc failures as noise the first
+time and as an obstacle the second. They are neither: they are the first defence reporting itself.
+A mutation that will not compile is not a failed experiment, it is a measurement of how hard the
+regression is to introduce.
+
+⚠️ **WHAT REMAINS OPEN, stated rather than fudged:** whether the five `rejectEffectiveOwner` sites are
+covered against a DELIBERATE fail-open is unanswered. Doing it properly needs a fabricated
+`OwnerAuthority` carrying a full `AccountRow`, and a malformed one throws at runtime — which reads
+exactly like a test catching the mutation when it is really a crash. **I would rather leave the question
+open than answer it with an instrument whose failure mode I cannot distinguish from a pass.**
+
+⚠️ Mutation safety: snapshot proven before each edit, difference asserted, restore trapped, and both
+restores verified byte-identical with a clean worktree. Neither mutation reached a suite run — the
+typecheck-first step stopped them, which is the improvement V-1908 called for.
