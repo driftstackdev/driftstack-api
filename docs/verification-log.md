@@ -13887,3 +13887,48 @@ once inside an existing arm — and the assert stopped the write; resolved by lo
 bounds and deriving the indentation from the file. Earlier, a probe listing the module's exports was piped
 through `tail -6`, and `CAPABILITY_REPORT_MAX_BYTES` sorts first alphabetically, so I read a truncated list
 as complete and briefly concluded the constant was not exported. It is; there are 103.
+
+## V-2023 — the reachability sweep triaged, and the one input that keeps an auth premise true (2026-08-27)
+
+2026-08-27. Finishing the sweep V-2020 started. **Boundary: 53 lines across both verification logs
+asserting a reachability conclusion ("cannot fire", "unreachable", "no input reaches", "dominated by",
+"is inert").** Working the candidates whose invariant is a constant or caller-set relationship produced a
+triage rule worth more than any single one of them.
+
+⭐ **Not every recorded "unreachable" needs asserting. Only the ones where the condition changing is BAD.**
+
+```
+V-2020  backoff fallbacks      BAD      diverge 60x once attempt 6 is reachable   -> asserted
+V-2022  safeguardChecks caps   BAD      schema-valid frames rejected on aggregate -> asserted
+V-1902  empty-token early return  BAD   skips the rate limit AND auth             -> asserted here
+V-1653  clientReferenceId      BAD      takes precedence, never cross-checked     -> already tested, real PG
+V-1834  usage-repo `continue`  BENIGN   a defence-in-depth filter starts working  -> nothing to do
+V-1524c AuditArchiveService    FIRED    three documents went stale                -> corrected (V-2021)
+```
+
+⭐⭐ **V-1606 is the model, and it was written before any of this.** It found that a null `account_id`
+collapses every caller into one `_anon` idempotency scope, verified unreachability by tracing the single
+`createIdempotent` call site (still exactly one, behind `requireAuth` + `requireScope`), **and then built
+the guard anyway** — its own words: _"This file fails on that change rather than after it, and says in its
+header what the next person has to decide."_ That is the whole lesson, already practised.
+
+### V-1902's premise, verified on both branches and now pinned
+
+`routes/internal-atlas-priority.ts` opens its per-token limiter with `if (token.length === 0) return;` — a
+bare return that skips the rate limit — annotated "validate() would have already thrown; defensive".
+**Verified, and it is stronger than the entry claimed:** `validate()` throws when `tokenBuf === null`
+(auth disabled), and otherwise the constructor guarantees `tokenBuf.length > 0`, so an empty candidate
+fails the length pre-check. Unreachable on **both** deployment shapes, not just the configured one.
+
+**The premise was guarded by branch and not by input.** The existing arms cover the disabled deployment,
+the length-mismatch branch and the constant-time compare — but every fixture is a non-empty token, and
+`Authorization: Bearer ` with nothing after the space is the ONE value that yields `token === ''` in that
+preHandler. New arm supplies exactly that, on both deployment shapes.
+
+**Mutation-proved, and it is the sole witness.** Letting an empty candidate skip the length pre-check
+(`candidate.length !== 0 && …`) reds **one** arm of eight — the new one. The pre-existing "different
+length" arm passes straight through it, because `'Bearer short'` is length 5 and still hits the mismatch
+throw. ⭐ **The branch was covered; the input was not** — the same distinction V-2005 found when a refusal
+fixture of 9 and 40 characters never reached a 36-character branch, and V-2007 found again at 10
+characters against a 36-wide pattern. Third and fourth instances of one rule: **a refusal fixture must be
+the value the other side actually produces.**

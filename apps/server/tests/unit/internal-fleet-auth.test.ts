@@ -66,4 +66,41 @@ describe('InternalFleetAuth.validate', () => {
     const auth = new InternalFleetAuth({ internalToken: TOKEN });
     expect(() => auth.validate(reqWith(`Bearer ${TOKEN}`))).not.toThrow();
   });
+  // V-2023 — the one header value that reaches the rate limiter's early return.
+  //
+  // `routes/internal-atlas-priority.ts` opens its per-token limiter with
+  // `if (token.length === 0) return;` — a bare return that skips the rate limit
+  // entirely — and annotates it "validate() would have already thrown; defensive".
+  // An audit traced that rather than assuming it, and it holds. This is the arm
+  // that keeps it holding.
+  //
+  // The coupling is exact. That preHandler computes
+  // `auth.replace(/^Bearer\s+/i, '').trim()`, so `Authorization: Bearer ` with
+  // nothing after the space is precisely the input that yields `token === ''`
+  // there. If validate() ever stopped throwing for it — an "allow when auth is
+  // disabled" convenience, say — that route family would answer unauthenticated
+  // AND unlimited.
+  //
+  // ⚠️ The length-mismatch arm above already covers the CODE BRANCH. This covers
+  // the INPUT, which is a different thing: a refusal fixture has to be the value
+  // the other side actually produces, or it reaches the branch by a route no
+  // caller can take.
+  it("CRITICAL an EMPTY bearer token is refused, on both deployment shapes — this is what makes the atlas-priority limiter's empty-token early return unreachable", () => {
+    const auth = new InternalFleetAuth({ internalToken: TOKEN });
+    expect(
+      () => auth.validate(reqWith('Bearer ')),
+      'the exact value the preHandler reduces to ""',
+    ).toThrow(UnauthorizedError);
+    expect(
+      () => auth.validate(reqWith('Bearer    ')),
+      'trailing whitespace trims to the same',
+    ).toThrow(UnauthorizedError);
+    // With the secret unset the same input is refused one branch earlier, so the
+    // early return is unreachable whether or not the deployment configures a token.
+    const disabled = new InternalFleetAuth({ internalToken: null });
+    expect(
+      () => disabled.validate(reqWith('Bearer ')),
+      'disabled deployment refuses it too',
+    ).toThrow(UnauthorizedError);
+  });
 });
