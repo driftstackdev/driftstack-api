@@ -16311,3 +16311,39 @@ executed against `e883cc24f`: build-test (3228 files / 32109 tests), e2e (233), 
 a merge — and neither was the Python wheel build and its fresh-venv smoke test, which are packaging
 steps rather than code verification. Everything else that CI would run has run, by hand, because nothing
 in this tree runs it automatically.
+
+## V-1869 — the SDK live-contract layer is covered, and a measured header had drifted by four
+
+2026-08-26. No defect in the product. One number refreshed; a plausible gap checked and found closed.
+
+**THE QUESTION.** A bare `pytest` in `packages/sdk-python` reports 9 skipped, all in
+`test_live_contract.py`, "needs DS*LIVE_BASE_URL + DS_LIVE_API_KEY pointing at a running server", and
+`DS_LIVE*` appears in **zero** workflow files. That is the exact shape of a permanently-skipped suite —
+the class that left three e2e rate-limit tests asserting a status produced by a gate they were not
+testing.
+
+⭐ **IT IS CLOSED, and the file says so in its own header.** `sdk-python-against-the-real-server.test.ts`
+starts a real app, sets both variables, and asserts the suite RAN. Its second arm states the reasoning
+better than I would have: the check is on the collected counts **rather than the exit code, because a
+fully-skipped pytest run also exits 0**. Run at HEAD: 2 passed. The symmetric harnesses exist for the
+other two SDKs — `sdk-go-` and `sdk-typescript-against-the-real-server` — so all three published clients
+have a live-contract layer driven from the vitest side, and the Go `TestLive*` skips are the same
+arrangement rather than a gap. That is the whole population; there are three SDKs.
+
+⛔ **THE HEADER'S MEASURED CLAIM HAD DRIFTED, which is the third instance of a class this ledger opened
+today.** It read "48 of 276 public resource methods parse into a model. The other 228 return the decoded
+JSON as `dict[str, Any]`, unvalidated". Re-derived with `ast` the way the header says it was derived:
+**52 of 280 parse, 228 unvalidated.**
+
+⭐ Both totals moved by exactly +4 and the unvalidated figure did not move at all, which is the whole
+story: `a6c6eb514` (P-14, team read and rename across three SDKs) added four public methods and **all
+four parse into models**. Confirmed against history rather than inferred from the arithmetic. So the
+header's argument — that a minority of the surface validates, which argues for more assertions in the
+live suite rather than fewer — is untouched, and the newest methods run the way it wants. Refreshed to
+carry both numbers and that trend.
+
+⚠️ Verified after the edit rather than before: ruff check and format clean, `mypy src examples` reports
+no issues in 43 files, pytest still 365 passed / 9 skipped, the file's test-function count unchanged at
+9 against HEAD, and the harness that drives it re-run to 2 passed. Boundary: this touches a docstring,
+and nothing else in the tree reads that text — the one vitest file referencing it invokes pytest rather
+than pinning its prose.

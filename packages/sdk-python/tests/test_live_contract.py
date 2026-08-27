@@ -12,8 +12,11 @@ process on a call that succeeded. Mocked tests cannot reach that path at all —
 they feed the parser exactly the body the test author wrote.
 
 But it is a minority of the surface, and this header used to claim otherwise.
-Measured with ``ast`` over ``src/driftstack/resources``: 48 of 276 public
-resource methods parse into a model. The other 228 return the decoded JSON as
+Measured with ``ast`` over ``src/driftstack/resources``: 52 of 280 public
+resource methods parse into a model (48 of 276 when this was written; the four
+team methods added since all parse, so the unvalidated count below is the same
+number it was, and the direction of travel is the one this argues for). The
+other 228 return the decoded JSON as
 ``dict[str, Any]``, unvalidated — including ``account.me``, ``profiles.list``
 and ``usage.series``, three of the endpoints exercised below. For those, drift
 is exactly as silent as it is in the TypeScript client: the caller gets a dict
