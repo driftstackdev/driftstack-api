@@ -13153,3 +13153,39 @@ lib: every site validates before stripping — `profiles.ts:526` runs a full str
 `acc_<uuid>` before `.slice(4)`; `account-web-sessions.ts` checks the prefix then a strict uuid;
 `currentWebSessionIdFromRequest` strips a server-side auth-context value, not caller input. `admin-cost.ts`
 is the V-1580 site, already fixed. **No unvalidated strip anywhere.**
+
+## V-2008 — the scope question V-2007 raised, asked of two more guards: both narrow, neither live (2026-08-27)
+
+2026-08-27. V-2007's transferable half is that **a shape guard scoped to one directory is a filename guard
+wearing a shape's clothes** — V-1565 walked `routes/` and the class it removed survived in `services/`.
+That is a question worth asking of every guard that hardcodes a scan root, so I asked it of the two whose
+property is least route-specific. **Boundary: `apps/server/src` in full for each property, comment lines
+distinguished from code.**
+
+**`client-ip-shared-parser` — narrow scope, zero live instances.** Its arms are named _"no ROUTE reads
+X-Forwarded-For outside the shared reader"_ and it walks a route roster. A service parsing the header
+itself would be invisible. Measured across all of `apps/server/src`: **seven mentions, every one a
+comment** (`schema.ts`, `app.ts` ×2, `bootstrap.ts`, `client-ip.ts`'s own header, `config.ts`,
+`legal.ts`) — **no code reads it anywhere outside `lib/client-ip.ts`.** The guard also derives its consumer
+roster rather than hardcoding it (its arm _"discovery found the consumers, and the historical roster is a
+subset of them"_), which is the design that stops the roster rotting.
+
+**`every-intent-emission-goes-through-the-public-projection` — narrow scope, and the boundary is the point.**
+It scans `ROUTES_DIR` only, and the three projections (`publicAgentIntent`, `publicIntentResult`,
+`publicTranscriptEntry`) live in `services/agent-public-redaction.ts`. Three services both write to a
+transport and carry intent/transcript payloads — `harness-dispatch-correlator`, `fleet-control-registry`,
+`cookies-request-correlator`. **None is a gap**: the first is the core of the `/v1/fleet/events` WSS sender,
+a server-to-fleet-node channel, and the projection exists to redact at the CUSTOMER boundary. Sending
+unprojected intent to our own harness is the design, not a leak. **A guard's scope is defensible when it
+matches a trust boundary rather than a directory** — here `routes/` happens to BE the customer boundary,
+which is why the scope is right and V-1565's was not.
+
+⛔ **Two of my own searches returned false zeros in this sweep.** `git grep -- 'apps/server/src/services/**/*.ts'`
+matched nothing — git pathspecs do not glob `**` that way — and I read it as "no service mentions intent".
+The control (the same query against `routes/`, a known positive) exposed it; with `*.ts` the answer is 50+
+files. Earlier the same turn, four concept greps returned zero because I used `-E` with `\|`, which is a
+literal backslash-pipe in extended regex. **Both zeros were plausible and both were my syntax.** A zero
+from a search whose positive control has not been run is not a measurement.
+
+**No code changed.** Recorded so the scope question is asked once and answered, rather than re-derived the
+next time a directory-scoped guard looks suspicious.
