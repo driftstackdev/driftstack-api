@@ -16010,3 +16010,73 @@ within them.
 **Mutation safety:** snapshot proven by size and `cmp` before the first edit, the file asserted to have
 actually changed before the run was believed, a single-path restore trap (no list to collapse — the
 morning's bug), and recovery verified by post-condition: byte-identical, zero markers, tree clean.
+
+## V-1863 — the gate told me it was blind, and my filter deleted the sentence
+
+2026-08-26. No product defect. An instrument defect in my own method, found twice over, plus a
+near-miss on a shared resource.
+
+⛔⛔⛔ **THE RUN SAID SO, IN PLAIN LANGUAGE, AND I DID NOT SEE IT.** Line 466 of the gate log:
+
+    verify-suite: NOTE — 117 test file(s) were collected but never executed.
+    Most gate on DATABASE_URL; set it to the local Postgres to run them.
+
+The remedy is in the sentence. I piped that log through
+`grep -E "Test Files|Tests |EXIT|Duration|FAIL"`, read `3111 passed | 117 skipped`, and called it
+green. **The filter I built to extract the verdict removed the caveat attached to the verdict** — the
+two are shaped differently, so a verdict-shaped pattern cannot match a caveat. I noticed only because
+the skip count differed from a number I happened to remember. That is luck, not method.
+
+⚠️ **And the same NOTE had already failed to land once**, on 2026-08-15, when it printed after every
+run and was read as a remark about suite completeness rather than about the probes being measured
+against it. Two encounters, two different defeat mechanisms: misread, then filtered away.
+
+⭐ **The database was there the whole time.** Postgres was accepting connections on 5432 throughout;
+the variable was simply never set. So this was not an unavailable dependency, it was a self-inflicted
+blind spot in every gate run this session — and 117 files is not a rounding error, it is the entire
+DB-backed integration layer.
+
+⛔⛔ **NEAR-MISS WORTH RECORDING.** `config.ts:749` defaults `databaseUrl` to
+`postgres://…/driftstack` — the SHARED local database other agents use. `npm run db:migrate` inherits
+that default, so running it with the variable merely unexported would have applied 115 migrations to
+a shared multi-agent resource. Caught by reading the config before running the command rather than
+after. The isolated path used instead: a dedicated `driftstack_a3_vitest` database and Redis index 11,
+both confirmed unused first, with the shared database's table count checked before and after to prove
+it was untouched.
+
+⭐ **RE-VERIFIED RATHER THAN ASSUMED, because a corrected instrument invalidates old negatives.** A
+missing integration test can only turn a real catch into a false "uncovered" — a CAUGHT verdict is
+unaffected. So only the negatives needed rechecking. V-1858 claimed the customer webhook scope gates
+were behaviourally unwitnessed; with the blind spot named, I checked the 20 DB-gated webhook files and
+the surviving pin. They are repo-layer tests, and the one arm that touches `listDeliveries` extracts
+the method body and regex-matches it — a source-text pin, not behaviour. **V-1858 stands.**
+
+⭐⭐ The rule this adds to the V-1862 tally: after a run finishes, **read the last lines unfiltered.**
+Tools put their self-reports next to their verdicts, which is precisely the region a verdict-shaped
+filter skips. And a count that differs from the remembered one is something to explain, never to round
+off — that difference is the only reason any of this surfaced.
+
+⭐ **BOUNDED, because "117 dark files" would otherwise read as a repo defect and it is not one.**
+`.github/workflows/ci.yml` wires `DATABASE_URL` for both test jobs and runs `db:migrate` before them,
+so those files execute on every CI run. They were dark **locally, for me**, which makes this an
+instrument gap on my side rather than dead tests in the tree.
+
+⚠️ The CI step carries its own history worth knowing: those `db-*-drizzle` files "had NEVER actually
+executed anywhere until 2026-06-12" — they probed a schema-less database, hit their reachability
+guard, and reported PASSED. That failure mode is now closed, and I re-derived the closure by accident:
+pointing one at my freshly-created, unmigrated database made it FAIL loudly on exactly that assertion.
+
+⭐ **Checked whether that vacuity class has any remaining foothold, and it does not.** The guard
+`an-integration-test-cannot-pass-without-its-database` scans `tests/integration`, and that directory
+holds 150 of the 151 files using the idiom — the 151st is the guard itself, so its scope is the whole
+population, not a subset. Sweeping the SHAPE rather than its handle names turned up two bail
+conditions outside its regex, `RUN_DB_TESTS` and `bucket`; neither is a hole. The first is
+`Boolean(process.env.CI || process.env.DATABASE_URL)` consumed through `describe.skipIf`, which skips
+rather than passing, and the second has no bail sites at all. The remaining early-return handles are
+data, not dependencies. **No defect — recorded so the next sweep does not re-run it.**
+
+✅ **MEASURED CONSEQUENCE, same gate, one variable changed.** Blind: 3111 passed / 117 skipped (3228),
+31280 tests, plus the NOTE. Wired to an isolated migrated Postgres: **3228 passed (3228), 32109 passed
+/ 16 skipped, exit 0, and no NOTE at all** — there is nothing left to caveat. **829 tests that had not
+been running executed, and every one passes.** The earlier green was real but partial; this is the
+first full green I have taken this session, at `bceb7c38b`.
