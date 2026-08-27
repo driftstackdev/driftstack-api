@@ -17899,3 +17899,49 @@ cap, LiveKit over-grant, permissive CORS, and this. **None described a live prob
 ⚠️ BOUNDARY: this verifies the retention bounds and the index cleanup. The note's own cross-account
 finding was re-read but not re-derived — it was checked when written and nothing in the delta touches
 the ownership check it rests on.
+
+## V-1911 — a real escalation, fixed twice, and the note that outlived both (2026-08-27)
+
+An open security note dated 2026-05-26 claimed `POST /v1/api-keys` let an `account_owner`
+web session mint a key carrying `driftstack_internal_admin`, which the V-174 alias then let
+satisfy every `/v1/admin/*` staff gate. **The note was correct when written.** `b5de219d0`
+shows the alias it relied on, in its original broad form:
+
+```ts
+(required === 'account_owner' || required === 'driftstack_internal_admin') &&
+  scopes.includes('admin');
+```
+
+Both halves are now closed, independently, and each alone would suffice:
+
+| layer              | commit      | date       | what it does                                                                                            |
+| ------------------ | ----------- | ---------- | ------------------------------------------------------------------------------------------------------- |
+| mint de-escalation | `e51ad504a` | 2026-05-26 | `api-keys.ts:275-293` refuses to grant `admin` / `driftstack_internal_admin` to a caller not holding it |
+| alias narrowing    | `b5de219d0` | 2026-07-14 | `scopesSatisfy` restricted to `account_owner`; `driftstack_internal_admin` now needs an **exact match** |
+
+The mint fix landed the _same day_ the note was written. The note sat open for three months
+across a fix it never saw, and would have been re-reported on the next recall.
+
+**Boundary of this measurement:** both layers read directly from source at `5f7ab3107`, and
+the history claims come from `git log -S` over `apps/server/src` — full history, no path
+narrowing. I did not test exploitability against a deployed origin; the claim is about the
+code, not about `api.driftstack.dev`.
+
+### The empty grep that nearly became a conclusion
+
+The note cited the predicate at `auth.ts ~L493`. Grepping that file for it returned **empty** —
+from a working grep, on a file that exists and parses. The predicate had **moved** to
+`lib/errors-helpers.ts:60`; `auth.ts:493` is unrelated OAuth-token code today. Empty read as
+_"the predicate is gone"_ when it meant _"the citation is three months old."_ A stale citation
+is worse than a missing one: a missing one makes you search, a stale one makes you search the
+wrong place confidently. The unscoped re-run that found it cost one command.
+
+### Residual, stated rather than guarded
+
+`ELEVATED_SCOPES` is hand-maintained and pinned by a **literal-text** parity assertion, so a
+_third_ staff scope added to `ApiKeyScopeSchema` and forgotten there stays green. I did not
+build a guard: the only available anchor — "scopes that `/v1/admin/*` routes gate on" — yields
+`{driftstack_internal_admin, read}`, **missing `admin`** (elevated via the alias, never via a
+route gate) and **wrongly including `read`**. A guard on a non-derivable anchor errs in both
+directions, so this is a comment at the const and a line here, not a test. Bounded by layer 1:
+a forgotten scope is a minting gap, not an alias escalation.

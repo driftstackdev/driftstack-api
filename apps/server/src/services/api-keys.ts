@@ -283,6 +283,21 @@ export class ApiKeysService {
     // staff/deprecated scopes require the caller to already hold that exact
     // scope. A legacy `admin` key can preserve customer compatibility but
     // cannot grant or derive the staff-only scope.
+    // ⚠️ 2026-08-27 — THIS LIST IS HAND-MAINTAINED AND ITS PIN IS TEXTUAL.
+    // `services-api-keys-content-parity` matches the literal line below, so it
+    // reds if these two names change — and stays green if a THIRD staff scope is
+    // added to ApiKeyScopeSchema and forgotten here. Adding a staff-only scope
+    // therefore requires adding it here in the same commit.
+    //
+    // Not derivable, checked: scoping it to "scopes /v1/admin/* gates on" yields
+    // {driftstack_internal_admin, read} — it misses `admin` (elevated via the
+    // scopesSatisfy alias, never via a route gate) and wrongly includes `read`.
+    // A guard on that anchor would be wrong in both directions, so the omission
+    // is caught by review rather than by a test.
+    //
+    // Bounded by a second layer: `driftstack_internal_admin` is satisfied by
+    // EXACT MATCH only (errors-helpers.ts scopesSatisfy), so a forgotten scope
+    // here is a minting gap, not an alias-based escalation.
     const ELEVATED_SCOPES: ApiKeyScope[] = ['admin', 'driftstack_internal_admin'];
     for (const scope of input.scopes) {
       if (ELEVATED_SCOPES.includes(scope) && !hasScope(ctx, scope)) {
