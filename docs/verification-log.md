@@ -17750,3 +17750,38 @@ note being touched. The notes are reliable about what was true; they are silent 
 ⚠️ BOUNDARY: this verifies the deletion, the registration absence, and the grant/identity split on the
 surviving route. The canonical route's own end-to-end behaviour was audited separately (V-1876 covered
 its ordering); its handler internals beyond the grants were not re-read here.
+
+## V-1907 — a prod CORS misconfiguration that can no longer boot, and a sweep that produced 158 non-answers
+
+2026-08-27. No defect. The sixth stale open-issue note, and an instrument that failed loudly enough to
+be worth recording alongside it.
+
+⛔ **THE SWEEP FAILED FIRST.** Having found five stale notes, I tried to enumerate the rest mechanically:
+`project_*` memories, server-side, whose description carries no resolution marker. It returned **158** —
+including `team_rbac_audit_clean`, `db_index_coverage_clean` and a pile of arcs, trackers and founder
+decisions. The filter matched "gap|LOW|open|pending" anywhere in a filename or summary, and **"open" and
+"gap" are ordinary English**. That is not a population; the property I want is semantic and I could not
+derive it cheaply. Recorded as a discarded instrument rather than dressed up as a backlog.
+
+⭐ **SO I HAND-PICKED FROM THE OUTPUT, which is honest work rather than a sweep.** Two were concretely
+security-shaped and touched today's thread. One — SSE bearer tokens reaching Fastify, Sentry and nginx
+logs via `?ds_token=` — already carried "FIXED 2026-05-31: new `lib/redact-url.ts`", **the very redactor
+V-1884 probed**, so it is consistent and closed.
+
+✅ **THE OTHER WAS STALE, AND ITS CLOSURE IS STRONGER THAN A FIX.** The note records
+`PERMISSIVE_CORS=true` in the production env, empirically confirmed reflecting any Origin with
+`Access-Control-Allow-Credentials: true`, and rated MEDIUM only because auth is bearer rather than
+cookie. At HEAD, `bootstrap.ts` calls `assertCorsPosture(permissiveCors, config.nodeEnv)` and that
+function **throws**. **The misconfiguration cannot start the server** — not a warning, not a lint, a
+refusal to boot.
+
+⭐⭐ **AND ITS GUARD PINS THE STRENGTH, NOT JUST THE PRESENCE — worth copying.** `cors-posture.test.ts`
+asserts bootstrap imports AND calls the function, and separately that the source does **not** contain
+`logger.error({ component: 'cors' }, corsWarning)`. A guard checking only that the function exists would
+pass against a version that quietly downgraded the throw to a log line, which is exactly how a
+fail-closed control decays into a fail-open one.
+
+⚠️ BOUNDARY: this verifies the code path — the flag's effect and the boot refusal. **The production
+`.env`'s current contents are outside this repo and I did not inspect them**, which is the right scope:
+the note's claim was that a running server could be misconfigured, and that is now impossible regardless
+of what the file says.
