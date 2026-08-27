@@ -20768,3 +20768,28 @@ assertion is, and it is intact and strong in every one of the nine. `vi.setConfi
 `Test timed out in 1ms`, so the inserted `vi.setConfig` is honored where it sits rather than being a
 decorative comment above nine files. Restored byte-identical. `it(` counts unchanged against HEAD in
 all nine; nine files, 63 tests, green; `tsc` clean.
+
+### V-1975 addendum — what the timeout raise actually traded away (2026-08-27)
+
+V-1975 says raising the family's clock "costs no coverage", and that is true of _coverage_ — every
+assertion those nine files make is unchanged, and their exact count pins and floors are intact. But
+the claim deserves its other half stated plainly rather than left to imply nothing was given up.
+
+**A 10s timeout did detect one thing the pins do not: a runtime regression that returns the right
+answer slowly.** After the raise, a census walk that got 10x slower while still finding the same 307
+routes would pass. Checked rather than assumed: the bench suite is **3 files / 11 benchmarks**
+(auth-cache, rate-limit, webhook-signature) and **none of them walks or parses the source tree**, so
+nothing else monitors that runtime either.
+
+That trade is still the right one, for reasons worth recording:
+
+- The 10s clock was never a _reliable_ runtime detector. It fired at load 50 and passed at load 8 on
+  identical code — it reports the box, not the regression. Keeping an unreliable detector because it
+  is the only one is how a flaky red gets re-run until green.
+- A slowdown in a **test-only** census costs CI minutes, not customers, and a gross one still surfaces
+  in the suite's own `Duration` line (487s → 741s across today's runs, which is exactly how the
+  contention was spotted in the first place).
+
+⛔ **The honest boundary: after V-1975, correctness regressions in these nine walks are caught by
+their pins; runtime regressions in them are caught by nobody.** Recorded so the next person reads a
+measured trade rather than an unqualified "free".
