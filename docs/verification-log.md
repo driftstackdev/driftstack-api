@@ -15830,3 +15830,44 @@ through to the lookup. Restore byte-identical both times.
 ⚠️ FRAMING, because it matters: both gates are PRESENT and CORRECT in source. This is a coverage gap,
 not a live exposure — nothing would have noticed if they were removed, which is the same sentence as
 the nine db-layer findings today.
+
+## V-1859 — the only-gate class closed, and a THIRD form of authorization gate neither instrument can see
+
+2026-08-26. Completing the partition V-1858 started, and finding the population both of my sweeps
+were structurally blind to.
+
+⛔ **THE PARTITION INSTRUMENT WAS WRONG AND IS NOW FIXED.** It matched a service to the route file of
+the SAME NAME, which cannot see admin routes (`admin-webhooks.ts`) or differently-named callers.
+Redone by IMPORT — which route files actually `import` each service — every service places correctly,
+and it surfaced one only-gate path the filename match had hidden: **`api-keys` (7 gates) is imported by
+`auth-cli.ts`, which carries no `requireScope`.**
+
+**THE ONLY-GATE CLASS IS CLOSED — every path where a service gate is the whole authorization:**
+
+    webhooks           10 customer gates  via routes/webhooks.ts(0)      8 covered + 2 fixed (V-1858)
+    email-preferences   2 gates           via email-preferences.ts(0)    ✓ one arm per gate (lines 123, 163)
+    account-audit       1 gate            via account-audit.ts(0)        ✓ verified V-1857
+    api-keys            7 gates           via auth-cli.ts(0)             ✓ see below
+
+⭐⭐ **AND THE THIRD FORM, which is the durable finding.** `POST /v1/auth/cli-authorize/bind-device-code`
+requires auth but no scope — its authorization is an IN-HANDLER check,
+`if (ctx.webSession === null) throw new ForbiddenError('Authorizing a device requires an interactive
+dashboard session.')`, before it calls `apiKeysService.create`. That is neither `requireScope` NOR
+`throwIfMissingScope`, so **the route-level refusal rosters cannot see it (they enumerate
+`requireScope`) and my service-gate partition cannot see it either.** The property is real: an API key
+must not be able to mint CLI credentials.
+
+⭐ COVERED — `tests/integration/device-key-deny.test.ts:363` drives a real POST to that endpoint with
+an ORDINARY API KEY bearer and asserts 403 plus the message. ⛔ Found only by grepping the MESSAGE
+STRING across the whole tree; it is not in `cli-authorize.test.ts` where I looked first. **Fourth time
+today the witness lived in a file I would not have guessed** — after the api-types density, the SDK
+coverage scope, and the webhooks service spec. The rule that keeps working: grep the PROPERTY, never
+the file you expect.
+
+**THE NEXT BOUNDED POPULATION, derived rather than guessed: 32 route-level authorization gates that
+are neither `requireScope` nor `throwIfMissingScope`** — in-handler `ForbiddenError` / `webSession`
+checks, concentrated in `agent-sessions.ts` (5), `sessions.ts` (4), `profiles.ts` (4), `admin.ts` (4),
+`auth.ts` (3). One of the 32 is now verified. ⚠️ BOUNDARY: counted by matching
+`webSession === null` / `throw new ForbiddenError(` in `src/routes/*.ts` — an in-handler refusal
+written another way (a helper, a different error class) is not in the 32, so this is a lower bound on
+that form, not the form's population.
