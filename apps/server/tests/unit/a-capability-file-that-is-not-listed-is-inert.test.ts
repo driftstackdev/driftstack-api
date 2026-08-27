@@ -65,9 +65,22 @@ describe('a capability file that is not listed is inert', () => {
     expect(checked, 'no identifier was compared — the assertions above are vacuous').toBe(
       files.length,
     );
-    // And the two known-live grants must be among what was checked, so a scan that
-    // silently narrowed to some other subset cannot pass either.
-    expect(identifiers).toEqual(expect.arrayContaining(['default', 'updater-check-macos']));
+    // ⭐ THE LOAD-BEARING FLOOR, and it is an EQUALITY rather than a containment on
+    // purpose: a non-empty expected value IS a non-vacuity floor, because an empty or
+    // narrowed scan cannot equal it. `arrayContaining` was the weaker form — it passes
+    // over a superset, so a scan that quietly grew, or one that found these two plus
+    // nothing else, both slip through.
+    //
+    // The cost is deliberate: adding a capability file REDDENS this arm until the
+    // roster is updated. That is the point. A capability arriving without anyone
+    // deciding whether it should be granted is exactly how 0.1.5 shipped one inert.
+    expect([...identifiers].sort()).toEqual([
+      'default',
+      'simulator',
+      'simulator-app',
+      'updater-check-macos',
+      'updater-windows-linux',
+    ]);
   });
 
   it('the macOS updater check is listed, since an unlisted grant is why 0.1.5 shipped without its fix', () => {
