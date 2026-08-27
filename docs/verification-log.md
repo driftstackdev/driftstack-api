@@ -14883,3 +14883,59 @@ different face**, and the arm now distinguishes them.
 Boundary: this covers `recordErrorEvent` only. The other five functions coverage reports uncovered in
 `agent-sessions-repo` are not named here — the summary reporter carries per-file totals, not
 per-function detail, so naming them needs a `--coverage.reporter=json` run.
+
+## V-1838 — three bulk closers, no id in the WHERE, and nothing objected when I removed all three bounds
+
+2026-08-26. The widest-blast-radius finding of this sweep, and the measurement is the headline.
+
+`agent-sessions-repo` has three methods that close sessions in BULK with no id in the WHERE, so the
+scope of each is whatever its predicate bounds it to: `closeActiveByNode` (a worker drops),
+`closeActiveByNodeExcept` (a worker restarts and reaffirms what it still owns), and
+`reapOrphanedActiveBefore` (the age sweep). `closeActiveByNode` states the invariant in its own
+comment — "another node's sessions, already-closed sessions, and never-dispatched rows (node_id NULL)
+are NEVER touched".
+
+⛔⛔ **MEASURED FIRST, on the full suite, not a subset:** removing ALL THREE scoping conjuncts produced
+**zero behavioural failures across 32,111 tests**. The only objection came from
+`the-server-source-type-checks`, reporting TS6133 on `cutoff`, `nodeId`, `nodeId` — the parameters had
+become unused. ⭐ That is not a test noticing the defect; it is the compiler noticing the parameter,
+and it is only there because I removed the predicate ENTIRELY. A realistic defect weakens a predicate
+(wrong column, wrong operator) and leaves the parameter used, and nothing would have said a word.
+
+**Why the existing coverage could not see it.** All three are exercised only against
+`InMemoryAgentSessionsRepo`, which `agent-sessions-repo.ts` line 2 calls the tests/dev backend while
+production wires the Drizzle one. The in-memory arms are genuinely thorough — `0086` and `W2813`
+assert node scoping, already-closed preservation, the NULL row, and idempotence. They assert them
+about the wrong implementation.
+
+⭐⭐ AND FOR THE NULL CASE THE DOUBLE CANNOT STAND IN AT ALL, which is the sharpest reason these
+needed real Postgres. The double compares with JS `===`, where `null === 'node-A'` is `false`.
+Postgres evaluates `NULL = 'node-A'` to NULL, excluded by three-valued logic rather than by an
+inequality. Both verified directly (`select (null = 'node-A') is null` → t; `node -e` → false), not
+assumed. Same outcome, different mechanism — the double agrees by coincidence of language semantics.
+
+**FIXED** — three arms in `db-agent-sessions-concurrency-drizzle`, which already owns an isolated
+database (it calls a global envelope migration), so the bulk closes cannot reach another file's
+fixtures. Existing file, no ratchet movement, and it gates on `RUN_DB_TESTS` so the DATABASE_URL pin
+does not move either.
+
+Mutation-proved, five ways, each failing its own arm: cutoff dropped → "expected 10 to be 1"; node
+scope dropped → "expected 8 to be 1"; status anchor dropped → "expected 2 to be 1"; keep-set dropped →
+"expected 2 to be 1"; node predicate swapped for `isNull(nodeId)` → "expected 5 to be 1". ⭐ The counts
+ARE the blast radius: ten sessions reaped where one was due, eight closed across every node.
+
+⚠️ WHAT I COULD NOT ISOLATE, stated because the per-assertion rule matters. For a bulk operation the
+COUNT is the detector, and it is sensitive enough that every mutation trips it before the row-level
+assertions run. I tried to isolate them with a mutation that keeps the count at one and closes the
+wrong row; the isolated database holds other arms' NULL-node rows, so the count moved anyway. The
+named assertions (another node untouched, the NULL row untouched, an already-closed reason preserved)
+localize a failure rather than detecting independently. ⭐ The clean-run count IS deterministic —
+the predicate scopes to a per-test unique node id — so the arm is stable when correct and only varies
+when broken, which is the right way round.
+
+⛔ INSTRUMENT NOTE, two this time. A sweep for "bulk UPDATE/DELETE with no id-like column in the WHERE"
+returned 19; both hits with an EMPTY column set were predicates assembled into a variable or array
+before `.where(...)` (`status-subscribers-repo::markUnsubscribed`, and `closeActiveByNodeExcept`
+itself), and both are correctly scoped. That detector fails toward false positives, which is the safe
+direction. Separately, `echo "tsc: $?"` after a pipe reported 0 while tsc had failed with TS5058 — the
+piped-runner trap, caught by re-running with the exit captured directly.

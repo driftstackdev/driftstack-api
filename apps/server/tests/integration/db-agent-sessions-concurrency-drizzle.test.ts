@@ -622,5 +622,157 @@ describe.skipIf(!RUN_DB_TESTS)(
         "a stranger node's error event overwrote the owning node's",
       ).toBe('driver_crashed');
     });
+
+    // ── the bulk closers ──────────────────────────────────────────────
+    //
+    // V-1838. Three methods close sessions in BULK, with no id in the WHERE, so
+    // the blast radius of each is the whole table. Each carries a scoping
+    // conjunct that is the only thing bounding it, and `closeActiveByNode`'s own
+    // comment states the invariant: "another node's sessions, already-closed
+    // sessions, and never-dispatched rows (node_id NULL) are NEVER touched".
+    //
+    // MEASURED before writing these: removing all three scoping conjuncts and
+    // running the FULL suite produced ZERO behavioural failures across 32,111
+    // tests. The only objection came from the typechecker, and only because the
+    // parameters became unused — which is itself the proof that each parameter's
+    // sole use was the predicate removed.
+    //
+    // They were exercised only against `InMemoryAgentSessionsRepo`, which the
+    // repo header calls the tests/dev backend while production wires the Drizzle
+    // one. That double cannot stand in for the NULL case in particular: it
+    // compares with JS `===`, where `null === 'node-A'` is false, while Postgres
+    // evaluates `NULL = 'node-A'` to NULL. Same outcome, different mechanism —
+    // agreement by coincidence of language semantics rather than by exercising
+    // the SQL. Both verified directly rather than assumed.
+    //
+    // Safe to run here because this file already owns an isolated database.
+
+    it('CRITICAL closeActiveByNode touches ONLY the named node’s ACTIVE sessions. It is a bulk UPDATE with no id in the WHERE, so if the node predicate stopped binding, one worker dropping would close every customer’s running session on every other node.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-bulk-${accountId}@test.local`})`;
+      const nodeA = `node-A-${randomUUID().slice(0, 8)}`;
+      const nodeB = `node-B-${randomUUID().slice(0, 8)}`;
+
+      const onA = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(onA.id, nodeA);
+      const onB = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(onB.id, nodeB);
+      const alreadyClosed = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(alreadyClosed.id, nodeA);
+      await repo.closeWithReason(alreadyClosed.id, 'customer-closed');
+      // Never dispatched: node_id stays NULL. In SQL `NULL = $1` is NULL, not
+      // false, so this row is excluded by three-valued logic rather than by an
+      // inequality — the one case the in-memory double cannot speak for.
+      const undispatched = await repo.create({ accountId, tokenBudgetTotal: 100 });
+
+      const closed = await repo.closeActiveByNode(nodeA, 'worker-disconnected');
+
+      // Positive control: exactly the one active session on node A.
+      expect(closed, 'the close did not reach the node’s own active session').toBe(1);
+      expect((await repo.get(onA.id))?.status, 'the node’s active session did not close').toBe(
+        'closed',
+      );
+      expect((await repo.get(onA.id))?.closedReason).toBe('worker-disconnected');
+
+      expect(
+        (await repo.get(onB.id))?.status,
+        'ANOTHER node’s session was closed by this node’s disconnect',
+      ).toBe('active');
+      expect(
+        (await repo.get(alreadyClosed.id))?.closedReason,
+        'an already-closed session had its reason overwritten by the bulk close',
+      ).toBe('customer-closed');
+      expect(
+        (await repo.get(undispatched.id))?.status,
+        'a never-dispatched session (node_id NULL) was closed by a bulk close naming a node',
+      ).toBe('active');
+
+      // Idempotent — the status anchor means a second run finds nothing active.
+      expect(
+        await repo.closeActiveByNode(nodeA, 'worker-disconnected'),
+        'the close is not idempotent, so a retrying reaper keeps re-stamping rows',
+      ).toBe(0);
+    });
+
+    it('CRITICAL closeActiveByNodeExcept spares the reaffirmed ids and still touches only this node. The keep-set is how a restarted worker says "these are mine and still alive"; if it stopped binding, a restart would kill the very sessions it just reaffirmed.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleAgentSessionsRepo(
+        { client, db, close: async () => {} },
+        { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY },
+      );
+
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-bulk-except-${accountId}@test.local`})`;
+      const nodeA = `node-A-${randomUUID().slice(0, 8)}`;
+      const nodeB = `node-B-${randomUUID().slice(0, 8)}`;
+
+      const doomed = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(doomed.id, nodeA);
+      const kept = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(kept.id, nodeA);
+      const other = await repo.create({ accountId, tokenBudgetTotal: 100 });
+      await repo.setNodeId(other.id, nodeB);
+
+      const closed = await repo.closeActiveByNodeExcept(nodeA, [kept.id], 'worker-restarted');
+
+      expect(closed, 'the close did not reach the un-reaffirmed session').toBe(1);
+      expect((await repo.get(doomed.id))?.status).toBe('closed');
+      expect(
+        (await repo.get(kept.id))?.status,
+        'a REAFFIRMED session was closed by the restart that reaffirmed it',
+      ).toBe('active');
+      expect(
+        (await repo.get(other.id))?.status,
+        'another node’s session was closed by this node’s restart',
+      ).toBe('active');
+
+      // An empty keep-set is documented as identical to closeActiveByNode.
+      expect(
+        await repo.closeActiveByNodeExcept(nodeA, [], 'worker-restarted'),
+        'with no ids reaffirmed the previously-kept session should now close',
+      ).toBe(1);
+      expect((await repo.get(kept.id))?.status).toBe('closed');
+    });
+
+    it('CRITICAL reapOrphanedActiveBefore honours its cutoff. It is the widest of the three — no node, no account, just an age bound — so a cutoff that stopped binding would close every active session in the fleet on the next sweep tick.', async () => {
+      if (!dbReachable || !client) return;
+      const c = client;
+      const db = drizzle(c) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const accountId = randomUUID();
+      seeded.push(accountId);
+      await c`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`agt-reap-${accountId}@test.local`})`;
+
+      // Two sessions with controlled birthdays, via the repo's injectable clock.
+      const at = (iso: string): DrizzleAgentSessionsRepo =>
+        new DrizzleAgentSessionsRepo(
+          { client: c, db, close: async () => {} },
+          { transcriptEncryptionKeyBase64: TRANSCRIPT_KEY, clock: () => new Date(iso) },
+        );
+      const old = await at('2026-01-01T00:00:00.000Z').create({ accountId, tokenBudgetTotal: 100 });
+      const fresh = await at('2026-06-01T00:00:00.000Z').create({
+        accountId,
+        tokenBudgetTotal: 100,
+      });
+
+      const repo = at('2026-06-02T00:00:00.000Z');
+      const reaped = await repo.reapOrphanedActiveBefore(new Date('2026-03-01T00:00:00.000Z'));
+
+      expect(reaped, 'the orphan older than the cutoff was not reaped').toBe(1);
+      expect((await repo.get(old.id))?.status).toBe('closed');
+      expect(
+        (await repo.get(fresh.id))?.status,
+        'a session NEWER than the cutoff was reaped — the age bound is not binding',
+      ).toBe('active');
+    });
   },
 );
