@@ -17177,3 +17177,43 @@ where it cost nothing.
 ⚠️ BOUNDARY: this closes the delta since the stored audit — the three commits touching the route and its
 service. It does not re-audit `processTick`'s dispatch semantics or the CRUD scoping, which the
 2026-06-03 pass covered and which those commits did not touch.
+
+## V-1891 — admin force-actions: the stored verdict holds, and the hard part is the external side effect
+
+2026-08-27. No defect. The two destructive admin operations audited end to end; a 2026-06-02 verdict
+re-verified as a post-condition rather than cited, and the concurrency delta since it closed.
+
+**THE SURFACE.** `POST /v1/admin/sessions/:id/destroy` and `POST /v1/admin/api-keys/:id/revoke` — an
+operator destroying a customer's session and revoking their key. The stored audit says "DOUBLE
+scope-gated … rate-limited … audit-logged. Don't re-audit", and eight commits have landed since.
+
+✅ **THE VERDICT'S OWN PROPERTIES STILL HOLD, checked rather than cited.** Both routes carry
+`app.requireScope('driftstack_internal_admin')` in the preHandler AND `requireScope(ctx, …)` inside the
+handler — the double gate is still double — plus `app.rateLimit('global')`, and both wrap through a
+`withAudit` helper that records on success and on error before re-throwing.
+
+**THE TWO COMMITS TOUCHING THIS FILE ARE BOTH CONCURRENCY FIXES, and both are present:**
+
+- `revokeApiKeyAtomic` fails closed rather than silently: "revokeApiKeyAtomic lost its update without a
+  persisted revocation".
+- `destroySessionSerialized` runs inside a transaction, takes a row lock, returns a discriminated
+  outcome (`not_found` / `already_terminal` / success) so a second destroy is idempotent rather than a
+  second teardown, and asserts an invariant — a non-terminal row carrying `destroyedAt` throws.
+
+⭐⭐ **THE INTERESTING PART IS THE ONE A DATABASE CANNOT SOLVE: this operation has an EXTERNAL side
+effect.** Tearing down a browser session cannot be rolled back with the transaction, and the code
+treats that as the design problem it is:
+
+- The driver teardown is **passed INTO the repo as a callback**, so ordering is owned by the layer that
+  holds the lock rather than by the caller.
+- `projectSessionEventMetadata` runs BEFORE the transaction, with the reason stated: "A future unknown
+  event type must fail before browser teardown; malformed known payloads collapse to closed metadata
+  without rolling back the terminal row." **Validation that could fail is moved ahead of the
+  irreversible step** — the same ordering discipline V-1875 measured for authorization, applied to a
+  side effect instead of a gate.
+- The call is bounded: `Promise.race([destroy(), timeout])`, the timer `unref()`'d so a pending teardown
+  cannot hold the process open, and cleared in a `finally`.
+
+⚠️ BOUNDARY: this covers the two force-action routes, their repo methods and the driver-teardown path.
+The six other commits in the window touch `admin-accounts.ts` — account deletion, termination reclaim,
+billing on suspension — which is a different file with its own stored audit and was not re-read here.
