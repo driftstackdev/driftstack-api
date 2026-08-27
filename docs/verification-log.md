@@ -12229,3 +12229,40 @@ Boundary: floors paired with a recorded measurement within six lines, across
 `apps/server/tests/**/*.test.ts` — 63 pairings, of which the three above are the ones a hand-read
 confirmed. A floor whose measurement is recorded further away, or nowhere, is outside this
 measurement entirely.
+
+## V-1992 — two more corpus floors, and a way to measure one without replicating its walk (2026-08-27)
+
+Continuing V-1991 with a cleaner discriminator than the last ranking, which was wrong twice at its
+top: **which corpus floors carry no sweep marker at all?** V-936/937/939 and V-1991 leave a marker
+within a few lines of every floor they raised, so their absence identifies a floor that was never
+revisited. Measured across `apps/server/tests/**/*.test.ts`: **19 floors carry a marker, 370 do not**
+— but most of the 370 are byte-length non-vacuity checks (`source.length`, spec file size), not corpus
+counts, and their slack means something different.
+
+Reading the file-count ones rather than ranking them:
+
+| guard                                                 | population | floor was | slack   | floor now                                                                            |
+| ----------------------------------------------------- | ---------- | --------- | ------- | ------------------------------------------------------------------------------------ |
+| `a-walk-that-swallows-a-missing-root-does-not-spread` | 3,272      | 2,500     | **24%** | 2,900                                                                                |
+| `a-test-arm-may-not-hide-all-its-assertions`          | 3,055      | 2,500     | **18%** | 2,750                                                                                |
+| `no-permanently-skipped-tests`                        | ~3,241     | 3,000     | 7%      | left alone — already raised, and its own message records the V-1033 raise from 1,500 |
+
+⛔ The first is **my own guard**, landed earlier today with the 2,500 floor I chose; its ceiling arm
+polices walks that swallow a missing root, and its non-vacuity floor had the same slack as the walks
+it polices.
+
+⭐ **The measurement technique is the transferable part.** Twice in V-1991 I got a population wrong by
+re-implementing a guard's walk in Python — once counting `node:` builtins the guard skips (12,579 vs a
+real 4,334). Here each guard was made to report its **own** number instead: set its floor to `999999`,
+run it, and read the count out of the assertion message —
+`expected 3272 to be greater than 999999`. No replication, so no replication error.
+
+⭐ **Demonstrated, not argued.** Truncating the walk to **2,711** files — a corpus the old floor of
+2,500 accepted — now fails with `expected 2711 to be greater than 2900`. A first attempt sliced both
+roots and landed at 1,411, which the old floor would have rejected too; that proves the floor bites
+but not that it improved, so the mutation was redone to land between the two floors. Restored
+byte-identical; 3/3 pass.
+
+Boundary: floors `>= 20` in `apps/server/tests/**/*.test.ts`, classified by whether a sweep marker
+appears within eight lines above them; the three file-count guards above are the ones a hand-read
+confirmed as corpus floors. Byte-length floors were not assessed.

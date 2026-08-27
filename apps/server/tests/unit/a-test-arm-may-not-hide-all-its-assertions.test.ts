@@ -301,7 +301,10 @@ describe('V-921 a test arm may not hide all its assertions', () => {
 
   it('CRITICAL the scan reaches the test corpus. The arm below reports an ABSENCE, so a broken walk returning nothing would satisfy it having examined no files — the exact false green this guard exists to prevent, and the failure mode the first version of this scanner actually had.', () => {
     const count = ROOTS.reduce((n, r) => n + testFiles(resolve(REPO_ROOT, r)).length, 0);
-    expect(count, 'test files walked under apps/ and packages/').toBeGreaterThan(2500);
+    // V-1992 — floor raised to just under the measured 3055; it stood at 2500,
+    // so this scan could have lost 18% of its corpus and still reported the
+    // absence below as checked rather than not looked.
+    expect(count, 'test files walked under apps/ and packages/').toBeGreaterThan(2750);
   });
 
   it('CRITICAL no arm puts every one of its assertions behind a conditional. Such an arm passes while checking nothing the moment the condition goes false — which happened to eleven arms in this repo: four doc-parity gates that retired when their feature shipped, two named for a wait barrier that passed with every wait barrier deleted, and two seeded loops one seed away from comparing nothing. Declare a genuine exception with a `vacuity-exempt:` comment and a reason at the site.', () => {

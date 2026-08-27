@@ -101,7 +101,10 @@ describe('a walk helper that swallows a missing root does not spread', () => {
     // Without this, a broken walker scans zero files, finds zero swallowers, and
     // the ceiling above passes for the same reason the guards it polices do.
     const { filesScanned } = scan();
-    expect(filesScanned).toBeGreaterThan(2500);
+    // V-1992 — floor raised to just under the measured 3272. It stood at 2500
+    // (mine, set the same day this guard landed), so the walk could have lost
+    // 24% of the corpus and still called the ceiling non-vacuous.
+    expect(filesScanned).toBeGreaterThan(2900);
   });
 
   it('the matcher fires on the swallowing shape and not on a throwing one', () => {
