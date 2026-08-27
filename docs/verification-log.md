@@ -18718,3 +18718,56 @@ to `publishBroadcast` fails the population arm and names both the file and `audi
 `apps/server/src`, so a broadcast reached through an aliased function or a re-exported wrapper is
 invisible to it, and it judges the literal `kind` at the call site rather than the type of the
 value passed. Ratchets 3059→3060 and 3235→3236.
+
+## V-1927 — the gate went red at a commit that passes, and this time the red kept its name (2026-08-27)
+
+The gate failed at `18e579f24` with **2 of 3236** files red, then passed at the same commit,
+unchanged, minutes later. Recorded rather than shrugged off, because a run that disagrees with
+itself is a defect in the suite even when the code is fine.
+
+**Attribution first, per the standing order.** `git status` was empty — no peer had a dirty file,
+so the red came from committed state; and the only commits since the previous green (3235) were
+mine. That made it mine to explain, not to hand off.
+
+**It is not a logic failure.** Zero `AssertionError` in the whole run. Both failures are timeouts:
+
+| test                                              | allowance                        | outcome   |
+| ------------------------------------------------- | -------------------------------- | --------- |
+| `a-source-gate-may-not-be-satisfied-by-a-comment` | 10 000 ms (project default)      | timed out |
+| `a-workspace-declares-what-its-source-imports`    | **30 000 ms** (its own override) | timed out |
+
+Run together in isolation, the two pass in **4.1 s** for 6 tests. A test carrying a 30 s allowance
+exceeding it, then finishing in seconds alone, is CPU starvation under suite parallelism — not a
+slow test and not a wrong one.
+
+**My first instinct was that I had caused it, and the measurement says otherwise.** I have added
+five AST guards in recent firings, so the load hypothesis was the honest one to check. Counted:
+**230 pre-existing unit tests already use `readdirSync`** to walk the source tree, four of my five
+use the same cheap `createSourceFile` pattern as those 230, and exactly **one** test in the entire
+3236-file suite builds a TypeScript `Program` — mine, already rooted at `src/` (342 files, not the
+config's 2836) and with its self-test arms rooted at their injected file alone. Five files added to
+a suite where 230 already do the same work is not a plausible tipping point, and the green re-run
+at the identical commit agrees.
+
+**What this most likely is, stated at the confidence the evidence supports.** Two runs disagreed
+and the subject did not move — same HEAD, clean tree both times — so the variance is in scheduling,
+not in the code. V-1918's durations run found only one test above half the ceiling; these two sat
+at roughly 25% and 38%, which is ample margin on a quiet machine and evidently not on a loaded one.
+
+⭐ **A note on the earlier unexplained red.** Much earlier this session the gate went red once at
+`bc576990e` and I could not name the test, because a filter had eaten the identity before I read
+it. That red was never explained. This one has the same signature — a transient failure at a commit
+that passes on re-run — and the mechanism here is now evidenced. I am not claiming they are the
+same event: that one's identity is unrecoverable, so this is a consistent hypothesis and not a
+resolution. What changed is that capturing full output to a file, which V-1889 forced after that
+episode, is why this red kept its name long enough to be diagnosed.
+
+**Not fixed, deliberately.** Both timing-out tests belong to other work, and the one already
+carrying a 30 s override would only be papered over by a larger number. The finding is the
+fragility itself: a suite in which scheduling variance alone can red a run, at tests whose quiet
+margin looks comfortable.
+
+**Boundary:** two runs of one commit on one machine, with no other load controlled or measured — so
+this establishes that the suite is non-deterministic under contention, not how often, nor which
+tests sit closest to their ceiling under real CI parallelism. Ratchets unchanged at 3060/3236;
+32137 tests pass on the green run.
