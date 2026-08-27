@@ -15030,3 +15030,53 @@ second tick re-scrubbed eight keys. The guard is doubly enforced and behavioural
 `RETENTION_SCRUB_SENTINEL`, 4 hits across 3 distinct roles) rather than the anchor string, and read
 what the target spec already asserts. If a spec already names the property you think is unwitnessed,
 the mutation is the thing that is wrong.
+
+## V-1841 — the 29 uncovered db functions, named at last, and two that are not defects
+
+2026-08-26. The summary reporter carries per-file totals only; re-running with
+`--coverage.reporter=json` gives `fnMap` + `f`, so uncovered functions can finally be NAMED rather
+than counted. Boundary: `apps/server/tests` with DATABASE_URL set — not Playwright, not the full
+3228-file run.
+
+⭐ INSTRUMENT CONTROL, from today's own work rather than a synthetic one:
+`purgeRecipesForTerminatedAccountsBefore`, `findAnyWithLivekit` and `recordErrorEvent` were all
+uncovered this morning and are all ABSENT from this list now that each has an arm. Two-sided, and the
+positives are real code I watched fail a mutation.
+
+**29 uncovered functions across 64 db files.** The two that most looked like findings are not, and
+both matter more as corrections than the list does.
+
+⛔ **`agent-turn-receipts-repo::purgeForTerminatedAccountsBefore` is a DEAD WRAPPER, not a gap.** It
+delegates to the exported free function `purgeTurnReceiptsForTerminatedAccountsBefore`, and
+`bootstrap.ts:1865` wires the FREE FUNCTION directly. So the method has no caller — but it also
+carries no divergence risk, because both paths run the same SQL. Harmless, worth knowing, not worth a
+test.
+
+⛔⛔ **`sessions-repo::findSessionUnscoped` — I nearly filed a CONVENTION as a fossil.** The facts are
+real: exactly two mentions in `src/` (its implementation and its interface declaration), no caller,
+no behavioural test, only a content-parity pin — and that pin's stated rationale ("admin force-destroy
+can't reach foreign-account sessions") no longer describes the code, since
+`routes/admin-force-actions.ts` reaches `destroySessionSerialized` directly. Read alone that is an
+unscoped cross-tenant primitive sitting unused on an interface, and the tidy move is to delete it.
+
+⭐ It is the codebase's deliberate pattern, and the prior art says so in as many words:
+`db-repo-account-ownership-boundary` asserts "`findApiKey` takes the account explicitly and there is a
+deliberate `findApiKeyUnscoped` beside it". Scoped read plus a named, greppable unscoped sibling is
+the convention, and the boundary guard covers the SCOPED one precisely because a dropped predicate
+there would be invisible. `findSessionUnscoped` beside `findSession` is that pattern, not a mistake.
+An unused member of a deliberate convention is not a fossil, and deleting it would have been exactly
+the "pattern-match a fix onto a documented decision" failure.
+
+⚠️ WHAT I AM NOT CLAIMING: that the remaining 27 are defects. They are a candidate list, and today's
+evidence says roughly one in ten survives reading — three real findings out of the ~30 names two
+instruments have handed me. The list is worth keeping because it is now NAMES, and each name is one
+`grep` and one read from a verdict.
+
+⭐ Names, for whoever picks this up: `sessions-repo` (findSessionUnscoped, countAllByStatus,
+setEgressCapabilityReport, emptySessionStatusCounts), `team-members-repo` (listTeamsOwnedBy,
+renameTeam, removeMember), `webhooks-repo` (enqueueDelivery, resetDeliveryToPending, deleteDelivery),
+`auth-flows-repo` (findAccountById, markEmailVerified, touchWebSession), `status-subscribers-repo`
+(findByConfirmTokenHash, listAll), `crypto-orders-repo` (upsert, getById), `fleet-nodes-repo`
+(recordHeartbeat, getDetail), `agent-sessions-repo` (setGuiControlKey, setPairModeState), plus
+`api-keys-repo::setExpiresAt`, `stripe-webhooks-repo::upsertSubscription`,
+`account-proxies-repo::create`, `auth-repo::touchWebSessionLastUsed`.
