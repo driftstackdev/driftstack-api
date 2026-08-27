@@ -17484,3 +17484,42 @@ written, rather than quietly deleted.
 ⚠️ BOUNDARY: this measures the shipped `_headers` of the six Astro apps and which of them serve a
 token-bearing route. It does not cover headers set at the Cloudflare edge outside these files, nor the
 API's own responses, which `api-security-headers-doc-parity` owns.
+
+## V-1900 — deciding NOT to build a guard, on evidence rather than instinct
+
+2026-08-27. No defect. A guard I was about to write, measured out of existence, and a sentence in
+V-1899 corrected.
+
+**THE CANDIDATE.** V-1899 documented why two authenticated frontends carry different referrer policies
+but left the property unenforced: if a token-landing page appears tomorrow in an app whose policy is the
+weaker one, nothing reds. The obvious move is a derived guard — pair "does this app serve a page that
+READS a token from its own URL" against its `Referrer-Policy`.
+
+⭐ **THE DERIVATION WORKS, AND ITS ANCHOR DOES NOT.** Keyed on reading the query string rather than
+mentioning a token, it separates all six apps correctly, and the crude version's two false positives
+vanish (docs 9 → 0, marketing-site 4 → 0) because documentation names `?token=` but never parses it.
+Then, applying V-1889 to my own proposed instrument, I derived the query-reading idioms actually in use:
+`new URLSearchParams` 33, `location.search` 32, `params.get` 19, **`url.searchParams` 5**, `searchParams`
+
+1. My alternation had `Astro.url.searchParams`, which does not match the bare `url.searchParams` form —
+   so the 6/6 was possibly right for the wrong reason, and a guard built on it could go blind exactly when
+   a new page uses the idiom I did not picture.
+
+✅ **AND THE DANGEROUS DIRECTION IS ALREADY CAUGHT — MUTATION-PROVEN, NOT ASSUMED.** Downgrading the
+customer dashboard to `strict-origin-when-cross-origin` reds TWO arms of the existing parity guard, the
+second named for the exact property: **"customer dashboard never sends one-time query credentials
+through Referer"**. Snapshot proven before the edit, restored byte-identical after, tree clean.
+
+⛔ **WHICH CORRECTS V-1899.** That entry said the difference between the two policies was recorded
+nowhere. It was — in a test title, precisely and behaviourally. What was genuinely missing is the
+admin-panel half and the asymmetry, which is what I added; "nothing said so" overstated it.
+
+⭐⭐ **SO: NO NEW GUARD.** The direction that loses a credential is pinned twice over. What remains
+uncovered is narrow and forward-looking — a new token page appearing in a weak-policy app — and the
+rationale now sits beside the values a future author would edit. **Adding an instrument whose anchor I
+had just proved fragile would be the exact mistake this week has been spent correcting**, and a guard
+that goes blind is worse than a documented convention, because it reports green while doing nothing.
+
+⚠️ BOUNDARY: measured over the six Astro apps' `src` trees and their shipped `_headers`. A token-landing
+page rendered by the API rather than a static app, or one reading its token from a path segment rather
+than the query, is outside both the derivation and the existing guard.
