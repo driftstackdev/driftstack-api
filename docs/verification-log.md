@@ -17407,3 +17407,39 @@ nothing narrows it — I will not name a candidate the evidence does not support
 result artifact and the vitest config sets no retries, so a failure that is not captured at the moment
 it happens leaves nothing behind. Capturing the full stream per run is the whole mitigation available
 without changing a shared script.
+
+## V-1898 — closing the half of a delta I said I had closed, and where the fix actually lived
+
+2026-08-27. No defect. The second commit in the status-subscriber delta, and a narrowing that hid the
+substance of a security fix from me.
+
+⛔ **V-1896 CLAIMED THE DELTA AND AUDITED HALF OF IT.** Two commits had landed since the stored audit;
+I read the authority fix closely and looked only at the other one's file stat. That is the V-1880 error
+again — naming a list and reading part of it — so this finishes it.
+
+⛔⛔ **AND MY FIRST READ OF THAT COMMIT CHARACTERISED IT WRONGLY.** `git show <sha> -- <the two service
+files>` shows exactly one kind of change: `?token=` becoming `/?token=`, four times. On that evidence
+"protect subscription token URLs" is a URL-canonicalisation tweak, presumably to avoid a redirect. **The
+actual fix is in a file my pathspec excluded**, and I only found it by reading the TEST diff: the status
+site's `Referrer-Policy` changed from `strict-origin-when-cross-origin` to **`no-referrer`**.
+
+✅ **VERIFIED AT HEAD, and the threat model is written into the shipped file rather than the commit.**
+`apps/status-site/public/_headers` carries `Referrer-Policy: no-referrer` under `/*` — applied to every
+path, not just the subscription routes — and the comment above it states both vectors: confirmation and
+long-lived one-click unsubscribe URLs "contain bearer tokens. Sending no Referer prevents both
+same-origin asset/navigation logs and outbound destinations from receiving those credentials." The old
+policy is the point: `strict-origin-when-cross-origin` sends the FULL url as Referer on SAME-ORIGIN
+requests, so every asset the confirm page loads would have logged the token. Post-condition: zero
+occurrences of the old value remain on that site.
+
+⭐⭐ **THE LESSON IS A NEW SHAPE OF NARROWING.** This week's instrument failures were all about the
+pattern — a typed alternation, a receiver spelling, a line anchor, a unit of comparison. This one is
+the PATHSPEC: I filtered `git show` to the files I expected to matter, and the filter removed the half
+that did. **A commit's subject tells you what it claims; its full file list tells you where it acted.**
+Read the stat before choosing a pathspec, and when the visible diff does not explain the subject, that
+mismatch is the signal to widen rather than to infer.
+
+⭐ Worth noting in the repo's favour: the commit message is a bare subject with no body, and the
+reasoning lives in the shipped `_headers` comment and in a test title instead. That is the durable
+place for it — a comment travels with the file, a commit body does not — but it does mean `git log`
+alone cannot explain the change.
