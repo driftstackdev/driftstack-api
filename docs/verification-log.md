@@ -13553,3 +13553,50 @@ caller more exists while giving no way to reach it.
 leading spaces; the file has eight. I had read the indentation off a `sed 's/^/  /'` display that adds two.
 The assert caught it and nothing was written — **derive indentation from the file, never from a rendering
 of it.**
+
+## V-2016 — the bounded-scan class confirmed closed by a second detector shape, and a money-path route audited clean (2026-08-27)
+
+2026-08-27. Two clean results, recorded so neither is re-derived.
+
+### The bounded-scan class, re-measured with a differently-shaped detector
+
+V-2014/V-2015 measured scan bounds by `<name>Limit ?? <n>`. **That is a token, and a bound can equally be
+a named constant** — the third standing lesson applied to my own instrument. **Boundary: 196 files under
+`services/` and `db/` (no migrations), every `const [A-Z_]*(MAX|LIMIT|CAP|WINDOW|SCAN)[A-Z_]* = <n>` that
+is actually used as a limit in the same file.**
+
+```
+500  crypto-order-expiry-sweep-job.ts  CRYPTO_ORDER_EXPIRY_BATCH_LIMIT  file discloses (capped)
+100  admin-accounts-repo.ts            ADMIN_ACCOUNTS_PAGE_MAX          caller clamp, not a scan window
+100  profile-snapshots-repo.ts         SNAPSHOT_PAGE_MAX                caller clamp
+ 16  scrub-node-diagnostics.ts         …INPUT_MAX_LENGTH                input length, not a limit
+```
+
+**No new member.** A page maximum is not silent truncation — the caller asked for more than allowed, gets
+the maximum, and receives a `next_cursor` to continue on. **Two independently-shaped detectors now agree
+the class has exactly one member** (`listForAdminPage`), which is worth more than one detector agreeing
+with itself.
+
+### `billing-crypto-quote.ts` — audited end to end, sound and better guarded than I expected
+
+Picked by V-1920's instrument: **one filename mention across both logs, 114 lines, customer-facing, money
+path.** The route reads its price from `pricing.listEffective()` — the same authoritative read the crypto
+CHARGE uses — and its own comment records why (reading the `TIER_PRICE_CENTS` constant directly "diverged
+the quote from the charge the instant the owner edited a tier price"). It reports the SETTLEMENT currency
+rather than echoing the caller's, with the defect that motivated it written down: quoting `api_scale`
+rendered "€1,499.00" for an order that then charged $1,499 USD. It is stateless, scope-gated on
+`read:billing`, and answers 400 rather than 500 for a tier missing from the price table.
+
+**The gap I went looking for is already guarded, twice.** The route hand-maintains a literal
+`SUPPORTED_PRODUCTS` of six tiers, so a new priced tier could be checkout-able but not quote-able.
+`billing-crypto-quote-product-list-cross-source-invariant` asserts that list equals the price table
+exactly, and — the part worth stealing — **also pins that the CHECKOUT route stays auto-derived
+(`Object.keys(TIER_PRICE_CENTS)`), so the hand-maintained side remains the only one the guard must
+watch.** `the-purchasable-product-set-is-one-set` (V-924) covers the published half, comparing derived
+sets on both sides with a non-vacuity arm. Measured today: quote list 6, `AccountTier` 8, difference
+exactly `free` and `enterprise`.
+
+**One acknowledged limit, already documented, not a finding:** quote and charge are separate requests each
+doing its own read, so an owner price edit between them can change the charged amount relative to the
+quoted one. The route says so — _"'quote == charge' means same SOURCE, not same instant… There is no
+quote-binding token."_ Naming it is what keeps it from being rediscovered as a bug.
