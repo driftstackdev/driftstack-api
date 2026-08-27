@@ -15373,6 +15373,16 @@ problem one level up: the whole HTTP surface is integration-tested against in-me
 layer is exercised separately by the 140 `db-*-drizzle` specs calling repos directly, and only the
 Playwright job joins the two against real Postgres.
 
+⛔ **PRECISION, because this claim is one step from one this repo already got wrong.** Raised by A2 and
+verified against the source: `scripts/verify-suite.mjs:109-120` records that "those 29 spec files were
+the only tests touching `apps/server/src/db/**` against a real Postgres, and therefore that this gate
+never executes the database layer" was WRONG IN BOTH HALVES (V-992), and that `vitest.config.ts` had
+already marked it expired four days before it was written down. **The db layer DOES run under this
+gate** — 135 integration files import `src/db/`, 134 keyed to `DATABASE_URL`, and CI sets it and
+migrates first. What it is not is MEASURED, because coverage excludes the directory. So the finding
+above is precisely and only this: **ROUTE-DRIVEN specs never reach the db layer.** It is not "the gate
+never executes it", and the two must not be allowed to compress into each other.
+
 ⛔ TWO INSTRUMENT FAILURES EN ROUTE, both caught by exit codes rather than by output:
 
 1. `npx vitest run $SPECS` — **zsh does not word-split an unquoted variable**, so 202 paths arrived as
