@@ -15571,3 +15571,49 @@ tested files, the same shape as the db-layer work, at the same roughly one-in-te
 ⚠️ BOUNDARY in the same sentence as the result: this is execution under `apps/server/tests` with a
 database, not assertion quality, and it excludes `packages/**` tests entirely — which is precisely the
 error that produced the 16.81% before it was corrected.
+
+## V-1853 — ten threads that look like gaps and are not, with where each guard lives
+
+2026-08-26. Every thread I pulled today after the db-layer work was already guarded. That is the
+session's dominant result, and the useful artifact is not the conclusion but the MAP — so the next
+reader spends ten greps instead of ten investigations.
+
+**Filtered rather than guessed.** Of the 216 never-executed functions in the measured scope (V-1852),
+5 contain an authorization or refusal predicate — the shape that produced every real finding today.
+The most alarming was `routes/internal-atlas-priority.ts::registerAdminAtlasPriorityRoutes`, a 40-line
+ROUTE REGISTRATION that never executes, meaning an admin staff route is never registered in any test.
+
+⛔ **It is guarded, and the guard is better than what I would have written.**
+`tests/integration/admin-scope-refusal-coverage.test.ts` pins `GET /v1/admin/atlas-priority/queue` in
+an independently-maintained `EXPECTED_STAFF_ROUTES` roster, and exempts it from the in-memory refusal
+drive with an accurate reason ("registered only when enabled" — `app.ts:1702` does gate on
+`deps.atlasPriorityEventsRepo`). ⭐⭐ The exemption is SELF-INVALIDATING IN BOTH DIRECTIONS: if the
+route becomes reachable in-memory the guard fails telling you to drop the entry, and if the route
+disappears the stale-exemption arm fails. Its header also measured its own vacuity mode — deleting one
+gate took 67 passed to 66 passed, all green — which is why the expected set is pinned independently
+rather than generated.
+
+**THE MAP — what looked like a gap, and where the guard already is:**
+
+1. every repo driven against real Postgres → `every-drizzle-repo-is-driven-against-a-real-postgres`
+2. read-modify-write serialisation → `every-read-modify-write-transaction-serialises` (+ `every-tier-cap-has-an-atomic-backstop`)
+3. services built but never wired → `every-service-is-wired-or-recorded-as-dormant`
+4. integration tests passing without their DB → `an-integration-test-cannot-pass-without-its-database` (position-aware: the assertion must sit inside an `it()`)
+5. every route driven over HTTP → `every-route-is-driven-over-http` (ground truth from `printRoutes`, not a regex: 154 by regex vs 232 registered)
+6. permanently skipped tests → `no-permanently-skipped-tests`
+7. the published spec drifting from the code → `sdk-python-openapi-snapshot-sync` (the drift really happened, 2026-05-31; V-952 then added CONTENT comparison after proving structural-only missed a `.max(2048)`→`.max(77)` edit with 6 of 6 arms green)
+8. shutdown exceeding the systemd window → `shutdown-budget-fits-systemd-stop-window`
+9. BYOK key handling → 29 specs incl. `byok-key-never-echoed`, `byok-plaintext-call-sites-are-pinned`, `changing-a-byok-key-evicts-every-cached-copy`
+10. admin staff routes losing their scope gate → `admin-scope-refusal-coverage`
+
+⭐ **THE ONE LINE WORTH STEALING**, from #8, which states the principle behind most of today's real
+findings more compactly than I managed: **"A pin asserts a number is what it is; it cannot assert that
+a number is ENOUGH."** Three shutdown constants, three files never edited together, three pins, not one
+looking at another.
+
+⚠️ WHAT THIS DOES NOT SAY: that the surface is defect-free. Nine real gaps were closed today, all in
+`src/db/**` — the layer these guards reach least, because it is excluded from the coverage gate AND
+its methods are reached through seams that a name-based scan cannot follow. **The guarded perimeter is
+excellent and the gaps were inside it.** The lesson for the next sweep is not "stop looking" but "look
+where the existing guards state their own blind spots" — every one of the ten above names its scope,
+and several name it precisely enough to aim at.
