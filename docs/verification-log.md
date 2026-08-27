@@ -19203,3 +19203,49 @@ syntactically as a function reaching `readdirSync`/`globSync`, and cannot see th
 repeat that V-1935 actually fixed — so this establishes that no LEXICALLY repeated walk in the
 suite is expensive today, and says nothing about interprocedural ones beyond the single instance
 already found and fixed. No ratchet movement; no source change.
+
+## V-1937 — a months-old privacy finding, re-verified unchanged, and already correctly fenced (2026-08-27)
+
+Ranking services by size against how little this log says about them put
+`account-deletion-purge-sweeper.ts` at 512 lines and one mention. The ranking was misleading —
+**18 test files** cover purge/deletion, including arm-independence and tenant-scope guards — but the
+one mention was the lead: V-1134, in the archive, recorded that _"`account-deletion-purge-sweeper.ts`
+never touches avatars. So avatar bytes survive both the DELETE and full account deletion"_, on a
+**public-readable** bucket.
+
+**Re-measured, because an archived finding is a claim about a tree at a date.** All three legs hold:
+
+| leg                                     | now                                                               |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| an avatar sweeper exists                | **no** — zero files, and zero avatar route registrations anywhere |
+| the purge sweeper touches avatars       | **no** — `avatar` appears **0** times in it                       |
+| the key still targets the public bucket | **yes** — `avatars/${accountId}.${ext}` in `lib/r2.ts`            |
+
+Controls: 58 avatar mentions in `routes/account-me.ts` and 4 in `lib/r2.ts` prove the greps reached
+their files, and `deleteObject` IS used four times elsewhere — profiles, trash purge, orphan sweep —
+so the capability exists and is simply not applied to avatars.
+
+**It is not an unnoticed gap. It is a recorded open decision, in the source.** `lib/config.ts:96-104`
+carries V-1134's finding verbatim and states the question is live: _"D-2 — whether avatars belong on
+a public bucket, and whether deleted avatars should be reaped rather than left in place — is still
+open, and it cannot be decided against a description of this bucket that omits them."_ That is the
+owner's call, like W-10, and the comment exists precisely so the decision is not taken against a
+stale description.
+
+**And the published promise does not contradict it.** `trust/security-overview.astro` says data is
+_"permanently erased (hard delete) — profile data, sessions, captures"_: an enumerated scope, and
+"profile data" here means the product's browser-profile objects, not an account picture. The DPA
+separately lists "customer-uploaded avatars" among the R2 objects. So the public posture is
+coherent rather than false.
+
+**The one regression path is already closed, and finding that out is why I did not build a guard.**
+The risk worth guarding is someone widening that public sentence to claim avatars are erased while
+no sweeper exists. `marketing-site-pages-trust-security-overview-content-parity` pins the sentence
+character-for-character _including the enumeration_ — `permanently erased\s+\(hard delete\) —
+profile data, sessions, captures\.` — so adding "avatars" reds it. Its own title gives the reason:
+the hard-delete scope must survive. A guard from me would have duplicated that.
+
+**Boundary:** this verifies the three factual legs and the pinning at `b3a205c19` by reading source
+and tests; it does not evaluate whether leaving avatars in place is the right posture, which is D-2
+and not mine, and it does not check the R2 bucket's actual ACL — "public" here is what `lib/config.ts`
+and `lib/r2.ts` call it, not something I queried. No source change; no ratchet movement.
