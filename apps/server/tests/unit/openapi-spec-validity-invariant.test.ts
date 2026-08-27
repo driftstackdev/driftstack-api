@@ -7,9 +7,12 @@
 //
 //   1. Duplicate operationId — SDK generators name the generated method from
 //      operationId, so two operations sharing one → colliding method names /
-//      a generator error. Only ~38 ops carry an explicit operationId today, so
-//      a dev copy-pasting an existing operationId onto a new route is the
+//      a generator error. Only a minority of operations carry an explicit
+//      operationId — 47 of 234 measured 2026-08-26, ~38 when this was written —
+//      so a dev copy-pasting an existing operationId onto a new route is the
 //      realistic trigger; the snapshot would just reflect the dup and pass.
+//      The figure moves with every route added, so it is stated as a ratio and
+//      dated rather than left as a bare "today".
 //   2. Dangling $ref — a `$ref: "#/components/schemas/X"` to a component that
 //      was removed/renamed → generators + validators choke. Not resolution-
 //      checked anywhere else.

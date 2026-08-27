@@ -16617,3 +16617,36 @@ evaluation precedes invocation, so textual line order is not evaluation order. A
 scans from line 1 rather than the enclosing handler shows awaits from NEIGHBOURING handlers: that is
 what briefly made `apiKeysService.revoke` look like it preceded a refusal three handlers away. The
 counter was right both times; the thing I read off the screen was not.
+
+## V-1877 — W-10 needed nothing from me, and a sixth header measurement had drifted
+
+2026-08-26. No defect. A prior-art check that stopped an investigation before it started, one confirmed
+gap that is not mine to close, and one number refreshed.
+
+⭐⭐ **THE PRIOR-ART CHECK PAID FOR ITSELF AGAIN, THIS TIME AGAINST MY OWN WORK.** I set out to
+strengthen W-10 by measuring whether the 39 orphan components reach the published SDKs. **V-1846 and
+its correction, both from earlier today, already answer that** — the generator reads COMPONENTS rather
+than paths, so the orphans are the SDKs' public vocabulary; the row's proposal was never removal but an
+operation change touching 33 of 232 operations; and the cause is that `r.register('Name', Schema)`
+creates a component without tagging the schema, so a route using the bare schema still emits an inline
+object. **W-10 needs the owner, not more measurement from me.** One command instead of an investigation,
+and the thing it saved me from re-deriving was published hours earlier under my own hand.
+
+⛔ **CONFIRMED GAP, stated because it bounds W-10 rather than reopening it: nothing guards against a NEW
+orphan component.** `openapi-spec-validity-invariant` covers duplicate operationIds and DANGLING `$ref`s
+— an operation pointing at a component that does not exist. An orphan is the inverse, a component no
+operation points at, and the word "orphan" in that file refers to path PARAMETERS. So the next
+`r.register` without a matching `.openapi()` tag adds silently to the 39. Recorded, not fixed: the
+decision that governs it is the owner's open one.
+
+⛔ **AND A SIXTH DRIFTED MEASUREMENT, in that guard's own header.** It read "Only ~38 ops carry an
+explicit operationId today". Measured: **47 of 234**. Refreshed, and stated as a ratio with a date
+because the figure moves with every route added.
+
+⭐ **The distinction that made this decidable, and it is worth keeping.** The same header also says
+"Manually verified clean 2026-06-03 (38 unique operationIds, 27 $refs all resolve, OpenAPI 3.1.0)" —
+and there are 1199 `$ref` occurrences now. **That sentence is not stale, because it is explicitly dated
+and past-tense: it records what was true on a day, which is history.** The one I changed said "today".
+A measurement in a header rots when it claims the PRESENT; the same measurement, dated, is a fact that
+stays true forever. Six instances found today, and this is the first where the two forms sat three
+lines apart in one comment.
