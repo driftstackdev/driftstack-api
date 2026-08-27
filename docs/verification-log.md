@@ -16716,3 +16716,42 @@ registration line.
 their fix landed, and both were security items. ⚠️ Boundary in the same sentence: I checked the
 server-side subset whose names claim something open, not all 102 name-matches, and the fork-side ones
 belong to another agent's lane.
+
+## V-1879 — sweeping my own open-vulnerability notes: four were out of date, none was live
+
+2026-08-26. No open defect found. The expiry check from V-1878 run over the whole population of notes
+claiming something unfixed, rather than the two that happened to surface.
+
+**POPULATION AND BOUNDARY IN ONE SENTENCE:** the server-side `project_*` notes whose summary claims an
+open issue — not all 102 name-matches, and not the fork-side ones, which are another agent's lane.
+
+⭐ **SIX OF TEN NEEDED NO CHECK AT ALL**, because their summary already carried the resolution:
+"RESOLVED", "SUPERSEDED → FIXED <sha>", "BUG-CLASS CLOSED", "NOT a bug — product observation". That is
+the hygiene working, and it is why the four below stand out rather than being typical.
+
+**FOUR WERE OUT OF DATE. Each verified by reading HEAD, never by trusting a commit subject:**
+
+1. **SOCKS5 egress SSRF** — closed in two layers (V-1878): `classifyUnsafeHost` before the probe, plus
+   a connection-time check on the resolved peer address for the domain-rebind case.
+2. **Unauth token routes without an IP limiter** — all five now carry one; the four unauthenticated
+   ones through NAMED gates (`magicLinkConsumeGate` and siblings), which is why a search for
+   `rateLimit(` finds nothing on a route that is limited.
+3. **Navigate URL scheme SSRF** — the scheme half shipped twice over (W487, V-1499): a **regex** rather
+   than a `refine` in the schema so the allowlist reaches the published document, and a repeat check in
+   the service because the agent executor calls it directly, bypassing the route. ⭐ The internal-IP
+   half is **deliberately** absent with the rationale in the source: under customer-SOCKS5 egress a
+   private IP is the CUSTOMER's own network, so a server-side blocklist would refuse legitimate traffic
+   and belongs at driver wiring. **Deferred with a documented rationale is not an open gap.**
+4. **Bundled-LLM soft-cap TOCTOU** — the subtlest, and the status is neither "fixed" nor "open". The
+   read-then-compare is unchanged and the $0.10 row still lands after the turn, so concurrent turns do
+   all read the same pre-increment total. What changed is that the exposure is now **bounded**: the
+   per-account concurrent-turn limiter caps N, so overshoot is N × $0.10 and callers past the ceiling
+   get a 429 — and `bundled-turn-concurrency.test.ts` proves the route consults the limiter and
+   releases its slot, by pre-occupying the slots rather than racing. ⭐⭐ **A TOCTOU on a SOFT cap does
+   not need a lock; it needs the exposure bounded and the bound tested.** A hard cap would need the lock.
+
+⭐⭐ **THE RESULT WORTH CARRYING: zero live gaps, four stale notes.** Every one had been closed or
+bounded months earlier and none of the notes was updated when the fix landed — the same asymmetry as
+the "don't re-audit" verdicts, and worse in this direction, because a note asserting a live
+vulnerability is precisely the kind of text that gets quoted rather than re-derived. All four corrected
+at their summary line, which is what recall reads first.
