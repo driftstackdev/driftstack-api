@@ -14329,3 +14329,50 @@ is `GETDEL` with no fallback (fails closed on pre-6.2 rather than degrading to a
 key as `-1`; and `services/fleet-nonce-cache.ts` + `lib/redis-fleet-nonce-cache.ts` — a single
 `SET NX EX` with a clamped TTL and a NUL-separated key, with the in-memory variant wired nowhere in
 `src`.
+
+## V-2031 — two more never-audited files, both clean, and six refuted gaps in one turn (2026-08-27)
+
+Continued the V-2028 list, biggest-first.
+
+**`services/session-duration-sweeper.ts` (10.3 KB, the largest never-audited file) — clean.** It
+auto-destroys free-tier sessions past a 20-minute wall-clock cap, so the load-bearing claim is its
+own: "Paid tiers have a null cap and are NEVER auto-destroyed." The tier loop is the right shape —
+it iterates `AccountTierSchema.options` (derived, so a new tier is automatically considered) and
+skips any tier whose `maxSessionMinutesFor` is null, rather than matching `'free'` by name. Measured:
+8 tiers, exactly one capped. `MAX_SESSION_MINUTES_PER_TIER` is typed `Record<AccountTier, number |
+null>`, so a new tier cannot be silently omitted — but it could be given a NUMBER, which would
+enroll paying customers into a destructive sweep.
+
+That is pinned, and conclusively: `api-types-common-content-parity.test.ts:169` pins the whole table
+literally (`free: 20, solo_manual: null, … enterprise: null`), so any paid tier gaining a cap reds
+it. Four further dedicated guards exist that I did not know about — `an-unbounded-paid-session-is-a-
+visible-choice`, `the-published-free-session-cap-is-the-enforced-one`, `tier-cap-helpers-cross-
+source-invariant`, `a-numeric-tier-cap-that-only-guards-creation`.
+
+**`lib/hijacked-reply.ts` — clean.** `reply.hijack()` hands over the socket, so no `onSend` hook
+runs and `x-request-id` plus the rate-limit headers the request already paid for are computed and
+discarded. Measured: **4 real `.hijack()` calls across 3 route files, every one preceded by a
+`writeHead` spreading `hijackedReplyHeaders(reply)`** (92→142, 123→213, 3591→3666, 5236→5280).
+
+⛔ My first pass scanned the 12 lines AFTER each hijack and reported all four as missing the helper.
+The helper runs BEFORE the hijack — writeHead first, then hand over the socket. **The window had the
+wrong shape, not the wrong size**, and widening it would have produced the same wrong answer more
+slowly. Reading one site settled it.
+
+Also already guarded, by a test that derives the roster the same way this audit did:
+`cors-allow.test.ts:117` counts the hijack sites in each file and requires a matching header call,
+with the comment "a fifth hijack route cannot be added uncovered."
+
+### The pattern worth recording
+
+**Six suspected gaps this turn, six refuted** — V-1998-style guard censuses proposed a hole and
+mutation or a direct read found the guard: the boot-probe roster (V-2028), the `FleetNodeAuthImpl`
+construction (V-2029), the tier-cap table, the hijack coupling, and two smaller ones. The four
+findings that DID survive were never missing guards; every one was a guard whose **derivation was
+keyed or scoped a little too narrowly** — a census keyed by basename where basenames collide
+(V-2025), a roster naming four of eight key-sharing modules (V-2026), a URL set with no tie to route
+registration (V-2027), a literal pin on one construction site that cannot see a second (V-2029).
+
+⭐ **So the productive question in a densely-guarded codebase is not "is this guarded?" but "what is
+the guard's KEY, and is it unique over the population it walks?"** Asking the first question six
+times cost most of this turn; asking the second produced every finding.
