@@ -18667,3 +18667,54 @@ what the proof rests on rather than an accident of ordering.
 type-alias literally named in the frozen map, within one named file under `services/`, so an
 inherited, intersected, or imported member is invisible to it; and it pins the TYPE's declared
 fields, not what any particular publisher actually sets. Ratchets 3058→3059 and 3234→3235.
+
+## V-1926 — a "fully mined, don't re-pick" conclusion whose premise had since changed (2026-08-27)
+
+The same 2026-06-02 memory V-1924 found expired carries two more audits at the same date, and one
+of them closes an entire lens: _"all 5 egress paths … the egress lens is exhausted"_. Its SSE leg
+rests on a stated premise — **"only `cost.threshold_alert` is actually published (the other 3 kinds
+forward-declared/unwired)"** — and the conclusion follows from it: one published kind, carrying the
+customer's own cost data, therefore no leak.
+
+**The premise is stale. All four kinds now have live publishers**, and the code says so itself:
+`bootstrap.ts` comments that its broadcast "retir[es] the kind's zero-publisher state". Measured,
+with the audit's own claim as the control (`cost.threshold_alert` still exactly 1):
+
+| kind                   | publishers now | method                  |
+| ---------------------- | -------------- | ----------------------- |
+| `cost.threshold_alert` | 1              | `publish` (per-account) |
+| `incident.broadcast`   | 1 — **new**    | `publishBroadcast`      |
+| `audit.high_severity`  | 1 — **new**    | `publish` (per-account) |
+| `session.errored`      | 3 — **new**    | `publish` (per-account) |
+
+**Re-tested rather than inherited, the conclusion still holds.** `audit.high_severity` is addressed
+to the audited account; `session.errored` is addressed to the session's owner, behind a
+"dropped errorEvent without an exact session-owner node match" guard, and its `errorClass` is the
+harness `code` — bounded by `z.string().regex(/^[a-z][a-z0-9_]{0,127}$/)`, which admits no dot,
+colon or slash and therefore cannot carry the node IP the forward-guard in
+`fleet-control-registry.ts` warns errorEvents can hold in `summary`/`detail`, neither of which is
+forwarded. `incident.broadcast` is public platform data.
+
+### The gap the re-test exposed
+
+`publishBroadcast` fans one frame to **every** account with a live stream, stamping each copy with
+that subscriber's own `accountId`. For an incident that is right. For an account-scoped kind it is
+a cross-tenant leak _that looks legitimate at every downstream layer_ — account A's audit action
+arrives at account B carrying B's own id, so neither the route nor the client can tell.
+
+Three of the four kinds are account-scoped facts and all three correctly use `publish`. What was
+pinned: `notification-bus-cross-source-invariant` asserts the bootstrap's broadcast call carries
+`kind: 'incident.broadcast'` — a positive pin on ONE site, which keeps that publisher wired and
+says nothing about a SECOND site appearing with an account-scoped kind.
+
+`only-account-agnostic-kinds-may-be-broadcast.test.ts` closes that direction: every
+`publishBroadcast` call in `apps/server/src`, in whatever file, must carry a kind from a frozen
+account-agnostic set. It accuses an unreadable call too — a broadcaster whose argument is not an
+object literal with a literal `kind` fails rather than passing, since that is precisely what must
+not be waved through. Proven with the real regression: switching `account-audit.ts` from `publish`
+to `publishBroadcast` fails the population arm and names both the file and `audit.high_severity`.
+
+**Boundary:** the reader matches any `<x>.publishBroadcast({...})` syntactically within
+`apps/server/src`, so a broadcast reached through an aliased function or a re-exported wrapper is
+invisible to it, and it judges the literal `kind` at the call site rather than the type of the
+value passed. Ratchets 3059→3060 and 3235→3236.
