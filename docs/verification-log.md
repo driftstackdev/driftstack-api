@@ -16755,3 +16755,41 @@ bounded months earlier and none of the notes was updated when the fix landed —
 the "don't re-audit" verdicts, and worse in this direction, because a note asserting a live
 vulnerability is precisely the kind of text that gets quoted rather than re-derived. All four corrected
 at their summary line, which is what recall reads first.
+
+## V-1880 — closing my own loose end: every owner-cockpit commit since its audits, accounted for
+
+2026-08-26. No defect. V-1871 observed that the owner-cockpit files had moved since their audits and
+then re-audited only the crypto. This finishes the sentence.
+
+⛔ **THE LOOSE END WAS MINE.** V-1871's argument was "the subject moved, so the verdict expired", and it
+listed `admin-owner.ts` among the moved files — then examined `platform-secret-encryption.ts` and
+stopped. **An expiry check that names five changed files and reads one is the same shape as the counts
+it was written to replace.** Every commit in that delta, resolved:
+
+- `3449f046e` (2026-06-12) — the secrets routes themselves, and `07ba11884` (2026-06-12), the
+  key-unset 503 mapping. **Both predate the 2026-06-13 platform-secrets audit by a day**, so that audit
+  covers them; neither carries a log entry, which is why they looked unaccounted for at first glance.
+- `1cba1b441` (2026-07-14) — the name binding, verified in V-1871.
+- `ef279e391` (2026-07-14) — the atomicity fix, which documented itself as V-658 and which I confirmed
+  at HEAD rather than trusting: `pg_advisory_xact_lock(hashtextextended('platform-secret-upsert:<name>'))`
+  is present, and BOTH branches fail closed — `inserted.length !== 1` throws, and `updated.length !== 1`
+  throws "Platform-secret update lost its locked row." The defect it closed is worth restating: create
+  versus update was decided from a read taken BEFORE the upsert, so two concurrent first writes could
+  each return 201 `created` and each emit `secret.created` while one silently overwrote the other.
+- `33f4eb711` (2026-07-02) — **the only commit post-dating both audits with no log entry**, and the one
+  thing here that genuinely needed reading.
+
+✅ **THE FAILED-DELETE AUDIT, read at HEAD: correct on every axis that matters for this surface.**
+Owner-gated and rate-limited at the preHandler; params validated before any side effect; the audit
+`await`ed BEFORE `reply.send()` on the success path; and on failure a `secret.deleted` record with
+`result: 'error: <code>'` where the code is derived from `err.name`, **not the raw message**, so a
+repository error cannot smuggle detail into the audit trail. `inputPayload` carries the name only —
+never the value, which is the whole point on a secrets surface. A benign not-found is excluded, with
+the reason written down and matched to the reveal sibling.
+
+⭐ **The general form, since this is the second time today the same shape has bitten:** an expiry check
+produces a LIST of changed commits, and the check is not finished until every member of that list is
+resolved to "covered by audit X", "documented as entry Y", or "read at HEAD". Three of these five
+resolved by date alone and one by a log reference; only one needed an audit. That ratio is the argument
+for doing it — it is cheap, and it is the difference between "the verdict expired" and "here is what
+replaced it".
