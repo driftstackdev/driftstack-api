@@ -33,6 +33,11 @@ const SRC_DIR = resolve(SERVER_DIR, 'src');
 const CONFIG = resolve(SERVER_DIR, 'tsconfig.test.json');
 const SYNTHETIC = resolve(SRC_DIR, '__exhaustive_probe.ts');
 const BUILD_TIMEOUT_MS = 60_000;
+// Measured, not guessed: the walk saw 342 files and 25 finite-union switches on
+// 2026-08-27. The floor sits well under the observed count so ordinary growth
+// never moves it, while a collapse — a drifted SRC_DIR, an empty root list — is
+// far below it and fails loudly.
+const FLOOR_FILES = 270;
 
 interface Offender {
   file: string;
@@ -71,7 +76,21 @@ function refusesUnhandled(clause: ts.DefaultClause): boolean {
   return throws || assertsNever;
 }
 
-function findOffenders(extraFile?: { text: string }): Offender[] {
+/**
+ * The offenders PLUS a census of what the walk actually looked at. The census
+ * exists because `offenders: []` is the pass condition, and an empty walk
+ * produces it just as readily as a clean tree: a drifted `SRC_DIR`, a program
+ * rooted at nothing, or sources moved out of `src/` all yield zero offenders.
+ * The synthetic arms cannot cover that — they analyse injected source text, so
+ * they prove the MATCHER fires, never that discovery found a file.
+ */
+interface Scan {
+  readonly offenders: Offender[];
+  readonly filesScanned: number;
+  readonly finiteUnionSwitches: number;
+}
+
+function findOffenders(extraFile?: { text: string }): Scan {
   const cfg = ts.parseConfigFileTextToJson(CONFIG, readFileSync(CONFIG, 'utf8'));
   const parsed = ts.parseJsonConfigFileContent(cfg.config, ts.sys, SERVER_DIR);
   const roots = parsed.fileNames.filter((f) => f.startsWith(`${SRC_DIR}/`));
@@ -100,10 +119,13 @@ function findOffenders(extraFile?: { text: string }): Offender[] {
   );
   const checker = program.getTypeChecker();
   const offenders: Offender[] = [];
+  let filesScanned = 0;
+  let finiteUnionSwitches = 0;
 
   for (const sourceFile of program.getSourceFiles()) {
     if (sourceFile.isDeclarationFile) continue;
     if (!sourceFile.fileName.startsWith(`${SRC_DIR}/`)) continue;
+    filesScanned += 1;
 
     const visit = (node: ts.Node): void => {
       if (ts.isSwitchStatement(node)) {
@@ -113,6 +135,7 @@ function findOffenders(extraFile?: { text: string }): Offender[] {
           parts.length > 1 && parts.every((p) => p.isStringLiteral() || p.isNumberLiteral());
 
         if (finiteUnion) {
+          finiteUnionSwitches += 1;
           let fn: ts.Node | undefined = node.parent;
           while (
             fn !== undefined &&
@@ -152,20 +175,35 @@ function findOffenders(extraFile?: { text: string }): Offender[] {
     visit(sourceFile);
   }
 
-  return offenders;
+  return { offenders, filesScanned, finiteUnionSwitches };
 }
 
 describe('a void switch over a finite union must be exhaustive', () => {
   it(
-    'finds no unguarded dispatch in apps/server/src',
+    'CRITICAL the walk actually enumerated the server sources',
     () => {
-      expect(findOffenders()).toEqual([]);
+      const { filesScanned, finiteUnionSwitches } = findOffenders();
+      expect(filesScanned).toBeGreaterThan(FLOOR_FILES);
+      // The load-bearing half: this one proves the shape matcher engaged the
+      // REAL tree. `filesScanned` alone still passes if the checker silently
+      // stops resolving unions, which would make every switch look non-finite.
+      expect(finiteUnionSwitches).toBeGreaterThan(0);
     },
     BUILD_TIMEOUT_MS,
   );
 
-  // The two arms below are why the arm above is worth anything: they prove the
-  // detector fires on every unguarded shape and on none of the guarded ones.
+  it(
+    'finds no unguarded dispatch in apps/server/src',
+    () => {
+      expect(findOffenders().offenders).toEqual([]);
+    },
+    BUILD_TIMEOUT_MS,
+  );
+
+  // The two arms below prove the MATCHER fires on every unguarded shape and on
+  // none of the guarded ones. They do NOT prove the arm above looked at
+  // anything: they root the program at an injected file, so discovery is out of
+  // their reach entirely. The census arm is what covers that half.
   it(
     'accuses every shape that does not actually refuse, including comment-only exhaustiveness',
     () => {
@@ -178,7 +216,7 @@ export function neverOnlyInAComment(k: K): void { switch (k) { case 'a': break; 
 export function throwInsideANestedFn(k: K): void { switch (k) { case 'a': break; default: { const f = (): void => { throw new Error('x'); }; void f; break; } } }
 `,
       });
-      expect(found.map((o) => o.reason)).toEqual([
+      expect(found.offenders.map((o) => o.reason)).toEqual([
         'no default clause',
         'default does not refuse the member',
         'default does not refuse the member',
@@ -200,7 +238,7 @@ export function returnsValue(k: K): string { switch (k) { case 'a': return 'x'; 
 export function openSubject(s: string): void { switch (s) { case 'a': break; default: break; } }
 `,
       });
-      expect(found).toEqual([]);
+      expect(found.offenders).toEqual([]);
     },
     BUILD_TIMEOUT_MS,
   );

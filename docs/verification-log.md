@@ -19704,3 +19704,33 @@ equality against a frozen 39-element list, a recorded roster of six, and a disk-
 is the strongest floor of the set. Fix drafted with a census floor (`filesScanned`, and
 `finiteUnionSwitches > 0` as the load-bearing half) and three mutations that must redden it; not applied
 yet because the suite was held by a peer.
+
+## V-1948 — the guard that could pass over an empty tree now has to say what it saw (2026-08-27)
+
+`a-void-switch-over-a-finite-union-must-be-exhaustive` asserted `findOffenders()` was empty over a walk
+that skips anything outside `SRC_DIR`. **`[]` is the pass condition, and an empty walk produces it as
+readily as a clean tree.** Its two synthetic arms root the program at an injected file, so they prove
+the matcher fires and cannot see discovery at all — while the comment above them read "the two arms
+below are why the arm above is worth anything," which is half true and reads as fully true.
+
+`findOffenders` now returns a census alongside the offenders, and a new arm floors it: `filesScanned`
+above 270 and `finiteUnionSwitches > 0`. **Measured, not guessed** — the walk sees 342 files and 25
+finite-union switches today, so the floor sits far under ordinary growth and far above a collapse. The
+switch count is the load-bearing half: `filesScanned` alone still passes if the checker quietly stops
+resolving unions, which would make every switch look non-finite.
+
+**Three mutations, and the informative one is the survivor.**
+
+- **Drifting `SRC_DIR` reddens the census — and leaves the original offender arm GREEN.** That is the
+  defect demonstrated rather than asserted: discovery collapses 342 → 0, `offenders` is `[]`, and the
+  old assertion passes. **This mutation is caught by the census arm and by nothing else.**
+- **Forcing `finiteUnion = false` reddens the census and the synthetic positive arm**, correctly — a
+  broken matcher is visible from both sides. So the two arms are complementary, not redundant.
+- **Restricting the program roots to a single file SURVIVES, and should.** I predicted it would fail
+  when I drafted the fix. Measured instead of assumed: one root still yields `filesScanned` 331 of 342
+  and `finiteUnionSwitches` 25 of 25, because a TypeScript program is transitively closed over imports.
+  **Coverage of the actual subject is fully preserved, so a floor that fired here would be wrong.** The
+  real threat is the prefix drift, not the root list — which I had backwards in the draft.
+
+tsc clean via `tsconfig.test.json` (the bare config excludes tests). No ratchet move: this adds an arm,
+not a file.
