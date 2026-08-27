@@ -18924,3 +18924,36 @@ module and embedded in an outbound frame is invisible to it; and bounding is jud
 from the call chain, so a cap applied by an enclosing `.transform()` (as `ErrorEventSchema` does for
 total serialized bytes) is not counted — which makes the check strictly conservative rather than
 lenient. Ratchets 3060→3061 and 3236→3237.
+
+## V-1931 — a red that is not mine, attributed before investigating, with the diagnosis handed over (2026-08-27)
+
+The gate validating V-1930's ratchet came back **1 failed | 3236 passed (3237)**. Attribution
+first, because the standing order is explicit that reds in `apps/gui-client` belong to A2:
+
+- The failing file is `apps/gui-client/tests/unit/use-receipt-pdf-download.test.tsx` — the
+  `gui-jsdom` project, A2's tree.
+- Every path my commits since `21a3b65d4` touched: four files under `apps/server/tests/unit`,
+  `docs/verification-log.md`, `scripts/verify-suite.mjs`. **Zero** under `apps/gui-client`.
+- The working tree was clean, so no peer's uncommitted file is implicated either.
+
+**My own change is validated regardless**, which is what the run was for: the gate collected
+**3237** files against `EXPECTED_TEST_FILES_ALL = 3237`. The ratchet is right; the red is content
+in someone else's test.
+
+**Not fixed — theirs. But it is diagnosable from outside, so here is the diagnosis.** The failing
+arm is _"bounds a stalled download with actionable recovery"_, and the file combines
+`useFakeTimers` (1) and `advanceTimersByTime` (1) with `waitFor` (2). That pairing is named in this
+repo's own flake note:
+
+> Beware fake timers: `waitFor` polls on real timers, so converting a `vi.useFakeTimers()` test to
+> `waitFor` makes it hang. Leave fake-timer tests synchronous — they are already deterministic.
+
+So this is flake **class one** — a timing assumption, the class whose remedy is to fix the
+assumption rather than the assertion — and distinct from the class-two synchronous-starvation
+failures of V-1927 through V-1929, which had no timing construct at all. Recorded here rather than
+in `docs/internal/OPEN-ITEMS.md`, which is dirty with A2's rows and not mine to commit.
+
+**Boundary:** this attributes the red and names a documented mechanism consistent with it from the
+file's imports and helpers; I did not run the test, reproduce the failure, or read its body, so the
+diagnosis is a strong lead for whoever owns it and not a confirmed root cause. Ratchets unchanged at
+3061/3237.
