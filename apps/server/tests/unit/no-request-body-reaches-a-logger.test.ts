@@ -26,7 +26,24 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+// ⛔ TIMEOUT — this file is an I/O-bound census: it walks the source tree and
+// parses every file with the TypeScript compiler. Its runtime scales with
+// machine load, not with anything it asserts, so under contention it fails with
+// "Test timed out" rather than an assertion — which reads as a regression in the
+// thing being checked and is not one. Measured 2026-08-27: the nine census tests
+// in this family run in 4.7s of test time COMBINED (~0.5s each) on a quiet box,
+// and one of them still exceeded the 10s default during a full-suite run while a
+// second workload held the machine at load 50.
+//
+// ⚠️ A test that only fails under load is the kind that gets re-run until green
+// rather than fixed. The clock is not what protects this file: a wall-clock
+// timeout fires on a busy box and passes on an idle one regardless of the code.
+// What detects a walk that stopped finding things is the census assertion this
+// file already carries — an exact count pin or a non-vacuity floor over the
+// walked population. Because that assertion is doing the real work, giving the
+// clock enough room to absorb contention costs no coverage. See V-1975.
+vi.setConfig({ testTimeout: 60_000 });
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = resolve(HERE, '..', '..', 'src');

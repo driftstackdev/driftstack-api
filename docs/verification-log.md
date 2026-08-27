@@ -20728,3 +20728,43 @@ under a comment recording that omitting it "made this method a guaranteed 400 in
 It is pinned: `untested-resources.test.ts:114` is a CRITICAL arm asserting exactly that query. The
 two irrelevant files sort first, and `head -4` cut the real hit. **A truncated read is a scoped
 search.** Full SDK suite after the change: 31 files, 352 tests, green; `tsc` clean.
+
+## V-1975 — the timeout family, swept by shape rather than by the file that failed (2026-08-27)
+
+The gate after V-1973/V-1974 came back red again, on a _different_ file with the _identical_ shape:
+`no-request-body-reaches-a-logger.test.ts`, **Test timed out in 10000ms**, walking and TS-parsing
+`apps/server/src`. V-1973 had fixed one walker; this is the same family one file over — the exact
+failure mode recorded that morning as "a fix applied to the file you were looking at is a fix to one
+call site of a shape".
+
+⭐ **The instrument fix from V-1973 proved itself immediately.** The rewritten wrapper printed
+`=== GATE EXIT 1 (verify-suite's own, not a pipe's) ===` beside `verify-suite: NOT TRUSTWORTHY`. The
+old shape would have printed `GATE EXIT 0` over this red, exactly as it did before.
+
+**Scoping the sweep honestly, because the first cut was far too wide.** 353 test files call
+`readdirSync`, and 350 run on the 10s default — but only two have ever timed out, so "walks the
+filesystem" is the wrong predicate. The expensive combination is _walking a tree AND parsing it
+through the TypeScript compiler_: **16 files, 15 of them on the default**, 9 of which also walk
+recursively. That is the family.
+
+⭐ **Measured before touching anything.** All nine run in **4.7s of test time COMBINED (~0.5s each)**
+on a quiet box. So the file that failed needed >10s for ~0.5s of work — roughly **20x starvation**,
+on a machine a second workload was holding at load 50. Nothing here is slow; the box was
+oversubscribed.
+
+⛔ **My floor detector over-flagged four of the nine as having no non-vacuity guard at all.** Reading
+them refuted it: they carry **exact count pins**, which are stronger than thresholds —
+`route-auth-coverage-invariant` `toHaveLength(307)`, `openapi-route-coverage` `toBe(234)`/`toBe(256)`,
+`effective-account-header-authz-invariant` `toHaveLength(32)`, `route-mutation-ratelimit`
+`toHaveLength(173)`. The regex only knew `toBeGreaterThan` and `toContain`. **All nine are guarded** —
+five by floors, four by exact pins.
+
+That is what makes the change free rather than a wave-through: a wall-clock timeout fires on a busy
+box and passes on an idle one regardless of the code, so it was never the detector here. The census
+assertion is, and it is intact and strong in every one of the nine. `vi.setConfig({ testTimeout:
+60_000 })` therefore costs no coverage — ~120x the measured solo cost.
+
+⭐ **The config placement was mutation-proved, not assumed.** Setting one file's value to `1` produces
+`Test timed out in 1ms`, so the inserted `vi.setConfig` is honored where it sits rather than being a
+decorative comment above nine files. Restored byte-identical. `it(` counts unchanged against HEAD in
+all nine; nine files, 63 tests, green; `tsc` clean.
