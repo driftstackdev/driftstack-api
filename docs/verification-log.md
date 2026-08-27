@@ -18455,3 +18455,53 @@ directions.
 assignments or parameters, so a body handed into a helper function and logged there is still
 invisible; it recognises loggers as `<x>.log|logger.<level>(…)` and covers `apps/server/src` only.
 Arms 3 → 5 in the same file, so no ratchet moves.
+
+## V-1922 — six copies of one helper, three different answers, and all three are right (2026-08-27)
+
+Chasing V-1921's stated boundary — a body handed to a helper and logged there. Measured before
+building anything: **75** call sites hand a whole body or parsed body to a non-logger callee, but
+the callees are overwhelmingly `Schema.safeParse(...)`, which is the body going _into_ validation.
+The one worth reading was `parseOrThrow`, receiving raw bodies at 8 sites. It does not log.
+
+Reading it found something else: **`parseOrThrow` is copy-pasted into six route files, and the six
+do not agree on what a failed parse tells the caller.** My first instrument was wrong about it — a
+fixed 14-line window captured 5 to 15 lines per copy and reported all of them as differing, which
+was an artefact of the window, not a finding. Reading each body to its closing brace gives the
+real split, and classifying by the routes' actual `requireScope` gates rather than by filename
+gives the reason:
+
+| copies                                             | gate                        | on a failed parse                             |
+| -------------------------------------------------- | --------------------------- | --------------------------------------------- |
+| `admin-cost`, `admin-crypto-orders`, `admin-usage` | `driftstack_internal_admin` | raw `result.error.message`                    |
+| `account-cost`, `billing-crypto-orders`            | `read:billing` (customer)   | a fixed sentence, both stating why            |
+| `oauth`                                            | serves PUBLIC endpoints     | raw message **plus** an RFC 6749 `error` code |
+
+**All three postures are correct.** An operator reading a raw Zod message is fine; the two
+customer copies say so explicitly — _"Don't leak the raw serialized zod error (full issue/path
+JSON) into the customer-facing problem detail"_ — and `oauth` is the documented V-753 decision,
+where integrators need the detail and get a stable `error` field to branch on instead of Zod prose.
+The gate check corrected my own reading: `oauth.ts` looked staff-scoped from its `requireScope`
+lines, and its `parseOrThrow` actually serves the unauthenticated endpoints.
+
+**The defect is that none of it was pinned**, and the difference is not cosmetic. A Zod message can
+carry the value it rejected — `z.enum` puts it in `received` and it survives `.flatten()` (V-1920)
+— so the gap between these two branches is the gap between echoing a caller's rejected input and
+not. A seventh copy, or a customer route pasting the staff form, changes that silently, and
+copy-paste is exactly how six copies came to exist.
+
+Frozen by **name and posture**, so both directions red. Proven on real files, and the two
+mutations kill _different_ arms — checked by reading which test name failed, since two mutations
+each killing "1 of 3" are indistinguishable in a count:
+
+| mutation                                   | arm killed                                         |
+| ------------------------------------------ | -------------------------------------------------- |
+| flip `account-cost` to the staff posture   | _every copy still answers the way it was recorded_ |
+| add a seventh copy to `mac-nodes-register` | _no SEVENTH copy has appeared in routes/_          |
+
+The second arm reads the directory rather than the frozen list, because an arm that opens only the
+six files it already knows can never notice a seventh.
+
+**Boundary:** the classifier inspects `throw` statements inside a function literally named
+`parseOrThrow` under `apps/server/src/routes`, so a differently-named helper with the same job is
+invisible to it, and it judges the posture rather than the wording — a copy that changes its fixed
+sentence still passes. Ratchets 3056→3057 and 3232→3233.
