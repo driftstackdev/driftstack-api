@@ -15742,3 +15742,44 @@ arms. Structural pin plus behavioural arm elsewhere — the same architecture, w
 ⚠️ WHAT THIS DOES NOT ESTABLISH: 627 references were checked for EXISTENCE, not for delivery. Only 5
 delegations have been read semantically. An unstated delegation — a guard silently assuming another
 covers something — is invisible to both passes, and is the residual risk this measurement leaves.
+
+## V-1857 — the 47 service-layer scope gates, and a prediction falsified into a better rule
+
+2026-08-26. Followed `customer-scope-refusal-coverage`'s stated blind spot — "this roster does NOT
+reach scope gates that live in the SERVICE layer" — to its population, and mutation-tested the two
+cheapest members. No finding; the value is a corrected structural rule.
+
+**THE POPULATION.** 47 `throwIfMissingScope(ctx, …)` gates in `apps/server/src/services`: 29
+`driftstack_internal_admin`, 11 `account_owner`, 4 `read:webhooks`, and two singletons — `read:audit`
+and `read:sessions`. The singletons are the cheapest decisive test of the class, and they sit on
+OPPOSITE sides of a distinction that turns out to matter.
+
+⭐ **`read:audit` — the service gate is the ONLY gate.** `/v1/account/audit-log` and its `/export`
+carry `preHandler: [app.requireAuth, app.rateLimit('global')]` and NO `requireScope`, so nothing above
+the service enforces scope, and the route is (correctly) absent from the route-level refusal roster.
+It is thoroughly witnessed anyway: mutating it failed **account-audit.test.ts** ("403 when the key
+lacks read:audit", "403 for a cross-resource granular key — read:sessions does NOT satisfy
+read:audit"), **audit-log-export.test.ts** in both directions, plus its content-parity pin and two
+cross-source invariants.
+
+⛔⛔ **`read:sessions` — MY PREDICTION, STATED BEFORE THE RUN, WAS WRONG.** I reasoned that because
+`GET /v1/sessions` refuses at `requireScope('read:sessions')` in the preHandler (routes/sessions.ts:410)
+before the handler calls `service.list` (417), the service-layer gate is defence-in-depth that HTTP can
+never exercise — so weakening it should fail nothing. It failed
+`sessions.test.ts > 200 with a granular read:sessions key`.
+
+⭐⭐ **THE CORRECTED RULE, which is better than the one I predicted from.** A defence-in-depth gate
+behind an equivalent outer gate cannot be witnessed by a REFUSAL through the outer path — the outer
+gate refuses first, so that direction is genuinely unreachable. But it IS witnessed by a POSITIVE arm:
+a credential that SATISFIES the outer gate and would fail a WRONG inner one. A granular `read:sessions`
+key carrying no broad `read` passes the preHandler, reaches the service, and breaks the instant the
+inner scope string changes. **The positive control is not just protection against a vacuous refusal —
+on a layered gate it is the ONLY arm that can see the inner layer at all.**
+
+**Total: 12 tests across 7 files.** Both singleton gates are load-bearing and witnessed. Restore
+verified byte-identical against a path-keyed snapshot, tree clean against HEAD.
+
+⚠️ BOUNDARY: 2 of 47 gates mutation-tested, chosen as singletons because they are individually
+isolable — a grouped mutation of the 29 `driftstack_internal_admin` sites would confirm the class but
+not attribute a survivor to a site. The corrected rule above is what generalises; the coverage result
+is about two gates.
