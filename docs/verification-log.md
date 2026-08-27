@@ -18505,3 +18505,56 @@ six files it already knows can never notice a seventh.
 `parseOrThrow` under `apps/server/src/routes`, so a differently-named helper with the same job is
 invisible to it, and it judges the posture rather than the wording — a copy that changes its fixed
 sentence still passes. Ratchets 3056→3057 and 3232→3233.
+
+## V-1923 — the raw Zod message traced to the customer, and it never arrives (2026-08-27)
+
+No defect. V-1922 pinned six `parseOrThrow` copies and stated its own limit: the classifier keyed
+on the NAME, so a helper doing the same job under another name was invisible. Closing that by
+sweeping the SHAPE — any function that calls `safeParse`/`parse` and throws.
+
+**The first instrument was useless and said so loudly: 70 matches**, because every
+`registerXRoutes` wrapper contains _a_ parse and _a_ throw somewhere in its hundreds of lines,
+unrelated to each other. Filtering to functions of ≤25 lines — a real validation helper is small,
+a route-registration wrapper is not — gives **20**, and the control holds throughout: all six known
+`parseOrThrow` copies are found by shape, so the narrowing did not cost the known positives.
+
+Of the fourteen the name-keyed classifier could not see, thirteen use a fixed sentence. The
+divergence sits inside one file, `services/harness-control-codec.ts`, and it is **principled along
+an axis the copies actually vary on** — direction of travel, not carelessness:
+
+- `decodeWireData` handles **inbound** wire data and answers with fixed sentences ("is not valid
+  base64", "did not contain valid JSON").
+- `serializeIntentDispatch` and `encodeInlineProxyConfig` are **outbound**, validating data _we_
+  construct before it leaves. Their raw Zod detail is the point: the docstring says the check
+  exists "so a wrong shape is caught here, not as an opaque harness
+  `intent_missing_parameter`". A failure there is a server bug, and the message is for whoever
+  has to diagnose it.
+
+### Following the message all the way to the wire
+
+The interesting question was not the posture but whether that raw detail can reach a customer,
+since a Zod message can carry the value it rejected (V-1920). Traced link by link rather than
+assumed:
+
+1. `HarnessWireCodecError` is **never caught or mapped** — grep returns only its definition, its
+   throws, and doc comments — so it reaches the global handler as a plain `Error`.
+2. `normaliseError` wraps anything unrecognised as `new InternalError('An unexpected error
+occurred.', err)` — generic detail, original as the cause.
+3. `ApiError.toProblem()` returns `{...safeExtensions, type, title, status, detail?, instance?}`.
+   **`cause` is not among them.** The cause is handed separately to the logger.
+
+So the message a developer needs goes to the logs, and the customer gets the generic 500.
+
+**And the chain is already pinned — by a guard that anticipated the precise regression I was about
+to write one for.** `error-handler-internal-error-no-leak.test.ts` injects real requests against
+throwing routes and asserts the serialized body carries neither message nor stack, existing
+explicitly because the three textual pins on `error-handler.ts` "would NOT catch a regression in
+`lib/errors.ts` — e.g. `ApiError.toProblem()` or `InternalError` starting to spread `cause` into
+`extensions`/`detail`". It also pins the contrast: known typed errors still surface their
+controlled detail, "so the handler is proven to hide _unknown_ errors specifically, not
+blanket-hide everything". Opening it instead of trusting its filename is what stopped a duplicate.
+
+**Boundary:** the shape sweep covers `apps/server/src`, treats a function as a validation helper
+if it is ≤25 lines and both parses and throws, and reads the posture from `throw` statements only —
+a helper that returns a result object rather than throwing is outside it, as is one whose parse and
+throw are separated by more than that span. No source change, no new guard, no ratchet movement.
