@@ -13664,3 +13664,54 @@ review-prompting, not safety — the security assertion beneath it is set-based 
 own framing is honest about which half it is. **Not changed**: the guard is carefully reasoned, its author
 scoped the claim correctly, and widening the pinned pairs from one file to ten is a judgement about review
 noise rather than a defect.
+
+## V-2018 — "two writers sharing one key must agree on its capacity" was an instance fix; now it is a class guard (2026-08-27)
+
+2026-08-27. `middleware/rate-limit.ts` carries an invariant that came out of a real, destructive incident:
+the store key is `rl:<accountId>:<bucketKey>` with no tier in it, the token-bucket script persists
+`math.min(capacity, …)`, so a writer arriving with a LOWER capacity **permanently truncates** the other's
+bucket. A control key charging a conservative `free` floor collapsed a paying `api_scale` owner's
+6,000-token bucket to about **59**, for as long as the desktop Simulator kept polling. The fix routed the
+control key through the same live owner authority the effective-owner path already used.
+
+**Re-asked as a post-condition, and it holds.** **Boundary: every bucket-key literal in
+`apps/server/src` — `bucketPrefix: '<x>'` and `` key: `<x>:` `` on the IP/internal side, `rateLimit('<x>')`
+on the account side.**
+
+```
+IP/internal key prefixes : 14   egress_echo, global_ip, oauth_provider_*, status_*, atlas_priority_token …
+account bucket keys      :  4   global, sessions:create, agent_sessions:message, agent_sessions:input_event
+INTERSECTION             :  0   the namespaces are disjoint
+```
+
+Within the account namespace all 198 `rateLimit('global')` call sites reach the store through one
+middleware that derives capacity from a single authority, which is what the incident fix established.
+
+### The instance was fixed; the class was not
+
+A new call site consuming a token bucket with its own capacity, on a key colliding with an existing
+namespace, reproduces the incident exactly and **no test would have noticed** — the existing guards are
+per-file drift pins on `ip-rate-limit.ts` and the route files, none of which sees the class. New guard,
+`a-bucket-key-is-written-by-one-authority`, with three assertions and a rot arm: namespaces disjoint; a
+token-bucket consume lives only in an acknowledged writer (`services/rate-limit.ts`,
+`middleware/ip-rate-limit.ts`, `routes/internal-atlas-priority.ts`); and every listed writer must still
+exist and still consume.
+
+⛔ **The rot arm caught my own detector on the very first run.** I keyed it on
+`.consume({ … capacity: … })` — an inline object — and `ip-rate-limit.ts` builds `consumeArgs` as a
+variable and passes it, so the file scored **zero** and the "listed writer no longer consumes" arm fired.
+Without that arm the guard would have shipped watching two of its three writers. **A roster arm that
+checks its own exemptions is also checking the detector that populates them.**
+
+Corrected to the shape — the module calls consume AND declares a capacity — and **validated in both
+directions**: it finds exactly the three real writers, and excludes `services/auth-flows.ts`, which calls
+`.consume(` three times on the MFA challenge store and never mentions a capacity. A receiver-name detector
+would have got that wrong in one direction or the other.
+
+**Mutation-proved on real subjects, restored byte-identical:** changing `egress-echo`'s prefix to `global`
+reds the collision arm naming `global`; planting a bucket consume in `routes/legal.ts` reds the roster arm
+naming `routes/legal.ts (1)`. **All three non-vacuity floors probed rather than trusted** — 342 source
+files walked (floor 300), 14 prefixes (floor 10), 201 account bucket-key call sites (floor 50).
+
+`EXPECTED_TEST_FILES` 3065 → 3066 and `EXPECTED_TEST_FILES_ALL` 3241 → 3242 for the one file added; the
+two pins that reference those constants name them rather than their values and still pass.
