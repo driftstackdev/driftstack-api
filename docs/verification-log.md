@@ -15871,3 +15871,57 @@ checks, concentrated in `agent-sessions.ts` (5), `sessions.ts` (4), `profiles.ts
 `webSession === null` / `throw new ForbiddenError(` in `src/routes/*.ts` — an in-handler refusal
 written another way (a helper, a different error class) is not in the 32, so this is a lower bound on
 that form, not the form's population.
+
+## V-1860 — a mutation harness that could not restore, and the blind spot in my own best technique
+
+2026-08-26. No defect. Two process findings, one of which corrects a method I have been relying on all
+session.
+
+⛔⛔⛔ **THE HARNESS COULD NOT RESTORE, AND NOTHING SAID SO.** Mutating 11 team-admin write gates across
+7 files, one shell-quoting bug broke BOTH ends of the safety mechanism identically:
+
+    for n in $FILES; do cp "src/$n.ts" "$SNAP/$n.ts"; done                    # setup
+    trap 'for n in '"$FILES"'; do cp "$SNAP/$n.ts" "..."; done' EXIT INT TERM  # restore
+
+The trap's quoting collapsed the list to ONE word, so `$n` became the whole string — and the SAME
+collapse hit the snapshot loop, so no snapshot was written either. Seven files of weakened
+authorization gates went live with no recovery path. ⭐ Found only because I VERIFIED the restore
+instead of trusting the trap; the `cp: No such file or directory` errors were in the task output the
+whole time, under the setup noise.
+
+**Recovered with `git checkout HEAD -- <paths>`** — correct for a poisoned WORKTREE, and knowable as
+safe ONLY because the pre-flight had recorded `dirty=0`, which made HEAD authoritative. Verified by
+post-condition: 0 markers remaining AND all 11 original conditions back, both, because a partial
+restore satisfies neither alone. Both re-runs since assert the snapshot exists and matches BEFORE the
+first edit and print its byte count; one was later killed mid-run and the corrected trap DID restore,
+verified the same way.
+
+⛔ **22nd PRIOR-ART ENCOUNTER, and the most on-the-nose: a guard named for my hypothesis.**
+`the-team-admin-write-gate-is-one-shape-in-three-files` — `effectiveAccountIdForWrite` is copied into
+three route files with **21 write endpoints** depending on it, and the guard compares the copies with
+identifiers and string literals NORMALISED AWAY, "the only comparison that is about behaviour rather
+than prose". Its stated hazard is the one I was hunting: "A copy that gained a condition, lost the
+throw, or returned the account id before checking the role would be a silent authz hole ... one line,
+in one of three files, with nothing else to notice."
+
+⭐⭐ **AND THE FINDING THAT MATTERS MOST — MY OWN TECHNIQUE HAS A BLIND SPOT.** "Grep the PROPERTY, not
+the file you expect" resolved five investigations today. Here it produced a FALSE NEGATIVE: I reported
+`agent-sessions.ts:2034` and `:2576` as having neither a pin nor an arm, because I grepped their
+refusal MESSAGES. `agent-sessions-routes.test.ts:1123` is that exact gate —
+"a NON-admin (role=member) launching under the owner → 403 (never 201) — only admins launch on the
+team" — with 1105 as its positive control and 1082 covering the read gate.
+**Those arms assert the STATUS CODE and never quote the message.**
+
+⭐ So: grepping a message finds arms that ASSERT THE MESSAGE. Arms that assert only behaviour are
+invisible to it. Sixth wrong prediction today, all in the same direction — the witness living somewhere
+the measurement did not look.
+
+⭐⭐ **THE ASYMMETRY THIS SETTLES, and it is the practical rule:** for a NEGATIVE ("this is covered"),
+reading an arm whose text names the property is sufficient — a false negative costs a look I stop
+taking. For a POSITIVE ("this is unwitnessed"), only mutation is sufficient — a false positive costs a
+test written against correct code and a wrong claim in a ledger someone else reads. **Every wrong
+prediction today was a positive I had not yet mutated.**
+
+⚠️ BOUNDARY: the agent-sessions mutation was killed mid-run, so this entry rests on READING those arms,
+not on their failing. That is the weaker evidence, and by the rule above it is the right strength for
+the claim being made — a negative.
