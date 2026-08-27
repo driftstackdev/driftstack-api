@@ -245,6 +245,27 @@ export function keysEqual(a: Buffer, b: Buffer): boolean {
 // one audited primitive instead of a parallel crypto path. A secret wrapped
 // under account A's TMK cannot be unwrapped with account B's TMK (the GCM tag
 // fails to verify) — the same cross-account isolation the DEK relies on.
+//
+// ⛔ 2026-08-26 — THE NAMED USE CASE SHIPPED ELSEWHERE, AND THESE HAVE NO
+// PRODUCTION CALLERS. Customer proxy credentials are encrypted by
+// `account-proxy-secret-encryption.ts` ("record- and slot-bound", AAD purpose
+// `driftstack.account-proxy-secret`, four call sites), which derives the TMK
+// from here and then adds its OWN AAD on top. `wrapSecret`/`unwrapSecret` are
+// referenced only by their unit tests.
+//
+// That matters because of what the paragraph above invites: reusing this
+// primitive for a new account-scoped secret. It binds by KEY only. Cross-account
+// substitution fails, as described — but two secrets belonging to the SAME
+// account are interchangeable, because nothing in the envelope names which
+// record or field a ciphertext belongs to. Measured across the nine AES-GCM
+// surfaces in `src/lib`, the convention is the opposite: every encrypt path
+// binds unconditionally and only decrypt is permissive, so it can still read
+// pre-AAD ciphertext.
+//
+// So: a new account-scoped secret that has a record identity wants the
+// `account-proxy-secret-encryption` shape, not this one. These two stay because
+// they are exported, tested and harmless unused; whether to delete them is the
+// owner's call rather than a silent removal from a crypto module.
 // ───────────────────────────────────────────────────────────────────────────
 
 /** Envelope-encrypt an arbitrary-length secret under a TMK → base64([IV | tag | ciphertext]). */

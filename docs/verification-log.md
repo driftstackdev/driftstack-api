@@ -16382,3 +16382,46 @@ future reader needs from this line.
 profile-limit placeholder, the Python live-contract totals, and these two. All four share one tell,
 which is cheap to apply without any sweep: **a header that states a count of something OUTSIDE the file
 it sits in.** A file can keep its own description true; it cannot keep a claim about its neighbours true.
+
+## V-1871 — auditing the at-rest crypto surface, because "don't re-audit" had expired
+
+2026-08-26. No vulnerability. One dead primitive whose header recommends itself, and a reason to stop
+trusting audit verdicts by their date.
+
+⛔⛔ **THE PRIOR AUDITS SAY "DON'T RE-AUDIT", AND THEY DESCRIBE CODE THAT HAS SINCE CHANGED.** Two
+audits of the owner cockpit and platform secrets (2026-06-05 and 2026-06-13) both conclude SOUND and
+say not to repeat them. Rather than redo them or skip on faith, I asked the cheap question — **did the
+subject move?** Every audited file has since: `admin-owner.ts` 3 commits, `platform-secrets.ts` 2,
+`platform-secret-encryption.ts` 4, `platform-secrets-repo.ts` 3, `middleware/auth.ts` 5. Among them
+`security: bind platform secrets to names` and `refactor(crypto)!: authenticatedContext is required,
+not optional` — **an AAD binding the older audit predates entirely**, since it describes a plain
+`[IV|tag|ct]` blob with no AAD at all. **An audit verdict is a snapshot, and "don't re-audit" carries
+an expiry that nothing tracks.**
+
+✅ **THE BINDING WORK IS SOUND.** Nine AES-GCM surfaces under `src/lib`, and the convention holds in
+every one: **encrypt binds unconditionally, decrypt is permissive so it can still read pre-AAD
+ciphertext.** The two primitives whose encrypt is conditional are the low-level ones whose callers
+supply the context, and I traced those callers rather than assuming — the single explicit `undefined`
+decrypts a v1 webhook envelope and immediately re-encrypts it bound, and `WEBHOOK_SECRET_V1_PREFIX`
+has three occurrences, all reads, so **v1 has no write path and cannot be created**. That is the
+post-condition, not the derivation: the question is not whether a migration exists but whether the old
+shape can still be produced.
+
+⛔ **THE ONE REAL FINDING IS A HEADER THAT RECOMMENDS A PRIMITIVE NOTHING USES.**
+`profile-key-hierarchy.ts` exports `wrapSecret`/`unwrapSecret` for "ARC A — customer proxy passwords",
+and invites reuse: "account-scoped secrets reuse this one audited primitive instead of a parallel
+crypto path". Measured: **zero production callers; only its own unit tests.** Proxy credentials
+actually ship through `account-proxy-secret-encryption.ts` — record- and slot-bound, AAD purpose
+`driftstack.account-proxy-secret`, four call sites — which derives the TMK from here and adds its own
+AAD on top.
+
+⭐ It binds by KEY only, so cross-account substitution fails but **two secrets of the SAME account are
+interchangeable**, nothing in the envelope naming which record a ciphertext belongs to. And the guard
+that would normally catch this — `an-at-rest-secret-is-bound-to-what-it-belongs-to`, which keeps a
+reasoned exemption list for context-free calls — watches call sites of `encryptPlatformSecret`.
+`wrapSecret` reaches `createCipheriv` directly, so it is **invisible to that guard**. Nothing today is
+wrong, because nothing calls it; the header is the only thing that would mislead someone, so the header
+is what I changed. Deleting the pair is the owner's call, not a silent removal from a crypto module.
+
+⭐⭐ Checked and NOT stale, stated because a class finding is worthless if I only report confirmations:
+that guard's own "5 encrypt and 5 decrypt call sites" is exactly right today.
