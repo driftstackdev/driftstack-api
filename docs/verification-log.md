@@ -11951,3 +11951,48 @@ the new archive is listed **literally** in `.prettierignore`, as that file's own
 Boundary: 12 log-reading guards pass (80 tests), the size guard passes explicitly, and `tsc` is clean
 on the test project. This changed no product code. ⚠️ `apps/gui-client/src/views/ProfilesView.tsx` was
 dirty in the shared tree throughout and is A2's; it is excluded from this commit.
+
+## V-1986 — Go could not tell the single web-session revoke from the bulk one (2026-08-27)
+
+Next slice of V-1979's list: the six `AccountResource` methods Go's tests never reached. Go pinned
+`Me`, the four BYOK calls and the bulk web-session revoke; `UpdateMe`, `UploadAvatar`, `ClearAvatar`,
+`ListWebSessions`, `RevokeWebSession` and `RateLimits` were unasserted. **Go account coverage is now
+12 of 12.**
+
+⭐ **One of the six is destructive if confused, and that is the one Go could not see.**
+`RevokeWebSession(id)` targets the ITEM path `/v1/account/web-sessions/{id}`; `RevokeAllOtherWebSessions()`
+targets the COLLECTION `/v1/account/web-sessions`. **A single revoke that pointed at the collection
+would revoke every session on the account, and return the same `nil` error.** The TypeScript suite
+pins that distinction explicitly — "so the single and bulk revocations cannot be confused for each
+other" — and Go did not.
+
+**Mutation-proved, and HEAD proved blind.** Repointing `RevokeWebSession` at the collection path
+reddens the new arm (`raw request URI = "/v1/account/web-sessions", want the id encoded on the ITEM
+path`) while **HEAD's entire Go suite reports `ok`.**
+
+The arm asserts `r.RequestURI`, not `r.URL.Path`, for the reason V-1978 recorded: `URL.Path` is
+already percent-decoded, so an arm built on it passes whether or not the id was encoded. It also
+asserts the single revoke carries **no** `?keep=current` — that confirm-intent query belongs to the
+bulk call, and its presence would mean the wrong method was reached.
+
+⭐ Second property pinned: `UpdateMeRequest` is four `*string` fields with `omitempty`, so a partial
+update must carry ONLY what the caller set. Dropping `omitempty` from `Timezone` reddens the arm with
+`body = map[name:New Name timezone:<nil>], want exactly {name}` — a name change that also asks the
+server to **clear the timezone** is a different request than the caller made.
+
+The remaining arms pin what a caller cannot recover if it decodes wrong: `ListWebSessions` must decode
+`current` as true (it is how a UI avoids offering "revoke" on the session you are using — decoding it
+false makes that control self-destructive) and both timestamps; `RateLimits` must decode
+`refill_per_second` as a **float** (an int would floor a sub-1/s bucket to zero and read as "never
+refills") and `override_expires_at` as nil rather than empty string.
+
+⛔ **A mutation script aborted on its own assertion and I nearly read the run that followed as
+evidence.** The first `omitempty` mutation targeted `types.go`, where `UpdateMeRequest` does not live —
+it is in `account.go`, and my earlier struct dump had concatenated every non-test file, hiding which
+one. The assert caught it (`count=0`), nothing was mutated, and the green `go test` immediately after
+proved nothing. Same shape as the aborted script in V-1976.
+
+Post-conditions: `go vet`, `go test -count=1` and `gofmt` clean; Go account methods covered 6 → 12.
+**21 of the 34 methods in V-1979's list remain.** ⚠️ `apps/gui-client/src/views/ProfilesView.tsx` is
+A2's and dirty in the shared tree; excluded from this commit, and the full gate is deferred until the
+tree is quiescent.
