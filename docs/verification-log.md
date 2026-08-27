@@ -20626,3 +20626,55 @@ Measured from a fresh coverage run rather than inferred from "I added arms cover
 `list` reddens three arms including the CRITICAL one. **100% branch coverage is reachable by tests that
 assert nothing about what the branches DO** — the mutation is what distinguishes arms that exercise code
 from arms that check it. Source restored byte-identical; only the test file changed.
+
+## V-1973 — the census floor could not see half the repo disappear (2026-08-27)
+
+The full-suite gate went red on `a-workspace-declares-what-its-source-imports.test.ts`:
+**Test timed out in 30000ms**. Two separate defects came out of chasing it, and the timeout was
+the less interesting one.
+
+⛔ **First, my own instrument lied about the result.** The gate wrapper ran
+`verify-suite.mjs | tail -25` and reported `$?` — which is **tail's** exit status, not the suite's.
+It printed `GATE EXIT 0` over a red run. The wrapper is fixed to log in full and read the exit code
+directly; proved on a known-red command (`false`), where the old shape reports 0 and the new one
+reports 1. **`verify-suite` itself was honest throughout** — it printed
+`verify-suite: NOT TRUSTWORTHY / - vitest exited 1`. My first grep searched for `verify-suite: OK`,
+so the red verdict could not match my own filter. A scan of all 341 archived gate outputs confirms
+39 `OK` and 4 `NOT TRUSTWORTHY` verdicts and **zero** that claim `OK` alongside a failed file.
+
+⭐ **Second, and the real finding: the file's non-vacuity floors were half-blind.**
+`workspaces()` carried `if (!existsSync(dir)) continue;` over `['apps','packages']`, and every floor
+in the file was **combined across both roots** — `>400` sources, `>2000` test files. Measured
+populations: **apps/ holds 8 workspaces, 533 src and 3261 test files; packages/ holds 7, 93 and 63.**
+So apps/ alone clears every combined threshold, and **losing packages/ entirely — all three SDKs,
+whose dependency declarations are exactly what this file checks — passes silently.** Losing apps/
+would be caught; losing packages/ would not. A union floor cannot see partial loss.
+
+The sting: **that exact fix was already made**, in `scripts/typecheck-test-backlog.mjs`, in commit
+`3eecd02d2`, with a comment explaining per-root floors in detail. The identical shape survived in the
+test file beside it because that sweep matched the script and not its neighbour.
+
+⭐ **Mutation-proved, two-sided.** Making `packages/` yield zero workspaces: the new per-root arm
+fails with `workspaces found under packages/: expected 0 to be greater than 4`, while
+**all four pre-existing arms PASS** (`1 failed | 4 passed`) — the file reported a clean result about a
+repo missing half its structure. Renaming the root away now fails loudly with `ENOENT` across four
+arms where it previously continued to a passing census. Restored byte-identical from a snapshot.
+
+**On the timeout, the honest numbers.** The previous 10s → 30s raise recorded a solo baseline of
+"2.6s" in a comment so the next person would have a number. **That number then rotted, unmeasured, to
+3.86s as the repo grew** — the 11x margin quietly became 7.8x, and a 21-worker run at load 28 spent
+it. A figure typed into a comment is not a measurement.
+
+Rather than guess a larger multiple, the waste was measured and removed: `setParentNodes` was `true`
+while the visitor uses only `forEachChild` and type predicates and never reads `node.parent` —
+**949ms → 637ms over all 3324 test files, with byte-identical specifier output on every one**. Arms 1
+and 2 both walked and re-parsed the same 626 `src` files, so parsing is now memoised by path (only
+for the read-from-disk case; a caller passing `code` is handing over one script block of a template,
+where the same path legitimately yields different results). **Net: 3.86s → 2.57s, 33% faster while
+adding a fifth arm.**
+
+⭐ **But parse is ~1.5s of a ~3s run — there is no hot spot; the work is genuinely I/O over ~4000
+files.** So the clock was set to accommodate contention and **regression detection was moved to the
+instrument that can actually carry it**: under variable load a wall-clock timeout fires on a busy box
+and passes on an idle one regardless of the code, whereas a census floor fails on its own evidence.
+The floors are now per root, which is why raising the timeout costs no coverage.
