@@ -41,6 +41,18 @@ for (const f of walk(PAGES).filter((f) => /\.(astro|md)$/.test(f))) {
 const guideFiles = walk(GUIDES).filter((f) => /\.md$/.test(f));
 
 describe('W299.C apps/docs/guides cross-link integrity', () => {
+  it('CRITICAL the walk found the pages — every assertion below is over `guideFiles`', () => {
+    // `walk` returns [] for a missing directory, so a moved or renamed root
+    // makes every arm in this file pass over an empty list: zero pages have
+    // zero offenders. A named member is the floor that cannot be satisfied by
+    // an empty walk, and unlike a count it does not churn as pages are added.
+    expect(guideFiles.length).toBeGreaterThan(5);
+    expect(
+      guideFiles.some((f) => f.endsWith('guides/session-lifecycle.md')),
+      'the guides tree produced nothing — the walk did not reach it',
+    ).toBe(true);
+  });
+
   it('every cross-doc link in a guide resolves to a real page', () => {
     const offenders: { file: string; href: string }[] = [];
     for (const f of guideFiles) {

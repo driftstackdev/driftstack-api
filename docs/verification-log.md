@@ -20260,3 +20260,34 @@ wired?" as its FIRST question, not its last.** I asked it fourth, after three in
 **Boundary: this audits the durable sender's own guarding and wiring. It does not re-audit the live
 `webhook-worker.ts` path**, whose SSRF layers are recorded as fixed in prior art and were not re-checked
 here.
+
+## V-1962 — four docs guards that reported clean over zero pages (2026-08-27)
+
+Four `apps/docs` drift guards walk `apps/docs/src/pages` and assert `expect(offenders).toEqual([])`.
+`walk()` opens `if (!existsSync(dir)) return out;`, so a moved or renamed root returns an empty list and
+**every arm passes over nothing**. Demonstrated rather than argued: pointing the root at
+`apps/docs/src/pages-RENAMED` leaves _"every .md page has a frontmatter block"_, _"declares layout,
+title, and description"_ and _"uses the canonical DocLayout"_ **all green**, reading zero pages.
+
+Added one arm each asserting the walk found the pages. **A named member rather than only a count**:
+a count floor churns as pages are added and gets bumped without being read, while
+`mdFiles.some((f) => f.endsWith('api/account.md'))` cannot be satisfied by an empty walk and needs no
+maintenance. Both are asserted — the member proves the walk reached the tree, the low floor catches a
+collapse to one or two files. Measured: `mdFiles` 57, `guideFiles` 10, `allFiles` 130.
+
+⭐ **`docs-no-dev-notes-baseline` spans TWO roots** — `apps/marketing-site/src/pages` and
+`apps/docs/src/pages` — so it gets a member from EACH. With one member, the other root could vanish
+silently and the surviving member would keep the arm green. **A collection built from N roots needs N
+members, or it degrades to guarding whichever root you happened to name.**
+
+⛔ **Scope, honestly: this fixes 4 of 19.** The other 15 build their collections inside arms or through
+shapes that differ per file, so there is no scripted pass — the same per-occurrence conclusion the
+swallowing-walk debt reached.
+
+⛔ **And my dry run was itself wrong, in the reassuring direction.** Before writing anything I dry-ran
+the patcher to print, per file, the module-level collection it matched — it reported "(none found)" for
+seven of ten, which is what made me stop and read them individually. **At least one of those seven does
+have a module-level collection**: `docs-no-dev-notes-baseline`'s
+`const allFiles = targets.flatMap((d) => walk(d)).filter(...)`, missed because my pattern required
+`= walk(` immediately. The dry run correctly stopped a bad batch edit AND under-reported the tractable
+set — **a dry run is an instrument too, and its negatives need the same suspicion as any other zero.**

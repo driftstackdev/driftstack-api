@@ -36,6 +36,22 @@ const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.t
 const FORBIDDEN_MARKERS = ['TODO', 'FIXME', 'XXX', 'HACK', 'WIP:'];
 
 describe('W293.C customer-facing docs no-dev-notes sweep', () => {
+  it('CRITICAL the walk found the pages — every assertion below is over `allFiles`', () => {
+    // `walk` returns [] for a missing directory, so a moved or renamed root
+    // makes every arm in this file pass over an empty list: zero pages have
+    // zero offenders. A named member is the floor that cannot be satisfied by
+    // an empty walk, and unlike a count it does not churn as pages are added.
+    expect(allFiles.length).toBeGreaterThan(60);
+    expect(
+      allFiles.some((f) => f.endsWith('apps/docs/src/pages/api/account.md')),
+      'the docs root produced nothing — the walk did not reach it',
+    ).toBe(true);
+    expect(
+      allFiles.some((f) => f.endsWith('apps/marketing-site/src/pages/about.astro')),
+      'the marketing-site root produced nothing — the walk did not reach it',
+    ).toBe(true);
+  });
+
   for (const marker of FORBIDDEN_MARKERS) {
     it(`no docs page ships with a "${marker}" marker`, () => {
       const offenders: string[] = [];

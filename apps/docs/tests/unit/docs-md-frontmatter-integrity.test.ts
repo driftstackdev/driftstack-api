@@ -30,6 +30,18 @@ function read(p: string): string {
 const mdFiles = walk(PAGES).filter((f) => /\.md$/.test(f));
 
 describe('W282.C apps/docs markdown frontmatter integrity', () => {
+  it('CRITICAL the walk found the pages — every assertion below is over `mdFiles`', () => {
+    // `walk` returns [] for a missing directory, so a moved or renamed root
+    // makes every arm in this file pass over an empty list: zero pages have
+    // zero offenders. A named member is the floor that cannot be satisfied by
+    // an empty walk, and unlike a count it does not churn as pages are added.
+    expect(mdFiles.length).toBeGreaterThan(20);
+    expect(
+      mdFiles.some((f) => f.endsWith('api/account.md')),
+      'the docs API tree produced nothing — the walk did not reach it',
+    ).toBe(true);
+  });
+
   it('every .md page has a frontmatter block', () => {
     const offenders: string[] = [];
     for (const f of mdFiles) {
