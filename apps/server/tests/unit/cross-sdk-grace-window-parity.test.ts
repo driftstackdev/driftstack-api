@@ -153,4 +153,40 @@ describe('W680 cross-SDK 24h grace-window parity', () => {
       ),
     ).toBe(true);
   });
+  // ⛔ V-1993 — the arms above pin "24h grace" in all three SDKs, and that phrase
+  // is true only when the key carries no earlier expiry. The repo computes
+  // min(now + grace, locked.expiresAt) and gives the successor the SAME
+  // expiresAt, neither of which any SDK said. A uniform claim across three SDKs
+  // is what a parity guard produces when the claim it pins is incomplete.
+  it('CRITICAL every SDK says the grace never EXTENDS an expiry and the successor inherits it. "now + 24h" alone reads as a promise of a full day, which is false for any key created with an expires_at', () => {
+    for (const [label, path] of [
+      ['TS', TS_API_KEYS],
+      ['Go', GO_API_KEYS],
+      ['Python', PY_API_KEYS],
+    ] as const) {
+      const body = read(path);
+      expect(body, `${label} says the grace does not extend an expiry`).toMatch(
+        /never EXTENDS an expiry/,
+      );
+      expect(body, `${label} says the successor inherits the expiry`).toMatch(/INHERITS that same/);
+    }
+  });
+
+  it('CRITICAL and the repo still behaves that way, so the warning above cannot outlive its truth: the grace is clamped to the key own expiry and the successor is inserted with it', () => {
+    const repo = readFileSync(resolve(REPO_ROOT, 'apps/server/src/db/api-keys-repo.ts'), 'utf8');
+    const start = repo.indexOf('async rotateApiKeyAtomic');
+    expect(start, 'rotateApiKeyAtomic still exists').toBeGreaterThan(-1);
+    // Bound BOTH ends — an unbounded slice runs on into later methods.
+    const rest = repo.slice(start + 10);
+    const end = /\n {2}(?:private |protected |public |static )?(?:async )?[A-Za-z_#]\w*\(/.exec(
+      rest,
+    );
+    const body = rest.slice(0, end?.index ?? rest.length);
+    expect(body.split('\n').length, 'the extracted body is non-trivial').toBeGreaterThan(30);
+
+    expect(body, 'the grace end is clamped to the key own expiresAt').toContain(
+      'locked.expiresAt < candidateGraceEnd',
+    );
+    expect(body, 'the successor inherits the old expiry').toContain('expiresAt: locked.expiresAt,');
+  });
 });

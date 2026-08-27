@@ -12266,3 +12266,46 @@ byte-identical; 3/3 pass.
 Boundary: floors `>= 20` in `apps/server/tests/**/*.test.ts`, classified by whether a sweep marker
 appears within eight lines above them; the three file-count guards above are the ones a hand-read
 confirmed as corpus floors. Byte-length floors were not assessed.
+
+## V-1993 — "now + 24h grace" was true for most keys and wrong for the ones that need it (2026-08-27)
+
+Auditing the api-keys surface by the V-1980 method. Six of the seven documented claims hold exactly:
+the plaintext is returned once and never by `list`; `create` requires `account_owner`; `revoke` is
+idempotent; and the "old key auto-revokes via the existing expires_at-driven auth gate" promise is
+carried by **four** separate expiry checks in `services/auth.ts` — cached path, live path and two
+revalidation sites, which matters because an expired key surviving in the auth cache would defeat all
+three others.
+
+⭐ **The implementation is exemplary and taught me what the docs omit.** `rotateApiKeyAtomic` takes a
+`FOR UPDATE` lock, refuses an already-revoked or already-expired key, and carries two documented
+anti-laundering fixes (V-775): scopes DE-ESCALATE (`driftstack_internal_admin` dropped, legacy `admin`
+→ `account_owner`) because "rotation must not launder one", and `createdByAccountId` is carried forward
+because a rotated key otherwise "survived removal of the member who minted it, with the same authority
+and no expiry".
+
+⛔ **What all three SDKs say is "sets the OLD key's expires_at to now + 24h grace", and two behaviours
+sit underneath it that none of them mentions:**
+
+- the grace is `min(now + graceMs, locked.expiresAt)` — it never EXTENDS an expiry, so rotating a key
+  that expires in an hour buys an hour, not a day;
+- the successor is inserted with `expiresAt: locked.expiresAt` — it INHERITS the old expiry, so
+  rotating a key _because_ it is about to expire does not hand you a longer-lived one.
+
+Both bite only when the key carries an `expires_at`, which **customers can set**: `expires_at` is an
+optional field on `CreateApiKeyRequestSchema` and the route honours it. So the omission lands exactly
+on the customer who set an expiry deliberately and then rotates near it.
+
+⛔ **The uniformity across three SDKs was not coincidence — a guard enforced it.**
+`cross-sdk-grace-window-parity` (W680) exists to catch a 12h/48h/7d drift, and its own charter states
+"old key.expires_at = now + 24h". That purpose is sound and is preserved: it pins loose substrings
+(`/24h grace/`, `/Both keys work concurrently during the/`) which the corrected docs still satisfy.
+What it could not see is a claim that is incomplete rather than wrong.
+
+Two arms added there, kept separate so a mutation cannot be masked: every SDK must state that the
+grace never extends an expiry and that the successor inherits it, **and** the repo must still clamp
+(`locked.expiresAt < candidateGraceEnd`) and still insert `expiresAt: locked.expiresAt`. Mutation-proved
+both ways — replacing the Go warning reddens the doc arm; replacing the clamp with `false` reddens the
+behaviour arm. Sources restored byte-identical.
+
+Post-conditions: 32 api-keys/grace test files, 442 tests green; Python 400 passed with ruff + mypy
+clean; Go vet, test and gofmt clean; `tsc` clean. No behaviour changed.

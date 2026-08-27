@@ -58,6 +58,22 @@ export class ApiKeysResource {
    * grace window; deploy the new key, then the old key auto-revokes at the
    * grace boundary via the existing expires_at-driven auth gate.
    *
+   * ⚠️ Two things the "now + 24h" above does not say, and both bite only when
+   * the key you are rotating already carries an `expires_at` (optional at
+   * create time, so most keys do not):
+   *
+   * - The grace never EXTENDS an expiry. It is `min(now + 24h, the key's own
+   *   expires_at)`, so rotating a key that expires in an hour buys an hour,
+   *   not a day.
+   * - The successor INHERITS that same `expires_at`. Rotating a key because it
+   *   is about to expire does not hand you a longer-lived one — set the expiry
+   *   you want at create time, or leave it unset.
+   *
+   * Rotation also DE-ESCALATES (V-775): `driftstack_internal_admin` is dropped
+   * and the legacy `admin` alias becomes `account_owner`, which carries the
+   * same customer authority. Rotation is an issuance path and must not launder
+   * a scope `create` would refuse.
+   *
    * The new plaintext is returned ONCE in the response — store it now.
    */
   rotate(keyId: string, options: RotateApiKeyOptions = {}): Promise<RotateApiKeyResponse> {

@@ -61,6 +61,22 @@ class ApiKeysResource:
         ``now + 24h``. Both keys work concurrently during the grace
         window; deploy the new key, then the old key auto-revokes at
         the grace boundary. Plaintext is in the response — store it now.
+
+        .. warning::
+           Two things ``now + 24h`` does not say, both of which bite only
+           when the key already carries an ``expires_at`` (optional at
+           create time, so most keys do not):
+
+           - The grace never EXTENDS an expiry. It is
+             ``min(now + 24h, the key's own expires_at)``, so rotating a
+             key that expires in an hour buys an hour, not a day.
+           - The successor INHERITS that same ``expires_at``. Rotating a
+             key because it is about to expire does not hand you a
+             longer-lived one.
+
+        Rotation also DE-ESCALATES (V-775): ``driftstack_internal_admin``
+        is dropped and the legacy ``admin`` alias becomes
+        ``account_owner``, which carries the same customer authority.
         """
         body: dict[str, Any] = {}
         if name is not None:
