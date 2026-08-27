@@ -13346,3 +13346,43 @@ one-sided `now - timestampMs >` would let future-dated signatures slip through."
 but a peer wrote `apps/marketing-site/tests/unit/workspace-overclaim-phrase-sweep.test.ts` at 17:37:14
 against a run that started at 17:34:22, so that one file ran against an indeterminate version. It is their
 file, it passed, and they have since committed it. The other 3240 files ran against my committed state.
+
+## V-2012 — the neighbourhood check applied to my own guards, and two sweeps that came back clean (2026-08-27)
+
+2026-08-27. V-2011's lesson is that an early return intercepts a _neighbourhood_ of inputs, not just the
+one that motivated it. The first thing to do with a lesson like that is turn it on my own recent work.
+
+**Both guards I added today pass it. Boundary: each guard's actual input type, traced to its source.**
+V-2005's `BARE_UUID_RE.test(parsed.data.account_id)` is reached only through
+`account_id: z.string().min(1).max(100).optional()` plus an explicit `!== undefined`, so Zod closes the
+neighbourhood before the guard sees it — a string of 1–100 characters or nothing. V-2007's
+`SEALED_KEY_RE.exec(obj.key)` takes a typed key from the R2 listing, and a missing one would coerce to
+`"undefined"`, fail to match, and `continue`. **Neither has the hole the TypeScript guard had**, and the
+reason is the same in both cases: the value was constrained before it arrived.
+
+### Sign/verify asymmetry — one pair, already fixed
+
+V-1466's shape generalises: _"a bare `32` in the signing guard and the verifying half had no [check]"_ —
+**a validation enforced on one half of a sign/verify pair and not the other.** **Boundary: every exported
+`sign*`/`verify*` function in `apps/server/src/{lib,routes,services}` — 12 of them.** Most are verify-only
+(the signing counterpart is Stripe's, NOWPayments', or a password hash). Exactly one is a true in-repo
+pair sharing a secret constraint — `oauth-client-state.ts` — and that is the pair V-1466 already fixed,
+its comment recording that the verifying half was the one missing it.
+
+### PKCE is S256-only, enforced three times independently
+
+`lib/oauth-pkce.ts` exports `verifyPlainChallenge` — RFC 7636's `plain` method, where the challenge IS the
+verifier, and the one an attacker who intercepts the challenge can complete. Worth checking whether it is
+reachable.
+
+**It has zero call sites.** `services/oauth.ts:631` imports and uses only `verifyS256Challenge`.
+**Post-condition across `apps/server/src`: no `'plain'` literal exists**, and the method is constrained at
+three independent layers — `routes/oauth.ts:55` `z.literal('S256')` at the HTTP boundary,
+`services/oauth.ts:517` re-checking `!== 'S256'` inside the service, and the service's own type declaring
+the literal. `lib/openapi.ts:2554` publishes the same literal, so the contract customers read matches.
+
+**Not dead code to delete.** Its own comment explains it — _"supported for completeness but the route
+layer refuses anything other than S256 at registration time"_ — and four test files cover it, including an
+RFC 7636 cross-source invariant. An implemented-but-unreachable weak method with a stated reason and its
+own tests is a documented decision, not debt. Recorded so the next reader who greps `plain` and finds a
+constant-time comparison of `verifier === challenge` does not have to re-derive that nothing calls it.
