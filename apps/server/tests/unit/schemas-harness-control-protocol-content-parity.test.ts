@@ -38,6 +38,7 @@ import {
   HARNESS_HEARTBEAT_MAX_OUTCOME_COUNTS,
   HARNESS_HEARTBEAT_OUTCOME_REASON_MAX_LENGTH,
   HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES,
+  CAPABILITY_REPORT_MAX_BYTES,
   HARNESS_HEARTBEAT_MAX_CONCURRENT,
   HARNESS_FRAME_ID_MAX_LENGTH,
   HARNESS_RESULT_ERROR_MAX_LENGTH,
@@ -2422,5 +2423,60 @@ describe('harness→server frame strictness is pinned per frame', () => {
       'a CP→node request frame stopped rejecting unknown keys. These are built by this server, so ' +
         'an unrecognised key is our own bug and should fail loudly rather than be stripped',
     ).toEqual([]);
+  });
+  // V-2022 — the per-field caps on safeguardChecks multiply to EXACTLY the frame cap.
+  //
+  // `safeguardChecks` permits `.max(16)` entries each with `detail: z.string().max(4096)`,
+  // and 16 * 4096 = 65_536 = CAPABILITY_REPORT_MAX_BYTES — before keys, JSON overhead, or
+  // the other fifteen fields. An archived entry worked that arithmetic out and recorded it
+  // as safe, correctly, because the PRODUCER emits three entries. It also said what makes
+  // it safe: "the producer is what makes it safe today, not the schema".
+  //
+  // ⛔ That producer is `buildCapabilityReport` in the Swift harness — a different
+  // repository. This repo cannot assert its entry count, so the assertable half here is the
+  // arithmetic: a frame satisfying every per-field cap is rejected on the aggregate.
+  // Measured while writing this — the safeguardChecks array ALONE serializes to 66,263
+  // bytes, over by 727 before anything else is added.
+  //
+  // Follows the `activeSessionStates` arm above, which makes the identical point for a
+  // different field: every individual key valid, only the composition over budget.
+  it('CRITICAL a safeguardChecks array at its per-field maximum is individually valid and rejected on the aggregate. The day safeguardChecks turns dynamic, this is the arm that says why frames start failing.', () => {
+    const detail = 'x'.repeat(4096);
+    const safeguardChecks = Array.from({ length: 16 }, (_unused, i) => ({
+      layer: `layer_${String(i)}`,
+      passed: true,
+      detail,
+      timestamp: '2026-08-27T00:00:00.000Z',
+    }));
+
+    // Each per-field cap is respected — that is the whole point of the arm.
+    expect(safeguardChecks.length, 'entries are at the .max(16) ceiling, not past it').toBe(16);
+    expect(detail.length, 'each detail is at the .max(4096) ceiling, not past it').toBe(4096);
+
+    const frame = {
+      type: 'capabilityReport' as const,
+      sessionId: 'agt_1',
+      timestamp: '2026-08-27T00:00:00.000Z',
+      egressPhase: 'phase_1_socks5' as const,
+      proxyKind: 'socks5' as const,
+      proxyUdpSupported: true,
+      proxyIpv4Supported: true,
+      proxyIpv6Supported: false,
+      transportModeRequested: 'h2-only' as const,
+      transportModeActive: 'h2-only' as const,
+      h3InterposeLoaded: false,
+      httpsSkipActive: false,
+      safeguardChecks,
+      archetypeId: 'iphone16pro_ios18_6_safari18_6',
+    };
+
+    expect(
+      Buffer.byteLength(JSON.stringify(frame), 'utf8'),
+      'the composed frame exceeds the aggregate ceiling the per-field caps multiply to',
+    ).toBeGreaterThan(CAPABILITY_REPORT_MAX_BYTES);
+    expect(
+      HarnessOutboundSchema.safeParse(frame).success,
+      'per-field valid, aggregate over budget — the backstop binds and that is the safe order',
+    ).toBe(false);
   });
 });

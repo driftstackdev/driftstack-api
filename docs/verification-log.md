@@ -13846,3 +13846,44 @@ written. That is precisely why the standing rule is _retraction paraphrases, sen
 retraction leaves the false sentence findable and indistinguishable from a live claim. Reworded to
 paraphrase; the post-condition then returns zero. **The ADR is the deliberate exception** — that convention
 preserves the original text, so a grep finding it there is the convention working, not a leak.
+
+## V-2022 — V-1750's arithmetic, verified against the right constant and made executable (2026-08-27)
+
+2026-08-27. Continuing the sweep of recorded reachability arguments. V-1750 noted that `safeguardChecks`
+permits `.max(16)` entries each with `detail: z.string().max(4096)`, that **16 × 4096 = 65,536 = exactly
+the frame cap**, and that this is safe only because the producer emits three entries — closing with
+_"the producer is what makes it safe today, not the schema"_ and a ⚠️ that the arithmetic "becomes live the
+day safeguardChecks turns dynamic".
+
+**Verified, and measured rather than recomputed.** **Boundary: the schema at
+`harness-control-protocol.ts:1233-1242` and the cap at `:130`.** A max-size array alone serializes to
+**66,263 bytes** — over by 727 before any other field — and `CapabilityReportSchema`'s transform rejects it.
+
+⛔ **One correction to the archive: V-1750 named the wrong constant.** It compared against
+`HARNESS_HEARTBEAT_MAX_SERIALIZED_BYTES`; a capabilityReport frame is bounded by its own
+`CAPABILITY_REPORT_MAX_BYTES`. Both are `64 * 1024`, so **the arithmetic and the conclusion are
+unaffected** — but the constant cited is not the one that binds this frame, and a reader checking the claim
+would have verified a neighbouring cap.
+
+⛔ **Half of this invariant is not assertable in this repo, and that is the finding.** `buildCapabilityReport`
+does not exist here — a post-condition search finds only consumers in `apps/gui-client` and the schema
+itself. The producer is the Swift harness in the driftstack repo, which is out of bounds. So "emits exactly
+three entries" cannot be guarded from here; **only the arithmetic can.** V-1750 said as much and left it in
+prose.
+
+New arm: a frame whose every per-field cap is respected — the array at exactly 16, each detail at exactly
+4096, both asserted so the fixture cannot drift off the ceiling it is testing — is rejected on the
+aggregate. It follows the `activeSessionStates` arm already in that file, which makes the identical point
+for a different field.
+
+**Mutation-proved, and honestly scoped:** raising the cap to 1 MiB reds it. ⚠️ It reds **two existing arms
+too**, so this is not the sole witness to a cap change — it is the one that names the `safeguardChecks`
+arithmetic, which is the thing V-1750 predicted would go live. The first run of the mutation showed only
+the two pre-existing failures in a truncated view; re-run grepping for this arm's own title before
+claiming it fired.
+
+⛔ **Two instrument slips, both caught.** An `import {...}` anchor matched twice — once in the import block,
+once inside an existing arm — and the assert stopped the write; resolved by locating the import block's
+bounds and deriving the indentation from the file. Earlier, a probe listing the module's exports was piped
+through `tail -6`, and `CAPABILITY_REPORT_MAX_BYTES` sorts first alphabetically, so I read a truncated list
+as complete and briefly concluded the constant was not exported. It is; there are 103.
