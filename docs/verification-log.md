@@ -15529,3 +15529,45 @@ direction.
 is a coverage proxy and not coverage — an import proves reachability from a test file, not that the
 package's behaviour is asserted. The stronger measurement is per-package v8 coverage, which I have not
 run outside `src/db/**`, and every coverage figure I have reported today carries that same scope.
+
+## V-1852 — a prediction I stated before running it, and the data falsified it
+
+2026-08-26. The useful kind of negative: the hypothesis was written down first, so the data could
+disprove it rather than be read to fit.
+
+**THE PREDICTION, stated before the run:** the db layer had per-method gaps precisely BECAUSE
+`vitest.config.ts` excludes it from coverage; the measured scope (`apps/server/src/**` minus `db/`,
+`index.ts`, `dump-openapi.ts`) is watched by the gate, so it should show materially FEWER
+never-executed functions.
+
+**FALSIFIED, on the same corpus and therefore comparable** — both figures from `apps/server/tests`
+with `DATABASE_URL` set:
+
+    apps/server/src/**  (MEASURED by the gate)     216 of 2670 functions never executed   8.09%
+    apps/server/src/db/** (EXCLUDED from the gate)  29 of  733 functions never executed   3.96%
+
+**The excluded layer is executed BETTER, by a factor of two.** ⭐⭐ Because the gate does not cause
+execution — dedicated tests do. `src/db/**` has 140 `db-*-drizzle` specs constructing repos and
+driving them directly; the measured services are reached through routes, and the route harness wires
+in-memory doubles (V-1848). **Being watched is not being exercised, and a coverage threshold is a
+detector, not a cause.**
+
+⛔ **AND THE INSTRUMENT WAS WRONG FIRST — the raw number was 496 of 2950 (16.81%) and I nearly
+reported it.** The config's coverage INCLUDE spans `packages/sdk-typescript/src/**`, whose tests live
+in `packages/sdk-typescript/tests/`, and I scoped the run to `apps/server/tests`. So the SDK reported
+**280 of 280 functions never executed — 100.00%**, which is the tell: a perfect score in the alarming
+direction is an artifact, not a finding. Same failure as the workspace-density metric an hour earlier
+(V-1851) and the same cause: the tests live somewhere the measurement did not look.
+
+⭐ The remaining 216 are a candidate list, not defects, and the top of it is explicable rather than
+alarming: `lib/bootstrap.ts` 61 (wiring, exercised in production and awkward to unit-test),
+`services/email.ts` 19 (Postmark integration), `drivers/playwright.ts` 18 (needs a browser),
+`services/durable-webhook-delivery.ts` 11 — ⭐ which independently agrees with A2's caller-graph read
+and the dormant roster: it is the V-173 forward path nothing reaches. Third instrument on that object.
+Spot-checked two that looked less explicable — `cli-authorize` (10 own specs) and
+`proxy-connectivity-probe` (1) — and both are wired and tested; their gaps are per-FUNCTION subsets of
+tested files, the same shape as the db-layer work, at the same roughly one-in-ten survival rate.
+
+⚠️ BOUNDARY in the same sentence as the result: this is execution under `apps/server/tests` with a
+database, not assertion quality, and it excludes `packages/**` tests entirely — which is precisely the
+error that produced the 16.81% before it was corrected.
