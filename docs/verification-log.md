@@ -17601,3 +17601,42 @@ sometimes load-bearing.
 ⚠️ BOUNDARY: this audits the auth path and the limiter wrapping these six routes. The handlers' own
 input validation and the queue semantics behind them were not read; the atlas memories in my notes are
 all fork-side font work and cover none of this.
+
+## V-1903 — correcting V-1902: I audited what V-1801 had already audited, because I counted the log instead of reading it
+
+2026-08-27. No defect. A duplicated audit, the boundary it stated wrongly, and the hole in my prior-art
+check that produced both.
+
+⛔⛔ **V-1902 IS ROUGHLY HALF A REPEAT OF V-1801, MY OWN ENTRY FROM THE DAY BEFORE.** That entry covered
+the same route family on three axes: the single `requireInternalAuth` preHandler, the per-token rate
+limit — **quoting the same sentence about hashing the bearer so the plaintext never reaches a Redis key
+or a Prometheus label** — and the body validation. I rediscovered two of the three and presented them as
+new.
+
+⛔ **AND V-1902's BOUNDARY WAS FALSE.** It closed with "the handlers' own input validation and the queue
+semantics behind them were not read", implying nobody had. V-1801 read the input validation and recorded
+the specific reason it is safe: `schema.parse(req.body)` with **no `?? {}`**, so an absent body raises a
+bare `ZodError`, which `error-handler.ts` converts to a `ValidationError` — a 4xx rather than a 500.
+Re-verified at HEAD today: six `.parse(req.X)` sites, **zero** `?? {}`, conversion still present. That
+claim was right and stays right.
+
+⭐ **WHAT IN V-1902 ACTUALLY STANDS**, since not all of it was duplicated: V-1801 stopped at
+"`deps.auth.validate(req)`" and did not open `InternalFleetAuth`. Inside it are three properties nothing
+had recorded — fail-closed when the env token is unset, `timingSafeEqual`, and the length pre-check that
+exists because `timingSafeEqual` THROWS on unequal lengths, which would otherwise answer a wrong-length
+token with a 500 and a wrong-value token with a 401 and leak the token's length. That is the delegation
+one layer down, and it was worth following.
+
+⭐⭐⭐ **THE PROCESS HOLE IS THE FINDING, AND IT IS AN ASYMMETRY I DID NOT KNOW I HAD.** My prior-art
+check treats the two stores differently: I grep MEMORIES and read every plausible hit, but I grep the
+verification log and read the COUNT. V-1902 opened with "log mentions: 37" and went straight to the
+source. **37 was a number where V-1801 was a heading.** The same lesson this ledger keeps recording — a
+count is not a read — applied to the one place I had not applied it.
+
+⭐ **The fix costs nothing and is proven in this entry**: grep the log for HEADINGS on the subject, not
+mentions of it.
+
+    grep -nE "^## V-[0-9]+.*<subject>" docs/verification-log.md docs/verification-log-archive-*.md
+
+That single command surfaced V-1801 immediately today. A mention count says how often a word appears; a
+heading match says whether the question has already been answered.
