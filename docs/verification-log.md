@@ -17678,3 +17678,40 @@ delivery a worker currently held. A guard now pins that.
 ⚠️ BOUNDARY: this closes the retry-budget thread across both implementations and the reset path's
 concurrency fence. The other 11 prior headings on this surface were not re-read, and the DLQ audit's own
 delta beyond this thread — an endpoint-detail fix and a filter-validation fix — is still unexamined.
+
+## V-1905 — the DLQ delta closed, and the heading check paying for itself before the work started
+
+2026-08-27. No defect. The two commits V-1904 left unexamined, and the corrected prior-art step
+preventing two more duplicates rather than reporting them afterwards.
+
+⭐⭐ **THE CHECK RAN FIRST AND CHANGED THE TASK.** Heading-grepping the two subjects returned prior
+entries for BOTH: **V-1603** ("the endpoint detail page reported no deliveries while the list showed
+them") and **V-1590** ("the same defect one door over, in the query string"), with **V-512** recording
+the original drill-down filter. Under yesterday's process — count the mentions, go to the source — I
+would have audited both and published a third and fourth duplicate. The detector was proved on V-1590
+by name before its results were used.
+
+✅ **SO THE WORK BECAME A POST-CONDITION, which is what a prior entry cannot give you: do the fixes still
+hold?** Both do, read at HEAD and one of them probed:
+
+- **The filter (V-1590)** — `endpointUuidFromFilter` runs an anchored
+  `^(?:webhook_endpoint_)?([0-9a-f]{8}-…)$`, throws `BadRequestError` on no match, and returns the
+  CAPTURE. That is the distinction the original finding turned on: **stripping a prefix is not validating
+  what is left**, and the previous code handed the remainder to a repo filtering a `uuid` column, so a
+  mistyped drill-down reached Postgres as a cast error and surfaced to an operator as a 500. Probed
+  directly: both documented forms accepted, `webhook_endpoint_nope` and an injection-shaped string
+  rejected.
+- **The detail listing (V-1603)** — `listDeliveriesForEndpoint` verifies ownership BEFORE listing
+  (`findEndpoint(endpointId, accountId)`) and early-returns `{ items: [], nextCursor: null }` on an
+  unowned id. Empty rather than an error, so the endpoint is also not an existence oracle.
+
+⚠️ One small self-catch worth recording because it is the week's theme in miniature: I first reported
+that `listDeliveriesForEndpoint` was absent from the repo file. It sits at line 1152 and my `head -4`
+had cut it off — **a truncated read, in the turn where I was being careful about truncated reads.** The
+absence lasted one command.
+
+⭐ Gate green at `6d2f1edee`: 3228 files, 32109 tests, exit 0, full output captured to a file.
+
+⚠️ BOUNDARY: the DLQ audit's delta is now fully accounted for — every commit since 2026-06-07 resolved to
+"covered by a prior entry" or "read at HEAD". The other prior headings on this surface (11 of 13) were
+not re-read, because nothing in the delta touches what they cover.
