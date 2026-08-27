@@ -15617,3 +15617,42 @@ its methods are reached through seams that a name-based scan cannot follow. **Th
 excellent and the gaps were inside it.** The lesson for the next sweep is not "stop looking" but "look
 where the existing guards state their own blind spots" — every one of the ten above names its scope,
 and several name it precisely enough to aim at.
+
+## V-1854 — where to aim next, derived from the guards' own admissions rather than guessed
+
+2026-08-26. The reusable output of twelve prior-art encounters: stop guessing where gaps are and
+harvest where the guards SAY they do not reach.
+
+**The repo already holds this as a named principle** — `a-gate-that-does-not-name-its-blind-spot-reads-as-total`
+is a test FILENAME. So guards here are expected to declare their scope, and **46 of them do**, matched
+on explicit markers only (`SCOPE, stated` · `blind spot` · `out of scope` · `WHAT THIS DOES NOT` ·
+`deliberately excluded` · `does not claim`) in the first 70 lines.
+
+⛔ INSTRUMENT NOTE, because the first attempt was wrong in the usual direction: a loose regex including
+bare "does not" / "cannot" returned **413** — mostly prose describing behaviour ("a payload that does
+not parse is removed"), not scope declarations. The strict markers give 46. A 17%-of-all-tests hit rate
+should have been the tell before I read a single one.
+
+⭐⭐ **WHY THIS IS THE RIGHT PLACE TO AIM, evidenced by today rather than asserted:** every real gap I
+closed sat inside a stated blind spot. `vitest.config.ts` says in its own comment that `src/db/**` is
+excluded and "the layer runs, and nothing reports which parts of it ran" — and all nine arms I landed
+were in `src/db/**`. The guarded perimeter is excellent; the gaps were in the places the guards
+already tell you they cannot see.
+
+**Worked example from the same session, showing the pattern is not luck.**
+`a-published-response-is-the-one-returned` declares that helper- or spread-built responses cannot be
+judged and reports the skip count. Its own history (V-1501) is this failure exactly: the extractor read
+`return {` only while the codebase overwhelmingly answers with `reply.send({ … })` — 145 of ~250
+registrations dropped by a `continue` that never touched the skip counter, so **the arm whose job was
+to keep the blind spot visible reported 32 skips against a blind spot of 177.** Extending it took the
+judged population 61 → 83 and surfaced a third real instance of the defect the file exists for.
+
+⭐ AND IT IS NOW STRUCTURALLY DEFENDED against its own history, which is what makes it a model:
+`expect(compared.length).toBeGreaterThanOrEqual(75)` floors the judged population so an extractor
+regression fails, and `expect(skipped).toBeGreaterThan(0)` keeps the skip counter live. Re-ran it:
+5 arms green, floor 75 against a judged 83.
+
+⚠️ BOUNDARY, stated in the same sentence as the result: 46 is guards whose FIRST 70 LINES carry an
+explicit marker. A guard that states its scope further down, or states it in prose I did not enumerate,
+is missed — this is a lower bound on declared blind spots, not the set of blind spots, and the
+undeclared ones are by construction invisible to it.
