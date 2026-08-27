@@ -18615,3 +18615,55 @@ interface literally named `TranscriptEntry` in `agent-decomposer.ts`, so an inhe
 intersected member is invisible to it; and the behavioural arm proves what this projection emits,
 not what the SSE route ultimately writes, which it reaches by spread. Ratchets 3057→3058 and
 3233→3234.
+
+## V-1925 — the other two SSE streams, and one guard instead of three copies (2026-08-27)
+
+V-1924 found the transcript SSE stream serialising an internal type straight to the customer.
+Generalising: which OTHER streams do that? The population came from a guard that already had it —
+`every-sse-stream-shares-one-buffer-ceiling` names the four SSE sites, so I reused its enumeration
+rather than inventing one.
+
+**The detector failed its control first, and the control is the only reason I noticed.** Grepping
+`"data: \${"` inside double quotes let the shell eat `\$`, so the pattern became `data: {`: it
+reported a total of 5 while printing nothing, and the file I already knew contained the shape
+came back **0**. Single-quoted, it finds all five and the known site is present. Of those five,
+two write a pre-built string and three serialise an object.
+
+| site                           | serialises          | type declared in                                           |
+| ------------------------------ | ------------------- | ---------------------------------------------------------- |
+| `agent-sessions.ts:3611/3636`  | transcript entry    | internal — pinned by V-1924                                |
+| `status-stream.ts:125`         | `IncidentEvent`     | `services/incident-event-bus.ts`, **0 api-types mentions** |
+| `account-notifications.ts:162` | `NotificationEvent` | `services/notification-event-bus.ts`                       |
+
+**Neither new one is a defect, and reading them is what establishes that** rather than their
+location. `IncidentEvent` uses snake_case `generated_at` — a wire spelling, not a service one — and
+`NotificationEvent`'s only per-account field is the recipient's own id, which its bus documents
+deliberately ("cross-account leakage stays impossible"). Both are wire-designed types that happen
+to live under `services/`.
+
+What is true of both is structural: nothing in the path validates or projects, `JSON.stringify`
+writes whatever the type carries, and neither type is in the published contract. The next field
+added to either reaches every subscribed customer by default, chosen by nobody.
+
+**One guard, not three copies.** V-1922 recorded six copies of one helper drifting into three
+behaviours; the fix for that is not a seventh copy. This freezes both types' key sets in a single
+file, and deliberately does NOT re-pin `TranscriptEntry`, which V-1924 already covers alongside the
+redaction behaviour that file exists for.
+
+The frozen lists are **derived from source and spliced in**, never hand-typed — a hand-written
+alternation is a guess, and `NotificationEvent` has 17 keys across four union members. The reader
+collects from every member for that reason: a first-member-only reader would pin about five of
+them and pass. Proven on the real subjects, each killing its own arm:
+
+| mutation                                               | arm killed                                           |
+| ------------------------------------------------------ | ---------------------------------------------------- |
+| add `internalTraceId` to `IncidentEvent`               | _IncidentEvent emits exactly the frozen key set_     |
+| add `internalStackHint` to the **fourth** union member | _NotificationEvent emits exactly the frozen key set_ |
+
+The second deliberately targets `session.errored`, the last member, so the union-wide collection is
+what the proof rests on rather than an accident of ordering.
+
+**Boundary:** the reader is syntactic — it takes `PropertySignature` members of an interface or
+type-alias literally named in the frozen map, within one named file under `services/`, so an
+inherited, intersected, or imported member is invisible to it; and it pins the TYPE's declared
+fields, not what any particular publisher actually sets. Ratchets 3058→3059 and 3234→3235.
