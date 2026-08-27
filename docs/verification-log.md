@@ -16277,3 +16277,37 @@ not by CI, which has not fired for 595 commits.
 ⚠️ Stated as the boundary of this entry rather than as a result: I have not run them yet, so I claim
 only that nothing else has. Running them is the next measurement, and until it happens their state is
 unknown rather than good.
+
+## V-1868 — the two SDK suites nothing had run, and the first complete verification of 595 commits
+
+2026-08-26. No defect. The gap V-1867 identified, closed by measurement.
+
+**verify-suite names itself as one CI job of five.** Read unfiltered, it ends by listing the four it is
+not: e2e, python-sdk, go-sdk, bench-regression. Combined with V-1867 — `ci.yml` has not fired for 595
+commits — the two SDK jobs had been executed by nothing at all. Now run, reproducing each job's steps:
+
+**Python SDK — green.** `ruff check` clean; `ruff format --check` reports 73 files already formatted;
+`mypy src examples` returns "Success: no issues found in 43 source files"; pytest gives **365 passed,
+9 skipped**. The 365 matches verify-suite's stated figure exactly, which is the cross-check that the
+right suite ran. `examples` is inside the mypy target deliberately — those scripts are what a customer
+copies, and a call to a renamed SDK method lints clean and ships broken.
+
+**Go SDK — green, and the first read of it was worthless.** `go vet ./...` silent, `go build
+./examples/...` clean, `go test ./...` **ok**. Two corrections were needed before that meant anything:
+
+- ⛔ The first result came through `tail -12`, and those twelve lines were all `[no test files]` example
+  packages. **The packages that DO have tests had scrolled off the top** — a truncated read reported as
+  a result, which is the failure this ledger names most often.
+- ⛔ The re-read said `ok (cached)`. A cached verdict is a previous run's answer to a possibly different
+  question. Forced with `-count=1`: **ok in 0.517s, 242 RUN, 232 PASS, 0 FAIL**.
+
+⭐ The 10-test gap between RUN and PASS is **10 SKIP**, all `TestLive*` — live-endpoint tests that
+correctly skip without one. Explained rather than rounded off, because a discrepancy noticed and
+waved through is how the 117-file blind spot survived all session.
+
+✅ **STATE OF THE WORK, and this is the first time it can be said.** Four of five CI jobs have now been
+executed against `e883cc24f`: build-test (3228 files / 32109 tests), e2e (233), python-sdk (365), go-sdk
+(232). ⚠️ Boundary in the same breath: `bench-regression` was not run — it is advisory and does not gate
+a merge — and neither was the Python wheel build and its fresh-venv smoke test, which are packaging
+steps rather than code verification. Everything else that CI would run has run, by hand, because nothing
+in this tree runs it automatically.
