@@ -20375,3 +20375,45 @@ the stateful ones are the only ones worth instrumenting.**
 
 **Boundary: both entries cover `apps/server` control-plane gates only.** The SFU and data-channel pacing
 that governs frame smoothness is outside this repo and unexamined here.
+
+## V-1966 — the inbound budget does not shed, it CLOSES the socket, and nothing records it (2026-08-27)
+
+V-1965 read the inbound gate as a shed-and-recover mechanism releasing on a clock. **Following the
+refusal to its consumer shows that framing is wrong, and the real behaviour is more consequential.**
+
+`FleetControlConnection.handleInboundBytes` returns `'parse-budget-exhausted'` when the token bucket
+refuses. At `routes/fleet-events.ts:176` the caller does:
+
+    const admission = conn.handleInboundBytes(messageToBuffer(data));
+    if (admission === 'accepted') return;
+    // Policy-close the whole authenticated socket after the first rejected
+    // frame. Do not log or reflect payload text
+    inboundRejected = true;
+    socket.close(1008, admission);
+
+**Exceeding the inbound budget terminates the node's control connection.** There is no shedding and
+nothing to un-shed. And the budget is `/** Reconnect-resistant token buckets */` — one map keyed by
+node, created once at registry construction and **never reset on register or unregister** — so a node
+whose budget is exhausted reconnects into a bucket that is still empty and can be closed again, until
+enough wall-clock refill has elapsed (up to 8 s for frames and bytes, 4 s for large frames).
+
+⭐ **The anti-abuse design is correct and I am not calling it a defect.** Reconnect-resistance is the
+whole point: a node must not be able to reset its budget by reconnecting. **What composes badly is the
+combination — a hard socket close, budget state that deliberately survives the reconnect, and a
+time-based refill — which together produce a close/reconnect window rather than a degradation.**
+
+⛔ **And the entire chain is unobservable.** The gate has no metric and no logger; the call site's comment
+says _"Do not log or reflect payload text"_ and logs nothing at all; the typed verdict
+`'parse-budget-exhausted'` is referenced in exactly three places — its own union declaration, its return,
+and one test. **No production code consumes it.** So if this is happening, it leaves no trace beyond a
+1008 close, which is exactly the shape of a complaint about lag spikes with no diagnostic trail.
+
+**Certain versus hypothesis, kept apart.** CERTAIN: the close, the reconnect-resistant state, the absence
+of any log or metric — all read from source. **HYPOTHESIS, unmeasured: that real post-lag traffic
+actually exhausts 256 frames or 64 MiB.** A slow link delivers FEWER frames; the exhaustion would come
+from a backlog arriving as a burst once the link recovers. **That is a measurement, and it is currently
+impossible to make from production data because nothing records the event.**
+
+⭐ The smallest thing that would settle it is in scope and does not touch the fork: a counter on the
+1008-close path, carrying the bounded reason and no payload — which respects the existing comment, since
+that forbids reflecting payload TEXT rather than recording that the event occurred.
