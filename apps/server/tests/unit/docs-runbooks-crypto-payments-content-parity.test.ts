@@ -127,6 +127,24 @@ describe('W555.B /docs/runbooks/crypto-payments.md content parity', () => {
     );
   });
 
+  // V-2004 — the triage arm above pins THREE rejection causes, and the
+  // signature-failure bullet named exactly one reason: secret mismatch. The
+  // 2026-06-03 crypto-payment-path security audit surfaced a SECOND cause for
+  // the identical log line — the verifier canonicalises before the HMAC while
+  // NowPayments signs with PHP `json_encode`, so a serialisation divergence
+  // drops a real payment while the secrets match. An operator following the
+  // runbook would have compared secrets, found them identical, and stalled.
+  // Pinned separately from the three-causes arm because this is the guidance
+  // that keeps someone from rotating a correct secret during a money incident.
+  it("Signature-failure triage names the SECOND cause: 'A **second, different** cause produces this same log line' + 'comparing secrets will not find it' + 'payment is silently dropped** while the secrets match perfectly' + '**Distinguish before rotating anything.**' + 'serialisation divergence, not a secret mismatch — do not rotate the' + the audit path — pinned so the do-not-rotate-a-correct-secret guidance survives", () => {
+    expect(body).toContain('A **second, different** cause produces this same log line');
+    expect(body).toContain('comparing secrets will not find it');
+    expect(body).toContain('payment is silently dropped** while the secrets match perfectly');
+    expect(body).toContain('**Distinguish before rotating anything.**');
+    expect(body).toContain('serialisation divergence, not a secret mismatch — do not rotate the');
+    expect(body).toContain('docs/internal/2026-06-03-crypto-payment-path-security-audit.md');
+  });
+
   it("Refund procedure + when-merchant-account-lands framing pinned: 'Refunds are issued by the founder via the NowPayments dashboard, not by Driftstack.' + 'Founder issues the refund in NowPayments (asset + amount + the customer's forwarding address).' + 'Our applyIpnStatus maps `refunded` → `failed`. The order moves to terminal `failed`.' + 'Do NOT edit `crypto_orders` rows by hand' + '## When the merchant account lands (V-666.E follow-up)' + 'NowPayments merchant account is approved + API keys minted.' + '`NOWPAYMENTS_API_KEY` env var is set in production.' + 'The `/v1/billing/crypto-checkout` route's stubbed `payment_address: null` response is replaced with a real NowPayments `POST /v1/payment` call' + 'The customer-facing crypto checkout flow is unblocked in the GUI (V-534.J button + view).' + '~~A `crypto_orders` table replaces the in-memory repo~~ **Done**' — pinned so the founder-issues-via-NowPayments + refunded→failed-mapping + DO-NOT-mutate-by-hand + V-666.E-5-step-go-live + V-534.J-GUI-button commitment survives", () => {
     expect(body).toMatch(/Refunds are issued by the founder via the NowPayments dashboard,/);
     expect(body).toMatch(/not by Driftstack\./);

@@ -137,6 +137,25 @@ Check the server logs for `nowpayments-webhooks` component entries:
   secret mismatch. Compare the `NOWPAYMENTS_IPN_SECRET` env var
   against the value in the NowPayments dashboard; rotation in only
   one place is the usual cause.
+
+  ⛔ A **second, different** cause produces this same log line, and
+  comparing secrets will not find it. The verifier canonicalises the
+  body before the HMAC — `JSON.stringify(sortKeys(JSON.parse(body)))`
+  — while the security audit records that NowPayments signs using PHP
+  `json_encode`, which can emit float fields (`price_amount`,
+  `actually_paid`) as different bytes. When the two serialisations
+  diverge for a payload, a **genuine IPN fails verification and a real
+  payment is silently dropped** while the secrets match perfectly.
+
+  **Distinguish before rotating anything.** Recompute the HMAC over the
+  RAW body exactly as received, and separately over the canonical form.
+  If the raw form verifies and the canonical form does not, this is the
+  serialisation divergence, not a secret mismatch — do not rotate the
+  secret, and escalate. Tracked as the open item in
+  `docs/internal/2026-06-03-crypto-payment-path-security-audit.md`,
+  which is to be confirmed against a real sandbox IPN before the rail
+  is enabled.
+
 - **`"NowPayments IPN is missing required fields"`** — schema drift.
   NowPayments shipped an IPN with no `payment_status` or no
   `payment_id`. Read the body in the log and decide whether to

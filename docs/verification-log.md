@@ -12862,3 +12862,83 @@ pin the wrong code. errors.ts has two block comments and neither contains a brac
 independent statements of one rule — but it touches six guards that each need re-proving by mutation, and
 a latent hazard with zero live instances does not justify that on today's evidence. Recorded so the case is
 cumulative rather than re-derived.
+
+## V-2004 — both payment webhook receivers audited: sound, and a money-path runbook that names one cause of two (2026-08-27)
+
+2026-08-27. Target chosen with V-1920's instrument — routes ranked by how little the log says about them.
+**Boundary: mentions of each route's filename stem across both verification logs, 59 route files at HEAD.**
+Five score zero, and two of those are the inbound payment receivers: `webhooks-stripe.ts` and
+`webhooks-nowpayments.ts`. Both take unauthenticated POSTs from a third party and move billing state.
+
+⛔ **My prior-art check returned zero four times, and all four were my bug.** I ran `grep -ainE` with
+`\|` for alternation — in EXTENDED regex that is a literal backslash-pipe, so the searches never matched
+anything. Four independent zeros is not a result, it is a smell; a control (`grep -aicE webhook` → 119)
+exposed it immediately. Corrected, the logs carry 75 `stripe` lines and 9 `nowpayments` — but only as a
+header inventory (`stripe-signature`, `x-nowpayments-sig` listed as "inbound from a third party"). **No
+end-to-end audit of either verifier existed.**
+
+### Both receivers are sound
+
+**Stripe** (`lib/stripe-signing.ts`): timestamp checked against a 300s tolerance so a captured delivery
+cannot be replayed indefinitely; empty signing secret refused before hashing (V-1465 — Node's HMAC accepts
+an empty key and returns a valid digest, so without it an attacker who knows body and timestamp verifies);
+EVERY `v1` candidate accepted for zero-downtime secret rolls, each compared constant-time; hex validity
+asserted **before** `Buffer.from(hex,'hex')` with the reason written down.
+
+**NOWPayments** (`lib/nowpayments-signing.ts`): HMAC-SHA512 over the sorted-key canonicalisation the
+provider's protocol mandates, `timingSafeEqual`, digest-length guard, false-on-malformed.
+
+**The state machine behind the IPN handles replay and reordering.** `applyIpnStatus` decides inside
+`withOrderLock` (a real `SELECT … FOR UPDATE`), rejects an IPN whose `payment_id` differs from the one
+bound at createPayment, and gates transitions on `isTerminalForward` — `paid`/`failed`/`cancelled` never
+move, `partial` advances only to `paid`/`failed`, `pending` is never re-entered. Side-effects read the
+LOCKED prior status, so a re-delivered `paid` fires no second webhook or receipt.
+
+**The signing tests are not vacuous**, which is the failure mode that would make all of this hollow. The
+canonicalisation arm signs an **unsorted** body `{z,a,m}` against a **hardcoded literal** canonical form
+`{"a":2,"m":3,"z":1}` — not against a re-implementation of `sortKeys` — so deleting canonicalisation fails
+it. Nested key sorting is pinned the same way.
+
+### The finding: a triage bullet that names one cause of two
+
+`docs/internal/2026-06-03-crypto-payment-path-security-audit.md` carries an explicitly open,
+money-critical item: the verifier canonicalises by re-serialising through the JS number formatter, while
+NOWPayments signs with PHP `json_encode`, which can emit float fields (`price_amount`, `actually_paid`)
+as different bytes. When they diverge, **a genuine IPN fails verification and a real payment is silently
+dropped.**
+
+**The operator runbook, which is what someone actually reads during an incident, gave that log line one
+cause:** _"IPN secret mismatch. Compare the `NOWPAYMENTS_IPN_SECRET` env var against the value in the
+NowPayments dashboard."_ An operator hitting the serialisation divergence would compare the secrets, find
+them identical, and stall — or worse, rotate a correct secret. **Neither document referenced the other.**
+
+Fixed by adding the second cause with a diagnostic that separates them (recompute the HMAC over the RAW
+body and over the canonical form; raw-verifies-canonical-does-not is the divergence, not a secret
+problem), an explicit _do not rotate the secret_, and a pointer to the audit item. Pinned as its own arm
+rather than folded into the existing three-causes arm, and **mutation-proved on the real subject**:
+deleting the block from the runbook reds exactly that arm, 1 of 8. `it(` count 7 → 8 as intended, tsc
+clean via `tsconfig.test.json`, diff is 37 insertions and 0 deletions.
+
+**The audit's condition has NOT fired, and that is verified rather than assumed.** The runbook records
+"we have no live merchant account", and the route registers only when `NOWPAYMENTS_IPN_SECRET` is set
+(`app.ts:1350`). So the item is correctly still open — and its recommendation #2, _verify against BOTH the
+raw body and the canonical form and accept either_, **is not implemented**: line 58 computes exactly one
+candidate (`canonicalizeJsonObject(bodyStr) ?? bodyStr`), falling back to raw only when the body is not a
+JSON object. Not changed here — the audit deferred money-path verification semantics to the owner pending
+a real sandbox IPN, and that judgement is not mine to overturn.
+
+### One dead mechanism, verified and deliberately not "fixed"
+
+`nowpayments-signing.ts` wraps `Buffer.from(signature,'hex')` in a try/catch and documents _"Returns false
+… signature is not valid hex"_. **Measured: `Buffer.from('zz','hex')` does not throw — it returns a
+0-length buffer. The catch is dead**, and the documented behaviour is delivered by the digest-length guard
+instead. Consequence, also measured: a correct signature with trailing garbage (`goodHex + "zz"`) decodes
+to the same 64 bytes and is **accepted** — signature malleability.
+
+**Not a vulnerability, and not changed.** Producing that input requires already holding the correct
+HMAC, at which point the unmodified signature works; nothing downstream keys on the signature string. The
+sibling verifier guards the identical hazard explicitly (`constantTimeHexEq` asserts hex before decoding),
+and the security audit already credits the **length guard** — not the catch — as the real mechanism, so
+the audit's description is accurate. Recorded because V-1465 was the reciprocal of exactly this comparison
+(the empty-secret check NOWPayments always had and Stripe lacked): **reading the two sibling verifiers
+against each other keeps paying, in both directions.**
