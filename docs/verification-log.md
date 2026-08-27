@@ -13386,3 +13386,48 @@ layer refuses anything other than S256 at registration time"_ — and four test 
 RFC 7636 cross-source invariant. An implemented-but-unreachable weak method with a stated reason and its
 own tests is a documented decision, not debt. Recorded so the next reader who greps `plain` and finds a
 constant-time comparison of `verifier === challenge` does not have to re-derive that nothing calls it.
+
+## V-2013 — an expand-phase table with read and update paths and no create path, behind two published operations (2026-08-27)
+
+2026-08-27. Sweeping the unique-constraint class (a caller-supplied value into a UNIQUE column with no
+23505 handler answers 500 where 409 is owed) led somewhere else. **Boundary: the 28 unique constraints in
+`schema.ts` — 1 `.unique()` and 27 `uniqueIndex(...)` — narrowed to the ones a caller controls.**
+
+**The class itself is in good shape.** `lib/pg-error.ts` is the canonical translator, and its own comment
+records the subtlety that matters — it reads `err.cause`, because "a top-level-only read would then MISS
+the 23505". The customer-facing constraints are handled end to end: `accounts_slug_unique` throws
+`SLUG_TAKEN` in `auth-repo.ts:178` and `account-me.ts:332` converts it to a 409;
+`team_invites_owner_email_pending_unique` is a **partial** index and its upsert repeats the predicate —
+index `.where(isNull(acceptedAt))`, `onConflictDoUpdate` with `targetWhere: isNull(teamInvites.acceptedAt)`
+— so it cannot raise 42P10, which is the trap V-1995 swept.
+
+### What the sweep actually turned up
+
+`teams_slug_unique` can never be violated, because **nothing inserts a `teams` row.** Verified with a
+working control rather than from a bare zero: the same grep form finds `insert(teamInvites)` in the same
+file, and finds no `insert(teams)` anywhere in `apps/server/src`.
+
+The table is nonetheless read and written: `listTeamsOwnedBy` selects from it and `renameTeam` updates it,
+both in `team-members-repo.ts`, and both are wired — `renameTeam` to `routes/team.ts:180`. **Both
+operations are published**: `GET /v1/teams` and `PATCH /v1/teams/{id}` are in `openapi.json`. So a customer
+or a generated SDK sees two operations of which one returns an empty list for everyone and the other
+answers `404 Team not found.` for everyone.
+
+⭐ **This is the design, not a defect, and the commit message says so:** `fa4df20a1` — _"feat(db): a team
+becomes a thing, not an account id (0114, **expand phase**)"_. Expand/contract: the table, the reads and
+the update land first; the create and backfill land in a later phase. The 404 is what an expand phase looks
+like from outside, and **naming it is the whole contribution here** — the alternative is someone
+rediscovering it as a bug.
+
+⛔ **The alarming reading was checked and is false.** `/v1/account/me` publishes a `teams` array, which
+would be permanently empty if it read this table. It does not: `ctx.teams` comes from team MEMBERSHIPS via
+`services/auth.ts` (`liveTeams`), and each entry carries a `mem_` membership id. **The customer-visible
+account payload is unaffected** — that is the first thing to check and it was checked before anything else
+was written down.
+
+**V-1048's guard cannot see this.** It lists published routes that can never succeed, and its detector is
+the `FeatureUnavailableError`/503 shape — a handler that throws unconditionally. These two succeed
+structurally and fail on data, which no source scan of throw-sites reaches. **Not extending it here**:
+detecting "the backing table has no writer" statically is fragile, and the state is temporary by
+construction. Recorded instead as the conditional deferral it is — nothing fires when the contract phase
+lands, which is exactly why V-1957 argued such items are the easiest kind to lose.
