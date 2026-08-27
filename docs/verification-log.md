@@ -17308,3 +17308,38 @@ a filter on a file does not.
 ⚠️ This repo treats flakes as defects rather than noise, so the honest state is: **one unexplained
 failure at `bc576990e`, not reproduced, not identified, and now unidentifiable.** Recorded so a second
 occurrence has a first data point to join rather than reading as the first.
+
+## V-1895 — a stale MM that was not stale, and the measurement that nearly hid it
+
+2026-08-27. No product defect. A pre-flight abort I was one step from calling a false positive, and the
+instrument that told me to.
+
+**WHAT HAPPENED.** A flake hunt aborted on my own guard: `git status` reported `MM
+docs/verification-log.md` with the tree otherwise clean and every commit since the last green touching
+only that file. The documented signature of the `lint-staged` artifact is exactly that, so the natural
+reading was "spurious — weaken the check".
+
+⛔⛔ **AND MY MEASUREMENT AGREED, WRONGLY.** Counting changed lines gave **0 for all three comparisons** —
+worktree vs HEAD, index vs HEAD, worktree vs index. On that evidence the `MM` is meaningless and the
+pre-flight is over-strict. `git update-index --refresh` did not clear it either, which looked like more
+confirmation.
+
+⛔⛔⛔ **THE INDEX REALLY DID DIFFER, BY ONE BYTE.** `git diff --cached --raw` names distinct blobs
+(`cff01de4c` → `4190e7b4b`), and their sizes are **1,221,350 against 1,221,349** — the worktree matching
+HEAD. One byte, almost certainly the trailing newline. **A line-oriented diff cannot see it**, so my
+"0 changed lines" was a false negative produced by asking a byte-level question with a line-level
+instrument. The pre-flight was RIGHT: a bare commit would have staged content I did not write.
+
+⭐ Repaired with `git reset -q -- <path>` — index ← HEAD, worktree untouched — and verified by
+post-condition rather than by the same instrument that misled me: porcelain empty, `--raw` diff empty,
+and worktree bytes equal to the HEAD blob's size.
+
+⭐⭐ **THE LESSON IS GRANULARITY, and it is the week's pattern in a new place.** Every other instrument
+failure this week was scope — a narrow anchor, a missed receiver, a line-anchored regex over wrapped
+text. This one is RESOLUTION: the right scope, the right files, and a unit of comparison coarser than
+the difference being measured. **When a diff says "no change" but git still reports one, compare blob
+hashes and byte counts, not lines.** Those cannot round a one-byte difference to zero.
+
+⚠️ And the near-miss is the point: the conclusion I was about to draw was "my safety check is
+over-strict, relax it". Weakening a guard on the strength of a false negative is how a real poisoned
+index gets committed later.
