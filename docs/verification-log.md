@@ -14376,3 +14376,35 @@ registration (V-2027), a literal pin on one construction site that cannot see a 
 ⭐ **So the productive question in a densely-guarded codebase is not "is this guarded?" but "what is
 the guard's KEY, and is it unique over the population it walks?"** Asking the first question six
 times cost most of this turn; asking the second produced every finding.
+
+## V-2032 — the basename-key sweep is closed: V-2025 was the only instance (2026-08-27)
+
+Applied V-2031's own conclusion — ask what a guard's KEY is, not whether the thing is guarded — as a
+sweep. Question: does any other census guard key a collection by a BASENAME while walking a tree
+recursively, the defect fixed in V-2025?
+
+**Boundary: 2023 unit test files, 143 of which walk a directory tree recursively (`readdirSync` +
+`isDirectory()`). One hit, refuted by reading. Zero remain.**
+
+⭐ **The detector was validated against a known positive before its zero was believed** — the pre-fix
+bytes of the very file V-2025 corrected, read straight out of `git show bbf81ea8e^:…`, with the
+post-fix bytes as the negative control:
+
+    detector on the KNOWN POSITIVE (basename key) : True  -> catches
+    detector on the KNOWN NEGATIVE (path key)     : False -> correct
+
+That control also caught the first version of the detector being too narrow: it matched only
+`` .set(`${entry.name}…` `` and `.set(entry.name…`, missing a basename bound to a variable first.
+Widened to resolve `const <v> = entry.name | basename(…)` and treat any key mentioning `v` as a
+basename key — then re-validated on the same positive before running. Sweep the shape, not the token.
+
+**The single hit was a false positive, and reading is what showed it.**
+`dist-reading-suites-have-fresh-artifacts.test.ts` contains both a recursive walker and a
+basename-keyed Set — in two unrelated functions. The recursive `walk()` pushes FULL paths; the
+basename key is `found.add(owner)` where `owner` comes from a **single-level** scan of `apps/`, whose
+entries are siblings in one directory and therefore unique by construction. My detector matched two
+true facts in one file and inferred a relationship between them that does not exist — the same
+mistake shape as the dominant lesson, caught the same way.
+
+So the V-2025 fix was not one of many: it was the only occurrence, and the class is now empty.
+Recorded so the next sweep of this shape can stop at this line.
