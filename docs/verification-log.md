@@ -20526,3 +20526,39 @@ established.
 **Execution boundary: none of this is mine to run.** A watched enable on fleet hardware is deploy-class
 work on the fork runtime, and my standing constraints are no push, no deploy, and no `driftstack` /
 `webkit-driftstack`. The procedure is the deliverable; the operation needs an owner with those surfaces.
+
+## V-1970 — I nearly "fixed" a correct comment back into a falsehood (2026-08-27)
+
+Auditing D-2 (avatar orphans) from my own note, which states the bucket is _"presign-only, 1h TTL — no
+public-direct URL"_ and that _"the R2 client has no deleteObject"_. **Both are false, and acting on them
+would have reintroduced a claim V-797 removed as untrue.**
+
+The route comment justifies leaving orphaned objects with _"avatars are already public-readable so
+leaving stale objects is no worse than the public bucket already is"_. Against my note that read as a
+false security claim understating the posture, and I set out to correct it. **V-797 had already settled
+it the other way:** the avatar bucket IS the public bucket, and the presigned URL is _"a stable
+time-limited LINK, not an access control: anyone holding the object URL can fetch it."_ The customer
+page is pinned to say `public-readable bucket` and pinned NOT to say `stored privately on Cloudflare
+R2`, and it tells customers to **treat an avatar as public content**. **My correction would have
+re-asserted the privacy framing V-797 deleted.**
+
+**The second claim is stale in the ordinary way.** `lib/r2.ts` now exports `deleteObject`, used by four
+services — and `profile-blob-orphan-sweeper` is a working app-side precedent for precisely the
+orphan-reaping the note said to prefer doing in infra. **So D-2's stated blocker is gone**: the
+capability exists and the pattern is proven. Whether to reap avatars is still a product call, but it is
+no longer blocked by "we cannot".
+
+⭐ **What stopped the wrong edit was the pin-checking rule, and not suspicion.** The standing rule is fix
+source plus every pin in one commit, so before touching the comment I searched for pins — and the pin's
+own arm title reads _"avatar R2 storage framing, corrected by V-797"_. **The provenance was in the test
+NAME, which pointed straight at the authority that had already adjudicated it.** A pin is usually a
+coupling to satisfy; here it was a citation that prevented a regression.
+
+⛔ **The direction of the rot is the part worth keeping.** Both stale claims made the surface sound
+SAFER than it is — "presign-only, no public URL" and "we cannot delete anyway". **A note that drifts
+toward reassurance is more dangerous than one that drifts toward alarm**, because nobody re-checks a
+claim that says there is nothing to do. Same asymmetry as a stale OPEN versus a stale CLEAN, one level
+down: this was a stale JUSTIFICATION.
+
+No code change: the comment is accurate and its future-tense "a future sweeper job" is exactly the
+honesty V-797 praised while faulting the customer page for promoting it to a guarantee.
