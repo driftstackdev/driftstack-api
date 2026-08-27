@@ -14167,3 +14167,52 @@ rather than listing them — the file header invites the drift ("Stripe + NowPay
 ⛔ The third mutation aborted first on `a=0`: I typed a 6-space indent read off a display that had
 been piped through `sed 's/^/  /'`. Derived from the file it is 4. Same class as the aborted-script
 entry in V-2025 — and the same assert caught it.
+
+## V-2028 — the boot key probes audit clean, and an audit boundary re-measured rather than trusted (2026-08-27)
+
+Same never-audited measurement as V-2027, widened. Boundary: files under `apps/server/src/{services,
+lib,db,middleware}` whose filename stem never appears in any `docs/verification-log*.md` — **39 of
+273** (services 24/141, lib 11/70, db 4/55, middleware 0/7). Picked `lib/boot-key-verification.ts`
+for continuity with V-2026.
+
+**It audits clean, and its own claim is exact.** The file exists to replace a raw
+`"Unsupported state or unable to authenticate data"` at boot with a message naming the subsystem and
+the env var, and its header says it was written as a function "rather than inlined nine times".
+Measured: **9 `verifyBootEncryptionKey(` call sites**, all in `db/*-repo.ts`, and all 9 enclosing
+methods are invoked from `lib/bootstrap.ts` — 8 envelope migrations plus `encryptLegacySecrets`.
+Zero unreachable probes.
+
+Its existing test file already pins the wrapper's behaviour across five arms — rethrows, does not
+throw on success, names subsystem + env var, attaches `cause`, and can never see key material. What
+none of them pins is that the wrapper is ON the boot path; a perfect wrapper that nothing calls is
+still dead. ⭐ **That gap does not exist**: `lib-bootstrap-content-parity.test.ts` pins all 9
+invocations, confirmed by mutation rather than by reading — neutering
+`await recipesRepo.migratePayloadEnvelopes(500)` reds it with
+`expected … to match /await recipesRepo\.migratePayloadEnvelopes\(500\)/`. **No guard added; the
+useful result was not writing a redundant one.** Third time this session that mutating refuted a
+gap a guard census suggested (V-1998, V-2024).
+
+### The envelope write-lock verdict, re-measured because its own trigger had fired
+
+`project_at_rest_envelope_versioning_audit_clean` (V-1873) recorded all NINE at-rest surfaces under
+`apps/server/src/lib` as write-locked, and stated its expiry honestly: re-check on a new
+`lib/*-encryption.ts` or an existing one gaining a second `createCipheriv`. **Two commits have
+touched `apps/server/src/lib` since.** Ran the check: neither adds a `createCipheriv` or an
+encryption module. **Verdict holds.**
+
+⭐ **I expected a scope gap and did not find one.** The audit's boundary was a DIRECTORY (`lib`),
+while the key-sharing family V-2026 established spans two (`services/recipe-payload-encryption`,
+`services/agent-session-transcript-encryption`). Widening the measurement to all of
+`apps/server/src`: `createCipheriv` occurs in **exactly 9 files, every one under `lib/`**. Both
+`services/` modules delegate to `encryptPlatformSecret` — the shared low-level primitive whose
+callers own versioning, exactly as recorded. Hypothesis refuted by measurement; the directory
+boundary was the right one.
+
+⛔⛔ **I hit the `git grep -E` class trap ~20 minutes after writing it into memory.**
+`git grep -nE "webhooksRepo\.\w+" -- apps/server/src/lib/bootstrap.ts` returned **0 rows** — `\w` is
+PCRE, not POSIX ERE — and I read that zero as "bootstrap never calls the webhooks repo", one step
+from reporting a live boot probe as unreachable dead code. `bootstrap.ts:487` calls it. Only a wider
+grep that happened not to use `\w` refuted it. Knowing the trap did not prevent it, so the rule is
+now mechanical: no `\s`/`\d`/`\w`/`\b` in a `git grep -E` pattern, and **a zero that would itself be
+a finding gets re-asked with an instrument that cannot fail the same way.** A negative about
+REACHABILITY is the most expensive kind to get wrong — it turns live code into reportable dead code.
