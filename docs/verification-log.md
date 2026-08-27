@@ -12098,3 +12098,45 @@ one argument; read as evidence it would have looked like a guard firing. A mutat
 its own assertion because the target string occurs twice in the file, and the green run after it
 proved nothing. And the first run's boundary was a grep for "profile", which I widened to the cap
 vocabulary before trusting the zero.
+
+## V-1989 — the storage gate counts a population the count gate deliberately does not (2026-08-27)
+
+Following the thread V-1988 opened. The profile **count** cap counts LIVE + TRASHED, deliberately,
+because "a trashed profile still holds a row + DEK + sealed blob" and excluding it would let a
+customer hoard past their limit (2026-06-17). The **storage** quota does the opposite, and nothing
+records a reason.
+
+**Traced, each link read rather than assumed:**
+
+1. Soft delete is `.set({ deletedAt, updatedAt })` and nothing else — `size_bytes` stays on the row
+   and no R2 delete is issued. `profile-blob-orphan-sweeper` states the same from the other side:
+   "a trashed profile still owns its blob until purge".
+2. `sumSizeBytesByAccount` sums **LIVE profiles only** (`notDeleted`), and its own comment says so:
+   "trashed profiles don't count toward the storage quota, mirroring the live read paths".
+3. That sum is the **enforced numerator**: `getStorageState` → `assertWithinStorageQuotaForLaunch`,
+   called before driver dispatch on a profile-backed create in both `routes/sessions.ts` and
+   `routes/agent-sessions.ts`, and documented as "the enforceable point to block NEW state growth".
+4. Retention is **30 days** (`PROFILE_TRASH_RETENTION_DAYS`), swept daily at 04:00 UTC.
+
+⛔ **So trashing a large profile lowers the number the launch gate reads while the R2 bytes it
+represents persist for up to 30 days.** An account at the hard cap can trash, launch again, and grow
+new state — with real stored bytes above the cap for the retention window. That is the same shape as
+the count-dimension hole, in the dimension where the bytes actually live.
+
+⭐ **The codebase has recognised this family twice and closed it twice, in the other two directions.**
+The count cap was hardened in 2026-06-17; the trash→**restore** path was hardened in 2026-06-30
+("a trash+restore round-trip silently bypassed the hard cap for the entire 30-day trash retention
+window"), which re-validates storage under a `FOR UPDATE` on the account row. The trash→**launch**
+path in the storage dimension is the remaining member and carries no note either way.
+
+**Boundary, stated with the result: this is a read-level finding about which population each gate
+counts.** I did not execute the sequence against a live database, and nothing here proves a customer
+has done it. What is established is that the two gates disagree about trashed rows, that the
+disagreement is documented as deliberate on one side and unexplained on the other, and that the bytes
+demonstrably survive a soft delete.
+
+⛔ **Not changed, deliberately.** Making the storage numerator include trashed bytes changes what the
+launch gate refuses for real customers — the same class of call as `profile_count` (V-1988) and W-10,
+and not a sweep's to make. Recorded here for the owner; `docs/internal/OPEN-ITEMS.md` does not exist in
+this tree. No guard added either: pinning the current numerator would freeze a choice that has not been
+made.
