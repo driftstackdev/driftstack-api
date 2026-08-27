@@ -15,7 +15,7 @@
 //
 // Pure-function-ish tests; we mock just the publishData call site.
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   boundTabListUpdate,
   isBenignTeardownError,
@@ -358,7 +358,74 @@ describe('sendNavigate', () => {
 // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI emits the
 // full tab list on every change + an activateTab (with a correlation requestId) on a
 // switch, both over the SAME reliable data channel as taps/navigate.
+/**
+ * Flush microtasks until `mock` has been called `want` times.
+ *
+ * ⚠️ Replaces a fixed `await Promise.resolve()` x2/x3. That pinned the drain's exact
+ * MICROTASK-TICK COUNT, which is scaffolding rather than the property under test — the
+ * property is "once the in-flight publish settles, the drain sends the latest pending
+ * snapshot and only that one". Bounding the tab-sync publish added a hop and broke both
+ * arms without changing anything a customer could observe. The cap keeps a genuine
+ * regression failing rather than hanging, and the call-count assertions after the final
+ * release still pin the total, so nothing here can over-publish unnoticed.
+ */
+async function flushUntilCalls(mock: { mock: { calls: unknown[] } }, want: number): Promise<void> {
+  for (let i = 0; i < 50 && mock.mock.calls.length < want; i += 1) {
+    await Promise.resolve();
+  }
+}
+
 describe('sendTabListUpdate', () => {
+  it('a publish that never settles does not wedge tab sync forever', async () => {
+    vi.useFakeTimers();
+    // ⛔ Unconditional. When this arm first failed on a bad fixture, a trailing
+    // `useRealTimers()` never ran and leaked fake timers into the next two tests —
+    // one real failure presented as three, and the two innocent ones looked like
+    // regressions in code I had not touched.
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // livekit's publishData resolves through `waitForBufferStatusLow`, which in
+    // 2.19.2 settles ONLY on a `bufferedamountlow` event and rejects only on engine
+    // close. A congested channel on a live engine therefore never settles. `never`
+    // models exactly that: a promise with no path to resolution.
+    let mode: 'never' | 'resolve' = 'never';
+    const publishData = vi.fn(() =>
+      mode === 'resolve' ? Promise.resolve() : new Promise<void>(() => {}),
+    );
+    const room = { localParticipant: { publishData } } as unknown as Room;
+    const snapshot = (): TabListUpdatePayload => ({
+      sessionId: 'agt_x',
+      tabs: [{ id: 't1', url: 'https://a.test/', scrollY: 0, title: 'a' }],
+      activeTabId: 't1',
+    });
+
+    const first = sendTabListUpdate(room, snapshot());
+    await vi.advanceTimersByTimeAsync(5_000);
+    // Before the bound existed this await never returned, the drain's `finally` never
+    // ran, and `state.drain` stayed armed for the lifetime of the Room.
+    await expect(first).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    // THE ASSERTION THAT MATTERS. A reset coordinator must accept new work. If
+    // `state.drain` were still armed this returns the dead promise and publishes nothing.
+    mode = 'resolve';
+    const before = publishData.mock.calls.length;
+    await sendTabListUpdate(room, snapshot());
+    expect(publishData.mock.calls.length).toBeGreaterThan(before);
+
+    // Warned once per Room, never per event: a wedged channel must not become the
+    // failure by flooding the console.
+    mode = 'never';
+    const third = sendTabListUpdate(room, snapshot());
+    await vi.advanceTimersByTimeAsync(5_000);
+    await third;
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    warn.mockRestore();
+  });
+
   it('bounds semi-trusted tab fields/count before publish and retains an active tab beyond the prefix', () => {
     const longId = 'i'.repeat(MAX_TAB_ID_CHARS + 50);
     const longField = 'x'.repeat(MAX_TAB_FIELD_CHARS + 500);
@@ -450,9 +517,7 @@ describe('sendTabListUpdate', () => {
     expect(decodeEvent(firstCall(publishData))).toMatchObject({ activeTabId: 'first' });
 
     releases.shift()?.();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushUntilCalls(publishData, 2);
     expect(publishData).toHaveBeenCalledTimes(2);
     const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
     const second = calls[1];
@@ -524,8 +589,7 @@ describe('sendTabListUpdate', () => {
     const stale = sendTabListUpdate(room, snapshot('stale'), () => false);
 
     releases.shift()?.();
-    await Promise.resolve();
-    await Promise.resolve();
+    await flushUntilCalls(publishData, 2);
     expect(publishData).toHaveBeenCalledTimes(2);
     const calls = publishData.mock.calls as unknown as Array<[Uint8Array, { reliable: boolean }]>;
     const second = calls[1];

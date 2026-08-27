@@ -367,6 +367,58 @@ interface TabListSendState {
 
 const tabListSendStates = new WeakMap<Room, TabListSendState>();
 
+/**
+ * Bound on ONE tab-sync publish. Matched deliberately to the harness's own
+ * `dataPublishTimeoutSeconds = 5` (W428): if the two sides disagree about when the
+ * channel is dead, the tighter side manufactures phantom failures.
+ */
+const TAB_SYNC_PUBLISH_TIMEOUT_MS = 5_000;
+
+/** Rooms already warned about a wedged tab-sync publish — once per Room, never per event. */
+const tabSyncTimeoutWarned = new WeakSet<Room>();
+
+/**
+ * Await `publish`, but give up after `TAB_SYNC_PUBLISH_TIMEOUT_MS`.
+ *
+ * ⛔ Why this exists: `publishData` resolves through livekit's
+ * `waitForBufferStatusLow`, which (livekit-client 2.19.2) settles ONLY on a
+ * `bufferedamountlow` event and rejects only on engine close — there is no timer. On a
+ * reliable channel that stays congested while the engine stays up, the publish never
+ * settles. The drain below awaits it inside a `try`, so its `finally` never runs,
+ * `state.drain` stays armed forever, and every later tab update returns that same dead
+ * promise: tab sync wedges permanently for the Room, recoverable only by teardown.
+ *
+ * ⚠️ The loser of the race is NOT cancelled — the publish keeps running and may reject
+ * minutes later, attributed to nothing. The `.catch` is attached to the publish itself,
+ * not to the race, so an abandoned publish cannot surface as an unhandled rejection.
+ */
+function publishWithinTabSyncBound(room: Room, publish: Promise<void>): Promise<boolean> {
+  publish.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), TAB_SYNC_PUBLISH_TIMEOUT_MS);
+  });
+  // ⚠️ Deliberately NOT an async function, and racing `publish` directly rather than
+  // `publish.then(...)`. Each of those costs a microtask hop, and the drain's tick
+  // budget is observable: a sibling arm releases one publish and awaits exactly three
+  // microtasks before asserting the next one went out. Extra hops break it without
+  // changing any behaviour a customer could see.
+  return Promise.race([publish, timeout]).then((outcome) => {
+    if (timer !== undefined) clearTimeout(timer);
+    if (outcome !== 'timeout') return true;
+    // ⛔ Loud, not silent. A bounded publish that says nothing reintroduces exactly the
+    // defect removed from the ack decoder: a frame dropped with no diagnostic.
+    if (!tabSyncTimeoutWarned.has(room)) {
+      tabSyncTimeoutWarned.add(room);
+      console.warn(
+        `[tab-sync] publish exceeded ${TAB_SYNC_PUBLISH_TIMEOUT_MS}ms; abandoning it so the ` +
+          `drain can reset. The reliable DataChannel is likely congested.`,
+      );
+    }
+    return false;
+  });
+}
+
 /** Send the FULL tab list to the harness (doc-150 item 4; locked A2↔A3 contract).
  *  Fire-and-forget — the GUI emits this on EVERY new / close / switch / reorder so
  *  the harness reconciles its per-tab pages (create missing, drop closed) and knows
@@ -415,11 +467,14 @@ export function sendTabListUpdate(
         if (!current) {
           continue;
         }
-        await sendInputEvent(
+        const sent = await publishWithinTabSyncBound(
           room,
-          { type: 'tabListUpdate', ...latest.payload },
-          { reliable: true },
+          sendInputEvent(room, { type: 'tabListUpdate', ...latest.payload }, { reliable: true }),
         );
+        // A wedged channel will wedge the next publish too, so stop draining and let
+        // `finally` clear the state. The next edit starts a fresh drain rather than
+        // queueing behind a publish that is never coming back.
+        if (!sent) break;
       }
     } finally {
       // A genuine publish failure must not leave stale state armed for an
