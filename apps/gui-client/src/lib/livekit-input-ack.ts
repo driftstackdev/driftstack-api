@@ -272,6 +272,35 @@ export function handleInputAck(room: Room, value: unknown): boolean {
   return true;
 }
 
+/**
+ * The device proved it is alive — clear a stale "did not confirm" warning.
+ *
+ * ⛔ THE DISTINCTION THIS RESTS ON: `timeout` is a PREDICTION that the device will
+ * never answer. `dropped` and `failed` are VERDICTS the device itself returned
+ * about a specific input. Evidence of liveness refutes a prediction; it says
+ * nothing about a verdict, so only `timeout` is cleared here.
+ *
+ * ⚠️ Why this exists: the only two places that published a clear were both inside
+ * `handleInputAck`, so the badge could ONLY clear when an ack arrived — and an ack
+ * only arrives in response to input the customer sends. After a lag recovered, the
+ * warning sat on screen until they happened to tap something, saying the device had
+ * not confirmed while the device was demonstrably answering. Owner-reported:
+ * "it's already back live working, so it becomes useless to show".
+ *
+ * Any inbound frame from the device is sufficient evidence. It does not have to be
+ * an ack — the claim being retracted is "we cannot reach the device", and one
+ * frame refutes exactly that.
+ */
+export function noteDeviceLiveness(room: Room): void {
+  const state = states.get(room);
+  if (state === undefined || state.issue !== 'timeout') return;
+  // Nothing outstanding to be pessimistic about: a receipt still pending has its
+  // own deadline and may legitimately re-raise this.
+  state.missedAcks = 0;
+  state.lastMissAt = 0;
+  publish(state, null, state.nextSequence);
+}
+
 export function resetInputReceipts(room: Room): void {
   const state = stateFor(room);
   for (const pending of state.pending.values()) clearTimeout(pending.timer);

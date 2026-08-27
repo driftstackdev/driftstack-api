@@ -32,6 +32,7 @@ import { ReliableInputCongestedError } from '../lib/livekit-input-congestion';
 import {
   handleInputAck,
   resetInputReceipts,
+  noteDeviceLiveness,
   subscribeInputReceiptIssues,
   type InputReceiptIssue,
 } from '../lib/livekit-input-ack';
@@ -4730,6 +4731,14 @@ export function SimulatorWindow(): JSX.Element {
       ) {
         return;
       }
+      // ⭐ Any inbound frame refutes "the device did not confirm the last input".
+      // That badge is a PREDICTION about reachability, and it cleared only when an
+      // ack arrived — which only happens if the customer sends MORE input. So after
+      // a lag recovered it stayed on screen describing a device that was visibly
+      // answering. One frame is sufficient evidence to retract it. A dropped/failed
+      // VERDICT is untouched: liveness says nothing about an input the device
+      // explicitly rejected.
+      noteDeviceLiveness(listenerRoom);
       try {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;

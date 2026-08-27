@@ -1,11 +1,13 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import type { Room } from '../../src/lib/livekit';
 import {
   handleInputAck,
   MAX_PENDING_INPUT_RECEIPTS,
+  MISSED_ACKS_BEFORE_ALARM,
   pendingInputReceiptCount,
   registerInputReceipt,
   rejectedInputAckCounts,
+  noteDeviceLiveness,
   resetInputReceipts,
   subscribeInputReceiptIssues,
 } from '../../src/lib/livekit-input-ack';
@@ -104,6 +106,47 @@ describe('per-Room committed input receipts', () => {
     expect(handleInputAck(r, { type: 'page_state', id: 'tap_2', status: 'applied' })).toBe(false);
     expect(handleInputAck(r, { type: 'inputAck', id: 'late_1', status: 'applied' })).toBe(true);
     expect(pendingInputReceiptCount(r)).toBe(1);
+    resetInputReceipts(r);
+  });
+
+  it('CRITICAL an inbound frame retracts a stale "did not confirm" — it no longer waits for the next input', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (i) => issues.push(i));
+
+    // Two misses close together is what raises the badge.
+    for (let n = 0; n < MISSED_ACKS_BEFORE_ALARM; n += 1) {
+      registerInputReceipt(r, `tap_live_${n}`, 1_000);
+    }
+    await vi.advanceTimersByTimeAsync(1_500);
+    expect(issues.at(-1), 'badge should be raised').toBe('timeout');
+
+    // ⛔ THE BUG: before this, the ONLY clears were inside handleInputAck, so the
+    // badge could not clear without the customer sending more input. The device
+    // answering was not enough — which is exactly the state the owner reported,
+    // a warning about a device that was visibly working.
+    noteDeviceLiveness(r);
+    expect(issues.at(-1), 'an inbound frame must retract the prediction').toBe(null);
+    resetInputReceipts(r);
+  });
+
+  it('CRITICAL liveness does NOT clear a dropped/failed verdict — only the timeout prediction', () => {
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (i) => issues.push(i));
+    registerInputReceipt(r, 'tap_verdict', 10_000);
+    // The device answered and said it REJECTED the input. That is a verdict about
+    // one input, not a claim about reachability, so evidence of liveness is
+    // irrelevant to it. Without this control the fix above could be written as
+    // "clear on any frame" and would silently swallow real device rejections.
+    handleInputAck(r, { type: 'inputAck', id: 'tap_verdict', status: 'dropped' });
+    expect(issues.at(-1)).toBe('dropped');
+    noteDeviceLiveness(r);
+    expect(issues.at(-1), 'a verdict must survive liveness').toBe('dropped');
     resetInputReceipts(r);
   });
 
