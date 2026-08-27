@@ -263,6 +263,18 @@ describe('ProfilesView profile-lifecycle actions', () => {
       expect(container.querySelector('[data-component="storage-meter"]')).toBeNull();
     });
 
+    it('CRITICAL hides the workspace strip when there is nowhere to switch to', async () => {
+      // With no team memberships the strip is the label "Workspaces" plus a single
+      // "Personal" chip — a switcher whose only option is where you already are —
+      // costing a row above the grid on every visit. This fixture has no teams, which
+      // is what makes it the right file for the negative; the positive case lives in
+      // the-grid-can-be-seen-without-scrolling, whose fixture has a membership so its
+      // collapse arms exercise a strip that actually renders.
+      const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await screen.findByRole('button', { name: 'New profile' });
+      expect(container.querySelector('[data-component="workspace-strip"]')).toBeNull();
+    });
+
     it('surfaces the per-profile size on the grid card', async () => {
       const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
       // ⛔ Hydration anchor was the storage meter's copy, an INCIDENTAL dependency:

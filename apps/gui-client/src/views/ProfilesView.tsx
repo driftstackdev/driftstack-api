@@ -3376,61 +3376,73 @@ export function ProfilesView({
           real memberships so the demo's team surface stops being
           invisible. Sits below the stat strip (not inside the bordered
           grid) so the metrics read as a clean console strip. */}
-      {state.profiles.length > 0 && !chromeCollapsed && (
-        <div
-          data-component="workspace-strip"
-          className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
-        >
-          <span className="section-label">Workspaces</span>
-          {/* The chips ARE the switcher (half-2): selecting rebuilds the
+      {/* ⭐ Only rendered when there is somewhere to switch TO. With no team
+          memberships this strip is the label "Workspaces" plus a single "Personal"
+          chip — a switcher whose only option is where you already are — costing a row
+          of vertical furniture above the grid on every visit. Same rule as the storage
+          meter: ambient context earns its space by being actionable.
+
+          ⚠️ `activeWorkspace !== null` stays in the condition deliberately. If a
+          membership list ever loads empty WHILE a workspace is active, hiding this
+          would remove the way back. The recovery bar covers that case too, and
+          belt-and-braces is cheap next to stranding someone inside a workspace. */}
+      {state.profiles.length > 0 &&
+        !chromeCollapsed &&
+        ((accountMe?.teams ?? []).length > 0 || activeWorkspace !== null) && (
+          <div
+            data-component="workspace-strip"
+            className="flex flex-wrap items-center gap-2 rounded-md border border-surface-divider bg-surface-raised px-3 py-2 text-xs"
+          >
+            <span className="section-label">Workspaces</span>
+            {/* The chips ARE the switcher (half-2): selecting rebuilds the
                   client with the SDK effectiveAccount option; every list/
                   action then runs against that workspace (writes need the
                   admin role — server-enforced, surfaced via the role label). */}
-          <button
-            type="button"
-            aria-pressed={activeWorkspace === null}
-            className={`rounded-full px-2 py-0.5 ${
-              activeWorkspace === null
-                ? 'bg-accent-subtle font-medium text-ink-primary'
-                : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
-            }`}
-            onClick={() => setActiveWorkspace(null)}
-          >
-            Personal
-          </button>
-          {(accountMe?.teams ?? []).map((t) => (
             <button
-              key={t.membership_id}
               type="button"
-              aria-pressed={activeWorkspace === t.owner_account_id}
+              aria-pressed={activeWorkspace === null}
               className={`rounded-full px-2 py-0.5 ${
-                activeWorkspace === t.owner_account_id
+                activeWorkspace === null
                   ? 'bg-accent-subtle font-medium text-ink-primary'
                   : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
               }`}
-              title={teamWorkspaceTitle(t)}
-              onClick={() => setActiveWorkspace(t.owner_account_id)}
+              onClick={() => setActiveWorkspace(null)}
             >
-              {teamWorkspaceLabel(t)}
+              Personal
             </button>
-          ))}
-          {/* Discoverability (2026-06-16, founder "where am I supposed to look"):
+            {(accountMe?.teams ?? []).map((t) => (
+              <button
+                key={t.membership_id}
+                type="button"
+                aria-pressed={activeWorkspace === t.owner_account_id}
+                className={`rounded-full px-2 py-0.5 ${
+                  activeWorkspace === t.owner_account_id
+                    ? 'bg-accent-subtle font-medium text-ink-primary'
+                    : 'border border-surface-divider text-ink-secondary hover:border-ink-muted/40'
+                }`}
+                title={teamWorkspaceTitle(t)}
+                onClick={() => setActiveWorkspace(t.owner_account_id)}
+              >
+                {teamWorkspaceLabel(t)}
+              </button>
+            ))}
+            {/* Discoverability (2026-06-16, founder "where am I supposed to look"):
               the strip now renders for everyone (not only team members). With no
               teams yet, explain what team workspaces are + where to set one up,
               so Teams isn't invisible until you already belong to one. */}
-          {(accountMe?.teams?.length ?? 0) === 0 && (
-            <span className="ml-auto text-2xs text-ink-muted">
-              Team workspaces let members share profiles — set one up in the web dashboard (Team),
-              then it appears here.
-            </span>
-          )}
-          {activeWorkspace !== null && (
-            <span className="ml-auto text-2xs text-ink-muted">
-              Viewing a team workspace — writes need the admin role.
-            </span>
-          )}
-        </div>
-      )}
+            {(accountMe?.teams?.length ?? 0) === 0 && (
+              <span className="ml-auto text-2xs text-ink-muted">
+                Team workspaces let members share profiles — set one up in the web dashboard (Team),
+                then it appears here.
+              </span>
+            )}
+            {activeWorkspace !== null && (
+              <span className="ml-auto text-2xs text-ink-muted">
+                Viewing a team workspace — writes need the admin role.
+              </span>
+            )}
+          </div>
+        )}
       {!onboardingDismissed && (
         <OnboardingChecklist
           steps={buildOnboardingSteps(

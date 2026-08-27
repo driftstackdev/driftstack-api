@@ -68,6 +68,19 @@ vi.mock('../../src/lib/SettingsContext', () => {
       startUrl: 'https://driftstack.dev',
     },
     accountMe: {
+      // ⭐ One membership, so the workspace strip actually renders. The strip is now
+      // gated on having somewhere to switch TO — with no teams it is a switcher whose
+      // only option is where you already are. Without a membership here the collapse
+      // arms below would pass VACUOUSLY: green, while never exercising the strip they
+      // name. Same trap the storage meter's zero-byte fixture had.
+      teams: [
+        {
+          membership_id: 'mem_1',
+          owner_account_id: 'acc_team',
+          name: 'Team',
+          role: 'admin',
+        },
+      ],
       tier: 'solo_manual',
       concurrent_session_cap: 1,
       concurrent_session_active: 0,
