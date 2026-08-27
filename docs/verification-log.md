@@ -15435,3 +15435,58 @@ count unchanged at 3, tsc 0, guard green 3/3, and nothing pins that file's text.
 ⚠️ BOUNDARY, in the same sentence as the result: 24/24 is execution under `apps/server/tests` with a
 database, not assertion quality — which is the very distinction the paragraph exists to draw, and I am
 not weakening it by closing its example.
+
+## V-1850 — session close: the sets enumerated, including the one nobody records
+
+2026-08-26. Closing tally, written as ENUMERATIONS because a bare count is the thing a future reader
+cannot check — and because A2 made the point that the corrections list is the one that never gets an
+artifact unless somebody writes it.
+
+**ARMS LANDED AGAINST REAL POSTGRES (12 `test:` commits):** V-1831 runtime web-session expiry +
+revocation · V-1832 MFA recovery-code single-use · V-1833 crypto refund clawback · V-1834 recipes
+erasure arm · V-1836 region-blind LiveKit dispatch fallback · V-1837 cross-node error-event write
+boundary · V-1838 three bulk session closers · V-1843 two owner-scoped team reads · V-1844
+per-node heartbeat write.
+
+**RETRACTED CANDIDATES — died on schedule, before becoming claims:** the `retention-scrub` api-key
+sentinel (V-1840, my mutation removed one of two enforcing copies) · `findSessionUnscoped` (V-1841, a
+documented scoped/unscoped convention, not a fossil) · the `removeMember` orphan (V-1842, already
+measured with a ledger warning against fixing it) · the status-subscriber confirm-link expiry (grep
+found no witness; mutation found one immediately) · `services/email.ts` (its "not wired by default"
+comment describes the API default while `bootstrap.ts:734` wires it) · the "28 unguarded `inArray`
+sites" (constant arrays plus a ±4-line context window; all 11 runtime-variable sites guarded).
+
+⛔ **WRONG CLAIMS — the ones that GOT OUT, which is the more useful list and the harder one to write:**
+V-1846's characterisation of W-10 as proposing removal (its status column proposed an operation change;
+retracted in V-1847) · P-43 item 2's "inherited from library internals, not asserted in our code"
+(every runtime-variable site guards itself) · the transposed coverage labels, lines and statements
+swapped, in a figure published for someone else's decision · P-41 as originally filed, whose systemic
+premise the measurement disproved · "not from the integration corpus" said to a peer, when the
+`db-*-drizzle` specs ARE that corpus · V-1822's "tenant boundary COMPLETE", true of `eq(.accountId)`
+and read as true of the concept (P-38 corrected; two further axes existed).
+
+**INSTRUMENTS RETIRED BY THEIR OWN CONTROLS:** the method-name census (V-1835, ~10 of 12 false
+positives — a method reached through a service executes with its name nowhere in the corpus) · the
+route-driven reachability column (V-1848 — the app-building harness wires in-memory repos 133-to-5, so
+coverage of `src/db/**` under it measures nothing about it).
+
+⭐⭐ **THE ASYMMETRY WORTH KEEPING, A2's and it is right: a missed defect eventually announces itself —
+it has a customer, a stack trace, an incident. A manufactured one has a green suite, a plausible entry,
+and a test written against code that was already correct. It recruits nothing.** Six retractions and
+six wrong claims are visible tonight only because each was written down as it happened; filed as
+findings instead, this log would read as a better day than it was. **So the retraction count belongs
+where the findings live, not in prose.**
+
+⭐ WHY THE YIELD CURVE LOOKS LIKE THIS, measured rather than felt: 342 source files against 2442 test
+files (7.14x), 278 invariant/cross-source specs, 191 prose-named guards, 122 deriving their population
+from ground truth. Seven prior-art encounters today; five cost an investigation, two cost one command.
+The BYOK audit I was about to start was closed by a single `ls` — 29 spec files including
+`byok-key-never-echoed`, `byok-plaintext-call-sites-are-pinned` and
+`changing-a-byok-key-evicts-every-cached-copy`, which is every property I would have checked.
+
+⭐ AND A CONVERGENCE WORTH RECORDING: `every-read-modify-write-transaction-serialises` — which I found
+only by grepping before starting — carries ONE exemption, `incidents-repo.ts:addUpdate`, reasoned as
+"resolved_at preservation; staff-only, cost is a timestamp". That is the exact method V-1832 cleared
+independently, by a different argument (the UPDATE writes status and resolvedAt from a single decision,
+so no interleaving can break the stated invariant). ⭐⭐ **Two methods agreeing is worth more than either
+method's confidence, and the value is highest when they can fail in DIFFERENT directions.**
