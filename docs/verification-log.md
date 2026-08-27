@@ -19149,3 +19149,57 @@ that made this particular test the most exposed member, which is the half that i
 relative to V-1928's quiet-machine 1771 ms for the same arm and only the ratio is meaningful; and
 the cache is per-root within one test file, so it changes nothing for any other test. `it(` count
 unchanged at 2; no ratchet movement.
+
+## V-1936 — four corrections to one detector, and the shape turned out not to be the cost (2026-08-27)
+
+V-1935 fixed a test that re-walked 342 files sixteen times. The obvious next question — are there
+others? — took four corrections to ask properly, and the answer is no. Load was 9.9 on 10 cores, so
+this was static analysis with the gate deferred.
+
+**The detector, and what each version got wrong.** A "walker" is a function reaching `readdirSync`;
+the hunt was for walkers called repeatedly.
+
+| version | rule                          | result  | why it was wrong                                                                                                                                           |
+| ------- | ----------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1       | walker called inside any loop | **560** | a recursive walker calls ITSELF in its own loop to descend — that is how it works, and it flagged every recursive walker in the repo                       |
+| 2       | …excluding self-recursion     | **312** | `for (const f of walk(DIR))` puts the walk in the ITERABLE, evaluated once; `walk(X).filter(cb)` puts it in the RECEIVER. Both were counted as "in a loop" |
+| 3       | …loop BODY or callback only   | **60**  | `targets.flatMap((d) => walk(d))` walks two DIFFERENT trees once each — linear and correct                                                                 |
+| 4       | …loop-INVARIANT argument only | **8**   | tractable, and read                                                                                                                                        |
+
+Each correction is a real distinction, and every one of the three sampled false positives read
+as an obvious defect until opened — which is the whole reason for opening them.
+
+**The control failing is the most useful thing the detector said.** The pre-fix version of the file
+I optimised in V-1935 never survives version 3, because its walk sits in the ITERABLE position:
+`for (const f of tsFiles(root))`, evaluated once per `classify()` call. **The repetition was that
+`classify` itself was called sixteen times** — a caller-level repeat, not a lexical one. My control
+was never valid for the detector I was building, and it took until version 3 to notice.
+
+**The eight survivors are real instances of the shape and cost nothing.** Measured per-arm:
+
+| file                                                  | slowest arm |
+| ----------------------------------------------------- | ----------- |
+| `a-documented-error-status-is-derived-from-its-class` | 377 ms      |
+| `public-app-v205-attribution-sweep`                   | 148 ms      |
+| `astro-markup-escapes-server-data`                    | 147 ms      |
+| `every-route-is-driven-over-http`                     | 121 ms      |
+| `an-exempt-surface-that-can-drop-a-field-is-listed`   | 39 ms       |
+| `api-reference-surface-doc-parity`                    | 6 ms        |
+
+All below V-1935's 614 ms instance, none near a ceiling. `the-crypto-api-doc…` calls
+`registeredRoutes()` inside a `.filter` predicate — once per documented route, the worst-looking
+shape in the list — and runs in **1–2 ms**, because that walker reads only the four
+`billing-crypto*` files. `routeRegistered` short-circuits on first match, so twelve entries cost
+6 ms.
+
+⭐ **The generalisation worth keeping: the shape does not predict the cost.** V-1935's instance was
+expensive because of walk SIZE — 342 files, sixteen repeats, a per-character lexer on each — not
+because it was a repeated walk. Cost is `size × repeats × per-file work`, which is a measurement;
+"walker called in a loop" is a pattern, and patterns rank badly. **No fix, and no guard**: a guard
+on this shape would fire on eight sites that are all fine, which is worse than no guard.
+
+**Boundary:** the detector reads `apps`, `packages` and `scripts` test files, defines a walker
+syntactically as a function reaching `readdirSync`/`globSync`, and cannot see the caller-level
+repeat that V-1935 actually fixed — so this establishes that no LEXICALLY repeated walk in the
+suite is expensive today, and says nothing about interprocedural ones beyond the single instance
+already found and fixed. No ratchet movement; no source change.
