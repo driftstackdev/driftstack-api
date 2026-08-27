@@ -19098,3 +19098,54 @@ minute, so this identifies the contention and its owners at 07:18 and does not e
 earlier red in this thread had the same load behind it — V-1928's durations run, by contrast, was
 demonstrably taken quiet, since nothing in it exceeded 17.7%. Ratchets unchanged at 3062/3238; no
 source change.
+
+## V-1935 — the repeat timeout victim, made 2.9× cheaper instead of given a bigger timeout (2026-08-27)
+
+V-1933 deferred this deliberately: the remedy for the suite's heaviest reader is to stop doing the
+work, not to widen its allowance, and that deserved its own firing rather than being folded into a
+ratchet validation. Load is still 9.7 on 10 cores, so this is CPU-light work and the gate is
+deferred with it.
+
+**V-1933's cost figure was too low, and reading the file is what corrected it.** I had measured
+`gateFiles()` — 3053 files, 26.3 MB — and stopped. The dominant cost is a second walk:
+
+```
+for (const file of gateFiles())        // 8 gate files
+  for (const m of body.matchAll(calls))  // its patterns
+    classify(root, …)                    // walks apps/server/src ENTIRELY, per pattern
+```
+
+`classify` re-reads all **342** files under `apps/server/src` and re-runs `kindMask` — a
+per-character lexer — on every call, and it is called **16 times** on the current roster. That is
+**5,472 reads and ~70 MB lexed per run to answer 16 questions about the same unchanged bytes**,
+on top of `gateFiles()`. The `{src, mask}` pair depends only on the file, never on the pattern.
+
+Computed once per root and reused. The arm's own duration, from vitest's JSON reporter:
+
+|        | run 1      | run 2      |
+| ------ | ---------- | ---------- |
+| before | 614 ms     | 614 ms     |
+| after  | **213 ms** | **212 ms** |
+
+**2.9×**, with the sibling arm unchanged at ~150 ms because it never calls `classify`.
+
+⛔ **Wall clock said 20% and was the wrong instrument.** A single-file vitest run carries ~2.4 s of
+boot, which swamps a 400 ms saving; the per-test duration is what isolates the work from the
+harness. I nearly reported the 20%.
+
+**Proven behaviour-preserving against a known positive, not against green.** A clean run passing
+proves little when the expected result is an empty list. The construction that does prove it needs
+**two** files — the token in a COMMENT inside `apps/server/src`, plus a gate call naming it — because
+`classify` searches the source tree, not the gate file. My first attempt put the comment in the gate
+file, got `code=0, comment=0`, and passed: the offender condition requires `comment > 0`, so a
+wrongly-built positive is indistinguishable from a working detector. Built correctly it reds and
+names the token, **before and after** the change alike.
+
+**What this does and does not fix.** It does not remove the timeout risk — V-1934 established that
+as machine saturation, and no amount of local thrift survives load 24. It removes 2.9× of the work
+that made this particular test the most exposed member, which is the half that is mine to control.
+
+**Boundary:** durations measured on a machine at load ~9–18, so the absolute figures are inflated
+relative to V-1928's quiet-machine 1771 ms for the same arm and only the ratio is meaningful; and
+the cache is per-root within one test file, so it changes nothing for any other test. `it(` count
+unchanged at 2; no ratchet movement.

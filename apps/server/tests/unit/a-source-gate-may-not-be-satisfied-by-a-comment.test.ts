@@ -156,13 +156,37 @@ function tsFiles(dir: string): string[] {
   });
 }
 
+/**
+ * Per-root source + lexical mask, read and computed ONCE.
+ *
+ * `classify` is called once per gate pattern — 16 times on the current roster —
+ * and every call used to re-walk the root, re-read all 342 files and re-run
+ * `kindMask` (a per-character state machine) over 4.4 MB. That is 5,472 reads and
+ * ~70 MB of lexing per run to answer 16 questions about the same unchanged bytes.
+ *
+ * The pair depends only on the file, never on the pattern, so it is computed on
+ * the first call and reused. V-1933/V-1934 recorded this test as the suite's
+ * heaviest reader and its repeat timeout victim under machine saturation; this is
+ * that cost, removed rather than accommodated with a larger timeout.
+ */
+const maskedRoots = new Map<string, ReadonlyArray<{ src: string; mask: number[] }>>();
+
+function maskedFiles(rootAbs: string): ReadonlyArray<{ src: string; mask: number[] }> {
+  const cached = maskedRoots.get(rootAbs);
+  if (cached !== undefined) return cached;
+  const built = tsFiles(rootAbs).map((f) => {
+    const src = readFileSync(f, 'utf8');
+    return { src, mask: kindMask(src) };
+  });
+  maskedRoots.set(rootAbs, built);
+  return built;
+}
+
 /** Where a pattern's matches live across a source tree. */
 function classify(root: string, source: string, flags: string): { code: number; comment: number } {
   let code = 0;
   let comment = 0;
-  for (const f of tsFiles(resolve(REPO_ROOT, root))) {
-    const src = readFileSync(f, 'utf8');
-    const mask = kindMask(src);
+  for (const { src, mask } of maskedFiles(resolve(REPO_ROOT, root))) {
     const re = new RegExp(source, flags.includes('g') ? flags : `${flags}g`);
     let m: RegExpExecArray | null;
     while ((m = re.exec(src)) !== null) {
