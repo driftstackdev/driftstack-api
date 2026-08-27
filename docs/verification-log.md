@@ -18292,3 +18292,64 @@ real-subject mutation.
 type-check test that already carries its own `300_000` override — so there is no latent
 timeout-flake population; V-1917's red was the anomaly, not a symptom. That is a statement about
 this machine on one run, not about CI. Ratchets 3054→3055 and 3230→3231.
+
+## V-1919 — a comment contradicting its own file's assertion, and the number was mine (2026-08-27)
+
+Three prior-art checks killed three hunts before they cost anything this firing. The Zod
+mass-assignment idea died on a premise error rather than a duplicate: **Zod's default STRIPS
+unknown keys**, recorded at line 10830 of this log, so a non-`.strict()` schema drops extras
+rather than passing them through, and the `.passthrough()`/`.catchall()` sites were already
+enumerated. A catastrophic-regex hunt died on my own durations run from V-1918 — no test sits
+near the 10s ceiling, so nothing is backtracking. And the "a test file exists but is never
+collected" idea died on `no-test-file-runs-in-no-project.test.ts`, which already derives both
+projects' globs from the configs rather than restating them.
+
+Reading that last file for the duplicate check is what produced the finding. Its header says the
+two projects **"currently collect 2,862 files, which is exactly what a full run reports."** A run
+reports **3,231**. V-1877 already named this class and its cure — _a measurement in a header rots
+when it claims the PRESENT; the same measurement, dated, is a fact_ — so this is the seventh.
+
+### Sweeping the class, and the detector that failed twice
+
+Rather than fix one comment, I swept for present-tense numeric claims across all test comments.
+**The detector returned a confident zero, twice, while a known positive sat in my hand.** Both
+times `ugrep` had _errored_ — `[^.]{0,60}` and then `[^0-9]{0,40}` each expand into UTF-8 byte
+alternations that "exceed complexity limits"; stderr was uncaptured, stdout was empty, and `wc -l`
+read that as "no matches". That is verbatim a trap already in my notes, and only the
+known-positive control caught it. The rule that survives: **a negated character class with a
+bounded repeat is unusable in this grep** — do the keyword match in grep and the logic in Python.
+
+Working detector, over 77,849 comment lines in `apps/server/tests`: **44** present-tense numeric
+claims, split by whether the same figure also appears on a non-comment line of its own file —
+**19 self-enforced** (the file asserts it, so it cannot drift while the gate is green) and **25
+comment-only**. Most of the 25 are artefacts of the heuristic rather than claims: V-numbers
+(`V-1602`, `V-1268`), HTTP statuses (404, 500, 201), token counts.
+
+### Three confirmed, and the worst one was mine
+
+| file                                                           | claim                                         | reality                                                |
+| -------------------------------------------------------------- | --------------------------------------------- | ------------------------------------------------------ |
+| `admin-audit-action-cross-source-invariant.test.ts:146`        | pgEnum must hold "no value beyond the **21**" | the same file asserts **33** at lines 109, 134 and 184 |
+| `no-test-file-runs-in-no-project.test.ts:6,15`                 | "currently collect **2,862** files"           | **3,231**                                              |
+| `a-verification-log-number-resolves-to-one-finding.test.ts:11` | "There are **844** lines beginning `## V-`"   | **431** live, **1,770** with archives                  |
+
+The first is the serious one and I wrote it: earlier this session I raised that file's roster from
+21 to 33 and updated every assertion, leaving a comment thirty-seven lines above still saying 21.
+I have a note about correcting a comment and leaving the acting line lying; this is the inverse,
+and the inverse is worse — the assertions were right, so nothing could ever go red to reveal it.
+
+Checking the three sibling files edited in that same batch found them **clean, and clean in the
+right way**: `admin-audit-d025` says _"places here said '15', a number stale by eighteen"_ and
+`openapi-spec-validity` carries _"47 of 234 measured 2026-08-26, ~38 when this was written"_.
+Dated and past-tense, so they are history and cannot rot. One of four went wrong, not four.
+
+Fixed accordingly: the admin-audit comment no longer restates a count at all — it points at the
+roster the file already pins, since restating a number this file asserts is precisely what let it
+drift — and the other two are dated into history.
+
+**Boundary:** the sweep covers comment lines under `apps/server/tests` matching a small keyword
+set (`currently`, `today`, `right now`, `there are`, `as it stands`) and excludes anything
+carrying an explicit date, so a present-tense claim phrased without those words is invisible to
+it; of the 25 comment-only candidates I verified the three above by measuring their subjects and
+triaged the rest by reading, without re-measuring each. `it(` counts unchanged at 10/5/5, tsc
+clean, 16 tests pass.

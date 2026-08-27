@@ -8,7 +8,9 @@
 // V-856 also got the surrounding census wrong in every figure it reported, which
 // is why this guard measures instead of restating:
 //
-//   • It said 800 headings. There are 844 lines beginning `## V-`.
+//   • It said 800 headings. There were 844 lines beginning `## V-` when that
+//     was measured; the log grows daily, so the figure is history and the arms
+//     below re-count rather than trusting it.
 //   • It said 783 distinct. 783 is the count of headings in the canonical
 //     `## V-<n> ` form; of those, 779 numbers are distinct.
 //   • It said nine numbers repeat. Among canonical headings, three do: V-219,

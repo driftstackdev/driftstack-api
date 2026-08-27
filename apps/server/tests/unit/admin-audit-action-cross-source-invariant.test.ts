@@ -143,7 +143,8 @@ describe('W862 AdminAuditAction cross-source invariant', () => {
       );
     }
     // 2026-06-05 anti-recurrence — the pgEnum must contain NO value beyond the
-    // 21 (there are no internal-only admin actions: every admin_audit_action is
+    // roster this file pins above (there are no internal-only admin actions:
+    // every admin_audit_action is
     // written to a customer-visible audit row + must be filterable). A prior
     // subset-only check here let the DB enum lead api-types silently — migrations
     // 0057/0061/0062/0063 added 4 values the canonical schema lacked, breaking the

@@ -3,8 +3,11 @@
 // The suite is split in two. `vitest.node.config.ts` takes
 // `apps/**/tests/**/*.test.ts` (plus packages and scripts), and
 // `apps/gui-client/vitest.config.ts` takes `tests/**/*.test.tsx` under that one
-// app. Between them they currently collect 2,862 files, which is exactly what a
-// full run reports — reconciled, not assumed.
+// app. Between them they collected 2,862 files when this was written
+// (2026-08-14), which was exactly what a full run reported then — reconciled,
+// not assumed. The arms below re-derive it on every run; the count is kept as
+// history rather than as a live claim, because a restated figure rots in exactly
+// the way the DERIVED globs below are written to avoid.
 //
 // The gap those two globs leave is narrow and easy to fall into: the node
 // project matches `.test.ts` ONLY, and the jsdom project is rooted at
@@ -12,7 +15,7 @@
 // under `apps/customer-dashboard/tests` or `apps/admin-panel/tests` — is
 // collected by neither. It does not error, it does not skip, it does not appear
 // in the count. It simply never runs, and the author has no way to notice
-// except by looking for their test in the output of 2,862.
+// except by looking for their test among the thousands a run reports.
 //
 // That is the failure this file exists for, and it is worth a guard precisely
 // because the current state is CLEAN. There are no orphans today, so nothing
