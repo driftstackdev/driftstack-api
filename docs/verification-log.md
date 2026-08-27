@@ -17217,3 +17217,41 @@ treats that as the design problem it is:
 ⚠️ BOUNDARY: this covers the two force-action routes, their repo methods and the driver-teardown path.
 The six other commits in the window touch `admin-accounts.ts` — account deletion, termination reclaim,
 billing on suspension — which is a different file with its own stored audit and was not re-read here.
+
+## V-1892 — account termination: a best-effort erasure that names what it could not finish
+
+2026-08-27. No defect. The `admin-accounts.ts` delta V-1891 left unread, and a memory whose "not built"
+claim survives a feature that looks like it contradicts it.
+
+⭐ **THE MEMORY LOOKED STALE AND IS NOT — the distinction is the whole point.** A note from 2026-06-04
+records "self-service account deletion is NOT built; erasure is operator-assisted", while
+`33d8f5b15 feat(admin): real account-deletion flow (GDPR Article 17)` landed a month later. **Those are
+compatible, and checking beats assuming in both directions:** `/v1/account/me` carries GET and PATCH
+only, and the two customer `app.delete` routes are `…/proxies/:id` and `…/avatar`. No self-service
+erasure route exists, so the claim holds — and its "operator-assisted" framing is now MORE true, not
+less. Second expiry check this session that passed.
+
+✅ **THE ADMIN FLOW IS SOUND.** `POST /v1/admin/accounts/:id/delete` is gated twice, though differently
+from the force-actions pair audited in V-1891: `app.requireScope('driftstack_internal_admin')` in the
+preHandler plus `throwIfMissingScope` in the service, consistent with its `suspend`/`unsuspend`
+siblings. It runs through `withAudit` under the `account.deleted` action.
+
+⭐⭐ **THE DESIGN QUESTION ON AN IRREVERSIBLE OPERATION IS WHAT HAPPENS TO THE PARTS THAT FAIL, and this
+answers it explicitly.** Status is set first; the reclaims — sessions, web sessions, API keys, webhooks
+— are best-effort and never fail the delete, because "the account was terminated" is true whichever did
+not land. Each failure logs a structured `account_reclaim_failed` event carrying the NAMED step, and
+the code says why the name matters: only the step tells an operator "whether live API keys are still
+authenticating or a browser is merely still running". The logging is itself wrapped and swallowed, so
+recording a failure cannot become a second failure.
+
+⭐⭐⭐ **AND ONE RECLAIM STEP IS SINGLED OUT FOR A REASON WORTH REPEATING.** V-727 added
+`revokeAllMintedByAccount` because the ordinary revoke filters on `account_id`, while **a team member's
+keys live on the OWNER's account and authenticate as the owner** — terminating the member left them
+working. The comment names the consequence precisely: this is the step "whose silent failure is NOT
+masked by the auth-path 'deleted' check", because those credentials authenticate as an account that is
+still active. Every other reclaim degrades into something the auth path refuses anyway; this one
+degrades into a live credential.
+
+⚠️ BOUNDARY: this audits the code path. Whether `account_reclaim_failed` is actually alerted on — as
+opposed to merely logged queryably — is an operational question outside the repo, and the BYOK purge is
+deliberately deferred to a 30-day sweeper per the privacy policy rather than done synchronously here.
