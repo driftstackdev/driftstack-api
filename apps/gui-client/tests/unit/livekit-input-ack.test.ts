@@ -5,6 +5,7 @@ import {
   MAX_PENDING_INPUT_RECEIPTS,
   pendingInputReceiptCount,
   registerInputReceipt,
+  rejectedInputAckCounts,
   resetInputReceipts,
   subscribeInputReceiptIssues,
 } from '../../src/lib/livekit-input-ack';
@@ -103,6 +104,52 @@ describe('per-Room committed input receipts', () => {
     expect(handleInputAck(r, { type: 'page_state', id: 'tap_2', status: 'applied' })).toBe(false);
     expect(handleInputAck(r, { type: 'inputAck', id: 'late_1', status: 'applied' })).toBe(true);
     expect(pendingInputReceiptCount(r)).toBe(1);
+    resetInputReceipts(r);
+  });
+
+  it('REPORTS a rejected inputAck instead of dropping it silently', () => {
+    const r = room();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    registerInputReceipt(r, 'tap_9', 10_000);
+
+    // Behaviour is UNCHANGED and that is deliberate: a frame claiming `inputAck`
+    // while carrying a `tabListUpdate` field is still refused, still leaves the
+    // receipt pending. This arm is about what the refusal SAYS, not what it does.
+    expect(
+      handleInputAck(r, {
+        type: 'inputAck',
+        id: 'tap_9',
+        status: 'applied',
+        activeTabId: 'must-not-be-accepted',
+      }),
+    ).toBe(true);
+    expect(pendingInputReceiptCount(r)).toBe(1);
+
+    // The diagnostic that did not exist. `unexpected-fields` is the reason that
+    // means PROTOCOL DRIFT — the harness grew a field — as opposed to one bad frame.
+    expect(rejectedInputAckCounts(r)).toEqual({ 'unexpected-fields': 1 });
+    expect(warn).toHaveBeenCalledTimes(1);
+    // The keys are the whole diagnostic: without them a reader knows a frame was
+    // refused but not which field is new, which is the only actionable part.
+    expect(warn.mock.calls[0]?.[0]).toContain('keys=[activeTabId,id,status,type]');
+
+    // Deduped per reason: a device emitting the drifted frame on EVERY input must
+    // not turn the console into the failure. Counter still climbs.
+    handleInputAck(r, {
+      type: 'inputAck',
+      id: 'tap_9',
+      status: 'applied',
+      activeTabId: 'again',
+    });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(rejectedInputAckCounts(r)).toEqual({ 'unexpected-fields': 2 });
+
+    // A different fault is a different reason, and IS worth its own warning.
+    handleInputAck(r, { type: 'inputAck', id: 'tap_9', status: 'not-a-status' });
+    expect(rejectedInputAckCounts(r)['bad-status']).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(2);
+
+    warn.mockRestore();
     resetInputReceipts(r);
   });
 

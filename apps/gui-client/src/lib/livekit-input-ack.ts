@@ -29,6 +29,18 @@ interface ReceiptState {
    * minutes apart still stacked to the alarm threshold.
    */
   lastMissAt: number;
+  /**
+   * Why inputAck frames were REJECTED, reason -> count. The rejection itself is
+   * deliberate (see `handleInputAck`); what was wrong is that it was SILENT.
+   *
+   * A rejected ack never settles its receipt, so the receipt times out and the
+   * badge says "did not confirm" about an input the device DID confirm. If the
+   * cause is a protocol change rather than a bad frame, that is every ack, and
+   * the badge is permanent with nothing anywhere saying why.
+   */
+  rejectedAcks: Map<string, number>;
+  /** Reasons already warned about, so a per-frame fault cannot spam the console. */
+  warnedReasons: Set<string>;
 }
 
 export const INPUT_RECEIPT_DEADLINE_MS = 5_000;
@@ -79,6 +91,8 @@ function stateFor(room: Room): ReceiptState {
       settledSequence: 0,
       missedAcks: 0,
       lastMissAt: 0,
+      rejectedAcks: new Map(),
+      warnedReasons: new Set(),
     };
     states.set(room, state);
   }
@@ -180,16 +194,56 @@ export function cancelInputReceipt(room: Room, id: string): void {
   state.pending.delete(id);
 }
 
+function classifyRejection(record: Record<string, unknown>): string {
+  if (Object.keys(record).length !== 3) return 'unexpected-fields';
+  if (typeof record.id !== 'string' || !INPUT_ID.test(record.id)) return 'bad-id';
+  return 'bad-status';
+}
+
+function noteRejectedAck(
+  state: ReceiptState,
+  reason: string,
+  record: Record<string, unknown>,
+): void {
+  state.rejectedAcks.set(reason, (state.rejectedAcks.get(reason) ?? 0) + 1);
+  if (state.warnedReasons.has(reason)) return;
+  state.warnedReasons.add(reason);
+  // `unexpected-fields` is the one that means PROTOCOL DRIFT rather than a bad
+  // frame, so name the keys — that is the whole diagnostic a future reader needs.
+  const detail =
+    reason === 'unexpected-fields' ? ` keys=[${Object.keys(record).sort().join(',')}]` : '';
+  console.warn(`[input-ack] rejected inputAck frame: ${reason}${detail}`);
+}
+
+/** Rejected-ack counts by reason. Diagnostic surface; empty when nothing was rejected. */
+export function rejectedInputAckCounts(room: Room): Record<string, number> {
+  const state = states.get(room);
+  if (state === undefined) return {};
+  return Object.fromEntries(state.rejectedAcks);
+}
+
 export function handleInputAck(room: Room, value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   if (record.type !== 'inputAck') return false;
+  // ⛔ The strict shape is INTENTIONAL and stays. `type` alone does not identify a
+  // frame: a `tabListUpdate` field riding on a frame that CLAIMS `type: 'inputAck'`
+  // would otherwise settle a receipt from a frame that is not one, which
+  // `must-not-be-accepted` in the unit test pins on purpose.
+  //
+  // ⚠️ What was wrong here was not the rejection, it was the SILENCE. A rejected
+  // ack leaves its receipt pending until the deadline, so it reads to the customer
+  // as "Device did not confirm the last input" — and if the cause is the harness
+  // adding a field rather than one bad frame, it is EVERY ack, forever, with no
+  // diagnostic anywhere. Same signature as the three defects fixed on 2026-08-26:
+  // a value refused, a frame dropped, and nothing said. So: still reject, but say so.
   if (
     Object.keys(record).length !== 3 ||
     typeof record.id !== 'string' ||
     !INPUT_ID.test(record.id) ||
     (record.status !== 'applied' && record.status !== 'dropped' && record.status !== 'failed')
   ) {
+    noteRejectedAck(stateFor(room), classifyRejection(record), record);
     return true;
   }
   const state = states.get(room);
