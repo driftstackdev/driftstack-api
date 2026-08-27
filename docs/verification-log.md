@@ -20562,3 +20562,40 @@ down: this was a stale JUSTIFICATION.
 
 No code change: the comment is accurate and its future-tense "a future sweeper job" is exactly the
 honesty V-797 praised while faulting the customer page for promoting it to a guarantee.
+
+## V-1971 — scope enforcement holds, and my clean bill was an empty detector (2026-08-27)
+
+Expiry-checked a note marked RESOLVED 2026-05-26 ("API-key scope enforcement implemented across all
+wired customer-write routes"). **A resolved note expires like an open one, and its residue was already
+moot** — its single deferral, `saved-proxies`, names a route retired outright in `fc8fb3de2`.
+
+⛔ **My first measurement reported "0 authed mutating routes lack a scope gate" and was meaningless.**
+The control — how many routes did the matcher SEE — returned **0 of 173**. The registration regex matched
+nothing at all, so the zero described the regex, not the routes. **I would have reported a clean bill
+from a detector that never fired.** Rewritten with a line-window matcher whose control passes 173/173.
+
+**With a working instrument: 99 of 173 mutating routes are `requireAuth`-gated, and 14 of those carry no
+inline `requireScope`. All fourteen are explained, by four different mechanisms:**
+
+- **Ten enforce at the service layer** — `webhooks` (6), `api-keys` (3), `email-preferences` (1) — exactly
+  the set the 2026-05-26 note recorded as "already enforced at the service/route layer".
+- **Three are auth flows** (`auth.ts` mfa/step-up, `auth-cli` bind-device-code, `oauth` authorize/complete)
+  where the caller holds a web session rather than an API key, so the scope concept does not apply.
+- **One delegates to a COMPOSITE preHandler.** `agent-sessions-transport-report` uses
+  `controlKeyOrAccountAuth`, which calls `requireAuth` then `requireScope('read:sessions')` internally —
+  deliberately the read scope, per its own comment. **My matcher reads the inline preHandler array, so a
+  route that composes its auth looks unscoped.**
+
+⭐ **That last one is the reusable caveat: a per-route gate check sees the registration, not the call
+graph.** Any route whose auth is factored into a helper reads as ungated, and the more carefully a
+codebase factors shared auth, the more false positives this class of check produces —
+[[feedback_a_grep_for_the_canonical_helper_accuses_the_strictest_code]] in a new place.
+
+⛔ **A separate false alarm, self-inflicted, worth recording because it cost a detour:** checking file by
+file I found `mfa` with zero `requireScope` sites and briefly read it as a regression. **`routes/mfa.ts`
+does not exist** — the file is `account-mfa.ts` and it does use `requireScope('read')`. I derived eight
+filenames from the note's shorthand instead of enumerating the directory. **A grep against a filename
+you guessed returns absence, not evidence.**
+
+No action: enforcement is intact, and `route-auth-coverage-invariant` already carries an enumerated
+exemption roster (35 public, 1 manual-auth, 54 disabled) for the auth dimension.
