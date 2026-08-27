@@ -42,11 +42,26 @@ const noopRelaunch = (): Promise<void> => Promise.resolve();
  */
 const currentVersion = (): Promise<string> => Promise.resolve('0.0.1');
 
+/**
+ * These fixtures exercise the INSTALL path, so they stand for a platform that
+ * may replace its own bundle (Windows/Linux). The macOS half — check permitted,
+ * install denied — is covered in
+ * `macos-is-told-about-updates-it-cannot-install.test.tsx`.
+ *
+ * ⛔ Required rather than optional on purpose. The sibling comment above records
+ * an arm that passed for the wrong reason because `currentVersion` was absent
+ * and the resulting TypeError was swallowed by the same catch. Making this
+ * field mandatory means the compiler names every fixture that has to decide,
+ * instead of a default silently deciding for them.
+ */
+const canSelfInstall = (): boolean => true;
+
 describe('V-243 checkForUpdate', () => {
   it('returns null when up-to-date (check resolves null)', async () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(null),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     expect(await checkForUpdate(deps)).toBeNull();
@@ -56,6 +71,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.reject(new Error('not allowed on the configured platform / offline')),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     // ⛔ STUBBED, and the reason is the finding. A rejected `check()` falls
@@ -86,6 +102,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ version: '0.1.0', currentVersion: '0.1.0' })),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     expect(await checkForUpdate(deps)).toBeNull();
@@ -95,6 +112,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ version: '0.0.9', currentVersion: '0.1.0' })),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     expect(await checkForUpdate(deps)).toBeNull();
@@ -104,6 +122,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate()),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     const upd = await checkForUpdate(deps);
@@ -117,6 +136,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate({ body: undefined })),
       currentVersion,
+      canSelfInstall,
       relaunch: vi.fn(noopRelaunch),
     };
     const upd = await checkForUpdate(deps);
@@ -128,6 +148,7 @@ describe('V-243 checkForUpdate', () => {
     const deps: UpdaterDeps = {
       check: () => Promise.resolve(fakeUpdate()),
       currentVersion,
+      canSelfInstall,
       relaunch,
     };
     const upd = await checkForUpdate(deps);
@@ -150,6 +171,7 @@ describe('V-243 checkForUpdate', () => {
           }),
         ),
       currentVersion,
+      canSelfInstall,
       relaunch,
     };
     const upd = await checkForUpdate(deps);

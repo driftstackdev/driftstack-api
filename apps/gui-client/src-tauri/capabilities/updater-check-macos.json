@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/macOS-schema.json",
+  "identifier": "updater-check-macos",
+  "description": "macOS may CHECK for updates and NOTHING else. The check runs in Rust, so unlike a webview fetch it is not subject to CORS -- which is why the macOS customer was never told a new version existed: the manifest URL redirects to release-assets.githubusercontent.com, which sends no Access-Control-Allow-Origin, so the browser rejected the response before the app saw it and the catch resolved to null. Download and install are deliberately NOT granted, so the security property of updater-windows-linux still holds here: a minisign-only artifact cannot replace the stable OS-signed bundle and change its code requirement. The UI renders this platform as download-only.",
+  "windows": ["main"],
+  "permissions": ["updater:allow-check"],
+  "platforms": ["macOS"]
+}

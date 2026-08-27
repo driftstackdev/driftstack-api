@@ -73,9 +73,33 @@ export interface UpdaterDeps {
    * there is nothing to compare against and no update is offered.
    */
   currentVersion: () => Promise<string | null>;
+  /**
+   * Whether THIS platform is allowed to replace its own bundle.
+   *
+   * ⛔ False on macOS, and that is a capability fact rather than a preference:
+   * `updater-check-macos` grants `updater:allow-check` and nothing else, so
+   * `check()` resolves but `downloadAndInstall()` is denied at the IPC layer.
+   * Without this, a successful check would hand the UI an Install button whose
+   * only possible outcome is a permission error.
+   */
+  canSelfInstall: () => boolean;
+}
+
+/**
+ * macOS detection, matching the convention already used by TitleBar and
+ * ShortcutsCheatsheet. Injected through `UpdaterDeps` rather than read inline so
+ * BOTH branches are reachable from a test — the install path and the
+ * download-only path differ only by this bit.
+ */
+function platformCanSelfInstall(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const mac =
+    navigator.platform.startsWith('Mac') || /Mac OS X|Macintosh/.test(navigator.userAgent);
+  return !mac;
 }
 
 const defaultDeps: UpdaterDeps = {
+  canSelfInstall: platformCanSelfInstall,
   currentVersion: async () => {
     try {
       const { resolveAppVersion } = await import('./app-version');
@@ -142,12 +166,37 @@ export async function checkForUpdate(
   if (!update) return null;
 
   const offered = update;
+  // ⭐ THE macOS PATH, and it is why this function exists in this shape.
+  //
+  // macOS holds `updater:allow-check` ONLY. The check itself is Rust-side, so it
+  // is not subject to the webview CORS rule that silently broke the manifest
+  // fallback (GitHub's release-asset redirect sends no Access-Control-Allow-Origin,
+  // so `fetch` rejected before the app could read the version and the customer was
+  // told nothing). Checking works here; installing must not be offered, because
+  // the capability denies it and the button could only ever fail.
+  const canInstall = deps.canSelfInstall();
   // Defend against a botched/rolled-back manifest that lists the installed
   // version (or older): Tauri's check() USUALLY filters, but with no app-side
   // guard a same/older manifest would render an "Update X available (current X)"
   // banner whose Install reinstalls the same build. Only offer a strictly NEWER
   // version. (audit)
   if (!isNewerVersion(offered.version, offered.currentVersion)) return null;
+
+  if (!canInstall) {
+    return {
+      version: offered.version,
+      currentVersion: offered.currentVersion,
+      notes: offered.body ?? null,
+      downloadOnly: true,
+      downloadUrl: RELEASES_URL,
+      // Same contract as `checkManifestOnly`: never silently no-op, so a caller
+      // that ignored `downloadOnly` fails loudly instead of appearing to update.
+      install: () =>
+        Promise.reject(
+          new Error('This platform installs updates manually — open the releases page.'),
+        ),
+    };
+  }
 
   return {
     version: offered.version,
