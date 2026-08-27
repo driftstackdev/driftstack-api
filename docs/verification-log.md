@@ -18957,3 +18957,57 @@ in `docs/internal/OPEN-ITEMS.md`, which is dirty with A2's rows and not mine to 
 file's imports and helpers; I did not run the test, reproduce the failure, or read its body, so the
 diagnosis is a strong lead for whoever owns it and not a confirmed root cause. Ratchets unchanged at
 3061/3237.
+
+## V-1932 — nine correlators, one shared guard, and the token sweep that accused two of them (2026-08-27)
+
+Closing V-1930's stated boundary first: its closure followed identifiers _within_
+`harness-control-protocol.ts`, so an imported schema embedded in an ingress frame would have been
+invisible. The file imports **only `zod`** — no schema comes from elsewhere, so that closure was
+already complete and V-1930's zero holds unqualified.
+
+Then the sibling axis, since V-1930 measured strings and an unbounded **array** of bounded strings
+is the same defect differently spelled. Scoped to the same 66-schema ingress closure: **5**
+`z.array()`/`z.record()`, **all 5 bounded**, controls passing. Two apparent anomalies both
+dissolved on reading — `.strict()` appearing 78 times against 41 `z.object(` is my own bad
+comparison (multi-line chains put `.strict()` on its own line; 58 of the 78 are continuations), and
+the single `.passthrough()` is `IntentResultHeaderSchema`, a documented _"cheap routing header used
+before any full-envelope parse"_. Its one consumer reads only the three bounded identity fields and
+then re-parses the **raw frame** strictly, so the passed-through keys are never read.
+
+### The family that read exposed
+
+That consumer carries a cross-session spoof guard whose comment says it "mirrors the identical
+guard the six sibling request-correlators already carry". A shared fleet connection carries every
+session on a node, so a frame echoing a known request id from a different session must be dropped —
+settling it would hand one account's DOM, screenshot, extracted text or cookie jar to another
+account's in-flight request.
+
+**Sweeping for `sessionId` reported two gaps, and both were mine, not the code's:**
+
+| correlator                        | sessionId compares | truth                                                                                                                                                    |
+| --------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `trim-profile-request-correlator` | 0                  | keys on **`profileId`** — "a profile at rest has no live session" — and drops on `profileId !== pending.profileId`, logging "cross-account spoof signal" |
+| `session-readiness-correlator`    | 0                  | **connection-local**: one instance per `FleetControlConnection`, so ownership is structural and there is no cross-request correlation to spoof           |
+
+The guard is keyed on the CORRELATION KEY, not on `sessionId`. I swept the token and it accused the
+two members that vary — the third standing lesson, on a sweep I wrote minutes after invoking it.
+
+**What was actually missing.** Eight correlators have their own test naming spoof or cross-session,
+so each is individually covered. Nothing covers the FAMILY: every one of those tests opens only its
+own file, so a tenth correlator added without a guard is invisible to all of them — the same shape
+as V-1926, where one broadcast site was positively pinned and nothing prevented a second.
+
+`every-correlator-drops-a-key-mismatched-frame.test.ts` freezes the roster **by file and by key**,
+reads the roster from disk so a tenth is seen, requires each exemption to carry a reason, and
+includes a matcher self-test — without which the population arm would pass just as happily against
+a matcher that returned true for everything. That arm also pins the discrimination directly:
+trim-profile satisfies a `profileId` check and must NOT satisfy a `sessionId` one.
+
+Proven on real subjects: removing the real guard from `harness-dispatch-correlator` reds **2** arms
+(the population arm and the self-test that names that file as a known positive), and dropping a
+tenth correlator into `services/` reds the roster arm alone.
+
+**Boundary:** the matcher is textual over a whitespace-normalised body, matching `key !==
+pending.key` / `target.key` in either order, so a guard written through a helper call or an early
+`return` inside a destructured comparison would not be recognised — it is conservative, accusing a
+real guard it cannot see rather than passing one that is absent. Ratchets 3061→3062 and 3237→3238.
