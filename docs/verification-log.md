@@ -12804,3 +12804,61 @@ defective.** Whether a comment can inflate a given count depends on what each on
 that needs the same per-file reading V-2000 needed. Naming the population is the useful half; calling it a
 defect list without reading it is the error V-1547 recorded (`admin-*` by filename) and the one V-2000
 repeated in miniature.
+
+## V-2003 — the self-excluder population judged: six, all reasoned, and one of my own numbers was a token collision (2026-08-27)
+
+2026-08-27. V-2002 named a population and explicitly declined to judge it — "measured but not judged". This
+closes that, by reading each member.
+
+⛔ **First, my own count was wrong, in exactly the way the third standing lesson names.** I swept for the
+TOKEN `SELF` and reported 7 self-excluding guards. `every-legal-clause-citation-resolves` uses
+`const SELF = /\bthis (DPA|AUP|Agreement|Policy|Addendum|Section)\b/i` — a regex for **self-referential
+clause language**, so a citation saying "this Agreement" resolves to its own document. It excludes no file
+and has nothing to do with the class. **The population is 6.** Sweeping the shape here would have meant
+matching a file-path comparison, not an identifier name.
+
+**All six are reasoned, and two are stronger than mine.**
+
+```
+a-source-gate-may-not-be-satisfied-by-a-comment  4-way per-char mask (Code|Str|Comment|Regex), calibrated
+a-test-arm-may-not-hide-all-its-assertions       boolean codeMask(src), matches filtered by mask[index]
+the-egress-claim-gate-has-one-definition         exclusion carries a NOTE and two mutation proofs
+test-fixtures-never-seed-unconvertible-secrets   parser exposed as secretsInSource(src,label) so a test drives it
+a-walk-that-swallows-a-missing-root-does-not-spread   mine (V-2000) — comment-aware, NOT string-aware
+```
+
+⭐ **The same rule is independently rediscovered in at least three of them.** The walk guard: _"a fixture
+demonstrating the pattern is not an instance of the debt"_. The fixtures guard: _"a guard that flags its own
+example reports a defect that does not exist — which it did on the first run"_. V-923's header records the
+same distinction as a **calibration** result, having found that lumping strings with comments reported three
+legitimate route-registration gates as defects. Three statements of one rule, each encoded for one path.
+
+### The block-comment blindness, tested for liveness rather than asserted
+
+`codeOf` has **5 independent definitions** and every one strips `//` lines only — V-1565 recorded that
+limitation and it still holds. Counting spellings of "is this match in code?" across the repo: \*\*5 `codeOf`
+
+- 2 maskers + my line-prefix filter = 8\*\*, differing in STRENGTH rather than in history. That makes it
+  unlike the `uuidFromPrefixedId` family (12 copies, 4 spellings, every one justified by its own git history);
+  here the weakest and strongest answer the same question.
+
+**Boundary: each of the 5 `codeOf` users' own pattern, applied to its own subject files, counting matches
+that fall inside a `/* */` block.**
+
+```
+req.guiControlKeyAuthorized = true   agent-sessions.ts (89 block comments)   1 match,  0 in a comment
+publicEndpoint(                      webhooks.ts                             5 matches, 0 in a comment
+createIdempotent({                   billing-crypto.ts                       1 match,  0 in a comment
+throw new BundledLlm*Error           agent-sessions.ts                       2 matches, 0 in a comment
+export class X extends ApiError {    errors.ts — 2 block comments, 0 braces
+```
+
+**Zero live instances. The hazard is latent in all five, not active in any.** The status-code guard is the
+one with real teeth if it ever goes live: it **brace-counts** from a class declaration to find `status:`, so
+a single unbalanced brace inside a block comment in `errors.ts` would make it read the wrong class body and
+pin the wrong code. errors.ts has two block comments and neither contains a brace — checked, not assumed.
+
+**No code changed.** The consolidation V-2002 named is now better evidenced — 8 spellings, three
+independent statements of one rule — but it touches six guards that each need re-proving by mutation, and
+a latent hazard with zero live instances does not justify that on today's evidence. Recorded so the case is
+cumulative rather than re-derived.
