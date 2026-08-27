@@ -19011,3 +19011,43 @@ tenth correlator into `services/` reds the roster arm alone.
 pending.key` / `target.key` in either order, so a guard written through a helper call or an early
 `return` inside a destructured comparison would not be recognised — it is conservative, accusing a
 real guard it cannot see rather than passing one that is absent. Ratchets 3061→3062 and 3237→3238.
+
+## V-1933 — the same test twice, which refutes what V-1929 said about where the stalls land (2026-08-27)
+
+The gate validating V-1932's ratchet came back red on
+`a-source-gate-may-not-be-satisfied-by-a-comment` — **`Test timed out in 10000ms`**, the same test
+and the same arm that timed out in V-1927. The ratchet itself is validated: 3238 files collected
+against `EXPECTED_TEST_FILES_ALL = 3238`.
+
+**Two timeouts of the SAME test in seven full runs is concentration, and V-1929 said the opposite.**
+That entry characterised the failures as landing "wherever the scheduler happens to squeeze". With
+one data point that was the honest reading; with two on one test it is wrong, and the correction
+matters because it moves this from an untargetable property of the suite to a property of one test.
+
+**What that test actually costs, measured.** It reads **every** `*.test.ts` under `apps` and
+`packages` — **3053 files, 26.3 MB** — to apply a two-condition filter that selects **8**. That is
+O(whole suite) work per run, in a suite that grows daily; I added six files to it myself today.
+Being the heaviest reader makes it the most exposed member under pressure, which is a cause of
+concentration rather than a coincidence.
+
+**One hypothesis tested and refuted.** If the exposure were I/O, competing readers should reproduce
+it. Timed in isolation across five runs: **1414–1510 ms** after a 2458 ms warm-up — stable. With
+four concurrent processes reading the same 26 MB: **1455 ms**, no slowdown at all; the page cache
+absorbs it. So the stall is not I/O starvation, and the real condition — ten to sixteen CPU-bound
+vitest workers each with its own heap — is one I have not reproduced outside a full run.
+
+**What stands from V-1928 and what does not.** The margin measurement stands: this test sits at
+17.7% of its ceiling on a quiet machine, the highest ratio in the suite, and no test exceeds 50% —
+so quiet-machine profiling still cannot rank fragility. What does not stand is V-1929's inference
+that the failures are unlocalised. They are localised, on the suite's single largest reader, and
+that is a target rather than a shrug.
+
+**Not fixed here.** The remedy is to stop reading 3053 files to find 8 — the filter's first
+condition (`function \w+\(re: RegExp\): boolean`) could gate a cheap pre-filter — but that rewrites
+a pre-existing V-923 guard while the suite is red, and the change deserves its own firing with its
+own mutation proof rather than being folded into a ratchet validation.
+
+**Boundary:** two observed timeouts across seven `verify-suite` runs at three different commits on
+one machine, so this establishes concentration on that test and its workload, not a rate, and not
+which contended resource produces the stall — I refuted I/O and did not replace it with a measured
+cause. Ratchets unchanged at 3062/3238.
