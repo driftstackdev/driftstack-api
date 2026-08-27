@@ -16873,3 +16873,47 @@ and the two rosters I traced to their owners were the admin-audit action enum an
 paths. I did not trace the other nine, and on this evidence the right expectation is that most also
 have an owner elsewhere — which is why the 11 is recorded here as a discarded instrument rather than a
 backlog.
+
+## V-1883 — auditing session-proxy end to end: three documented claims verified, and one live risk probed
+
+2026-08-27. No defect. The route with the least test coverage in the repo, audited in full; its own
+documentation holds, and the one property that is live today was measured rather than reasoned about.
+
+⭐ **TARGET CHOSEN BY MEASUREMENT, AFTER THE FIRST MEASUREMENT WAS WRONG.** Ranking route files by how
+many test files reference them, `account-bundled-llm` looked like the thinnest at 1. It is not: my
+column counted references to `routes/<basename>`, and tests reference route PATHS. Re-derived from each
+file's registered `'/v1/…'` literals, that surface has **23** test files and the genuine thinnest is
+`session-proxy.ts` — 159 lines, one path, 6 files.
+
+✅ **ITS THREE DOCUMENTED CLAIMS ALL HOLD AT HEAD**, checked rather than taken from the comments:
+
+- `applyToSession()` / `releaseFromSession()` have no callers — the only mentions outside their own
+  module are two comments. **So the SOCKS5 backend is unreachable over HTTP by construction**, which is
+  a second, independent reason the SSRF in V-1878 was latent, alongside the guard that now blocks it.
+- `_service` is destructured at line 81 and never used; the POST validates and throws unconditionally.
+- The four secret-handling requirements (tmpfs-only, AES-256-GCM envelope, hashed config for audit,
+  zeroing on session-end) are genuinely **absent** from `services/proxy-backends/` — 0 matches. V-1005
+  reframed them from "the service layer is responsible for" to a REQUIREMENT, and that reframing is
+  still the accurate one.
+
+⭐⭐ **THE ONE LIVE PROPERTY, AND IT IS SAFE FOR A REASON WORTH WRITING DOWN.** The route receives SOCKS5
+passwords and WireGuard private keys in its body even though it never dispatches, so the question is
+whether `new ValidationError(parsed.error.flatten())` can quote them back. **Zod's `flatten()` does
+quote the received value for some issue kinds** — a plain `z.enum` mismatch renders "received
+'<value>'". Probed against the REAL schema with a marker in `proxy.type`, in a wrong-typed `password`,
+and as an unrecognised key: **the marker appears in none of them.** ⭐ And the probe was proved able to
+see a leak BEFORE its zeros were believed — a `z.enum` control and a `.strict()` unrecognised-key
+control both surface the marker.
+
+⭐ **The mechanism is incidental, which is the finding.** `ProxyConfigSchema` is a
+`z.discriminatedUnion('type', …)`, chosen for an unrelated reason (it stops `{type:'socks5',
+openvpn:{…}}` mixing), and a discriminator error names only the expected options: "Invalid discriminator
+value. Expected 'socks5' | 'openvpn' | 'wireguard'". **Refactoring that union to `z.enum` plus a
+refinement — a natural-looking simplification — would start echoing rejected values out of a body
+carrying a private key.** The header carried the warning "do not echo body fields" as advice; it now
+carries why the warning currently holds and what would break it.
+
+⚠️ BOUNDARY: this covers the route layer's own error path for its own schema. Errors raised further in
+(a framework 4xx, a serializer) are the error-handler's, whose 5xx no-leak path has its own guard;
+2xx bodies have another. Neither sweeps a 400 that quotes input, which is the gap this probe filled by
+hand for one route rather than for the population.

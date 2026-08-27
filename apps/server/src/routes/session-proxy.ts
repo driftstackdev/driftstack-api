@@ -54,6 +54,24 @@
 // reaches a backend today, but a ValidationError that quoted the body
 // would put a SOCKS5 password or a WireGuard private key into a client
 // response and every log aggregator behind it.
+//
+// ⭐ 2026-08-27 — that warning HOLDS today, and the reason is worth knowing
+// because it is incidental rather than deliberate. The only error this route
+// can raise from customer input is `new ValidationError(parsed.error.flatten())`,
+// and Zod's `flatten()` DOES quote the received value for some issue kinds — a
+// plain `z.enum` mismatch renders "received '<value>'". `ProxyConfigSchema` is a
+// `z.discriminatedUnion('type', …)`, chosen further up for an unrelated reason
+// (it stops `{type:'socks5', openvpn:{…}}` mixing), and its discriminator error
+// names only the EXPECTED options: "Invalid discriminator value. Expected
+// 'socks5' | 'openvpn' | 'wireguard'". Probed against the real schema with a
+// marker value in `proxy.type`, in a wrong-typed `password`, and as an
+// unrecognised key: the marker reaches the flattened error in none of them, and
+// the probe was proved able to see a leak first (a `z.enum` control does echo).
+//
+// ⛔ So the protection rests on the union STAYING discriminated. Refactoring it
+// to `z.enum` plus a refinement — a natural-looking simplification — would start
+// echoing rejected `type` values out of a body that also carries a SOCKS5
+// password and a WireGuard private key.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { ProxyConfigSchema, SessionEgressConfigSchema } from '@driftstack/api-types';
