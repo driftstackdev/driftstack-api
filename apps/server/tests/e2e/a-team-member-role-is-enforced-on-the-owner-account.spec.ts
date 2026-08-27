@@ -12,6 +12,35 @@
 // `PUT /v1/account/me/organization` — had a behavioural test. The rest were prose
 // plus a source-level guard.
 //
+// ⛔ 2026-08-26 — THAT MEASUREMENT IS STALE, AND IT READS AS CURRENT. It was true
+// when written. It is not true now: all eleven sites have behavioural arms today,
+// nine of them with an explicit admin-allowed positive control. The map, so the
+// next reader does not re-derive it —
+//
+//   account-me.ts:409          account-organization-team-effective-account (it.each)
+//   admin.ts:70                team-rbac-auth-path 1457 / 1401
+//   agent-sessions.ts:2034     agent-sessions-routes 1123 / 1105
+//   agent-sessions.ts:2576     agent-sessions-routes 1082
+//   email-preferences.ts:79    team-rbac-auth-path 711 / 664 (+733, read is role-agnostic)
+//   webhooks.ts:33             team-rbac-auth-path 1363 / 1320; webhook-replay-customer 146 / 87
+//   sessions.ts:57             team-rbac-auth-path 1073 (live ops helper, 9 call sites)
+//   sessions.ts:256            team-rbac-auth-path 941 / 896
+//   sessions.ts:358            sessions 1065 / 1087
+//   sessions.ts:821            team-rbac-auth-path 1030 / 976
+//   profiles.ts:64             team-rbac-auth-path 1285 / 1243
+//
+// A header that counts the suite around it decays as that suite improves, and it
+// decays SILENTLY — nothing reds when the gap it describes gets closed. A reader
+// trusting the sentence above would have written ten redundant tests. Left in
+// place rather than deleted because the file's reason for existing is historical,
+// but it is history, not a measurement of today.
+//
+// ⚠️ What this spec still uniquely provides: it is the only one of these that
+// drives a REAL invite-accept against Postgres, so the membership-role LOOKUP is
+// witnessed here. The eleven integration arms inject the role through the
+// in-memory auth repo (`setTeamMemberships`), which exercises the branch, not the
+// lookup. Both halves are needed and only this half is e2e.
+//
 // So this drives the real flow: seed an owner and an invitee, create an invite with
 // role 'member', accept it through the API, then have the member act on the owner's
 // account with the header and attempt operations that require 'admin'.

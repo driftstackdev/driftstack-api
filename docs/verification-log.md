@@ -15957,3 +15957,56 @@ status, no prose — and search for that too.
 ⭐ Recorded because the correction is worth more than the original entry. A blind spot found twice is
 a fact about the instrument; a rule that was written down, was correct, and did not fire is a fact
 about how I read my own notes, and only the second one changes anything.
+
+## V-1862 — the team-admin role gate is closed 11/11, and a third way my searches lie
+
+2026-08-26. No defect in the product. One stale header corrected, one population closed, and the
+instrument question from V-1860/V-1861 settled by measurement rather than by another opinion.
+
+**THE POPULATION IS CLOSED.** All eleven `effective.role !== 'admin'` sites across seven route files
+have behavioural arms; nine carry an explicit admin-allowed positive control, which is what separates
+"the role is bound" from "team access is blocked outright" — a distinction invisible from inside a
+refusal arm alone. The full map is now in the header of
+`a-team-member-role-is-enforced-on-the-owner-account.spec.ts` rather than restated here.
+
+⛔ **THE HEADER I CORRECTED WAS TRUE WHEN WRITTEN, AND WRONG TO READ TODAY.** V-1041 recorded that of
+eleven sites, exactly one had a behavioural test and the rest were prose plus a source-level guard.
+The suite has since closed all eleven — and nothing reds when a gap a comment describes gets filled,
+so the sentence decayed silently while reading as current. **A reader trusting it would have written
+ten redundant tests.** Corrected in place with the site→witness map, kept rather than deleted, and
+relabelled as history.
+
+⭐⭐ **A THIRD MECHANISM BY WHICH SEARCHING FOR A WITNESS PRODUCES A FALSE NEGATIVE.** I reported
+`account-me.ts:409` as behaviourally unwitnessed inside this gate. Mutation caught it **five times** —
+three of them genuine arms in `account-organization-team-effective-account.test.ts`, a file whose test
+list I had already read. It has six `it.each(...)` blocks and one plain `it('...')`, and in
+`it.each([...])(...)` the title lives in a template string AFTER the data array, so a search for `it('`
+matches none of them. **The better and more table-driven the file, the more invisible it is.**
+
+So the tally, all three found in one day:
+
+1. Arms assert a message PATTERN or the error class, not the literal (recorded 2026-08-23).
+2. Arms assert only the STATUS CODE and never the message (V-1860).
+3. Arms are PARAMETERISED, so no title sits next to the `it(` token (here).
+
+⭐⭐⭐ **These are one root cause, and it is the standing lesson I already hold: sweep the SHAPE, not
+the token.** All three are me searching for the SYNTAX of a test instead of the BEHAVIOUR under test.
+I violated it three separate ways in a single day, and a fourth time inside this very investigation —
+a helper that resolves via `req` rather than `request` scored as "resolves differently" against a
+regex I had hardcoded a parameter NAME into.
+
+**The rule this settles, and it is not a preference:** eight "unwitnessed" predictions today, eight
+wrong, three distinct mechanisms. **There is no search that soundly answers "is this witnessed?".**
+Mutation is not the best instrument for that question, it is the only sound one. Never publish an
+unwitnessed claim from any grep — mutate, or say nothing.
+
+⚠️ **GATE BOUNDARY, stated because it is not the usual one.** Green at 3111 passed / 117 skipped
+(3228 files), 32125 tests, exit 0 — but `DATABASE_URL` was unset, so 117 DB-gated files did not run,
+against 4 skipped in the last green. The Playwright e2e corpus is outside this runner entirely, which
+is why `account-me.ts:409` needed an integration witness at all: its e2e arm cannot defend a vitest
+gate. The mutation above ran under exactly these conditions and was still caught, so the finding holds
+within them.
+
+**Mutation safety:** snapshot proven by size and `cmp` before the first edit, the file asserted to have
+actually changed before the run was believed, a single-path restore trap (no list to collapse — the
+morning's bug), and recovery verified by post-condition: byte-identical, zero markers, tree clean.
