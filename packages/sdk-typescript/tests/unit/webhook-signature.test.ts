@@ -356,4 +356,34 @@ describe('verifyWebhookSignature — the header may arrive as an array, and cryp
       'an attacker who knows the body and timestamp must not verify against an empty secret',
     ).resolves.toBe(false);
   });
+  // V-2011 — the untyped-caller half, and the reason the guard is a FALSY test.
+  //
+  // A webhook handler is usually plain JavaScript, where `secret` can arrive
+  // undefined (an unset env var, a missing config key) with no compiler to stop
+  // it. Measured across three versions of this function: before any guard, `null`
+  // RETURNED FALSE and `undefined` threw a DOMException from subtle.importKey;
+  // the first guard spelled `.length === 0` and made `null` throw a TypeError too
+  // — a regression in the very contract the guard existed to restore. `!secret`
+  // covers all three in one test.
+  //
+  // The casts are deliberate: these are the values a JS caller supplies and
+  // TypeScript would reject, which is exactly why the runtime needs its own answer.
+  it('CRITICAL a missing secret from an untyped caller returns false rather than throwing (undefined / null / absent)', async () => {
+    const body = JSON.stringify({ id: 'evt_1' });
+    const t = Math.floor(Date.now() / 1000);
+    const forged = createHmac('sha256', '').update(`${t}.${body}`).digest('hex');
+    const header = `t=${t},v1=${forged}`;
+
+    for (const bad of [undefined, null]) {
+      await expect(
+        verifyWebhookSignature({ body, header, secret: bad } as never),
+        `secret=${String(bad)} must answer false, not throw — the contract promises a boolean`,
+      ).resolves.toBe(false);
+    }
+    // The property omitted entirely, which is what a missing config key produces.
+    await expect(
+      verifyWebhookSignature({ body, header } as never),
+      'an absent secret property must answer false, not throw',
+    ).resolves.toBe(false);
+  });
 });

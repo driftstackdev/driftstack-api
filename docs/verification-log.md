@@ -13284,3 +13284,65 @@ V-1465 judged worth fixing server-side**, and the reciprocal comparison between 
 paid three times in two days: V-1465 found it by comparing Stripe against NOWPayments, V-2004 was the
 reciprocal of that comparison, and this is the same question asked one layer out — at the boundary the
 customer owns.
+
+## V-2011 — the fix I shipped one entry ago regressed the contract it was written to restore (2026-08-27)
+
+2026-08-27. V-2010 added an empty-secret refusal to all three SDK webhook verifiers because Python and Go
+verified an attacker-forged HMAC against `secret=""`. **The TypeScript guard I wrote for it was
+`input.secret.length === 0`, and that spelling throws.**
+
+Asking the question one layer out — _who actually calls this?_ — answers it: a webhook handler is usually
+plain JavaScript, where `secret` arrives from an unset env var or a missing config key with no compiler in
+the way. **Boundary: the same forged-header probe as V-2010, run against three versions of the function.**
+
+```
+                       secret=''      secret=undefined         secret=null
+before any guard        ACCEPTED*     THREW DOMException       returned false
+`.length === 0` (mine)  false         THREW TypeError          THREW TypeError   <-- regression
+`!input.secret`         false         false                    false
+                                                     * the V-2010 forgery, on Python/Go; TS threw
+```
+
+⛔ **`null` returned false before my change and threw after it.** The guard existed to make the function
+honour _"returns false on any failure mode"_, and it broke that promise for the caller most likely to hit
+it. A fix that narrows one failure mode while widening another is not a fix, and the only reason this was
+caught is that I kept probing the same function after committing rather than treating the commit as the
+end of the work.
+
+**Only TypeScript was affected.** Python's `if not secret:` covers `None` and `""` in one — verified, not
+assumed — and Go strings cannot be nil, so `secret == ""` is complete there. **The two guards I wrote
+idiomatically were right; the one I wrote as a length test was not**, which is the same lesson as V-2005 in
+a different costume: a length is not the property.
+
+Fixed to the falsy test. **Mutation-proved in both directions**, restoring byte-identical each time:
+restoring `.length === 0` reds _only_ the new untyped-caller arm (22 others pass), and deleting the guard
+entirely reds _both_ it and V-2010's empty-secret arm.
+
+The content-parity pin now carries a **negative** assertion beside the positive one — `input.secret.length`
+must not reappear — because the whole point is the spelling, and a future tidy-up back to `.length` is
+exactly how this returns. `it(` counts: parity file unchanged at 24, SDK suite 22→23. Post-condition:
+`undefined`, `null` and an absent property all return false; 8 files / 98 tests green across the webhook
+surface.
+
+### The tolerance sweep, run at the same time and clean
+
+While probing the verifiers I checked the other property a signature verifier can get wrong: a one-sided
+timestamp comparison, which lets a **future**-dated signature replay indefinitely. **Boundary: all four
+verifiers — the three SDKs and `lib/stripe-signing.ts`.** All four take the absolute delta.
+
+⛔ **My first sweep said Go did not.** I grepped for `Abs`/`abs` and Go has no `Duration.Abs`; its idiom is
+
+```go
+delta := now.Sub(signed)
+if delta < 0 { delta = -delta }
+```
+
+Reading it refuted the hit. **Sweep the shape, not the token** — three files spell this property with a
+function call and the fourth spells it with a negation. All three SDKs also already carry a
+future-timestamp test, and the TypeScript one names the exact drift in its own comment: _"Drift to
+one-sided `now - timestampMs >` would let future-dated signatures slip through."_
+
+⚠️ **Gate caveat, disclosed.** The full run that covered V-2010 came back green (3241/3241, 32226 passed),
+but a peer wrote `apps/marketing-site/tests/unit/workspace-overclaim-phrase-sweep.test.ts` at 17:37:14
+against a run that started at 17:34:22, so that one file ran against an indeterminate version. It is their
+file, it passed, and they have since committed it. The other 3240 files ran against my committed state.

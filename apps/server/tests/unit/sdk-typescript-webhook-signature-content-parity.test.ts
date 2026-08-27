@@ -114,7 +114,17 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     // empty secret made Python and Go verify an attacker-computed HMAC, and made
     // this one throw out of subtle.importKey. Kept as a separate assertion so the
     // short-circuit chain below stays legible.
-    expect(body).toContain('if (input.secret.length === 0) return false;');
+    //
+    // ⛔ V-2011 — the FALSY test, not a `.length` test, and that is the whole point
+    // of pinning the exact line. `.length` throws a TypeError when an untyped JS
+    // caller passes undefined or null, which is how the first version of this guard
+    // regressed `null` from returning false to throwing. Pinning `!input.secret`
+    // means a future "tidy-up" back to `.length === 0` fails here.
+    expect(body).toContain('if (!input.secret) return false;');
+    expect(
+      body,
+      'the .length spelling throws on a null secret — it must not come back',
+    ).not.toContain('input.secret.length');
     expect(body).toMatch(
       /const ok = await verifySingleHeader\(input\.header, input\);\s*if \(ok\) return true;/,
     );

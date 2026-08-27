@@ -66,7 +66,15 @@ export async function verifyWebhookSignature(input: VerifySignatureInput): Promi
   // accident of WebCrypto, but an exception in the customer's webhook handler
   // where the contract promises a boolean. The server-side sibling has carried
   // this check since V-1465 for exactly the same reason.
-  if (input.secret.length === 0) return false;
+  // ⛔ `!input.secret`, NOT `.length === 0` — V-2011. The first spelling of this
+  // guard read `.length`, which THROWS a TypeError when an untyped JavaScript
+  // caller passes `undefined` or `null`, and untyped JS is the common case for a
+  // webhook handler. Measured before and after: pre-guard, `null` RETURNED FALSE
+  // and `undefined` threw a DOMException out of subtle.importKey; the `.length`
+  // guard made `null` throw too, so the fix regressed the very contract it was
+  // written to restore. The falsy test covers '', undefined and null in one, and
+  // is what Python's `if not secret:` has always done.
+  if (!input.secret) return false;
 
   const ok = await verifySingleHeader(input.header, input);
   if (ok) return true;
