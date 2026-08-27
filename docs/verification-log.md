@@ -17028,3 +17028,40 @@ multi-line spread before its zero was believed.
 not cover Sentry captures (scrubbed separately), response bodies (covered by
 `no-response-leaks-a-credential`), or a body handed to a service that logs it further down — that last
 one is reachable by the same brace-matched method and was not run here.
+
+## V-1887 — correcting V-1886: the sweep that "covered apps/server/src" saw 18% of it
+
+2026-08-27. No defect. The boundary V-1886 left unrun, run — and in running it, the discovery that
+V-1886's own sweep was scoped far narrower than it claimed.
+
+⛔⛔ **THE PATTERN REQUIRED A RECEIVER THAT MOST LOG CALLS DO NOT HAVE.** V-1886 reported "swept
+`apps/server/src` for any `log.{info,warn,error,debug}` whose object argument spreads a request body:
+0". Its regex was anchored on `\.log\.` — so it matched `req.log`, `request.log`, `app.log` and
+`reply.log`, and nothing else. Enumerated, the receivers in this tree are:
+
+    logger 110 · this.logger 59 · req.log 27 · this.config.logger 25 · request.log 17
+    console 16 · deps.logger 9 · app.log 4 · opts.logger 3 · this.deps.logger 1
+    reply.log 1 · config.logger 1        → 273 total
+
+**49 of 273. The sweep saw 18% of its stated population**, and missed the two commonest forms outright.
+I congratulated the method in that entry for brace-matching the argument instead of anchoring to a
+line — which was the right fix to the wrong half. **The argument shape was handled; the receiver was
+the assumption nobody checked.**
+
+✅ **RE-RUN ACROSS ALL TWELVE FORMS: 273 matched, 0 contain a spread of any kind.** So V-1886's
+CONCLUSION holds — no log call in the server source spreads a request body, or anything else — but it
+now rests on the whole population rather than a fifth of it. Three controls in the real idioms
+(`logger.info`, a multi-line `req.log.warn`, `this.logger.error`) are each detected, and the 273 is an
+exact cross-check: the independent receiver enumeration sums to the same number, so nothing is outside
+the sweep.
+
+⭐⭐ **THE RULE THIS ADDS, and it is not the one I already had: before sweeping CALLS, enumerate the
+RECEIVERS.** Every lesson this week has been about the thing being matched — the token, the spelling,
+the wrap, the position. This is about what the match is anchored TO. A call-site sweep silently
+inherits whatever receiver spelling the author happened to picture, and the cost is invisible because
+the output looks identical: a confident zero either way. Enumerating first costs one command and turns
+the scope from an assumption into a measurement.
+
+⚠️ Same shape as V-1874: a conclusion that survived, on evidence that did not. Twice this week the
+correction has been "the answer was right and the reasoning was a fifth of an answer", which is worth
+more attention than either instance alone.
