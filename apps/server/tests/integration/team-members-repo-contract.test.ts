@@ -76,6 +76,12 @@ interface Subject {
   backdateMember: (id: string, at: Date) => Promise<void>;
   /** Same, for an invite. */
   backdateInvite: (id: string, at: Date) => Promise<void>;
+  /**
+   * V-1843 — seed a team and return its id. No repo method creates teams (they
+   * arrive via the account/backfill path), and the two owner-scoped team reads
+   * below need one to act on.
+   */
+  seedTeam: (ownerAccountId: string, name: string) => Promise<string>;
 }
 
 function inMemorySubject(): Subject {
@@ -92,6 +98,12 @@ function inMemorySubject(): Subject {
       const row = repo.getAllInvites().find((i) => i.id === id);
       if (row) (row as { createdAt: Date }).createdAt = at;
       return Promise.resolve();
+    },
+    seedTeam: (ownerAccountId, name) => {
+      const id = randomUUID();
+      const now = new Date();
+      repo.seedTeam({ id, name, slug: null, ownerAccountId, createdAt: now, updatedAt: now });
+      return Promise.resolve(id);
     },
   };
 }
@@ -113,6 +125,13 @@ function drizzleSubject(): Subject {
     },
     backdateInvite: async (id, at) => {
       await c`UPDATE team_invites SET created_at = ${at.toISOString()}::timestamptz WHERE id = ${id}::uuid`;
+    },
+    seedTeam: async (ownerAccountId, name) => {
+      const [row] = await c<Array<{ id: string }>>`
+        INSERT INTO teams (owner_account_id, name) VALUES (${ownerAccountId}, ${name})
+        RETURNING id`;
+      if (!row) throw new Error('teams insert returned no row');
+      return row.id;
     },
   };
 }
@@ -287,6 +306,70 @@ function teamMembersRepoContract(label: string, make: () => Subject, enabled: ()
         (await s.repo.listPendingInvites(owner)).map((i) => i.id),
         'the invite list is in write order, not newest-first',
       ).toEqual([second, first]);
+    });
+
+    // ── owner-scoped team reads ───────────────────────────────────────
+    //
+    // V-1843. `eq(teams.ownerAccountId, …)` is a THIRD tenancy axis: the earlier
+    // sweep enumerated `eq(.accountId)` and a later gap was `eq(.nodeId)`. Both
+    // reads below are LIVE — `routes/team.ts` behind `requireScope('account_owner')`,
+    // a scope every account owner holds, straight through the service to these two
+    // repo methods — and coverage reported neither Drizzle implementation as ever
+    // executed. Their only drivers were a fake in the service test and the
+    // in-memory double.
+    //
+    // Checked first, because a sibling taught it: `removeMember` is a superseded
+    // orphan whose scoping mutation SURVIVES by design, and `team-routes` carries a
+    // ledger saying so. There is no such ledger for these two, and unlike that one
+    // the service reaches them directly.
+
+    it('CRITICAL renameTeam refuses a team owned by ANOTHER account, in both. The owner predicate is the whole cross-tenant guard on this write: the route only checks that the caller is SOME account owner, so without it any owner could rename any other owner’s team by id.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const stranger = await s.account();
+      const teamId = await s.seedTeam(owner, 'owner-team');
+
+      // Positive control: the owner CAN rename, so the refusal below is a
+      // boundary rather than a method that renames nothing.
+      expect(
+        (await s.repo.renameTeam(teamId, owner, 'renamed-by-owner'))?.name,
+        'the owner could not rename their own team',
+      ).toBe('renamed-by-owner');
+
+      expect(
+        await s.repo.renameTeam(teamId, stranger, 'renamed-by-stranger'),
+        'ANOTHER account renamed a team it does not own',
+      ).toBeNull();
+
+      // Refusing to return the row is not the property; not WRITING is.
+      expect(
+        (await s.repo.listTeamsOwnedBy(owner)).find((t) => t.id === teamId)?.name,
+        'the stranger’s rename was refused but still landed on the row',
+      ).toBe('renamed-by-owner');
+    });
+
+    it('CRITICAL listTeamsOwnedBy returns only the asking owner’s teams, in both. This list is what `GET /v1/team` answers with, so a dropped predicate discloses every other account’s team names and ids.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const owner = await s.account();
+      const stranger = await s.account();
+      const mine = await s.seedTeam(owner, 'mine');
+      const theirs = await s.seedTeam(stranger, 'theirs');
+
+      const ids = (await s.repo.listTeamsOwnedBy(owner)).map((t) => t.id);
+
+      // Positive control first: an empty list satisfies the exclusion below.
+      expect(ids, 'the owner’s own team is missing, so the exclusion proves nothing').toContain(
+        mine,
+      );
+      expect(ids, 'another account’s team appeared in this owner’s listing').not.toContain(theirs);
+
+      // And the stranger sees exactly their own, so this is a boundary rather
+      // than a query that happens to return one row for everyone.
+      const theirIds = (await s.repo.listTeamsOwnedBy(stranger)).map((t) => t.id);
+      expect(theirIds).toContain(theirs);
+      expect(theirIds, 'the boundary only holds in one direction').not.toContain(mine);
     });
   });
 }

@@ -15129,3 +15129,45 @@ measurements down, the answer is usually already there, and the cost of looking 
 `renameTeam` / `listTeamsOwnedBy` members of it are NOT covered by the ledger above — only
 `removeMember` and `removeMemberWithInvites` are. That remains open and is worth a look, with the
 ledger read FIRST this time.
+
+## V-1843 — a third tenancy axis: the two owner-scoped team reads nothing executed
+
+2026-08-26. Found by the named uncovered-function list (V-1841), and the prior-art check came FIRST
+this time — the lesson V-1842 cost me.
+
+**The axis.** V-1822 reported the tenant boundary complete across 126 `eq(.accountId)` predicates.
+V-1837 found `eq(.nodeId)` outside that scope. This is the third: **`eq(teams.ownerAccountId)`**, the
+boundary between one account owner and another's team.
+
+**Both reads are LIVE and were unexecuted.** `routes/team.ts` gates on
+`requireScope('account_owner')` — a scope every account owner holds, so it establishes that the
+caller is SOME owner and nothing more — then the service reaches the repo directly:
+`listTeams → repo.listTeamsOwnedBy` and `renameTeam → repo.renameTeam`. Coverage reported neither
+Drizzle implementation as ever executed; their only drivers were a fake in the service test and the
+in-memory double, both of which reimplement the scoping themselves.
+
+⭐ CHECKED FOR PRIOR ART BEFORE FORMING A THEORY, which is what V-1842 taught me an hour earlier. A
+sibling — `removeMember` — carries the same predicate and is a SUPERSEDED ORPHAN whose scoping
+mutation survives BY DESIGN, with a ledger in `team-routes` warning against exactly the "fix" it
+invites. `grep -rn renameTeam tests/` returns no such ledger, and unlike that orphan the service
+reaches these two directly. That distinction is the whole justification for acting here and not
+there.
+
+**FIXED** — two arms in `team-members-repo-contract`, which drives BOTH implementations, so each arm
+covers the double and the real repo at once. The seam grew a `seedTeam` (no repo method creates
+teams; they arrive via the account/backfill path). Existing file, no ratchet movement, and the file
+is already DATABASE_URL-gated so that pin does not move either.
+
+Mutation-proved per predicate, and the property census was 2 occurrences of `eq(teams.ownerAccountId`
+— both mutated, one each, rather than trusting a unique anchor:
+
+- rename scope dropped → **"ANOTHER account renamed a team it does not own"**, and only ONE test
+  failed, the drizzle half, with the in-memory half green. ⭐ That asymmetry is simultaneously the
+  proof the drizzle half is not silently skipped, since `if (!enabled()) return` makes a disabled arm
+  PASS.
+- listing scope dropped → two arms, the listing boundary and the rename arm's write-check, which
+  reads back through the same listing.
+
+⭐ THE RENAME ARM ASSERTS THE WRITE, NOT THE RETURN. Refusing to return the row is not the property;
+not WRITING is. The third assertion reads the row back and confirms the stranger's name never landed
+— the same distinction V-1837 needed an isolating mutation to earn.
