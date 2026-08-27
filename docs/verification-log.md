@@ -13600,3 +13600,67 @@ exactly `free` and `enterprise`.
 doing its own read, so an owner price edit between them can change the charged amount relative to the
 quoted one. The route says so — _"'quote == charge' means same SOURCE, not same instant… There is no
 quote-binding token."_ Naming it is what keeps it from being rediscovered as a bug.
+
+## V-2017 — the acting-as split is by trust boundary, and a tripwire already guards it (2026-08-27)
+
+2026-08-27. Audited `account-oauth-links.ts` end to end — **picked by V-1920's instrument: two filename
+mentions across both logs, 84 lines, a customer-facing auth surface.**
+
+**Sound, and read-only by design** (driftstack-side revoke is a separate slice). `requireAuth` +
+`requireScope('read')` + the global bucket; `listForAccount(ctx.account.id)` so a caller can only ever see
+their own links; the querystring is Zod-validated rather than trusted from the `Querystring` generic, with
+V-1367's reason written down — a repeated query key parses to an ARRAY, so `?active_only=true&active_only=true`
+used to return **200 with the revoked links the caller asked to hide**, a wrong answer rather than an
+error. The public projection deliberately omits `provider_avatar_url` and `provider_name` so a future
+re-link cannot leak as a profile update.
+
+### The question worth asking: it does NOT resolve the acting-as header
+
+**Boundary: the seven `/v1/account/*` route modules, counting `resolveEffectiveAccount` /
+`readEffectiveAccountHeader` references.**
+
+```
+account-me            3 / 3      honours acting-as
+account-audit         3 / 3      honours acting-as
+account-oauth-links   0 / 0
+account-web-sessions  0 / 0
+account-mfa           0 / 0
+account-notifications 0 / 0
+account-rate-limits   0 / 0
+```
+
+⭐ **That split is by trust boundary, not by accident.** Under `X-Driftstack-Account` a team admin acts as
+the owner. Four of the five that ignore it are personal credential surfaces — OAuth links, web sessions,
+MFA, notification preferences — and the two that honour it are the account profile and the audit log,
+legitimately team-scoped. **The safe direction is the one taken:** those routes can never return another
+account's credentials, whatever header arrives.
+
+**`account-rate-limits` is the fifth and its reason is different, which is worth getting right rather than
+lumping in.** It ignores the header because the limits that apply to the caller ARE the caller's own — the
+e2e spec `acting-as-an-owner-spends-your-own-bucket` pins exactly that: _"a member acting as an owner
+charges their OWN bucket at their OWN capacity."_ Reporting the owner's buckets there would describe
+limits the caller is not subject to. That spec exists because of a real destructive bug on the adjacent
+control-key path, where two writers sharing one Redis key disagreed on capacity and a conservative `free`
+floor collapsed a paying owner's 6,000-token bucket to about 59.
+
+### And it is guarded, in the direction that matters
+
+`effective-account-header-authz-invariant` parses every route with the **TypeScript AST** — so aliases,
+generics and formatting cannot hide a read — and asserts that every `readEffectiveAccountHeader` call is
+passed directly as `resolveEffectiveAccount`'s acting-account argument, that no route holds a raw
+`X-Driftstack-Account` literal, and it carries adversarial arms for an aliased parser, a local-function
+alias, and multiline composition.
+
+**The roster arm answers my question directly.** It pins `reads` at exactly 32 across exactly 10 files, and
+calls itself _"a review tripwire, not the security assertion"_. The scan walks every non-test `.ts` in
+`routes/`, so **a credential route gaining acting-as behaviour moves both numbers and trips a review** —
+which is the control I was looking for. The exact count also serves as its own non-vacuity check: an
+emptied walk reads 0, not 32.
+
+⚠️ **One weakness, stated because a tripwire that can net out is worth knowing about.** It pins COUNTS
+(32 reads / 10 files) plus the exact route pairs for `account-me.ts` alone. A change that adds a read to a
+credential route while removing one elsewhere nets to 32/10 and passes. That affects only the
+review-prompting, not safety — the security assertion beneath it is set-based and complete — and the arm's
+own framing is honest about which half it is. **Not changed**: the guard is carefully reasoned, its author
+scoped the claim correctly, and widening the pinned pairs from one file to ten is a judgement about review
+noise rather than a defect.
