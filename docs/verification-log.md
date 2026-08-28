@@ -15706,3 +15706,49 @@ That third arm is the one worth having: without hop resolution the census still 
 still compares two sets, it just believes six of them audit instead of eighteen. Restored
 byte-identical; ratchets 3069→3070 / 3245→3246; `tsc -p apps/server/tsconfig.test.json` clean; the
 whole unit corpus green at 2022 files / 20998 tests.
+
+## V-2058 — my gate never rebuilds, and is protected from stale artifacts by a guard rather than a build step (2026-08-27)
+
+Followed a recorded blind spot of my own: `apps/customer-dashboard` has page tests that execute the
+compiled inline `<script>` from BUILT `dist/<page>/index.html` in jsdom, not from source, so they give
+a stale pass/fail unless a build ran first. **48 test files execute a page out of a gitignored
+`dist/`**, and staleness is wrong in both directions — a stale artifact makes suites green against
+markup the source no longer produces (measured 2026-07-30 on admin-panel: 10 falsely green until a
+rebuild), a missing one produces a wall of ENOENTs naming nothing.
+
+**My gate does not rebuild.** Verified rather than assumed: neither `scripts/verify-suite.mjs` nor my
+gate wrapper contains `npm run build`, `build:apps` or `astro build`. CI does — `npm run build` runs
+`build:apps` across every workspace before `vitest run` — which is exactly why
+`dist-reading-suites-have-fresh-artifacts` says in its header that it exists "for the local runs that
+agents gate their commits on". That is me.
+
+**So the green I have been quoting rests on a guard, not on a fresh build.** Checked the artifacts
+directly — boundary: newest file mtime under each app's `dist/` against the newest under its `src/`:
+
+    customer-dashboard   dist 08-27 09:22   src 08-26 05:10   fresh
+    admin-panel          dist 08-27 09:22   src 08-20 03:38   fresh
+    marketing-site       dist 08-27 09:22   src 08-26 12:15   fresh
+    docs                 dist 08-27 09:22   src 08-26 05:12   fresh
+
+All fresh — and **coincidentally so**, because something built at 09:22 today, not because anything in
+my run guarantees it.
+
+⭐ **Mutation-proved that the protection is real rather than assumed.** Touched
+`apps/customer-dashboard/src/pages/api-keys.astro` (content untouched, mtime only) and the guard went
+red immediately, naming the app, both timestamps and the remedy:
+
+    customer-dashboard: built 2026-08-27T13:22:36Z but source changed 2026-08-28T02:44:19Z
+    — REBUILD, do not repin assertions onto stale markup
+
+Restored the original mtime with `touch -t`; verified byte-identical restore and a clean tree.
+
+⭐⭐ **The design is better than the one I would have reached for.** My instinct on finding "the gate
+does not rebuild" was that the gate should rebuild. It should not: a build step would add minutes to
+every run and would MASK the condition, whereas a guard inside the suite makes it visible and
+actionable at the moment it matters. The gate is not required to guarantee a fresh artifact; it is
+required not to be green when the artifact is stale — and it is not.
+
+⚠️ Operational consequence worth stating for both agents: **editing any `apps/*/src` file makes the
+next full gate red on dist staleness rather than on a defect.** Granularity is whole-app `src` by
+design (a changed shared Layout restales every page), so this fires on edits that touch no page the
+suites read. The fix is a rebuild, and the red is correct.
