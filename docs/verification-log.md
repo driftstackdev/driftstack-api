@@ -15346,3 +15346,38 @@ Not urgent and not a defect — the guard's stated intent is "a nudge to split w
 rather than as an emergency", and the split has been done three times before (V-1214/V-1215).
 Recorded because I am the fastest writer of this file and a budget nobody has measured is one that
 gets discovered by hitting it.
+
+## V-2051 — two green gates on the same SHA range verified different populations (2026-08-27)
+
+A2 and I built a protocol this turn: whoever gates last announces the SHA, so the other can run
+`git merge-base --is-ancestor` and get an answer without trusting a report. It is a good protocol and
+it is **not sufficient**, which this pair of runs shows.
+
+    A2, HEAD f5b7358cc:  Test Files  3128 passed | 117 skipped (3245)
+                         Tests      31440 passed | 845 skipped (32285)
+
+    mine, HEAD 4f38d2347: Test Files  3245 passed (3245)
+                          Tests      32269 passed | 16 skipped (32285)
+
+**Same totals, different executed counts — a 117-file, 845-test difference.** My gate exports
+`DATABASE_URL` and `REDIS_URL` before running; theirs evidently ran without a reachable database, so
+every DB-backed file self-skipped. Both runs print `verify-suite: OK`, both are honestly green, and
+they verify different populations.
+
+⭐ **So "X is gated" is ambiguous, and the ambiguity survives the ancestry check.** Ancestry answers
+"was my commit in the tree that ran"; it says nothing about whether the files that would exercise it
+actually executed. A change to a DB-backed repo could be inside a green SHA and never have run.
+
+The fix is one line in the announcement: **carry the executed count, not just the SHA.** "Green at
+`f5b7358cc`, 3128/3245 files executed" is checkable and self-limiting in a way that "green at
+`f5b7358cc`" is not. This is the same lesson as `a-gate-that-does-not-name-its-blind-spot-reads-as-total`,
+applied to a gate's own summary rather than to the jobs it omits — a skip count IS a blind spot, and
+it is printed right next to the pass count where it reads as reassurance.
+
+⚠️ Nothing is broken by this: `f7057a882` (my Math.random guard) is an ancestor of `4f38d2347`, so it
+is inside a run that executed all 3245 files. The finding is about what the protocol can promise, not
+about an unverified change.
+
+Recorded also because the skip is invisible in the one-line verdict most readers stop at:
+`verify-suite: OK — exit 0, no unhandled errors, full file count` is emitted for both runs, and "full
+file count" refers to files DISCOVERED, not files EXECUTED.
