@@ -16483,3 +16483,114 @@ happened.
 
 Related: V-2069 (the measurement corrected here), and the exemption-list shape — a duplicated list
 whose copies nothing compares.
+
+---
+
+## V-2071 — REFUTED: "referenced nowhere in this repo" is not "dead" when the consumer is another repo (2026-08-27)
+
+Followed the symbol measurement from V-2069/V-2070 into its largest cluster: 23 of the 75
+never-named-by-a-test exports live in `schemas/harness-control-protocol.ts`, which bounds untrusted
+input arriving from the harness. The hypothesis was the one that has paid out repeatedly here — a
+declared `*_MAX_*` bound that no schema references is an unenforced bound.
+
+**Refuted on the bounds, immediately and cleanly.** Of 102 SCREAMING_CASE exports in that file, every
+cap is referenced in `apps/server/src`. Exactly **three** are referenced nowhere beyond their own
+declaration:
+
+    HARNESS_SCROLL_DEFAULT_DISTANCE_PX = 600
+    HARNESS_SCROLL_DEFAULT_DIRECTION   = 'down'
+    HARNESS_WAIT_FOR_DEFAULT_TIMEOUT_SECONDS = 30
+
+All three are **defaults**, not caps — and the schemas that would apply them declare those fields
+`.optional()` with no `.default()`. Each is mentioned in exactly two files repo-wide: its own
+declaration, and a content-parity test pinning its literal value. So the shape read as: _a parity pin
+freezing three constants nothing applies_, which is a pin on documentation wearing the costume of a
+pin on behaviour, and I have logged that shape before.
+
+⛔ **It is not that, and the contract doc says so plainly.**
+`docs/internal/cross-agent-control-plane-contract.md:381` — _"distance_px?: number (TOTAL distance,
+**default 600**; **harness decomposes into momentum flicks**)"_ — and `:455` lists exactly these as
+"Caps/defaults as exported consts". **The default is applied by the HARNESS, in another repository.**
+The server declares the contract value and deliberately does not apply it, which is precisely why
+nothing here reads it, and the parity pin is the right guard for a value whose consumer cannot import
+it.
+
+⭐⭐ **The calibration, which is the reusable part.** My unreferenced-symbol detector answers "is this
+symbol read inside this repository", and I framed its output as "dead". Those are different questions
+wherever a repo publishes a contract someone else implements — a protocol schema, an SDK constant, an
+API type. **The detector cannot see the consumer by construction**, so every hit in a cross-repo
+surface is a candidate false positive until the contract is checked, exactly as V-2068 found that
+"named by no test" measures attention rather than protection. Two measurements, two turns, the same
+correction: the instrument answers a narrower question than its name suggests.
+
+⚠️ **The genuine residual, stated rather than fixed.** Nothing verifies the harness actually defaults
+to 600. The server pins the constant, the doc states the behaviour, and the two are joined only by
+prose — if the harness changed its default, the constant and its parity pin would both stay green
+while the contract was violated. That is a real cross-repo drift hazard and it is **not verifiable
+from this repo**: the harness lives in `driftstack`/`webkit-driftstack`, which this lane does not
+touch. Recorded so it is owned rather than rediscovered; whoever holds both sides can close it with a
+mirror check of the kind V-2070 added for the loopback sets.
+
+**No finding.** Three constants that read as dead are a published contract, and the reason is one
+`grep` into a doc that names them.
+
+Related: V-2069/V-2070 (the measurement), V-2068 (the first calibration of the same instrument).
+
+---
+
+## V-2072 — the name-absence detector family is exhausted here, and the instrument I pick targets with reads 42% of the audit record (2026-08-28)
+
+Two results from following V-2068–V-2071 to the end of the vein. Both are negative, and the second
+changes how the next target gets chosen.
+
+### 1. Five variants, 253 hits, zero defects
+
+| detector                                  | hits                  | what they turned out to be                                                                                                                                                                              |
+| ----------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| files never named in any verification log | 3 of 93 (`packages/`) | all guarded; packages own their tests                                                                                                                                                                   |
+| files named by no test, repo-wide         | 5 of 623              | 4 are a peer's; 1 safe because it is thin                                                                                                                                                               |
+| exported symbols unreferenced in `src`    | 3                     | a cross-repo contract the harness implements                                                                                                                                                            |
+| exported symbols named by no test         | 75 of 1000            | **all 75 consumed elsewhere in `src`; zero orphans**                                                                                                                                                    |
+| modules imported only by DB-gated tests   | 25                    | 22 `db/*` repos by design; of the 3 others, one is an interface module with **zero value exports**, one is covered by an ungated ROSTER test that names it as a string literal rather than importing it |
+
+⭐ **Every one failed the same way: the key was coarser than the property.** "Is this symbol named in a
+test" is not "is this behaviour guarded" — coverage flows through call chains, roster tests, interface
+implementations and other repositories, and a name-match sees none of those. The last row is the
+sharpest: my detector keyed on `import` statements, and the guard it missed reads the file by name.
+
+**This family is done in this repo.** Guard density is high enough that name-absence produces
+attention, never risk, and the next defect will not come from it.
+
+### 2. ⭐⭐ The targeting instrument reads less than half the record
+
+V-1920's instrument — rank routes by how little the verification log says about them — is what the
+standing order points at, and what V-2004 used. It counts mentions **in `docs/verification-log*.md`
+only**. Measured today:
+
+    verification logs   6,154,667 chars
+    memory corpus       8,414,460 chars across 1320 files
+
+**The store it does not read is the LARGER of the two.** The distortion is not marginal, it inverts
+the ranking:
+
+    webhooks-nowpayments     log  1  memory 11
+    _webhook-raw-body        log  1  memory 15
+    account-byok-anthropic   log  2  memory 11
+
+All three rank as least-audited on the log alone, and all three are thoroughly audited — `nowpayments`
+end to end by V-2004 **today**, BYOK by three dedicated memory files. I was one step from re-auditing
+`nowpayments` and stopped only because I grepped prior art on _naming_ the route, which is V-2067's
+rule doing exactly the job it was written for.
+
+Re-ranked on `log + memory`, the genuinely least-covered substantial route is
+**`agent-sessions-transport-report`** — 6 log mentions and **zero** in memory, 8,973 B. Nothing else
+in the top ten has a zero in either column.
+
+⛔ **The general shape, and it is the same one as the sixteenth test directory:** an instrument that
+reads one store answers a question about that store, and its name says "audited". Two stores exist
+here for historical reasons and neither is authoritative — so any "how well examined is X" measurement
+must span both, and any that does not should say which store it read in the same sentence as its
+result.
+
+Related: V-2068 and V-2071 (the first two calibrations of the same family), V-2004 and V-1920 (the
+instrument corrected here), V-2070 (the same one-store error in the test-dir corpus).
