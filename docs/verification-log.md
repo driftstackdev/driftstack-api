@@ -10728,3 +10728,40 @@ mattered is the integration helper, and only that one.
 helper's default. It establishes that no literal-`admin` requirement remains and that the helper no longer
 supplies a scope satisfying one; it does not re-derive the alias predicate's correctness, which
 `lib/errors-helpers.ts` and its guards already own.
+
+## V-2125 — V-2123's safety argument was under-verified in a way I had the evidence to catch, and the exclusion is proven by execution (2026-08-28)
+
+Addendum to V-2123, from a peer's adversarial check plus my own re-verification. The conclusion is unchanged;
+the VERIFICATION behind it was thinner than the entry implied.
+
+⛔ **`harness-control-protocol.ts` declares TWO `reason` fields, and only one carries the strict pattern.**
+`:942` is `z.string().min(1).max(512)` with **no pattern at all**; `:1062` is the
+`^[a-z][a-z0-9_]{0,127}$` one my argument rested on. If the unpatterned field could reach `closed_reason`,
+V-2123's safety claim would have a hole exactly the size of the two-definitions trap.
+
+**It cannot, verified by resolving each to its owning schema rather than by name:** `:942` belongs to
+`ControlCommandSchema` (declared `:938`) — operator-supplied text travelling **server → node** for the node's
+own logs and audit trail. `:1062` belongs to `SessionStatusSchema` (declared `:1045`) — travelling **node →
+server**. Opposite directions, different frames, no path between them. The argument stands.
+
+⭐ **The uncomfortable part: `:942` was in my own grep output when I wrote V-2123.** The command that found
+the strict pattern printed both lines. I read the one that confirmed the hypothesis and moved on without asking
+which of the two feeds `closed_reason` — the first-matching-row habit, in a session where I had already
+recorded twice that resolving by name picks a stranger. Finding a pattern that supports the conclusion is not
+the same as establishing that no sibling defeats it.
+
+⭐⭐ **And the exclusion is proven by EXECUTION, not only by reading the regex.**
+`schemas-harness-control-protocol-content-parity.test.ts:1536` already parses hostile inputs through the real
+schema and asserts refusal — including **`'browser_crashed direct=10.0.0.8'`**, the exact egress payload the
+terminal-close note was written about, alongside a space-bearing reason, an HTML one, and the 128/129 length
+boundary. So the protection is two-layered and **the layers fail differently**: the content-parity pin catches
+an edit to the regex TEXT, while this arm catches any change that lets a diagnostic through — including one
+that leaves the pinned line intact and adds an alternative elsewhere. That is adequacy, not redundancy.
+
+**Nothing was built.** The guard I would have written exists, and was found by grepping prior art at the moment
+the subject was NAMED rather than after measuring it. Recorded because the outcome of a good check is often
+that no code should be added, and that outcome leaves no artifact unless it is written down.
+
+**Boundary:** this establishes that the two `reason` fields belong to schemas travelling in opposite directions
+and that the strict one's exclusion of `direct=` is asserted through a real parse. It does not enumerate every
+other field in the protocol that reaches a published surface.
