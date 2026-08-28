@@ -16153,3 +16153,62 @@ it.
 is evidence about two markers.
 
 Related: V-2061 (population), V-2063 (first sample), V-2054 (the stale-OPEN direction).
+
+---
+
+## V-2066 — third sample: both latent findings have moved, one to enforced and one to fixed (2026-08-27)
+
+Third of the 28 markers (V-2061), same selection rule. `2026-06-03-duration-sweep-and-rearm-audit.md`
+— "Clean (don't re-audit)" plus two findings surfaced for a maintainer decision.
+
+**The clean claims hold** (per-session destroy isolation, cutoff math over the full tier enum,
+poller-retry resilience, the re-arm dedup posture). But **both** surfaced findings have moved since,
+in the two different directions this vein keeps producing.
+
+### Finding 1 — still latent, and the invariant that keeps it latent is now asserted
+
+`minCapFor` records the SMALLEST cap across matched tiers on every destroy event, because candidate
+rows come back without their tier. Correct only while exactly one tier is capped. **That precondition
+is enforced:** `session-duration-sweeper.test.ts` (V-1523) reads `MAX_SESSION_MINUTES_PER_TIER`,
+filters to capped tiers, and reds the moment a second appears, its message naming both the
+consequence and the right fix (carry the candidate's tier, don't adjust the arm).
+
+⭐ This is the "a nil consequence holds only while an invariant does — assert it, don't write it down"
+shape, already applied here. I checked for prior art _before_ measuring rather than after, which is
+the only reason I did not re-derive it: the register describes the precondition in prose, and prose
+is what I would have gone on.
+
+### Finding 2 — RESOLVED, and the register still asks for the decision
+
+The fan-out: handler re-arms (B) → `markComplete` throws → retry re-arms again (C) → two chains
+forever, because `dedup:false` never collapses them. The proposed fix was to exclude the executing
+job **by id** and restore `dedup:true`.
+
+**`dedup: false` no longer appears anywhere in `apps/server/src`.** The re-arms pass
+`dedupOnAccountAndType: true` together with `dedupAfterRunAt: currentRunAt`, and — checked, because a
+field nothing reads is not a fix — the repo consumes it: `gt(scheduledJobs.runAt,
+input.dedupAfterRunAt)` inside the dedup predicate. Same fix, keyed on **run-time cohort** instead of
+id, and it solves both halves at once: the in-flight job (runAt ≤ current) is excluded so the re-arm
+is never blocked, which is what `dedup:false` existed for; a prior pending successor (runAt > current)
+still collapses, so the retry creates no second chain. Applied to **16 self-re-arming services**.
+
+⛔ **Method note on how that zero was read.** `grep 'dedup: *false'` returning nothing is exactly the
+shape of a broken pattern, and I have twice reported a live thing as absent from such a zero. I did
+not treat it as the finding: I read the re-arm, then its implementation, then the repo predicate. The
+absence turned out to have a _reason_, and the reason is the finding. **A zero is a question, not an
+answer** — and it becomes evidence only once you can say what replaced the thing you were looking for.
+
+**Three of 28 sampled.** All sound on their clean claims; **two of three carried a stale surfaced
+item** (V-2065, this one). That ratio is now worth naming as a pattern rather than a coincidence: the
+"do NOT re-audit" heading protects the VERDICT, and the verdicts have held — what rots is the
+open-item list underneath it, because closing an item elsewhere never sends anyone back to the
+register that raised it.
+
+### Suite state at this point
+
+Full `npx vitest run`: **3129 passed | 117 skipped (3246 files), 31445 passed | 845 skipped**, 248.7s
+— matching `EXPECTED_TEST_FILES_ALL` exactly. `verify-suite`: OK, exit 0, full file count, with its
+own honest note that the 117 collected-but-never-executed files gate on `DATABASE_URL`. **Executed
+3129 of 3246 discovered**, which is the number that means anything.
+
+Related: V-2061 (population), V-2063 and V-2065 (first two samples).

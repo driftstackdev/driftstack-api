@@ -22,6 +22,12 @@ touch documented and/or incident-prone behavior, so they want a founder/maintain
 
 ## Finding 1 — `minCapFor` records the wrong cap once a 2nd tier is capped (latent; documented in-code)
 
+> ⚠️ **Still latent, and the precondition is now ENFORCED rather than described (V-1523,
+> re-verified 2026-08-27).** `session-duration-sweeper.test.ts` carries a CRITICAL arm that
+> reads `MAX_SESSION_MINUTES_PER_TIER`, filters to capped tiers, and reds the moment a second
+> one appears — naming the consequence and the fix. So "no current incorrectness" is asserted
+> by the suite, not left to a reader to re-check.
+
 `tickOnce` resolves the destroy-event `max_session_minutes` payload as `minCapFor(cutoffTiers)` — the
 **smallest** cap across all capped tiers — and applies it to **every** candidate, because the candidate's
 own tier isn't carried on `SessionRecord`. Today only `free` is capped, so this is always `20` and
@@ -35,6 +41,16 @@ future-proofing a latent issue with no current incorrectness, so wiring it now w
 when/if a second tier gains a cap.
 
 ## Finding 2 — self-re-arm + `dedup:false` can fan out under a poller retry (latent; incident-prone area)
+
+> ✅ **RESOLVED since — verified 2026-08-27 (V-2066), annotated here because this is the
+> heading a reader stops at.** `dedup: false` no longer appears anywhere in `apps/server/src`.
+> The re-arms pass `dedupOnAccountAndType: true` **plus** `dedupAfterRunAt: currentRunAt`, and
+> the repo reads it — `gt(scheduledJobs.runAt, input.dedupAfterRunAt)` in the dedup predicate.
+> That is this section's proposed fix in a run-time-cohort form rather than the by-id form
+> suggested: the in-flight job (runAt ≤ current) is excluded so the re-arm is never blocked
+> (the chain-death risk `dedup:false` existed for), while a prior pending successor (runAt >
+> current) DOES collapse, so the retry in step 3 below creates no second chain. Applied to
+> **16 self-re-arming services**, not only this one.
 
 The self-re-arming jobs (duration-sweep, auth-tokens sweeper, …) run, inside one handler:
 `await tickOnce()` → `await enqueueNext({ dedup:false })` → handler returns → poller `markComplete(job)`.
