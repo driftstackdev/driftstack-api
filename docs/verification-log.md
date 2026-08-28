@@ -18345,3 +18345,97 @@ already happened — reds only the ordering arm. Restored byte-identical both ti
 running during the window.
 
 Ratchets 3073 → 3074 and 3250 → 3251 for the one file added.
+
+---
+
+## V-2102 — third pass of the ownership mutation sweep: two predicates asserted only by their own source text (2026-08-28)
+
+V-2101 generalised to a question: which OTHER interfaces carry a safety step enforced once per
+implementation? **19 interfaces have ≥2 implementations under `apps/server/src`** (comments stripped,
+brace-matched bodies). Exactly one asymmetry — a guard-ish helper in some implementations but not all:
+`Driver::requireSession`, present in `MockDriver` and `PlaywrightDriver`, absent in `WebKitDriver`.
+**Refuted by reading:** `WebKitDriver` is a pure stub whose every method throws
+`DriverNotIntegratedError`; it holds no session state, so the absence is correct.
+
+⭐ 14 of the 19 are production/double pairs, and for those the invariant is agreement, not a guard.
+The repo already knows this: **V-1197 traced eighteen db-layer defects to one cause** — unit tests
+drive the in-memory double, so a property is proven in the double and unproven in the SQL that ships —
+and V-1198 built the first contract test "as the template for the other twenty-eight". Measured now:
+**45 interfaces with both an `InMemory*` and a `Drizzle*`/`Redis*` implementation, and 31 two-sided
+contract tests.** The programme largely completed.
+
+### The sweep, and what it actually found
+
+Two repos sit outside every contract test AND outside both existing boundary sweeps: `recipes-repo`
+(6 account predicates) and `agent-turn-receipts-repo` (2). Neutralised all 8 —
+`eq(t.accountId, …)` → `eq(t.accountId, t.accountId)` — and ran the full suite. Peer notified first,
+restore trapped, window ~4 minutes.
+
+**Caught: 6 failing files against a 2-file environmental baseline.** But WHICH assertions caught it is
+the finding:
+
+- **`recipes` — behaviourally covered, three real-Postgres assertions fired:** `deleteById refuses to
+delete` another account's row, `a recipe cannot be fetched by id from another account`, and
+  `recipes are not listed to another account`. ⛔ I had inferred `db-repo-account-scoped-reads-boundary`
+  covered only the three methods its header names. Wrong — **a header names what PROMPTED the file,
+  not what it now covers**; that file has 11 tests and reaches recipes.
+- **`agent-turn-receipts` — caught ONLY by `db-agent-turn-receipts-content-parity`, a TEXT pin.** No
+  behavioural test failed. So the account scoping on `reserve`/`complete` was asserted by source text
+  alone: a pin proves the predicate is WRITTEN, never that it holds against Postgres. That is exactly
+  the distinction V-1197 was built on, surviving in the one repo the programme never reached.
+
+⚠️ Severity stated rather than dramatised, and it is second-line: `(account_id, idempotency_key)` is
+the table's composite PRIMARY KEY, so the predicate is half the row's identity — but `reserve` compares
+session and request hash before returning a stored body, and that equality is what actually stops
+disclosure. Unscoped `complete` yields a durable denial of the victim's idempotent turn (their row is
+overwritten with ciphertext whose AAD names someone else, so their replay fails to decrypt), not a
+disclosure. Defence in depth that nothing verified — the same posture the existing boundary file
+already judged worth closing.
+
+### ⛔ My first arm was vacuous, and mutation caught what review did not
+
+The `complete` arm as first written varied account AND session AND hash together. `complete` matches on
+**five** predicates — account, key, session, hash, state — so the refusal it observed came from the
+session/hash mismatch and proved nothing about the account predicate it was named for. **It passed
+under mutation.** Not a broken test: a test that would have been cited as proof of tenant isolation
+while asserting something else, in the reassuring direction.
+
+Rewritten to hold every field equal to the victim's except the account, which is the only construction
+that attributes the refusal — at the cost of an unrealistic fixture (a real attacker would not know the
+victim's session id), stated in the test. Both arms now fail under mutation:
+`promise resolved "undefined" instead of rejecting`, and `expected 'mismatch' to be 'in-progress'`.
+⚠️ The replay arm is honestly labelled as order-dependent: its unscoped read is a `limit(1)` with no
+ORDER BY, so it catches the break only when the scan reaches the victim's row first.
+
+Two fixture facts worth recording: `agent_turn_receipts_request_hash` CHECKs `^[0-9a-f]{64}$`, so a
+readable label like `'victim-hash'` is rejected by Postgres — the constraint doing its job and the
+fixture inventing a shape the column does not accept; and `complete` THROWS on a zero-row update rather
+than returning silently, which the arm now asserts.
+
+### The stale claim next to it
+
+`recipes-repo.ts`'s header denied that any delete surface existed, citing the handoff that deferred one.
+`DELETE /v1/recipes/:id` is registered, `write`-scoped, returns 204, and is **published in the OpenAPI
+document**; `routes/recipes.ts` records the defer being pulled forward (V-530.I/.J). One file kept
+recording a decision another file records as overturned.
+
+⭐ The two findings are one blind spot: **a reader who believes there is no delete surface does not go
+looking for the account scoping on it.** Corrected, and its content-parity pin — which had frozen the
+false sentence and would have failed anyone who fixed it — now pins the corrected text plus a NEGATIVE
+sentinel that the retracted claim cannot return. ⛔ The retraction is PARAPHRASED, not quoted: my first
+draft quoted the stale sentence, which would have satisfied the new sentinel from inside the retraction
+explaining it.
+
+### Peer
+
+A2 reported this red against their full gate and attributed it correctly before investigating — file
+mtime stable, source repo unmodified, their own change confined to a gui-client test. Their diagnosis
+sampled an arm I was mid-rewrite on. Two things of theirs I adopted: **verify a mutation restore against
+GIT, not against your own snapshot** (`cmp` shares the mechanism that produced the snapshot; `git diff
+--quiet` fails differently because HEAD is an artifact neither party produced during the operation) —
+that is my own control rule, which I had been violating on every mutation this session; and their point
+that a 5-file reproduction says little about interleaving at 397. Closed on their bar instead: the
+rewritten arms green in a FULL run — **3251 files, 32326 tests, 2 failed**, both the environmental
+`MFA_ENCRYPTION_KEY` mismatch against the dev database, zero failures in the new arms.
+
+Related: V-1197/V-1198 (the programme this extends), V-2101 (the interface question that led here).

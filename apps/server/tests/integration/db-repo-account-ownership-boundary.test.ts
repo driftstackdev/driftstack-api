@@ -34,11 +34,19 @@ import { DrizzleAgentSessionsRepo } from '../../src/db/agent-sessions-repo.js';
 import { DrizzleAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
 import { DrizzleApiKeysRepo } from '../../src/db/api-keys-repo.js';
 import { DrizzleTeamMembersRepo } from '../../src/db/team-members-repo.js';
+import { DrizzleAgentTurnReceiptsRepo } from '../../src/db/agent-turn-receipts-repo.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 const TRANSCRIPT_KEY = Buffer.alloc(32, 11).toString('base64');
+
+// `agent_turn_receipts_request_hash` is CHECKed against `^[0-9a-f]{64}$` — a
+// sha256 digest. A readable label like 'victim-hash' is rejected by Postgres,
+// which is the constraint doing its job and the fixture inventing a shape the
+// column does not accept.
+const VICTIM_HASH = 'a'.repeat(64);
+const SHARED_HASH = 'c'.repeat(64);
 
 let dbReachable = false;
 let client: ReturnType<typeof postgres> | null = null;
@@ -46,6 +54,7 @@ let sessions: DrizzleAgentSessionsRepo | null = null;
 let proxies: DrizzleAccountProxiesRepo | null = null;
 let apiKeysRepo: DrizzleApiKeysRepo | null = null;
 let teamRepo: DrizzleTeamMembersRepo | null = null;
+let receipts: DrizzleAgentTurnReceiptsRepo | null = null;
 const seeded: string[] = [];
 
 beforeAll(async () => {
@@ -67,6 +76,7 @@ beforeAll(async () => {
   proxies = new DrizzleAccountProxiesRepo(handle);
   apiKeysRepo = new DrizzleApiKeysRepo(handle);
   teamRepo = new DrizzleTeamMembersRepo(handle);
+  receipts = new DrizzleAgentTurnReceiptsRepo(handle, TRANSCRIPT_KEY);
 });
 
 afterAll(async () => {
@@ -75,6 +85,7 @@ afterAll(async () => {
       await client`DELETE FROM team_members WHERE owner_account_id = ${accountId} OR member_account_id = ${accountId}`.catch(
         () => {},
       );
+      await client`DELETE FROM agent_turn_receipts WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM api_keys WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM account_proxies WHERE account_id = ${accountId}`.catch(() => {});
       await client`DELETE FROM agent_sessions WHERE account_id = ${accountId}`.catch(() => {});
@@ -333,6 +344,86 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         (await proxies!.list(victim)).length,
         'the victim’s proxy survives an attacker’s delete',
       ).toBe(1);
+    });
+
+    it("CRITICAL completing a turn receipt cannot reach another account's row. `complete` updates on FIVE predicates — account, key, session, hash, state — so every field except the account is held EQUAL to the victim's here, deliberately. A first version varied session and hash too and passed under mutation: the refusal it observed came from those, and the arm proved nothing about the account predicate it was named for. Isolating one predicate means the fixture may be unrealistic (an attacker would not know the victim's session id); that is the price of attributing the refusal. Neutralised, the update lands on the victim's row and replaces their stored response with ciphertext whose AAD names the attacker, so the victim's own replay then fails to decrypt — not a disclosure, a durable denial of their idempotent turn.", async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const victimSession = await seedSession(victim);
+      const key = `idem_${randomUUID()}`;
+
+      expect(
+        await receipts!.reserve({
+          accountId: victim,
+          agentSessionId: victimSession,
+          idempotencyKey: key,
+          requestHash: VICTIM_HASH,
+        }),
+        'fixture: the victim holds an in-progress receipt under this key',
+      ).toEqual({ kind: 'reserved' });
+
+      // Same key, attacker's own account and session. With the predicate intact
+      // the UPDATE matches zero rows and `complete` REFUSES rather than
+      // returning quietly — asserted here because the refusal is the observable
+      // half, and a silent no-op would look identical to a successful write
+      // that happened to land on the right row.
+      await expect(
+        receipts!.complete({
+          accountId: attacker,
+          // The victim's session and hash on purpose — see the title. Only the
+          // account differs, so only the account predicate can refuse this.
+          agentSessionId: victimSession,
+          idempotencyKey: key,
+          requestHash: VICTIM_HASH,
+          terminal: { status: 200, body: { owner: 'attacker' } },
+        }),
+        "completing another account's receipt must refuse, not succeed",
+      ).rejects.toThrow();
+
+      const [row] = await client!`
+        SELECT state FROM agent_turn_receipts
+        WHERE account_id = ${victim} AND idempotency_key = ${key}`;
+      expect(row?.state, "the victim's receipt was completed by another account").toBe(
+        'in_progress',
+      );
+    });
+
+    it("CRITICAL a replay lookup does not return another account's terminal response. On an insert conflict `reserve` re-reads the row and, when session and request hash match, decrypts and RETURNS its stored body — and `readTerminal` builds the decryption AAD from the ROW, so a row fetched across the boundary decrypts cleanly rather than failing closed. The (session, hash) equality is what actually stops disclosure; the account predicate is the second line, and the second line is the half nothing was asserting. ⚠️ Unlike the arm above, this one is not fully deterministic under mutation: the unscoped read is a `limit(1)` with no ORDER BY, so it catches the break only when the scan reaches the victim's row first. The victim is seeded first to make that the likely order; the arm above is the deterministic proof.", async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const victimSession = await seedSession(victim);
+      const attackerSession = await seedSession(attacker);
+      const key = `idem_${randomUUID()}`;
+
+      await receipts!.reserve({
+        accountId: victim,
+        agentSessionId: victimSession,
+        idempotencyKey: key,
+        requestHash: SHARED_HASH,
+      });
+      await receipts!.complete({
+        accountId: victim,
+        agentSessionId: victimSession,
+        idempotencyKey: key,
+        requestHash: SHARED_HASH,
+        terminal: { status: 200, body: { owner: 'victim' } },
+      });
+
+      const attackerArgs = {
+        accountId: attacker,
+        agentSessionId: attackerSession,
+        idempotencyKey: key,
+        requestHash: SHARED_HASH,
+      };
+      expect(
+        await receipts!.reserve(attackerArgs),
+        'fixture: the attacker gets their OWN row, not a conflict',
+      ).toEqual({ kind: 'reserved' });
+
+      const replay = await receipts!.reserve(attackerArgs);
+      expect(replay.kind, "the attacker's own reservation is still in progress").toBe(
+        'in-progress',
+      );
     });
   },
 );

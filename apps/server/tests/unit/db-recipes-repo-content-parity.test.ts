@@ -39,9 +39,17 @@ describe('db/recipes-repo content parity', () => {
     expect(body).toMatch(
       /\/\/\s+- Label trim \+ length \+ description length validation lives in\s*\/\/\s+the service-layer `validateLabelAndDescription`; the DB CHECK\s*\/\/\s+constraint is the belt-and-suspenders backstop for that\./,
     );
-    expect(body).toMatch(
-      /\/\/\s+- No update\/delete surface in v1\.0 — write-only per the\s*\/\/\s+orchestrator handoff #3 Q\.5\./,
-    );
+    // ⛔ This pinned "No update/delete surface in v1.0 — write-only per the
+    // orchestrator handoff #3 Q.5", which had stopped being true: `deleteById`
+    // backs DELETE /v1/recipes/:id, registered, `write`-scoped, 204, and
+    // published in the OpenAPI document. The pin did not merely miss the change
+    // — it held the false sentence in place and would have failed anyone who
+    // corrected it. A pin records what the text SAID, never whether it is TRUE.
+    expect(body).toMatch(/\/\/\s+- No UPDATE surface\. There IS a delete: `deleteById` backs/);
+    // Negative sentinel: the retracted claim must not come back, and the header
+    // paraphrases it rather than quoting so this arm cannot be satisfied from
+    // inside the retraction that explains it.
+    expect(body).not.toMatch(/No update\/delete surface in v1\.0/);
   });
 
   it('rowToRecord binds and runtime-validates both JSONB payloads to account + recipe', () => {

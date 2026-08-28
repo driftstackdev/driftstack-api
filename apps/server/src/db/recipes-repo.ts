@@ -10,8 +10,26 @@
 //   - Label trim + length + description length validation lives in
 //     the service-layer `validateLabelAndDescription`; the DB CHECK
 //     constraint is the belt-and-suspenders backstop for that.
-//   - No update/delete surface in v1.0 — write-only per the
-//     orchestrator handoff #3 Q.5.
+//   - No UPDATE surface. There IS a delete: `deleteById` backs
+//     `DELETE /v1/recipes/:id`, which is registered, `write`-scoped,
+//     returns 204, and is published in the OpenAPI document.
+//
+// ⛔ This line used to deny that any delete surface existed and cited the
+// orchestrator handoff that deferred one. Deliberately PARAPHRASED rather than
+// quoted: the parity pin below asserts the stale sentence is ABSENT, and
+// reproducing it here would satisfy that pin from inside the retraction.
+// The write-only posture was real when this file was written and was
+// REVERSED: routes/recipes.ts records the
+// read/management path (list/get/delete) being pulled forward out of the
+// v1.1 defer as V-530.I/.J, and its own header has said so since. One file
+// kept recording a decision another file records as overturned.
+//
+// ⚠️ Worth stating because it cost something measurable: a reader who
+// believes there is no delete surface does not go looking for the account
+// scoping on it. `deleteById` scopes on (id, accountId), and when the
+// ownership mutation sweep reached this file the delete predicate turned out
+// to be covered — but by `db-account-scoped-deletes-tenant-scope-drizzle`,
+// which was written against the route, not against this header's claim.
 
 import { verifyBootEncryptionKey } from '../lib/boot-key-verification.js';
 import { randomUUID } from 'node:crypto';
