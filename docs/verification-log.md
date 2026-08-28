@@ -18168,3 +18168,69 @@ nothing is therefore invisible to it. That is a correct scope, not a bug in the 
 means "does this guard need stripping?" stays a human question.
 
 Related: V-2096 (prose satisfying a structural pattern, in the false-negative direction), V-2097.
+
+---
+
+## V-2099 — a `);` inside a help string disarmed the metric-cardinality guard, and the pin froze the undercount (2026-08-28)
+
+Full suite after four commits: **3250 files, 32315 tests, 3 failed, 195s** (DATABASE_URL + REDIS_URL
+from `.env`, so integration files execute rather than skip).
+
+Two failures are environmental and not code: `parked-pair-mode-survives-a-restart` and
+`production-bootstrap-arms-every-chain` both die on _"Webhook signing secrets: stored data could not be
+decrypted with the configured MFA_ENCRYPTION_KEY."_ My run pointed at the dev database, whose stored
+secrets were encrypted under a different key. ⚠️ Not connectivity — zero `ECONNREFUSED` in the log;
+these two are the ones hardened by `80a422ee1` ("18 integration files reported PASSED against a dead
+service") to fail loudly instead of vacuously, and they did their job.
+
+The third was mine, and it inverted on inspection.
+
+### The pin was right to go red, and wrong about why
+
+`metrics-label-cardinality-cross-source-invariant` pins the distinct label keys in use. It went from 16
+to 17, the new key being `role`. I had changed a metric HELP string in V-2096, so my first read was that
+I had introduced a label. I had not.
+
+The extractor was `/register(?:Counter|Gauge|Histogram)\s*\((.*?)\);/gs` — **non-greedy, stopping at
+the first `);`**. The old help text ended a clause with `…/v1/agent-sessions/:id/livekit-token (LK.3);`.
+That `)` and `;` sit **inside a string literal**, and the regex cannot tell. So the captured body ended
+before the label array, `TRAILING_ARRAY` matched nothing, and that registration contributed **zero**
+keys. Verified against both revisions: at `0c74605fb^` the site extracts `[]`; at HEAD it extracts
+`['role', 'outcome']`. **My edit did not break the guard — it removed the `);` and thereby revealed
+what the guard had never been able to see.** The recorded list of 16 was a pin frozen around an
+extraction bug, which reads exactly like a pin frozen around a fact.
+
+⛔⛔ **The consequence is not a wrong number.** Those keys were invisible to the CRITICAL arm as well —
+the one that forbids identifier-shaped labels because the registry keys each series by its label VALUES
+in a never-evicted Map, so a `session_id` label costs one entry per session for the life of the process.
+**Any counter whose help text contained a `);` could have registered `['session_id']` and passed.**
+
+**Proved two-sided, on the real subject.** Planting `session_id` into a real registration whose help
+string carries a `);`: with the old regex the CRITICAL arm reports **`✓` — passed while the offending
+label was registered**; with the balanced extractor it fails naming
+`session_id (src/lib/bootstrap.ts)`. Restored byte-identical.
+
+⭐ **Neither anti-vacuity floor could catch this, and the reason generalises.** They floor the number of
+SITES found (≥18) and DISTINCT KEYS (≥12). Truncation reduces neither: 21 sites still matched, 16 keys
+still cleared the floor, and the one site that mattered contributed nothing. **Floor the EXTRACTION, not
+just the discovery** — a parser that finds things and extracts nothing from them satisfies every
+discovery floor ever written.
+
+### Fixes
+
+1. The extractor now balances parens while skipping string literals, so prose in a help string cannot
+   truncate a call. Boundary: **22 registration sites** under `apps/server/src` (`metrics-registry.ts`
+   excluded, as the guard already does), of which exactly one is legitimately label-less.
+2. `role` added to the recorded list, 16 → 17.
+3. A new arm: every registration yields at least one label key, or is recorded in `LABELLESS_METRICS`
+   with the rot check that an entry gaining labels must leave. `it(` 3 → 4, deliberately.
+
+⛔ **The new arm's first version was vacuous, and the mutation caught what review did not.** I keyed the
+exemption by FILE — `{ metric: 'unhandledRejectionTotal', file: 'src/lib/bootstrap.ts' }` — and the one
+deliberately label-less counter lives in `bootstrap.ts`, so the exemption covered **every registration
+in that file, 12 of the 22**. Deleting a real label array left the arm green. Re-keyed to the metric
+identifier; the same mutation now fails naming `METRIC_NAMES.livekitTokenMintTotal`. This is
+[an exemption keyed by filename] one more time, written by me, in the arm whose whole job was to close a
+blind spot — the third instance this session of prose or a coarse key defeating a structural check.
+
+Related: V-2096 (prose satisfying a structural pattern, same class), V-2098 (comments parsed as SQL).

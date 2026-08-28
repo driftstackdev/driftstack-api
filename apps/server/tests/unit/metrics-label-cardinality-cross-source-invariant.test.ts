@@ -41,12 +41,58 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const REGISTRATION = /register(?:Counter|Gauge|Histogram)\s*\((.*?)\);/gs;
+const REGISTRATION_START = /register(?:Counter|Gauge|Histogram)\s*\(/g;
 /** The trailing array literal of a registration call is its labelKeys. */
 const TRAILING_ARRAY = /\[([^\]]*)\]\s*,?\s*$/s;
 
+/**
+ * The argument list of the call opening at `open`, found by balancing parens
+ * while skipping string literals.
+ *
+ * ⛔ This replaced `/register…\((.*?)\);/gs`, and the difference is not style.
+ * Non-greedy `.*?` stops at the FIRST `);` — including one inside the HELP
+ * STRING, which is prose and routinely contains parentheses. Measured: the
+ * LiveKit mint counter's help text ended a clause with `…/livekit-token (LK.3);`,
+ * so the captured body stopped before the label array, `TRAILING_ARRAY` found
+ * nothing, and that registration contributed ZERO keys.
+ *
+ * It was invisible in both directions. The recorded key list below was pinned at
+ * 16 when the truth was 17 — a pin frozen around an extraction bug reads exactly
+ * like a pin frozen around a fact. Worse, the CRITICAL unbounded-key arm never
+ * saw those keys either: a counter registered with `['session_id']` would have
+ * passed silently for as long as its help text contained a `);`. That arm exists
+ * because such a label costs one never-evicted map entry per session forever.
+ *
+ * Found only because an unrelated edit removed the `);` from that help string and
+ * the pin went red for what looked like the wrong reason.
+ */
+function argumentList(text: string, open: number): string | null {
+  let depth = 0;
+  let quote: string | null = null;
+  for (let i = open; i < text.length; i += 1) {
+    const c = text[i]!;
+    if (quote !== null) {
+      if (c === '\\') {
+        i += 1;
+        continue;
+      }
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') quote = c;
+    else if (c === '(') depth += 1;
+    else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return text.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
 interface Registration {
   file: string;
+  /** First argument as written, e.g. `METRIC_NAMES.unhandledRejectionTotal`. */
+  metric: string;
   labelKeys: string[];
 }
 
@@ -55,11 +101,13 @@ function collectRegistrations(): Registration[] {
   for (const file of sourceFiles(SRC)) {
     if (file.endsWith('metrics-registry.ts')) continue; // the definition itself
     const text = readFileSync(file, 'utf8');
-    for (const match of text.matchAll(REGISTRATION)) {
-      const body = match[1] ?? '';
+    for (const match of text.matchAll(REGISTRATION_START)) {
+      const body = argumentList(text, text.indexOf('(', match.index + match[0].length - 1));
+      if (body === null) continue;
       const arr = TRAILING_ARRAY.exec(body.trim());
       const labelKeys = arr === null ? [] : [...arr[1]!.matchAll(/'([^']+)'/g)].map((m) => m[1]!);
-      found.push({ file, labelKeys });
+      const metric = (body.split(',')[0] ?? '').trim();
+      found.push({ file, metric, labelKeys });
     }
   }
   return found;
@@ -87,6 +135,14 @@ function isUnbounded(key: string): boolean {
   ].includes(key);
 }
 
+/**
+ * Registrations that deliberately carry no labels. One entry today: a process-wide
+ * counter with nothing to break down by. Recorded rather than pattern-matched so
+ * that a site yielding zero keys is either a stated decision or a broken parse,
+ * and never ambiguous.
+ */
+const LABELLESS_METRICS: readonly string[] = ['METRIC_NAMES.unhandledRejectionTotal'];
+
 describe('metric label cardinality', () => {
   const registrations = collectRegistrations();
 
@@ -107,6 +163,29 @@ describe('metric label cardinality', () => {
     expect(offenders).toEqual([]);
   });
 
+  it("CRITICAL every registration yields label keys, or is recorded as deliberately label-less. The two floors above count SITES and DISTINCT KEYS, and a truncated parse reduces neither — it empties one site's list while the site is still found and the other twenty still contribute keys. That is exactly how a `);` inside a help string hid a registration from the identifier-shaped-key arm: 21 sites still matched, 16 distinct keys still exceeded the floor of 12, and the one site that mattered contributed nothing. Floor the EXTRACTION, not just the discovery.", () => {
+    // ⛔ Keyed on the METRIC, not the file. Keyed on the file, this arm was
+    // vacuous: the one deliberately label-less counter lives in bootstrap.ts, so
+    // the exemption covered EVERY registration in bootstrap.ts — 12 of the 22.
+    // Caught by mutation, not by review: deleting a real label array left the arm
+    // green.
+    const unexplained = registrations
+      .filter((r) => r.labelKeys.length === 0 && !LABELLESS_METRICS.includes(r.metric))
+      .map((r) => `${r.metric} (${r.file.slice(r.file.indexOf('/src/') + 1)})`);
+    expect(
+      unexplained,
+      'registration(s) yielding no label keys — either the parse broke on this site or the metric is genuinely label-less and belongs in LABELLESS_METRICS:',
+    ).toEqual([]);
+    // Rot: a recorded exemption that gains labels must leave the list, or the
+    // roster grows a fossil that makes the guard look more thorough than it is.
+    expect(
+      LABELLESS_METRICS.filter(
+        (m) => !registrations.some((r) => r.metric === m && r.labelKeys.length === 0),
+      ),
+      'recorded label-less metric(s) that now carry labels — remove the entry:',
+    ).toEqual([]);
+  });
+
   it('records the label keys in use, so adding one is a visible decision rather than a silent widening', () => {
     const distinct = [...new Set(registrations.flatMap((r) => r.labelKeys))].sort();
     // Exact, not a superset: a new key should red this and be acknowledged. The
@@ -123,6 +202,7 @@ describe('metric label cardinality', () => {
       'outcome',
       'prefix',
       'result_kind',
+      'role',
       'route',
       'status_class',
       'template',
