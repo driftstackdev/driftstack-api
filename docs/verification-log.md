@@ -18439,3 +18439,68 @@ rewritten arms green in a FULL run — **3251 files, 32326 tests, 2 failed**, bo
 `MFA_ENCRYPTION_KEY` mismatch against the dev database, zero failures in the new arms.
 
 Related: V-1197/V-1198 (the programme this extends), V-2101 (the interface question that led here).
+
+---
+
+## V-2103 — V-993's db-layer coverage method does not reproduce as written, and three claims that hold (2026-08-28)
+
+**The question.** V-2102 established that `agent-turn-receipts`' account scoping was asserted by source
+text alone, found by mutating and running the full suite. That is the expensive way to learn something
+an instrument reports for free: **a cold function's account predicate is unproven by definition.**
+V-993 measured exactly this — 82.3% of statements in `apps/server/src/db`, 81 cold functions of 730 —
+and V-994/V-995 closed items five and six of a list of 19 account-scoped `src/db` functions no
+integration test executes. Re-running it at HEAD would give the current work-list directly.
+
+⛔ **It does not reproduce. Five attempts, no coverage report for the db layer, and the variables are
+worth recording so the next attempt does not repeat them:**
+
+| attempt                                                                                                 | outcome                                                                                 |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| CLI `--coverage.include` + the config's `src/db` exclude                                                | empty file set — **V-993's own caveat, reproduced exactly**                             |
+| CLI `--coverage.exclude` to replace the config array                                                    | does not replace it; still nothing                                                      |
+| probe config OUTSIDE the repo                                                                           | `Cannot find module 'vitest/config'` — resolution is relative to the config's directory |
+| probe config INSIDE the repo, exclusion absent                                                          | "Coverage enabled with v8", **no report written anywhere**                              |
+| the real config edited, `reportsDirectory` outside then inside the repo, with and without a path filter | no report in any combination                                                            |
+
+⚠️ **Stated as a boundary, not a verdict: I could not reproduce it. That is not proof the method is
+broken for everyone** — coverage demonstrably works by another route. The peer session's
+`verify-suite --all` produced `coverage/coverage-summary.json` at the same HEAD: **311 entries, 285
+under `apps/server/src`, and 0 under `src/db`** — which independently confirms the exclusion is the
+only thing between the gate and that directory, and that the collection machinery is fine. What is
+established is narrower and still useful: **V-993's "Method, for whoever repeats it" paragraph is not
+sufficient to repeat it**, and the next person should budget for that rather than assume a typo.
+
+⭐ **Two guards caught the config edit, and the second is the interesting one.**
+`workspace-vitest-config-content-parity` fired on the text, as expected. So did
+`a-gate-that-does-not-name-its-blind-spot-reads-as-total` — which asserts the coverage gate NAMES its
+blind spot, so DELETING the `src/db` exclusion made the gate's stated blind spot false and the guard
+refused. A guard that fires when you silently WIDEN a gate's scope is the mirror of every "you
+narrowed it" guard in this repo, and I had not seen one before. Both green again once restored; the
+config verified identical to HEAD by `git diff --quiet`, and the peer's coverage artifact left
+untouched (its mtime unchanged across all five runs).
+
+### Three universal claims checked, all holding
+
+Boundary: comment lines in `apps/server/src`, read at HEAD.
+
+- `admin-accounts-repo` — _"zero-fill from AccountTierSchema.options so every tier is present (no
+  hardcoded list to drift from the enum)"_. **Holds:** `emptyTierCounts` iterates
+  `AccountTierSchema.options`, in both copies of the helper (`admin-accounts-repo`,
+  `admin-billing-repo`). Duplicated, but both derive from the same schema so they cannot drift apart.
+- `sessions-repo` — the same claim for statuses. **Holds:** `emptySessionStatusCounts` iterates
+  `SessionStatusSchema.options`.
+- `openapi.ts` S33 — _"Apart from page-state, every route returns a DISCRIMINATED 200 body in each
+  relay case."_ **Holds** across the block's seven agent-session routes (lines 5401–5704): the cookie
+  read + import pair, history, file upload, and the download list + fetch pair all carry
+  `agentRelayStatus`; page-state is the stated exception.
+
+⛔ **Both of my instruments were wrong first, in the two classic ways.** The route extractor anchored
+with `index()` on a string that occurs FOUR times and started 5,200 lines early, returning
+`/v1/sessions/*` routes and flagging all nine as violations — garbage, discarded. Re-anchored by LINE,
+it then over-reached with a fixed 700-line window and flagged `livekit-token` and `recipe-suggestion`,
+which belong to the "LK arc" section beginning at 5705. **The claim's own text enumerates its seven
+endpoints; reading that is what bounded the window correctly.** A count that disagrees with the prose
+beside it is the instrument, not the finding.
+
+No source change. Recorded so the cold-function work-list stays an open thread with its blockers named
+rather than a measurement someone assumes was taken.
