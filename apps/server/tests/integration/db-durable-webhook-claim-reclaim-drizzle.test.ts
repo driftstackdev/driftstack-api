@@ -135,5 +135,60 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
         await client`SELECT status FROM webhook_deliveries WHERE id = ${freshInFlight}`;
       expect(freshRow?.status).toBe('in_flight');
     });
+
+    it('CRITICAL the delivery lifecycle runs against Postgres, and BOTH write fences bite. enqueueDelivery / resetDeliveryToPending / deleteDelivery had never executed a line of SQL: they were pinned only by source text. The fences ARE the safety properties. Reset refuses an in_flight row because a live worker owns it. Delete matches id AND the dlq status, so a concurrent requeue landing between the service read and this call cannot destroy a live delivery.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleWebhooksRepo(
+        { client, db, close: async () => {} },
+        { secretEncryptionKeyBase64: Buffer.alloc(32, 17).toString('base64') },
+      );
+      const accountId = randomUUID();
+      const webhookId = randomUUID();
+      await client`INSERT INTO accounts (id, email) VALUES (${accountId}, ${`lc-${accountId}@test.local`})`;
+      await client`INSERT INTO webhook_endpoints (id, account_id, url, secret, secret_prefix, events)
+        VALUES (${webhookId}, ${accountId}, 'https://example.test/hook', 'whsec_abcdefghijklmnopqrstuvwxyz234567', 'whsec_test',
+                ARRAY['session.completed']::webhook_event_type[])`;
+
+      const at = new Date();
+      const id = await repo.enqueueDelivery({
+        webhookId,
+        eventId: randomUUID(),
+        eventType: 'session.completed',
+        payload: { body: '{}', emittedAtSec: 1 },
+      });
+      const statusOf = async (): Promise<string> => {
+        const [r] = await client!`SELECT status FROM webhook_deliveries WHERE id = ${id}`;
+        return (r?.status as string) ?? 'gone';
+      };
+      expect(id, 'enqueueDelivery must return the DB-generated id').toBeTruthy();
+      expect(await statusOf(), 'a freshly enqueued delivery is pending').toBe('pending');
+
+      // FENCE 1 - a live worker owns an in_flight row; reset must refuse it.
+      await client`UPDATE webhook_deliveries SET status = 'in_flight' WHERE id = ${id}`;
+      expect(
+        await repo.resetDeliveryToPending(id, at),
+        'resetting an in_flight row would yank a delivery from a live worker',
+      ).toBeNull();
+      expect(await statusOf(), 'the refused reset must not have changed the row').toBe('in_flight');
+
+      // A non-in_flight row DOES reset - without this the arm above could pass
+      // on a reset that never works at all.
+      await client`UPDATE webhook_deliveries SET status = 'delivered', attempts = 3 WHERE id = ${id}`;
+      const reset = await repo.resetDeliveryToPending(id, at);
+      expect(reset, 'a delivered row must be resettable - the replay path').not.toBeNull();
+      expect(await statusOf()).toBe('pending');
+
+      // FENCE 2 - delete matches id AND the dlq status.
+      expect(
+        await repo.deleteDelivery(id),
+        'deleting a PENDING delivery would destroy a live one',
+      ).toBe(false);
+      expect(await statusOf(), 'the refused delete must not have removed the row').toBe('pending');
+
+      await client`UPDATE webhook_deliveries SET status = 'dlq' WHERE id = ${id}`;
+      expect(await repo.deleteDelivery(id), 'a dlq row is deletable').toBe(true);
+      expect(await statusOf(), 'the dlq row must be gone').toBe('gone');
+    });
   },
 );

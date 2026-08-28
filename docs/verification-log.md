@@ -17564,3 +17564,54 @@ same conclusion and retracted their earlier framing that the two were the same c
 that it is empty.** Write-and-run as one action; if the inline check fails, nothing is written.
 
 Related: V-2087 (text pins are shape assertions), V-2086 (the classified list), V-1576 (the seam).
+
+---
+
+## V-2089 — three more closed in one arm, and both webhook write fences now bite against Postgres (2026-08-28)
+
+Continuing V-2086's list. `enqueueDelivery`, `resetDeliveryToPending` and `deleteDelivery` share
+`DrizzleWebhooksRepo`, so one lifecycle arm executes all three — and the interesting part is not the
+execution, it is that **both write fences are safety properties nothing had ever tested**:
+
+    resetDeliveryToPending   .where(and(eq(id), ne(status, 'in_flight')))
+    deleteDelivery           .where(and(eq(id), eq(status, 'dlq')))
+
+Reset refuses an `in_flight` row because a live worker owns it. Delete matches id **AND** status, so —
+in the repo's own words — "a concurrent state change (e.g. a worker requeued the row between the
+service's findDeliveryById and this call) won't accidentally delete a non-DLQ delivery."
+
+**The arm**, in `db-durable-webhook-claim-reclaim-drizzle.test.ts` (an existing host that builds the
+repo inside an ISOLATED SCHEMA dropped in `afterAll`, so no cleanup code and no new file): enqueue →
+assert `pending` → force `in_flight`, reset must return **null** and leave the row untouched → force
+`delivered`, reset must succeed (without this the refusal above could pass on a reset that never works
+at all) → delete a `pending` row must return **false** and leave it → force `dlq`, delete returns
+**true** and the row is gone.
+
+**Proof.** Removing each fence separately from the real subject reds exactly one arm — mine — and
+nothing else; source restored byte-identical from a path-keyed snapshot both times. `it(` 2 → 3, tsc
+clean.
+
+### ⛔ The first attempt reported "no tests", which is a syntax error wearing a green-adjacent costume
+
+My `it(...)` title is a single-quoted JS string and I wrote `status='dlq'` and `the service's read`
+into it. Both terminate the string. Vitest reported **`Tests no tests`** — not a failure — which is
+exactly the symptom the standing rules name and which I have now hit a fourth time this session.
+`tsc -p apps/server/tsconfig.test.json` located it immediately (TS1005 at the title line); the run
+alone would not have.
+
+⭐ Added `assert "'" not in title` to the generator before rewriting. **The lesson is not "escape your
+quotes", it is that a title is CODE** — long prose in a quoted string is the most quote-dense thing in
+a test file, and it is the one part nobody proofreads because it reads as documentation.
+
+### Running total on the eleven
+
+**4 closed** (`markEmailVerified`, `enqueueDelivery`, `resetDeliveryToPending`, `deleteDelivery`),
+**7 remain** — `findAccountById`, `countAllByStatus`, `setEgressCapabilityReport`, `upsertSubscription`,
+`touchWebSessionLastUsed`, `findByConfirmTokenHash`, `getDetail` — each with an existing host that
+already constructs its repo.
+
+⭐ Both closures so far found the same thing: the method was pinned by source text, and the property
+worth asserting was a **fence** — a WHERE clause whose whole job is to refuse. A text pin proves the
+fence is written; only execution proves the database applies it.
+
+Related: V-2088 (the first closure), V-2087 (why text pins are shape assertions), V-2086 (the list).
