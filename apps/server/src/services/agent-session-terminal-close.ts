@@ -33,10 +33,26 @@
 //     here must NOT escape into that loop. A close failure just leaves the
 //     worker-disconnect reaper + 12h orphan_reap backstop to catch the row.
 //
-// SECURITY: the close reason becomes the row's internal-only closed_reason. We
-// use `reason` (clean snake_case), never `detail`, so the egress-leak
+// SECURITY: the close reason is persisted as `closed_reason`, and that column
+// IS customer-visible. `packages/api-types` publishes it, it appears in the
+// OpenAPI spec and in both the TypeScript and Python SDKs,
+// `routes/agent-sessions.ts` returns it on the session resource, and it is
+// interpolated into a customer-facing "Agent session is <status> (<reason>)"
+// error. We use `reason` (clean snake_case), never `detail`, so the egress-leak
 // `direct=<node-ip>` diagnostic (W1859) that can ride `detail` never reaches it.
-// If a future webhook/SDK ever surfaces closed_reason, scrub `direct=` first.
+//
+// ⛔ This comment used to call `closed_reason` INTERNAL-ONLY and said "if a
+// future webhook/SDK ever surfaces closed_reason, scrub `direct=` first". That
+// condition has since fired, and the remedy taken was better than the one
+// proposed: rather than scrubbing at this sink, `SessionStatusSchema.reason` in
+// `schemas/harness-control-protocol.ts` admits only `^[a-z][a-z0-9_]{0,127}$`,
+// and `fleet-control-registry` safeParses every inbound frame against
+// `HarnessOutboundSchema` before dispatching it here. A token matching that
+// pattern cannot carry `direct=<ip>` — it has no `=` and no `.`.
+//
+// So the value is safe, but NOT because it stays inside the system. Keep using
+// `reason` over `detail`, and do not relax that regex on the belief that
+// nothing customer-facing reads this column.
 
 import type { AgentSessionsRepo } from './agent-sessions.js';
 import type { SessionLivenessStore } from './session-liveness-store.js';

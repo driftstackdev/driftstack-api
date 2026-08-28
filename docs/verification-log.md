@@ -10641,3 +10641,57 @@ naming the subject, not finishing the measurement.
 **Boundary:** this establishes that every integration file which bails carries an in-`it()` assertion that its
 handle was non-null, and that the guard enforcing it is green. It does not measure whether those assertions are
 each _correct_ about the handle they name.
+
+## V-2123 — a documented trip-wire had fired: `closed_reason` is customer-visible, and the file reasoning about its egress leak still called it internal-only (2026-08-28)
+
+Reached by re-running an open note's post-condition rather than by a sweep. A memory from **2026-06-03**
+recorded the `session.failed` webhook forwarding the raw driver `err.message` — unsanitized and
+length-unbounded — into the customer webhook and the stored event row, filed LATENT because the real driver was
+not wired. **86 days is long enough that an open note expires exactly like a clean one**, so I re-checked both
+halves.
+
+**The leak is closed, verified at source.** `services/sessions.ts` now derives a failure CLASS
+(`classifySessionFailure(err)`, whose fallback arm returns `'unknown'`, so it is total) and renders the payload
+from `sessionFailureCopy(class)` — an **exhaustive** switch over four classes with **no default arm**, each
+returning a fixed customer-safe string. Checked as a post-condition rather than a derivation: **zero**
+`err.message` / `error.message` occurrences remain anywhere in that file. A second layer,
+`projectSessionFailedData`, closes the data again before persistence. ⭐ The gating condition never fired
+either — `drivers/webkit.ts` still declares "Every method throws `DriverNotIntegratedError`" and all 11 do, so
+the fix landed ahead of the trigger. The memory has been marked RESOLVED.
+
+**Re-running the same sweep across the grown family is what produced the finding.** That audit swept three
+`enqueueEvent` producers; there are now **seven**. The four added since are all clean, and deliberately so —
+`challenge-relay` and `profile-save-failed-relay` both route their free-form field through
+`customerSafeNodeDiagnostic` with a comment naming the exact lesson, and `challenge-relay` additionally drops a
+frame from a non-owning node. `webhooks.ts` and `bootstrap.ts` are the method definition and a forwarder shim.
+
+⛔ **THE FINDING. `services/agent-session-terminal-close.ts` carried a SECURITY note stating the close reason
+"becomes the row's internal-only `closed_reason`", and closing with: "If a future webhook/SDK ever surfaces
+`closed_reason`, scrub `direct=` first."** That condition **has fired**. `closed_reason` is now published in
+`packages/api-types`, in the OpenAPI spec, in **both** the TypeScript and Python SDKs, returned on the session
+resource by `routes/agent-sessions.ts:439`, and interpolated into a customer-facing error at `:4443`.
+
+**The value is nonetheless safe, and the remedy taken was better than the one the note proposed.** Rather than
+scrubbing at the sink, `SessionStatusSchema.reason` in `schemas/harness-control-protocol.ts` admits only
+`^[a-z][a-z0-9_]{0,127}$`, and `fleet-control-registry.ts:532` `safeParse`s every inbound frame against
+`HarnessOutboundSchema` before dispatch. A token matching that pattern cannot carry the `direct=<node-ip>`
+diagnostic — the pattern has no `=` and no `.`. The schema's own comment shows the author knew: "persisted
+verbatim into customer-visible `closed_reason`, so accept only the emitted snake_case token contract."
+
+⭐ **So two files disagreed about whether a column is customer-visible, and the one that was wrong is the one
+whose header reasons about egress leaks.** The remedy moved to the wire boundary and the prose specifying the
+trigger was left behind — a guard's self-correction updating the mechanism while the sentence citing it goes
+false, one level up. A reader auditing the terminal-close path would be told the value stays inside the system,
+and could relax that regex, or add a close path writing free-form text, on that belief. Corrected in place: the
+comment now states the exposure, names the enforcing regex and the `safeParse`, and says explicitly that the
+value is safe **but not because it stays internal**. No pin froze the old text; the change is comment-only and
+`tsc` is clean.
+
+⛔ **Nearly resolved an identifier by name, one hour after writing the memory about it.** `SessionStatusSchema`
+exists in BOTH `@driftstack/api-types` and `schemas/harness-control-protocol.ts`. The regex protection only
+guards this path if the frame reaching the terminal-close consumer is the protocol one — resolved by reading
+the **import** (`import type { SessionStatus } from '../schemas/harness-control-protocol.js'`), not by the
+name. Had I taken the api-types definition, the delegation would have been "verified" against a stranger.
+
+**Boundary:** this establishes which surfaces publish `closed_reason` and what the wire schema admits into it.
+It does not exercise a hostile node against the live endpoint.
