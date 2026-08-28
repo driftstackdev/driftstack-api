@@ -16256,3 +16256,71 @@ The only instrument that distinguishes them is a grep I keep running afterwards.
 **the trigger is naming a document, symbol, or subsystem — not finishing an analysis.** The moment
 `2026-05-31-auth-flow-token-audit.md` appeared in my sampling list was the moment to grep memory for
 `auth.flow.token`, and that is a cheaper action than the measurement it would have replaced.
+
+---
+
+## V-2068 — REFUTED, and it calibrates the technique: "never named in the audit record" is not "unguarded" (2026-08-27)
+
+Applied `measure which files the audit record has never named` to a root it had never been run
+against. Prior runs covered `routes/` (1 of 60) and `services/lib/db/middleware` (39 of 273, yielding
+three findings). **`packages/` had never been measured.**
+
+**3 of 93** `.ts` files under `packages/*/src` are never named by stem in any verification log —
+boundary stated in the same sentence: _by stem_, across the four `docs/verification-log*.md` files
+(6,136,885 chars, asserted non-empty before believing any zero, since a mistyped glob makes every file
+look unaudited). A file audited under another spelling would not show here.
+
+    packages/behavioural-simulation/src/typing-sequence.ts   8,562 B
+    packages/api-types/src/agent-intents.ts                  6,272 B
+    packages/api-types/src/agent-models.ts                   3,160 B
+
+### The largest is the repo's best answer to every hypothesis I formed from it
+
+`typing-sequence.ts` (V-530.H) generates typo-aware keystroke streams — anti-detection-relevant, and
+it states its own invariants in its header, which is where the technique says to look for the
+hypothesis. Each one is already guarded, in a dedicated suite of **18 arms** at
+`packages/behavioural-simulation/tests/typing-sequence.test.ts`:
+
+- _"Replaying the events reproduces the intended text exactly"_ → an arm replays at
+  `typoProbability: 0.5` across five seeds.
+- Graphemes → _"emits emoji, combining sequences, and flags as intact grapheme keystrokes"_.
+- `MAX_TYPING_REPLAY_EVENTS` / `MAX_TYPING_REPLAY_INSERTED_CODE_UNITS` → arms accept the exact limit,
+  reject one over, **and** _"replay the generator worst case at both exact derived limits"_.
+- `MAX_TEXT_LENGTH` → an arm asserts the function's OWN check fires rather than relying on the
+  delegated `generateKeyboardCadence` call.
+
+Two hypotheses survived the arm list and died on reading:
+
+1. **Replay-with-typo is only exercised on ASCII** (`'log in and reply to my messages'`), and graphemes
+   are exercised in a different arm — so the intersection looked untested. It is **unreachable by
+   construction**: a typo requires `QWERTY_NEIGHBOURS[char.toLowerCase()]` to exist, and the branch is
+   guarded `if (neighbours && neighbours.length > 0 && …)`. No emoji or combining sequence is a key, so
+   no grapheme is ever substituted, and the correction retypes the whole `char`.
+2. **Index misalignment** — the loop iterates `graphemes` but reads `cadence.delaysMs[i]`, which would
+   skew every delay if the cadence were code-unit-indexed. `generateKeyboardCadence` splits graphemes
+   too, and its JSDoc says so: _"`delaysMs[i]` is the delay BEFORE Unicode grapheme keystroke `i`"_.
+
+The other two unnamed files are guarded as well — `agent-intents` by four cross-source invariants,
+`agent-models` by a dedicated `api-types-agent-models-parity.test.ts` plus both index-export pins.
+
+### ⭐⭐ The calibration, which is the reusable output
+
+**"Never named in the audit record" is a proxy for attention, not for protection, and the two come
+apart where a subtree owns its own tests.** In `services/lib/db` the proxy held — those files are
+guarded from `apps/server/tests`, so an unaudited file there really was an under-examined one, and 39
+unnamed produced three findings. In `packages/`, every workspace carries its own `tests/` dir, so a
+file is guarded by its package regardless of whether any audit ever wrote its name down. Same
+measurement, same repo, opposite yield.
+
+⛔ Note the scope trap I avoided only because I read prior art first: the guards for all three files
+live across `apps/*/tests` **and** `packages/*/tests` — **fifteen** directories match that pattern, and
+`agent-models`'s export pin lives in `packages/api-types/tests/` where an `apps/server/tests` survey
+would never see it. A "this file is unguarded" claim greped from one test dir is the same false
+negative in a different costume.
+
+**No finding. One root closed, and a bound on when the technique is worth running:** measure the
+audit record against subtrees whose tests live somewhere else; expect little from those that carry
+their own.
+
+Related: V-2067 (grep prior art on naming the subject — followed here, and it is what produced the
+fifteen-directory caveat).
