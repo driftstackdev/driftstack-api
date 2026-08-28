@@ -433,6 +433,20 @@ describe('V-553.B-21 ProfilesService.create', () => {
     );
   });
 
+  it('CRITICAL translates a concurrent-TRANSFER race loser (sourceAlreadyRetired) into ConflictError, not a 500. `db-profile-transfer-concurrency-drizzle` proves the REPO returns this outcome when two transfers of one profile race — the claim matches zero rows for the loser — but nothing drove the SERVICE with that outcome, so the branch mapping it to a customer-visible 409 had never executed (found by branch coverage, V-2113). The sibling arm above covers the same-name race; this is the transfer race, and without it a loser gets whatever falling through produces.', async () => {
+    const { repo } = makeRepo([makeProfile({ id: 'p_src', accountId: 'acc_1' })]);
+    repo.transferAtomic = () => Promise.resolve({ sourceAlreadyRetired: true as const });
+    const svc = new ProfilesService(repo);
+    await expect(
+      svc.transferProfile({
+        sourceProfileId: 'p_src',
+        sourceAccountId: 'acc_1',
+        recipientAccountId: 'acc_2',
+        recipientTier: SOLO,
+      }),
+    ).rejects.toThrow(ConflictError);
+  });
+
   it('re-throws a non-constraint insert error (the race catch is precise, not a catch-all)', async () => {
     const { repo } = makeRepo();
     repo.insertWithLimit = () => Promise.reject(new Error('db exploded'));

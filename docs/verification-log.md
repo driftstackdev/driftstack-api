@@ -19091,3 +19091,59 @@ and this is the fourth. Recorded so it is not audited a fifth time without a rea
 evidence about the surfaces reached so far, not a claim about the codebase.
 
 Related: V-2111 (why the mode changed), V-721 (the defect this region already fixed).
+
+---
+
+## V-2113 — branch coverage as a new axis: 79 refusal paths never executed, one closed (2026-08-28)
+
+Every instrument this session measured FUNCTIONS or STATEMENTS. Branches are a different axis and the
+one that matters most for a guard: **an `if` whose refusal arm never runs is a refusal never observed.**
+The all-green run from V-2111 already carried the branch maps, so this needed no new suite run.
+
+**Boundary: `apps/server/src` excluding `db/`, from the 3251-file all-green run — branches
+10434/12352 (84%), and 1918 never taken across 198 files.** Too broad to triage, so narrowed to the
+shape that matters: an untaken branch whose opening lines refuse (`throw new …Error`, a 4xx reply).
+**79 such refusal branches, concentrated in `routes/agent-sessions.ts` (24), `admin-incidents` (7),
+`team` (7), `account-me` (5).**
+
+⛔ **The narrowing has a false-positive mode and it fired immediately.** It reads the four lines from
+the branch's start, so it attributes a refusal to whichever branch happens to open above it.
+`middleware/auth.ts:304` came back as a never-executed refusal; it is `if (!ctx) return;` — an
+impossible-case early return whose comment says "requireAuth would have thrown" — and the
+`ForbiddenError` my window matched belongs to the NEXT statement. Read before believing, as ever.
+`middleware/rate-limit.ts:64` is genuine but correctly cold: a double-invocation assert whose firing
+would mean a programming error, not a customer condition.
+
+### The one that was real, and is now closed
+
+`services/profiles.ts:1145` — the concurrent-TRANSFER race loser:
+
+    if ('sourceAlreadyRetired' in result) throw new ConflictError('Profile was transferred or deleted…')
+
+⭐ The outcome IS proven at the SQL layer: `db-profile-transfer-concurrency-drizzle` runs two transfers
+of one profile against real Postgres and asserts exactly one loses, because the retire is a CLAIM whose
+result is checked. **What nothing did was drive the SERVICE with that outcome**, so the branch turning
+it into a customer-visible 409 had never executed. A loser would have got whatever falling through
+produces — `result.record` is not there — rather than the documented conflict.
+
+The file already had the sibling for the other race (`translates a concurrent same-name 23505 (race
+loser) into ConflictError, not a 500`); the transfer race simply never got one. Added beside it, using
+the file's own idiom of overriding a single repo method on the existing faithful double — whose comment
+notes it deliberately mirrors the claim, so "a double that skipped the claim would let the
+concurrent-transfer bug pass here". `it(` 66 → 67.
+
+**Mutation-proved on the real subject**, failing arm confirmed BY NAME: neutralising the branch so the
+loser falls through reds exactly this arm and nothing else; clean tree 67/67; subject restored identical
+to HEAD.
+
+⚠️ Two process notes. The first mutation attempt aborted on its anchor assert because I typed the
+indentation from `sed`-prefixed display output instead of deriving it — the assert did its job and
+nothing was written. And the restore was performed FROM the snapshot but verified AGAINST git, which is
+the distinction recorded earlier today; here the subject carries no uncommitted work, so an empty diff
+is the right expectation.
+
+**The remaining 78 are a measured work-list, not a claim** — several will be defensive asserts like the
+rate-limit one and several more will be my window's false positives. What this establishes is that the
+axis is productive where function coverage was exhausted.
+
+Related: V-2111 (function coverage exhausted), V-2112 (the audit that preceded this).
