@@ -10599,3 +10599,45 @@ it is not raised again.**
 beside a set comparison in the cases read, not that no counter-example exists. The crypto-replay result is a
 source-text audit of the admission predicate and its two enum sources — it does not exercise a replay against a
 live provider.
+
+## V-2122 — "which DB guards pass silently when the database is down" is already guarded; my known-positive control was fabricated (2026-08-28)
+
+Reading two integration guards raised what looked like a strong enumerable question: an integration test that
+bails when its database is unreachable reports PASSED, so how many of them are green while testing nothing?
+
+**Already guarded, and by a better mechanism than the one I was looking for.**
+`an-integration-test-cannot-pass-without-its-database.test.ts` requires every integration file that bails on a
+missing handle to also ASSERT the handle was there — so a dead database is a failure rather than a silent pass,
+**independent of CI**. Run just now: green, 4 arms. Its own header records the history: 14 files were in that
+state when it landed, and a later revision found **18 more that the first version had certified clean**,
+because the assertion text it matched sat inside `beforeAll`, where `it()` registers nothing — vitest silently
+drops it and the file's registered-test count is one lower than its `it(` occurrences. The scan is now
+position-aware. A guard that matches text cannot tell a registered test from dead code in a hook, which is the
+same defect it exists to catch, one level up.
+
+⛔⛔ **The lesson worth the entry: my known-positive control was FABRICATED, and it inverted the result.** I
+built a detector for "fails closed in CI" and validated it against `database-check-enums-agree-with-the-code`,
+which I was certain contained `if (process.env.CI) { throw … }`. It does not. I had read a function named
+`guardUnreachable()` with exactly that body in `db-schema-matches-the-migrations-drizzle.test.ts` minutes
+earlier, saw the same _name_ called in the other file, and carried the _body_ across. `database-check-enums`
+in fact uses a different and equally sound idiom — `if (!process.env.CI && !dbReachable) return;`: skip
+locally, fall through in CI and let the real assertions fail, no throw required.
+
+⭐ So when the control came back negative I concluded my detector was broken. **Both readings were wrong.** The
+detector reported that file correctly; what was wrong was my belief about the file, and separately the detector
+was too narrow — it recognised one of at least two sound idioms.
+
+**Quantified, because a false-positive rate is the only honest description of an instrument:** 131 integration
+files carry a reachability bail — 32 use `if (CI) throw`, **60 use the idiom my detector called silent**, 7
+mention CI another way, and 32 never mention CI at all (correctly, since the real guard is CI-independent).
+**67 of 131 misclassified.** Trusting it would have filed an 82-file list of "guards that pass silently", every
+entry of which is fine.
+
+⛔ **And I grepped prior art after building the instrument rather than before.** The guard that already answers
+the question surfaced _inside my own detector's output_ — it was sitting in the result list as
+`unit/an-integration-test-cannot-pass-without-its-database.test.ts`. The trigger for searching prior art is
+naming the subject, not finishing the measurement.
+
+**Boundary:** this establishes that every integration file which bails carries an in-`it()` assertion that its
+handle was non-null, and that the guard enforcing it is green. It does not measure whether those assertions are
+each _correct_ about the handle they name.
