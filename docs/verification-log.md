@@ -19200,3 +19200,104 @@ none here is. That is a cheaper triage question than "is this tested" and it dis
 79-item list.
 
 Related: V-2113 (the axis, and the finding that stands), V-973 (the prior art that corrects it).
+
+## V-2115 — the largest never-executed branch class is unreachable by construction, proved structurally (2026-08-28)
+
+Completes the never-taken-branch triage. Outside `routes/agent-sessions.ts`: **97 refusal branches, classed
+mapping=8, other=68, zod-parse=21.** ⚠️ Boundary, stated because the number moved: the repo-wide figure went
+**79 → 121** between two passes because I _widened the refusal vocabulary_ (added `BadRequest`/`TierLimit`) —
+a different boundary, not a contradiction. 121 = 97 outside + 24 inside `agent-sessions.ts`.
+
+The `other` class is dominated by one idiom: the post-auth narrowing assert. Keyed by its **message** — the
+only spelling-independent key — there are **121 sites across 43 files** (117 `after requireAuth`, 4 `after
+requireOwner`). ⚠️ Do not sum my two intermediate censuses: the inline `if (!ctx)` count (108) and the
+`requireCtx` helper count (11) **overlap**, because the inline pattern matches the `!ctx` spelling but not
+the `!request.account` one.
+
+**Unreachable by construction — proved from types and totality, NOT from coverage:**
+
+1. `requireAuth` (`middleware/auth.ts:154`) is _total_: every path either assigns `request.account = ctx` or
+   rethrows. Its reply parameter is `_reply`, unused — it cannot reply-and-return.
+2. `authenticate` (`services/auth.ts:280`) and both slow paths (`:469`, `:641`) are declared
+   `Promise<AccountContext>` — non-nullable under TS strict, so no nullish context can be assigned.
+3. Therefore after `requireScope`'s lazy `await requireAuth(...)`, `request.account` is always set, the
+   `if (request.account) requireScope(...)` guard always passes, and the handler-side assert cannot fire.
+4. `requireAuthEventSource` (`:191`) is documented "Standalone (NOT a wrapper around requireAuth)"; that
+   exception is about duplicated header-path code, not totality — it has the same throw-or-assign shape.
+   `requireOwner` and `requireMfaFresh` lazy-auth identically. All five gates covered.
+
+The **11 local `requireCtx` copies** carry 4 distinct spellings (falsy check; explicit null/undefined; bind-a-
+local; plus-a-comment) and are **semantically identical** — an object type has no falsy non-null value.
+Classified by reason rather than by difference: duplication without divergence, **no defect**. The cost is a
+maintenance surface — converting the bare `Error` (500) to a typed 401 would be 121 edits.
+
+⛔ **THE INSTRUMENT ERROR, recorded.** I measured 61 preHandler chains naming `requireScope` with **no**
+`requireAuth` and read it as an unauthenticated admin surface — concentrated exactly where it looks worst
+(`admin-crypto-orders` 11, `admin-accounts` 11). It is not one: `requireScope` lazy-auths. **The refutation
+was already written in the code** at `middleware/auth.ts:237-254`, which predicts this exact misreading, names
+the same concentration, and states its own figures — 61 scope-only / 104 naming both. I re-measured both
+independently today: **still exact.** That comment exists because an earlier audit reached this and abandoned
+it "one step from being filed". Mine is the second. The lesson is not "read the comment" but that a
+_structurally alarming shape_ concentrated in money routes is precisely where a lazy-init pattern will be
+misread, and the cheap disproof is to read the decorator, not to count its call sites.
+
+⛔ **A numeric coincidence I nearly filed as a mechanism.** The 104 inline `after requireAuth` asserts equalled
+the comment's "104 chains name both". Checking the per-file distribution killed it: chains naming `requireAuth`
+number **129**, and the two populations are **anti-correlated** — admin files carry the asserts and zero such
+chains, while `sessions.ts`/`profiles.ts` carry 14/13 chains and **zero** asserts (they use a local
+`requireCtx`). Equal totals, opposite distributions.
+
+The 7 mapping-class candidates all resolve clean: `profiles.ts:1145` (closed by me in `cb219b898` — a test that _executes_ it; the source line is unchanged),
+`status-subscribers` ×3 (defensive; the invariant is executably asserted), `team.ts:189` (deliberate
+anti-enumeration 404), `billing.ts:251` and `profiles.ts:652` (fail-closed).
+
+⛔ **My own error, recorded:** I grepped the status-subscribers purge test camelCase-only and concluded an
+invariant was unasserted. The file uses `snake_case` in raw SQL. My standing rule says enumerate with BOTH
+patterns, and I used one.
+
+**Blind spots, stated:** the proof is structural, so it does _not_ depend on the coverage artifact — which
+matters here, because a peer's `vitest run --coverage` was regenerating `coverage-final.json` throughout this
+measurement and reading it would have been racy. It covers only the five gates named above; a route that sets
+`request.account` by any other means is outside it. The 21 `zod-parse` refusals and the ~68-member `other`
+class remain never-executed by test weight, not by defect — recorded, not closed.
+
+## V-2116 — the error taxonomy's "never leak raw error messages" claim holds, and its guard is not scoped narrower than the family (2026-08-28)
+
+Checked by the universal-claim instrument (`Every <noun> <verb>` in source comments — 45 such claims in
+`apps/server/src` today, matching the 46 recorded when the technique was adopted). `lib/errors.ts:3` claims
+"Every thrown error that surfaces to the response layer is one of these `ApiError` subclasses", and its next
+sentence carries the _checkable security_ half: **"We never leak raw error messages to clients."**
+
+The first claim is not falsified by the 121 bare `throw new Error(...)` narrowing asserts of V-2115 — the file
+states its own fallback explicitly ("Anything _else_ that escapes … is logged at error level and replied as
+Internal (500)"). A two-sentence claim whose second sentence is the escape hatch.
+
+**Three paths return an upstream message to the client; all three are deliberate and all three are guarded:**
+
+- `error-handler.ts:112` — `detail: fastifyErr.message` for any error with numeric `statusCode < 500`.
+  ⚠️ The condition is not Fastify-specific, so I checked what else in the tree throws with a numeric
+  `statusCode`: exactly one site, `routes/_webhook-raw-body.ts:37-39`, whose message is the hardcoded
+  constant `'Invalid JSON in request body.'`. No sensitive content can reach this path.
+- `error-handler.ts:128` — a `StripeApiError` with `status < 500` returns `upstream.message` as a
+  `BadRequestError` detail. A documented V-780 decision (a reused Idempotency-Key was surfacing as
+  "an unexpected error occurred" while paging the operator), not an oversight — so it was not
+  pattern-matched as a leak.
+- `error-handler.ts:133` — everything else becomes `InternalError('An unexpected error occurred.')`.
+
+⛔ **The hypothesis I formed and then refuted by reading.** The guard is named
+`error-handler-internal-error-no-leak.test.ts` — a name that scopes it to the InternalError path — while V-780
+_later added_ a path that deliberately returns an upstream message. That is exactly the shape where a guard
+naming one member of a growing family goes blind. **It is not blind:** the file carries a dedicated
+`describe('an upstream 4xx is not our 500 (V-780)')` block exercising the Stripe remap, a framework-4xx arm
+that states its own safety rationale ("safe: describes client input, not server internals"), a typed-ApiError
+contrast arm proving the handler hides _unknown_ errors rather than all errors, and the V-494 arm asserting a
+token in the URL is redacted out of the echoed 404 detail. The guard grew with the family.
+
+**Prior art was grepped before measuring, not after** — the adjacent Zod vein is already swept
+(`z.enum`/`z.literal` echo the rejected value through `.flatten()`; `z.string()` length/type checks do not; all
+23 interpolating `message:` templates carry constants or state names, and no sensitive field in this repo has a
+low-cardinality domain). Nothing re-derived here.
+
+**Boundary:** this checks which paths _can_ place an upstream string in a response body, and what the one
+non-framework `statusCode` thrower puts there. It does not enumerate the message space of Stripe's own 4xx
+catalogue, which is Stripe's to define and is customer-facing by their design. No defect.
