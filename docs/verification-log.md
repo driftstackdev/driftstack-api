@@ -11155,3 +11155,47 @@ and every emptiness assertion passed. Restored byte-identical; `git status` show
 **Boundary:** what remains in the ceiling is 7 `continue` sites (per-workspace lookups where absence is a
 property of the workspace), the `dist/` walker, the `return true` filter, and the 28 marketing-site + 1
 gui-client members A2 owns. The debt marker is now mostly A2's lane plus classified keeps.
+
+## V-2136 — the open owner decisions as of 2026-08-28, consolidated: nine items, each re-verified in the tree today, none autopilot work (2026-08-28)
+
+Every open note re-run this session fell into one of two bins: stale (the fix had landed — V-2129, V-2130) or
+genuinely open because it needs a product, contract, DNS or design call. This entry is the second bin in one
+place, so the owner reads one list instead of nine notes, and so autopilot stops re-deriving them.
+
+1. **`GET /v1/whoami` is outside the published contract.** `lib/app.ts:1850` registers it (auth smoke
+   endpoint, customer-authenticated); `docs/reference/scopes.md` mentions it; `lib/openapi.ts` does not. Adding
+   it changes the contract SDKs generate from. Pinned as an exemption with this reason (V-2130). Decision:
+   document it, or leave it as an undocumented smoke endpoint.
+2. **W-10: 39 declared component schemas with no operation `$ref`.** Frozen by name (V-2081), re-derived at
+   39 by a second implementation, growth impossible in silence. Removing them changes the published spec.
+   Decision: prune, or keep as documentation-only types.
+3. **R2 endpoint has no EU-jurisdiction assertion.** `config.ts:110` `endpointUrl: z.string().url()` only,
+   while the Sentry DSN is refined to `.de.` "per data-residency policy" and `docs/deployment/env-vars.md:70`
+   calls the bucket "EU jurisdiction". A refine on the endpoint host would turn a misconfiguration into a boot
+   failure. Decision: assert it (and which host pattern), or accept that residency for R2 is operational.
+4. **DMARC and CAA are absent.** `dig txt _dmarc.driftstack.dev` → empty; `dig CAA driftstack.dev` → empty;
+   SPF present. DNS, not repo. Decision: publish a DMARC policy (start `p=none` with `rua`) and a CAA record.
+5. **Team invites have no tier gate and no seat cap.** `routes/team.ts:128` `POST /v1/team/invites` is
+   `account_owner` + rate-limited only; any tier can invite without limit. Not a security or billing bug —
+   members act on the owner's account. Decision: is seat count a packaging dimension.
+6. **`/version` exposes `node_version`.** `lib/app.ts:1794`, public, unauthenticated. Low. Decision: keep
+   (operational transparency) or drop.
+7. **Transcript SSE subscribes after the replay.** `routes/agent-sessions.ts`: replay loop, then
+   `transcriptEventBus.subscribe`; an entry published in that window is dropped until reconnect (self-heals via
+   `Last-Event-ID`). The note asks not to restructure the critical handler for this alone. Decision: fold
+   subscribe-first into the next deliberate SSE change.
+8. **Avatar DELETE leaves the R2 object.** `routes/account-me.ts:946` nulls `avatarR2Key` only; the note
+   reconciled itself to "open, LOW, do NOT app-side fix" and points at `profile-blob-orphan-sweeper` as the
+   precedent if a reaper is wanted. Decision: reap in-app, in infra, or accept orphans.
+9. **The agent run-loop still frames executor output as `assistant`.** `agent-decomposer-claude.ts:389`
+   maps `'agent'` entries — which include sanitized executor summaries and the page read-back paraphrase — to
+   the assistant role; the real fix is a distinct observation role, prompt-eval-gated (V-2129). Bounded by the
+   sanitizer, the system prompt's untrusted framing, and the consequential-action gate. Decision: schedule the
+   prompt-eval.
+
+**Not on this list, because they closed today:** strict-FK on `driftstack_session_id`, SSE connection caps,
+approval-turn double charge, `apiAccess` enforcement, `ws` CVE, `devalue` patch, webhook dual-signing on the
+prod path, the snapshot-drift "blocker", and the walk-swallow debt in four of six lanes.
+
+**Boundary:** each item is a read of the tree at `f38d339af` or a DNS query today; none was re-derived from
+its note alone. Where a note said "owner call", this entry says what the call is, not what it should be.
