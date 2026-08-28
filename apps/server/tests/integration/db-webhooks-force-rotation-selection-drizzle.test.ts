@@ -27,19 +27,33 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 import { encryptWebhookSecret } from '../../src/lib/webhook-secret-encryption.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+let DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// One distinct name per sweeping file — two files sweeping the same table on a
+// shared name collide and the isolation is lost (the helper's own caveat).
+const ISOLATED_DB_NAME = 'driftstack_iso_webhook_force_rotation';
 const WEBHOOK_KEY = Buffer.alloc(32, 29).toString('base64');
 
-// Deliberately historical, the same isolation device the reminder file uses: the
-// query is GLOBAL and decrypts every row it selects, so a foreign endpoint with a
-// legacy secret would throw before any assertion ran. Rows seeded by other files
-// default `secret_created_at` to the real now() and fall outside a cutoff in the
-// year 2000.
+// Deliberately historical: the query is GLOBAL and decrypts every row it selects,
+// so a foreign endpoint with a legacy secret would throw before any assertion ran.
+// Rows seeded by ORDINARY files default `secret_created_at` to the real now() and
+// fall outside a cutoff in the year 2000.
+//
+// ⛔ That device is sound against ordinary files and UNSOUND against the one other
+// file using the same device. `db-webhook-rotation-reminder-repo-drizzle.test.ts`
+// seeds 1998-01-01 and 1999-01-01 too, which are OLDER than this file's 2000-10-02
+// cutoff — so on a shared database its rows land in this sweep's due set, sort to
+// the FRONT of an oldest-first ordering, and displace this file's own rows inside
+// `limit`. Observed as a full-suite-only failure of the ordering/limit arm: green
+// alone, green across the integration directory, red only when both files ran
+// concurrently. Hence a dedicated database, which is the documented remedy for a
+// sweeping file and holds by construction rather than by date arithmetic that the
+// next file to pick a historical date would silently break.
 const NOW = new Date('2001-01-01T00:00:00.000Z');
 const THRESHOLD_DAYS = 91; // cutoff 2000-10-02
 
@@ -102,6 +116,9 @@ async function dueIds(limit = 500): Promise<string[]> {
 }
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
