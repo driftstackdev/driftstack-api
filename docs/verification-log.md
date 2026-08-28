@@ -10899,3 +10899,52 @@ single-subject half, not the walker half.
 the ceiling; the grep that disagreed by four was the one worth having. And the population's KEY (`readdirSync`)
 was coarser than the PROPERTY (a swallow), so the guard reported its key's population as if it were the
 property's.
+
+## V-2129 — five open notes re-run by post-condition: three were stale in the code's favour, two still hold (2026-08-28)
+
+The method that has produced every finding this week — re-run an OPEN note's stated post-condition instead of
+hunting fresh — applied to the driftstack-api notes in the queue. Each result carries its boundary.
+
+**Stale, closed (the code was fixed; the note was the stale half):**
+
+- `project_agent_sessions_strict_fk_plan` said "NOT yet built". It is: `0080_agent_sessions_driftstack_fk.sql`
+  (text → uuid, FK `ON DELETE SET NULL`, idempotent), `schema.ts` `uuid(...).references(sessions.id)`, and the
+  create handler in `routes/agent-sessions.ts` normalizes `ses_<uuid>` then `findSession(uuid, ownerAccountId)`
+  → 404 — the latent cross-account pointer is closed, not merely integrity-checked. Landed `90aa7a23d`
+  (2026-06-16, the same day the plan was written). Tests: `agent-sessions-routes.test.ts` own → ok, foreign
+  account → 404, malformed → 400, unwired repo → refused. NOT re-run: the prod `psql` column/FK check (step 6),
+  which this box cannot reach.
+- `project_sse_no_concurrent_connection_cap` said no stream had a concurrent cap and the public status stream
+  had no pre-handler at all. All three are capped: `status-stream.ts` 500 total / 10 per IP before hijack
+  (`7369614b1`), transcript per-account (`0d6cdcd51`), notifications `DEFAULT_MAX_SSE_PER_ACCOUNT = 10`
+  (`1e6687a77`).
+- `project_consequential_approval_redecompose_double_charge_2026_07_07` prescribed Option A — resume the stored
+  plan instead of re-decomposing — as a maintainer decision. It landed the next day (`e00849cd1`):
+  `reconstructHaltedPlan` rebuilds the paused plan from the `awaitingConfirmation` entry with `tokensConsumed: 0`
+  and no usage, so no cost row and no debit; a caller preapproval is never forwarded into a fresh decompose.
+  Seven arms in `agent-runtime.test.ts:1534-1802`, including concurrent double-approval dispatching once. Both
+  halves of the finding (2× charge, re-plan drift) are closed.
+
+**Still hold (open, and the note is right):**
+
+- `project_agent_runloop_prompt_injection_frame_surfaced` — executor results are still `role: 'agent'` and
+  `buildMessages` (`agent-decomposer-claude.ts:389`) still frames `'agent'` as `assistant`; no `observation`
+  transcript role exists (the `'observation'` strings in `agent-runtime.ts` are an interrupt-reason kind, a
+  stranger with the same name). Two things moved: `operator` entries now map to `user`, and a SECOND
+  page-influenced channel exists — the read-back answer from `observePage` → `extractPageText` lands as
+  `role: 'agent'` at `agent-runtime.ts:1278`, a model paraphrase passed through `sanitizeTranscriptText`. Bounded,
+  named untrusted in code, and the real fix remains prompt-eval-gated — not autopilot work. Memory pointers
+  refreshed.
+- `project_sse_transcript_connect_race_surfaced` — the transcript SSE still replays the snapshot, THEN subscribes
+  (`agent-sessions.ts` replay loop before `transcriptEventBus.subscribe`), so an entry published in that window
+  is dropped until reconnect. Low, self-healing, deliberately not restructured alone. Unchanged.
+
+**Also re-confirmed:** `project_profile_saved_ownership_gap_surfaced` (closed 2026-06-17) still holds — the
+persister's ownership guard is wired whenever R2 is (`bootstrap.ts` `r2 !== null ? makeProfileSavedPersister(r2,
+logger, { agentSessions, profiles })`), six refusal arms in `profile-store.test.ts`.
+
+**Boundary:** every claim above is a grep or a read of the current tree at `6258e4487`, plus the landing commit
+found by `git log -S`; no suite run and no behavioural re-derivation of the fixes. Memory: three notes marked
+CLOSED with the landing SHA, two refreshed. The pattern is now 7 for 7 — every open-note re-run this week found
+the NOTE stale, never the code — which says the stale half of a finding is the record, and the record needs its
+post-condition re-run on a cadence.
