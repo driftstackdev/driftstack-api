@@ -17955,3 +17955,107 @@ so it cannot go stale as the roster grows. **A guard's prose is subject to exact
 exists to prevent.**
 
 Related: V-2094 (the pattern and the guard), V-2086 (the callerless group this corroborates).
+
+---
+
+## V-2096 — a deletion was verified at the deleted thing, never at the four artifacts pointing to it (2026-08-28)
+
+Started from a technique my own notes say is the only one still paying here: ranking instruments
+("files no test names", "files the log never mentions") are exhausted — seven of them, 253+ hits, zero
+defects — so instead ask what a FILE claims about itself and check the claim. **39 universal claims in
+comments across 32 files in `apps/server/src`** (comment lines only; a claim in a doc or a `.mjs`
+script is outside this boundary). The one that broke: `services/sessions.ts` — _"Every method takes an
+AccountContext and enforces account-scoped ownership."_
+
+Three of its seventeen public methods take no `AccountContext`. Two are fine and the reading says why:
+`autoDestroyExpired` is called only by the duration sweeper over sessions it listed itself, and
+`destroyAllForAccount` only by the staff suspend/reclaim path. **The third, `findOwnedSessionLite`, has
+zero callers anywhere — no source, no test.**
+
+### What it was, and what happened to it
+
+`97785484b` built it as the ownership seam for the V-531.B route `/v1/sessions/:id/livekit-token`.
+`58a0a2521` **deleted that route** — owner-greenlit, because a customer could mint a _publisher_ token.
+That commit removed the seam's only call site, an `isSessionOwned` adapter in `app.ts`. The seam stayed.
+
+⭐ **The deletion was verified, and verified well — at the wrong population.** A prior pass (memory
+note, 2026-08-27) confirmed at HEAD that the route file is gone, the path is registered nowhere, and
+`app.ts` records the removal at the old registration site. All true. Nothing asked what still POINTED
+at the route. Four artifacts did:
+
+| artifact                               | what it claimed                                    | kind                                    |
+| -------------------------------------- | -------------------------------------------------- | --------------------------------------- |
+| `lib/bootstrap.ts` comment             | the route's ownership check uses this seam         | source comment                          |
+| `docs/runbooks/livekit-go-live.md`     | same, plus "publisher/subscriber role mapping"     | **operator runbook, `[x]`**             |
+| `services-sessions-content-parity` pin | freezes the dead method's body AND its doc comment | guard                                   |
+| `lib/bootstrap.ts` metric HELP string  | see below                                          | **runtime string served at `/metrics`** |
+
+The surviving route is a different surface over a different subject — agent sessions, not browser
+session records — and its check is not merely fine but _better_ than the prose described: it uses
+`callerCanAccessAgentSession`, the canonical helper its four sibling routes share, and its comment
+explains that raw owner-equality wrongly 404'd a legitimate team admin. **The code was sound the whole
+time. Only the things describing it were false.**
+
+### ⛔⛔ The stale prose was hiding the dead method from my own census
+
+Building a caller census, I got a _known-positive control failure_: the detector did not find
+`findOwnedSessionLite`. Cause — the bootstrap comment wrapped the name so that a dot-qualified receiver
+was followed by an open paren, and a census matching a dotted call **counted the comment as a call
+site**. Prose that names a symbol joins the population every name-based instrument measures, so such a
+census must strip comments (`tests/unit/_helpers/code-only.ts`). Then I re-created the same hazard in
+my own retraction by quoting the offending spelling verbatim — the standing rule is that a retraction
+PARAPHRASES and only a sentinel QUOTES, and I broke it while documenting it. Now paraphrased, and both
+the raw and comment-stripped counts agree at zero.
+
+Census, with control passing: **164 methods named in an `async X\(` pin regex across 868 parity files;
+9 have zero callers** in the comment-stripped source of all 15 source roots. Read all nine. `refresh`
+is a matcher artifact (called bare after destructuring, and gui-client is a peer's scope);
+`consumeAuthToken` is V-2094's roster entry, callerless by design. Two looked like the dangerous
+inverse — a SAFE variant nobody calls — and **both resolve in the safe direction, checked at the
+production call sites rather than assumed**: transcripts go through `appendTranscriptIfAuthorityRevision`
+(7 sites, the strongest of a three-level chain) and invites through `acceptInviteAtomic`.
+
+### ⭐ The correction reached the doc and not the thing the doc describes
+
+`bootstrap.ts` registers the mint counter with a HELP string — served to operators at `/metrics` —
+saying it is _"Emitted by both /v1/sessions/:id/livekit-token (V-531.B) and /v1/agent-sessions/:id/…;
+the role label discriminates publisher (legacy session-livekit surface) from subscriber."_ The only
+bump site in the tree is the agent-sessions route, with `role: 'subscriber'` hardcoded. So one named
+emitter does not exist and two of three advertised label values can never appear.
+
+Meanwhile `apps/docs/src/pages/reference/metrics.md` **already says the right thing** — "the sole
+token-mint path", and that the legacy publisher route "was removed". The customer-facing page was
+corrected when the route died; the runtime string it describes was not. ⚠️ Severity checked rather than
+assumed: **no alert rule matches `role="publisher"`**, so nothing is sitting green forever today — this
+is observability accuracy, not a dead alert. Fixed the string and its `build-test-app.ts` mirror
+identically, in this commit. The compiled `dist/` copy is stale until the next build.
+
+### A guard defect found by using it, with a measured blind spot
+
+Documenting the deletion in the runbook turned V-756 red: **every `/v1/*` path in an operator doc must
+resolve to a registered route** — so naming a deleted path is forbidden, and a truthful deletion notice
+is unwriteable. Its per-occurrence context check had two defects:
+
+1. **Unanchored vocabulary.** `no` matched inside `none`, `not`, `note`, `non-launch`, `NOWPayments`.
+   Measured over its own 26 docs and 163 path occurrences: the live form exempted **40 (24%)**, a
+   word-anchored form exempts **16 (9%)** — **24 occurrences, 15% of the population, exempt by
+   accident.** Worst case is the common one: an endpoint table with `none` in its auth column exempts
+   every path in that table, and an endpoint reference table is where a stale path both hides best and
+   hurts most.
+2. **No way to say "deleted".** It could say "was never built" but not "existed and was removed".
+
+Both fixed in one regex. ⚠️ Stated plainly: anchoring surfaced **no** new stale paths — all 24 resolve —
+so this is preventive, and what it buys is that those 24 are now actually checked.
+
+**Two-sided proof.** Two probes planted in a `none`-bearing table, one deliberately ordinary-looking
+(`/v1/status/uptime`) and one obvious: the anchored guard names **both**; the old unanchored regex, with
+the runbook held at HEAD so the regex is the only variable, is **green 3/3 — blind to both**. First
+attempt at that arm was confounded (the old regex also re-flagged my own retraction) and my output
+filter hid it; re-run isolated. All files restored byte-identical from snapshots.
+
+**Left for the owner, with evidence rather than a recommendation:** deleting `findOwnedSessionLite` and
+its parity pin. Zero callers, zero test calls, its consumer removed by an owner-greenlit commit. ⛔ Note
+the incentive the pin creates — deleting the dead method **reds a test**, so the guard prices removal as
+expensive and retention as free. That is the inverse of what a guard should do.
+
+Related: V-2094/V-2095 (the superseded-method family this census overlaps), V-756 (the guard fixed here).

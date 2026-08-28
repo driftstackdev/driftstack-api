@@ -685,7 +685,7 @@ export async function createProductionDeps(
     // Arc 7 obs.12 — LiveKit token mint outcome counter.
     metricsRegistry.registerCounter(
       METRIC_NAMES.livekitTokenMintTotal,
-      'LiveKit token mint outcomes, labelled by role (publisher | subscriber | unknown) + outcome (ok / not_found / validation / forbidden / no_mac / secret_unreadable). Emitted by both /v1/sessions/:id/livekit-token (V-531.B) and /v1/agent-sessions/:id/livekit-token (LK.3); the role label discriminates publisher (legacy session-livekit surface) from subscriber (LK.3 + LK.6 gui-client).',
+      'LiveKit token mint outcomes, labelled by role + outcome (ok / not_found / validation / forbidden / no_mac / secret_unreadable). Emitted by exactly one route, /v1/agent-sessions/:id/livekit-token, which hardcodes a subscriber token -- so role is always subscriber and no series has ever carried publisher or unknown. The legacy session-livekit surface that emitted role=publisher was deleted in 58a0a2521; a matcher on role=publisher selects nothing and would sit green forever.',
       ['role', 'outcome'],
     );
     // Arc 7 obs.13 — outbound email send outcome counter.
@@ -2939,12 +2939,32 @@ export async function createProductionDeps(
     ...(config.nowpayments?.ipnSecret !== undefined && config.nowpayments.ipnSecret.length > 0
       ? { nowpaymentsIpnSecret: config.nowpayments.ipnSecret }
       : {}),
-    // V-531.B — LiveKit token-mint surface. Same all-or-nothing
-    // semantics as nowpayments: the route only registers when all
-    // three fields are present. Partial config = unregistered route
-    // = 404 = client falls back to HTTP polling. The route's
-    // ownership check uses sessionsService.findOwnedSessionLite (no
-    // driver side-effects).
+    // LiveKit token-mint surface. Same all-or-nothing semantics as
+    // nowpayments: the route only registers when all three fields are
+    // present. Partial config = unregistered route = 404 = client falls
+    // back to HTTP polling.
+    //
+    // ⛔ This said "the route's ownership check uses
+    // sessionsService.findOwnedSessionLite". That has been false since
+    // 58a0a2521, which DELETED the V-531.B route it described
+    // (/v1/sessions/:id/livekit-token, an owner-greenlit fix for a
+    // customer-mintable publisher token). The surviving route is
+    // /v1/agent-sessions/:id/livekit-token, over a DIFFERENT subject
+    // (agent sessions, not browser SessionRecords), and it checks access
+    // with callerCanAccessAgentSession — the canonical helper its four
+    // sibling routes use, which admits a team admin where raw
+    // owner-equality wrongly 404'd. `findOwnedSessionLite` is now
+    // called from nowhere.
+    //
+    // ⚠️ The stale sentence was not merely misleading. It wrapped the
+    // method name across a line break so that a dot-qualified receiver
+    // was followed by an open paren, and a caller census matching a
+    // dotted call therefore counted the COMMENT as a call site and
+    // reported the dead method as live. Deliberately paraphrased rather
+    // than quoted here: reproducing the offending spelling would
+    // re-poison the same census. Prose that names a symbol joins the
+    // population every name-based instrument measures, so such a census
+    // must strip comments (see tests/unit/_helpers/code-only.ts).
     ...(config.livekit?.apiKey !== undefined &&
     config.livekit?.apiSecret !== undefined &&
     config.livekit?.wsUrl !== undefined

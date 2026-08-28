@@ -23,12 +23,29 @@ subscriber probe.
       (commit `2b92d957`). No `livekit-server-sdk` dependency.
 - [x] `apps/server/src/routes/agent-sessions-livekit-token.ts` —
       `POST /v1/agent-sessions/:id/livekit-token` route (commit `1eea466d`)
-      with publisher/subscriber role mapping + cross-account 404 +
-      shape-check on session id.
+      with cross-account 404 + shape-check on session id. The token is
+      **subscriber-only**: `role` is hardcoded to `'subscriber'` and the
+      grants are `canPublish: false`, `canSubscribe: true`,
+      `canPublishData: true` (the data channel carries input events, which
+      is why the mint requires the `write` scope). There is no
+      caller-selectable role.
 - [x] `apps/server/src/lib/app.ts` + `bootstrap.ts` — route
       registration gated on `config.livekit` presence (3-field
-      all-or-nothing), ownership check via the new
-      `sessionsService.findOwnedSessionLite` seam (commit `97785484`).
+      all-or-nothing). Access is checked with `callerCanAccessAgentSession`,
+      the canonical helper shared with the sibling agent-session routes,
+      which admits a team admin of the owning account.
+
+      ⛔ Two claims stood here and both were false. This entry said the
+      route mapped a caller-supplied publisher/subscriber role, and that
+      ownership went through a `findOwnedSessionLite` seam in the sessions
+      service. Both described the **V-531.B route that was deleted** in
+      `58a0a2521` (`/v1/sessions/:id/livekit-token`, removed because a
+      customer could mint a *publisher* token). The surviving route is a
+      different surface over a different subject — agent sessions, not
+      browser session records — and the seam it named now has no callers
+      anywhere. An operator reading this while go-live was already going
+      badly would have gone looking for a check that is not there.
+
 - [x] `scripts/smoke-livekit.mjs` — operator smoke script using Node
       22+ global WebSocket, dep-free (commit `e3662779`).
 - [ ] `gui-client` `LiveSessionView` LiveKit-subscriber path with

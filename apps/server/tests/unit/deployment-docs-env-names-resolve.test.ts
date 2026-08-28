@@ -209,7 +209,23 @@ describe('operator docs reference HTTP paths the server registers (V-756)', () =
         // dr-runbook.md said "NOT `/v1/version`", every OTHER `/v1/version` in the same
         // file (there were two more, both live instructions) became invisible. Same
         // too-broad-negative shape that bit the AUP `reason` assertion.
-        const NEGATED = /(?:NOT|no|never|there is no|404s|does not exist|was never built)/i;
+        // ⛔ Two defects, both measured 2026-08-28 (V-2096), both in this one regex.
+        //
+        // (1) It was UNANCHORED, so `no` matched inside `none`, `not`, `note`,
+        // `non-launch` and `NOWPayments`. Across the 26 operator docs, 163 path
+        // occurrences: the unanchored form exempted 40 (24%), a word-anchored form
+        // exempts 16 (9%) — so 24 occurrences, 15% of the population, were exempt by
+        // accident. The dominant case is the worst one: an endpoint table with a
+        // `none` in its auth column exempts EVERY path in that table, and an endpoint
+        // reference table is exactly where a stale path both hides best and hurts most.
+        //
+        // (2) Its vocabulary could say "was never built" but had no way to say "existed
+        // and was DELETED". A doc cannot retract a removed route without naming it, so
+        // the guard made a truthful deletion notice unwriteable and priced vagueness as
+        // the cheap option. Found by hitting it while documenting the removal of
+        // /v1/sessions/:id/livekit-token in livekit-go-live.md.
+        const NEGATED =
+          /\b(?:NOT|no|never|404s|does not exist|was never built|deleted|removed|retired|superseded)\b/i;
         let flaggedHere = false;
         for (
           let at = body.indexOf(path);
