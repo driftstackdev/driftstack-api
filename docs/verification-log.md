@@ -14476,3 +14476,63 @@ an allowlist entry with no vetted count fails loudly, so the two lists cannot dr
 Both restored byte-identical; `it(` 3 → 4; `tsc -p apps/server/tsconfig.test.json` clean. This is the
 fifth finding of one shape this session — **the guard existed and its KEY was coarser than the
 property it protected** — and the first where the coarse key guards a security exemption.
+
+## V-2034 — the same coarse key in the at-rest binding guard, and a proxy metric I nearly reported (2026-08-27)
+
+Turned V-2033 into a sweep. Boundary: 2023 unit test files; exemption-style lists
+(`ALLOW|EXEMPT|WAIV|SKIP|IGNORE|KNOWN|RECORDED|DORMANT`) whose entries are FILE PATHS —
+**14 lists across 9 files**.
+
+⛔ The first detector found **5**. Its name pattern was `[A-Z][A-Z0-9_]*(?:ALLOWLIST|…)`, which
+requires at least one character BEFORE the keyword, so a list called plainly `ALLOWLIST` — the one I
+had just fixed in V-2033 — did not match. **The detector failed its own known positive and I only
+noticed because I ran it against that file deliberately.** Fixed, re-validated, re-ran: 14, not 5.
+Second time this turn a spelling hid most of a population.
+
+### ⛔ Then I measured the wrong property
+
+I swept for which lists have a length pin, and got a headline: 12 of 14 "CAN GROW". **That metric
+does not track the defect.** Adding an entry to an exemption list is an explicit edit to a test file
+— a reviewer sees it in the diff. What V-2033 found was the opposite: the exemption widened with **no
+edit to the list at all**, because a new `Math.random` in an already-listed file inherited the
+waiver. A count pin guards the visible direction and leaves the invisible one open.
+
+I was one step from reporting a 12-row list of files that are not defective. The tell was asking what
+a failure of the pinned property would actually look like — a diff someone already has to approve.
+
+### The right question, and what it found
+
+**Is the exemption's KEY as fine-grained as the thing the reason reviewed?** Re-checked the
+highest-consequence lists by reading:
+
+- `route-auth-coverage-invariant.test.ts` — entries are `(file, registrar, exact method+path,
+posture, reason)`; a new unauthenticated route in an exempted file is NOT covered. Correctly keyed.
+- `route-mutation-ratelimit-coverage-invariant.test.ts` — entries are `{file, method, path, reason}`
+  matched by `routeMatches`. Correctly keyed.
+
+⭐ **Both are route guards, and that is the pattern: the coarse key appears where the exempted thing
+has no natural identifier.** A route has `(method, path)`. A `Math.random()` call has nothing, so
+V-2033's author keyed by file. That predicts where to look next — guards over CALL SITES.
+
+**`an-at-rest-secret-is-bound-to-what-it-belongs-to.test.ts` is one, and it has the same shape.** Its
+`ALLOWED` entries are `{file, fn, reason}` and the forward arm filters
+`!ALLOWED.some((a) => a.file === s.rel && a.fn === s.fn)` — so **every** context-free site sharing a
+`(file, fn)` pair is excused, while each reason describes one specific call ("this writer has zero
+production callers", "the v1 READ path"). Its staleness arm checks an exemption still matches at
+least one site: the shrink direction again.
+
+Probed the guard's own `contextFree` scan: three exemptions, each covering exactly 1 site today.
+Added a site-count arm keyed the same way, with an exemption lacking a count failing loudly so the
+lists cannot drift apart.
+
+| mutation                                                                                 | result                                            |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| ⭐ **real subject**: a second 2-arg `encryptPlatformSecret` in the already-exempted file | reds — `reviewed 1 context-free site(s), found 2` |
+| an exemption with no reviewed count                                                      | reds — `exempted but no reviewed site-count`      |
+
+Both restored byte-identical; `it(` 5 → 6; `tsc -p apps/server/tsconfig.test.json` clean. What the
+new arm protects is the file's own stated property: an unbound at-rest secret "decrypts under any
+record, for any account".
+
+⚠️ Nine suspected gaps refuted this session against six findings — and every finding was a guard
+whose key was coarser than its property, never a missing guard.

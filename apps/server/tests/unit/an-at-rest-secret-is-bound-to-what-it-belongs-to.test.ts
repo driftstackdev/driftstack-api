@@ -64,6 +64,25 @@ const ALLOWED: ReadonlyArray<{ file: string; fn: string; reason: string }> = [
       'is not a v2 envelope, so this is a migration step and not a dual-read.',
   },
 ];
+/**
+ * How many context-free CALL SITES each exemption above covers.
+ *
+ * ALLOWED is keyed by `(file, fn)`, but every reason written there reviews a
+ * specific CALL — "this writer has zero production callers", "the v1 READ path".
+ * The forward arm filters out EVERY site matching the pair, so a SECOND unbound
+ * `encryptPlatformSecret` added to the same file inherits the excuse written for
+ * the first one, silently, with no edit to this list. The staleness arm below
+ * only notices an exemption that stops matching anything at all — the shrink
+ * direction, never the widening one.
+ *
+ * Counts come from this file's own `contextFree` scan (probed, not recomputed).
+ * An exemption with no count here fails loudly, so the two lists cannot drift.
+ */
+const ALLOWED_SITES: ReadonlyMap<string, number> = new Map([
+  ['services/agent-transcript-encryption.ts::encryptPlatformSecret', 1],
+  ['services/agent-transcript-encryption.ts::decryptPlatformSecret', 1],
+  ['lib/webhook-secret-encryption.ts::decryptPlatformSecret', 1],
+]);
 
 function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
@@ -261,5 +280,29 @@ describe('an at-rest secret is bound to what it belongs to', () => {
       (a) => !contextFree.some((s) => s.rel === a.file && s.fn === a.fn),
     ).map((a) => `${a.file} ${a.fn} no longer calls without a context — drop the exemption`);
     expect(stale.sort(), 'a listed exemption describes code that no longer exists').toEqual([]);
+  });
+
+  it('CRITICAL every exemption covers only the NUMBER of context-free sites that was reviewed. Each reason above describes one specific call; the arm that consumes ALLOWED matches on (file, fn) and therefore excuses every site sharing that pair. Without this, a second unbound encryptPlatformSecret in an already-listed file is green on arrival — the ciphertext it writes decrypts under any record, for any account, which is the exact property this file exists to prevent.', () => {
+    const drifted: string[] = [];
+    for (const a of ALLOWED) {
+      const key = `${a.file}::${a.fn}`;
+      const actual = contextFree.filter((s) => s.rel === a.file && s.fn === a.fn).length;
+      const reviewed = ALLOWED_SITES.get(key);
+      if (reviewed === undefined) {
+        drifted.push(
+          `${key}: exempted but no reviewed site-count — state how many calls the reason covers`,
+        );
+        continue;
+      }
+      if (actual !== reviewed) {
+        drifted.push(
+          `${key}: reviewed ${String(reviewed)} context-free site(s), found ${String(actual)}`,
+        );
+      }
+    }
+    expect(
+      drifted.sort(),
+      'context-free call-site count drift inside an existing exemption (review the new call: what record should it bind?):',
+    ).toEqual([]);
   });
 });
