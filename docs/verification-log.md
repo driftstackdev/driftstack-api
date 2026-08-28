@@ -15447,3 +15447,54 @@ artifact's own name the moment you can name it, not only by its family.**
 ⭐ Operational note: the inline quiescence check I adopted last turn **fired and blocked this entry's
 first write attempt** — a peer's suite had started between my previous check and the commit. That is
 the race that bit me twice, caught by a guard rather than by disclosure afterwards.
+
+## V-2053 — a control proves the detector fires; it does not prove the population is right (2026-08-27)
+
+Set out to measure a structural blind spot I already knew existed: `buildTestApp` wires in-memory
+repos, so a route test cannot see a Postgres cast error — the class V-716 and V-2005 both lived in.
+**Premise confirmed first**: `apps/server/tests/integration/_helpers/build-test-app.ts` has ZERO
+matches for `postgres(`, `new Pool`, `drizzle(` or `isolated-database`, and wires **47** in-memory
+repos.
+
+Then asked which `db/*.ts` files are never exercised against a REAL database. I produced three
+answers:
+
+    boundary = tests importing `isolated-database` (21 files), matched by file stem   -> 34 of 55
+    same boundary, matched by exported symbol name                                    -> 36 of 51
+    boundary = tests gated on a real DB at all (147 files)                            ->  4 of 51
+
+⛔⛔ **The first two are wrong by an order of magnitude, and my controls did not catch it.** I ran a
+known-positive control both times — `webhooks-repo.ts` must be found — and it PASSED at the 21-file
+boundary exactly as it passed at the 147-file one. The control proves the detector fires. **It says
+nothing about whether the population it fires over is the right one**, and a too-narrow population
+produces a long, confident, entirely false list of "uncovered" files.
+
+⭐ **What falsified it was an external number, not an internal check.** A2's gate ran without a
+database and reported **117 skipped files**; only 21 import `isolated-database`. Those two facts
+cannot both describe the same DB-dependent population, and the gap forced the real mechanism into
+view: `describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)` — **134 occurrences**, plus 12
+`RUN_DB_TESTS`. A peer's skip count audited my boundary; nothing I was running could have.
+
+**The corrected result: 47 of 51 `db/*.ts` files have an exported symbol named by a DB-gated test.**
+The four that do not are pure or infrastructural, verified by reading — `chunkIds` (splits id lists,
+0 SQL), `assertSeedTargetIsLocal` (0 SQL), `profileSessionAdvisoryLockKey` (7 lines, audited V-2043),
+and `client.ts`, the factory every one of the 147 DB tests exercises implicitly. Real-DB coverage of
+the db layer is complete.
+
+### The bind-parameter question, already answered better than I asked it
+
+Reading `chunk-ids.ts` ("so a single statement never exceeds the driver's bind-parameter limit")
+suggested a sweep: which unbounded `inArray` sites chunk and which do not — 23 sites across 12 files,
+3 files using `chunkIds`. **`an-unbounded-repo-scan-is-a-recorded-decision.test.ts` had already done
+it, and better.** It classifies **165 repo SELECTs, 12 bounded by nothing the caller controls, and 3
+whose size is customer activity**, and it carries a production incident in its prose:
+`status-subscribers listPurgeCandidates` — "a backlog past the bind-parameter ceiling made the purge
+throw, and the erasure did not happen. The fix chunked the WRITE. The READ that produced the
+oversized list is still this."
+
+⭐ It has every arm I have been arguing for this session: a non-vacuity floor on the census
+(`> 150`), a forward arm (no unbounded scan without a recorded justification), a rot arm (no recorded
+entry that stopped being unbounded), and an **exact-set pin** on the three customer-growth scans so a
+fourth is a red rather than one row in a roster of twelve. Its header names four while the pin holds
+three, and that is not drift: both the roster and the assertion carry the same in-place note that
+`audit-archive selectArchivableRows` left the set at V-1591 by gaining a row cap.
