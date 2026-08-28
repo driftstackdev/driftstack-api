@@ -11199,3 +11199,24 @@ prod path, the snapshot-drift "blocker", and the walk-swallow debt in four of si
 
 **Boundary:** each item is a read of the tree at `f38d339af` or a DNS query today; none was re-derived from
 its note alone. Where a note said "owner call", this entry says what the call is, not what it should be.
+
+## V-2137 — a correction to V-2134's boundary: four of the seven `continue` sites loop over tracked roots, not optional workspace dirs; converted, ceiling 39 → 35 (2026-08-28)
+
+V-2134 said of the seven remaining `if (!existsSync(x)) continue;` sites that "the rest are per-workspace
+`src/` and `tests/` lookups where absence is a property of the workspace." I had read two of the eight files
+and generalised. Reading the other five: `an-sdk-may-not-say-calling-account-for-an-effective-route` loops
+over `SURFACES` (the docs API pages and the three SDK resource dirs), `deployment-docs-env-names-resolve`
+over `DOC_DIRS` (`docs/{deployment,runbooks,operations}`), `docs-catalogue-completeness-invariant` over the
+docs and marketing pages, `docs-runbooks-file-references-exist` over runbooks + deployment — every one a
+tracked source tree, every one a swallow of exactly the kind the guard exists for. Only three are optional by
+construction: the two per-workspace lookups in `a-workspace-declares-what-its-source-imports` and the
+`package.json` probe in `every-command-the-docs-tell-you-to-run-exists`, which skips a directory that is not
+a workspace.
+
+**Fix:** the four convert to throws (roots re-verified to exist and be tracked); ceiling 39 → **35**
+(35 occurrences / 33 files), with the guard's measurement comment now listing what the 35 are: 3 optional
+`continue` sites, the `dist/` walker, the `return true` filter, and the marketing-site + gui-client members.
+
+**Lesson, the same one twice in one day:** a classification made from a sample and written as if it covered
+the population. V-2134's sentence was a claim about seven sites derived from two; the record is corrected here
+rather than edited in place. The guard's ceiling was never wrong — it counted them — the prose beside it was.

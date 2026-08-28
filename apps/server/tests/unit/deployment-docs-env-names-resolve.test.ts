@@ -46,7 +46,10 @@ function docFiles(): string[] {
   const out: string[] = [];
   for (const d of DOC_DIRS) {
     const abs = resolve(REPO_ROOT, d);
-    if (!existsSync(abs)) continue;
+    if (!existsSync(abs))
+      throw new Error(
+        `walk root is missing: ${abs} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
     for (const f of readdirSync(abs)) if (f.endsWith('.md')) out.push(resolve(abs, f));
   }
   return out;

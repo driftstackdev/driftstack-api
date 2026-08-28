@@ -34,7 +34,10 @@ function allCustomerDocText(): string {
   let out = '';
   for (const root of ['apps/docs/src/pages', 'apps/marketing-site/src/pages']) {
     const base = resolve(REPO_ROOT, root);
-    if (!existsSync(base)) continue;
+    if (!existsSync(base))
+      throw new Error(
+        `walk root is missing: ${base} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
     const stack = [base];
     while (stack.length > 0) {
       const dir = stack.pop()!;

@@ -69,7 +69,10 @@ function pairedFiles(): { label: string; resource: string; path: string }[] {
   const out: { label: string; resource: string; path: string }[] = [];
   for (const s of SURFACES) {
     const dir = resolve(REPO_ROOT, s.dir);
-    if (!existsSync(dir)) continue;
+    if (!existsSync(dir))
+      throw new Error(
+        `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
     for (const f of readdirSync(dir).filter((n) => n.endsWith(s.ext) && !n.includes('_test'))) {
       // Python uses snake_case filenames for hyphenated route modules.
       const resource = f.slice(0, -s.ext.length).replace(/_/g, '-');

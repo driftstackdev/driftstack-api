@@ -46,7 +46,10 @@ function runbookFiles(): string[] {
 function procedureDocs(): string[] {
   const out: string[] = [];
   for (const dir of [RUNBOOKS_DIR, resolve(REPO_ROOT, 'docs/deployment')]) {
-    if (!existsSync(dir)) continue;
+    if (!existsSync(dir))
+      throw new Error(
+        `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
     for (const f of readdirSync(dir)) {
       if (f.endsWith('.md')) out.push(join(dir, f));
     }
