@@ -69,12 +69,24 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import { DrizzleWebhookRotationReminderRepo } from '../../src/db/webhook-rotation-reminder-repo.js';
 import { encryptWebhookSecret } from '../../src/lib/webhook-secret-encryption.js';
 import * as schema from '../../src/db/schema.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+let DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// ⛔ Historical seed dates are NOT isolation once a second file adopts them. This
+// file seeds 1998-01-01 through 2001-01-01 and calls a GLOBAL sweep over `webhook_endpoints`, and it
+// shares literal dates with the other adopters in that table — so on a shared
+// database each file's rows enter the others' result sets. It is green today only
+// because its arms assert MEMBERSHIP (`toContain`) under `limit: 500`: a foreign
+// row is invisible until it pushes a row this file cares about past the limit.
+// Adding an ordering assertion, or lowering the limit, would convert that silence
+// into the failure `db-webhooks-force-rotation-selection` actually hit. A dedicated
+// database removes the shared state instead of negotiating with it — one distinct
+// name per file, per the helper's own caveat.
+const ISOLATED_DB_NAME = 'driftstack_iso_webhook_rotation_reminder';
 
 const WEBHOOK_KEY = Buffer.alloc(32, 23).toString('base64');
 
@@ -150,6 +162,9 @@ async function dueIds(limit = 500): Promise<string[]> {
 }
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;

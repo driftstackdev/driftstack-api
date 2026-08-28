@@ -36,13 +36,25 @@ import { randomUUID } from 'node:crypto';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { ensureIsolatedDatabase } from './_helpers/isolated-database.js';
 import * as schema from '../../src/db/schema.js';
 import { DrizzleWebhookRotationReminderRepo } from '../../src/db/webhook-rotation-reminder-repo.js';
 import { DrizzleWebhooksRepo } from '../../src/db/webhooks-repo.js';
 import { encryptWebhookSecret } from '../../src/lib/webhook-secret-encryption.js';
 
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
-const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+let DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
+// ⛔ Historical seed dates are NOT isolation once a second file adopts them. This
+// file seeds 2001-01-01 / 2003-01-01 and calls three GLOBAL sweeps over `webhook_endpoints`, and it
+// shares literal dates with the other adopters in that table — so on a shared
+// database each file's rows enter the others' result sets. It is green today only
+// because its arms assert MEMBERSHIP (`toContain`) under `limit: 500`: a foreign
+// row is invisible until it pushes a row this file cares about past the limit.
+// Adding an ordering assertion, or lowering the limit, would convert that silence
+// into the failure `db-webhooks-force-rotation-selection` actually hit. A dedicated
+// database removes the shared state instead of negotiating with it — one distinct
+// name per file, per the helper's own caveat.
+const ISOLATED_DB_NAME = 'driftstack_iso_webhook_sweeps_undecryptable';
 
 /** The key the repos are built with. */
 const GOOD_KEY = Buffer.alloc(32, 41).toString('base64');
@@ -104,6 +116,9 @@ let goodEndpointId = '';
 let poisonEndpointId = '';
 
 beforeAll(async () => {
+  const isolated = await ensureIsolatedDatabase(ISOLATED_DB_NAME);
+  if (isolated === null) return;
+  DB_URL = isolated;
   const probe = postgres(DB_URL, { max: 1, connect_timeout: 2, idle_timeout: 1 });
   try {
     await probe`SELECT 1`;
