@@ -18911,3 +18911,69 @@ the mangled form, at least one of the backticked form — then the same shape sw
 file, where the five remaining matches are regex literals already inside code spans.
 
 Related: V-2104 (the method), V-2105 (the shape worth hunting), V-2107 (the peer figure this uses).
+
+---
+
+## V-2110 — dead code bounded at 3 of 1736, and a 44-false-positive detector my controls could not catch (2026-08-28)
+
+### The measurement I could not take, and why
+
+Launched the non-db coverage run after checking 120s of tree quiescence, zero runners, and that the
+peer's two touched tests passed 15/15. They wrote `retention-scrub-repo.ts` at 04:56, mid-run. Two
+files failed and **the report was suppressed entirely** (V-2104), so the 211-cold-function measurement
+is still unmade. Attributed by mtime before reading anything: the type-check arm named
+`scrubExpiredWebSessionIdentifiers does not exist on type 'RetentionScrubRepo'` — a method their
+sweeper referenced before their repo declared it.
+
+⚠️ **The lesson is mine.** A quiescence check plus a green spot-check is necessary and NOT sufficient:
+both describe the tree at launch and neither covers the window. Only a peer announcement does.
+
+### The half that needed no machine
+
+A cold function is not necessarily dead — it may be live code no test reaches — so the strict subset
+that IS answerable statically is "declarations with no caller anywhere". Boundary: **1736 exported
+top-level functions and class methods under `apps/server/src` EXCLUDING `db/`**, against a call index
+built in one pass over 2851 files in `src` + `tests`, comments stripped, declarations excluded.
+
+**Three have no caller, and all three are explained:**
+
+- `services/sessions.ts` `findOwnedSessionLite` — V-2096's orphaned seam, deliberately left pending the
+  owner's call. ⭐ It doubles as the built-in known-positive: the detector independently rediscovered
+  the one declaration already proven dead.
+- `services/fleet-control-registry.ts` `setEgress` — the live egress swap, built ahead of its route,
+  which is this repo's documented wire-ready posture (the correlator beneath it is separately tested and
+  the wire format is pinned). ⚠️ Its comment says "the route mints a uuid", present tense, about a route
+  that does not exist — the V-2096 shape again, small.
+- `services/oauth.ts` `resetForTest` — uncalled ON PURPOSE, and pinned that way:
+  `oauth-production-wiring-content-parity` asserts the e2e helper does NOT call it, because wiping
+  provider authority mid-run against a shared store is the harm.
+
+⭐ **So dead code in non-db server source is bounded at 3 of 1736, none of it a defect.** That also
+reframes the 211: they are not deletion candidates. Every one has a caller — they are cold because the
+path reaching them is unexercised, which is what V-2105 turned out to be and needs tests, not removal.
+
+### ⛔ The detector was wrong first, by 44, and the controls could not see it
+
+The first run reported **44** zero-caller declarations. Every one was named `get`, `set`, `del`, `has`,
+`inc`, `on`, `end` or `run`. Cause: my CALL index required `\w{3,}` — four characters — while the
+DECLARATION scan had no length floor, so short methods were declared and never indexed.
+
+⭐⭐ **All three controls were long names** (`verifyStripeSignature`, `buildAdditionalAuthenticatedData`,
+`verifyBootEncryptionKey`), so every one passed while the detector was blind to an entire length class.
+A control only proves the detector works _for inputs shaped like the control_. Fixed by aligning both
+thresholds and adding SHORT known-live controls — `get` 1638 calls, `set` 957, `run` 29. **44 → 3.**
+
+⚠️ The tell was in the output and readable without any of this: a result list whose members share a
+shape the population does not (eight three-letter names out of 1736 declarations) is describing the
+instrument, not the code.
+
+### Also verified, clean
+
+`lib/stripe-signing.ts` claims "each candidate must independently match a real HMAC". **Holds**, and the
+implementation carries a fixed real defect worth knowing: V-1465 records that Node's HMAC accepts an
+EMPTY key and returns a valid digest, so an empty secret verified — now refused before hashing. The
+timestamp tolerance is checked before the HMAC, and `constantTimeHexEq` guards both subtle traps with
+reasons: a length check first (`timingSafeEqual` throws on unequal buffers) and a hex-charset check
+(`Buffer.from(x,'hex')` silently truncates on bad characters).
+
+Related: V-2104 (report suppression), V-2105 (cold-with-a-caller), V-2109 (the population named).
