@@ -5,6 +5,25 @@
 // Every method takes an AccountContext and enforces account-scoped ownership
 // — a session belongs to exactly one account, and only that account's keys
 // can operate on it.
+//
+// EXCEPT five, each scoped another way rather than left unscoped. Counted
+// 2026-08-28: 15 of the 20 methods on this class take the context.
+//   - autoDestroyExpired — acts on a SessionRecord the duration sweeper has
+//     already fetched.
+//   - destroyAllForAccount(accountId) — scoped by its explicit argument;
+//     reached only from admin suspend/reclaim.
+//   - ingestEgressCapabilityReport — bound one layer out, in
+//     session-capability-report-relay.ts: a frame is dropped unless the
+//     reporting node IS the session's live owner node, and the id forwarded
+//     here comes from the RESOLVED record, never from the frame.
+//   - persistPostSuccessObservability — private; its accountId comes from a
+//     record the caller already authorized.
+//   - findOwnedSessionLite(accountId, sessionId) — scoped by argument, and
+//     currently has no callers.
+// The blanket wording predates all five, and an audit goes wrong in either
+// direction without this note: trusting the sentence above skips five
+// methods, while reading only the signatures accuses
+// ingestEgressCapabilityReport, whose enforcement is not in this file.
 
 import {
   DEFAULT_BEHAVIORAL_PROFILE,

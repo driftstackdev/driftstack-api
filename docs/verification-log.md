@@ -19301,3 +19301,54 @@ low-cardinality domain). Nothing re-derived here.
 **Boundary:** this checks which paths _can_ place an upstream string in a response body, and what the one
 non-framework `statusCode` thrower puts there. It does not enumerate the message space of Stripe's own 4xx
 catalogue, which is Stripe's to define and is customer-facing by their design. No defect.
+
+## V-2117 — a security claim two parity guards froze was false for 5 of 20 methods; corrected without churning either pin (2026-08-28)
+
+Found by the universal-claim instrument (V-2116). `services/sessions.ts:5` states **"Every method takes an
+AccountContext and enforces account-scoped ownership"**. Measured on the class body: **20 methods, 15 take the
+context, 5 do not** — `autoDestroyExpired`, `destroyAllForAccount`, `findOwnedSessionLite`,
+`persistPostSuccessObservability` (private), `ingestEgressCapabilityReport`.
+
+⛔ **Instrument error, recorded.** My first census reported 21/17/4. A two-space-indent regex matched the
+`SessionRepo` **interface** members as service methods — 17 of them — and in the same pass counted two
+interface members (`countActiveSessions`, `countAllByStatus`) as context-taking _service_ methods while missing
+the `private` one entirely. The brace-scoped enumeration that **names** its members is the one that was right.
+Enumerate the set; never report the size.
+
+**All five are sound — each scoped another way rather than left unscoped:**
+
+- `autoDestroyExpired` — acts on a `SessionRecord` the duration sweeper already fetched.
+- `destroyAllForAccount(accountId)` — scoped by explicit argument; reached only from admin suspend/reclaim.
+- `persistPostSuccessObservability` — `private`; its `accountId` comes from an already-authorized record.
+- `findOwnedSessionLite(accountId, sessionId)` — scoped by argument, and has no callers (deletion candidate).
+- ⭐ `ingestEgressCapabilityReport` — the one that justified the audit: it takes no context and is reachable
+  from a fleet node. Enforcement is **one layer out**, in `session-capability-report-relay.ts:64` — a frame is
+  dropped unless `session.nodeId === reportingNodeId` _and_ the session is not closed, and the id forwarded
+  downstream is `session.driftstackSessionId` taken from the **resolved record**, never `frame.sessionId`. A
+  node cannot target another node's session. The same id-binding discipline the seed-script AAD pin exists to
+  protect.
+
+⛔ **Two parity guards froze the false sentence** — `services-sessions-content-parity.test.ts:54` and
+`sessions-v156-v136-v169-cross-source-invariant.test.ts:78-80`. A pin freezes _text_, not truth, and here it
+made the overstatement **durable**: correcting the sentence breaks two tests, which is a standing disincentive
+to correct it.
+
+**The fix keeps both pins green.** Rather than rewrite the frozen sentence and churn two guards, I appended an
+`EXCEPT` clause naming all five and where each is enforced — the idiom this repo already uses at
+`routes/auth.ts:16` ("Every endpoint here is public … EXCEPT `POST /v1/auth/mfa/step-up`"). All four pinned
+regexes still match, dry-run against the edited file _before_ running anything; both test files pass (47
+tests); `tsc -p apps/server/tsconfig.json --noEmit` exits 0; the diff is 19 comment lines and prettier-clean.
+
+**Why it matters in both directions** — the note says so at the source: trusting the sentence skips five
+methods, while reading only the signatures accuses `ingestEgressCapabilityReport`, whose enforcement is not in
+this file. That is the "gated is not a property of the route registration" trap one layer down, and I walked
+into its second half before checking the relay.
+
+**Also verified, no change:** `routes/auth.ts:16`'s claim holds exactly — 12 route registrations, exactly one
+(`POST /v1/auth/mfa/step-up`) behind `requireAuth`, matching its EXCEPT clause; the "MFA pair"'s other half
+(`mfa/challenge`) is correctly public because it _completes_ authentication rather than sitting behind it. The
+adjacent MFA brute-force question was answered by prior art before I spent a measurement — atomic INCR attempt
+cap `MAX_MFA_CHALLENGE_ATTEMPTS=5`, 300s TTL, already adjudicated sound and marked do-not-re-audit.
+
+**Boundary:** this measures which methods take a context and where each exception enforces scope instead. It
+does not re-audit the 15 that do take one.
