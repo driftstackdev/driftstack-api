@@ -17615,3 +17615,53 @@ worth asserting was a **fence** — a WHERE clause whose whole job is to refuse.
 fence is written; only execution proves the database applies it.
 
 Related: V-2088 (the first closure), V-2087 (why text pins are shape assertions), V-2086 (the list).
+
+---
+
+## V-2090 — the V-2077 loop closed, and a jsonb round-trip on a column where that defect once lived (2026-08-28)
+
+Two more of the eleven, both on `DrizzleSessionRepo`, in one arm on the existing tenant-scope host.
+
+**`countAllByStatus` closes a loop I opened myself.** In V-2077 I verified its claim — _"zero-filled
+from `SessionStatusSchema.options` so every status is present (no hardcoded list to drift from the
+enum)"_ — **by reading the helper**. V-2083 then showed the code had never executed. The arm now asserts
+`Object.keys(counts)` equals `SessionStatusSchema.options`, importing the enum so the test and the code
+resolve the same source, plus that the seeded `ready` session is actually counted.
+
+**`setEgressCapabilityReport` writes TWO jsonb columns**, which is the exact shape of a defect this
+repo has had before — postgres-js `JSON.stringify` double-encoding under a jsonb cast. The arm writes
+an object and reads it back through raw SQL, asserting `typeof` is `object` rather than a string, that
+both columns round-trip by value, and that an unknown id is a **null no-op** rather than a throw.
+
+**Proof.** Slicing one member off the enum the zero-fill iterates reds the completeness assertion;
+dropping `egressCapabilityReport: args.raw` from the `.set()` reds the round-trip. Each mutation reds
+exactly one arm — mine — and source was restored byte-identical from a path-keyed snapshot both times.
+`it(` 1 → 2, tsc clean.
+
+### ⛔ Two self-inflicted errors, both the same shape as the ones I keep finding
+
+**1. `Cannot find name 'SessionStatusSchema'`.** My generator added the import conditionally —
+`if 'SessionStatusSchema' not in t` — but ran that check AFTER inserting the arm that references it.
+The symbol was present, so the import was never added. **The check's population included the thing I
+had just added**, which is the same error as a census counting its own fixture, and it produced a file
+that typechecked as broken.
+
+**2. The previous arm reported `Tests no tests`** (V-2089) because a quoted status value and an
+apostrophe terminated the `it(` title string. Both were caught by `tsc -p tsconfig.test.json`, not by
+the run — the run reported "no tests", which is not a failure and not a pass.
+
+⭐ The generator now asserts `"'" not in title` before writing, and adds imports unconditionally with
+an assert that they are absent first. **Both fixes are asserts, not care** — the third time this
+session that converting an intention into a precondition is what actually worked.
+
+### Running total
+
+**6 of 11 closed** — `markEmailVerified`, `enqueueDelivery`, `resetDeliveryToPending`, `deleteDelivery`,
+`countAllByStatus`, `setEgressCapabilityReport`. **5 remain**: `findAccountById`, `upsertSubscription`,
+`touchWebSessionLastUsed`, `findByConfirmTokenHash`, `getDetail`, each with an existing host.
+
+⭐ Every closure so far has found the same thing: what the method needed was not coverage but a
+**property nobody had asserted against the database** — a first-transition claim, two write fences, an
+enum-derived zero-fill, a jsonb round-trip. The coverage number located them; it was never the point.
+
+Related: V-2089, V-2088 (the earlier closures), V-2077 (the claim this loop closes), V-2086 (the list).

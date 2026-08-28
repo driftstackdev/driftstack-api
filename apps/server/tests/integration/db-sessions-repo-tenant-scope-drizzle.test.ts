@@ -25,6 +25,7 @@ import { randomUUID } from 'node:crypto';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { SessionStatusSchema } from '@driftstack/api-types';
 import { DrizzleSessionRepo } from '../../src/db/sessions-repo.js';
 import type * as schema from '../../src/db/schema.js';
 
@@ -145,6 +146,59 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       const [afterOwner] = await client`
         SELECT last_state_at FROM sessions WHERE id = ${sessionId}`;
       expect(afterOwner?.last_state_at ?? null).not.toBeNull();
+    });
+
+    it('CRITICAL countAllByStatus zero-fills from the ENUM and setEgressCapabilityReport round-trips its jsonb, both against real Postgres. Neither had executed a line of SQL. The count claim is pinned by source text only, and text cannot show that the query groups correctly or that every enum member survives the zero-fill. The report writes TWO jsonb columns, which is the exact shape where a past double-encode defect lived, so a round-trip is what proves the value comes back an object rather than a JSON string.', async () => {
+      if (!dbReachable || !client) return;
+      const db = drizzle(client) as unknown as ReturnType<typeof drizzle<typeof schema>>;
+      const repo = new DrizzleSessionRepo({ client, db, close: async () => {} });
+
+      const owner = randomUUID();
+      seeded.push(owner);
+      await client`INSERT INTO accounts (id, email) VALUES (${owner}, ${`egr-${owner}@test.local`})`;
+      const [key] = await client`
+        INSERT INTO api_keys (account_id, name, key_prefix, key_hash)
+        VALUES (${owner}, 'egress-report', ${`dk_${owner.slice(0, 8)}`}, ${`hash-egr-${owner}`})
+        RETURNING id`;
+      const [srow] = await client`
+        INSERT INTO sessions (account_id, api_key_id, driver_session_id, status)
+        VALUES (${owner}, ${key?.id as string}, ${`drv-egr-${owner}`}, 'ready')
+        RETURNING id`;
+      const sessionId = srow?.id as string;
+
+      // countAllByStatus - every enum member present, not just the ones with rows.
+      const counts = await repo.countAllByStatus();
+      expect(
+        Object.keys(counts).sort(),
+        'the zero-fill must cover every SessionStatusSchema member, not only statuses that have rows',
+      ).toEqual([...SessionStatusSchema.options].sort());
+      expect(counts.ready, 'the seeded ready session must be counted').toBeGreaterThanOrEqual(1);
+
+      // setEgressCapabilityReport - jsonb round-trip on BOTH columns.
+      const derived = {
+        udp_associate: true,
+        quic_route: 'proxy' as const,
+        dns_remote_resolve: false,
+        warnings: ['probe-timeout'],
+      };
+      const raw = { probe: { attempts: 2 }, note: 'round-trip' };
+      const updated = await repo.setEgressCapabilityReport({ sessionId, derived, raw });
+      expect(updated, 'the report write must return the updated session').not.toBeNull();
+
+      const [back] = await client`
+        SELECT egress_capabilities, egress_capability_report FROM sessions WHERE id = ${sessionId}`;
+      expect(
+        typeof back?.egress_capabilities,
+        'a double-encoded jsonb comes back a string, not an object',
+      ).toBe('object');
+      expect(back?.egress_capabilities).toEqual(derived);
+      expect(back?.egress_capability_report).toEqual(raw);
+
+      // An unknown id is a no-op returning null, not a throw.
+      expect(
+        await repo.setEgressCapabilityReport({ sessionId: randomUUID(), derived, raw }),
+        'an unknown session id must be a null no-op',
+      ).toBeNull();
     });
   },
 );
