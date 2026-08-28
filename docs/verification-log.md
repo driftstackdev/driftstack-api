@@ -19420,3 +19420,57 @@ step being an audit write wrapped in `try { … } catch { /* swallow */ }`.
 **Boundary:** these are source-text measurements. They establish which key a constructor is handed and which
 function encloses each probe — not that any key decrypts any row, which is what the boot probe itself does at
 runtime against a real database.
+
+## V-2119 — two more universal claims verified exact; both of my detector's hits were false positives (2026-08-28)
+
+Closing the universal-claim round (V-2116/V-2118). Recorded so neither is re-checked.
+
+**`routes/account-mfa.ts:2` — holds in all three of its parts.** The claim is unusually precise, and each part
+was checked separately against the six live registrations:
+
+- "Every operation that changes MFA credential state requires an interactive web session" — `enroll`,
+  `verify`, `DELETE /v1/account/mfa`, `disable`, and `recovery-codes/regenerate` all carry
+  `requireInteractiveWebSession`.
+- "API keys may read status" — `GET /v1/account/mfa` gates on `requireScope('read')` and is the one route
+  without the interactive-session requirement. The exception is real and deliberate, not an omission.
+- "Disable and recovery-code regeneration additionally require fresh MFA" — ⭐ the part worth checking, because
+  there are **two** disable paths and the claim names "disable" in the singular. Both carry
+  `app.requireMfaFresh()`: `DELETE /v1/account/mfa` at `:153` and its `POST` alias at `:169`, which the source
+  marks "Same gate, same handler" and which shares `disableHandler`. Regeneration has it at `:189`. A hijacked
+  interactive session cannot disable the factor through either path without a fresh one.
+
+⚠️ The second registration block (`registerAccountMfaDisabledRoutes`) re-registers all six paths with **no
+gate**, which reads alarmingly in a census. It is the activation-gate stub: every handler is a `stub` that
+throws `FeatureUnavailableError`, registered only when MFA is unconfigured, and deliberately unauthenticated so
+a stale token yields the real reason rather than a 401 pointing at the wrong problem. Both blocks can never be
+registered together — Fastify rejects a duplicate route at boot.
+
+**`services/anthropic-key-tester.ts:32` — "Every failure reason is fixed customer-safe copy: upstream response
+bodies, native transport errors, and the plaintext key never enter the result."** Exact. Every `reason:` value
+resolves to one of five module constants; the file contains **zero** template interpolations, **zero** reads of
+the upstream body, and **zero** references to a native error message. The response body is explicitly discarded
+(`void response.body?.cancel()`), and the four `apiKey` occurrences are the two signatures, the empty-length
+check, and the outbound `x-api-key` header — none of them a result field.
+
+⛔ **Both of my detector's flagged hits were false positives, found by reading rather than by the detector.**
+It reported two `reason:` sites that were "not a fixed constant": one was the `reason: string` **type
+annotation** in the interface, and the other a ternary **between two module constants**
+(`controller.signal.aborted ? TIMEOUT_REASON : NETWORK_REASON`). A value extractor that matches a type
+declaration will accuse every well-typed file it is pointed at.
+
+**`services/email.ts:651` — "Every current call site for these 3 templates only ever sends to a KNOWN,
+active account."** Holds across all five call sites, and the direction that matters is enumeration: a
+security-critical template reaching an _unknown_ address is an oracle telling an attacker the address exists.
+`auth-flows.ts:749` is the one site that passes the raw input `email` rather than a resolved `account.email`,
+which is why it was read rather than counted — it sits inside signup, immediately after the account row is
+created (the line above binds `accountId: account.id`), and the tracker matches case-insensitively on the
+canonical address, so a case difference still resolves. The other three auth-flows sites pass `account.email`.
+The fifth, `oauth-client-service.ts:103`, sends the merge-confirmation inside
+`if (collidingAccountId !== null)` — the address belongs to an existing account by construction.
+
+**Round tally, stated so the instrument's rate stays honest:** eight claims checked — `lib/errors.ts`,
+`routes/auth.ts`, `services/sessions.ts`, `routes/auth-cli.ts`, `lib/boot-key-verification.ts`,
+`routes/account-mfa.ts`, `services/anthropic-key-tester.ts` and `services/email.ts` — yielding **one overstated comment corrected** (V-2117) and **one real
+latent gap closed with a guard** (V-2118). The remaining five were exact as written. That is consistent with
+the rate recorded when the technique was adopted, and materially better than the ranking instruments it
+replaced.
