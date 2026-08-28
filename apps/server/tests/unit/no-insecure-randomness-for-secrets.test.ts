@@ -57,6 +57,25 @@ const ALLOWLIST = new Set<string>([
   'packages/sdk-typescript/src/retry.ts', // retry backoff jitter; rng is injectable for tests
 ]);
 
+/** How many vetted `Math.random` USES each allowlisted file carries.
+ *
+ *  ALLOWLIST is keyed by FILE, but what the header above vetted is a specific
+ *  USE: one jti fallback, one internal driver handle, retry jitter. A presence
+ *  check cannot tell a SECOND `Math.random` in an allowlisted file from the one
+ *  that was reviewed — so the exemption silently covers whatever else lands in
+ *  that file, including a token generator. The rot arm below catches an
+ *  exemption that shrinks to zero; nothing caught one that GROWS.
+ *
+ *  Counts are the guard's own, read out of `code()` (comments stripped) rather
+ *  than recomputed by hand. Adding an allowlist entry without a count here fails
+ *  loudly, so the two lists cannot drift apart. */
+const ALLOWLIST_USES: ReadonlyMap<string, number> = new Map([
+  ['apps/server/src/services/webhook-worker.ts', 2],
+  ['apps/server/src/lib/livekit-token.ts', 1],
+  ['apps/server/src/drivers/playwright.ts', 1],
+  ['packages/sdk-typescript/src/retry.ts', 1],
+]);
+
 /** Comments stripped — a comment that NAMES Math.random is not a use of it, and
  *  two files in packages/ say "no Math.random()" in prose to explain why they
  *  seed their own PRNG. Without this they read as offenders. */
@@ -138,5 +157,23 @@ describe('security: no Math.random() for secrets/tokens/ids in server runtime', 
         `allowlisted file no longer uses Math.random: ${a}`,
       ).toBe(true);
     }
+  });
+
+  it('CRITICAL an allowlisted file carries only the NUMBER of Math.random uses that was vetted. The exemption is keyed by FILE while the review was of a USE — the header reasons about one jti fallback, one driver handle, retry jitter. Without this, adding a token generator built on Math.random to any allowlisted file is green: the presence check is already satisfied by the vetted use sitting beside it, and the rot arm only notices an exemption that disappears, never one that grows.', () => {
+    const drifted: string[] = [];
+    for (const entry of ALLOWLIST) {
+      const actual = [...code(resolve(REPO_ROOT, entry)).matchAll(/\bMath\.random\b/g)].length;
+      const vetted = ALLOWLIST_USES.get(entry);
+      if (vetted === undefined) {
+        drifted.push(`${entry}: allowlisted but no vetted use-count — state how many and why`);
+        continue;
+      }
+      if (actual !== vetted)
+        drifted.push(`${entry}: vetted ${String(vetted)}, found ${String(actual)}`);
+    }
+    expect(
+      drifted,
+      'Math.random use-count drift in an allowlisted file (review each new use: is it generating a token / id / secret?):',
+    ).toEqual([]);
   });
 });

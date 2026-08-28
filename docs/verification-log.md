@@ -14408,3 +14408,71 @@ mistake shape as the dominant lesson, caught the same way.
 
 So the V-2025 fix was not one of many: it was the only occurrence, and the class is now empty.
 Recorded so the next sweep of this shape can stop at this line.
+
+## V-2033 — a security allowlist keyed by FILE, exempting a USE (2026-08-27)
+
+Gate-31 first: **3244 test files, 32244 passed, 16 skipped, exit 0** — verify-suite's own verdict, so
+last turn's ratchet bumps (3068/3244) are confirmed by a full run rather than by arithmetic.
+
+### Generalising V-2029: the "optional dep bypasses a validated default" class
+
+V-2029 found one instance; `services/agent-session-orphan-sweeper.ts:77` is a second
+(`deps.maxLifetimeHours ?? resolveMaxLifetimeHours()`). Swept the class. Boundary: 342 tracked `.ts`
+under `apps/server/src`, comment lines excluded, matching `<deps|opts|options|config|args>.X ??
+someFn()`.
+
+⛔ **The first run found 4 sites; the shape actually has 8.** My callee pattern was `(\w+)\(\)`, so
+every `?? Date.now()` was invisible — a dot in the callee, nothing more. **Half the population was
+hidden by the spelling I happened to write**, which is the third time today the sweep-the-shape rule
+has cost me a re-run. Widened to allow a dotted callee:
+
+    randomJti()                      lib/livekit-token.ts:117
+    randomNonce()                    lib/oauth-client-state.ts:72
+    resolveMaxLifetimeHours()        services/agent-session-orphan-sweeper.ts:77
+    resolveDisconnectGraceSeconds()  services/worker-disconnect-reaper.ts:80
+    Date.now()  x3                   lib/livekit-token.ts:105, lib/oauth-client-state.ts:73,157
+    this.nowFn()                     services/crypto-orders.ts:1216
+
+**All 8 clean**, each checked by reading its caller population rather than by pattern: no production
+caller supplies `jti`, `graceSeconds`, `maxLifetimeHours` or `issued_at`; the two production callers
+that DO pass `nowMs` pass a server clock read, and `agent-sessions-livekit-token.ts:233` deliberately
+captures `const tokenNowMs = nowMs()` once so the token's `exp` and the response's `expiresAt` cannot
+disagree. `crypto-orders.ts:1216` returns an object carrying BOTH `issued_at` and `created_at`, so
+the seam is receipt-generation time, not the order's stored timestamp.
+
+`resolveMaxLifetimeHours` also audits clean on its own claim ("can never be silently disabled"):
+`Number('')` and `Number(' ')` are 0 → caught by `<= 0`; `'abc'` → NaN and `'Infinity'` → caught by
+`!Number.isFinite`; the `120000`-for-`12` typo → caught by the 30-day upper bound. Bootstrap
+constructs the sweeper with `repo` alone, so the resolver governs.
+
+### The finding
+
+`randomJti()` in `lib/livekit-token.ts` feature-detects `crypto.getRandomValues` and falls back to
+**`Math.random()`** — while its sibling `randomNonce()` in `lib/oauth-client-state.ts` is a plain
+`randomBytes(16)`. The file imports `createHmac` from `node:crypto`, so it is server-only, and
+`package.json` declares `"node": ">=22.12.0"`, where the webcrypto global has existed since Node 19.
+
+⛔ **That is already vetted, and with better reasoning than I had.**
+`no-insecure-randomness-for-secrets.test.ts` names the file in its header — "dead code in Node 22 …
+the `jti` is a replay/uniqueness marker, NOT a secret — the LiveKit token's security is its
+HMAC-SHA256 signature, so a predictable jti can't forge a token." **Seventh suspected gap refuted
+this session.**
+
+⭐ **But its exemption is keyed by FILE, and what it vetted is a USE.** The check is
+`if (MATH_RANDOM.test(code(f))) { if (!ALLOWLIST.has(rel(f))) offenders.push(...) }` — pure presence.
+An allowlisted file may carry any number of `Math.random` uses. The existing rot arm asserts each
+allowlisted file _still contains_ `Math.random`, so it catches an exemption that shrinks to zero and
+not one that **grows** — and the guard's own header reasons about exactly one use per file.
+
+Added a use-count arm. Counts read from the guard's own `code()` via a probe rather than
+re-implemented (`webhook-worker` 2, `livekit-token` 1, `playwright` 1, `sdk-typescript/retry` 1), and
+an allowlist entry with no vetted count fails loudly, so the two lists cannot drift apart.
+
+| mutation                                                                      | result                                       |
+| ----------------------------------------------------------------------------- | -------------------------------------------- |
+| ⭐ **real subject**: a second `Math.random` planted in `lib/livekit-token.ts` | reds — `vetted 1, found 2`                   |
+| a new ALLOWLIST entry with no count                                           | reds — `allowlisted but no vetted use-count` |
+
+Both restored byte-identical; `it(` 3 → 4; `tsc -p apps/server/tsconfig.test.json` clean. This is the
+fifth finding of one shape this session — **the guard existed and its KEY was coarser than the
+property it protected** — and the first where the coarse key guards a security exemption.
