@@ -14821,3 +14821,62 @@ comment lines excluded, matching the regex boundary idiom with an explicit chara
 (`(?:^|[…])`, `(?=$|[…])`, `(?<=[…])`). Detector validated against the PRE-fix bytes of
 `agent-sensitive-input.ts` (2 hits). **Population: 2 sites, both in the file V-2039 already fixed.**
 No second instance of a hand-listed token boundary in server source.
+
+## V-2041 — a prose-only invariant, and four files `git grep` cannot read (2026-08-27)
+
+**Gate-34: 3244 files, 32258 passed, 16 skipped, `verify-suite: OK`** — and the first run to carry a
+contention verdict:
+
+    --- contention during the run ---
+    samples=31 foreign_vitest_pids=0
+      none — no vitest outside our own process tree for the whole run
+
+31 samples across the run, so the V-2039 privacy fix is verified against a run that is _labelled_
+uncontended rather than assumed to be. Gate-32's ambiguity cannot recur silently.
+
+### `services/byok-anthropic-key-cache.ts` — an invariant written down instead of asserted
+
+The cache holds a customer's decrypted BYOK Anthropic key, keyed by agent-session id, TTL **13h**
+hardcoded (`opts.ttlMs ?? 13 * 60 * 60 * 1000`), and `bootstrap.ts:1496` constructs it with no
+override. Its comment justifies the number: _"just past the 12h orphan-sweep session cap, so a live
+session's key is never evicted mid-run"_.
+
+⛔ **The two values are independent.** V-2035 established the session cap is
+`DRIFTSTACK_AGENT_SESSION_MAX_LIFETIME_HOURS` — operator-settable, sanity-bounded at 30 DAYS. The
+cache never references `resolveMaxLifetimeHours`; nothing enforces `ttl > cap`. Raise the cap above
+13h and the stated property silently stops holding for any session that outlives the TTL. Exactly the
+shape of "a nil consequence holds only while an invariant does" — the fix is to derive the TTL from
+the same source rather than restate its value in prose.
+
+⭐ **I over-read the consequence first and reading refuted it.** I expected the expired cache to
+substitute the platform's key for the customer's — a billing/attribution defect. It does not: the
+fallback leg at `agent-sessions.ts:4691` requires `headerByokKey === undefined && cachedByokKey ===
+undefined && bundledLlmService !== undefined && deploymentFallbackKey !== undefined`, and then gates
+on `settings.consent` with its own concurrency cap and `bundledLlmRequestTotal` counters. It is the
+consented, metered bundled-LLM product, not an accidental switch. A non-consenting customer gets an
+error. **The real consequence is a functional degradation on a raised cap, not a silent substitution
+— narrower than my first draft, and recorded at the narrower size.**
+
+### Four source files that `git grep` will not read
+
+`git grep` reported `services/exit-identity-cache.ts` as _binary_. It carries one raw **NUL byte** at
+offset 1992 — ``return `${accountId}\x00${proxyId}`;`` — a composite-key separator written as a
+literal byte rather than an escape. Swept the repo: **4 of 4625 tracked text-type files contain a raw
+NUL**, all deliberate separators or, in one case, a fixture whose point is to feed a NUL:
+
+    apps/gui-client/src/lib/SettingsContext.tsx:239        (A2's — flagged to them)
+    apps/server/src/services/exit-identity-cache.ts:41
+    apps/server/tests/unit/idempotency-key-shared-parser.test.ts:130
+    packages/recapture-automation/src/matrix.ts:83
+
+⭐ **The repo is fine; MY tooling was not.** The repo's own guards walk the filesystem
+(`readFileSync`/`readdirSync` in 1683 unit tests) and read NULs without trouble — no guard shells out
+to `git grep`. But every `git grep` census I ran this session had a 4-file blind spot, including one
+unit test. `git grep -a` reads them correctly, and that is the fix — not churning four source files
+for a tooling nicety.
+
+⚠️ **One published audit used the affected method.** `docs/internal/v524-public-leak-audit` records
+that personal-name leaks were "confirmed with `git grep -E \"…\"`" — the same blind spot, on a
+privacy audit. Re-ran that pattern over the four files with a NUL-safe reader: **0 matches in all
+four.** The blind spot hid nothing and the audit's conclusion stands — but it was luck, not method,
+and it is now checked rather than assumed.
