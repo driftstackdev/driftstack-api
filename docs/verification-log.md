@@ -17825,3 +17825,73 @@ the unit suite or e2e.
 
 Related: V-2086 (the classified list), V-2087 (why text pins are shape assertions), V-2088 through
 V-2092 (the closures).
+
+---
+
+## V-2094 — a superseded repo method sits beside its safer replacement with nothing stopping a caller (2026-08-28)
+
+After V-2093 closed the never-executed work, I asked the systematic version of what those eight arms
+kept finding: **seven of eight pinned a REFUSAL, so how many refusals does the db layer have, and are
+they exercised?**
+
+**Census: 130 write statements under `apps/server/src/db`, of which 44 carry a compound WHERE** — an
+`and(...)` combining more than the primary key, i.e. a fence. Boundary in the same sentence: the
+pattern requires the WHERE to begin `and(` with more than one predicate, so a fence expressed in raw
+`sql` or across a longer chain would not be counted.
+
+Intersected with coverage: **40 of the 44 already execute, 3 were closed by my arms this session, and
+exactly ONE has never run** — `team-members-repo.removeMember`, whose fence is
+`and(eq(id), eq(ownerAccountId))`, i.e. owner-scoped team-membership removal.
+
+### It has never run because nothing calls it, and that is the finding
+
+`removeMember` was **superseded on 2026-07-10** by `removeMemberWithInvites`, which does the same
+owner-scoped DELETE _inside a transaction_ that also cancels the removed member's outstanding invites
+— closing a membership-resurrection race where an `acceptInvite` that read the invite before the
+removal could slip its upsert in between — and, per V-726, revokes every live key that member minted
+on the owner's account. The service calls only the replacement. The original was left in place: **on
+the repo interface, implemented by the in-memory double, fully typed, and reachable by anyone reaching
+for the obvious shorter name.**
+
+⭐ **This is the third instance of one pattern**, and the asymmetry is the point:
+
+    findSessionUnscoped   superseded by atomic admin primitives   ✅ GUARDED at zero callers
+    consumeAuthToken      superseded by consumeAuthTokenFamily    ❌ nothing
+    removeMember          superseded by removeMemberWithInvites   ❌ nothing
+
+The first is pinned by `unscoped-finders-admin-only-sweep`, so a new invocation fails loudly. The
+other two are not, and **calling either looks entirely correct at the call site** — both do a real,
+owner-scoped write; they just do less than the method that replaced them.
+
+### The guard, and how it was itself caught by the hazard it describes
+
+New `a-superseded-repo-method-keeps-zero-callers.test.ts`: a roster of (weak, strong, file), a
+zero-callers assertion over `apps/server/src`, a non-vacuity control requiring the REPLACEMENT to be
+found by the same matcher, and a rot arm requiring both halves of each pair to still exist — because
+an entry whose strong method vanished means the supersession was undone, and the rule would then be
+enforcing the wrong thing.
+
+⛔ **First run: one offender — `routes/team.ts` calling `service.removeMember(...)`.** That is the
+SERVICE's method, which happens to share the name. **A guard written to catch a shared-name hazard was
+defeated by a shared name.** Fixed with a narrow, named exclusion of service receivers, plus a control
+that a repo call through any spelling this codebase uses (`repo.`, `this.repo.`, `this.deps.repo.`,
+`…Repo.`) still reads as a call — otherwise the exclusion could silently swallow the thing being
+guarded.
+
+⭐ It scans through the repo's shared `codeOnly` helper rather than raw text, so a commented-out call
+is not a call. **Proved as a pair:** switching the service to `this.repo.removeMember(` reds two arms;
+adding the same call as a COMMENT reds nothing. Service restored byte-identical.
+
+⚠️ **Deletion is the better remedy and is not mine to make.** `removeMember` is on the
+`TeamMembersRepo` interface and implemented by the double, so removing it touches three files and a
+published-ish contract — and `findSessionUnscoped` shows this repo sometimes retains such a method
+deliberately. The guard makes the hazard loud without taking that decision.
+
+### Suite
+
+Full run **with `DATABASE_URL`** so every arm from V-2088–V-2092 actually executed:
+**3249 files passed, 32296 tests passed, 16 skipped**, 192s. Ratchets 3072→3073 / 3249→3250 for the
+file added here.
+
+Related: V-2093 (the refusal observation this generalises), V-2086 (where I excluded `removeMember` for
+lack of a repo-receiver call — correctly, and it turned out to be superseded), V-2065 (`consumeAuthToken`).
