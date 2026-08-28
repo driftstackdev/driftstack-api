@@ -18853,13 +18853,13 @@ Recorded because each cost time and none should cost it twice.
 
 ### Three threads that ended without a finding
 
-- **Admin audit-log completeness.** Three route files claim "each mutation writes an admin*audit_log
+- **Admin audit-log completeness.** Three route files claim "each mutation writes an `admin_audit_log`
   row". Grepped prior art before checking and found **80+ audit-related test files**, including
   `every-admin-mutation-writes-an-audit-row` and `every-mutating-admin-route-writes-an-audit-row` —
   which are complementary rather than duplicates: the first contrasts the documented claim against
   reality (mutations audit, GETs do not), the second guards the specific recurrence of a new admin route
   shipping with no audit wiring, which has happened twice. ⭐ The first file also records
-  *"Counts are deliberately absent… V-861 found the figures written here had already drifted"\_ — the
+  "Counts are deliberately absent… V-861 found the figures written here had already drifted" — the
   derive-don't-record remedy, already applied here, which partly pre-empts V-2107's lesson too.
 - **Permissive CORS.** `cors-allow.ts` claims "When true, every origin is reflected". True, and the
   dangerous configuration is already fail-closed: `assertCorsPosture` throws on permissive-CORS-in-
@@ -18897,5 +18897,17 @@ suppresses the entire coverage report**. It needs the machine, and a peer is mid
 scrub, so it is deferred rather than skipped.
 
 No source change. Next firing's target is named and sized.
+
+⛔ **Correction to this entry, minutes after landing it.** The paragraph above shipped with a MANGLED
+identifier: written unbackticked in prose, prettier read the underscores as emphasis markers and
+committed `admin` + `*` + `audit_log` into HEAD, with zero correct occurrences. The tell was a `MM`
+status on this file — the commit hook reformatted a corrected version into the INDEX while the worktree
+reverted, which reads exactly like the poisoned-index shape the shared-tree rules warn about and was
+repaired the documented way (`git reset -q -- <path>`, index ← HEAD, worktree untouched).
+
+Two things worth keeping: **an identifier containing underscores must be backticked in this log**, or
+the formatter silently rewrites it; and the fix was verified by POST-CONDITION — zero occurrences of
+the mangled form, at least one of the backticked form — then the same shape swept across the whole
+file, where the five remaining matches are regex literals already inside code spans.
 
 Related: V-2104 (the method), V-2105 (the shape worth hunting), V-2107 (the peer figure this uses).
