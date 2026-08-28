@@ -15555,3 +15555,45 @@ And a route-file-level sweep reported **20 of 27** customer route files as unaud
 one hop away in the service layer, so resolving each route's service imports cut it to 9, of which the
 billing four are explicitly accepted by the doc ("Stripe is the audit boundary for billing"). Reading
 the remainder is what left one real finding.
+
+## V-2055 — the shared date-namespace has a third adopter, protected only by assertion shape (2026-08-27)
+
+A2 fixed a real defect the moment their gate began executing the DB-backed files it had been
+skipping: `db-webhooks-force-rotation-selection` isolates itself by seeding historical secret dates
+under a year-2000 cutoff, and `db-webhook-rotation-reminder-repo-drizzle` seeds 1998/1999 into the
+same global, unscoped sweep — so its rows entered the due set, sorted to the front of an oldest-first
+ordering, and displaced the file's own rows inside `limit`. Their generalisation is the durable part:
+**an isolation device that two files adopt stops being isolation and becomes a shared namespace, and
+the second adopter is invisible because each file's comment reasons as if it were alone.**
+
+Swept for other adopters. Boundary: 2418 tracked test files under `apps/server/tests`, literal date
+strings with a year before 2010 on non-comment lines. Detector validated against A2's known-positive
+pair, which it finds.
+
+    1970                    db-agent-session-transcript-migration-drizzle.test.ts
+    1998 1999 2000 2001     db-webhook-rotation-reminder-repo-drizzle.test.ts
+    1998 1999 2000 2001     db-webhooks-force-rotation-selection-drizzle.test.ts   <- now isolated
+    2000                    rate-limit-overrides-repo-contract.test.ts
+    2001 2003               webhook-sweeps-survive-one-undecryptable-row.test.ts   <- THIRD adopter
+
+**There are three files in that namespace, not two.** `webhook-sweeps-survive-one-undecryptable-row`
+seeds `2001-01-01` and `2003-01-01` into the same `webhook_endpoints` table and calls the same two
+global sweeps — `findEndpointsNeedingRotationReminder` and `findEndpointsNeedingForceRotation`. A2's
+fix gave `force-rotation-selection` its own database; **the other two both take the shared
+`DATABASE_URL`** (`process.env.DATABASE_URL ?? DEFAULT_DB_URL`, no `ensureIsolatedDatabase`), and
+they share the literal `2001-01-01`.
+
+⭐ **It does not red today, and the reason is worth stating exactly, because it is not isolation.**
+Its arms assert membership — `expect(ids).toContain(goodEndpointId)` and `.not.toContain(poisonEndpointId)`
+— with `limit: 500`. A2's failing arm asserted ORDER and that the limit was honoured. Foreign rows
+entering this file's result set are invisible to a membership assertion until they push the row it
+cares about past 500. **So the protection is the shape of the assertion and a generous limit, not the
+absence of a collision** — and an assertion that cannot see interference is exactly the kind that
+later gets tightened into one that can.
+
+⚠️ Not fixed here. The remedy is the one A2 already applied — `ensureIsolatedDatabase`, structural
+rather than moving dates, since moving the boundary is what the next adopter breaks. It sits inside
+the webhook test family A2 is actively working, so it goes to them rather than being edited by a
+second agent in the same area. `rate-limit-overrides-repo-contract` (2000) and
+`db-agent-session-transcript-migration-drizzle` (1970) are in the same date space but touch different
+tables, so they do not join this namespace.
