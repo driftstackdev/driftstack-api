@@ -18780,3 +18780,67 @@ prose, which names api-types with a reason ("no `.test.ts` imports") that is tru
 false of its own four tests, three of which import `../src/`.
 
 Related: V-1422 (the measurement this reproduces), V-2104 (the db-layer equivalent).
+
+---
+
+## V-2108 — the recipes payload path audited clean, and why the production-boot test is environment-coupled by design (2026-08-28)
+
+Two threads, both ending in "sound", which is the outcome an end-to-end audit is supposed to be allowed
+to have.
+
+### Recipes, end to end — clean
+
+Audited after V-2106 found this file's own header denying a delete surface that ships. Boundary:
+`routes/recipes.ts`, `services/recipe-payload-encryption.ts`, `db/recipes-repo.ts`, read at HEAD.
+
+Five routes, each with `requireAuth` + a scope + `rateLimit('global')`; reads take `read`, the create
+and delete take `write`. The header's remaining universal claim — _"Legacy plaintext arrays and
+context-free v1 envelopes are readable only by a bounded compare-and-set bootstrap upgrader"_ —
+**holds**, and the read path fails closed twice over: `readRecipeIntentLog` and
+`readRecipeTranscriptSnapshot` each reject any stored value that is not a v2 envelope, and each throw
+on a missing key rather than returning plaintext. Every read funnels through `rowToRecord`, so there is
+no second path.
+
+⭐ The AAD is bound on four axes — purpose, SLOT, `accountId`, `recipeId` — and the two payload columns
+use **distinct purposes AND distinct slots** (`driftstack.recipe-intent-log.v2`/`intent_log` versus
+`driftstack.recipe-transcript-snapshot.v2`/`transcript_snapshot`). So a ciphertext cannot be moved
+between the two columns, between recipes, or between accounts. That is the property most easily got
+wrong by reusing one AAD for both slots, and it is right here.
+
+⚠️ Boundary: this audits the read/decrypt path and its bindings. It does not re-audit the 29 existing
+recipes guards, and it says nothing about the migration path beyond that the normal readers refuse what
+the upgrader accepts.
+
+### Why the only production-boot test is coupled to its database
+
+The gate's single failure (V-2107) is `production-bootstrap-arms-every-chain`, which passes in
+isolation. The peer session analysed the isolation fix and **declined it, correctly**: the boot resolves
+its database from `process.env.DATABASE_URL` inside `loadConfig()`, not from the file's local client, so
+isolating the file would require mutating a process-global that **153 files capture at module scope** —
+the repo's first such mutation, safe only under a default `isolate: true` nobody has stated. Their
+framing is the one to keep: it works today and becomes a landmine the day someone sets `isolate: false`
+for speed, in an edit that would look unrelated.
+
+They handed back the better question — why the boot decrypts stored customer rows at all — and it has a
+documented answer. `lib/boot-key-verification.ts` exists for exactly this: _"Every envelope migration in
+bootstrap opens with a probe: read one already-encrypted row with the configured key and throw if it
+cannot be decrypted. That check is deliberate and correct — it refuses to serve with unreadable
+secrets."_ Nine call sites across eight repos (webhooks, MFA, BYOK, agent-session transcripts, platform
+secrets, fleet-node LiveKit secrets, account proxies, recipes, profiles), with two stated invariants: it
+never swallows, and it never names the key.
+
+**So the eager decryption is a fail-closed safety property, not incidental startup work, and the test is
+exercising it correctly.** What fails is not the boot and not the test: it is that a single suite run
+puts TWO ENCRYPTION KEYS in one database — `buildTestApp` writes rows under a fixed test key while this
+file boots with the `.env` key — and the probe is fatal by design.
+
+⭐ That also explains why the peer measures 3251/3251 and I measure one failure **on the same commit**:
+the condition is order- and residue-dependent, so both observations are correct. A green here is not
+evidence the interference is absent.
+
+No fix landed. Isolation cannot reach it without the global mutation the peer rightly refused; clearing
+the probe tables would delete other tests' rows on a shared database; and the boot's own error already
+names the subsystem, the env var and the remedy. Recorded so the next session does not re-open it — two
+of us spent real time attributing this one.
+
+Related: V-2107 (the gate run), V-2106 (the header that prompted the recipes audit).
