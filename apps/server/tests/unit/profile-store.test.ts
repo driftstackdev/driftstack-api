@@ -37,11 +37,35 @@ function fakeLogger() {
   return { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as never;
 }
 
+/**
+ * V-2140 — ownership deps are required now. These bind `sessionId` to a node and
+ * a profile the session's account owns, so the guard admits the write and the
+ * arm under test sees the same R2 behaviour it saw before the door was closed.
+ */
+function owningDeps(
+  nodeId: string,
+  profileId: string,
+): Parameters<typeof makeProfileSavedPersister>[2] {
+  return {
+    agentSessions: {
+      get: vi.fn().mockResolvedValue({ accountId: 'acc_owner', nodeId, profileId }),
+    },
+    profiles: {
+      findById: vi.fn().mockResolvedValue({ id: profileId, accountId: 'acc_owner' }),
+      recordSave: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+}
+
 describe('makeProfileSavedPersister', () => {
   it('inline shape: writes the base64-decoded sealed_blob to R2 under profileSealedBlobKey', async () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
     const logger = fakeLogger();
-    const persist = makeProfileSavedPersister(fakeR2(putObject), logger);
+    const persist = makeProfileSavedPersister(
+      fakeR2(putObject),
+      logger,
+      owningDeps('node_a', 'p1'),
+    );
 
     const frame: ProfileSaved = {
       type: 'profileSaved',
@@ -49,7 +73,7 @@ describe('makeProfileSavedPersister', () => {
       profile_id: 'p1',
       sealed_blob: Buffer.from('opaque-sealed-bytes').toString('base64'),
     };
-    persist(frame);
+    persist(frame, 'node_a');
     // fire-and-forget → flush microtasks
     await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
 
@@ -63,8 +87,12 @@ describe('makeProfileSavedPersister', () => {
 
   it('large shape (stored:true, no inline blob): does NOT write to R2 (harness already PUT)', () => {
     const putObject = vi.fn().mockResolvedValue(undefined);
-    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger());
-    persist({ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true });
+    const persist = makeProfileSavedPersister(
+      fakeR2(putObject),
+      fakeLogger(),
+      owningDeps('node_a', 'p2'),
+    );
+    persist({ type: 'profileSaved', sessionId: 'ses_y', profile_id: 'p2', stored: true }, 'node_a');
     expect(putObject).not.toHaveBeenCalled();
   });
 
@@ -86,7 +114,11 @@ describe('makeProfileSavedPersister', () => {
     expect(frame.sealed_blob).toBe('c2VhbGVk');
 
     const putObject = vi.fn().mockResolvedValue(undefined);
-    makeProfileSavedPersister(fakeR2(putObject), fakeLogger())(frame);
+    makeProfileSavedPersister(
+      fakeR2(putObject),
+      fakeLogger(),
+      owningDeps('node_a', 'prof_abc'),
+    )(frame, 'node_a');
     await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
     const arg = putObject.mock.calls[0]![0] as { key: string; body: Buffer };
     expect(arg.key).toBe(profileSealedBlobKey('prof_abc'));
@@ -101,22 +133,33 @@ describe('makeProfileSavedPersister', () => {
     expect(frame.stored).toBe(true);
 
     const putObject = vi.fn().mockResolvedValue(undefined);
-    makeProfileSavedPersister(fakeR2(putObject), fakeLogger())(frame);
+    makeProfileSavedPersister(
+      fakeR2(putObject),
+      fakeLogger(),
+      owningDeps('node_a', 'prof_xyz'),
+    )(frame, 'node_a');
     expect(putObject).not.toHaveBeenCalled();
   });
 
   it('a putObject rejection is logged, not thrown (receive loop must not crash)', async () => {
     const putObject = vi.fn().mockRejectedValue(new Error('r2 down'));
     const logger = fakeLogger();
-    const persist = makeProfileSavedPersister(fakeR2(putObject), logger);
+    const persist = makeProfileSavedPersister(
+      fakeR2(putObject),
+      logger,
+      owningDeps('node_a', 'p3'),
+    );
 
     expect(() =>
-      persist({
-        type: 'profileSaved',
-        sessionId: 'ses_z',
-        profile_id: 'p3',
-        sealed_blob: 'YmxvYg==',
-      }),
+      persist(
+        {
+          type: 'profileSaved',
+          sessionId: 'ses_z',
+          profile_id: 'p3',
+          sealed_blob: 'YmxvYg==',
+        },
+        'node_a',
+      ),
     ).not.toThrow();
 
     const errSpy = (logger as unknown as { error: ReturnType<typeof vi.fn> }).error;
@@ -490,20 +533,6 @@ describe('makeProfileSavedPersister — size_bytes / last_saved_at metadata (doc
     const arg = recordSave.mock.calls[0]![0] as { sizeBytes?: number; at: Date };
     expect(arg.sizeBytes).toBeUndefined();
     expect(arg.at).toBeInstanceOf(Date);
-  });
-
-  it('no ownership deps (legacy wiring): no recordSave path — only the R2 write runs', async () => {
-    const putObject = vi.fn().mockResolvedValue(undefined);
-    const persist = makeProfileSavedPersister(fakeR2(putObject), fakeLogger());
-    persist({
-      type: 'profileSaved',
-      sessionId: 'ses_x',
-      profile_id: 'p1',
-      sealed_blob: 'YmxvYg==',
-      size_bytes: 10,
-    });
-    await vi.waitFor(() => expect(putObject).toHaveBeenCalledTimes(1));
-    // nothing to assert on recordSave (no deps) — the key property is no throw.
   });
 
   it('a recordSave rejection is logged, not thrown (receive loop must not crash)', async () => {

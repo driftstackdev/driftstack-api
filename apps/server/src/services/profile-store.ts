@@ -57,15 +57,17 @@ export interface ProfileSavedOwnershipDeps {
  * not configured the caller passes `undefined` instead (no-op); this factory is
  * only called when an R2 client exists.
  *
- * When `ownership` is provided, the write is REFUSED (fail-closed, logged) unless
- * `frame.sessionId` is assigned to `frame.profile_id` and that account still owns
- * the profile — blocking both cross-account and same-account redirected writes.
- * When omitted (legacy wiring), behavior is unchanged.
+ * The write is REFUSED (fail-closed, logged) unless `frame.sessionId` is assigned
+ * to `frame.profile_id` and that account still owns the profile — blocking both
+ * cross-account and same-account redirected writes. `ownership` is REQUIRED
+ * (V-2140): it was optional, and a caller that omitted it got the pre-guard
+ * behaviour — an authenticated node could overwrite any profile's sealed blob.
+ * Production always passed it; the door existed for the next caller.
  */
 export function makeProfileSavedPersister(
   r2: R2,
   logger: Logger,
-  ownership?: ProfileSavedOwnershipDeps,
+  ownership: ProfileSavedOwnershipDeps,
 ): (frame: ProfileSaved, reportingNodeId?: string) => void {
   const process = async (frame: ProfileSaved, reportingNodeId?: string): Promise<void> => {
     const sealedBlob = frame.sealed_blob;
@@ -87,7 +89,7 @@ export function makeProfileSavedPersister(
     await (async () => {
       try {
         let ownerAccountId: string | undefined;
-        if (ownership !== undefined) {
+        {
           const session = await ownership.agentSessions.get(frame.sessionId);
           if (session === null) {
             logger.warn(
@@ -191,7 +193,7 @@ export function makeProfileSavedPersister(
         // size_bytes) on the profile row. Only when ownership deps are wired (the
         // resolved session-owner account scopes the write). A missing size_bytes
         // leaves the column untouched; a failure is logged, never thrown.
-        if (ownership !== undefined && ownerAccountId !== undefined) {
+        if (ownerAccountId !== undefined) {
           try {
             await ownership.profiles.recordSave({
               id: frame.profile_id,
@@ -241,14 +243,6 @@ export function makeProfileSavedPersister(
       );
     });
   };
-
-  // Retain the ownership-free legacy/test shape. Production bootstrap always
-  // supplies ownership and therefore always uses the bounded authenticated path.
-  if (ownership === undefined) {
-    return (frame: ProfileSaved, reportingNodeId?: string): void => {
-      void process(frame, reportingNodeId);
-    };
-  }
 
   const bounded = makeBoundedNodeLatestRelay({
     getSessionId: (frame: ProfileSaved) => frame.sessionId,

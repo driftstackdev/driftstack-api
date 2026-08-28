@@ -11288,3 +11288,30 @@ something below the route asserts").
 **Boundary:** static text; a service method that asserts through a helper the map does not name would need
 the helper's text in the entry; the two "by design" entries are reasons, not assertions, and are the place a
 future reader should look first. One new file: ratchets 3079 → 3080 and 3256 → 3257.
+
+## V-2140 — the profileSaved ownership guard's optional parameter is now required: the legacy-wiring door is removed at the type level (2026-08-28)
+
+Post-condition re-run of `project_profile_saved_ownership_gap_surfaced` (closed 2026-06-17 by an ownership
+guard) with the "remove the door rather than price it" lens. The guard held — `bootstrap.ts` wires
+`makeProfileSavedPersister(r2, logger, { agentSessions, profiles })` whenever R2 is configured, and
+`lib-bootstrap-content-parity` pins that call shape — but the third argument was `ownership?:`, and the
+factory kept a branch for its absence: no session→node binding, no session→profile binding, no
+account-ownership lookup, then the R2 write. `profile-store.test.ts:495` pinned that path as behaviour ("no
+ownership deps (legacy wiring): only the R2 write runs"). Production never took it; the next caller could.
+
+**Change:** `ownership: ProfileSavedOwnershipDeps` is required. The three `ownership !== undefined` guards
+collapse into the always-taken path; the "retain the ownership-free legacy/test shape" early return is
+deleted, so every persister is the bounded, node-authenticated relay. The JSDoc now says why. Six tests that
+constructed the persister without deps get an `owningDeps(nodeId, profileId)` helper and pass a matching
+reporting node — because with the guard always on, a frame with no `reportingNodeId` is refused, which is the
+point. The legacy-wiring arm is deleted (`it(` 27 → 26); all six refusal arms and the two DB-blip arms
+stand. `profile-store.test.ts` 26 green, `lib-bootstrap-content-parity` and
+`bootstrap-unwired-optional-deps-are-declared` green, server test tsconfig clean.
+
+**Proof the door is gone:** a planted `makeProfileSavedPersister(fakeR2(vi.fn()), fakeLogger())` in the test
+file → `TS2554: Expected 3 arguments, but got 2` — the pre-push typecheck refuses the caller before any test
+runs. Restored byte-identical.
+
+**Boundary:** no behaviour change for the one production caller; the sole runtime difference is that a
+persister can no longer be built in the shape that skipped the guard. The guard's own arms were not
+re-derived here — they were re-run and are unchanged. A2 was told before the primitive was touched.
