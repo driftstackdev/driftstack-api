@@ -15309,3 +15309,40 @@ by Postgres rather than silently stored.
 
 Axis closed. ⚠️ Recorded with its boundary because the sweep keys on the identifier `payload`; a
 jsonb column read under a different local name is outside it.
+
+## V-2050 — "docs cannot break a test" was false here, and the log has a measured budget (2026-08-27)
+
+A2 announced their gated SHA (`f5b7358cc`) and, rather than waving my two docs-only commits through
+as harmless, recorded them as OUTSIDE it — noting that "docs cannot break a test" is a claim about
+today's test set, and several tests read files. **Checked rather than assumed, and they were right:
+twelve tests reference the verification log**, among them
+`a-verification-log-number-resolves-to-one-finding` (V-numbers must be unique),
+`docs-verification-log-content-parity`, and `no-formatted-markdown-outgrows-the-format-hook`.
+
+Ran the four that read it against my ungated commits: **17 tests, all pass.** So the commits are
+fine — but they were never outside the reach of the suite, and I had said otherwise.
+
+⛔ My own check of that claim was also wrong in the other direction: a grep for tests referencing
+`docs/` returned **0** while twelve were sitting in the previous command's output. The pattern was
+double-quoted inside an already-quoted shell string, so the search that ran was not the one I wrote —
+the same quoting trap that is already in my notes, hit while checking a peer's caveat about
+unverified assumptions.
+
+### The budget I am consuming fastest
+
+`no-formatted-markdown-outgrows-the-format-hook` exists because prettier's markdown parser once
+exhausted memory on a large file — "it exits inside a V8 out-of-memory stack trace, so the first sign
+is every commit touching the file breaking at something that does not look like a rule". It reads
+`.prettierignore` rather than carrying its own list, so the three frozen archives are exempt for the
+same reason they are exempt from the hook. **The ACTIVE log is not exempt.**
+
+    MARKDOWN_BUDGET_BYTES   1,500,000
+    docs/verification-log.md  1,103,599   (73.6% consumed)
+    headroom                    396,401   (26.4%)
+    entries                         344
+    my 25 entries this session average 3,755 bytes  ->  room for ~105 more
+
+Not urgent and not a defect — the guard's stated intent is "a nudge to split with room to spare
+rather than as an emergency", and the split has been done three times before (V-1214/V-1215).
+Recorded because I am the fastest writer of this file and a budget nobody has measured is one that
+gets discovered by hitting it.
