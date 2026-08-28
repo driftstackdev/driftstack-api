@@ -1,9 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { NotificationEvent } from '../lib/notifications';
 import {
   digestNotifications,
   highestLevel,
   unreadCount,
+  type HistoryOutcome,
   type LocalNotice,
   type NotificationLevel,
 } from '../lib/notification-digest';
@@ -38,17 +39,27 @@ const BADGE: Record<NotificationLevel, string> = {
 export function NotificationBell({
   events,
   notices = [],
+  loadHistory = null,
 }: {
   events: ReadonlyArray<NotificationEvent>;
   /** Client-originated rows — app updates today. Deliberately NOT folded into
    *  `NotificationEvent`: that union is pinned across three surfaces against
    *  the server, which never publishes them. They merge for display only. */
   notices?: ReadonlyArray<LocalNotice>;
+  /** Durable history from GET /v1/account/audit-log, fetched on OPEN — the
+   *  "separate piece of work" the header used to defer. Null (no client yet)
+   *  renders the live-only panel unchanged. */
+  loadHistory?: (() => Promise<HistoryOutcome>) | null;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   // The marker the unread count is measured against. Null until the panel has
   // been opened once, which is why a fresh launch shows everything as unread.
   const [lastSeenAt, setLastSeenAt] = useState<string | null>(null);
+  // Durable history, refetched on every OPEN so the panel is as fresh as the
+  // moment it was asked for. 'loading' only until the first outcome; a stale
+  // outcome stays visible under a refresh rather than flashing to a spinner.
+  const [history, setHistory] = useState<HistoryOutcome | 'loading' | null>(null);
+  const historyRequest = useRef(0);
 
   const items = digestNotifications(events, notices);
   // Unread counts BOTH sources: a shipped update the customer has not looked at
@@ -61,10 +72,24 @@ export function NotificationBell({
       // Mark seen on OPEN, not on close: a customer who opens the panel has
       // seen what is in it, and marking on close would leave the badge lit
       // while they are looking at the thing it points to.
-      if (!wasOpen) setLastSeenAt(new Date().toISOString());
+      if (!wasOpen) {
+        setLastSeenAt(new Date().toISOString());
+        if (loadHistory !== null) {
+          const request = historyRequest.current + 1;
+          historyRequest.current = request;
+          setHistory((prior) => (prior === null ? 'loading' : prior));
+          loadHistory()
+            .then((outcome) => {
+              if (historyRequest.current === request) setHistory(outcome);
+            })
+            .catch(() => {
+              if (historyRequest.current === request) setHistory({ kind: 'error' });
+            });
+        }
+      }
       return !wasOpen;
     });
-  }, []);
+  }, [loadHistory]);
 
   return (
     <div className="relative">
@@ -113,6 +138,51 @@ export function NotificationBell({
                 </li>
               ))}
             </ol>
+          )}
+          {loadHistory !== null && history !== null && (
+            <div
+              data-testid="notification-history"
+              className="mt-1 border-t border-surface-divider pt-1"
+            >
+              <p className="px-2 pt-1 text-2xs font-medium uppercase tracking-wide text-ink-muted">
+                Earlier — from the account audit log
+              </p>
+              {history === 'loading' ? (
+                <p className="px-2 py-2 text-2xs text-ink-muted">Loading older history…</p>
+              ) : history.kind === 'forbidden' ? (
+                <p className="px-2 py-2 text-2xs text-ink-muted">
+                  Older history needs the read:audit scope on your API key.
+                </p>
+              ) : history.kind === 'error' ? (
+                <p className="px-2 py-2 text-2xs text-ink-muted">
+                  Couldn&apos;t load older history — the live feed above is unaffected.
+                </p>
+              ) : history.items.length === 0 ? (
+                <p className="px-2 py-2 text-2xs text-ink-muted">
+                  No recorded account activity yet.
+                </p>
+              ) : (
+                <ol className="flex max-h-60 flex-col gap-1 overflow-y-auto">
+                  {history.items.map((item) => (
+                    <li
+                      key={item.key}
+                      className="flex gap-2 rounded px-2 py-1.5 hover:bg-surface-inset"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[item.level]}`}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block break-words text-xs text-ink-primary">
+                          {item.title}
+                        </span>
+                        <span className="block text-2xs text-ink-muted">{item.at}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </div>
           )}
         </div>
       )}

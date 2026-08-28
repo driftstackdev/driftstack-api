@@ -179,3 +179,44 @@ export function digestNotifications(
   };
   return [...fromStream, ...fromLocal].sort((a, b) => rank(b.at) - rank(a.at));
 }
+
+/** The slice of an audit-log row the bell's history section needs — structural,
+ *  so this display lib never imports the SDK. */
+export interface AuditHistoryRow {
+  id: string;
+  action: string;
+  timestamp: string;
+  target_resource_id: string | null;
+}
+
+/** Outcome of the bell's on-open durable-history fetch. Forbidden is its own
+ *  case because a key without read:audit is a configuration the panel must
+ *  EXPLAIN, not an error to shrug at. */
+export type HistoryOutcome =
+  | { kind: 'ok'; items: DigestItem[] }
+  | { kind: 'forbidden' }
+  | { kind: 'error' };
+
+/** Destructive / access-revoking actions read as warnings in history; the rest
+ *  are info. Critical stays reserved for LIVE events — a row already survived
+ *  into the ledger, so it is context, not an alarm. */
+const WARN_HISTORY_ACTION = /\.(deleted|revoked|failed|disabled|removed)$/;
+
+export function auditHistoryItem(row: AuditHistoryRow): DigestItem {
+  return {
+    key: `audit-${row.id}`,
+    level: WARN_HISTORY_ACTION.test(row.action) ? 'warn' : 'info',
+    title:
+      row.target_resource_id === null ? row.action : `${row.action} — ${row.target_resource_id}`,
+    at: row.timestamp,
+  };
+}
+
+/** Classify a failed audit-log fetch. 403 is the one status with a MEANING the
+ *  panel can act on (the key lacks read:audit); everything else — transport,
+ *  5xx, a thrown non-HTTP error — is just "couldn't load". Pure so the mapping
+ *  is testable without a Shell render. */
+export function historyOutcomeFromError(err: unknown): HistoryOutcome {
+  const status = (err as { status?: unknown } | null)?.status;
+  return status === 403 ? { kind: 'forbidden' } : { kind: 'error' };
+}

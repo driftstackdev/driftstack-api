@@ -11425,3 +11425,27 @@ restored from a path-keyed snapshot, cmp-verified.
 **Boundary:** the un-mocked persistence path is unchanged and still exercised; only its console
 output is intercepted, in this one file. The message text is now load-bearing in a test — renaming
 it in `ProfilesView.tsx` must update the pin in the same commit.
+
+## V-2145 — the bell's durable history: the deferred half of #18, shipped the way the bell's own header prescribed (2026-08-28)
+
+V-1611 built the bell with an in-memory 16-event ring and recorded the boundary in its header: a
+durable history "belongs on GET /v1/account/audit-log and is a separate piece of work". This is that
+work. Opening the panel now fetches the account audit log (SDK `auditLog.list({ limit: 30 })`) into
+its own labelled section — "Earlier — from the account audit log" — below the live feed. The pinned
+`NotificationEvent` union is untouched (the header warns it is pinned across three surfaces); audit
+rows map through a new pure `auditHistoryItem` (destructive/revoking actions read as warn, the rest
+info — critical stays reserved for LIVE events). A 403 renders the explanation ("needs the read:audit
+scope on your API key" — enforcement lives in services/account-audit.ts list(), no route change, so
+the spec pin and the SSE cap are untouched); any other failure degrades to a quiet line and leaves
+the live feed alone. `Shell` builds the callback in its unconditional hook block (it early-returns
+below) and the bell stays a reader — no second SSE subscription, no client in the component. Unread
+is still the live-feed contract: history rows never light the badge, and that is now pinned.
+
+**Proofs.** 17/17 in the bell file (9 existing + 5 history arms + 3 for the pure 403 mapping, which
+was extracted from Shell glue precisely so it could be tested without a render); 3 app-shell files
+19/19. Mutations, snapshot-restored and cmp-verified: the bell that never fetches on open → 4 arms
+red; the 403 branch collapsed to 'error' → exactly the missing-scope arm red.
+
+**Boundary:** the fetch is on-open only — no polling, no background stream, so the
+DEFAULT_MAX_SSE_PER_ACCOUNT interaction does not arise. Click-through navigation from a history row
+remains open #18 work.

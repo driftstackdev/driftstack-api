@@ -10,13 +10,14 @@ import {
   Fragment,
   lazy,
   Suspense,
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useTransition,
-  type ReactNode,
 } from 'react';
 import { ConnectionPill } from './components/ConnectionPill';
 import { Sidebar, type SidebarViewKind } from './components/Sidebar';
@@ -25,6 +26,11 @@ import { ThemeSwitcher } from './components/ThemeSwitcher';
 import { ShortcutsCheatsheet } from './components/ShortcutsCheatsheet';
 import { NotificationToastStack } from './components/NotificationToastStack';
 import { NotificationBell } from './components/NotificationBell';
+import {
+  auditHistoryItem,
+  historyOutcomeFromError,
+  type HistoryOutcome,
+} from './lib/notification-digest';
 import { useNotifications } from './lib/use-notifications';
 import {
   browserStallCensusDeps,
@@ -417,6 +423,26 @@ function Shell(): JSX.Element {
   // already warns about. A hook below an early return is a hook that sometimes
   // does not run.
   const notificationFeed = useNotifications();
+  // V-2145 #18 — the durable half of the bell's history: a callback handed down
+  // so the bell stays a reader. Lives in this unconditional hook block for the
+  // same reason the feed does (Shell early-returns below). Refetched on every
+  // panel OPEN by the bell; 403 means the key lacks read:audit and the panel
+  // explains that instead of erroring.
+  const bellClient = useMemo(
+    () => buildClient(settings.apiKey, settings.baseUrl, activeWorkspace),
+    [settings.apiKey, settings.baseUrl, activeWorkspace],
+  );
+  const loadBellHistory = useMemo(() => {
+    if (bellClient === null) return null;
+    return async (): Promise<HistoryOutcome> => {
+      try {
+        const page = await bellClient.auditLog.list({ limit: 30 });
+        return { kind: 'ok', items: page.data.map(auditHistoryItem) };
+      } catch (err) {
+        return historyOutcomeFromError(err);
+      }
+    };
+  }, [bellClient]);
   // Toast surface for the app-boot deep-link listener below: a dashboard
   // "Open in desktop client" that can't open the window must SHOW the reason,
   // not bury it in console.warn (the customer re-clicks with no idea why).
@@ -813,6 +839,7 @@ function Shell(): JSX.Element {
             <>
               <NotificationBell
                 events={notificationFeed.events}
+                loadHistory={loadBellHistory}
                 notices={
                   update
                     ? [
