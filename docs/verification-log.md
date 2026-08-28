@@ -11377,3 +11377,32 @@ two src changes — the subscription `id DESC` tiebreakers (V-2131) and the requ
 line quoted verbatim from the capture, and the NOTE line checked before any executed-count claim.
 
 **Boundary:** the e2e suite exercises the mock driver (`driver:mock`), not a real fleet box; the bench-regression, python-sdk and go-sdk CI jobs remain unrun locally today; the environment notes describe the two runners on this machine, not CI, whose job sets its own env. An earlier partial e2e run at `670a105f0` (29 tests, killed to keep a timing instrument unloaded) is superseded by this full pass.
+
+## V-2143 — nine marketing-site walkers now throw on a missing root; ceiling 35 → 26, and nineteen members stay by recorded judgement (2026-08-28)
+
+**The judgement, per the debt note's own rule.** The 28 marketing-site members are not uniform: 19
+carry a recorded decision — a non-vacuity arm asserting the walk read real files, or prose making the
+case for call-site root assertion over a throwing recursive guard (`workspace-tier-slug-sweep`, whose
+walk guards every DESCENT, so a throw would also fire on a mid-walk symlink race it deliberately
+tolerates; `workspace-readme-links`, which warns against scripted passes by name and whose second
+`!existsSync` site IS the assertion). Those files keep their tolerant walk and remain counted
+members. The NINE with no judgement recorded (api-reference-resource-coverage,
+api-reference-status-group-parity, docs-cli-quickstart-parity, footer-href-integrity,
+footer-nav-baseline, header-nav-href-integrity, workspace-api-key-scope-sweep,
+workspace-id-prefix-sweep, workspace-image-alt-baseline) share one copy-pasted `walk` over
+git-tracked roots only — every root checked tracked before conversion — and now open with the
+established `throw new Error` shape (15 prior sites).
+
+**Instrument discipline.** The new ceiling is the guard's OWN scan re-run post-conversion
+(26 occurrences / 24 files), not arithmetic — though the arithmetic agrees. A first batch attempt
+died mid-run on tier-slug's JSDoc QUOTING the shape (2 matches where 1 was asserted) and was fully
+restored from path-keyed snapshots before any judgement was made; the abort is what forced the
+per-file read that found the 19 recorded decisions.
+
+**Proofs.** Ceiling test green at 26; a converted file green; mutation A — a converted file's root
+pointed at a nonexistent dir → red with the throw text naming the path; mutation B — the swallow
+reintroduced into a converted file → the ceiling arm red with "expected 27 to be less than or equal
+to 26". Both mutations asserted to differ before running and restored from snapshots, cmp-verified.
+
+**Boundary:** the 5 server/scripts members and the 19 compensated marketing members are unchanged;
+their next reduction requires the same per-file reading, not a sweep.

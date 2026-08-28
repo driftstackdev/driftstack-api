@@ -23,7 +23,7 @@ function read(path: string): string {
 }
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir)) throw new Error(`missing ${dir}`);
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     const stat = statSync(full);

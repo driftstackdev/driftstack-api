@@ -14,7 +14,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir)) throw new Error(`missing ${dir}`);
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     const st = statSync(full);

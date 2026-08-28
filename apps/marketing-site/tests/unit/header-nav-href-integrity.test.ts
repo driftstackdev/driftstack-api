@@ -14,7 +14,7 @@ const HEADER = resolve(REPO_ROOT, 'apps/marketing-site/src/components/Header.ast
 const PAGES = resolve(REPO_ROOT, 'apps/marketing-site/src/pages');
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir)) throw new Error(`missing ${dir}`);
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     const st = statSync(full);

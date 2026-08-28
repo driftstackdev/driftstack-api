@@ -16,7 +16,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/api-reference.ast
 const ROUTES = resolve(REPO_ROOT, 'apps/server/src/routes');
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir)) throw new Error(`missing ${dir}`);
   for (const e of readdirSync(dir)) {
     const full = resolve(dir, e);
     if (statSync(full).isDirectory()) walk(full, out);
