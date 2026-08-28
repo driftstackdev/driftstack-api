@@ -11350,3 +11350,30 @@ red naming room-ownership; in the pin's own file → red naming control-actions.
 **Boundary:** the fix removes the only identified emission class in this file. If the flake recurs
 here, the diagnosis was incomplete — the probe technique (mid-flight deletion on a macrotask)
 reproduces candidates deterministically and is where to resume.
+
+## V-2142 — the Playwright e2e arm runs at 9c1030770, and two ways a green gate lies about its environment (2026-08-28)
+
+**The e2e run.** `scripts/e2e-local.mjs` — the one CI job the vitest gate never executes, and the only suite
+that drives the real server against real Postgres and Redis through the whole stack — run at `9c1030770`
+against the disposable `driftstack_e2e_a3` database (Redis index 12): **233 passed (55.7 s), runner rc=0, zero failed / flaky / skipped** — capture `e2e-9c1030770.log`, 453 lines, final line quoted verbatim. This puts the day's
+two src changes — the subscription `id DESC` tiebreakers (V-2131) and the required profileSaved ownership deps
+(V-2140) — under end-to-end boot, migration, and route traffic rather than only under vitest.
+
+**Two environment failure classes, from A2's three-run saga at the same SHA, recorded so the class dies:**
+
+1. **A bare environment skips 117 files BEHIND a green judge line.** With no `DATABASE_URL`, the judge still
+   prints `OK — exit 0, no unhandled errors, full file count` — "full file count" is COLLECTED — and only the
+   conditional next line (`verify-suite: NOTE — 117 test file(s) were collected but never executed`) says the
+   run is not comparable. The executed-count claim must come from that line's ABSENCE, read in the capture:
+   all four A3 gate captures today carry zero NOTE lines, which is what "3257/3257 executed" stands on.
+2. **Sourcing the whole `.env` poisons the suite sideways.** Exporting everything set `MFA_ENCRYPTION_KEY`
+   over a database seeded under the suite's defaults, and the two real-boot integration tests died in
+   `verifyBootEncryptionKey` ("stored data could not be decrypted with the configured MFA_ENCRYPTION_KEY") —
+   a red that looks like an encryption regression and is actually an env-hygiene bug in the runner.
+
+**The recipe both agents now run:** exactly two command-prefix assignments —
+`DATABASE_URL=<per-agent disposable db> REDIS_URL=<per-agent non-default index> node scripts/verify-suite.mjs
+--all > <capture>.log 2>&1` — nothing sourced, nothing exported, `rc=$?` captured before any echo, the judge
+line quoted verbatim from the capture, and the NOTE line checked before any executed-count claim.
+
+**Boundary:** the e2e suite exercises the mock driver (`driver:mock`), not a real fleet box; the bench-regression, python-sdk and go-sdk CI jobs remain unrun locally today; the environment notes describe the two runners on this machine, not CI, whose job sets its own env. An earlier partial e2e run at `670a105f0` (29 tests, killed to keep a timing instrument unloaded) is superseded by this full pass.
