@@ -17773,3 +17773,55 @@ execution genuinely is the whole property, and an arm would assert little beyond
 
 Related: V-2091, V-2090, V-2089, V-2088 (the closures), V-2086 (the list), V-1209 (the divergence class
 this contract format exists to catch).
+
+---
+
+## V-2093 — stopping at 8 of 11, because the last three would be checkbox arms (2026-08-28)
+
+V-2092 asserted the remaining three — `findAccountById`, `touchWebSessionLastUsed`, `getDetail` — were
+"thin". That was a judgement, so I measured it before acting on it.
+
+**All three are `select().from(X).where(eq(id)).limit(1)` with no fence, no boundary and no
+compare-and-swap** — the shape every earlier closure had something to say about and these do not. The
+one thing a by-id read still does is run a row MAPPER, and a mis-mapped or swapped column is exactly
+the kind of defect a source-text pin cannot see. So the question was whether the mappers were already
+exercised.
+
+**Measured against `apps/server/coverage/coverage-final.json`** — an artifact produced BEFORE my eight
+new arms, so it can only under-state coverage:
+
+    auth-flows-repo.ts   toAccountRow   executed 16 times
+    fleet-nodes-repo.ts  rowToDetail    executed 99 times
+
+`toAccountRow` has 5 call sites and `rowToDetail` 6; the siblings already drive both. **So an arm on
+these three would assert that a row comes back, against a mapper run ninety-nine times, through the
+simplest expression drizzle can produce.** That is a number going from 8 to 11 and nothing else.
+
+⭐ **Not closing them, and this is the same call as `findSessionUnscoped` in V-2086** — where the
+highest-looking target on the raw list turned out to be a deliberate escape hatch whose SQL never
+running was correct. Both times the discipline was the same: **the list was a starting point, and the
+last items on it earn a reason, not an arm.**
+
+### What the eight closures actually bought, stated plainly
+
+Not coverage. Every one landed on a property nobody had asserted against the database:
+
+    markEmailVerified          a CAS first-transition: the second caller must LOSE and not move the timestamp
+    resetDeliveryToPending     refuses an in_flight row - a live worker owns it
+    deleteDelivery             matches id AND dlq, so a concurrent requeue cannot destroy a live delivery
+    enqueueDelivery            returns the DB-generated id; the row lands pending
+    countAllByStatus           the zero-fill covers EVERY enum member, not just statuses with rows
+    setEgressCapabilityReport  two jsonb columns round-trip as objects, not double-encoded strings
+    upsertSubscription         a stale Stripe event is rejected, and <= not < at the equal-second boundary
+    findBy*TokenHash           a spent confirm link stops resolving; an unsubscribe hash never resolves a confirm lookup
+
+⭐ **Seven of the eight are refusals** — a WHERE clause whose entire job is to say no. A content-parity
+pin proves the refusal is written; only execution proves the database performs it. That is the whole
+content of V-2087, demonstrated eight times rather than argued once.
+
+⚠️ Boundary, in the same sentence as the result: the coverage figures above are from a run of
+`tests/integration` alone with `DATABASE_URL` set, so they measure execution by that suite and not by
+the unit suite or e2e.
+
+Related: V-2086 (the classified list), V-2087 (why text pins are shape assertions), V-2088 through
+V-2092 (the closures).
