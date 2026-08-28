@@ -15115,3 +15115,61 @@ a digit-substring match on a timestamp, the characteristic false positive of num
 so a bootstrap-window rejection is caught. Verified: `index.ts:25` installs, `index.ts:29` is the
 first `await`. Its metric sink documents that a second attach would double-count, and there is
 exactly one call site (`bootstrap.ts:606`).
+
+## V-2046 — W-10 re-verified and characterised: not 39 dead schemas, 39 shipped models (2026-08-27)
+
+W-10 has sat open as "39 declared component schemas, no operation `$ref`s — the fix changes the
+published contract so it needs the owner's call". That is a count, not a decision. Re-measured it
+properly so the call can be made on facts.
+
+**Boundary: the checked-in generated spec `packages/sdk-python/openapi.json` (2,068,750 bytes),
+produced by `apps/server/src/lib/openapi.ts`.**
+
+    components.schemas declared     83
+    referenced DIRECTLY from paths   40
+    referenced TRANSITIVELY          44
+    unreachable from any operation   39
+
+⭐ The count survives a stronger test than the one that produced it. Direct-reference counting alone
+would report **43**; four schemas are reachable only through another schema's body. So 39 is right,
+and now right transitively.
+
+### The cause, which changes what the fix is
+
+**82 of the 94 operations with a JSON request body inline their schema; only 12 use `$ref`.**
+`POST /v1/sessions` publishes an inline 6-property requestBody and an inline 14-property 201, while
+`CreateSessionRequest` and `CreateSessionResponse` sit in `components.schemas` referenced by nothing.
+
+So the document carries the same contract twice. **It cannot drift, and that is worth stating
+precisely rather than hoping:** `openapi.ts` registers each component from the SAME Zod object the
+route uses (`r.register('CreateSessionRequest', CreateSessionRequestSchema)`), so both renderings are
+one schema emitted twice. Verified on four pairs — request and response for
+`/v1/sessions`, plus `/v1/webhooks` and `/v1/api-keys` requests — **identical property sets and
+identical `required` lists** in every case.
+
+### The consequence is real, measurable, and confined to one SDK
+
+`packages/sdk-python` is GENERATED: `sdk:python:dump-spec` writes the spec into the package and
+`scripts/generate.sh` runs `datamodel-codegen` over it into `_generated/models.py`. Measured against
+that file: **209 classes generated, and all 39 of the unreachable schemas are among them** (control:
+the referenced `Problem` is generated too, so the detector works; 0 unreachable schemas missing).
+
+**So the Python SDK ships 39 named Pydantic models that no endpoint accepts or returns.** The
+TypeScript and Go SDKs are hand-written and unaffected.
+
+⛔ **Two measurements died on the way to that, and the control is what killed them.** I first asked
+"does each SDK emit these types" by name presence: python 7/39, typescript 36/39, go 30/39. Switching
+to actual declarations flipped it: python 39/39, typescript 4/39, go 28/39 — **opposite directions
+for two of three languages**, which means at least one instrument was badly wrong. The control
+settled it: `Problem` IS referenced by every problem+json response, yet neither TS nor Go declares a
+type by that name, and TypeScript's real exports are `AccountSelfProfile`, `WebSessionEntry`,
+`ListWebSessionsResponse`. **The hand-written SDKs do not use the spec's component names at all, so
+the question was never well-posed for them** — the first pass over-counted on substring noise, the
+second under-counted nothing but was only meaningful for the generated SDK.
+
+### What the owner is actually deciding
+
+Not "delete 39 dead schemas". The choice is whether operations should `$ref` the components they
+already register — which changes the shape of the published document (inline → `$ref`) and therefore
+what `datamodel-codegen` emits for existing Python users — or whether the 39 unreferenced models are
+an acceptable cost of keeping named types available. Still not mine to make; it is now costed.
