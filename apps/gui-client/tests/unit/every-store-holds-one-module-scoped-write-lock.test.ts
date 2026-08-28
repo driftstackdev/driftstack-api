@@ -15,6 +15,7 @@
 // inside a function, reds here rather than losing writes in the field.
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { makeWriteLock } from '../../src/lib/store-write-lock';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -90,5 +91,88 @@ describe('every store holds ONE module-scoped write lock', () => {
       .filter(([, n]) => n > 1)
       .map(([f, n]) => `${f} (${n.toString()})`);
     expect(doubled, 'one lock per store file').toEqual([]);
+  });
+});
+
+// ⛔ The arms above are a TEXT pin: they prove nine stores DECLARE a module-scoped
+// lock, and nothing there proves the lock serialises anything. That distinction
+// is the one that keeps costing us — a pin proves the property is written, only
+// execution proves it holds. Until these arms existed, `makeWriteLock` was named
+// by exactly one test file (this one) and imported by none.
+describe('makeWriteLock actually serialises', () => {
+  it('holds the second write until the first completes — the whole reason the lock exists', async () => {
+    const lock = makeWriteLock();
+    const order: string[] = [];
+    let signalStarted!: () => void;
+    const firstStarted = new Promise<void>((r) => {
+      signalStarted = r;
+    });
+    let releaseFirst!: () => void;
+    const firstMayFinish = new Promise<void>((r) => {
+      releaseFirst = r;
+    });
+
+    const first = lock(async () => {
+      order.push('first:start');
+      signalStarted();
+      await firstMayFinish;
+      order.push('first:end');
+      return 'A';
+    });
+    const second = lock(() => {
+      order.push('second:start');
+      return Promise.resolve('B');
+    });
+
+    await firstStarted;
+    // The claim: the second write has NOT begun while the first is in flight.
+    // Without serialisation both read-modify-writes interleave and one is lost.
+    expect(order).toEqual(['first:start']);
+
+    releaseFirst();
+    expect(await first).toBe('A');
+    expect(await second).toBe('B');
+    expect(order).toEqual(['first:start', 'first:end', 'second:start']);
+  });
+
+  // A failed write must not wedge the queue: the next write to that store would
+  // deadlock permanently, silently, with no error raised. That is the worst
+  // failure this file can have, and it was asserted nowhere before these arms.
+  //
+  // ⚠️ The property is guarded TWICE, and the mutation matrix is worth having
+  // because a single-mechanism edit leaves these arms GREEN:
+  //     `const run = lock.then(fn, fn)` — runs fn on the prior op's reject path
+  //     `lock = run.then(() => undefined, () => undefined)` — swallows the
+  //      rejection so the NEXT `lock.then(...)` sees a resolved promise
+  // Measured: removing either one alone -> 7/7 still pass; removing BOTH -> this
+  // arm and the ordering arm below both red. So the source comment naming the
+  // first mechanism as the reason is naming one of two. Anyone "simplifying"
+  // either line will see a green suite and conclude it was safe — it is safe
+  // only until someone simplifies the other one too.
+  it('a REJECTED write does not wedge the queue — the next write still runs', async () => {
+    const lock = makeWriteLock();
+    await expect(lock(() => Promise.reject(new Error('disk full')))).rejects.toThrow('disk full');
+    await expect(lock(() => Promise.resolve('still working'))).resolves.toBe('still working');
+  });
+
+  it('the rejection reaches the CALLER rather than being swallowed by the lock', async () => {
+    const lock = makeWriteLock();
+    await expect(lock(() => Promise.reject(new Error('surfaced')))).rejects.toThrow('surfaced');
+  });
+
+  it('a write queued behind a failing one still runs, in order', async () => {
+    const lock = makeWriteLock();
+    const order: string[] = [];
+    const failing = lock(() => {
+      order.push('failing');
+      return Promise.reject(new Error('nope'));
+    });
+    const queued = lock(() => {
+      order.push('queued');
+      return Promise.resolve(1);
+    });
+    await expect(failing).rejects.toThrow('nope');
+    expect(await queued).toBe(1);
+    expect(order).toEqual(['failing', 'queued']);
   });
 });
