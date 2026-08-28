@@ -16324,3 +16324,84 @@ their own.
 
 Related: V-2067 (grep prior art on naming the subject — followed here, and it is what produced the
 fifteen-directory caveat).
+
+---
+
+## V-2069 — the one src file no test names, and my guard for it carried the exact defect class I was hunting (2026-08-27)
+
+V-2068 measured _attention_ (the audit record). This measures **protection**: which source files are
+named by no test anywhere. Boundary in the same sentence: by stem, across the corpus of all fifteen
+`apps/*/tests` and `packages/*/tests` directories — 3329 files, 29,979,274 chars, with three
+known-guarded stems asserted present before any zero was believed.
+
+**5 of 623.** Four are `apps/gui-client` (A2's, not investigated). One is mine:
+
+    apps/server/src/scripts/seed-local-fleet-node.ts   4,812 B
+
+An operator CLI that registers a Mac harness node and stores its LiveKit credentials, documented for
+**prod** (`DATABASE_URL=<prod> … npx tsx …`), referenced by no `package.json` script and imported
+nowhere — invoked by hand. A production credential-writing path with no test naming it, in a repo
+where 618 of 623 source files are named by some test.
+
+### Audited end to end. Every hypothesis I formed died, and the reasons are the point
+
+- **AAD bound to mutable columns** (`nodeId`, `apiKey`, `wsUrl`) — a later edit to `wsUrl` alone would
+  make the ciphertext permanently undecryptable. Refuted: `setLivekitCredentials` writes all three
+  **in one UPDATE**, so the tuple can never drift from the ciphertext authenticating it, and it is the
+  only setter — both call sites go through it.
+- **Encrypt/decrypt AAD drift** — refuted by construction: both call one shared
+  `buildLivekitSecretAad(context)`.
+- **Encrypt-before-register**, since `fleet_nodes.id` is DB-minted — refuted: `repo.register(` is at
+  offset 3716, `encryptLivekitSecret(` at 3975.
+- **Empty env vars defeat the all-or-nothing guard.** `withLivekit` tests `!== undefined`, which
+  `LIVEKIT_API_SECRET=` passes — so a blank var in an operator's shell looked like it would store a
+  bogus credential, exactly what the header promises cannot happen. Refuted downstream:
+  `assertSecretBytes` rejects `length < 1`, and `assertBoundedUtf8` applies a `1..max` bound to
+  `apiKey` and `wsUrl` too. Every empty case throws loudly.
+- The envelope migration probes an already-v2 row with the operator key **before** rewriting any
+  legacy row, and rejects an incomplete tuple explicitly.
+
+⭐ **The file is safe because it is thin.** Its 4.8 KB is env parsing, ordering and console output;
+every security-relevant operation delegates to guarded, defensive code. "Named by no test" located it
+correctly — but the risk depends on what the file does _itself_, and here that is almost nothing.
+
+### The one property nothing downstream can enforce
+
+The AAD binds `nodeId`, and the library validates only that it is **a** UUID — never that it is the
+id of the row being written. `fleet_nodes.id` is minted by the database. So the binding is correct
+**only** because the script registers first and encrypts with the returned `node.id`. Reverse the two
+steps, or pass a caller-chosen uuid, and every check above still passes: the envelope encrypts
+cleanly, stores cleanly, and fails at decrypt time on a production node long after the operator has
+gone. Guarded now, with a rot arm that reds if the library ever gains row-binding validation, so the
+pin gets retired rather than left as a fossil.
+
+### ⛔⛔ My guard shipped the defect class this whole session has been about — twice — and only mutation found it
+
+**Version 1.** `expect(src).toMatch(/nodeId:\s*node\.id/)` — file-scoped. `nodeId: node.id` occurs
+**twice** in that script (line 77 the setter, line 80 the encrypt context). Mutating the setter's copy
+left the encrypt's intact and **all four arms passed**. A guard whose key is the FILE, asserting a
+property that belongs to a CALL.
+
+**Version 2**, written to fix exactly that, scoped each call with
+`/setLivekitCredentials\([\s\S]{0,300}?\}\)/`. The setter's call **literally contains the encrypt
+call as an argument**, so the lazy match stops at the nested `})` and the "scoped" region swallows
+both bindings. Mutating the setter passed again. **I re-introduced the same defect while fixing it,
+in a narrower spelling** — which is the third lesson verbatim: sweep the SHAPE, not the token.
+
+**Version 3** takes the first `nodeId:` after each call marker. All three mutations now red:
+setter-binding → 1 arm, encrypt-binding → 1 arm, renaming the register call → 2 arms (the floor and
+the ordering). Script restored byte-identical from a path-keyed snapshot each time, and proved to
+differ before each result was read.
+
+⭐⭐ **What this cost and what it bought.** I have spent this session finding guards whose key is
+coarser than the property they name — a census keyed by basename, an exemption keyed by filename, a
+roster keyed per-file for a per-use review, a covered-list keyed on prose. **I then wrote one, twice,
+inside an hour of writing that sentence down.** Knowing the shape does not prevent the shape. The only
+thing that caught it was the rule that a mutation must edit the REAL SUBJECT and be applied to _each_
+occurrence separately — a single mutation on a two-occurrence property is not a proof, it is a coin
+toss that lands green.
+
+⚠️ Ratchets `EXPECTED_TEST_FILES` 3070→3071 and `EXPECTED_TEST_FILES_ALL` 3246→3247 for the one file
+added. `tsc -p apps/server/tsconfig.test.json` clean.
+
+Related: V-2068 (attention vs protection), V-2060 (a guard whose key was coarser than its property).
