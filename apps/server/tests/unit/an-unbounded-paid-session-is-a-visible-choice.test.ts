@@ -113,7 +113,20 @@ describe('an unbounded paid session is a visible choice', () => {
     const capped = Object.keys(caps)
       .filter((t) => caps[t] !== null)
       .sort();
-    expect(capped, 'tiers with a duration cap').toEqual(['free']);
+    // ⛔ Capping a SECOND tier is not only a product decision — it makes a
+    // deferred defect live. `session-duration-sweeper.ts:114` records the
+    // destroy event's `max_session_minutes` from `minCapFor(cutoffTiers)`, the
+    // SMALLEST cap across all capped tiers, for EVERY candidate rather than the
+    // candidate's own (the tier is not carried on `SessionRecord`). That is
+    // correct only while exactly one tier is capped. Surfaced 2026-06-03 and
+    // deliberately deferred: the fix carries the tier on
+    // `listExpiredForAutoDestroy` rows, a repo-shape change wanting a
+    // maintainer's call. So do NOT simply widen the expectation below — the
+    // sweeper has to be fixed in the same change.
+    expect(
+      capped,
+      'tiers with a duration cap — adding one makes the sweeper record a WRONG max_session_minutes (minCapFor uses the smallest cap for every candidate); fix session-duration-sweeper.ts in the same change, do not just widen this list',
+    ).toEqual(['free']);
     expect(caps.free, 'the free cap, in minutes').toBe(20);
 
     // V-1520 — this posture is a product decision, and it now lives in the

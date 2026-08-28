@@ -10765,3 +10765,47 @@ that no code should be added, and that outcome leaves no artifact unless it is w
 **Boundary:** this establishes that the two `reason` fields belong to schemas travelling in opposite directions
 and that the strict one's exclusion of `direct=` is asserted through a real parse. It does not enumerate every
 other field in the protocol that reaches a published surface.
+
+## V-2126 — a trip-wire that fires at the right moment but does not say what breaks (2026-08-28)
+
+Third application of the open-note technique. `project_duration_sweep_rearm_audit` (2026-06-03) surfaced two
+LATENT findings, explicitly not fixed. **#1 has a testable trigger:** the destroy event's
+`max_session_minutes` comes from `minCapFor(cutoffTiers)` at `session-duration-sweeper.ts:114` — the SMALLEST
+cap across all capped tiers, applied to EVERY candidate rather than the candidate's own, because the tier is
+not carried on `SessionRecord`. Correct **only while exactly one tier is capped**.
+
+**Trigger has not fired:** `MAX_SESSION_MINUTES_PER_TIER` still caps exactly one of eight tiers (`free: 20`,
+seven `null`). The finding remains latent and correct today.
+
+⭐ **And the invariant is already guarded — the guard I was about to write exists.**
+`an-unbounded-paid-session-is-a-visible-choice.test.ts:111` asserts `capped` equals `['free']` and the cap is
+20, reading the table from source, checking the built package agrees, and proving behaviourally that the
+sweeper never targets an uncapped tier. Prior art was grepped when the subject was NAMED rather than after
+measuring; that ordering has now prevented a duplicate guard four times.
+
+⛔ **THE GAP, and it is a real one: the trip-wire fires at exactly the right moment but does not say what
+breaks.** The arm named the consequence **zero** times. Its message frames a red as a product-baseline change —
+"recorded here so raising or removing a cap is a deliberate edit against a stated baseline". So the engineer
+who caps a second tier reads that, widens the expectation to `['free', 'solo_manual']`, and ships: the guard
+did its job, printed a sentence about product intent, and the deferred sweeper defect went live silently. A
+guard that fires without naming the consequence converts a stop into a speed bump.
+
+**Fixed in the assertion MESSAGE rather than a comment**, because the message is what a failing run prints: it
+now states that adding a cap makes the sweeper record a wrong `max_session_minutes`, names `minCapFor` and the
+smallest-cap mechanism, and says explicitly _do not just widen this list — fix the sweeper in the same change_.
+The in-code comment carries the deferral's provenance and why the fix is a maintainer's call.
+
+**Mutation-proved on the real subject**, snapshotted by full path and restored under a trap: capping
+`solo_manual` at 45 inside `MAX_SESSION_MINUTES_PER_TIER` reds two arms and prints the new message verbatim.
+`it(` count unchanged against HEAD (5), `tsc -p apps/server/tsconfig.test.json` clean, file restored
+byte-identical.
+
+⛔ **The precondition earned itself again.** The first mutation attempt anchored on `'  solo_manual: null,'`,
+which occurs **TWICE** in `common.ts` — a sibling per-tier table carries the same key. The assert-before-mutate
+check refused, nothing was written, and the run's "5 passed" came from an unmutated tree. Without it that green
+would have read as the guard surviving the mutation, i.e. exactly the wrong conclusion. Re-anchored by
+searching for the key _after_ the `MAX_SESSION_MINUTES_PER_TIER` declaration.
+
+**Boundary:** this checks trigger #1 of that note and the message its guard prints. Finding #2 — the poller
+retry re-arming a self-re-arming job twice, since `markComplete` throwing after the re-arm leaves `dedup:false`
+unable to collapse the duplicate — is untouched and remains a maintainer's call, as recorded.
