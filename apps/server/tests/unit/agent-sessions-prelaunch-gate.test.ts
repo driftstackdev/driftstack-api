@@ -176,7 +176,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
       logger: logger(),
       exitIdentityCache: cache,
     });
-    expect(cache.get('acc_1', 'prx_ok')?.identity).toEqual(PROBED_IDENTITY);
+    expect((await cache.get('acc_1', 'prx_ok'))?.identity).toEqual(PROBED_IDENTITY);
   });
 
   it('does NOT cache when the probe passed but observed no exit identity (optional block stays absent)', async () => {
@@ -193,7 +193,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
       logger: logger(),
       exitIdentityCache: cache,
     });
-    expect(cache.get('acc_1', 'prx_ok')).toBeUndefined();
+    expect(await cache.get('acc_1', 'prx_ok')).toBeUndefined();
     expect(cache.size()).toBe(0);
   });
 

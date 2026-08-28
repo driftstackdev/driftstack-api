@@ -130,7 +130,7 @@ import { ClaudeAgentDecomposer } from '../services/agent-decomposer-claude.js';
 import { DeterministicAgentDecomposer } from '../services/agent-decomposer-deterministic.js';
 import type { AgentDecomposer } from '../services/agent-decomposer.js';
 import { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
-import { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
+import { EXIT_IDENTITY_TTL_MS, RedisExitIdentityStore } from '../services/exit-identity-cache.js';
 import { RedisMfaChallengeStore } from '../services/mfa-challenge-store.js';
 import { UsageService } from '../services/usage.js';
 import { WebhooksService, WebhooksAdminService } from '../services/webhooks.js';
@@ -1498,7 +1498,13 @@ export async function createProductionDeps(
   // the pre-launch proxy probe can stash the observed exit identity for the dispatch
   // build to emit as exit_identity (box new-tab IP panel). A cold cache (restart) or
   // a probe that saw no identity simply omits the optional block.
-  const exitIdentityCache = new InMemoryExitIdentityCache();
+  // #128 follow-up — Redis-backed so a dispatch served by a DIFFERENT replica than
+  // the one that probed, or one that follows a restart, still emits exit_identity.
+  // A single miss blanks the new-tab panel for the session's WHOLE life, because the
+  // identity is baked into the box fork's environment once at launch.
+  // TTL passed explicitly, not defaulted: an optional dep the production graph
+  // never supplies is a feature that exists only in tests.
+  const exitIdentityCache = new RedisExitIdentityStore(redis, { ttlMs: EXIT_IDENTITY_TTL_MS });
 
   // V-079: user-facing auth flows.
   const authFlowsRepo = new DrizzleAuthFlowsRepo(dbHandle);

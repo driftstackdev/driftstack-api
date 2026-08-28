@@ -58,7 +58,7 @@ import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { AgentTurnReceiptsRepo } from '../services/agent-turn-receipts.js';
 import type { RecipesRepo } from '../services/recipes.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
-import type { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
+import type { ExitIdentityStore } from '../services/exit-identity-cache.js';
 import type { FleetNodeAuth } from '../services/fleet-node-auth.js';
 import type { DrizzleFleetNodesRepo } from '../db/fleet-nodes-repo.js';
 import { registerMacNodesRoutes } from '../routes/mac-nodes-register.js';
@@ -430,7 +430,7 @@ export interface AppDeps {
    * exit identity to the dispatch-time exit_identity emission (box new-tab IP
    * panel). Wired unconditionally in bootstrap; absence just omits the block.
    */
-  exitIdentityCache?: InMemoryExitIdentityCache;
+  exitIdentityCache?: ExitIdentityStore;
   /**
    * Q.1 — which decomposer impl bootstrap wired. The route layer
    * uses this to decide whether to enforce the

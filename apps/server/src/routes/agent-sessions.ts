@@ -72,7 +72,7 @@ import { PROFILE_ID_INPUT_RE, parseProfileId } from '../lib/profile-id.js';
 import { parseSessionId } from '../lib/session-id.js';
 import type { BYOKAnthropicService } from '../services/byok-anthropic.js';
 import type { InMemoryByokKeyCache } from '../services/byok-anthropic-key-cache.js';
-import type { InMemoryExitIdentityCache } from '../services/exit-identity-cache.js';
+import type { ExitIdentityStore } from '../services/exit-identity-cache.js';
 import type { BundledLlmService } from '../services/bundled-llm.js';
 import type { BundledTurnConcurrencyLimiter } from '../services/bundled-turn-concurrency.js';
 import type { AgentSessionEventBus } from '../services/agent-session-event-bus.js';
@@ -494,7 +494,7 @@ export interface AgentSessionsRoutesDeps {
   /** #128 — in-memory bridge from the create-time proxy probe's observed exit
    *  identity to the dispatch-time exit_identity emission (box new-tab IP panel).
    *  Optional: absent → dispatch omits exit_identity (today's behaviour). */
-  exitIdentityCache?: InMemoryExitIdentityCache;
+  exitIdentityCache?: ExitIdentityStore;
   /** Q.1 — which decomposer impl bootstrap wired. Defaults to
    *  'deterministic'. The ByokAnthropicRequired 502 only fires
    *  when this is 'claude' (deterministic ignores keys entirely
@@ -916,7 +916,7 @@ export async function dispatchSessionAssignOnCreate(args: {
   // #128 — the create-time proxy probe stashes the observed exit identity here
   // keyed by (accountId, proxyId); this dispatch reads it back to emit the
   // exit_identity block (box new-tab IP panel). A miss omits the optional block.
-  exitIdentityCache?: InMemoryExitIdentityCache;
+  exitIdentityCache?: ExitIdentityStore;
   // Worker-disconnect fix (2026-06-19, migration 0086) — when wired, the
   // dispatch persists session→node (agent_sessions.node_id) so the
   // worker-disconnect reaper can close THIS node's active sessions if the node
@@ -1167,7 +1167,7 @@ export async function dispatchSessionAssignOnCreate(args: {
     // through it (#46 udp_capable), not merely requested (udp_associate is a wish).
     const cachedExit =
       accountId !== undefined && proxyId !== undefined && exitIdentityCache !== undefined
-        ? exitIdentityCache.get(accountId, proxyId)
+        ? await exitIdentityCache.get(accountId, proxyId)
         : undefined;
     const exitIdentity =
       cachedExit !== undefined
@@ -1463,7 +1463,7 @@ export async function runProxyPrelaunchGate(args: {
   logger?: { info: (obj: unknown, msg: string) => void; warn: (obj: unknown, msg: string) => void };
   /** #128 — cache the probe's observed exit identity (keyed by accountId+proxyId) so
    *  the dispatch build can emit the exit_identity block for the box new-tab IP panel. */
-  exitIdentityCache?: InMemoryExitIdentityCache;
+  exitIdentityCache?: ExitIdentityStore;
 }): Promise<void> {
   const {
     probe,
@@ -1556,7 +1556,7 @@ export async function runProxyPrelaunchGate(args: {
   // the box new-tab IP panel. Best-effort + peek-only upstream: it can never have
   // affected the pass/fail verdict, and a miss just omits the optional block.
   if (result.exitIdentity !== undefined) {
-    exitIdentityCache?.set(accountId, proxyId, result.exitIdentity);
+    await exitIdentityCache?.set(accountId, proxyId, result.exitIdentity);
   }
   logger?.info(
     { component: 'proxy-prelaunch-probe', proxyId, host: descriptor.host },
