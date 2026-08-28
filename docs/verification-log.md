@@ -14657,3 +14657,46 @@ reads a script incrementally.
 ⭐ The sampler is only trustworthy because the control ran first: a detector that reported six
 foreign runners on an uncontended run would have labelled every future gate as contended, and the
 label would have been believed exactly when a real red needed explaining.
+
+## V-2037 — the same detector bug in a second costume: my own argv (2026-08-27)
+
+V-2036 fixed a detector that counted postgres backends as vitest runners, because the test database
+is named `driftstack_a3_vitest`. A2 proposed a second instance and explicitly framed it as a
+hypothesis to test rather than a finding: **the Bash tool passes the entire script as one argv, so
+the shell running a detector carries every literal in that detector's own source** — and the
+`[v]itest` bracket trick protects only the pattern token, not the rest of the script.
+
+**Tested, confirmed:**
+
+    my own `/bin/zsh -c …` command line, untruncated:  927 chars
+    occurrences of `node_modules/vitest` inside it:     1
+
+⛔ **My first check returned ZERO and I nearly reported the hypothesis disproved.** The difference is
+`ps` truncating command lines at some widths and not others, so the self-match is an INTERMITTENT
+false positive. That is worse than a constant one: absent every time I probed it deliberately,
+present on some future real run — and it would have fired precisely when a red needed explaining.
+
+⭐ **The fix is one rule instead of one exclusion per collision: key on the EXECUTABLE, not the
+text.** A real runner is exec'd as `node`/`npm`/`npx`; a shell that merely mentions vitest is exec'd
+as `zsh`, and a postgres backend as `postgres`. Both false-positive classes fall to the same rule.
+The ancestry check stays for the suite's own workers. Token filters need a new exclusion every time a
+name collides; exec-identity and ancestry need none.
+
+**Proven in both directions, because a clean negative proves nothing.** The positive took two
+attempts, and the first failure was mine:
+
+| test                                                       | result                                                                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| own shell, argv contains the token, no suite running       | not flagged ✓                                                                                 |
+| postgres backends on `driftstack_a3_vitest`                | not flagged ✓                                                                                 |
+| synthetic runner launched as a CHILD of the root passed in | 0 foreign — **my test was malformed**, it descended from the root, so "not foreign" was right |
+| synthetic runner, root = an unrelated leaf process         | `FOREIGN 79360: node -e … node_modules/vitest/dist/workers/forks.js` ✓                        |
+| same, after it exits                                       | none ✓                                                                                        |
+
+The synthetic was a real `node` process carrying the runner path rather than a real suite, so the
+proof cost no machine time while a peer held it.
+
+⭐⭐ Both bugs are the same bug: **a token identifies a thing only where it is structural — a path
+component, an exec name — never as a bare substring of a line that other software is free to
+compose.** A database name and a shell's own argv are both "other software composing the line". The
+only reason either was found is that a control ran first, on a case where the answer was known.
