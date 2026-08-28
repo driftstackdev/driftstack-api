@@ -14734,3 +14734,47 @@ Both files were on the never-mentioned list from V-2028, which has now yielded f
 (boot key verification, the two nonce caches, the MFA challenge store, these two) against two
 findings (V-2027's parser coupling, V-2030's per-replica sweep). **Recording the clean ones is the
 point: a file that has been read to the bottom and found sound should not be re-swept.**
+
+## V-2039 — a sensitivity heuristic blind to every CSS combinator (2026-08-27)
+
+`services/agent-sensitive-input.ts` (1.1 KB, never audited) decides whether a `type` intent's
+selector implies a secret field. Its own header states the asymmetry: a false positive "merely
+disable[s] typo correction and suppress[es] input logging", while a false negative "can expose a
+password/OTP/card value to ordinary input telemetry".
+
+**The token boundary was a hand-listed delimiter class, `[#.[\]_\-\s"'=:]`, and CSS combinators are
+not in it.** Measured against the live regex:
+
+    #password>input    -> false        #password~span   -> false
+    #password,#email   -> false        :is(#password)   -> false
+    #password+label    -> false        #otp,#submit     -> false
+
+The token is present; the character after it merely was not on the list.
+
+**Consequence, traced to three call sites.** `agent-public-redaction.ts:19` is the sharp one —
+`publicAgentIntent` deletes `value` only when the intent is sensitive, so a false negative leaves the
+typed password or one-time code in the public copy of the intent. The other two
+(`agent-intent-to-dispatch.ts:147`, `agent-decomposer-claude.ts:740`) each read
+`intent.sensitive === true || selectorImpliesSensitiveInput(...)`, so this is the defence that
+matters precisely when the caller did not set the explicit flag — which is the case it exists for.
+
+⭐ **The existing tests could not have caught it.** All 16 positive fixtures put the token at the end
+of the string or before a character that happened to be on the list (`#password`, `#login_passwd`,
+`.totp-input`). **Not one placed a combinator after the token**, so every fixture passed identically
+with the bug present — the same shape as the malformed-id fixtures in V-2005/V-2007, where the
+refusal input never reached the branch being tested.
+
+**Fix: the boundary is now any non-alphanumeric.** Not `\b`, because `_` and `-` must remain
+boundaries for `#login_passwd` and `.totp-input`; and alphanumeric on either side still blocks a
+substring hit. Validated against every existing fixture before editing: 16/16 positives still true,
+7/7 negatives still false, the 6 failures now true, and `#spin` / `#pinboard` / `#tokenizer` /
+`#weaponstore` still false.
+
+⚠️ The other two regexes (`SENSITIVE_AUTOCOMPLETE_RE`, `PASSWORD_TYPE_RE`) were checked for the same
+flaw and do NOT have it: they match inside an attribute selector, which always closes with `]`, and
+`]` is on their list. `[type=password],#x` is fine. Scoped the fix to the one regex that needed it.
+
+**Mutation-proved on the real subject:** restoring the old delimiter list reds exactly the 6 new
+fixtures and none of the 16 pre-existing ones. Restored byte-identical; 33 tests in the file;
+`agent-public-redaction` consumers green; `tsc -p apps/server/tsconfig.test.json` clean. No parity
+pin quotes the regex source — checked with both the import-path and the symbol-name patterns.
