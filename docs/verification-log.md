@@ -16594,3 +16594,68 @@ result.
 
 Related: V-2068 and V-2071 (the first two calibrations of the same family), V-2004 and V-1920 (the
 instrument corrected here), V-2070 (the same one-store error in the test-dir corpus).
+
+---
+
+## V-2073 — the schema says every numeric is bounded; one is not, and the arm named for that property checks half of it (2026-08-28)
+
+First target picked with the corrected two-store instrument from V-2072:
+`routes/agent-sessions-transport-report.ts`, the only substantial route with a zero in either store
+(6 log mentions, **0** in memory).
+
+**The route is well built.** Dual-path auth (`controlKeyOrAccountAuth`) with an explicit ownership
+check — `callerCanAccessAgentSession(ctx, session.accountId)` — plus `app.rateLimit('global')` in the
+preHandler AND `consumeEffectiveOwnerRateLimit(...)` charging the owner, because the control-key path
+leaves `request.account` absent and the generic limiter keys off it. The body carries **no free-text
+field at all**, so the structured log line it emits cannot be injected into.
+
+### The finding
+
+The schema's own doc comment states the invariant:
+
+> "**Every numeric field is bounded** (a hostile/buggy client can't log a nonsensical value)"
+
+Five numerics. Four are bounded — `rtt_ms` `.int().max(60000)`, `packet_loss_recent_pct` `.max(100)`,
+`jitter_ms` `.max(60000)`, `decode_fps` `.max(1000)`. The fifth was
+`freeze_count: z.number().nonnegative().nullable().optional()` — **no ceiling, and no `.int()` on a
+field that is a count.** So a client could report `freeze_count: 1e12` or `2.5` into the log line the
+route exists to aggregate for a transport decision.
+
+⛔⛔ **And the guard is named for exactly the property it does not check.** The arm was titled
+_"schema: bounds are exactly as documented"_ and asserted three of six fields — `rtt_ms` fractional,
+`decode_fps` over its max, and for `freeze_count` **only the lower bound**, because the lower bound
+was the only constraint that existed. **A subset check under a total name.** This is the same shape as
+V-2069's file-scoped assertion and V-2060's covered-list: the name states the property, the key checks
+less than the property, and the gap is invisible because the arm is green.
+
+### Fixed, and why the bound is loose
+
+`freeze_count: z.number().int().nonnegative().max(1_000_000)`.
+
+⭐ **The bound is deliberately generous, and the reason is a failure mode specific to this route: the
+client swallows every error by contract** ("Best-effort by contract: the client swallows every error,
+so a failure here NEVER affects the stream"). A rejected report is therefore **silently dropped** —
+losing exactly the telemetry the endpoint exists to collect. A too-tight ceiling would be a worse
+defect than the missing one, so the number is anchored in the schema's own figures: a million freezes
+is 1000 seconds of freezing at the `decode_fps` ceiling directly above it. `.int()` is separately safe
+— the client reads `RTCInboundRtpStreamStats.freezeCount` (spec: unsigned long) straight through, and
+every gui-client fixture is `0` or `null`, checked before touching a shared contract.
+
+The arm now checks the property its name claims: an upper bound on **all five** numerics, `.int()` on
+both counts, the lower bound, and that the **exact** ceiling is still accepted — an off-by-one in the
+bound is otherwise indistinguishable from the bound working.
+
+**Proof.** Dropping `.max` reds one arm; dropping `.int` reds one arm; source restored byte-identical
+from a path-keyed snapshot, proved to differ before each result was read. `it(` count unchanged at 19
+(the arm was replaced, not added). `tsc -p apps/server/tsconfig.test.json` clean. All **six** files
+referencing this route pass, 64 tests — and the six were found only by running BOTH grep patterns:
+the import-path spelling and the quoted basename return **different, partly disjoint** sets here.
+
+⛔ Two aborted edits are worth recording. Both replacements asserted `count == 1` and both hit `0`, so
+nothing was written: I had copied the indentation out of terminal output that carried a
+`sed 's/^/  /'` display prefix, making every line two spaces wrong. **Derive indentation from the
+file, never from what a pager printed** — the assert is the only reason this cost a retry instead of a
+malformed file.
+
+Related: V-2072 (the instrument that chose this route), V-2069 and V-2060 (the same subset-under-a-
+total-name shape).

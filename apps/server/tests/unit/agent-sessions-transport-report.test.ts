@@ -408,14 +408,25 @@ describe('ICE.T — POST /v1/agent-sessions/:id/transport-report', () => {
     await app.close();
   });
 
-  it('schema: bounds are exactly as documented (unit-level guard on the zod shape)', () => {
+  it('schema: EVERY numeric field is bounded above, as the schema comment claims. This arm was named "bounds are exactly as documented" while checking three of six fields and, for freeze_count, only the LOWER one — which is how freeze_count shipped as the single numeric with no ceiling despite the contract directly above it saying every one is bounded. A subset check under a total name is how a stated invariant goes unenforced.', () => {
     expect(transportReportBodySchema.safeParse(VALID_BODY).success).toBe(true);
-    expect(transportReportBodySchema.safeParse({ ...VALID_BODY, rtt_ms: 1.5 }).success).toBe(false); // int only
-    expect(transportReportBodySchema.safeParse({ ...VALID_BODY, decode_fps: 1001 }).success).toBe(
-      false,
-    );
-    expect(transportReportBodySchema.safeParse({ ...VALID_BODY, freeze_count: -1 }).success).toBe(
-      false,
-    );
+    const rejects = (patch: Record<string, unknown>): boolean =>
+      !transportReportBodySchema.safeParse({ ...VALID_BODY, ...patch }).success;
+
+    // An upper bound on EVERY numeric — the property the schema comment states.
+    expect(rejects({ rtt_ms: 60001 }), 'rtt_ms above its ceiling').toBe(true);
+    expect(rejects({ packet_loss_recent_pct: 101 }), 'loss pct above 100').toBe(true);
+    expect(rejects({ jitter_ms: 60001 }), 'jitter above its ceiling').toBe(true);
+    expect(rejects({ decode_fps: 1001 }), 'fps above its ceiling').toBe(true);
+    expect(rejects({ freeze_count: 1_000_001 }), 'freeze_count above its ceiling').toBe(true);
+
+    // Counts are integers; the two per-frame rates are legitimately fractional.
+    expect(rejects({ rtt_ms: 1.5 }), 'rtt_ms is int-only').toBe(true);
+    expect(rejects({ freeze_count: 2.5 }), 'freeze_count is int-only').toBe(true);
+
+    // Lower bound, and the exact ceiling still ACCEPTED — an off-by-one in the
+    // bound would otherwise look identical to the bound working.
+    expect(rejects({ freeze_count: -1 }), 'freeze_count below zero').toBe(true);
+    expect(rejects({ freeze_count: 1_000_000 }), 'the exact ceiling is allowed').toBe(false);
   });
 });

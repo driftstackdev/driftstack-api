@@ -54,7 +54,14 @@ export const transportReportBodySchema = z
     packet_loss_recent_pct: z.number().min(0).max(100).nullable(),
     jitter_ms: z.number().nonnegative().max(60000).nullable().optional(),
     decode_fps: z.number().nonnegative().max(1000).nullable().optional(),
-    freeze_count: z.number().nonnegative().nullable().optional(),
+    // Bounded like every sibling, per this schema's own contract above. It was the
+    // one numeric without a ceiling, and a count with a fractional value is as
+    // nonsensical as one with none. The bound is deliberately GENEROUS rather than
+    // tight: the client swallows every error by contract, so a report rejected here
+    // is silently lost -- exactly the telemetry this route exists to collect. A
+    // million freezes is 1000 seconds of freezing at the decode_fps ceiling above,
+    // so no real client reaches it.
+    freeze_count: z.number().int().nonnegative().max(1_000_000).nullable().optional(),
   })
   .strict();
 
