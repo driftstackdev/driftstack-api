@@ -19352,3 +19352,71 @@ cap `MAX_MFA_CHALLENGE_ATTEMPTS=5`, 300s TTL, already adjudicated sound and mark
 
 **Boundary:** this measures which methods take a context and where each exception enforces scope instead. It
 does not re-audit the 15 that do take one.
+
+## V-2118 — the boot-probe net is attached to migrations, not to keys; one repo inherits its safety and nothing asserted that (2026-08-28)
+
+Third round of the universal-claim instrument (V-2116). Three claims checked, one real gap.
+
+**`lib/boot-key-verification.ts:3` — "Every envelope migration in `bootstrap` opens with a probe."** Exact.
+There are **nine** envelope migrations reached from `bootstrap` and all nine call `verifyBootEncryptionKey`
+_inside the migration method itself_, verified by resolving each probe's enclosing function rather than by
+checking that the file imports it: `migrateValueEnvelopes`, `migrateLivekitSecretEnvelopes`,
+`migrateTotpSecretEnvelopes`, `migrateCiphertextEnvelopes`, `migratePayloadEnvelopes`,
+`migrateTranscriptEnvelopes`, `migrateWrappedDekEnvelopes`, `migrateSecretEnvelopes`, and
+`encryptLegacySecrets`. Nine also matches the file's own "rather than inlined nine times".
+
+⭐ **The gap the claim cannot state, because it is true.** The probe is attached to the **migration**, not to
+the **key**. A repo that never had a legacy envelope to migrate never acquired one — and
+`agent-turn-receipts-repo` encrypts customer response bodies through `platform-secret-encryption` with no
+migration, so it is the one envelope-bearing repo outside the net. On a bad key it would fail at _request_
+time with the raw "Unsupported state or unable to authenticate data" that this very wrapper exists to replace,
+at the moment an operator is least able to diagnose it.
+
+**Consequence today is nil — but only because of a relationship nothing asserted.** `bootstrap.ts:1335`
+constructs it with `config.mfaEncryptionKey`, the same key **seven of the nine** probes verify
+(`MFA_ENCRYPTION_KEY`; the other two verify `PROFILE_MASTER_KEY`). So a wrong key is already caught at boot by
+those seven. A nil consequence holds only while its invariant does, and this one was written nowhere and
+checked by nothing: hand that repo its own key, or move the probes off `MFA_ENCRYPTION_KEY`, and the
+inheritance ends silently, with no observable change until a rotation.
+
+**Closed with a guard that asserts the relationship instead of recording it**
+(`a-repo-outside-the-boot-probe-net-inherits-a-verified-key.test.ts`, 4 arms): a non-vacuity floor over the
+probe census spanning both key families; the key-binding arm (paren-balanced argument extraction, so a nested
+call cannot shift the index); the inheritance arm, which reds if the probes leave `MFA_ENCRYPTION_KEY` while
+the binding arm still passes; and a self-retiring arm that fails — telling the reader to delete the file — if
+the subject ever gains a probe of its own.
+
+**Mutation-proved, three mutations, each on the real subject rather than the guard's own list**, snapshotted by
+full path, restored under a trap, all 11 files verified byte-identical afterwards: rebinding the constructor
+to another key killed the binding arm; adding a `verifyBootEncryptionKey` token to the subject killed the
+self-retiring arm; renaming the key in all seven probe files killed both the inheritance arm and the
+non-vacuity floor.
+
+⛔ **Instrument error, recorded.** My first pass reported that **0 of 8** migrations probed — a uniform,
+dramatic result, which is the signature of a broken instrument rather than an eight-way defect. Two causes:
+the scan began at the _signature_ line, so the parameter list and the batch-limit guard consumed its window
+before reaching the probe, and one target matched an **interface** declaration instead of the implementation.
+A method body starts after the params, not at the signature. The corrected pass resolved each probe's
+enclosing method and found 8 of 8, then 9 of 9.
+
+⛔ **Second instrument error, caught by a precondition rather than by luck.** The snapshot step built its file
+list in a shell variable and zsh did not word-split it, so `cp` received one impossibly long filename and
+copied nothing. Because the rule is to _prove the snapshot exists before mutating_, the script stopped there —
+had it run, three mutations would have been applied over a snapshot that did not exist.
+
+**Suite:** full run 249.99s — **2958 files and 29844 tests pass**, 117 files / 850 tests skipped. The only two
+reds are `EXPECTED_TEST_FILES` and `EXPECTED_TEST_FILES_ALL`, and the census names its own cause: it counts
+**two** untracked test files, one mine and one a peer's, written concurrently. My pins move 3074→3075 and
+3251→3252 — the +1 for the file I added, **not** absorbing the peer's, which stays theirs to carry in the
+commit that lands it. ⭐ That the guard _names the untracked files_ rather than reporting a bare mismatch is
+what made the attribution immediate.
+
+**Also verified, no change.** `routes/auth-cli.ts:132` — "Every failed bind must retire the just-minted key,
+including infrastructure/serialization failures" — holds end to end: the key is minted at `:108` and the
+compensating `try` opens at `:118` with nothing but a blank line between, so there is no window in which a
+throw escapes the revoke; and `apiKeysService.create` cannot throw _after_ its insert, its only post-insert
+step being an audit write wrapped in `try { … } catch { /* swallow */ }`.
+
+**Boundary:** these are source-text measurements. They establish which key a constructor is handed and which
+function encloses each probe — not that any key decrypts any row, which is what the boot probe itself does at
+runtime against a real database.
