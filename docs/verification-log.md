@@ -15173,3 +15173,50 @@ Not "delete 39 dead schemas". The choice is whether operations should `$ref` the
 already register — which changes the shape of the published document (inline → `$ref`) and therefore
 what `datamodel-codegen` emits for existing Python users — or whether the 39 unreferenced models are
 an acceptable cost of keeping named types available. Still not mine to make; it is now costed.
+
+## V-2047 — my own guard was a checkbox; making it price the remedy (2026-08-27)
+
+A2 reframed what the second arm of an exemption guard is FOR, and the reframing indicts a guard I
+landed earlier today. Their words, because they are better than mine: a one-arm guard reliably
+produces DECLARATIONS, because declaring is one line and fixing is a real change — so the guard
+accepts the cheapest possible response to itself. **"A guard that only detects omissions is a
+checkbox; a guard that prices the remedies is a design force."**
+
+They demonstrated it rather than asserted it: hitting `bootstrap-unwired-optional-deps-are-declared`
+on `RedisExitIdentityStore.opts`, they could have added a declared entry in one line. They wired the
+TTL through bootstrap instead, and said plainly they would not have without the arm that makes a
+declaration keep having to be true.
+
+### Applying that standard to V-2033, which fails it
+
+My `no-insecure-randomness-for-secrets` use-count arm reds with `vetted 1, found 2` when a new
+`Math.random` appears in an allowlisted file. Its two remedies were **bump the number (one
+character, permanent)** or fix the use. On a SECURITY exemption, that reliably produces bumps — the
+exact checkbox shape, written by me, hours after arguing the opposite elsewhere.
+
+⛔ **My first fix did not fix it, and testing the claim is what showed that.** I attached a `why`
+string to each count. A new use could still be absorbed by editing `count: 1` to `count: 2` while the
+existing justification sat untouched — I had added a prose floor for entries that already existed and
+changed the price of a new use by nothing.
+
+**The working form: the count IS the number of justifications.** `ReadonlyMap<string, readonly
+string[]>`, one line per use, and the arm compares `actual` against `vetted.length`. There is no
+number to increment; admitting a use means writing the sentence that defends it.
+
+| mutation                                                                      | result                                                                   |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| ⭐ **real subject**: a second `Math.random` planted in `lib/livekit-token.ts` | reds — `justified, 2 found — every Math.random here needs its own line…` |
+| the cheap door: find a number to bump                                         | **0 numeric counts in the map** — nothing to increment                   |
+| buy it off with a thin justification (`'ok'`)                                 | reds — `too thin to review`                                              |
+| add a real justification for the new use                                      | green — the only remedy that passes                                      |
+
+Both files restored byte-identical; `it(` 4 at HEAD and 4 in the tree; `tsc -p
+apps/server/tsconfig.test.json` clean.
+
+⭐ The generalisation I had been missing all session: I have been writing rot arms for staleness
+hygiene and getting the pricing effect by accident. The question to ask of every exemption list is
+not only "what fails when an entry stops being needed" but **"which remedy does this guard make
+cheapest?"** If the answer is "adding an entry", it will produce entries, and the population will
+look reviewed while nothing was fixed. Re-checked V-2042's outbound roster against the same standard:
+it passes for the same reason this one now does — an entry must name the bounding MECHANISM in prose,
+so there is no numeric door, and its rot arm drops an entry whose file stops calling out.

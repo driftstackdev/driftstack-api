@@ -69,11 +69,30 @@ const ALLOWLIST = new Set<string>([
  *  Counts are the guard's own, read out of `code()` (comments stripped) rather
  *  than recomputed by hand. Adding an allowlist entry without a count here fails
  *  loudly, so the two lists cannot drift apart. */
-const ALLOWLIST_USES: ReadonlyMap<string, number> = new Map([
-  ['apps/server/src/services/webhook-worker.ts', 2],
-  ['apps/server/src/lib/livekit-token.ts', 1],
-  ['apps/server/src/drivers/playwright.ts', 1],
-  ['packages/sdk-typescript/src/retry.ts', 1],
+const ALLOWLIST_USES: ReadonlyMap<string, readonly string[]> = new Map([
+  [
+    'apps/server/src/services/webhook-worker.ts',
+    [
+      'retry backoff jitter on the delivery schedule — spreads load, derives nothing',
+      'retry backoff jitter on the DLQ re-arm — same, and neither value reaches a token, id or secret',
+    ],
+  ],
+  [
+    'apps/server/src/lib/livekit-token.ts',
+    [
+      'randomJti fallback when webcrypto is absent; a jti is a uniqueness marker and the token is secured by its HMAC-SHA256 signature, so a predictable one cannot forge it',
+    ],
+  ],
+  [
+    'apps/server/src/drivers/playwright.ts',
+    [
+      'synthetic internal driver-session handle, timestamp-salted; the auth boundary is the account-scoped ses_ id resolved via requireOwned, never this value',
+    ],
+  ],
+  [
+    'packages/sdk-typescript/src/retry.ts',
+    ['retry backoff jitter; the rng is injectable so tests do not depend on it'],
+  ],
 ]);
 
 /** Comments stripped — a comment that NAMES Math.random is not a use of it, and
@@ -168,8 +187,13 @@ describe('security: no Math.random() for secrets/tokens/ids in server runtime', 
         drifted.push(`${entry}: allowlisted but no vetted use-count — state how many and why`);
         continue;
       }
-      if (actual !== vetted)
-        drifted.push(`${entry}: vetted ${String(vetted)}, found ${String(actual)}`);
+      if (actual !== vetted.length)
+        drifted.push(
+          `${entry}: ${String(vetted.length)} use(s) justified, ${String(actual)} found — every Math.random here needs its own line saying why it is not a token, id or secret`,
+        );
+      const thin = vetted.filter((w) => w.trim().length < 40);
+      if (thin.length > 0)
+        drifted.push(`${entry}: ${String(thin.length)} justification(s) too thin to review`);
     }
     expect(
       drifted,
