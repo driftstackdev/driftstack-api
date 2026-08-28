@@ -11220,3 +11220,31 @@ a workspace.
 **Lesson, the same one twice in one day:** a classification made from a sample and written as if it covered
 the population. V-2134's sentence was a claim about seven sites derived from two; the record is corrected here
 rather than edited in place. The guard's ceiling was never wrong — it counted them — the prose beside it was.
+
+## V-2138 — one gate run was NOT TRUSTWORTHY and I announced it as green from the wrong line; the re-run is OK, and the cause is a 1-in-2 gui-client teardown race (2026-08-28)
+
+**The misread.** The `--all` run at `44a9e250f` (full capture, 470 lines) showed `Test Files 3256 passed
+(3256)` and `32367 passed | 16 skipped`. Two lines below: `verify-suite: NOT TRUSTWORTHY — vitest exited 1;
+1 unhandled error(s) — workers that died or never started`. I grepped the counts, not the judge, and posted
+"GATED" to A2, who was choosing a prod SHA. Retracted in-channel minutes later; prod stayed on `7ed30d8cb`,
+whose judge line reads `OK — exit 0, no unhandled errors, full file count` and was re-read before saying so.
+The background task had also reported "exit code 0" because the wrapper's last statement was an `echo`; the
+wrapper's own `exit 1` was in the file. Recorded in memory as the third instance of "a filtered view is not
+the tool's verdict" — the capture fixed the tail-cut failure and I reproduced it with a grep.
+
+**The cause.** `EnvironmentTeardownError: [vitest-worker]: Closing rpc while "onUserConsoleLog" was pending`,
+originating in `apps/gui-client/tests/unit/simulator-window-control-actions.test.tsx` — a jsdom worker
+closed its environment while a `console.log` forwarded from the test was still in flight. Zero test
+failures; vitest exit 1; verify-suite exit 1. No commit in the window touched gui-client (server tests and
+docs only).
+
+**The re-run.** `31c057574`, full capture, judge line verbatim: `verify-suite: OK — exit 0, no unhandled
+errors, full file count`; runner exit captured as `rc=$?` before any echo: 0; 3256/3256, 32367 passed, 0
+unhandled. So the race reproduced 0 of 1 on retry — a flake, and a flake is a defect: it is recorded here
+with the capture path (`suite-44a9e250f.log:212-219` in the A3 scratchpad) for the gui-client owner rather
+than re-rolled a third time. The likely shape — a test that logs during unmount or after its last `await` —
+is a claim for the owner to verify by reading that file, not one this entry makes.
+
+**Boundary:** the gate at `31c057574` covers the five test/docs-only commits since `7ed30d8cb`; the flake
+was not reproduced, so its trigger is unknown; the process correction (judge line first, verbatim; `rc`
+captured before echo) is in memory and in this entry, not in a script.
