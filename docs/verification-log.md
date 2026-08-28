@@ -16908,3 +16908,66 @@ a held claim).
 
 Related: V-2076 (the first false-positive pair), V-2075 (the finding), V-1465 (the empty-secret
 defence this one mirrors).
+
+---
+
+## V-2078 — a universal that omits its own deliberate exception, and five instrument failures in one investigation (2026-08-28)
+
+`agent-runtime.ts` claims _"Every later mutation is independently active-only as a second fence."_
+Checked all three mutation-shaped methods called after it:
+
+- `debitTokensIfActive` — active-gated in name and body. ✓
+- `appendTranscriptIfAuthorityRevision` — fences on `admission.authority.revision`, i.e. the exact
+  control-lane revision. Arguably stronger than "active". ✓
+- `recordUsageRowWithRetry` — **deliberately not gated**, and both post-fence call sites say so:
+  _"Account that work exactly once whether the optional answer is published, sanitized to empty,
+  **fenced by a new controller**, or suppressed by a transcript-storage failure."_
+
+**The code is right; the universal is imprecise by one documented exception.** Compare `routes/auth.ts`
+(V-2075), which states the same kind of claim _with_ its exception named — "Every endpoint here is
+public EXCEPT POST /v1/auth/mfa/step-up" — and holds exactly. The repo has the right pattern in one
+file and not the other. **Amended the comment to name the exception**, because the blanket wording
+invites a future edit to "fix the inconsistency" by gating the cost row — and that edit would stop a
+superseded turn advancing `sumMonthlySpendCents`, which the code four lines below calls "the ONLY
+enforcement of the bundled-LLM monthly soft-cap". No test would fail and nothing would raise.
+
+**The billing ordering is honoured in BOTH decompose branches, each with its reasoning written down:**
+the success path records at L925 before any authority re-read, and the settled-error path records at
+L864 before the re-read at L886 ("Preserve real spend/budget accounting before surfacing the fatal
+protocol error").
+
+### ⛔⛔ Five instrument failures, one investigation, one cause
+
+1–2. **The settle-fence detector** (V-2076): keyed `eq(scheduledJobs.lockedBy, workerId)`; two methods
+spell it `opts.workerId`. Two false "unfenced" verdicts on a job runner that is fenced.
+
+3–4. **Two runtime probes read `recorder called: 0`** and looked like proof that settled provider work
+goes unbilled. Both were mis-sequenced: `getAuthoritySnapshot` has **two** call sites and **both run
+before the decomposer**, so my "first call succeeds, rest return null" fake refused the turn at
+admission — no provider call, correctly nothing to bill. I nearly reported unbilled revenue from a
+fake I had wired wrong, twice.
+
+5. ⭐ **A guard I wrote failed on its own premise.** I pinned "the cost row is written before THE
+   authority re-read" using `indexOf` on the fence expression. It reds: `expected 41274 to be less than
+31010`. The cause is not an ordering bug — **`authorityStillCurrent(session.id, admission)` occurs
+   SEVENTEEN times** in `runTurn` (lines 708 … 1361), so `indexOf` matched the first of seventeen and I
+   had reasoned about the one at 960. The guard was reverted, not "fixed": with seventeen re-checks the
+   design is re-check-before-every-mutation, and "precedes the fence" is not a property that file has.
+
+⭐⭐ **All five have the identical cause, and it is now the single most repeated lesson of this
+session: I keyed on a token without enumerating its occurrence set.** Once for a qualifier
+(`opts.`), once for a call-order assumption, once for a string that appears seventeen times. The fix
+is mechanical and I keep not doing it: **before building any detector on a literal, count how many
+times that literal occurs and look at each** — `indexOf` and a first-match grep are only sound on a
+set of size one, and nothing tells you the size unless you ask.
+
+⭐ The two probes are worth separating from the three greps. A grep that lies gives a list you can
+read. **A test double that is wired wrong gives you a passing test and a number** — `0` — that looks
+exactly like evidence. The only thing that caught it was reading the source to ask _why_ the number
+should be 0, which is the same move that refuted the other four.
+
+Running total on the V-2074 instrument: **13 claims checked, 13 held, 1 finding** (V-2075), 1 comment
+amended.
+
+Related: V-2076, V-2077 (the earlier false-positive pairs), V-2075 (`routes/auth.ts` as the pattern
+this file now follows).

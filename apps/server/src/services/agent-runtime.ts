@@ -956,7 +956,14 @@ export class AgentRuntime {
     // Decomposition can be slow. A customer close may commit while it is in
     // flight, so account for the upstream call above, then re-read the durable
     // lifecycle before ANY debit, result append, SSE or browser execution.
-    // Every later mutation is independently active-only as a second fence.
+    // Every later mutation is independently active-only as a second fence —
+    // EXCEPT the cost row, which is deliberately NOT authority-gated. The
+    // provider has already been paid by the time we get here, so that spend is
+    // recorded ABOVE this re-read (and above the settled-error re-read) and both
+    // call sites below say so: account the work exactly once whether the answer
+    // is published, sanitized to empty, fenced by a new controller, or lost to a
+    // transcript-storage failure. Gating it would make a superseded turn stop
+    // advancing sumMonthlySpendCents, and nothing would raise.
     if (!(await this.authorityStillCurrent(session.id, admission))) {
       // The provider response is already consumed. Preserve its usage record
       // above and debit it while the row remains active, but do not publish a
