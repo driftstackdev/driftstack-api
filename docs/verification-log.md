@@ -16103,3 +16103,53 @@ with their prior, and required no work; any one of those should prompt a harder 
 together did not. The direction matters for the same reason the doc→repo asymmetry does: a
 severity-LOWERING claim closes an investigation, so a false one is silent, while a false
 severity-raising claim gets chased and dies of its own accord.
+
+---
+
+## V-2065 — second sample of the "do NOT re-audit" population: the clean claims hold, the surfaced note is stale (2026-08-27)
+
+Second of the 28 markers from V-2061, chosen the same way as V-2063 — on churn, and small enough to
+verify in full. `2026-05-31-auth-flow-token-audit.md`: two subject files, one changed after it was
+written, subject is the user-facing auth-flow tokens.
+
+**Every "VERIFIED CLEAN — do not re-audit" claim holds.** Token primitive: `randomBytes(...)` →
+`base64url`, `createHash('sha256')` at rest, lookup by hash. Passwords: scrypt `logN: 15, r: 8, p: 1`
+via the api-keys path. TTLs: 30 min / 15 min / 60 min / 30 days, exactly as claimed. Replay: the
+conditional UPDATE still carries `isNull(t.consumedAt)` and `findActiveAuthToken` still filters
+`gt(expiresAt, now)` AND `isNull(consumedAt)` — the load-bearing predicate, checked first because a
+refactor dropping it would be silent and would re-open replay.
+
+### The finding — the surfaced hardening note is stale, in the V-2054 direction
+
+The register's LOW-severity note says `consumeAuthToken` returns `void`, so a caller cannot tell it
+lost a concurrent race, and both callers proceed to act. **It returns `Promise<boolean>` now**
+(`rows.length > 0`), and the comment states the contract: "0 → already consumed (a concurrent
+winner), so the caller must reject rather than double-run."
+
+⛔ **A returned boolean is necessary and not sufficient — a value nothing reads is not added — so I
+enumerated the callers rather than stopping at the signature.** All three flows (`email_verify`,
+`magic_link`, `password_reset`) gate on it with
+`if (!consumed) throw new AuthFlowError('invalid_auth_token')`.
+
+⭐ **And the remedy is stronger than the one the note proposed.** The note asked for an affected-row
+count gated on winning the claim. The code calls `consumeAuthTokenFamily`, which atomically consumes
+every still-unconsumed sibling of the same kind and account and returns true only when the presented
+id was in that UPDATE — so it closes not just the concurrent double-submit but the _sequential_ case
+the note never raised: an older or resent link cannot later mint a second session. The note's
+"benign-to-minor session sprawl" analysis no longer describes the code.
+
+Annotated in place. Same hygiene point as V-2059's item 2: a reader stops at the heading, so a
+resolution recorded anywhere else is not recorded for them.
+
+⚠️ **Loose end, stated rather than fixed:** the single-token `consumeAuthToken` now has **no
+production caller** — it survives on the `AuthFlowsRepo` interface, the drizzle implementation, an
+in-memory test double, and four test files that exercise it directly, including a content-parity pin
+on its body. So it is guarded code with no live path. Traced across `apps`, `packages` and `scripts`
+before saying so, because a negative about reachability is the most expensive kind to get wrong.
+Removing it is a judgement call about whether the interface method earns its place; I have not made
+it.
+
+**Two of 28 markers sampled, both sound on their clean claims, one stale on a surfaced item.** That
+is evidence about two markers.
+
+Related: V-2061 (population), V-2063 (first sample), V-2054 (the stale-OPEN direction).

@@ -23,6 +23,19 @@ LOW-severity hardening note (surfaced, not fixed).
 
 ## LOW-severity hardening note (surfaced)
 
+> ✅ **RESOLVED since — verified 2026-08-27 (V-2065), annotated here because a reader
+> stops at this heading.** `consumeAuthToken` now returns `Promise<boolean>`
+> (`rows.length > 0`) with the reasoning in a comment: "0 → already consumed (a
+> concurrent winner), so the caller must reject rather than double-run". **And the
+> remedy went further than this note proposed.** All three flows call
+> `consumeAuthTokenFamily`, which atomically claims every still-unconsumed sibling of
+> the same kind and account and returns true only if the presented id was among them
+> — so an old or resent link cannot later mint a session — and each of the three gates
+> on it with `if (!consumed) throw new AuthFlowError('invalid_auth_token')`. The
+> "both callers proceed to act" analysis below no longer describes the code. Note the
+> single-token `consumeAuthToken` now has **no production caller**: it survives on the
+> repo interface and is exercised by four test files.
+
 All flows do **find → consume → act**, but `consumeAuthToken` returns `void`, so
 a caller cannot tell it _lost_ a concurrent race. On a truly-concurrent
 double-submit of the **same** valid token (both pass `find` before either
