@@ -13,6 +13,7 @@
 import { useEffect } from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, within, act, waitFor } from '@testing-library/react';
+import { getLogEntries, clearLogEntries } from '../../src/lib/log-buffer';
 
 const sendTabListUpdate = vi.fn(() => Promise.resolve());
 const sendActivateTab = vi.fn(
@@ -1970,5 +1971,47 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(tabEls(container)).toHaveLength(1);
     expect(tabEls(container)[0].getAttribute('data-active')).toBe('true');
     expect(lastTabListCall().activeTabId).toBe(survivingId);
+  });
+
+  // ── New-tab open TIMING ───────────────────────────────────────────────────────
+  // The affordance above says outright that it "does not make it faster". The
+  // complaint that a new tab is still very slow arrived with no number attached,
+  // and the harness log carries no tab timing at all, so there was nothing to
+  // compare a warm-tabs change against. This pins the measurement itself.
+  it('records how long a new tab took to become ready', () => {
+    clearLogEntries();
+    const { container } = renderSim();
+    expect(dataHandler).not.toBeNull();
+    fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+    // The box reports the new-tab page loaded → the open completes.
+    pushPageState({ state: 'loaded', url: 'https://driftstack.dev/newtab/' });
+    const ready = getLogEntries().filter((e) => e.text.startsWith('[tab] new tab ready in'));
+    expect(ready).toHaveLength(1);
+    expect(ready[0]!.level).toBe('info');
+    expect(ready[0]!.text).toMatch(/^\[tab\] new tab ready in \d+ms$/);
+  });
+
+  // The watchdog ALSO drops pageLoading to false when it expires, so a naive edge
+  // timer would file a 45s TIMEOUT as the slowest successful open — the failure
+  // case masquerading as a success and skewing the baseline upward exactly when
+  // the page never arrived. It must be recorded as a give-up, at warn.
+  it('files a load-deadline give-up as a warn, never as a slow success', () => {
+    vi.useFakeTimers();
+    try {
+      clearLogEntries();
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      // No page_state ever arrives; the load deadline expires.
+      act(() => {
+        vi.advanceTimersByTime(46_000);
+      });
+      const entries = getLogEntries();
+      expect(entries.filter((e) => e.text.startsWith('[tab] new tab ready in'))).toHaveLength(0);
+      const gaveUp = entries.filter((e) => e.text.startsWith('[tab] new tab gave up after'));
+      expect(gaveUp).toHaveLength(1);
+      expect(gaveUp[0]!.level).toBe('warn');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

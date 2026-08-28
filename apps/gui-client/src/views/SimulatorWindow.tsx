@@ -41,6 +41,7 @@ import { buildRecordingExport, recordingExportFilename } from '../lib/recordings
 import { exportCookies } from '../lib/cookie-export';
 import { parseCookies } from '../lib/cookie-import';
 import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
+import { record } from '../lib/log-buffer';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
@@ -4698,6 +4699,42 @@ export function SimulatorWindow(): JSX.Element {
     setPageLoadTimeout(null);
     setPageLoadStalled(null);
   }, [sessionEnded]);
+
+  // ⭐ MEASURE the new-tab open rather than only making the wait legible. The
+  // affordance in onNewTab says plainly that it "does not make it faster"; the
+  // report that a new tab is still very slow arrived with no number attached, and
+  // the harness log carries no tab timing at all — so there was nothing to compare
+  // a warm-tabs change against. This records into the shared log buffer (the Logs
+  // panel), where an operator can read it back the moment a tab feels slow, and it
+  // gives future warm-tab work a before/after that is measured rather than felt.
+  //
+  // ⚠️ Separates "ready" from "gave up". The watchdog ALSO drops pageLoading to
+  // false when it expires at PAGE_LOAD_FALLBACK_MS, so timing that edge without
+  // consulting `expired` would file a 45s timeout as a 45s successful open — the
+  // failure case would masquerade as the slowest success and skew the baseline
+  // upward exactly when the page never arrived.
+  const newTabOpenStampRef = useRef<{ tabId: string; at: number } | null>(null);
+  const prevPageLoadingRef = useRef(false);
+  useEffect(() => {
+    const was = prevPageLoadingRef.current;
+    prevPageLoadingRef.current = pageLoading;
+    // Only a true→false edge closes a measurement. A tab that never armed the
+    // watchdog (armLoadWatchdog returns false on an already-expired cycle) never
+    // opens one, so it is never mis-timed as instant.
+    if (!was || pageLoading) return;
+    const stamp = newTabOpenStampRef.current;
+    if (stamp === null) return;
+    newTabOpenStampRef.current = null;
+    // Switching away before the tab settled ends the measurement without a number:
+    // the elapsed span would cover the switch, not the open.
+    if (stamp.tabId !== activeTabId) return;
+    const ms = Date.now() - stamp.at;
+    if (loadWatchdogRef.current.expired) {
+      record('warn', [`[tab] new tab gave up after ${ms.toString()}ms (load deadline)`]);
+      return;
+    }
+    record('info', [`[tab] new tab ready in ${ms.toString()}ms`]);
+  }, [pageLoading, activeTabId]);
   // Optimistically reset the per-page chrome (error overlay / loading bar / stalled
   // badge / progress) on a tab switch/open/close. These four pieces of state are
   // currently GLOBAL to the window (not per-tab), so without this reset a prior tab's
@@ -6924,6 +6961,8 @@ export function SimulatorWindow(): JSX.Element {
     // deadline so a device that never answers becomes an actionable Retry instead of
     // a bar that spins forever.
     currentNavTargetRef.current = '';
+    // Opens the measurement closed by the pageLoading edge effect above.
+    newTabOpenStampRef.current = { tabId: tab.id, at: Date.now() };
     lastNavAtRef.current = Date.now();
     setPageLoading(armLoadWatchdog(true));
     // Mark a switch so the ~2s poll's grace window suppresses a stale prior-tab url
