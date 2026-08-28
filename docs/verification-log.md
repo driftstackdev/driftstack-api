@@ -15498,3 +15498,60 @@ entry that stopped being unbounded), and an **exact-set pin** on the three custo
 fourth is a red rather than one row in a roster of twelve. Its header names four while the pin holds
 three, and that is not drift: both the roster and the assertion carry the same in-place note that
 `audit-archive selectArchivableRows` left the set at V-1591 by gaining a row cap.
+
+## V-2054 — customer recipe create/delete emit no audit row, and the exemption covering them is false (2026-08-27)
+
+The ADMIN side has a route-coverage invariant (`admin-audit-route-coverage-invariant`, V-1007) that
+fails when a new admin mutation forgets its audit row. It exists because `services/admin-audit.ts`
+claimed "Every /v1/admin/\* endpoint writes one row here" and that sentence was false in two ways.
+**The CUSTOMER side has no equivalent** — its guards pin the service's SHAPE (header text, field
+counts, method counts, scope gates). Nothing asserts which customer mutations write an `account_audit`
+row; coverage rests on `docs/internal/2026-05-19-audit-log-coverage-audit.md`, whose own method was
+"spot-check route files".
+
+**That audit's named remediations all landed** — checked as a post-condition against the current enum
+and every tracked `.ts` under `apps/server/src`: `account.byok_anthropic_key_{set,cleared,tested}`,
+`proxy.{created,deleted}`, `account.bundled_llm_consent_changed`,
+`account.email_preferences_changed` — 7 of 7 declared AND emitted. The enum is fully wired:
+**47 declared actions, 47 appearing as literals in server source, 0 orphans.**
+
+### The gap its own text now mis-describes
+
+It placed recipes under "Acceptable gaps (not customer-action-driven)": _"recipes — read-only customer
+surface (list bundled recipes); no modification ⇒ no audit needed."_ **No longer true.**
+`registerRecipesRoutes` registers:
+
+    line 141  POST   /v1/recipes       requireAuth + requireScope('write') + rateLimit
+    line 225  DELETE /v1/recipes/:id   requireAuth + requireScope('write') + rateLimit
+
+The POST/DELETE at 255/258 are the 503 stubs from `registerRecipesDisabledRoutes`. `app.ts:1648`
+picks the real pair when `recipesRepo` and `agentSessionsRepo` are both wired, and `bootstrap.ts:1235`
+constructs `recipesRepo` unconditionally — so on a production deployment these are live customer
+mutations.
+
+**Neither audits.** `services/recipes.ts` contains ZERO occurrences of the substring `audit`, the two
+handlers emit nothing, and **no `recipe.*` action exists in `AccountAuditActionSchema` at all** — so
+this is not a wiring omission; the action was never defined.
+
+⭐ It matters at the weight the doc gave its own Tier-1 items. A recipe carries `intent_log` and
+`transcript_snapshot`, which V-2035 established hold **full customer URLs, path and query** — that is
+why the retention sweeper purges them for terminated accounts. The doc's Tier-1 argument for
+saved-proxies applies verbatim: _"Customer needs to audit which proxies have been minted under their
+account (especially for shared-team-RBAC sessions where any member can mint)."_ Recipes are
+account-scoped, so on a shared team account any member with `write` can create or delete one and
+nothing records who. The analogous customer-owned object is audited — the doc's Tier-3 list reads
+"profile lifecycle (created/deleted/exported/imported): ✓".
+
+**Not fixed here, for the reason the doc itself gives.** `recipe.created` / `recipe.deleted` would
+extend a published enum in `packages/api-types` that the three SDKs consume, which it classifies as a
+"Class-A schema change". Owner's call, alongside W-10 — though the precedent is encouraging rather
+than blocking: every Tier-1 and Tier-2 item on that list was an enum extension and all landed the
+next day.
+
+⛔ **Two of my detectors were wrong before this one was right.** A literal extractor over the enum
+block matched apostrophes inside interleaved comments and reported 9 "never-emitted actions" that were
+comment fragments — the precise failure my standing lesson names. Stripping comments first gave 47/47.
+And a route-file-level sweep reported **20 of 27** customer route files as unaudited; the emit happens
+one hop away in the service layer, so resolving each route's service imports cut it to 9, of which the
+billing four are explicitly accepted by the doc ("Stripe is the audit boundary for billing"). Reading
+the remainder is what left one real finding.
