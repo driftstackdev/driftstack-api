@@ -18844,3 +18844,58 @@ names the subsystem, the env var and the remedy. Recorded so the next session do
 of us spent real time attributing this one.
 
 Related: V-2107 (the gate run), V-2106 (the header that prompted the recipes audit).
+
+---
+
+## V-2109 — three negative results, a stale snapshot my control caught, and the population still unmeasured (2026-08-28)
+
+Recorded because each cost time and none should cost it twice.
+
+### Three threads that ended without a finding
+
+- **Admin audit-log completeness.** Three route files claim "each mutation writes an admin*audit_log
+  row". Grepped prior art before checking and found **80+ audit-related test files**, including
+  `every-admin-mutation-writes-an-audit-row` and `every-mutating-admin-route-writes-an-audit-row` —
+  which are complementary rather than duplicates: the first contrasts the documented claim against
+  reality (mutations audit, GETs do not), the second guards the specific recurrence of a new admin route
+  shipping with no audit wiring, which has happened twice. ⭐ The first file also records
+  *"Counts are deliberately absent… V-861 found the figures written here had already drifted"\_ — the
+  derive-don't-record remedy, already applied here, which partly pre-empts V-2107's lesson too.
+- **Permissive CORS.** `cors-allow.ts` claims "When true, every origin is reflected". True, and the
+  dangerous configuration is already fail-closed: `assertCorsPosture` throws on permissive-CORS-in-
+  production so it cannot boot, pinned by `cors-posture.test.ts` for both wiring and strength, verified
+  at HEAD on 2026-08-27. Thirty seconds because I grepped prior art first.
+- **Cold × no-op-stub.** V-2105's shape — a production write stubbed to `() => Promise.resolve()` in a
+  dozen tests AND never executed — generalised into a detector: cold db functions intersected with
+  no-op stubs across `apps/server/tests`. **Two hits, both already handled**: the V-2105 case itself,
+  and `upsert`, whose generic name I had already resolved and audited clean in V-2106. The vein is
+  swept.
+
+### ⛔ The control caught that my own input was stale
+
+That intersection reported `touchWebSessionLastUsed` as still cold — which is impossible, since V-2105
+added the arms that execute it. Cause: the cold set came from a coverage run taken **before** that fix,
+so the analysis ran against a pre-fix snapshot. **Third time tonight a stale artifact read exactly like
+a fresh one** (after the shared `coverage-summary.json` and the two coverage directories), and the only
+reason it was caught is that the detector carried a probe whose expected answer I knew.
+
+⚠️ A derived set is an artifact like any other. Re-derive it, or stamp it with the commit it was taken
+at — the same discipline as a dated measurement, applied to intermediate data rather than to prose.
+
+### What is actually unmeasured, stated so "saturated" is not overclaimed
+
+Five consecutive threads this firing ended clean or pre-empted, which is real evidence that the STATIC
+INSTRUMENTS I have been using are exhausted. It is **not** evidence the codebase is. Concretely, from
+the peer's server-wide figure of **2748/2959 functions covered, excluding `src/db`**:
+
+> **211 cold functions outside the db layer, across 287 source files — versus the 31 I triaged in the
+> db layer this session.**
+
+That population is seven times larger and has not been looked at once. The method is now known and
+recorded (V-2104): an all-green run against a disposable database, because **a single failing test
+suppresses the entire coverage report**. It needs the machine, and a peer is mid-write on the retention
+scrub, so it is deferred rather than skipped.
+
+No source change. Next firing's target is named and sized.
+
+Related: V-2104 (the method), V-2105 (the shape worth hunting), V-2107 (the peer figure this uses).
