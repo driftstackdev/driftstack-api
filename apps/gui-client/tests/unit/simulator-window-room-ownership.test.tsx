@@ -6,7 +6,7 @@
 // absent/connecting/publishing gate in both rendered controls and forced DOM events.
 
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type PanelCallbacks = {
   info: { token: string };
@@ -151,9 +151,15 @@ describe('SimulatorWindow — Room/session ownership', () => {
     };
   });
 
-  afterEach(() => {
-    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-  });
+  // No per-test teardown of __TAURI_INTERNALS__ — deliberately. A control chain
+  // still settling when a test returns (End's credential-cleanup race, the
+  // aspect-lock debounce) re-enters Tauri AFTER the hook ran; a deleted stub
+  // turns that straggler into a thrown TypeError -> the swallow guard's
+  // console.warn -> the warn's rpc forward lands after vitest's rpcDone
+  // snapshot and the worker rejects it: "Closing rpc while onUserConsoleLog
+  // was pending" (V-2138's 1-in-2 full-suite flake; mechanism + deterministic
+  // probe in V-2141). The stub lives for the whole file; jsdom isolation
+  // discards it with the environment.
 
   it('keeps tab controls inert until the exact Room is connected and publishing', async () => {
     const { container } = renderSimulator();

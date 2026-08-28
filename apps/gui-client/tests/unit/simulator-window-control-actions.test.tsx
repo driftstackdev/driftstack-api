@@ -3,9 +3,12 @@
 // Own focused harness because the standalone Simulator swaps its sessionId in place
 // (without remounting) and the real AgentSessionPanel requires a live WebRTC room.
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type Deferred<T> = {
   promise: Promise<T>;
@@ -127,9 +130,15 @@ describe('SimulatorWindow — control actions', () => {
       invoke: tauriInvoke,
     };
   });
-  afterEach(() => {
-    delete (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
-  });
+  // No per-test teardown of __TAURI_INTERNALS__ — deliberately. A control chain
+  // still settling when a test returns (End's credential-cleanup race, the
+  // aspect-lock debounce) re-enters Tauri AFTER the hook ran; a deleted stub
+  // turns that straggler into a thrown TypeError -> the swallow guard's
+  // console.warn -> the warn's rpc forward lands after vitest's rpcDone
+  // snapshot and the worker rejects it: "Closing rpc while onUserConsoleLog
+  // was pending" (V-2138's 1-in-2 full-suite flake; mechanism + deterministic
+  // probe in V-2141). The stub lives for the whole file; jsdom isolation
+  // discards it with the environment.
 
   it('clears a sent draft immediately, shows Sending, and restores the exact draft on rejection', async () => {
     const send = deferred<void>();
@@ -294,5 +303,29 @@ describe('SimulatorWindow — control actions', () => {
       await newSend.promise.catch(() => undefined);
     });
     await waitFor(() => expect(newInput.value).toBe('new session draft'));
+  });
+
+  it('V-2141 pin — no simulator-window family file tears down its Tauri stub mid-file', () => {
+    // The pin asserts the absence of the deletion, not that absence is
+    // sufficient — the mechanism it protects is documented where the
+    // afterEach used to be. open-simulator.test.tsx is excluded: its inline
+    // delete is a test SUBJECT (the non-Tauri branch), not teardown.
+    const here = dirname(fileURLToPath(import.meta.url));
+    const family = [
+      'simulator-window-control-actions.test.tsx',
+      'simulator-window-room-ownership.test.tsx',
+      'simulator-window-tauri.test.tsx',
+    ];
+    // Token-split so this pin's own source cannot satisfy it, and comments
+    // stripped so prose about the deletion never trips it — only code can.
+    const deletion = new RegExp('delete[^\\n]*__TAURI_' + 'INTERNALS__');
+    for (const name of family) {
+      const src = readFileSync(join(here, name), 'utf8');
+      const code = src
+        .split('\n')
+        .map((line) => line.replace(/\/\/.*$/, ''))
+        .join('\n');
+      expect(code, name).not.toMatch(deletion);
+    }
   });
 });

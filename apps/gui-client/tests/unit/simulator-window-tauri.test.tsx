@@ -10,7 +10,7 @@
 // Kept in a SEPARATE file so the mocks don't leak into the no-Tauri suite.
 
 import { useEffect } from 'react';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
 
 vi.mock('../../src/lib/livekit', () => ({
@@ -146,9 +146,15 @@ describe('SimulatorWindow — Tauri close + Dock tile', () => {
     // Tauri IPC seam: the real `invoke` calls window.__TAURI_INTERNALS__.invoke.
     (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = { invoke };
   });
-  afterEach(() => {
-    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
-  });
+  // No per-test teardown of __TAURI_INTERNALS__ — deliberately. A control chain
+  // still settling when a test returns (End's credential-cleanup race, the
+  // aspect-lock debounce) re-enters Tauri AFTER the hook ran; a deleted stub
+  // turns that straggler into a thrown TypeError -> the swallow guard's
+  // console.warn -> the warn's rpc forward lands after vitest's rpcDone
+  // snapshot and the worker rejects it: "Closing rpc while onUserConsoleLog
+  // was pending" (V-2138's 1-in-2 full-suite flake; mechanism + deterministic
+  // probe in V-2141). The stub lives for the whole file; jsdom isolation
+  // discards it with the environment.
 
   /** Find the args of the first invoke of `cmd` (the real `invoke` appends an
    *  `options` arg + defaults `args` to `{}`, so we match on cmd + arg0 only). */

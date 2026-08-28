@@ -11315,3 +11315,38 @@ runs. Restored byte-identical.
 **Boundary:** no behaviour change for the one production caller; the sole runtime difference is that a
 persister can no longer be built in the shape that skipped the guard. The guard's own arms were not
 re-derived here — they were re-run and are unchanged. A2 was told before the primitive was touched.
+
+## V-2141 — the 1-in-2 gui teardown flake: mechanism, deterministic reproduction, and the fix (2026-08-28)
+
+**Mechanism (read from vitest 4.1.10 dist, not inferred).** The worker console spy batches every
+`console.*` into a microtask flush that calls `rpc.onUserConsoleLog` UN-AWAITED (`chunks/console.*.js`);
+`execute()` awaits `worker.runTests`, then `rpcDone()` — which awaits a SNAPSHOT `Array.from(promises)`
+(`chunks/rpc.*.js:103`) — then a per-file cleanup rejects every still-pending call with
+`EnvironmentTeardownError "Closing rpc while onUserConsoleLog was pending"` (`chunks/init.*.js`). A
+console call whose flush lands after the snapshot — a continuation of the file's OWN code firing after
+the last test returned — is rejected, and the un-awaited rejection is V-2138's unhandled error.
+Per-file, so a cross-file source is structurally impossible.
+
+**Emission (probed, not guessed).** `simulator-window-control-actions.test.tsx` emits nothing in 3
+unloaded single-file `--disableConsoleIntercept` runs. A TEMPORARY probe arm deleting
+`__TAURI_INTERNALS__` via a 0 ms macrotask while an owned End settled fired the exact class 3 times:
+`[simulator] window operation failed (ignored): TypeError: Cannot read properties of undefined
+(reading 'invoke')` — SimulatorWindow's `withCurrentWindow` swallow guard. The guard re-checks the
+stub at ENTRY only; the dynamic import yields, and a deletion landing in that gap turns a straggler
+into the warn. Under full-suite load the first import is real IO — the gap the flake needs; unloaded,
+adjacent microtasks close it, which is why single-file runs are silent.
+
+**Fix.** The three simulator-window family files no longer delete the stub in `afterEach` — `afterAll`
+would only narrow the race to once per file, so it is not deleted at all; jsdom isolation discards it
+with the environment. A pin arm (control-actions) fails if any family file reintroduces a deletion:
+token-split pattern, comment-stripped scan — two drafts matched their own regex literal and then their
+own title before the third scanned clean (dry-run the checker on the file it will read).
+`open-simulator.test.tsx` keeps its inline delete: a test SUBJECT (the non-Tauri branch), not teardown.
+
+**Proofs.** Green 3 files / 23 tests. Mutations, each asserted to differ before the run and restored
+from path-keyed snapshots (cmp-verified): deletion reintroduced in the SIBLING (room-ownership) → pin
+red naming room-ownership; in the pin's own file → red naming control-actions.
+
+**Boundary:** the fix removes the only identified emission class in this file. If the flake recurs
+here, the diagnosis was incomplete — the probe technique (mid-flight deletion on a macrotask)
+reproduces candidates deterministically and is where to resume.
