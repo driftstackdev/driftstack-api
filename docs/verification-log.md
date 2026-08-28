@@ -15220,3 +15220,42 @@ cheapest?"** If the answer is "adding an entry", it will produce entries, and th
 look reviewed while nothing was fixed. Re-checked V-2042's outbound roster against the same standard:
 it passes for the same reason this one now does — an entry must name the bounding MECHANISM in prose,
 so there is no numeric door, and its rot arm drops an entry whose file stops calling out.
+
+## V-2048 — the exhaustiveness axis has no if/else sibling, and the gate's blind-spot figures hold (2026-08-27)
+
+Two axes checked and closed, both clean. Recording them so neither is re-swept.
+
+### The `if/else-if` spelling of the void-switch defect
+
+`a-void-switch-over-a-finite-union-must-be-exhaustive.test.ts` (V-1917) covers a real compiler gap: a
+switch over a finite literal union inside a **void** function has no return obligation, so
+`noImplicitReturns` cannot see a missing case. Its scope is deliberately narrow and every exclusion
+is a shape the compiler already covers — a value-returning function (caught by `noImplicitReturns`),
+a `never`-returning one (TS2534), a switch over bare `string` (legitimately permissive).
+
+⭐ **Its scope is `switch`, and an `if/else-if` chain over the same union is the same defect in a
+different spelling** — TypeScript cannot check that one either. Swept for it. Boundary: 342 tracked
+`.ts` files under `apps/server/src`; chains of ≥2 branches comparing ONE identifier against string
+literals with no final bare `else`. Detector controlled against an in-memory known positive AND a
+known negative before running (the negative differs only by having a final `else`), because A2's
+suite was importing the tree and a planted probe file would have been a write into their run.
+
+**One candidate in 342 files, refuted by reading.** `db/webhooks-repo.ts:318` buckets delivery counts
+with three branches — `delivered` / `failed` / `dlq` — over a status enum with **five** members
+(`'pending' | 'in_flight' | 'delivered' | 'failed' | 'dlq'`, DB default `'pending'`). That is not a
+dropped case: the target type is `EndpointDeliveryCounts = { delivered, failed, dlq }`, so omitting
+pending and in-flight rows from a delivered/failed/dlq breakdown is the projection the type declares.
+A pending delivery has not been delivered, failed, or DLQ'd.
+
+The axis is closed: the codebase dispatches on unions with `switch` (29 of them, all covered), not
+with chains.
+
+### The gate's own blind-spot figures
+
+`verify-suite.mjs` records the CI jobs it does not run, with figures "RE-MEASURED 2026-08-26". A
+dated count of live statistics is the shape that rots, so it is worth re-checking rather than
+trusting. **41 Playwright spec files recorded, 41 tracked on disk.** The Python figure (365 passing)
+cannot be settled statically — measured 276 `def test_` declarations across 32 tracked pytest files
+plus 10 `@pytest.mark.parametrize` decorators, which is a LOWER bound since parametrize expands at
+runtime, so 365 is consistent and the statics are inconclusive by construction. Stated rather than
+resolved; running pytest would have contended with a peer's suite for a figure that is documentation.
