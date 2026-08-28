@@ -17495,3 +17495,72 @@ timestamp**. That last step is the one that matters: the boolean alone cannot di
 
 Related: V-2086 (the classified list), V-2085 (reading proves the shape), V-1209 (the divergence class
 this is NOT).
+
+---
+
+## V-2088 — the first of the eleven closed: Postgres now enforces the verification first-transition, not just the source text (2026-08-28)
+
+V-2087 established that 8 of the 11 never-executed repo methods are guarded only by source-TEXT pins.
+This closes the first one, with the recipe that generalises to the rest.
+
+**`markEmailVerified`** is a CAS first-transition claim —
+`UPDATE accounts SET email_verified_at WHERE id = ? AND email_verified_at IS NULL RETURNING id` — whose
+boolean gates the one-time signup-welcome email. Four pins across four files already assert the body
+SAYS `and(eq(id), isNull(emailVerifiedAt))`, one of them stating the property outright. **None had ever
+run it.**
+
+**New arm** in `db-canonical-email-dedup-is-enforced-drizzle.test.ts` (an existing host that already
+constructs `DrizzleAuthFlowsRepo` with seeding and cleanup, so no new file and no ratchet change):
+positive control that a fresh account starts unverified → first call **true** → second call **false** →
+**read `email_verified_at` back and assert it is the FIRST timestamp**. That last step is the one that
+matters: the booleans alone cannot separate a working guard from a broken one that returns true twice
+AND moves the timestamp.
+
+**Proof.** Removing `isNull(accounts.emailVerifiedAt)` from the real subject reds the arm
+(`expected true to be false`); source restored byte-identical from a path-keyed snapshot, proved to
+differ before the result was read. `it(` 5 → 6, `tsc -p apps/server/tsconfig.test.json` clean.
+
+### The remaining ten are all cheap, and now priced
+
+Every one already has an integration file constructing its repo, so each is an arm in an existing file
+— no new file, no `EXPECTED_TEST_FILES` bump:
+
+    DrizzleWebhooksRepo          14 hosts   enqueueDelivery, resetDeliveryToPending, deleteDelivery
+    DrizzleAuthFlowsRepo         10 hosts   findAccountById
+    DrizzleSessionRepo            9 hosts   countAllByStatus, setEgressCapabilityReport
+    DrizzleStripeWebhooksRepo     7 hosts   upsertSubscription
+    DrizzleAccountAuthRepo        6 hosts   touchWebSessionLastUsed
+    DrizzleStatusSubscribersRepo  4 hosts   findByConfirmTokenHash
+    DrizzleFleetNodesRepo         3 hosts   getDetail
+
+⭐ **A `*-repo-contract` host would be strictly better and is not available here.** Those run one
+contract against BOTH implementations, pinning double↔Drizzle parity as well as execution. But
+`auth-token-family-repo-contract`'s `inMemorySubject().account()` returns a bare UUID **without
+creating a row**, which is fine for token-family arms and makes the double's `markEmailVerified` return
+`false` on the FIRST call. Using it needs a shared-harness change. Recorded with the blocker rather
+than attempted.
+
+### ⭐⭐ The seam behind all of this, measured
+
+**165 of 397 integration files (42%) construct a Drizzle repo at all; 200 use `buildTestApp` only.**
+Boundary in the same sentence: "constructs" means the `new Drizzle*` spelling, so a factory-obtained
+repo would not count. That is the V-1576 seam quantified for the first time, and it explains V-2083
+entirely — most of the "integration" suite exercises routes and services against in-memory doubles,
+which is the design, not a defect. The SQL is tested by the `db-*-drizzle` minority.
+
+### ⛔ A hazard I created and a distinction worth keeping
+
+I wrote this arm, went to run it, and the inline check found a peer had started — so an **unverified**
+test edit sat in a shared tree their gate could collect. I withdrew it byte-identical, then re-wrote it
+later in a single write-and-run action once the tree was free.
+
+**The dirty-file hazard is not symmetric.** A dirty _docs_ file is inert unless a guard reads it. A
+dirty _test_ file is EXECUTABLE, and an unverified one is arbitrary code injected into someone else's
+verification run — the failure mode is not "my number describes a slightly different tree", it is
+"your gate reds on my bug and you spend twenty minutes attributing it". A2 independently reached the
+same conclusion and retracted their earlier framing that the two were the same class.
+
+**The rule that follows is the one that has worked all day: make the window not exist rather than check
+that it is empty.** Write-and-run as one action; if the inline check fails, nothing is written.
+
+Related: V-2087 (text pins are shape assertions), V-2086 (the classified list), V-1576 (the seam).

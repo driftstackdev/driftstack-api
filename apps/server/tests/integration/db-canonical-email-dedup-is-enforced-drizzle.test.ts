@@ -151,4 +151,40 @@ describe('canonical-email dedup is enforced by the database, not just the double
     expect(row?.indexdef, 'the index is no longer UNIQUE').toMatch(/CREATE UNIQUE INDEX/);
     expect(row?.indexdef, 'the index no longer covers canonical_email').toMatch(/canonical_email/);
   });
+
+  it('CRITICAL markEmailVerified is a FIRST-TRANSITION claim and POSTGRES enforces it, not just the source. Four content-parity and cross-source pins already assert the body says and(eq(id), isNull(emailVerifiedAt)) — but a text pin is reading, mechanised: it catches an edit to the source, never the database disagreeing with what the source assumes. The boolean gates the one-time signup-welcome email, so a guard that stopped biting sends one per outstanding verify token. This is the first test to run that SQL at all.', async () => {
+    if (!dbReachable) return;
+    const email = `ds${randomUUID().replace(/-/g, '').slice(0, 16)}@example.com`;
+    seededEmails.push(email);
+    const account = await repo!.createAccount({
+      email,
+      name: null,
+      passwordHash: 'x'.repeat(32),
+      initialTier: 'free',
+    });
+    // Positive control: without it the first assertion could pass on a fixture
+    // that was already verified, proving nothing about the transition.
+    expect(account.emailVerifiedAt, 'a fresh account must start unverified').toBeNull();
+
+    const firstAt = new Date('2026-01-01T00:00:00.000Z');
+    const secondAt = new Date('2026-02-02T00:00:00.000Z');
+    expect(
+      await repo!.markEmailVerified(account.id, firstAt),
+      'the first verification must claim the null -> verified transition',
+    ).toBe(true);
+    expect(
+      await repo!.markEmailVerified(account.id, secondAt),
+      'a second verification must LOSE - otherwise every outstanding token fires a welcome email',
+    ).toBe(false);
+
+    // The booleans alone cannot separate a working isNull guard from a broken
+    // one that returns true twice AND moves the timestamp. Read the row back.
+    const [row] = await sql!<{ email_verified_at: Date }[]>`
+      SELECT email_verified_at FROM accounts WHERE id = ${account.id}`;
+    expect(row?.email_verified_at, 'the account was not verified at all').toBeTruthy();
+    expect(
+      new Date(row!.email_verified_at).toISOString(),
+      'the losing call overwrote the winner timestamp - the isNull guard is not biting',
+    ).toBe(firstAt.toISOString());
+  });
 });
