@@ -72,7 +72,14 @@ beforeAll(async () => {
     return;
   }
   await admin.unsafe(`CREATE SCHEMA "${TEST_SCHEMA}"`);
-  for (const table of ['accounts', 'api_keys', 'sessions', 'session_operations', 'usage_records']) {
+  for (const table of [
+    'accounts',
+    'api_keys',
+    'sessions',
+    'session_operations',
+    'usage_records',
+    'web_sessions',
+  ]) {
     await admin.unsafe(
       `CREATE TABLE "${TEST_SCHEMA}"."${table}" (LIKE public."${table}" INCLUDING ALL)`,
     );
@@ -87,6 +94,9 @@ beforeAll(async () => {
     ALTER TABLE "${TEST_SCHEMA}"."session_operations"
       ADD CONSTRAINT session_operations_session_fk FOREIGN KEY (session_id)
       REFERENCES "${TEST_SCHEMA}"."sessions"(id) ON DELETE CASCADE;
+    ALTER TABLE "${TEST_SCHEMA}"."web_sessions"
+      ADD CONSTRAINT web_sessions_account_fk FOREIGN KEY (account_id)
+      REFERENCES "${TEST_SCHEMA}"."accounts"(id) ON DELETE CASCADE;
   `);
   client = postgres(DB_URL, { max: 1 });
   // Constructing the drizzle wrapper MUTATES this client: drizzle-orm/postgres-js replaces
@@ -337,6 +347,107 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(second.operationsDeleted).toBe(0);
       expect(second.sessionsScrubbed).toBe(0);
       expect(second.apiKeysScrubbed).toBe(0);
+      // Every step, not the three that existed when this arm was written.
+      expect(second.webSessionsScrubbed).toBe(0);
+    });
+
+    // ── web_sessions (§9 session metadata) ───────────────────────────────────────
+    // `issued_from_ip` and `user_agent` are a source IP and a device string recorded per
+    // sign-in. Nothing scrubbed or pruned them: this table appeared ZERO times in the
+    // sweeper, so they survived until the account cascade removed the row.
+    async function seedWebSession(over: {
+      expiresAt: string;
+      revokedAt?: string | null;
+    }): Promise<{ accountId: string; sessionId: string }> {
+      if (!client) throw new Error('no client');
+      const accountId = randomUUID();
+      const sessionId = randomUUID();
+      await client`
+        INSERT INTO accounts (id, email, tier, status)
+        VALUES (${accountId}, ${`ws-${accountId}@retention.test`}, 'solo_manual', 'active')`;
+      // token_hash is UNIQUely indexed, so it must differ per row. last_used_at is
+      // DEFAULT now() NOT NULL in the migration and is deliberately not supplied.
+      await client`
+        INSERT INTO web_sessions (id, account_id, token_hash, expires_at, revoked_at,
+                                  issued_from_ip, user_agent)
+        VALUES (${sessionId}, ${accountId}, ${`hash-${sessionId}`}, ${over.expiresAt},
+                ${over.revokedAt ?? null}, '203.0.113.7', 'Mozilla/5.0 (probe)')`;
+      return { accountId, sessionId };
+    }
+
+    async function identifiersOf(id: string): Promise<{
+      ip: string | null;
+      ua: string | null;
+      account: string | null;
+      expires: Date | null;
+    }> {
+      const [row] = await client!<
+        Array<{
+          issued_from_ip: string | null;
+          user_agent: string | null;
+          account_id: string | null;
+          expires_at: Date | null;
+        }>
+      >`SELECT issued_from_ip, user_agent, account_id, expires_at
+          FROM web_sessions WHERE id = ${id}`;
+      return {
+        ip: row?.issued_from_ip ?? null,
+        ua: row?.user_agent ?? null,
+        account: row?.account_id ?? null,
+        expires: row?.expires_at ?? null,
+      };
+    }
+
+    it('CRITICAL nulls the per-login IP and user-agent once a session is past the window, and leaves a session inside it untouched', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const past = await seedWebSession({ expiresAt: '2026-01-01T00:00:00.000Z' });
+      const recent = await seedWebSession({ expiresAt: '2026-08-10T00:00:00.000Z' });
+
+      const result = await sweeper().tickOnce(NOW);
+      expect(result.webSessionsScrubbed).toBeGreaterThanOrEqual(1);
+
+      const gone = await identifiersOf(past.sessionId);
+      expect(gone.ip).toBeNull();
+      expect(gone.ua).toBeNull();
+      // The ROW survives, and so does everything that is not a personal identifier — the
+      // dashboard session list orders on these and nothing else reads the two scrubbed
+      // columns. Deleting the row instead would change what the customer sees.
+      expect(gone.account).toBe(past.accountId);
+      expect(gone.expires).not.toBeNull();
+
+      const kept = await identifiersOf(recent.sessionId);
+      expect(kept.ip, 'a session two days old is inside the window').toBe('203.0.113.7');
+      expect(kept.ua).toBe('Mozilla/5.0 (probe)');
+    });
+
+    it('CRITICAL the window starts at REVOCATION, not expiry — a session revoked yesterday is not due even though it expired long ago. Keying on expires_at alone would scrub it 89 days early, which is the simplification a future reader is most likely to make.', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      const revokedRecently = await seedWebSession({
+        expiresAt: '2026-01-01T00:00:00.000Z',
+        revokedAt: '2026-08-11T00:00:00.000Z',
+      });
+
+      await sweeper().tickOnce(NOW);
+
+      const row = await identifiersOf(revokedRecently.sessionId);
+      expect(row.ip, 'revoked one day ago — 89 days of the window remain').toBe('203.0.113.7');
+      expect(row.ua).toBe('Mozilla/5.0 (probe)');
+    });
+
+    // ⛔ The file's existing idempotency arm asserts `webSessionsScrubbed === 0` on a repeat
+    // tick, but it runs EARLIER in the file than these arms, so no web_sessions row exists
+    // when it executes — it asserts zero against an empty table. Measured: removing the
+    // already-scrubbed guard from BOTH the CTE and the UPDATE left that arm green. This one
+    // seeds first, so the second tick has something it could wrongly re-scrub.
+    it('CRITICAL a repeat tick re-scrubs NOTHING. Without the already-scrubbed guard the same rows are re-selected every tick, the count inflates forever, and each daily run logs a retention event that did not happen.', async () => {
+      if (!dbReachable || !client) throw new Error('real PostgreSQL setup failed');
+      await seedWebSession({ expiresAt: '2025-12-01T00:00:00.000Z' });
+
+      const first = await sweeper().tickOnce(NOW);
+      expect(first.webSessionsScrubbed, 'the seeded row was due').toBeGreaterThanOrEqual(1);
+
+      const second = await sweeper().tickOnce(NOW);
+      expect(second.webSessionsScrubbed, 'already scrubbed — nothing left to do').toBe(0);
     });
   },
 );

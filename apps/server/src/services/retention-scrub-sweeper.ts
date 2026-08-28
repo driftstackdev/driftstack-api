@@ -44,6 +44,7 @@ export interface RetentionScrubTickResult {
   readonly operationsDeleted: number;
   readonly sessionsScrubbed: number;
   readonly apiKeysScrubbed: number;
+  readonly webSessionsScrubbed: number;
   /** True when ANY step hit its batch limit — more remains for the next tick. */
   readonly capped: boolean;
 }
@@ -68,18 +69,33 @@ export class RetentionScrubSweeperService {
     const keys = await this.step('api_keys', () =>
       this.deps.repo.scrubExpiredRevokedApiKeys({ olderThan, limit }),
     );
+    // Fourth step, order-independent: web sessions share no rows with the three above.
+    // The header's "every statement is idempotent" is a universal that a new member can
+    // silently falsify, so stating how THIS one satisfies it: the already-scrubbed guard
+    // (`issued_from_ip IS NOT NULL OR user_agent IS NOT NULL`) means a retry after a failed
+    // step re-selects only rows still carrying identifiers, and a repeat tick reports 0.
+    const webSessions = await this.step('web_sessions', () =>
+      this.deps.repo.scrubExpiredWebSessionIdentifiers({ olderThan, limit }),
+    );
 
     const result: RetentionScrubTickResult = {
       operationsDeleted: ops.affected,
       sessionsScrubbed: sessions.affected,
       apiKeysScrubbed: keys.affected,
-      capped: ops.capped || sessions.capped || keys.capped,
+      webSessionsScrubbed: webSessions.affected,
+      capped: ops.capped || sessions.capped || keys.capped || webSessions.capped,
     };
 
     // Log only when something happened. A daily no-op tick on a young deployment should not
     // add a line, but a tick that touched personal data is a retention event and should be
     // attributable after the fact.
-    if (result.operationsDeleted + result.sessionsScrubbed + result.apiKeysScrubbed > 0) {
+    if (
+      result.operationsDeleted +
+        result.sessionsScrubbed +
+        result.apiKeysScrubbed +
+        result.webSessionsScrubbed >
+      0
+    ) {
       this.deps.logger?.info?.(
         {
           component: 'retention-scrub-sweeper',

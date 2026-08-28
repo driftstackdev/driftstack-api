@@ -41,6 +41,7 @@ function makeRepo(over: Partial<RetentionScrubRepo> = {}): RetentionScrubRepo {
     deleteExpiredSessionOperations: () => ok(0),
     scrubExpiredSessionMetadata: () => ok(0),
     scrubExpiredRevokedApiKeys: () => ok(0),
+    scrubExpiredWebSessionIdentifiers: () => ok(0),
     ...over,
   };
 }
@@ -74,6 +75,7 @@ describe('retention scrub sweeper (V-759)', () => {
         deleteExpiredSessionOperations: capture,
         scrubExpiredSessionMetadata: capture,
         scrubExpiredRevokedApiKeys: capture,
+        scrubExpiredWebSessionIdentifiers: capture,
       }),
     });
 
@@ -82,7 +84,9 @@ describe('retention scrub sweeper (V-759)', () => {
     // The window is a published number, so it is asserted against the constant rather than
     // a literal — a change to one that does not change the other is the drift that matters.
     const expected = new Date(NOW.getTime() - RETENTION_WINDOW_DAYS * DAY_MS);
-    expect(seen).toHaveLength(3);
+    // Every step, not a hardcoded three: a count that excludes a new member is how a
+    // fourth step inherits the claim without being checked by it.
+    expect(seen).toHaveLength(4);
     expect(seen.every((d) => d.getTime() === expected.getTime())).toBe(true);
   });
 
@@ -199,5 +203,51 @@ describe('retention scrub sweeper (V-759)', () => {
     expect(enqueued[0]?.dedupOnAccountAndType).toBe(true);
     // No currentRunAt on the bootstrap enqueue, so no future-successor anchor.
     expect(enqueued[0]).not.toHaveProperty('dedupAfterRunAt');
+  });
+
+  // ⛔ This arm exists because adding the web-session step passed the whole file WITHOUT
+  // executing it. `makeRepo` takes a Partial and casts to the full interface, so a fake
+  // missing a method type-checks; the sweeper's per-step isolation then catches the
+  // resulting "not a function" and reports 0. A new step can therefore be dead in the unit
+  // suite and green — which is the failure this arm is written against, not the counting.
+  it('CRITICAL the web-session step actually RUNS and its count reaches the result. A step whose fake is missing throws, the per-step isolation swallows it, and the tick still reports success — so counting is the only way to tell a step that ran from one that never existed.', async () => {
+    const seen: Array<{ olderThan: Date; limit: number }> = [];
+    const svc = new RetentionScrubSweeperService({
+      repo: makeRepo({
+        scrubExpiredWebSessionIdentifiers: (args) => {
+          seen.push(args);
+          return ok(7);
+        },
+      }),
+    });
+
+    const result = await svc.tickOnce(NOW);
+
+    expect(seen, 'the web-session scrub was invoked exactly once').toHaveLength(1);
+    expect(result.webSessionsScrubbed, 'its affected count reaches the tick result').toBe(7);
+    // The window is the published constant, asserted the same way the other steps are.
+    expect(seen[0]?.olderThan.getTime()).toBe(NOW.getTime() - RETENTION_WINDOW_DAYS * DAY_MS);
+  });
+
+  it('a capped web-session batch marks the whole tick capped, so the next tick knows to come back', async () => {
+    const svc = new RetentionScrubSweeperService({
+      repo: makeRepo({ scrubExpiredWebSessionIdentifiers: () => ok(500, true) }),
+    });
+    expect((await svc.tickOnce(NOW)).capped).toBe(true);
+  });
+
+  // ⛔⛔ The guard that would have caught the real defect. `makeRepo` takes a Partial and
+  // casts to the full interface, so a fake missing a method type-checks — and the sweeper's
+  // per-step isolation converts the resulting "not a function" into a logged error and a 0.
+  // Every other test in this file therefore runs a sweeper with a silently dead step and
+  // still passes. This arm fails the moment a step exists that the default fake does not
+  // implement, which is the growing-family problem the Partial cast creates.
+  it('CRITICAL a default fake implements EVERY step — a tick over the bare fake logs no errors. Without this, adding a step to the sweeper leaves it dead in this suite and green: the missing method throws, per-step isolation swallows it, and the tick reports success.', async () => {
+    const { logger, errors } = makeLogger();
+    await new RetentionScrubSweeperService({ repo: makeRepo(), logger }).tickOnce(NOW);
+    expect(
+      errors.map((e) => e.step ?? e),
+      'a step threw over the default fake — the fake is missing a method the sweeper calls',
+    ).toEqual([]);
   });
 });

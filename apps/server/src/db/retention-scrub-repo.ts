@@ -84,6 +84,10 @@ export interface RetentionScrubRepo {
     olderThan: Date;
     limit: number;
   }): Promise<RetentionScrubOutcome>;
+  scrubExpiredWebSessionIdentifiers(args: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<RetentionScrubOutcome>;
 }
 
 /** postgres-js returns the RowList directly; pg/neon wrap it as { rows }. */
@@ -207,6 +211,58 @@ export class DrizzleRetentionScrubRepo implements RetentionScrubRepo {
          AND k.revoked_at < ${cutoff}
          AND k.name <> ${RETENTION_SCRUB_SENTINEL}
        RETURNING k.id;
+    `);
+    const affected = rowCount(result);
+    return { affected, capped: affected >= args.limit };
+  }
+  /**
+   * Null the per-login identifiers on web sessions that ended more than the window ago.
+   *
+   * `issued_from_ip` and `user_agent` are a source IP and a device string recorded per
+   * sign-in — personal data by any reading, and until now retained for the life of the
+   * account. Nothing pruned or scrubbed this table: `web_sessions` appeared ZERO times in
+   * this file, and its rows survive only until the account cascade removes them.
+   *
+   * Both columns are nullable, so this is the `sessions.label`/`metadata` shape and needs no
+   * sentinel — constraint #3 in the header applies unchanged. `account_id`, `expires_at` and
+   * `revoked_at` are deliberately untouched: the row must survive so the dashboard's session
+   * list keeps its ordering anchor, and none of the three identifies a person on its own.
+   *
+   * Cutoff is `COALESCE(revoked_at, expires_at)`, which is the judgement call here. A web
+   * session ends either by explicit revocation or by simply expiring; `expires_at` is notNull
+   * and `revoked_at` is nullable, so the coalesce covers both and starts the window at
+   * whichever actually happened. A session revoked yesterday is NOT due even if it expired
+   * long ago, which is what §9's "90 days after revocation" describes. A live session — not
+   * revoked, not yet expired — can never satisfy the predicate.
+   *
+   * `(issued_from_ip IS NOT NULL OR user_agent IS NOT NULL)` is the already-scrubbed guard,
+   * so a repeat tick reports 0 rather than inflating the count forever, and it is repeated in
+   * the UPDATE's WHERE for the reason the header records: the CTE is a snapshot, and
+   * re-checking under the row lock is what stops a concurrently-resurrected row being
+   * scrubbed (#79).
+   */
+  async scrubExpiredWebSessionIdentifiers(args: {
+    olderThan: Date;
+    limit: number;
+  }): Promise<RetentionScrubOutcome> {
+    const cutoff = args.olderThan.toISOString();
+    const result = await this.database.db.execute<{ id: string }>(sql`
+      WITH due AS (
+        SELECT id FROM web_sessions
+         WHERE COALESCE(revoked_at, expires_at) < ${cutoff}
+           AND (issued_from_ip IS NOT NULL OR user_agent IS NOT NULL)
+         ORDER BY COALESCE(revoked_at, expires_at) ASC
+         LIMIT ${args.limit}
+         FOR UPDATE SKIP LOCKED
+      )
+      UPDATE web_sessions w
+         SET issued_from_ip = NULL,
+             user_agent = NULL
+        FROM due
+       WHERE w.id = due.id
+         AND COALESCE(w.revoked_at, w.expires_at) < ${cutoff}
+         AND (w.issued_from_ip IS NOT NULL OR w.user_agent IS NOT NULL)
+       RETURNING w.id;
     `);
     const affected = rowCount(result);
     return { affected, capped: affected >= args.limit };

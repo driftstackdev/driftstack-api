@@ -31,7 +31,7 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
    wave (a prune query + a periodic tick). (The W416 partial index keeps the
    \_claim* O(due-unfinished) regardless.)
 
-3. **`web_sessions`** — **OPEN, found 2026-08-27 (V-2059).** Was listed in the
+3. **`web_sessions`** — **RESOLVED 2026-08-28. Found OPEN 2026-08-27 (V-2059).** Was listed in the
    Covered table above as "`expires_at` + sweeper"; the row has been removed because
    neither half held as a unique claim: the auth-token half duplicates the
    auth-flows-sweeper row, and **no code path deletes a `web_sessions` row.** Measured
@@ -63,6 +63,34 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
    implementation's three-table list does not. So the decision is narrower than
    "pick a period": whether these columns join the existing scrub, whose mechanism,
    sentinel convention and ordering are already designed and deployed.
+
+   **RESOLUTION 2026-08-28.** Implemented as a fourth step on the existing sweeper:
+   `DrizzleRetentionScrubRepo.scrubExpiredWebSessionIdentifiers` nulls `issued_from_ip`
+   and `user_agent` once a session is 90 days terminal, wired into
+   `RetentionScrubSweeperService.tickOnce` as the `web_sessions` step and reported as
+   `webSessionsScrubbed`. Both columns are nullable, so this is the
+   `sessions.label`/`metadata` shape and needs no sentinel; the row SURVIVES, keeping
+   `account_id`/`expires_at`/`revoked_at`, because the dashboard session list orders on
+   them and none identifies a person alone.
+
+   The cutoff is `COALESCE(revoked_at, expires_at)` — the one judgement call. A session
+   ends by revocation or by expiry; `expires_at` is notNull and `revoked_at` nullable, so
+   the coalesce covers both and starts the window at whichever happened. A session revoked
+   yesterday is NOT due even if it expired long ago, which is what §9's "90 days after
+   revocation" says. Keying on `expires_at` alone would scrub it 89 days early — the
+   likeliest future simplification, and the arm that catches it is named for that.
+
+   ⚠️ Which §9 row governs remains an owner's call: **Account data** (duration + 7 years),
+   **Authentication data** (anonymised 90 days after revocation) and **Session metadata**
+   (90 days operational) are all candidates. This implements the shortest defensible
+   window, which is safe under all three. The classification is not settled by shipping it.
+
+   Verified by execution, not text: three arms in `db-retention-scrub-drizzle.test.ts`
+   against real Postgres, mutation-proved — keying the window on `expires_at` reds the
+   revocation arm, dropping the already-scrubbed guard reds the idempotency arm, and
+   removing the cutoff reds two. ⛔ Each mutation had to be applied at BOTH the CTE and the
+   UPDATE's re-check: changing one site alone left every arm green, because the re-check
+   under the row lock (#79) independently enforces the same predicate.
 
    ⚠️ Which disclosed row governs is a LEGAL classification and is deliberately not
    answered here. The published Retention table offers two candidates — "Account data
