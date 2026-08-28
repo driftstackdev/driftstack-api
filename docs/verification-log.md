@@ -14536,3 +14536,69 @@ record, for any account".
 
 ⚠️ Nine suspected gaps refuted this session against six findings — and every finding was a guard
 whose key was coarser than its property, never a missing guard.
+
+## V-2035 — the account-deletion purge path, audited end to end (2026-08-27)
+
+Switched from sweeps to an end-to-end audit of the GDPR Art. 17 erasure path — the destructive one,
+where a wrong predicate deletes live customer data and a missing arm retains it past the promise.
+
+**Six erasure arms, all wired.** `AccountDeletionPurgeSweeperService` takes one required repo (BYOK
+key) and five optional ones (proxy secrets, profiles+snapshots, turn receipts, agent sessions,
+recipes). Bootstrap passes all six. Three are deliberately KEY-FREE, with the reason written at the
+wiring site: binding an arm to `MFA_ENCRYPTION_KEY` "would make an unrelated flag switch off a fourth
+retention promise — the exact defect 2eeddefa7 fixed for the other three".
+
+**Every erasure query scopes to a terminated account.** Boundary: the 7 purge/candidate functions
+under `apps/server/src/db`, bodies sliced from declaration to next top-level member — all 7 carry
+`status = 'deleted'` AND `deleted_at IS NOT NULL` AND `deleted_at < cutoff`. Notable for any future
+guard over this family: **six express it in Drizzle (`eq(accounts.status, 'deleted')`) and
+`purgeRecipesForTerminatedAccountsBefore` expresses it in RAW SQL** (`WHERE a.status = 'deleted'`), so
+a detector shaped for one mechanism is blind to the other.
+
+⛔ **Two instrument faults inside that measurement, both caught by reading.** My function list was
+HAND-WRITTEN, so it missed `purgeRecipesForTerminatedAccountsBefore` entirely — the name did not
+match any I had guessed. And it flagged `agent-turn-receipts-repo.ts:177` as missing the filter; that
+is a 3-line wrapper delegating to the filtered free function 16 lines below it. Derive the set, never
+list it, and read every accusation.
+
+### The hypothesis I nearly shipped, and what refuted it
+
+The BYOK arm is wired `...(byokAnthropicService ? { byok: … } : {})`, i.e. gated on
+`MFA_ENCRYPTION_KEY`. I verified `clearKey()` decrypts nothing — it is `repo.clear({accountId, now})`,
+a NULL write — and concluded the FIRST arm still carried the coupling its three siblings had been
+freed from, by the very commit their comments cite. I was drafting the rewiring.
+
+⭐ **`git show 2eeddefa7` settled it against me.** Its message addresses this arm by name: "That was
+correct when the BYOK Anthropic key was the only thing it purged: **no key storage configured meant
+nothing to do.** … The BYOK dependency is now optional and **its arm no-ops when unwired** … An
+unwired BYOK arm does not even run its candidate query." The case was considered and decided.
+
+**The lesson is new and general: when a comment cites a sha, read that commit's MESSAGE before
+forming the hypothesis.** The sibling comments were accurate about themselves and silent about the
+arm I was looking at — a comment explains its own line, only the commit explains the set. A decision
+to EXCLUDE something is stated in prose and appears nowhere in the diff.
+
+Also already guarded: `account-deletion-purge-arm-independence.test.ts` pins independence in every
+direction, including "with the BYOK service UNWIRED, the proxy and profile arms still run" and "an
+unwired BYOK service does not even QUERY for candidates" — plus per-arm failure isolation and a
+retention-window sanity arm. **Twelfth suspected gap refuted this session.**
+
+⚠️ Residual worth stating rather than dropping: a deployment that once had `MFA_ENCRYPTION_KEY` and
+later unset it retains unreadable BYOK ciphertext, since the arm no-ops. Narrow, and the sweeper
+emits `count('byok', 'skipped')` once per tick precisely so an unwired arm is visible rather than
+indistinguishable from an empty one — good design, though a counter is only a control if someone
+reads it.
+
+### Gate-32 red — attributed, not mine
+
+`verify-suite: NOT TRUSTWORTHY`, GATE EXIT 1, while **all 3244 files and 32246 tests passed**. The
+sole cause: `EnvironmentTeardownError: [vitest-worker]: Closing rpc while "onUserConsoleLog" was
+pending`, originating in `apps/gui-client/tests/unit/simulator-window-control-actions.test.tsx` —
+A2's territory, so flagged to them and not investigated here. Gate-31 at the same HEAD minus my two
+commits had ZERO occurrences; gate-32 ran 497s against gate-31's ~250s because our suites overlapped
+at load 40+. Load-sensitive teardown race, consistent with the known gui jsdom flake.
+
+⭐ Worth recording about the harness rather than the flake: **vitest exits 0 on an unhandled
+rejection** and warns it "might cause false positive tests". A plain `vitest run` reads green here.
+Only verify-suite's own verdict line caught it — which is exactly why the gate echoes that verdict
+instead of trusting an exit code.
