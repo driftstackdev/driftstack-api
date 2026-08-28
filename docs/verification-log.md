@@ -18977,3 +18977,64 @@ reasons: a length check first (`timingSafeEqual` throws on unequal buffers) and 
 (`Buffer.from(x,'hex')` silently truncates on bad characters).
 
 Related: V-2104 (report suppression), V-2105 (cold-with-a-caller), V-2109 (the population named).
+
+---
+
+## V-2111 — the 215 cold functions outside the db layer, measured and triaged: no defect (2026-08-28)
+
+The measurement V-2109 named, taken on a fully green tree after the peer landed `e47fe3266`:
+**3251/3251 files, 32321 tests passing**, and for `apps/server/src` EXCLUDING `db/` —
+**functions 2476/2691 (92.01%), statements 16444/17754 (92.62%)**. That leaves **215 cold functions
+across 62 files**, and the first useful split is that **160 are anonymous** (arrow callbacks, error
+handlers, `map` bodies) and **55 are named**, in 29 files.
+
+### The 55 named, and why each class is cold
+
+| class                       | count | why                                                                                                                                                                                      |
+| --------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| external I/O clients        | ~20   | `drivers/playwright.ts` (all 15 methods), `lib/r2.ts` (2), `lib/stripe-api.ts`, `lib/ssrf-guarded-fetch.ts`, sentry, logger — executing them needs a live browser, S3, Stripe or network |
+| entrypoints and CLIs        | 4     | `index.ts`, `lib/dump-openapi.ts`, `scripts/seed-local-fleet-node.ts` (2)                                                                                                                |
+| a stub that throws          | 3     | `drivers/webkit.ts` — every method throws `DriverNotIntegratedError` by design                                                                                                           |
+| documented known exclusions | 3     | the atlas-priority admin mirror, below                                                                                                                                                   |
+| in-process residue          | ~25   | webhook delivery (6), team helpers (2), billing pause/resume (2), agent-runtime, error constructors, session-event metadata                                                              |
+
+Two checked to the bottom, because inventory is not a reading.
+
+**`lib/r2.ts` `deleteObject` — cold by construction, not a gap.** It has FOUR production callers, all of
+them erasure paths: profile delete, the orphan-blob reaper, the account-deletion purge and the trash
+purge. Every test supplies a fake r2 client, so the real `s3.send(new DeleteObjectCommand(...))` never
+runs — but it cannot, without a live bucket. Same category as `migrate.ts` in the db triage (V-2104),
+and the method is a thin wrapper whose one subtlety (S3 DELETE is idempotent, so a never-saved blob is
+safe to delete) is documented where it is relied on.
+
+**`registerAdminAtlasPriorityRoutes` — a whole admin surface never registered in any test, and already
+recorded.** Its gate is `if (deps.atlasPriorityEventsRepo !== undefined)`, deliberately independent of
+the internal-fleet token gate, and bootstrap wires that repo unconditionally — so the two routes
+(`/v1/admin/atlas-priority/queue` and `/event/:id`, both behind
+`requireScope('driftstack_internal_admin')`) are live in production and registered in no test app.
+
+⛔ **I expected to find that the refusal guards passed on a 404 and was wrong — they were already ahead
+of it.** `templated-routes-refuse-anonymous-callers` derives its population from the LIVE route table
+via `app.hasRoute()` rather than a hand list, names these two operations as conditionally registered,
+and asserts an ALLOWLIST of exactly 401/403 precisely because "404 means the handler reached the
+lookup… all four are the same defect". `admin-scope-refusal-coverage` carries them in an explicit
+exclusion map — _"atlas-priority surface is registered only when enabled"_ — and states that a 404 would
+mean the route is not registered, which makes the assertion meaningless. **Both refuse the reading I was
+about to make.** Resolved by reading, not by preferring my own inference against their evidence.
+
+⚠️ One prose nuance, recorded rather than changed: that exclusion reason reads as though the surface is
+conditionally enabled in general, while in production the repo is wired unconditionally and the routes
+are always on. Accurate about the test app, loose about production.
+
+### Outcome
+
+**No defect.** Every named cold function outside the db layer is explained by its class, and the two
+deepest reads confirmed the explanation rather than assuming it. Combined with V-2110 — dead code
+bounded at 3 of 1736 declarations — the non-db server source is now measured on both axes: almost
+nothing is unreachable, and what is unexecuted is unexecuted for a stated reason.
+
+That closes the target V-2109 named. ⭐ Eighth consecutive thread this session ending clean or
+pre-empted by existing prior art, which is now the strongest available evidence that static measurement
+of this repo is genuinely exhausted rather than merely unlucky.
+
+Related: V-2109 (named this target), V-2110 (the dead-code bound), V-2104 (the method).
