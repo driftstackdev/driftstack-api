@@ -10946,3 +10946,44 @@ logger, { agentSessions, profiles })`), six refusal arms in `profile-store.test.
 **Boundary:** every claim above is a grep or a read of the current tree at `6258e4487`, plus the landing commit
 found by `git log -S`; no suite run and no behavioural re-derivation of the fixes. Memory: three notes marked
 CLOSED with the landing SHA, two refreshed. The tally is seven stale notes across the seven re-runs that YIELDED this week — but two of today's re-runs found the note accurate and the defect still open, so the method's lesson is "the record is the likelier stale half", not "the record is always wrong". Either way the record needs its post-condition re-run on a cadence.
+
+## V-2130 — the route↔OpenAPI spot-check becomes a guard: 254 registered (method, path) pairs against 234 spec entries, 16 undocumented, every one now exempt for a stated reason (2026-08-28)
+
+Post-condition re-run of `project_openapi_route_coverage_spotcheck` (2026-06-03), which found no undocumented
+customer route and recorded "NO automated route↔openapi COVERAGE guard" as the open half. `lib/openapi.ts` is
+hand-maintained — one `registerRoute` per method + path — and nothing tied it to what `routes/*.ts` register.
+
+**Measured instead of spot-checked.** A static census over `routes/*.ts` + `lib/app.ts`: **311 `app.<verb>`
+sites, 254 distinct (method, path) pairs**, against **234 `registerRoute` entries** in the spec. Three
+instrument corrections on the way, each caught by a control rather than by luck: (1) `:id` vs `{id}` made 40
+routes read as undocumented — normalize both sides; (2) the first matcher missed the generic form
+`app.delete<{ Params… }>('/v1/…')`, so **87 documented routes read as "registered nowhere"** — an absurd
+result that was the instrument, not 87 phantoms; (3) one site registers a TEMPLATE path in a loop
+(`/v1/auth/oauth/${provider}/callback`, google + github), which no literal matcher can see. The guard carries a
+completeness arm — every `app.<verb>` occurrence must parse as literal, template, or listed non-/v1 — so a
+fourth shape cannot hide the way the second did.
+
+**Result:** 0 spec entries without a route (the spec is honest), and **16 registered-but-undocumented
+routes**, every one a deliberate class that nothing pinned: internal fleet control plane (7:
+`/v1/internal/atlas-priority/*`, `/v1/mac-nodes*`), inbound provider receivers (2: Stripe, NOWPayments), browser
+legs of interactive flows (3, incl. the per-provider template), GUI-client-only (3: `gui-input`,
+`gui-control-key`, `transport-report`), the public SSE stream, and **`GET /v1/whoami`** — customer-authenticated,
+mentioned in `docs/reference/scopes.md`, absent from the spec. Adding it changes the published contract (W-10
+class), so it is recorded as an exemption with that reason, not decided here.
+
+**The guard** (`every-registered-route-is-in-the-spec-or-exempt-for-a-stated-reason.test.ts`, 6 arms):
+census completeness + floors (311/254/234 measured; floors 280/230/210) and `path:` entries === paired entries;
+every /v1 registration documented or exempt; every exemption still registered AND still undocumented (a stale
+exemption is deleted, not kept); no spec phantom; the non-/v1 set is exactly the six infrastructure endpoints;
+matcher controls for the generic, nested-generic, template and prose shapes.
+
+**Mutation proofs — 4 of 4 killed, snapshot-restored, byte-identical after:** a planted
+`app.post<{ Params… }>('/v1/profiles/:id/archive')` under an ordinary name → offenders arm names it; a spec
+entry re-pointed at `/v1/sessionz` → phantom arm AND the offender arm (the real route lost its entry); an
+exemption key for a retired route → stale arm; `/v1/whoami` added to the spec → "drop the exemption" arm.
+
+**Boundary:** static text, not a booted app — a route registered through a helper that does not spell
+`app.<verb>(` would need to appear in the completeness arm's `unparsed` list to be seen, and today that list is
+empty by assertion, not by construction. Paths only; request/response shapes are the existing content-parity
+pins' job. One new test file: ratchets 3077 → 3078 and 3254 → 3255. Suite at `25ec86b14` was green with the
+full file count before this landed; the executed count for the combined HEAD is A2's full-capture run.
