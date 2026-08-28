@@ -15940,3 +15940,111 @@ test THAT — by mutation — rather than the mechanism the prose happens to nam
 unmeasured, and the population is now enumerated for whoever takes it next.
 
 Related: V-2059, V-2060 (the register class), V-2039 (the agent-intent channel this doc never listed).
+
+---
+
+## V-2062 — sharpening V-2059: those rows carry a per-login IP and user-agent, and the repo's own scrub principle reaches them (2026-08-27)
+
+A2 verified V-2059 independently by a schema-level path rather than my `.delete(` census — a
+different mechanism, so a shared blind spot could not carry both — and confirmed every element:
+`webSessions` cascades only from `accounts`, no migration deletes it, no sweeper names it, with a
+control proving their greps DO find deletions in `agent-session-orphan-sweeper`.
+
+They also offered a severity bound: the published Retention table lists **"Account data — Duration of
+Subscription + 7 years post-termination"** (Article 52 _Algemene wet inzake rijksbelastingen_), so
+indefinite retention would be consistent with what is published, making this unbounded growth rather
+than a compliance exposure. **Verified the row exists and says that, at
+`apps/marketing-site/src/pages/legal/privacy.md:468`.** Also verified my V-2059 entry made no
+compliance claim in the first place — it argued unbounded growth and a false register — so nothing
+needed retracting.
+
+⛔ **But the bound does not hold as stated, for two reasons I found by checking it rather than
+adopting it.**
+
+**1. The same table has a second candidate row.** Two lines below Account data:
+**"Session metadata — 90 days operational; aggregated counters (no PII) retained indefinitely"**. The
+2026-08-07 re-audit's finding 2 was _"Session metadata is never deleted (disclosed: 90 days
+operational)"_, resolved by the retention-scrub covering the proxy `sessions` table — so the
+established internal reading of that row is `sessions`. Whether a dashboard login session falls under
+it or under Account data is a **legal classification, not an engineering call**, and I am not making
+it. What matters is that two rows are candidates and the severity differs by a factor of ~28 between
+them.
+
+**2. The rows are not bookkeeping.** `web_sessions` carries **`issued_from_ip`** and
+**`user_agent`** — a source IP and a device string per login, kept forever. That is the fact the
+"account data, therefore fine" reading has to survive, and it is not what "internal job bookkeeping"
+looked like for `scheduled_jobs` (W441), where PRUNE was chosen precisely because the rows had no
+customer content.
+
+⭐⭐ **The decisive evidence is the repo's own principle, not my reading of the policy.**
+`db/retention-scrub-repo.ts` states it in its header: _"Keeping the row while scrubbing what
+identifies it is therefore the disclosed behaviour, not a workaround."_ It then enumerates personal
+data **per column** with the reasoning written out — `sessions.label` and `sessions.metadata` scrubbed
+to NULL; `api_keys.name` and `key_hash` to a sentinel; `sessions.purpose` deliberately NOT scrubbed
+because an enum of internal vocabulary is not personal data; `api_keys.key_prefix` left intact as a
+non-secret lookup fragment under a unique index.
+
+**That principle covers `issued_from_ip` and `user_agent` exactly. The implementation's table list
+does not reach them.** The remedy already exists, is designed, is deployed, and has a sentinel
+convention and a documented ordering — it simply enumerates three tables, and a fourth carrying the
+same class of column was never added.
+
+So the owner's-call item is sharper than "pick a retention period": the question is whether these two
+columns join the existing scrub, and that is a smaller decision than the one V-2059 recorded, because
+the mechanism needs no design. Updated GAPS item 3 accordingly.
+
+⭐ **Method note, since this is the second time it has mattered.** I have recorded before that I
+verified a peer claim which contradicted me and adopted one that agreed — the asymmetry, not the
+verification, was the defect. This time the agreeing claim was checked at source, and checking it is
+what surfaced the second policy row and the two columns. **A claim that lowers the severity of your
+own finding deserves the same scrutiny as one that raises it**, and it is easier to skip precisely
+because accepting it costs nothing in the moment.
+
+---
+
+## V-2063 — VERIFIED CLEAN holds: the MFA register's three claims, and an operator asymmetry that will read as an off-by-one to the next sweep (2026-08-27)
+
+Sampling the 28 "do NOT re-audit" markers enumerated in V-2061, per A2's suggestion to sample rather
+than sweep. Picked `2026-05-31-mfa-challenge-not-attempt-bounded.md` on churn: it cites only two
+source files, so it can be verified in full, **both changed since it was written**, one of them today
+— and its subject is brute-force bounding on a second factor.
+
+**All three "What's solid (do NOT re-audit)" claims verify against current code:**
+
+- **TOTP** — `TOTP_PERIOD_SECONDS = 30`, `TOTP_DIGITS = 6`, `TOTP_DRIFT_WINDOWS = 1`, constant-time
+  per-window compare with no early break. Holds, and is now **stronger** than the claim: V-353b added
+  `last_used_totp_counter`, making each 30s window single-use.
+- **Challenge token** — `randomBytes(32).toString('base64url')`, `TTL_SECONDS = 5 * 60`, atomic
+  `GETDEL` with an explicit "there is NO fallback here" note, bound to `account_id` / `email` /
+  `source_ip`. Holds.
+- **Recovery codes** — scrypt-verify against stored rows, `markRecoveryCodeUsed` on match,
+  `regenerateRecoveryCodes` present. Holds.
+
+`MAX_MFA_CHALLENGE_ATTEMPTS = 5` survives, pinned by four test files.
+
+### ⭐⭐ The part worth recording: one constant, two comparisons, both correct
+
+    auth-flows.ts:1007   if (attempts >= MAX_MFA_CHALLENGE_ATTEMPTS)   // login MFA
+    auth-flows.ts:1354   if (attempts >  MAX_MFA_CHALLENGE_ATTEMPTS)   // step-up reauth
+
+Same constant, same file, opposite boundaries — the exact shape a sweep reports as an off-by-one.
+**It is not one, and the asymmetry is load-bearing.** The login path increments _only on a failed
+verification_, so `attempts` counts failures including the current one and `>=5` kills the token on
+the fifth. The step-up path **reserves a slot before verification for every proof** — "each in-flight
+proof reserves a slot … invalid proofs retain it, while valid proofs and verifier errors release only
+their own" — so `attempts` includes the in-flight call and `>5` refuses the sixth. Both permit
+exactly five failures. **Changing either operator to match the other would silently move a
+brute-force bound**, in opposite directions.
+
+The step-up counter keys on `accountId`, which makes it a per-account lockout — the thing the register
+recorded as SURFACED policy rather than implemented. Its safety rests on the caller already holding a
+session, and that assumption is enforced rather than assumed: the route registers with
+`preHandler: [app.requireAuth, loginGate]` and takes `accountId: ctx.account.id` from the
+authenticated context, never from the body. So an attacker cannot lock out an arbitrary account
+without already holding that account's session. Checked because a counter keyed on caller-supplied
+identity would be a remote lockout vector.
+
+**No finding. One of 28 markers sampled and sound** — which is evidence about that marker, not about
+the other 27.
+
+Related: V-2061 (the enumerated population), V-2059/V-2060.

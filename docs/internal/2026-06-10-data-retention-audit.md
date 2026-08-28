@@ -52,6 +52,25 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
    customers; ~70K rows at 10K". Retention period and delete-vs-anonymise are an
    owner's call per the heading below; the measurement is not.
 
+   **V-2062 update — the rows are not bookkeeping, and the remedy already exists.**
+   `web_sessions` carries **`issued_from_ip`** and **`user_agent`**: a source IP and a
+   device string per login, kept forever. `db/retention-scrub-repo.ts` states the
+   principle in its header — "Keeping the row while scrubbing what identifies it is
+   therefore the disclosed behaviour, not a workaround" — and enumerates personal data
+   per COLUMN with the reasoning written out (`sessions.label`/`metadata` to NULL,
+   `api_keys.name`/`key_hash` to a sentinel, `sessions.purpose` deliberately not
+   scrubbed as internal vocabulary). That principle reaches these two columns; the
+   implementation's three-table list does not. So the decision is narrower than
+   "pick a period": whether these columns join the existing scrub, whose mechanism,
+   sentinel convention and ordering are already designed and deployed.
+
+   ⚠️ Which disclosed row governs is a LEGAL classification and is deliberately not
+   answered here. The published Retention table offers two candidates — "Account data
+   — Duration of Subscription + 7 years" and "Session metadata — 90 days operational"
+   — and the established internal reading of the latter is the proxy `sessions` table
+   (the 2026-08-07 finding 2, closed by the scrub). Severity differs by roughly 28x
+   between them.
+
 ## Recommended fix (founder/A-team decision: period + delete-vs-archive)
 
 Two established patterns already in the codebase — pick per table:
