@@ -17895,3 +17895,63 @@ file added here.
 
 Related: V-2093 (the refusal observation this generalises), V-2086 (where I excluded `removeMember` for
 lack of a repo-receiver call — correctly, and it turned out to be superseded), V-2065 (`consumeAuthToken`).
+
+---
+
+## V-2095 — the superseded-method pattern swept systematically: two more confirmed, four left as candidates (2026-08-28)
+
+V-2094 found `removeMember` by accident, as the one unexecuted fence in a census. Three instances of
+one pattern is enough to sweep for it deliberately.
+
+**Candidate generator, stated as a heuristic rather than a finding:** methods declared in the same
+file where one name PREFIXES another (`removeMember` / `removeMemberWithInvites`). **127 such pairs in
+`apps/server/src`; 23 where the short name has zero dot-invocations anywhere in src.** Deduplicated
+across the repo file and its service-interface twin, that is 10 distinct pairs.
+
+⛔ **Prefix is not supersession, and most of the 23 are not.** `countActive` / `countActiveForProfile`
+are different queries. `introspect` / `introspectForClient` are different OAuth surfaces. `findApiKey`
+/ `findApiKeyUnscoped` is the pattern REVERSED — there the longer name is the weaker one, and it is
+already guarded. The heuristic generated candidates; reading decided them.
+
+### Two confirmed, by the replacement's own comment
+
+    sessions-repo   insertSession   -> insertSessionIfUnderLimit
+    webhooks-repo   insertEndpoint  -> insertEndpointIfUnderLimit
+
+Both replacements name the superseded method themselves: _"closes the count-then-insert TOCTOU … a
+bare countActiveSessions + **insertSession** lets N concurrent creates all pass a stale count and
+exceed the tier cap"_, and the same for endpoints. The bare inserts do no counting and take no lock,
+so a production caller reaching for the shorter name reopens a race that **two browser tabs are enough
+to hit**. Roster extended 2 → 4.
+
+⭐ **Complementary to `every-tier-cap-has-an-atomic-backstop`, not a duplicate.** That guard asserts
+the SAFE method is reached by every file consulting a tier limit; this one asserts the WEAK method is
+not called at all. A file can satisfy the first — it calls the conditional insert somewhere — while
+also calling the bare insert elsewhere, and nothing there would notice. Verified it never names
+`insertSession` or `insertEndpoint`.
+
+### Four left OUT, with the reason
+
+`appendTranscript`, `setGuiControlKey`, `setMode`, `setAccountTier` are all callerless in src and all
+prefix-paired with a conditional variant — but **no comment states a supersession**, so adding them
+would be my inference dressed as the repo's. Recorded as candidates. (`setGuiControlKey` also appeared
+in V-2086's "no dot-invocation in src" group, so two independent measurements agree it is callerless.)
+
+⚠️ **A discriminator I expected to work and does not:** test-call counts. `insertSession` has 21 test
+calls and `removeMember` 4, but both have zero src calls — tests use the bare insert to SEED fixtures,
+which is legitimate. The scope split is what resolves it, and the guard already had it: it scans
+`apps/server/src` only, because a test may call the weaker method to prove it still behaves and
+production may not.
+
+**Proof.** Switching `services/sessions.ts` from `insertSessionIfUnderLimit` to `insertSession` — the
+exact TOCTOU regression — reds the zero-callers arm AND the non-vacuity control (the replacement loses
+its only caller, which is that control working). Service restored byte-identical.
+
+⭐ **One flaw the extension introduced, and it is the shape I have spent the session finding.** Arm 2's
+title enumerated what the original two pairs cost — "the invite cancellation and key revocation on
+removal, or the sibling-token claim on consume" — so growing the roster to four made the title describe
+half of it. Rewritten to defer to the header and the failure message, which names the offending pair,
+so it cannot go stale as the roster grows. **A guard's prose is subject to exactly the rot the guard
+exists to prevent.**
+
+Related: V-2094 (the pattern and the guard), V-2086 (the callerless group this corroborates).

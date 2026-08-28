@@ -19,6 +19,20 @@
 //     account, so an older or re-sent link cannot later mint a session. The single
 //     variant claims one row.
 //
+//   sessions-repo       insertSession       -> insertSessionIfUnderLimit
+//   webhooks-repo       insertEndpoint      -> insertEndpointIfUnderLimit
+//     Both replacements say so themselves: the atomic variant "closes the
+//     count-then-insert TOCTOU ... a bare countActiveSessions + insertSession lets
+//     N concurrent creates all pass a stale count and exceed the tier cap". The
+//     bare inserts do no counting and take no lock, so a production caller reaching
+//     for the shorter name reopens the race two browser tabs are enough to hit.
+//
+// COMPLEMENTARY to every-tier-cap-has-an-atomic-backstop, not a duplicate of it.
+// That guard asserts the SAFE method is reached by every file consulting a tier
+// limit; this one asserts the WEAK method is not called at all. A file can satisfy
+// the first — it calls the conditional insert somewhere — while also calling the
+// bare insert elsewhere, and nothing there would notice.
+//
 // Neither replacement renamed the original, so nothing signals which one is
 // correct at a call site. Both weaker methods currently have zero production
 // callers, and this pins that: a new invocation of either is a deliberate act that
@@ -50,6 +64,8 @@ interface Superseded {
 const SUPERSEDED: readonly Superseded[] = [
   { weak: 'removeMember', strong: 'removeMemberWithInvites', file: 'db/team-members-repo.ts' },
   { weak: 'consumeAuthToken', strong: 'consumeAuthTokenFamily', file: 'db/auth-flows-repo.ts' },
+  { weak: 'insertSession', strong: 'insertSessionIfUnderLimit', file: 'db/sessions-repo.ts' },
+  { weak: 'insertEndpoint', strong: 'insertEndpointIfUnderLimit', file: 'db/webhooks-repo.ts' },
 ];
 
 function listTs(dir: string, out: string[] = []): string[] {
@@ -122,7 +138,7 @@ describe('a superseded repo method keeps zero callers', () => {
     }
   });
 
-  it('CRITICAL no production code calls a superseded method. Reaching for the shorter name is the natural mistake, and it silently drops what the replacement added -- the invite cancellation and key revocation on removal, or the sibling-token claim on consume. Both weaker methods do a correct, owner-scoped write, so nothing about the call site looks wrong.', () => {
+  it('CRITICAL no production code calls a superseded method. Reaching for the shorter name is the natural mistake, and it silently drops whatever the replacement added -- see the header for what each pair costs. Every weak method here does a real, correctly-scoped write, so nothing at the call site looks wrong; it simply does less than the method that replaced it. The failure message names the pair, so this title does not enumerate them and cannot go stale as the roster grows.', () => {
     const offenders: string[] = [];
     for (const { weak, strong } of SUPERSEDED) {
       for (const f of callers(weak)) offenders.push(`${f} calls ${weak} (use ${strong})`);
