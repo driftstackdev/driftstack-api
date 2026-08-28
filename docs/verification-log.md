@@ -14880,3 +14880,60 @@ that personal-name leaks were "confirmed with `git grep -E \"…\"`" — the sam
 privacy audit. Re-ran that pattern over the four files with a NUL-safe reader: **0 matches in all
 four.** The blind spot hid nothing and the audit's conclusion stands — but it was luck, not method,
 and it is now checked rather than assumed.
+
+## V-2042 — a new outbound caller could read an unbounded body and nothing would notice (2026-08-27)
+
+Started from `lib/nowpayments-api.ts` (9.3 KB, largest never-audited lib file). **It audits clean**:
+bounded body via the shared reader, a 10s AbortController, a response validator that rejects a
+missing or empty `payment_id`/`pay_address` (its comment explains that without it
+`String(res.payment_id)` persists the literal `"undefined"` as an order's payment id), and every
+error message carries only method, path, status and the limit constant — the header's claim that
+"upstream response text is never copied into the Error" holds across all five throw sites.
+
+`lib/bounded-response-body.ts` audits clean too, and the interesting part is the ORDER: it checks
+`content-length` and cancels, then enforces the cap DURING streaming on `value.byteLength`, throwing
+before appending. A lying `content-length` cannot evade it, and the limit is wire bytes rather than
+UTF-16 length, exactly as its docstring claims.
+
+### The measurement, and two false positives inside it
+
+Boundary: 342 tracked `.ts` under `apps/server/src`, comment lines dropped — **9 files issue an
+outbound request**. My first sweep flagged two as unbounded. Both were wrong, and both for the same
+reason: **I keyed on the shared helper's NAME rather than on the property.**
+
+- `services/webhook-worker.ts` has its own `readExcerpt` — 64 KiB streaming cap, reader cancelled in
+  `finally`, and `slice` rather than `subarray` with a comment explaining that a view retains the
+  entire backing buffer when a decompressed chunk exceeds the cap. It cites the undici decompression
+  advisory. It is _stronger_ than the shared helper, and my detector called it unbounded.
+- `services/agent-decomposer-claude.ts` likewise caps at `MAX_ANTHROPIC_RESPONSE_BYTES` 64 KiB.
+
+⭐ Reading also found a NINTH caller my first sweep missed entirely (`durable-webhook-delivery.ts`),
+and that `lib/oauth-client-exchange.ts` defines its **own local copy** of `readBoundedResponseBody`
+rather than importing the shared one. Diffed the two: structurally identical — same content-length
+precheck, same streaming byte counter, same throw-before-append — differing only in parameter name, a
+hardcoded constant versus a parameter, and the error type. Equivalent today, coupled by nothing.
+
+**All 9 are bounded**, by three legitimate mechanisms: the shared reader (2), an equivalent local or
+own streaming cap (4), and cancelling the body outright while reading only `status`/`ok` (3 —
+verified by reading each, they call `res.body?.cancel()` and never touch content).
+
+### The gap: the property was not guarded forward
+
+Planting a NEW file under `apps/server/src` whose whole body is
+`const res = await fetch(url); return await res.text();` **passed the entire unit suite — 2020 files,
+20984 tests, zero failures.** Removing the bound from an EXISTING caller IS caught, but incidentally:
+the now-unused import trips `the-server-source-type-checks`. Nothing asserted the property, and
+nothing at all noticed a new caller.
+
+New `an-outbound-response-body-is-bounded.test.ts` walks for callers rather than listing them and
+rosters each with the mechanism that bounds it — prose, not `true`, so an entry added without a
+reason is as visible as one missing.
+
+| arm                                                              | mutation                                  | result            |
+| ---------------------------------------------------------------- | ----------------------------------------- | ----------------- |
+| census non-vacuity                                               | —                                         | floor on the walk |
+| ⭐ **the forward case**: a new unbounded caller planted in `src` | reds — `[ 'lib/zz-probe-outbound.ts' ]`   |
+| a real caller dropped from the roster                            | reds — `[ 'services/webhook-worker.ts' ]` |
+| rot: roster a file that issues no outbound request               | reds — `[ 'services/rate-limit.ts' ]`     |
+
+Ratchets 3068→3069 / 3244→3245; `tsc -p apps/server/tsconfig.test.json` clean.
