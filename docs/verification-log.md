@@ -15381,3 +15381,69 @@ about an unverified change.
 Recorded also because the skip is invisible in the one-line verdict most readers stop at:
 `verify-suite: OK — exit 0, no unhandled errors, full file count` is emitted for both runs, and "full
 file count" refers to files DISCOVERED, not files EXECUTED.
+
+## V-2052 — a budget guard that has never nudged, and a split-verification flaw caught before use (2026-08-27)
+
+### The size guard fires as a red, never as the nudge it describes
+
+`no-formatted-markdown-outgrows-the-format-hook` says its budget sits "far below the size that killed
+the hook, so it fires as a nudge to split with room to spare rather than as an emergency". **Its own
+history falsifies the nudge half.** V-1985, earlier today: "The gate went red … had reached
+1,508,063 bytes against a 1,500,000-byte budget — over by 8,063." The split happened because the
+suite was already failing.
+
+⭐ Not a defect, and the distinction is worth stating: **it converts a catastrophic failure into a
+legible one.** Before it existed the symptom was Prettier dying inside a V8 out-of-memory stack trace
+mid-commit (V-1214/V-1216), which looks like anything but a size problem. What it cannot do is warn,
+because a test has exactly one signal and that signal is failure. "Nudge with room to spare"
+describes an intent the mechanism cannot express — so acting early is the writer's job, not the
+guard's.
+
+Measured: `docs/verification-log.md` is **1,108,171 bytes, 73.9% of budget, 346 entries
+(V-1707..V-2051)** — the only formatted markdown past half the budget, the next being 29.4%. At this
+session's rate (25 entries averaging 3,755 bytes) that is ~105 entries of headroom, and nothing will
+say so until entry ~106 turns the suite red.
+
+### The split, dry-run and verified — and the flaw in my first verification
+
+Candidates measured, then dry-run entirely in memory while a peer's suite held the tree:
+
+    after V-1900   archive 589,665 B   active 520,217 B  (34.7%)
+    after V-1950   archive 754,392 B   active 355,490 B  (23.7%)
+    after V-1999   archive 914,849 B   active 195,033 B  (13.0%)   <- 915 KB, matching the 886 KB v1499 archive
+
+⛔ **My first dry run keyed entries by `int(V-number)`, and that key is wrong here.** The log contains
+`## V-1793b`, a deliberate follow-up to `V-1793`, so both collapsed to key `1793` and the later
+overwrote the earlier — a verification that would have reported "0 entries changed" while silently
+dropping `V-1793b`. Two of my own counts disagreeing (346 headings vs 345 distinct numbers) is what
+exposed it; the guard `a-verification-log-number-resolves-to-one-finding` already models this
+distinction in its header, counting canonical `## V-<n> ` headings separately from distinct numbers.
+
+⭐ **This is V-1985's warning one level up.** It said counting headings would pass even if a body were
+truncated at the boundary, so it compared per entry. My per-entry comparison was right in shape and
+wrong in KEY — the same class of error, in the fix for it. Re-run keyed by the full heading token
+(`V-\d+[a-z]?`): **346 before, 294 + 52 = 346 after, no overlap, none lost, 0 entries whose text
+changed, and `V-1793b` present as archive entry #88.** Trigger for the real split: ~90% of budget,
+rather than waiting for the red.
+
+### The migration journal audits clean
+
+Boundary: 115 tracked `.sql` files under `apps/server/src/db/migrations` against the 115
+`entries[].tag` values in `meta/_journal.json` — **the sets match exactly both ways**, `idx`
+contiguous from 0, no duplicates.
+
+⚠️ One `when` runs backwards: idx 21 (2026-05-16) precedes idx 22 (2026-05-06) by ten days. Not
+cosmetic in general — drizzle-orm 0.38.4 **silent-skips** a pending migration whose `when` is at or
+below the max applied `created_at` — but harmless here, because that check applies only to unapplied
+entries and both are long applied. Guarded by `scripts/migration-immutability-check.mjs` (Check 3,
+P0), wired as a pre-deploy gate at `deploy-bridge.sh:234`, with its own regression tests and a unit
+pin.
+
+⛔ Its reachability was already asked and answered — the archive log records that the script "looked
+orphaned but is" active. I re-derived it after grepping the guard corpus for the family word
+(`migrations`, 71 hits) but not the log for the specific ARTIFACT name. **Grep prior art by the
+artifact's own name the moment you can name it, not only by its family.**
+
+⭐ Operational note: the inline quiescence check I adopted last turn **fired and blocked this entry's
+first write attempt** — a peer's suite had started between my previous check and the commit. That is
+the race that bit me twice, caught by a guard rather than by disclosure afterwards.
