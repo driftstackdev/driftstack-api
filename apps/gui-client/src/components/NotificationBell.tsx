@@ -7,6 +7,7 @@ import {
   type HistoryOutcome,
   type LocalNotice,
   type NotificationLevel,
+  type NotificationTarget,
 } from '../lib/notification-digest';
 
 /**
@@ -40,6 +41,7 @@ export function NotificationBell({
   events,
   notices = [],
   loadHistory = null,
+  onNavigate = null,
 }: {
   events: ReadonlyArray<NotificationEvent>;
   /** Client-originated rows — app updates today. Deliberately NOT folded into
@@ -50,6 +52,9 @@ export function NotificationBell({
    *  "separate piece of work" the header used to defer. Null (no client yet)
    *  renders the live-only panel unchanged. */
   loadHistory?: (() => Promise<HistoryOutcome>) | null;
+  /** Click-through: rows whose event has an in-app destination become buttons.
+   *  Null (no shell wiring, e.g. tests of the pure panel) keeps every row static. */
+  onNavigate?: ((target: NotificationTarget) => void) | null;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   // The marker the unread count is measured against. Null until the panel has
@@ -122,21 +127,46 @@ export function NotificationBell({
             </p>
           ) : (
             <ol className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-              {items.map((item) => (
-                <li
-                  key={item.key}
-                  className="flex gap-2 rounded px-2 py-1.5 hover:bg-surface-inset"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[item.level]}`}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block break-words text-xs text-ink-primary">{item.title}</span>
-                    <span className="block text-2xs text-ink-muted">{item.at}</span>
-                  </span>
-                </li>
-              ))}
+              {items.map((item) => {
+                const target = item.target ?? null;
+                const body = (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${DOT[item.level]}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block break-words text-xs text-ink-primary">
+                        {item.title}
+                      </span>
+                      <span className="block text-2xs text-ink-muted">{item.at}</span>
+                    </span>
+                  </>
+                );
+                return (
+                  <li key={item.key}>
+                    {onNavigate !== null && target !== null ? (
+                      <button
+                        type="button"
+                        data-testid="notification-row-link"
+                        // Close BEFORE navigating: the destination renders under
+                        // the panel otherwise, and the click's answer is the view.
+                        onClick={() => {
+                          setOpen(false);
+                          onNavigate(target);
+                        }}
+                        className="flex w-full gap-2 rounded px-2 py-1.5 text-left hover:bg-surface-inset"
+                      >
+                        {body}
+                      </button>
+                    ) : (
+                      <span className="flex gap-2 rounded px-2 py-1.5 hover:bg-surface-inset">
+                        {body}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ol>
           )}
           {loadHistory !== null && history !== null && (

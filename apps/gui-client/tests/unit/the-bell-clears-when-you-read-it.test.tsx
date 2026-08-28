@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { NotificationEvent } from '../../src/lib/notifications';
 import { NotificationBell } from '../../src/components/NotificationBell';
-import { historyOutcomeFromError, type HistoryOutcome } from '../../src/lib/notification-digest';
+import {
+  historyOutcomeFromError,
+  notificationTarget,
+  type HistoryOutcome,
+} from '../../src/lib/notification-digest';
 
 /**
  * V-1611 #18 — the bell.
@@ -204,5 +208,63 @@ describe('historyOutcomeFromError — the one status with a meaning', () => {
   it('a thrown non-HTTP error (no status at all) is a plain load failure too', () => {
     expect(historyOutcomeFromError(new Error('network down'))).toEqual({ kind: 'error' });
     expect(historyOutcomeFromError(null)).toEqual({ kind: 'error' });
+  });
+});
+
+describe('bell click-through (V-2146)', () => {
+  it('maps each live kind to its one in-app destination — or to none', () => {
+    expect(notificationTarget(resolved)).toBe('billing');
+    expect(notificationTarget(errored('2026-08-25T12:00:00.000Z'))).toBe('sessions-history');
+    // An incident's home is the status page (external) and a high-severity audit
+    // event's surface is the bell's own history — neither gets an in-app jump.
+    expect(notificationTarget(outage)).toBeNull();
+  });
+
+  it('a row with a destination is a button: click navigates AND closes the panel', () => {
+    const onNavigate = vi.fn();
+    render(<NotificationBell events={[resolved]} onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    fireEvent.click(screen.getByTestId('notification-row-link'));
+    expect(onNavigate).toHaveBeenCalledWith('billing');
+    expect(screen.queryByTestId('notification-panel')).toBeNull();
+  });
+
+  it('a row without a destination stays static even with navigation wired', () => {
+    const onNavigate = vi.fn();
+    render(<NotificationBell events={[outage]} onNavigate={onNavigate} />);
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(screen.queryByTestId('notification-row-link')).toBeNull();
+    expect(screen.getByText('Regional outage')).toBeInTheDocument();
+  });
+
+  it('without shell wiring no row is a button, destination or not', () => {
+    render(<NotificationBell events={[resolved]} />);
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    expect(screen.queryByTestId('notification-row-link')).toBeNull();
+  });
+
+  it('history rows are never clickable — their surface is this panel', async () => {
+    const rows: HistoryOutcome = {
+      kind: 'ok',
+      items: [
+        {
+          key: 'audit-1',
+          level: 'info',
+          title: 'profile.created — prof_1',
+          at: '2026-08-20T09:00:00.000Z',
+        },
+      ],
+    };
+    const onNavigate = vi.fn();
+    render(
+      <NotificationBell
+        events={[]}
+        loadHistory={() => Promise.resolve(rows)}
+        onNavigate={onNavigate}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('notification-bell'));
+    await waitFor(() => expect(screen.getByText('profile.created — prof_1')).toBeInTheDocument());
+    expect(screen.queryByTestId('notification-row-link')).toBeNull();
   });
 });

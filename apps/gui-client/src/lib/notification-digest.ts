@@ -147,6 +147,9 @@ export interface DigestItem {
   level: NotificationLevel;
   title: string;
   at: string;
+  /** In-app destination for click-through, or null when none exists (incidents
+   *  point at the external status page; audit rows' surface IS the bell). */
+  target?: NotificationTarget | null;
 }
 
 /**
@@ -166,6 +169,7 @@ export function digestNotifications(
     level: notificationLevel(e),
     title: notificationTitle(e),
     at: e.at,
+    target: notificationTarget(e),
   }));
   const fromLocal: DigestItem[] = notices.map((n) => ({
     key: `local-${n.id}`,
@@ -219,4 +223,22 @@ export function auditHistoryItem(row: AuditHistoryRow): DigestItem {
 export function historyOutcomeFromError(err: unknown): HistoryOutcome {
   const status = (err as { status?: unknown } | null)?.status;
   return status === 403 ? { kind: 'forbidden' } : { kind: 'error' };
+}
+
+/** The bell's click-through vocabulary — View kinds the shell can navigate to.
+ *  A string union rather than the App View type so this lib stays render-free. */
+export type NotificationTarget = 'billing' | 'sessions-history';
+
+/** Where a live event should take the customer, or null when no in-app view is
+ *  the answer: an incident's home is the status page (external), and a
+ *  high-severity audit event's surface is the bell's own history section. */
+export function notificationTarget(e: NotificationEvent): NotificationTarget | null {
+  switch (e.kind) {
+    case 'cost.threshold_alert':
+      return 'billing';
+    case 'session.errored':
+      return 'sessions-history';
+    default:
+      return null;
+  }
 }

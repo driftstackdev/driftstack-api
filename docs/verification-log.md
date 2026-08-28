@@ -11449,3 +11449,22 @@ red; the 403 branch collapsed to 'error' → exactly the missing-scope arm red.
 **Boundary:** the fetch is on-open only — no polling, no background stream, so the
 DEFAULT_MAX_SSE_PER_ACCOUNT interaction does not arise. Click-through navigation from a history row
 remains open #18 work.
+
+## V-2146 — bell click-through: a notification row takes you to its answer (2026-08-28)
+
+The last #18 remainder. Live rows whose event has an in-app destination are now buttons:
+`cost.threshold_alert` → the billing view, `session.errored` → sessions history. The mapping is a
+pure `notificationTarget` in the digest lib (a string union, so the lib stays free of App types) and
+two absences are decisions, not gaps: an incident's home is the external status page, and a
+high-severity audit event's surface is the bell's own history section — both map to null and render
+static. A click closes the panel BEFORE navigating (the destination otherwise renders under it).
+History rows are never clickable, and that is pinned. Without shell wiring (`onNavigate` null) every
+row stays static, so pure-panel tests and any future embedding are unaffected.
+
+**Proofs.** 22/22 in the bell file (+5 arms). Mutations, snapshot-restored, cmp-verified: the mapping
+collapsed to null → the mapping arm AND the button arm red (2 failed); `setOpen(false)` dropped from
+the click → exactly the "navigates AND closes" arm red.
+
+**Boundary:** #18 is now closed end-to-end (bell, panel, durable history, click-through, update
+notices). Deep-linking a specific session row (sessions-history scoped to the errored session id)
+would need a View payload change and is future polish, not a gap in this entry.

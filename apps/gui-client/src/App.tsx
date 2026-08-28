@@ -840,6 +840,7 @@ function Shell(): JSX.Element {
               <NotificationBell
                 events={notificationFeed.events}
                 loadHistory={loadBellHistory}
+                onNavigate={(target) => setView({ kind: target })}
                 notices={
                   update
                     ? [
