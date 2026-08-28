@@ -53,11 +53,22 @@ describe('W536.B apps/gui-client/vitest.config.ts content parity', () => {
     expect(body).toMatch(/hookTimeout: 10_000,/);
   });
 
-  it("Coverage-disabled framing pinned: 'Don't measure coverage from this project — the root project's coverage report is the load-bearing one. Component-level coverage is informational; if a feature gap surfaces, write the test, don't gate on a separate threshold.' + 'coverage: { enabled: false }' — pinned so the no-coverage-in-jsdom-project (root's V-107 thresholds are the load-bearing gate, component-coverage is informational, gap → write test not threshold) commitment survives (drift to coverage.enabled:true would let CI fork into 2 conflicting coverage reports)", () => {
-    expect(body).toMatch(
-      /\/\/ Don't measure coverage from this project — the root project's\s*\/\/ coverage report is the load-bearing one\. Component-level\s*\/\/ coverage is informational; if a feature gap surfaces, write the\s*\/\/ test, don't gate on a separate threshold\./,
-    );
+  // ⛔ This pin used to freeze a FALSE rationale. It required the comment to read
+  // "the root project's coverage report is the load-bearing one" — but the root
+  // config's include is ['apps/server/src/**', 'packages/sdk-typescript/src/**']
+  // and its own comment lists "GUI client (Tauri) — not in scope". The two files
+  // deferred to each other, and this test is why the wrong reason survived: a
+  // parity pin protects whatever text it was written against, true or not.
+  //
+  // The commitment being pinned is unchanged — coverage stays disabled in this
+  // project so CI cannot fork into two conflicting reports. What is pinned now is
+  // an accurate reason for it, plus an arm refusing the old claim's return.
+  it("Coverage-disabled COMMITMENT pinned with a true rationale: 'coverage: { enabled: false }' survives, the config states that no gate measures this app and quotes the root's own exclusion, and the retired 'root's coverage report is the load-bearing one' framing cannot come back", () => {
     expect(body).toMatch(/coverage: \{\s*enabled: false,\s*\},/);
+    expect(body).toMatch(/Coverage is measured by NOTHING today/);
+    expect(body).toMatch(/GUI client \(Tauri\) — not in scope/);
+    // The false claim is retired, not merely edited around it.
+    expect(body).not.toMatch(/coverage report is the load-bearing one/);
   });
 
   it('file exists at canonical path', () => {
