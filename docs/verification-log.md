@@ -15650,3 +15650,59 @@ their run, theirs by writing and then running tests inside mine, each after runn
 finding it true. A point-in-time check cannot establish a property that must hold over an interval, in
 either direction. **The rule is not the fix and cannot be**; a worktree makes the interference
 structurally impossible, which is what both of us skipped because the edit felt small.
+
+## V-2057 — the customer half gets the invariant the admin half already had; and I retract V-2056's amendment (2026-08-27)
+
+### ⛔ Retraction — I amended correct advice on someone else's unverified measurement
+
+V-2056 walked back V-2055's remedy, arguing that giving each colliding test its own database stops
+working once three files do it, on the strength of a peer-reported result of two failures when the
+three webhook files ran together. **I did not reproduce that before recording it.** Run now on a
+quiescent machine with a real database:
+
+    3 test files, 23 tests, ALL PASSING together
+
+The failures were an artifact of contention rather than of the remedy: `ensureIsolatedDatabase` opens
+its admin connection with `connect_timeout: 2`, and that timeout expired under my own full-suite gate
+running at the same moment. So the chain that produced a false entry in this log was: my gate ran
+during a peer's work, their helper timed out, they reported the failure in good faith, and I wrote it
+down as a structural property of the fix. **One protocol breach of mine, laundered through a peer's
+honest report, became a retracted claim about someone else's correct design.** My standing rule is to
+verify claims myself; I applied it to their sweep-count claim in the same turn and not to this one,
+because this one agreed with a conclusion I found interesting.
+
+V-2055's original recommendation stands. ⭐ Worth preserving from the episode: that
+`connect_timeout: 2` makes the helper fail LOUDLY under load — the reachability arm reds rather than
+the file skipping quietly — which is the right design and should not be "fixed".
+
+### The invariant
+
+`admin-audit-route-coverage-invariant` (V-1007) fails when a new admin mutation forgets its audit
+row. The customer half had nothing equivalent: its guards pin the audit SERVICE's shape, and coverage
+rested on a 2026-05-19 document whose method was "spot-check route files" — which V-2054 showed has
+drifted, since it files recipes as a read-only surface and recipes now register an authenticated
+write-scoped POST and DELETE.
+
+New `a-customer-mutation-audits-or-says-why-not.test.ts` walks `src/routes` for customer files that
+register a mutation and resolves, for each, whether the file OR any service it directly imports
+reaches `account_audit`. **The one-hop resolution is the whole measurement**: a route-file-level check
+reports 20 of 27 files silent and every one of those is wrong, because routes call
+`api-keys`/`mfa`/`auth-flows`/`profiles` and those emit.
+
+All 27 classify. Eighteen audit; nine are recorded with a reason — four billing routes the 2026-05-19
+audit ruled acceptable because the provider holds the record, `session-proxy` (throws
+`FeatureUnavailableError` unconditionally, V-823, so it changes no state), `agent-sessions-transport-report`
+(logs and returns 204), `legal` (writes a dedicated `lacc-` acceptance record with IP and user-agent,
+a stronger artifact than an audit row), `status-subscribe` (public and unauthenticated, so there is no
+account to attribute to), and **recipes, recorded as a GAP rather than excused**.
+
+| arm                                                            | mutation                                  | result                                    |
+| -------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------- |
+| ⭐ forward: a new customer route that mutates and never audits | planted `zz-probe-customer.ts`            | reds — `[ 'zz-probe-customer.ts' ]`       |
+| rot: roster a file that DOES audit                             | added `account-mfa.ts` to the list        | reds — `[ 'account-mfa.ts' ]`             |
+| non-vacuity: break the one-hop service resolution              | pointed the import regex at a missing dir | reds — `expected 6 to be greater than 10` |
+
+That third arm is the one worth having: without hop resolution the census still returns 27 routes and
+still compares two sets, it just believes six of them audit instead of eighteen. Restored
+byte-identical; ratchets 3069→3070 / 3245→3246; `tsc -p apps/server/tsconfig.test.json` clean; the
+whole unit corpus green at 2022 files / 20998 tests.
