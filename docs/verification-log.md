@@ -16659,3 +16659,72 @@ malformed file.
 
 Related: V-2072 (the instrument that chose this route), V-2069 and V-2060 (the same subset-under-a-
 total-name shape).
+
+---
+
+## V-2074 — stop ranking files, start checking what they claim about themselves (2026-08-28)
+
+V-2072 closed the name-absence family (5 variants, 253 hits, 0 defects). Two more targeting axes died
+the same way today:
+
+- **Recency** — routes ranked by last commit. Non-discriminating: most of the surface moved on
+  2026-08-27.
+- **Code newer than its last audit**, across BOTH stores (1840 dated log entries + 1320 memory files).
+  **1 route of 60**, and it was a false positive: `admin-owner.ts` scored `0000-00-00` because my date
+  extraction matched no dated section, while it is covered by 7 log mentions and 6 memory files
+  including a dedicated `admin_owner_gate_audit_clean`. A prior entry had already run this exact
+  analysis — "**did the subject move?** Every audited file has since: `admin-owner.ts` 3 commits".
+
+**Seven targeting instruments, zero defects between them.** The route surface is saturated by every
+measure of _how much has been written about a file_.
+
+### ⭐⭐ What actually produced every finding today
+
+Not one came from a ranking. Every one came from a file stating a rule about itself and the rule not
+holding:
+
+| finding | the file's own words                                                          |
+| ------- | ----------------------------------------------------------------------------- |
+| V-2059  | the retention register's Covered table: "`expires_at` + sweeper"              |
+| V-2070  | `loopback-host.ts`: "the classification lives here … so the two cannot drift" |
+| V-2069  | the seed script: "NO fake dev defaults are applied"                           |
+| V-2073  | the transport schema: "**Every numeric field is bounded**"                    |
+
+That is a mechanizable search, and it is the inverse of the exhausted family: instead of asking what
+the RECORD says about a file, ask what the FILE says about itself, then check it.
+
+**Boundary, stated with the count:** comment lines under `apps/server/src` matching
+`every <noun> <verb>` — a universal over an enumerable set, which is the checkable form. **46 claims.**
+(The looser pattern including `always|never|no X can|cannot` yields 2275 across 283 files, too coarse
+to work through; the narrow form is the one that pays.)
+
+### Four checked this turn, three held
+
+- ⭐ `agent-session-control-key.ts`: _"A header IS present → every failure is a hard 401 (never a
+  fallthrough to account data with attacker-controlled input)."_ **Holds.** Exactly two `return`s and
+  four `throw`s; the only `{ authorized: false }` is guarded by
+  `header === undefined || header.length === 0`. The empty-header case — the input that in V-2023 was
+  the sole witness for an MFA bound — is handled explicitly here and falls through as "no key
+  presented", which is the safe reading.
+- ⭐ `webhook-target-guard.ts`: _"Matches a host whose every dot-separated label is a
+  decimal/hex/octal number."_ **Holds** for all four documented smuggling forms — decimal
+  `2130706433`, hex `0x7f000001` (and `0X`, the regex is `/i`), octal `0177.0.0.1` (octal digits are
+  decimal digits, so `\d+` covers it), inet_aton short form `127.1`. A match returns
+  `'numeric-encoding'` — rejected outright, fail-closed.
+- ⭐ Same file: _"Shared by the webhook SSRF guard AND the SOCKS5 egress backend."_ **Holds, and
+  understates** — six consumers, including `proxy-backends/socks5.ts` and
+  `proxy-connectivity-probe.ts`.
+- Its IPv6 allowlist checked **before** the blocklist is the one structure that looked like a bypass
+  and is not: `PUBLIC_SPECIAL` holds only IANA's genuinely routed exceptions inside the otherwise
+  non-global `2001::/23` parent (PCP/TURN/DNS-SD anycast, AMT, AS112-v6, ORCHIDv2, DET), so the parent
+  can fail closed without rejecting routed ranges. Deliberate, and the comment says so.
+
+**Yield so far: 1 defect from 4 claims checked (V-2073), against 0 from 253 ranking hits.** Small
+sample, but the direction is the opposite of everything else tried today, and 42 claims remain as a
+standing work-list.
+
+⚠️ The instrument's own blind spot, stated: it finds claims written in comments. A file that states no
+rule about itself is invisible to it, and a rule stated in a doc rather than beside the code (V-2059's
+register) will not appear.
+
+Related: V-2072 (the family this replaces), V-2073 (the finding this generalises).
