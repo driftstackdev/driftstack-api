@@ -12,7 +12,6 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
 | `email_verify` / `magic_link` / `password_reset` tokens                                 | auth-flows-sweeper (deletes expired, per-kind)                                         |
 | `admin_audit_log`, `processed_stripe_events`, `legal_acceptances`, `webhook_deliveries` | audit-archive → R2 JSONL+gzip then DELETE (AUDIT_TABLES, archiveTable per `olderThan`) |
 | crypto-order idempotency dedup                                                          | in-memory 24h TTL prune                                                                |
-| `web_sessions` / auth tokens                                                            | `expires_at` + sweeper                                                                 |
 
 ## GAPS — unbounded growth, no retention
 
@@ -23,12 +22,35 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
    archive (not hard-delete) preserves the forensic history cheaply in R2 while
    bounding the hot table. Uses the proven audit-archive pattern (repo cases +
    the monthly scheduler). Dormant pre-launch (no 90-day-old rows yet).
-2. **`scheduled_jobs`** finished rows (W415 #2) — STILL OPEN. `completed_at`/
+2. ✅ **`scheduled_jobs`** finished rows (W415 #2) — **RESOLVED W441** (see the
+   W441 update below; annotated here too because a reader of this list stops at the
+   bullet). Historical statement follows. `completed_at`/
    `failed_at` set but never deleted → accumulates. Decision (W438): PRUNE (hard-
    delete finished rows older than N days) — low value, no archive needed (unlike
    session*events, scheduled_jobs has no forensic/customer value). Implement next
    wave (a prune query + a periodic tick). (The W416 partial index keeps the
    \_claim* O(due-unfinished) regardless.)
+
+3. **`web_sessions`** — **OPEN, found 2026-08-27 (V-2059).** Was listed in the
+   Covered table above as "`expires_at` + sweeper"; the row has been removed because
+   neither half held as a unique claim: the auth-token half duplicates the
+   auth-flows-sweeper row, and **no code path deletes a `web_sessions` row.** Measured
+   over the 342 `.ts` files under `apps/server/src` by a census of every
+   `.delete(<ident>)` call site (53 distinct identifiers, including the known
+   positives `scheduledJobs` and `systemHealthProbes`, and the dynamic `t` =
+   `tableForKind(kind)` serving the three auth-flow token tables): `webSessions` does
+   not appear, and a NUL-safe sweep for `DELETE FROM web_sessions` and a scan of
+   `apps/server/migrations` for a partition/TTL policy both return zero. All 60
+   `webSessions` references are `.insert`/`.update`/`.select`; revocation sets
+   `revoked_at`, and expiry is enforced at READ time (`gt(expiresAt, now)` in
+   `auth-repo`, `auth-flows-repo`, `mfa-repo`) rather than by deletion. The only
+   reclamation is `onDelete: 'cascade'` from `accounts`, which bounds rows for
+   _deleted_ accounts only. TTL is 30 days (`AUTH_TOKEN_TTL_MS.webSession`), so a row
+   is dead weight 30 days after mint and kept forever — one row per login per device.
+   Same shape as the 2026-05-19 `scheduled_jobs` incident and the 2026-05-20 stale
+   auth-token audit, whose sweeper header does the arithmetic: "~10 rows at 10
+   customers; ~70K rows at 10K". Retention period and delete-vs-anonymise are an
+   owner's call per the heading below; the measurement is not.
 
 ## Recommended fix (founder/A-team decision: period + delete-vs-archive)
 
@@ -49,7 +71,7 @@ decided before meaningful traffic so the tables don't accumulate from day one.
 No code changed here — retention is an irreversible-deletion policy choice, so
 surfaced rather than auto-applied. The mechanisms to implement it both exist.
 
-**W441 update:** `scheduled_jobs` finished-row retention RESOLVED — daily prune job (scheduled-jobs-prune-sweeper.ts) deletes completed/failed rows older than 30 days via repo.pruneFinished. Both retention gaps (session_events archive W438 + scheduled_jobs prune W441) now closed.
+**W441 update:** `scheduled_jobs` finished-row retention RESOLVED — daily prune job (scheduled-jobs-prune-sweeper.ts) deletes completed/failed rows older than 30 days via repo.pruneFinished. Both retention gaps KNOWN AT THE TIME (session_events archive W438 + scheduled_jobs prune W441) closed. **That completeness claim did not hold:** `web_sessions` sat in the Covered table unverified until V-2059 (2026-08-27) — see GAPS item 3.
 
 ---
 

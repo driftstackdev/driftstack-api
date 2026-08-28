@@ -15752,3 +15752,80 @@ required not to be green when the artifact is stale — and it is not.
 next full gate red on dist staleness rather than on a defect.** Granularity is whole-app `src` by
 design (a changed shared Layout restales every page), so this fires on edits that touch no page the
 suites read. The fix is a rebuild, and the red is correct.
+
+---
+
+## V-2059 — a retention audit's "Covered" list is the half nobody re-reads: `web_sessions` has no retention (2026-08-27)
+
+Applied the V-2054 method — re-checking whether a dated audit's conclusions still hold — to
+`docs/internal/2026-06-10-data-retention-audit.md`.
+
+### The finding I started with, and why it dissolved
+
+GAPS item 2 reads "**`scheduled_jobs`** finished rows — STILL OPEN … Implement next wave". That is
+false today: W441 (`services/scheduled-jobs-prune-sweeper.ts`) hard-deletes finished rows older than
+`SCHEDULED_JOBS_PRUNE_RETENTION_MS` (30 days), registered at `bootstrap.ts:1620` and enqueued at
+`:1625`, deleting via `db/scheduled-jobs-repo.ts`, guarded by both
+`tests/unit/scheduled-jobs-prune-sweeper.test.ts` and
+`tests/integration/db-scheduled-jobs-prune-finished-drizzle.test.ts`.
+
+⛔ **But the doc records that resolution** — a "**W441 update:**" paragraph 26 lines below, under a
+different heading. I had read the GAPS section and the document's tail and concluded "the doc never
+recorded W441", which is a claim about the whole document drawn from two windows of it. The remaining
+issue is hygiene, not a false record: item 1 was annotated ✅ **in place**, item 2 only remotely, so a
+reader who stops at the bullet — which is what a GAPS list is for — sees "STILL OPEN". Annotated in
+place. **State the boundary of a measurement in the same sentence as its result, and "the doc says X"
+is a claim about every line of it.**
+
+### The real finding
+
+The Covered table listed ``| `web_sessions` / auth tokens | `expires_at` + sweeper |``. **No code
+path deletes a `web_sessions` row.**
+
+Measured over the 342 `.ts` files under `apps/server/src`, by a census of every `.delete(<ident>)`
+call site — 53 distinct identifiers. The census is self-validating: it contains both known positives
+(`scheduledJobs`, the W441 prune above; `systemHealthProbes`, `health-probes-repo.ts:60`) and the
+four `AUDIT_TABLES`. `webSessions` is absent. Corroborated two further ways, because the claim is a
+negative: a NUL-safe filesystem walk for `.delete(webSessions)` / `DELETE FROM web_sessions` over the
+same 342 files returns 0, and `apps/server/migrations` carries no partition/TTL/delete policy naming
+the table. All 60 `webSessions` references in src are `.insert` / `.update` / `.select`.
+
+What exists instead: revocation sets `revoked_at`; expiry is enforced at READ time (`gt(expiresAt,
+now)` in `auth-repo`, `auth-flows-repo`, `mfa-repo`); `onDelete: 'cascade'` from `accounts` reclaims
+rows for _deleted_ accounts only. TTL is 30 days (`AUTH_TOKEN_TTL_MS.webSession`), so a row is dead
+weight 30 days after mint and retained indefinitely — one row per login per device. Precisely the
+class this document exists to catch, and the same shape as the two incidents its siblings cite: the
+2026-05-19 `scheduled_jobs` accumulation, and the 2026-05-20 stale-auth-token audit whose sweeper
+header does the arithmetic ("~10 rows at 10 customers; ~70K rows at 10K").
+
+Retention period and delete-vs-anonymise are an owner's call per that document's own heading; the
+measurement is not. Recorded as GAPS item 3, not implemented.
+
+### ⭐⭐ Why this row survived three passes of the same document
+
+**An audit's GAPS list is re-read; its COVERED list never is.** Both gaps in this document were
+chased and annotated — one in place, one remotely, and a whole later section exists to explain why a
+third had been resolved a third way. The safe-list got no such attention in 78 days across three
+dated passes.
+
+⭐ **And the row was half true, which is what made it durable.** "`web_sessions` / auth tokens" pairs
+an uncovered table with a covered one under a single label and a single mechanism string. The
+auth-token half is real (`auth-flows-sweeper`, per-kind) — and it duplicates the row directly above
+it, so the pairing added no true unique claim while lending the false half its credibility. A reader
+scanning for "is X covered?" finds X in the safe-list and stops.
+
+⛔ **A near-miss inside the instrument, worth more than the finding.** My first pass mapped doc rows
+to table identifiers by hand and reported three "NO DELETE" verdicts. Two were **my own mapping
+errors**: I wrote `healthProbes` for `systemHealthProbes`, and I looked for
+`emailVerifyTokens|magicLinkTokens|passwordResetTokens` when that repo deletes through a **dynamic**
+`const t = tableForKind(args.kind)` — visible in the census only as an identifier called `t`. Had I
+trusted the first output, I would have reported two live prunes as missing. **A name-keyed census
+cannot see a table chosen at runtime**, so a zero from one means "no delete under this spelling",
+never "no delete". The one verdict that survived did so because the same census that missed those two
+found both known positives — which is the only reason its zero is worth anything.
+
+Doc corrected: misleading row removed, item 2 annotated in place, `web_sessions` recorded as GAPS
+item 3 with the measurement and its boundary, and the closing "Both retention gaps … now closed"
+qualified — it asserted completeness over a safe-list nothing had verified.
+
+Related: V-2054 (the same method, opposite direction — a doc claiming a gap that was closed).
