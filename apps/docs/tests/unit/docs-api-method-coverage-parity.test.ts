@@ -37,7 +37,16 @@ describe('W284.C apps/docs API page method-coverage parity', () => {
     it(`${docPage}: every verb registered on ${route} appears in the doc`, () => {
       const docPath = resolve(REPO_ROOT, docPage);
       const routePath = resolve(REPO_ROOT, route);
-      if (!existsSync(docPath) || !existsSync(routePath)) return;
+      for (const [what, p] of [
+        ['doc page', docPath],
+        ['routes file', routePath],
+      ] as const) {
+        if (!existsSync(p)) {
+          throw new Error(
+            `${what} ${p} is missing: a retired pair must be removed from PAIRS, not skipped — skipping is exactly how a docs sweep goes quiet when a routes file is retired, as routes/saved-proxies.ts was`,
+          );
+        }
+      }
 
       const doc = read(docPath).toLowerCase();
       const routeSrc = read(routePath);

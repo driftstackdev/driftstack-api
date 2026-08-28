@@ -82,8 +82,11 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
     ).resolves.toBe(false);
   });
 
-  it('CRITICAL Python accepts both secrets and rejects a tampered body, run in the published package rather than compared as text', () => {
-    if (!process.env.CI && !existsSync(PYTHON)) return;
+  it('CRITICAL Python accepts both secrets and rejects a tampered body, run in the published package rather than compared as text', (ctx) => {
+    // V-2128 — a silent return here read as a pass, so a local run without the venv
+    // said "verified in every SDK" about an arm that never ran. Report the skip.
+    if (!process.env.CI && !existsSync(PYTHON))
+      ctx.skip('python venv absent locally; CI runs this arm');
     expect(existsSync(PYTHON), `python venv present at ${PYTHON}`).toBe(true);
 
     const script = [
@@ -113,8 +116,9 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
   // caching out used a DIFFERENT fixture path, which is a different cache entry — so it
   // exonerated the wrong thing. Instrumented, the spawn returns status 1 and zero
   // `--- PASS` lines exactly as it should once `-count=1` is passed.
-  it('CRITICAL Go accepts both secrets and rejects a tampered body — run with -count=1, and asserted to have RUN rather than skipped. `go test` prints ok and exits 0 both for a cached result and for a package whose tests all skipped, so neither the exit code nor a bare PASS is evidence on its own.', () => {
-    if (!process.env.CI && !existsSync(resolve(GO_DIR, 'go.mod'))) return;
+  it('CRITICAL Go accepts both secrets and rejects a tampered body — run with -count=1, and asserted to have RUN rather than skipped. `go test` prints ok and exits 0 both for a cached result and for a package whose tests all skipped, so neither the exit code nor a bare PASS is evidence on its own.', (ctx) => {
+    if (!process.env.CI && !existsSync(resolve(GO_DIR, 'go.mod')))
+      ctx.skip('Go SDK module absent locally; CI runs this arm');
 
     const run = spawnSync(
       'go',

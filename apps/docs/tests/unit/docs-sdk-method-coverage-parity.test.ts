@@ -15,6 +15,15 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// V-2128 — a missing subject is a broken test or a retired subject, never a
+// pass: the earlier `if (!existsSync(…)) return` made every arm here go green
+// the moment either file moved.
+function mustExist(p: string, what: string): void {
+  if (!existsSync(p)) {
+    throw new Error(`${what} is missing at ${p}: update the pin rather than skipping it`);
+  }
+}
+
 // Pin SDK Sessions resource methods to typescript-quickstart.md
 // citations. This is the highest-visibility SDK page so it should
 // keep up with the resource surface.
@@ -23,7 +32,8 @@ const TS_QUICKSTART = resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/typescript-qui
 
 describe('W285.C SDK Sessions ↔ typescript-quickstart.md method coverage', () => {
   it('the core Sessions methods (create/destroy/navigate/capture) are cited in the quickstart', () => {
-    if (!existsSync(SESSIONS_TS) || !existsSync(TS_QUICKSTART)) return;
+    mustExist(SESSIONS_TS, 'SDK Sessions resource');
+    mustExist(TS_QUICKSTART, 'TypeScript quickstart page');
     const doc = read(TS_QUICKSTART);
 
     // Quickstarts cover the minimum-viable lifecycle, not every
@@ -35,7 +45,7 @@ describe('W285.C SDK Sessions ↔ typescript-quickstart.md method coverage', () 
   });
 
   it('the SDK Sessions module exports a non-trivial method surface', () => {
-    if (!existsSync(SESSIONS_TS)) return;
+    mustExist(SESSIONS_TS, 'SDK Sessions resource');
     const src = read(SESSIONS_TS);
     const methodRe =
       /^\s+(create|list|get|destroy|navigate|interact|capture|wait|update|listAll)\s*[(<]/gm;

@@ -34,7 +34,11 @@ describe('W302.C auth-flow page sidebar-disabled baseline', () => {
   for (const page of AUTH_FLOW_PAGES) {
     it(`${page} disables the sidebar (withSidebar={false})`, () => {
       const path = resolve(PAGES, page);
-      if (!existsSync(path)) return;
+      if (!existsSync(path)) {
+        throw new Error(
+          `auth-flow page ${page} is missing at ${path}: a retired page must be removed from AUTH_FLOW_PAGES, not skipped — skipping would let the sidebar guard go green on a page that no longer exists`,
+        );
+      }
       const body = read(path);
       expect(body).toMatch(/<DashboardLayout\b[^>]*\bwithSidebar=\{false\}/);
     });

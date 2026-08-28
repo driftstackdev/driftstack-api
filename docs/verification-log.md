@@ -10846,3 +10846,56 @@ own guards, and was not re-run here.
 **Three of three findings from that note are now resolved or checked** (#1 latent-and-guarded per V-2126, #2
 fixed here), so the note's "don't re-audit; the two findings want a maintainer call" no longer describes the
 tree. Memory updated rather than deleted, since the audit's CLEAN list is still a useful do-not-re-audit record.
+
+## V-2128 — the walk-swallow ceiling measured the token, not the shape: four single-subject tests could go green on a missing subject, and the guard could not see them (2026-08-28)
+
+Post-condition re-run of `project_walk_swallow_debt_capped_at_89`. A guard-faithful re-scan (same regex, same
+walk, same prose filter, run outside vitest) reproduced exactly **92 occurrences / 89 files / 3285 scanned**, so
+the ceiling itself held. Then a second instrument that shares nothing with the first — a plain grep over the
+shape's family, scoped to `apps`, `packages` AND `scripts` and every test extension — found **93 files**, and the
+four-file disagreement was the finding.
+
+**Three blind spots, all in the guard's own key:**
+
+1. Its regex `existsSync\([^)]*\)\s*\)\s*return` cannot match an `||`-joined condition —
+   `if (!existsSync(A) || !existsSync(B)) return;` (`docs-sdk-method-coverage-parity:26`,
+   `docs-api-method-coverage-parity:40`).
+2. Its `readdirSync` pre-filter defined the population as WALKERS, so the identical swallow inside an `it()`
+   body that reads ONE subject was invisible (`auth-flow-no-sidebar-baseline:37`,
+   `docs-sdk-method-coverage-parity:38`). The auth-flow one points at `apps/customer-dashboard/src/pages` — the
+   tree the guard's own header cites as gutted in `ba1a9d270`. A guard whose header documents the exact failure
+   it is blind to.
+3. Its scan roots `['apps', 'packages']` omit `scripts/`, which `vitest.node.config.ts` executes — two more
+   walker sites in `scripts/tests/verify-suite.test.ts` (equality-pinned census, so loud rather than quiet, but
+   the shape).
+
+Also found by the family scan and deliberately NOT converted to a throw:
+`webhook-signature-verifies-in-every-sdk.test.ts:86/:117` — `!process.env.CI && !existsSync(<toolchain>)`. A
+toolchain absent locally is a legitimate reason not to run, but a bare `return` there reads as a PASS, so a local
+green said "verified in every SDK" about arms that never ran. They are now `ctx.skip('…')`, which the reporter
+shows (proved: a bogus venv path → `3 passed | 1 skipped`).
+
+**Fixes.** The four single-subject sites throw, with the consequence in the message (all 17 subjects verified
+git-tracked: 7 pages, the 8 `PAIRS` files, `sessions.ts` + the quickstart). The guard is widened to the family
+regex, scans `scripts/` too, and gains a single-subject arm held to `[]` — no exemption, because a legitimate
+skip is `ctx.skip`, which has no `return` to match, so the exemption has nothing to rot. Ceiling 92 → 94 is
+boundary honesty (+2 from `scripts/`, zero new debt). Matcher controls cover both new shapes and the
+`ctx.skip` non-member.
+
+**Mutation proofs — 6 of 6 killed, snapshot-restored, byte-identical after:** an `||` form planted in a
+single-subject file plus a block form in an ordinary-named file → single-subject arm red naming both (the block
+form alone is named at `agent-executor-stub.test.ts:390`); one more swallow inside a walker under `scripts/` →
+ceiling red at 95 > 94; `select-tier.astro`, `api/team.md`, `sdk-typescript/…/sessions.ts` each moved aside →
+the fixed test FAILS with its message where before it passed silently; bogus `PYTHON` path → a reported skip.
+
+**Boundary, stated because it is narrower than it reads:** 5 files, 21 tests green, 0 skipped locally (the venv
+and Go module both exist here); `it(` counts unchanged except the guard 3 → 4; server test tsconfig clean; the
+docs and customer-dashboard test tsconfigs carry their PINNED backlogs (`scripts/typecheck-test-backlog.mjs`)
+with ZERO errors in the three files touched — I did not re-derive those backlog numbers. No parity pin quotes any
+of the five files. Ratchets untouched (no file added). The 90 walker members remain debt: this closes the
+single-subject half, not the walker half.
+
+**Lesson.** A control sharing the instrument is not a control — the guard-faithful re-scan could only confirm
+the ceiling; the grep that disagreed by four was the one worth having. And the population's KEY (`readdirSync`)
+was coarser than the PROPERTY (a swallow), so the guard reported its key's population as if it were the
+property's.

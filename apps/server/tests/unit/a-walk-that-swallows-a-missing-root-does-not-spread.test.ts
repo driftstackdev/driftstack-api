@@ -9,7 +9,7 @@
 // retired outright. Nothing has drifted today — a sweep of 3300 test-declared
 // roots found zero missing directories — so this is debt, not a live defect.
 //
-// Rather than rewrite 89 helpers (the right fix is to THROW, not to add a floor,
+// Rather than rewrite ~90 helpers (the right fix is to THROW, not to add a floor,
 // because throwing removes the failure mode instead of detecting it), this holds
 // the line: the population may SHRINK freely as helpers are fixed, and may not
 // grow. A ceiling, deliberately, not an equality — an equality would break the
@@ -21,6 +21,17 @@
 // with unrelated semantics. The judgement per site is source-tree (must throw)
 // versus build-output (skip is right), so do not "fix" a member without making
 // that call. Lowering the ceiling is what records the judgement having been made.
+//
+// V-2128 — the SAME swallow has a second home that the first version of this
+// guard could not see: a single-subject test whose `it()` body opens with
+// `if (!existsSync(subject)) return;`. No walker, no `readdirSync`, but the
+// identical failure mode — the day the subject file is retired the test passes
+// silently instead of saying so. Those are held to ZERO below, not to a ceiling:
+// there is no build-output case for a test whose one subject is a tracked source
+// file. The one legitimate reason to not run — a toolchain absent locally that
+// CI does have — is written `ctx.skip('…')`, which REPORTS the skip; a bare
+// `return` there reads as a pass, and a local green then says "verified in every
+// SDK" about arms that never ran.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -30,20 +41,35 @@ import { describe, expect, it } from 'vitest';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 
-/** `if (!existsSync(x)) return ...` — the shape that turns a missing root into []. */
-const SWALLOWS = /if\s*\(\s*!\s*existsSync\([^)]*\)\s*\)\s*return\b/;
-/** Global twin of SWALLOWS — `match` needs /g to count every site in a file. */
-const SWALLOWS_G = /if\s*\(\s*!\s*existsSync\([^)]*\)\s*\)\s*return\b/g;
+/**
+ * The shape family, not the token: an `if` whose condition (group 1, kept to one
+ * line — prettier prints every member that way) tests `!existsSync(…)` anywhere
+ * in it, and whose consequent is a bare `return` — inline, or first in a block.
+ * The first version matched only `if (!existsSync(x)) return`, which missed an
+ * `||`-joined pair of subjects outright and could not tell a walker's swallow
+ * from a single-subject one.
+ */
+const SWALLOWS = /if\s*\(([^\n]*?!\s*existsSync\([^\n]*?)\)\s*(?:return\b|\{\s*return\b)/;
+/** Global twin of SWALLOWS — `matchAll` needs /g to count every site in a file. */
+const SWALLOWS_G = new RegExp(SWALLOWS.source, 'g');
 
-// Measured 2026-08-27: 92 occurrences across 89 files. Ceiling, not a pin —
-// shrinking is the goal.
+// Measured 2026-08-28: 94 walker occurrences across 90 files, scanning apps,
+// packages AND scripts. It was 92 across 89 the day before — the +2 are the two
+// census walkers in `scripts/tests/verify-suite.test.ts`, which the earlier scan
+// never reached (its roots omitted `scripts/`, though vitest.node.config.ts runs
+// `scripts/tests/**`). A guard scoped narrower than the suite it polices leaves
+// a place for the population to grow unseen, so the roots now match the suite.
+// Ceiling, not a pin — shrinking is the goal.
 //
 // The unit is OCCURRENCES, not files, and that distinction is load-bearing: two
 // files carry more than one swallow site (3 and 2). A file-count ceiling cannot
 // see a file it already counts gaining another occurrence, so the population
 // could grow with the number unchanged — a population expressed in one unit and
 // enforced in another.
-const CEILING = 92;
+const CEILING = 94;
+
+/** The suite's own roots — vitest.node.config.ts `include` names all three. */
+const ROOTS = ['apps', 'packages', 'scripts'] as const;
 
 function testFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -60,8 +86,8 @@ function testFiles(dir: string, out: string[] = []): string[] {
 /**
  * This file is excluded from its own scan. Its matcher-control arm below carries
  * `if (!existsSync(dir)) return out;` as a literal fixture, and the header quotes
- * the shape — so without this, the guard counts itself and reports 90. A fixture
- * demonstrating the pattern is not an instance of the debt.
+ * the shape — so without this, the guard counts itself. A fixture demonstrating
+ * the pattern is not an instance of the debt.
  */
 const SELF = fileURLToPath(import.meta.url);
 
@@ -83,10 +109,10 @@ const SELF = fileURLToPath(import.meta.url);
  * tested it against a known member. Matching still runs over the whole file, so a site
  * wrapped across lines is counted exactly as before.
  */
-function codeSites(src: string): number {
+function codeSites(src: string): number[] {
   const lineStarts: number[] = [0];
   for (let i = 0; i < src.length; i += 1) if (src[i] === '\n') lineStarts.push(i + 1);
-  const lineAt = (idx: number): string => {
+  const lineIndexAt = (idx: number): number => {
     let lo = 0;
     let hi = lineStarts.length - 1;
     while (lo < hi) {
@@ -94,51 +120,85 @@ function codeSites(src: string): number {
       if ((lineStarts[mid] as number) <= idx) lo = mid;
       else hi = mid - 1;
     }
-    const start = lineStarts[lo] as number;
+    return lo;
+  };
+  const lineText = (li: number): string => {
+    const start = lineStarts[li] as number;
     const end = src.indexOf('\n', start);
     return src.slice(start, end === -1 ? src.length : end);
   };
-  let hits = 0;
+  const lines: number[] = [];
   for (const m of src.matchAll(SWALLOWS_G)) {
     if (m.index === undefined) continue;
+    const li = lineIndexAt(m.index);
     // A statement's own line opens with the `if`; a prose mention opens with a
     // JSDoc continuation `*` or a `//`.
-    if (/^\s*(\*|\/\/)/.test(lineAt(m.index))) continue;
-    hits += 1;
+    if (/^\s*(\*|\/\/)/.test(lineText(li))) continue;
+    lines.push(li + 1);
   }
-  return hits;
+  return lines;
 }
 
-function scan(): { occurrences: number; files: string[]; filesScanned: number } {
-  const files: string[] = [];
-  let occurrences = 0;
-  let filesScanned = 0;
-  for (const base of ['apps', 'packages']) {
+interface Scan {
+  /** Sites in files that walk a tree (`readdirSync`) — the ceilinged debt. */
+  walkerOccurrences: number;
+  walkerFiles: string[];
+  /** Sites in files that read ONE subject — held to zero. `file:line`. */
+  singleSubject: string[];
+  filesScanned: number;
+}
+
+function scan(): Scan {
+  const out: Scan = {
+    walkerOccurrences: 0,
+    walkerFiles: [],
+    singleSubject: [],
+    filesScanned: 0,
+  };
+  for (const base of ROOTS) {
     for (const file of testFiles(resolve(REPO_ROOT, base))) {
       if (file === SELF) continue;
-      filesScanned += 1;
+      out.filesScanned += 1;
       const src = readFileSync(file, 'utf8');
+      const sites = codeSites(src);
+      if (sites.length === 0) continue;
+      const rel = file.slice(REPO_ROOT.length + 1);
       if (src.includes('readdirSync')) {
-        const hits = codeSites(src);
-        if (hits > 0) {
-          occurrences += hits;
-          files.push(file.slice(REPO_ROOT.length + 1));
-        }
+        out.walkerOccurrences += sites.length;
+        out.walkerFiles.push(rel);
+        continue;
       }
+      for (const line of sites) out.singleSubject.push(`${rel}:${line.toString()}`);
     }
   }
-  return { occurrences, files, filesScanned };
+  return out;
 }
 
 describe('a walk helper that swallows a missing root does not spread', () => {
   it('CRITICAL the swallowing-walk population does not grow', () => {
-    const { occurrences, files } = scan();
+    const { walkerOccurrences, walkerFiles } = scan();
     expect(
-      occurrences,
-      `walk sites that return [] for a missing directory: ${occurrences} across ${files.length} files (ceiling ${CEILING}).\n` +
+      walkerOccurrences,
+      `walk sites that return [] for a missing directory: ${walkerOccurrences} across ${walkerFiles.length} files (ceiling ${CEILING}).\n` +
         `A new one makes another sweep pass silently when its source tree moves.\n` +
         `Fix by throwing on a missing root, not by adding a floor.`,
     ).toBeLessThanOrEqual(CEILING);
+  });
+
+  it('CRITICAL no single-subject test returns silently when its subject file is missing', () => {
+    // V-2128 — four of these existed, invisible to the ceiling above because the
+    // scan looked only at files that walk. One pointed at
+    // apps/customer-dashboard/src/pages, the tree the header cites as having
+    // been gutted once already. Every subject they read is a git-tracked source
+    // file, so absence is a broken test or a retired subject — either way the
+    // test must say so, not pass.
+    const { singleSubject } = scan();
+    expect(
+      singleSubject,
+      `single-subject tests that return instead of failing when the subject is missing:\n  ${singleSubject.join('\n  ')}\n` +
+        `Throw (or expect(existsSync(…)).toBe(true)) so a retired subject fails the test instead of skipping it;\n` +
+        `a toolchain that is legitimately absent locally is ctx.skip('why'), which the reporter shows.`,
+    ).toEqual([]);
   });
 
   it('CRITICAL the scan enumerated the test corpus, so the ceiling is not vacuous', () => {
@@ -151,10 +211,21 @@ describe('a walk helper that swallows a missing root does not spread', () => {
     expect(filesScanned).toBeGreaterThan(2900);
   });
 
-  it('the matcher fires on the swallowing shape and not on a throwing one', () => {
+  it('the matcher fires on every member of the swallowing shape and not on a throwing one', () => {
     expect(SWALLOWS.test('if (!existsSync(dir)) return out;')).toBe(true);
     expect(SWALLOWS.test('  if ( ! existsSync( PAGES ) ) return [];')).toBe(true);
+    // The two shapes the token-matcher missed (V-2128): a joined condition, and a
+    // block whose first statement is the return.
+    expect(SWALLOWS.test('if (!existsSync(a) || !existsSync(b)) return;')).toBe(true);
+    expect(SWALLOWS.test('if (!existsSync(dir)) {\n    return out;\n  }')).toBe(true);
     expect(SWALLOWS.test('if (!existsSync(dir)) throw new Error("missing root");')).toBe(false);
+    expect(SWALLOWS.test('if (existsSync(dir)) return out;')).toBe(false);
     expect(SWALLOWS.test('const files = readdirSync(dir);')).toBe(false);
+    // A joined toolchain gate is still a member when it returns …
+    expect(SWALLOWS.test('if (!process.env.CI && !existsSync(PYTHON)) return;')).toBe(true);
+    // … and stops being one when it reports the skip instead.
+    expect(SWALLOWS.test("if (!process.env.CI && !existsSync(PYTHON)) ctx.skip('no venv');")).toBe(
+      false,
+    );
   });
 });
