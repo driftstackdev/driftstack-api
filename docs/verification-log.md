@@ -16803,3 +16803,63 @@ grep patterns.
 
 Related: V-2074 (the instrument), and the pre-existing arm at `:511` which proved the throw does not
 escape — surviving was tested, recording was not.
+
+---
+
+## V-2076 — 228 catch blocks, zero undocumented; and my fence detector produced two false positives on one character (2026-08-28)
+
+Continuing V-2074's list. **Three more claims checked, all held**, plus a sweep of the shape V-2075
+came from.
+
+### The claims
+
+- `db/scheduled-jobs-repo.ts`: _"every settle is fenced on `locked_by = workerId` and returns whether
+  it matched."_ **Holds** — `markComplete`, `markRetry`, `markFailed` are the three settle-shaped
+  methods of seven, each carries `eq(scheduledJobs.lockedBy, …workerId)` in its WHERE and each returns
+  `rows.length > 0`. The reason is written down and is a real hazard: `claimDue` re-claims a row whose
+  lock is older than the stale window **without excluding the current worker's own running job**, so an
+  overrunning handler's late write could otherwise complete a job still running, or `markRetry` one
+  already completed and re-run a side-effecting sweep.
+- `db/session-operations-repo.ts`: _"Every fence is enforced by Postgres, never by process memory."_
+  **Holds absolutely** — the file contains no `Map`, `Set`, or module-level mutable at all, so there is
+  no process memory in which a fence could be held, and all three write fences (`admit`,
+  `markRunning`, `settle`) constrain inside a `.where(...)`.
+
+### ⛔⛔ My detector said two of the three settles were unfenced. Both were false, and the cause is one character
+
+I keyed the fence check on the literal `eq(scheduledJobs.lockedBy, workerId)`. `markRetry` and
+`markFailed` take their worker id in an options object and spell it **`opts.workerId`**. Two
+false positives, refuted by reading — and had I trusted the output, I would have reported a missing
+concurrency fence on a job runner that has one.
+
+⭐ **This is the same failure as every other instrument today: I matched the TOKEN, not the SHAPE.**
+The corrected detector is `eq\(\s*scheduledJobs\.lockedBy\s*,\s*[\w.]*workerId\s*\)` and is
+proved on three controls before use — the bare spelling, the `opts.`-qualified spelling, and a
+non-match. That "prove it on a known positive first" step is what separates this from the version I
+nearly published, and it cost one command.
+
+### The sweep behind V-2075, and a result worth stating positively
+
+V-2075 found a `catch` that swallows a defect signal without recording it. Swept the shape:
+**228 bare `} catch {` sites across 90 files under `apps/server/src`; 36 of those files hold a logger.**
+
+That list is **not** a finding and I am not filing it as one. Most bare catches are legitimately silent
+— expected garbage from untrusted input, best-effort cleanup — and the discriminator that made V-2075
+real (does the swallowed error indicate a defect in OUR code, or expected input?) is not mechanically
+detectable. A 228-item list I cannot triage is the false-positive machine my dominant lesson warns
+about.
+
+⭐⭐ **The mechanizable narrowing is a swallow nobody wrote a reason for — and there are ZERO.** Every
+catch block in `apps/server/src`, all 228 bare ones included, carries either a statement or an
+explanatory comment. Detector proved on four controls first (empty; empty-but-bound; comment-only;
+statement-only), because a zero from an unproven detector is worth nothing.
+
+**So the repo's norm is already "always say why you swallow" at 100%.** V-2075's gap was a different
+property that the norm does not cover: **documenting a swallow and recording it when it fires are not
+the same guarantee**, and a comment explaining why an error is discarded reads exactly like a comment
+explaining why it is safe to discard.
+
+Running total on the V-2074 instrument: **8 claims checked, 7 held, 1 finding** — and the finding came
+from reading the code _around_ a claim that held, not from the claim itself.
+
+Related: V-2075 (the finding this sweeps), V-2074 (the instrument).
