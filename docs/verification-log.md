@@ -17255,3 +17255,59 @@ the probe removed.
 
 Related: V-1035 (the measurement re-derived), V-1849 (the single-file version), V-1835 (the retired
 census), V-2077 (the claim whose implementation turns out never to run).
+
+---
+
+## V-2084 — a peer's mutual-deferral finding verified, and the same config audited claim by claim (2026-08-28)
+
+A2 reported that gui-client's coverage is measured by nothing: its own config disables coverage
+because "the root project's coverage report is the load-bearing one", while the root config excludes
+it as "not in scope". **Verified at source, both halves:**
+
+    apps/gui-client/vitest.config.ts:23-28  "Don't measure coverage from this project — the root
+                                             project's coverage report is the load-bearing one."
+                                             coverage: { enabled: false }
+    vitest.config.ts:44                     "- GUI client (Tauri) — not in scope."
+                                             include: ['apps/server/src/**', 'packages/sdk-typescript/src/**']
+
+Neither file is wrong alone. Each defers to the other, and a reader who checks either one is told it
+is handled elsewhere. **177 source files and 258 test files measured by nothing** — their figures,
+their lane, and I have not touched the config while they are mid-measurement on it.
+
+### The generalisation: that exclusion list carries FIVE rationales, so I checked each
+
+| rationale                                          | verdict                                                                                                                                                                                                                                                |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Drizzle repos (`src/db/`)                          | ⭐ **exemplary** — annotated as expired, re-measured twice (V-1002, V-1798), and V-1002 proved lifting it is free (92.29/90.74/90.94/81.74 against 85/83/84/75). Explicitly left as a decision "somebody makes, not one a measurement makes for them". |
+| GUI client — "not in scope"                        | ⛔ mutual deferral (A2's finding, above)                                                                                                                                                                                                               |
+| api-types — "Zod runtime, **no .test.ts imports**" | ⛔ false: **3 of its 4 own tests import `../src`** and execute it                                                                                                                                                                                      |
+| Astro apps — "**not under vitest scope**"          | ⚠️ substantially true, categorically overstated                                                                                                                                                                                                        |
+| generated code (sdk-python `_generated/`, sdk-go)  | not checked                                                                                                                                                                                                                                            |
+
+⭐ **The Astro entry is the one worth stating carefully, because the raw counts invite an overclaim.**
+marketing-site has 190 test files and customer-dashboard 145, and the vitest include glob
+`apps/**/tests/**/*.test.ts` matches all of them — so "not under vitest scope" reads plainly false.
+It is not: **180 of the 190 and 140 of the 145 read source with `readFileSync` rather than importing
+it**, and the bulk of both apps is `.astro`, which vitest cannot instrument. The claim is right about
+the apps.
+
+**Measured tail, stated with its boundary:** counting distinct `src/` modules that an excluded
+workspace's tests actually IMPORT (not read as text) — **9 TypeScript modules total**: marketing-site
+3 of its 5 `.ts` files (`data/capabilities`, `data/pricing`, `data/sub-processors`),
+customer-dashboard 4 of 5 (`data/tier-display-names`, `lib/api-base-url`, `lib/oauth-provider-consent`,
+`lib/safe-next`), api-types 2 of 24 (`common`, `egress`). That is executable source running under
+vitest that the coverage gate does not measure — real, and small.
+
+⭐⭐ **Proportion matters here and I want it on the record: A2's hole is 177 source files; mine is a
+9-module tail.** The same shape at two orders of magnitude, and a write-up that presented them as
+equivalent findings would be the more expensive error. The instrument that found both is the same one
+that has been paying all session — **read what the artifact claims about itself, then check the
+claim** — applied to configuration rather than code.
+
+⚠️ Not fixing the config. The Drizzle entry sets the precedent for how this file handles an expired
+rationale (annotate, measure, leave the decision), and changing a coverage `include` changes what CI
+enforces. A2 is measuring that file's subject right now, so the correction is theirs to land with
+their numbers.
+
+Related: V-2083 (the same config's db exclusion, from the other side), V-2074 (the self-claim
+instrument this applies).
