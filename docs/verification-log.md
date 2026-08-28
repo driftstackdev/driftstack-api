@@ -15259,3 +15259,53 @@ cannot be settled statically — measured 276 `def test_` declarations across 32
 plus 10 `@pytest.mark.parametrize` decorators, which is a LOWER bound since parametrize expands at
 runtime, so 365 is consistent and the statics are inconclusive by construction. Stated rather than
 resolved; running pytest would have contended with a peer's suite for a figure that is documentation.
+
+## V-2049 — storage as a trust boundary: the class A2 hit, swept across the codebase (2026-08-27)
+
+A2 fixed a live defect in their own hour-old change and stated the class better than I would have:
+**"changing where a value lives changed who can write it, and my validation did not move with it."**
+Their exit-identity store moved from an in-process Map to Redis; the read path validated types but
+not shapes, so an empty `region` or a country like `"USA"` passed and then threw inside
+`SessionAssignSchema.parse`, failing a whole session launch over the IP panel. An in-memory map has
+one writer and its invariants are enforced by the code that fills it; a Redis key can be written by
+anything holding the connection, including an older deploy of the same service.
+
+That generalises, so I swept it. **Every Redis read path in `apps/server/src` validates what it reads
+back.** Boundary: all `redis.(get|getdel|hget|hgetall|mget|lrange|smembers)` call sites —
+
+- `services/cli-authorize.ts` — `parseStoredCode` reconstructs a normalized discriminated union and
+  states the principle in its own header: _"Redis is an external trust boundary: deploy drift,
+  operator writes, or a partial restore can leave syntactically-valid JSON whose runtime shape no
+  longer matches StoredCode … so malformed values never reach constant-time comparison or secret
+  decryption with attacker-controlled types."_ It checks a 64-hex hash, a non-empty state, a finite
+  non-negative timestamp.
+- the MFA challenge consumer (`auth-flows.ts`) — `parseMfaChallengePayload`, and on failure it
+  CONSUMES the corrupt entry so malformed data fails closed rather than becoming a repeatable 500.
+- `services/auth-cache.ts` — has its own dedicated guard, `auth-cache-security-schema.test.ts`.
+- `agent-pair-mode-lock` returns a display string only; `redis-fleet-nonce-cache` returns a boolean
+  from `SET NX` and reads no stored payload.
+
+**So the discipline is established here and A2's file was the exception, not the rule** — worth
+saying, because it means their fix aligned with a convention rather than inventing one.
+
+### The same class one layer down: jsonb
+
+Drizzle's `$type<T>()` on a jsonb column is a COMPILE-TIME cast, and a row written by an older deploy
+carries whatever shape that deploy wrote — the identical trust-boundary shape at the database. 23
+jsonb columns are declared in `schema.ts`.
+
+The execution-driving one, `scheduled_jobs.payload`, is read as
+`(r.payload as Record<string, unknown>) ?? {}` — the WEAKEST possible assertion, which is the honest
+one: every field arrives as `unknown`, so TypeScript forces each handler to narrow before use.
+Measured that narrowing across the tree (boundary: tracked `.ts` under `apps/server/src`, comment
+lines dropped, lines reading a field off a `payload` object): **13 lines guard with `typeof` or a
+schema parse, 1 casts.**
+
+⛔ The single cast is a false positive for this class, and reading is what showed it.
+`durable-webhook-delivery.ts:150` casts on the **write** path — `opts.payload` is a caller-supplied
+in-process object being narrowed for an INSERT, not a value read back from storage. Its consequence
+is safe besides: `webhookDeliveries.eventType` is a pg enum column, so an invalid value is rejected
+by Postgres rather than silently stored.
+
+Axis closed. ⚠️ Recorded with its boundary because the sweep keys on the identifier `payload`; a
+jsonb column read under a different local name is outside it.
