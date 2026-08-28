@@ -29,7 +29,7 @@
 // would be a worse guard than none. What it catches is the specific, recurring
 // failure: code closes a documented gap and nobody edits the document.
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +61,77 @@ function scrubbedTables(): string[] {
     found.add(m[1]!);
   }
   return [...found].sort();
+}
+
+/**
+ * Artifacts the repo actually contains: source file stems, and declared symbols.
+ *
+ * This is the resolver for the reverse direction. Every arm above walks repo ->
+ * doc; this one walks doc -> repo, and the two catch opposite failures. A
+ * mechanism cell is required to name something that EXISTS, which is a weaker
+ * property than "the mechanism works" and a much stronger one than prose.
+ */
+function repoArtifacts(): { stems: Set<string>; decls: Set<string> } {
+  const stems = new Set<string>();
+  const decls = new Set<string>();
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const full = resolve(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.name.endsWith('.ts')) {
+        stems.add(e.name.slice(0, -3));
+        const text = readFileSync(full, 'utf8');
+        for (const m of text.matchAll(
+          /\b(?:function|const|let|class|interface|type|enum)\s+([A-Za-z_]\w*)/g,
+        )) {
+          decls.add(m[1]!);
+        }
+        for (const m of text.matchAll(
+          /^\s{2,}(?:(?:public|private|protected|static|async|readonly)\s+)*([a-z]\w*)\s*\(/gm,
+        )) {
+          decls.add(m[1]!);
+        }
+      }
+    }
+  };
+  walk(SERVER_SRC);
+  return { stems, decls };
+}
+
+/** The rows of the "Covered (have a prune or archive)" table, as [table, mechanism]. */
+function coveredRows(): { table: string; mechanism: string }[] {
+  const audit = readFileSync(AUDIT, 'utf8');
+  const section = audit.split(/^## Covered[^\n]*$/m)[1]?.split(/^## /m)[0] ?? '';
+  const rows: { table: string; mechanism: string }[] = [];
+  for (const line of section.split('\n')) {
+    if (!line.startsWith('|')) continue;
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim());
+    if (cells.length < 2) continue;
+    if (/^-+$/.test(cells[0]!.replace(/[\s-]/g, '-'))) continue; // separator
+    if (cells[0] === 'Table') continue; // header
+    rows.push({ table: cells[0]!, mechanism: cells[1]! });
+  }
+  return rows;
+}
+
+/** Tokens in a mechanism cell that name a real artifact. */
+function namedArtifacts(
+  mechanism: string,
+  repo: { stems: Set<string>; decls: Set<string> },
+): string[] {
+  const hits: string[] = [];
+  for (const raw of mechanism.match(/[A-Za-z][\w.-]{5,}/g) ?? []) {
+    const tok = raw.endsWith('.ts') ? raw.slice(0, -3) : raw;
+    // Require structure — camelCase, UPPER_SNAKE or kebab. A bare English word
+    // like "sweeper" or "prune" must not count as naming anything, or the arm
+    // grades prose and passes on exactly the row that motivated it.
+    if (!/[A-Z]|-/.test(tok)) continue;
+    if (repo.stems.has(tok) || repo.decls.has(tok)) hits.push(tok);
+  }
+  return hits;
 }
 
 describe('the retention audit does not outlive its findings', () => {
@@ -100,5 +171,26 @@ describe('the retention audit does not outlive its findings', () => {
     expect(audit, 'and scopes the covered claim to its own date').toMatch(
       /scoped to 2026-06-10|Treat the "the rest are covered" line/,
     );
+  });
+
+  it('CRITICAL the resolver sees the repo, and the covered table parses. Both halves are floors: a resolver that matched nothing would report every mechanism unnamed, and a parser that matched no rows would report every mechanism fine — the two failures look like opposite verdicts and are the same bug.', () => {
+    const repo = repoArtifacts();
+    expect(repo.stems.size, 'source file stems under src').toBeGreaterThan(200);
+    expect(repo.decls.size, 'declared symbols under src').toBeGreaterThan(2000);
+    // Known positives: if these stop resolving the resolver is broken, not the doc.
+    expect(repo.decls, 'a known exported symbol').toContain('pruneOlderThan');
+    expect(repo.stems, 'a known sweeper file').toContain('auth-flows-sweeper');
+    expect(coveredRows().length, 'rows in the Covered table').toBeGreaterThanOrEqual(4);
+  });
+
+  it('CRITICAL every row of the covered table names an artifact that exists. This is the reverse of the arms above: they check that code closing a gap reaches the document, this checks that a document claiming coverage reaches the code. web_sessions sat in this table for 78 days across three dated passes as "expires_at + sweeper" — a column and a noun, naming nothing — while no code path deleted a row (V-2059). The gaps list is re-read and annotated; the safe-list is not, so its rows need a machine to keep them honest.', () => {
+    const repo = repoArtifacts();
+    const unnamed = coveredRows()
+      .filter((r) => namedArtifacts(r.mechanism, repo).length === 0)
+      .map((r) => `${r.table} -> "${r.mechanism}"`);
+    expect(
+      unnamed,
+      'covered row(s) whose mechanism names no file or symbol in the repo. Name the sweeper, the prune method, or the constant that implements it — if nothing can be named, the row does not belong in this table:',
+    ).toEqual([]);
   });
 });

@@ -11,7 +11,7 @@ audit. Two gaps found (`session_events`, `scheduled_jobs`); the rest are covered
 | `system_health_probes`                                                                  | hourly prune, rows > 30 days (health-probe.ts pruneOlderThan)                          |
 | `email_verify` / `magic_link` / `password_reset` tokens                                 | auth-flows-sweeper (deletes expired, per-kind)                                         |
 | `admin_audit_log`, `processed_stripe_events`, `legal_acceptances`, `webhook_deliveries` | audit-archive → R2 JSONL+gzip then DELETE (AUDIT_TABLES, archiveTable per `olderThan`) |
-| crypto-order idempotency dedup                                                          | in-memory 24h TTL prune                                                                |
+| crypto-order idempotency dedup                                                          | in-memory 24h TTL prune (crypto-orders.ts pruneIdempotency)                            |
 
 ## GAPS — unbounded growth, no retention
 

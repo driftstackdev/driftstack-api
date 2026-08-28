@@ -15829,3 +15829,67 @@ item 3 with the measurement and its boundary, and the closing "Both retention ga
 qualified — it asserted completeness over a safe-list nothing had verified.
 
 Related: V-2054 (the same method, opposite direction — a doc claiming a gap that was closed).
+
+---
+
+## V-2060 — the guard on that register walked repo→doc only; the reverse arm is the one that catches a false safe-list (2026-08-27)
+
+`the-retention-audit-does-not-outlive-its-findings.test.ts` already guards the register V-2059 found
+wrong, and it is a good guard: it reads the scrubbed tables from the REPO rather than pinning prose,
+it floors its own reader ("the first version matched `.update(x)` and found NOTHING — the
+anti-vacuity floor is what caught it"), and it states its limits explicitly rather than implying
+them.
+
+⭐⭐ **Every one of its four arms runs in one direction: repo → doc.** Code closes a gap, therefore
+the document must acknowledge it. That is the V-2054 direction, and it is the direction that gets
+attention because a stale OPEN item wastes visible work. **Nothing walked doc → repo** — a row
+claiming coverage was never asked whether the thing it claims exists. So the register's safe-list
+could assert a mechanism that had never been written, which is precisely what it did for 78 days.
+
+This is the missing-reverse-arm shape again, and the third time it has produced a finding here: a
+forward assertion ships, the reverse one does not, and the reverse one catches the failure that
+**looks like success**. A gap wrongly listed as open is loud and gets chased. A gap wrongly listed as
+covered is silent by construction.
+
+### The arm
+
+For every row of the Covered table, the mechanism cell must name at least one artifact that exists —
+a source file stem or a declared symbol under `apps/server/src`. Resolution requires structure
+(camelCase, UPPER_SNAKE, or kebab) so that a bare English word cannot satisfy it; without that the
+arm would grade prose and pass on the exact row that motivated it. "sweeper", "prune" and "delete"
+name nothing.
+
+Deliberately weaker than "the mechanism works", which is not mechanically checkable, and much
+stronger than prose. The pricing is the point: to put a table in the safe-list you must name the code
+that covers it, and if nothing can be named, the row does not belong in the table. That is the same
+inversion as the exemption-list second arm — the cheap door becomes the expensive one.
+
+### Proof
+
+- **Known-positive, on the real subject rather than the guard's own list:** restoring the historical
+  ``| `web_sessions` / auth tokens | `expires_at` + sweeper |`` row reds exactly one arm — the new
+  one — printing `` `web_sessions` / auth tokens -> "`expires_at` + sweeper" ``. The defect this was
+  written for is reproduced verbatim and caught. File proved to differ before the result was read;
+  restored byte-identical from a path-keyed snapshot.
+- **Vacuity:** breaking the table parser so it matches no rows reds the FLOOR arm
+  (`expected 0 to be greater than or equal to 4`), not the main arm silently passing. Both failure
+  modes — a resolver that resolves nothing and a parser that parses nothing — report opposite
+  verdicts from the same bug, so both are floored.
+- Resolver floors on known positives (`pruneOlderThan` as a symbol, `auth-flows-sweeper` as a file)
+  so a broken resolver reds instead of condemning every row.
+- 4 → 6 `it(` against HEAD; `tsc -p apps/server/tsconfig.test.json` clean; no new test file, so no
+  `EXPECTED_TEST_FILES` change.
+
+### What the arm immediately priced
+
+One surviving row named no artifact: `crypto-order idempotency dedup | in-memory 24h TTL prune`. The
+mechanism is real — `pruneIdempotency` in `services/crypto-orders.ts`, called on each idempotent
+create — so the remedy was to name it, not to remove the row. That is the guard working as intended
+on its first run: it did not find a second missing mechanism, it found a row that could not be
+distinguished from one, and the fix took the ambiguity away.
+
+⛔ **Scope, stated rather than implied.** This checks the Covered table of one document. The same
+weakness — a safe-list nothing re-reads — is generic to every audit register in `docs/internal`, and
+this arm does not reach them.
+
+Related: V-2059 (the finding), V-2054 (the same register class, opposite direction).
