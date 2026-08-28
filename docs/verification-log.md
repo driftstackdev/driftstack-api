@@ -10809,3 +10809,40 @@ searching for the key _after_ the `MAX_SESSION_MINUTES_PER_TIER` declaration.
 **Boundary:** this checks trigger #1 of that note and the message its guard prints. Finding #2 — the poller
 retry re-arming a self-re-arming job twice, since `markComplete` throwing after the re-arm leaves `dedup:false`
 unable to collapse the duplicate — is untouched and remains a maintainer's call, as recorded.
+
+## V-2127 — the deferred re-arm fan-out fix landed across all seven self-re-arming sweepers; the note deferring it is stale (2026-08-28)
+
+Closes the second half of `project_duration_sweep_rearm_audit` (2026-06-03), whose finding #1 was checked in
+V-2126. Finding #2 was recorded as INCIDENT-PRONE and explicitly **not** autopilot work: with `dedup:false`,
+a handler that re-arms and then has `markComplete` throw is retried by the poller, re-arms **again**, and both
+successors persist because `dedup:false` never collapses them — the sweep then runs at 2×, one extra chain per
+recurrence. The note said the documented "single locked executor → one enqueue → can't fan out" reasoning
+OMITTED the retry path, and prescribed the robust fix: dedup that excludes the in-flight job while re-arming
+back to a deduplicating posture, fixing both chain-death and fan-out — "deliberate review, not an autopilot
+flip".
+
+**That fix has landed, and across the whole family rather than the two files the note named.** Every
+self-re-arming sweeper in `apps/server/src` now enqueues with `dedupOnAccountAndType: true` — seven of them:
+`session-duration-sweeper:232` (the subject), `daily-maintenance-jobs:146`, `scheduled-jobs-prune-sweeper:100`,
+`crypto-order-expiry-sweep-job:112`, `account-deletion-purge-sweeper:499`, `agent-session-orphan-sweeper:170`,
+and `auth-flows-sweeper:174`. The `dedup:false` posture the finding rested on is gone.
+
+⭐ **And the mechanism is the one the note specified, not merely a flip back to dedup:true** — which would have
+reintroduced the chain-death incident that caused `dedup:false` in the first place. `auth-flows-sweeper`
+carries it explicitly: the re-arm "uses future-successor dedup. The current/older run-time cohort" is ignored
+while future successors still collapse, via `dedupAfterRunAt`; bootstrap omits `currentRunAt` and dedups
+against every pending row. That is exactly "the dedup query EXCLUDES the in-flight job", implemented as a
+run-time cohort boundary.
+
+⭐ **The stale documentation half is closed too.** The complaint was that the JSDoc's safety reasoning omitted
+poller retries. `session-duration-sweeper.ts:174` now states the successor enqueue "survives handler replay
+without creating parallel chains" — replay is named rather than assumed away.
+
+**Boundary, stated because it is narrower than the finding:** this establishes the dedup POSTURE at all seven
+enqueue sites and that the JSDoc now names handler replay. It does not re-derive that `dedupAfterRunAt`'s
+cohort boundary is correct under every interleaving — that is behavioural, belongs to the scheduled-jobs repo's
+own guards, and was not re-run here.
+
+**Three of three findings from that note are now resolved or checked** (#1 latent-and-guarded per V-2126, #2
+fixed here), so the note's "don't re-audit; the two findings want a maintainer call" no longer describes the
+tree. Memory updated rather than deleted, since the audit's CLEAN list is still a useful do-not-re-audit record.
