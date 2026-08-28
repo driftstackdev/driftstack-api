@@ -19038,3 +19038,56 @@ pre-empted by existing prior art, which is now the strongest available evidence 
 of this repo is genuinely exhausted rather than merely unlucky.
 
 Related: V-2109 (named this target), V-2110 (the dead-code bound), V-2104 (the method).
+
+---
+
+## V-2112 — the agent-session upload path audited end to end: clean, and already three times audited (2026-08-28)
+
+Static measurement is exhausted (V-2111), so this is the mode the standing order prescribes for that
+state. Boundary: `POST /v1/agent-sessions/:id/files` in `routes/agent-sessions.ts` — its caps,
+reservation and release accounting only, not the ~5000-line route file around it.
+
+**The question an audit adds over the existing guards.** `upload-account-inflight-cap`,
+`the-documented-upload-caps-are-the-enforced-ones` and `upload-request-correlator` all assert the caps
+REFUSE correctly. None of them asks whether the reservation is RELEASED on every exit path — and a
+leaked per-account counter is not a refused request, it is a customer permanently throttled with no
+error anywhere.
+
+**Verified, and it holds on every point:**
+
+- The reservation (`accountUploadInFlightBytes/Count.set`) is taken at one place, and the window
+  between it and the enclosing `try` contains only comments, a `let`, two `Map.set` calls and an LRU
+  eviction — **no return path and nothing that can throw**, so the reservation cannot escape the
+  `finally`.
+- The `finally` releases BOTH concurrent maps and **deletes the key at zero** rather than storing 0 —
+  without that the per-account map would grow one permanent entry per account that ever uploaded.
+- It also rolls the LIFETIME reservation back unless `lifetimeCommitted`, with `Math.max(0, …)`, and
+  reads the current values through `?? reserveBytes` / `?? 1` so an entry cleared by the LRU eviction
+  cannot drive a counter negative. Those two defaults only matter in the eviction case, and they are
+  right.
+- Byte reservation is taken on the ENCODED length BEFORE decoding, so the cap is consulted before a
+  large copy is materialised.
+- The lifetime check runs BEFORE the concurrent reservation, so a lifetime-rejected request never
+  touches maps it would then have to release.
+
+⭐ **The one unbounded-growth item is documented AND bounded.** The per-session lifetime maps are
+deleted only along the customer-DELETE path, so a session reaped by worker-disconnect or the 12h orphan
+sweep orphans its entry — stated in the code, then capped at 20,000 tracked sessions with
+oldest-evicted, and with the safety argument written down: a falsely cleared counter only ever WIDENS
+that session's remaining allowance, so eviction is not a security regression.
+
+⭐⭐ **And the region already caught a real concurrency defect (V-721), recorded where it happened.**
+Committing the lifetime total AFTER `await conn.requestUpload(...)` made the check-and-increment a
+read-modify-write straddling the relay: every upload admitted while another was in flight read the same
+pre-relay total and wrote back its own single increment, so a concurrent batch registered as ONE
+upload and a caller keeping four in flight spent the per-session ceiling at roughly a quarter rate —
+defeating the counter that exists to backstop the concurrent caps. Fixed by reserving in the same
+synchronous block.
+
+**Result: clean.** Three recorded audit passes are visible in the comments (2026-06-24, 06-30, 07-01)
+and this is the fourth. Recorded so it is not audited a fifth time without a reason.
+
+⚠️ Ninth consecutive thread ending clean or pre-empted. Stated with the same caveat as V-2111: that is
+evidence about the surfaces reached so far, not a claim about the codebase.
+
+Related: V-2111 (why the mode changed), V-721 (the defect this region already fixed).
