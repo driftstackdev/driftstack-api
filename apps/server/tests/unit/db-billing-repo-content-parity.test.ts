@@ -81,12 +81,12 @@ describe('W442.A apps/server/src/db/billing-repo.ts content parity', () => {
     );
   });
 
-  it('findCurrentSubscription framing pinned: most-recent first by created_at; route layer can filter to active statuses if it cares; do NOT filter here so the dashboard can surface "your last subscription was canceled on X" without an extra query; orderBy desc createdAt + limit 1', () => {
+  it('findCurrentSubscription framing pinned: most-recent first by created_at; route layer can filter to active statuses if it cares; do NOT filter here so the dashboard can surface "your last subscription was canceled on X" without an extra query; orderBy desc createdAt, desc id (V-2131 tiebreak) + limit 1', () => {
     expect(body).toMatch(
       /\/\/ Most-recent first by created_at; route layer can filter to active\s*\/\/ statuses if it cares\. We don't filter here so the dashboard can\s*\/\/ surface "your last subscription was canceled on X" without an\s*\/\/ extra query\./,
     );
     expect(body).toMatch(
-      /const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(subscriptions\)\s*\.where\(eq\(subscriptions\.accountId, accountId\)\)\s*\.orderBy\(desc\(subscriptions\.createdAt\)\)\s*\.limit\(1\);\s*return row \? toSubscription\(row\) : null;/,
+      /const \[row\] = await this\.database\.db\s*\.select\(\)\s*\.from\(subscriptions\)\s*\.where\(eq\(subscriptions\.accountId, accountId\)\)\s*\.orderBy\(desc\(subscriptions\.createdAt\), desc\(subscriptions\.id\)\)\s*\.limit\(1\);\s*return row \? toSubscription\(row\) : null;/,
     );
   });
 

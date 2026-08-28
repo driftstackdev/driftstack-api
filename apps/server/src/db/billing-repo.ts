@@ -81,7 +81,12 @@ export class DrizzleBillingRepo implements BillingRepo {
           inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
         ),
       )
-      .orderBy(desc(subscriptions.createdAt))
+      // V-2131 — `id DESC` breaks a created_at tie. Nothing at the database
+      // level limits an account to one live subscription (only the checkout
+      // guard does), and two rows written in one transaction share now(), so
+      // without a tiebreaker the pick depends on heap order and the in-memory
+      // double (insertion order) can disagree with Postgres on the same data.
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
       .limit(1);
     return row ? toSubscription(row) : null;
   }
@@ -110,7 +115,7 @@ export class DrizzleBillingRepo implements BillingRepo {
           inArray(subscriptions.status, [...COLLECTING_SUBSCRIPTION_STATUSES]),
         ),
       )
-      .orderBy(desc(subscriptions.createdAt))
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
       .limit(1);
     return row ? toSubscription(row) : null;
   }
@@ -124,7 +129,7 @@ export class DrizzleBillingRepo implements BillingRepo {
       .select()
       .from(subscriptions)
       .where(eq(subscriptions.accountId, accountId))
-      .orderBy(desc(subscriptions.createdAt))
+      .orderBy(desc(subscriptions.createdAt), desc(subscriptions.id))
       .limit(1);
     return row ? toSubscription(row) : null;
   }

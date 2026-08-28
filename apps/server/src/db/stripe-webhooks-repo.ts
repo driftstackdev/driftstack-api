@@ -232,7 +232,8 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
         .limit(1);
       const previousTier = before[0]?.tier ?? null;
       // The account's best remaining active/trialing subscription (most-recently
-      // updated wins in the pathological multi-active case). Its tier is the true
+      // updated wins in the pathological multi-active case; `id DESC` breaks a
+      // same-transaction tie, since now() is transaction-start time — V-2131). Its tier is the true
       // entitlement; only when NONE remain do we drop to the fallback (free).
       const remaining = await tx
         .select({ tier: subscriptions.tier })
@@ -243,7 +244,7 @@ export class DrizzleStripeWebhooksRepo implements StripeWebhooksRepo {
             inArray(subscriptions.status, [...ACTIVE_SUBSCRIPTION_STATUSES]),
           ),
         )
-        .orderBy(desc(subscriptions.updatedAt))
+        .orderBy(desc(subscriptions.updatedAt), desc(subscriptions.id))
         .limit(1);
       const stripeCandidate = remaining[0]?.tier ?? args.fallbackTier;
       // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement, so a

@@ -93,6 +93,9 @@ interface LedgerSubject {
     accountId: string;
     tier: 'solo_manual' | 'team_manual';
     status: 'active' | 'canceled';
+    /** V-2131 — fixed id + timestamp so an arm can stage an id-decided tie. */
+    id?: string;
+    at?: Date;
   }) => Promise<void>;
   setAccountTierToBestActive: (args: {
     accountId: string;
@@ -153,7 +156,8 @@ function inMemorySubject(): LedgerSubject {
         currentPeriodEnd: null,
         cancelAtPeriodEnd: false,
         canceledAt: null,
-        at: NOW,
+        at: a.at ?? NOW,
+        ...(a.id !== undefined ? { id: a.id } : {}),
       });
       return Promise.resolve();
     },
@@ -190,6 +194,8 @@ function drizzleSubject(): LedgerSubject {
         stripePriceId: `price_${a.tier}`,
         tier: a.tier,
         status: a.status,
+        ...(a.id !== undefined ? { id: a.id } : {}),
+        ...(a.at !== undefined ? { createdAt: a.at, updatedAt: a.at } : {}),
       });
     },
     setAccountTierToBestActive: (a) => repo.setAccountTierToBestActive(a),
@@ -305,6 +311,39 @@ function stripeLedgerContract(
       expect(
         await s.getAccountTier(account),
         'the account was left on a tier it is not paying for',
+      ).toBe('solo_manual');
+    });
+
+    it('CRITICAL when two active subscriptions were last updated in the same instant, `id DESC` decides which tier survives a downgrade — in both, deterministically. now() is transaction-start time, so rows touched in one webhook transaction tie exactly; without the tiebreak the surviving tier depends on scan order in Postgres and on insertion order in the double.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account('team_manual');
+      const lowId = '00000000-0000-4000-8000-00000000000c';
+      const highId = 'ffffffff-0000-4000-8000-00000000000d';
+      // Low id first, so scan order and insertion order both favour the LOSER (the higher tier).
+      await s.subscription({
+        accountId: account,
+        tier: 'team_manual',
+        status: 'active',
+        id: lowId,
+        at: NOW,
+      });
+      await s.subscription({
+        accountId: account,
+        tier: 'solo_manual',
+        status: 'active',
+        id: highId,
+        at: NOW,
+      });
+
+      const applied = await s.downgradeAccountTierToBestRemaining({
+        accountId: account,
+        fallbackTier: 'free',
+        at: NOW,
+      });
+      expect(
+        applied.appliedTier,
+        'the tie resolved to the lower id — the tiebreak is not id DESC, so the surviving tier depends on scan order',
       ).toBe('solo_manual');
     });
 

@@ -158,6 +158,8 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     cancelAtPeriodEnd: boolean;
     canceledAt: Date | null;
     at: Date;
+    /** Test-only: a fixed id so a contract arm can stage an id-decided tie. */
+    id?: string;
   }): Promise<{ applied: boolean }> {
     const existing = Array.from(this.subs.values()).find(
       (s) => s.stripeSubscriptionId === args.stripeSubscriptionId,
@@ -185,7 +187,7 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
         updatedAt: args.at,
       });
     } else {
-      const id = randomUUID();
+      const id = args.id ?? randomUUID();
       this.subs.set(id, {
         id,
         accountId: args.accountId,
@@ -252,7 +254,11 @@ export class InMemoryStripeWebhooksRepo implements StripeWebhooksRepo {
     // updated wins), else the fallback — mirrors the Drizzle query.
     const remaining = Array.from(this.subs.values())
       .filter((s) => s.accountId === args.accountId && BILLED_STATUSES.includes(s.status))
-      .sort((x, y) => y.updatedAt.getTime() - x.updatedAt.getTime());
+      // V-2131 — `id DESC` tiebreak, mirroring the Drizzle ORDER BY.
+      .sort(
+        (x, y) =>
+          y.updatedAt.getTime() - x.updatedAt.getTime() || (y.id > x.id ? 1 : y.id < x.id ? -1 : 0),
+      );
     // C1 — floor against the highest-ranked UNEXPIRED crypto entitlement (mirrors
     // the Drizzle gt(expiresAt, at) union). No rows → byte-identical to before.
     let appliedTier = remaining[0]?.tier ?? args.fallbackTier;

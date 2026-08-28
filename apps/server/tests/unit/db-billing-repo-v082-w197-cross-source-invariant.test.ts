@@ -87,10 +87,10 @@ describe('W992 db/billing-repo V-082 + W197 cross-source invariant', () => {
     expect(p).toMatch(/\/\/ extra query\./);
   });
 
-  it("CRITICAL findCurrentSubscription orders desc(createdAt) + limit(1). The most-recent-first + limit-1 pattern is what makes 'last subscription' semantics correct.", () => {
+  it("CRITICAL findCurrentSubscription orders desc(createdAt), desc(id) + limit(1). V-2131 added the id tiebreak so a created_at tie is deterministic. The most-recent-first + limit-1 pattern is what makes 'last subscription' semantics correct.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/db/billing-repo.ts'));
     expect(p).toMatch(/\.where\(eq\(subscriptions\.accountId, accountId\)\)/);
-    expect(p).toMatch(/\.orderBy\(desc\(subscriptions\.createdAt\)\)/);
+    expect(p).toMatch(/\.orderBy\(desc\(subscriptions\.createdAt\), desc\(subscriptions\.id\)\)/);
     expect(p).toMatch(/\.limit\(1\);/);
   });
 

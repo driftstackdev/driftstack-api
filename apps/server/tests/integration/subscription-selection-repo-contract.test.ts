@@ -72,7 +72,7 @@ type Status = SubscriptionMirror['status'];
 interface Subject {
   repo: BillingRepo;
   account: () => Promise<string>;
-  sub: (accountId: string, status: Status, createdAt: Date) => Promise<string>;
+  sub: (accountId: string, status: Status, createdAt: Date, id?: string) => Promise<string>;
 }
 
 function inMemorySubject(): Subject {
@@ -90,8 +90,8 @@ function inMemorySubject(): Subject {
       });
       return Promise.resolve(id);
     },
-    sub: (accountId, status, createdAt) => {
-      const id = randomUUID();
+    sub: (accountId, status, createdAt, explicitId) => {
+      const id = explicitId ?? randomUUID();
       repo.upsertSubscription({
         id,
         accountId,
@@ -124,8 +124,8 @@ function drizzleSubject(): Subject {
       await c`INSERT INTO accounts (id, email) VALUES (${id}, ${`bill-${id}@test.local`})`;
       return id;
     },
-    sub: async (accountId, status, createdAt) => {
-      const id = randomUUID();
+    sub: async (accountId, status, createdAt, explicitId) => {
+      const id = explicitId ?? randomUUID();
       await c`INSERT INTO subscriptions
                 (id, account_id, stripe_subscription_id, stripe_price_id, tier, status,
                  cancel_at_period_end, created_at, updated_at)
@@ -191,6 +191,28 @@ function subscriptionSelectionContract(
         (await s.repo.findCurrentSubscription(account))?.id,
         'the most recent subscription was filtered out by status',
       ).toBe(cancelled);
+    });
+
+    it('CRITICAL when two live subscriptions share a created_at, `id DESC` decides — in both, deterministically. Nothing at the database level limits an account to one live subscription (only the checkout guard does), and two rows written in one transaction share now(). Without the tiebreak Postgres returns whichever row the scan reaches while the double kept the first inserted, so the same data could answer differently per implementation and per read.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const account = await s.account();
+      const lowId = '00000000-0000-4000-8000-00000000000a';
+      const highId = 'ffffffff-0000-4000-8000-00000000000b';
+      // Low id first, so scan order and insertion order both favour the LOSER.
+      await s.sub(account, 'active', OLDER, lowId);
+      await s.sub(account, 'active', OLDER, highId);
+
+      for (const [name, pick] of [
+        ['findActiveSubscription', () => s.repo.findActiveSubscription(account)],
+        ['findCollectingSubscription', () => s.repo.findCollectingSubscription(account)],
+        ['findCurrentSubscription', () => s.repo.findCurrentSubscription(account)],
+      ] as const) {
+        expect(
+          (await pick())?.id,
+          `${name} resolved the tie to the lower id — the tiebreak is not id DESC, so the pick depends on scan order`,
+        ).toBe(highId);
+      }
     });
 
     it("CRITICAL every lookup is account-scoped, in both. Another customer's active subscription granting entitlements here is both a billing error and a disclosure.", async () => {

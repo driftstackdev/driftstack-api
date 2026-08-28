@@ -10987,3 +10987,47 @@ exemption key for a retired route → stale arm; `/v1/whoami` added to the spec 
 empty by assertion, not by construction. Paths only; request/response shapes are the existing content-parity
 pins' job. One new test file: ratchets 3077 → 3078 and 3254 → 3255. Suite at `25ec86b14` was green with the
 full file count before this landed; the executed count for the combined HEAD is A2's full-capture run.
+
+## V-2131 — the V-1228 `id DESC` tiebreaker re-run across its family: four subscription picks could answer differently per implementation and per read (2026-08-28)
+
+Method: take a historical fix's post-condition and re-run it across every sibling, not the one site it named.
+V-1228 fixed `latestAcceptancesForAccount` — a `DISTINCT ON … ORDER BY accepted_at DESC` with no tiebreaker,
+so a same-timestamp tie was resolved by scan order and the recorded version changed between reads. The
+predicate generalises: **any "latest row" pick ordered by a non-unique timestamp.**
+
+**Census:** `DISTINCT ON` appears once in `apps/server/src/db` (the fixed one). `.orderBy(desc(<timestamp>))
+… .limit(1)` with no second key appears at **10 sites**; each was read for what a tie would change. Six have
+nil consequence by construction and were left alone: the crypto-entitlement stack anchor reads only the max
+`expires_at` (a tie yields the same value); three fleet-node picks accept any node with credentials; the
+atlas-priority probe is an existence check; the open-incident lookup is dedup-bounded per target. **Four are
+material, all subscriptions:** `billing-repo.ts` `findActiveSubscription` / `findCollectingSubscription` /
+`findCurrentSubscription` (created_at) and `stripe-webhooks-repo.ts` `downgradeAccountTierToBestRemaining`'s
+"most-recently updated active subscription wins" (updated_at).
+
+**Why the tie is reachable:** nothing at the database level limits an account to one live subscription — the
+`subscriptions` table has a unique index on `stripe_subscription_id` only; the guard is `billing.ts:201`'s
+checkout refusal, an application check a concurrent checkout or a Stripe-side second subscription walks past.
+And Postgres `now()` is transaction-start time, so two rows touched in one webhook transaction share
+`updated_at` exactly. **Then the two halves of the contract disagree:** the in-memory doubles kept the FIRST
+inserted row on a tie (`>` comparison, stable sort) while Postgres returned whichever the scan reached — same
+data, different answer per implementation, and per read in Postgres. No contract arm covered it.
+
+**Fix:** `desc(subscriptions.id)` at the four Drizzle sites; the same rule in both doubles (`newerThan` in
+`in-memory-billing.ts`, the sort comparator in `in-memory-stripe-webhooks-repo.ts`); a tie arm in each contract
+test using V-1228's technique — low id inserted first so scan order AND insertion order both favour the loser,
+then assert the greater id (billing: all three lookups; stripe: the surviving tier after a downgrade). The
+fixtures gained an optional explicit id (+ timestamp for the stripe Drizzle insert, which otherwise defaults
+`updated_at` per statement and cannot tie); the stripe double's `upsertSubscription` accepts a test-only `id`.
+Two content-parity pins quoted the old `orderBy` and moved in this commit; `it(` counts unchanged.
+
+**Mutation proofs — 4 of 4 killed, snapshot-restored:** dropping the Drizzle tiebreak in `billing-repo.ts` →
+the billing tie arm fails on the Drizzle half (`findActiveSubscription resolved the tie to the lower id`);
+dropping the double's tie rule → the same arm fails on the in-memory half; dropping the Drizzle tiebreak in
+`stripe-webhooks-repo.ts` → the stripe tie arm fails; dropping the double's sort tiebreak → the same arm on the
+in-memory half. Both halves verified to RUN (verbose reporter; the reachability arm was green) against
+`driftstack_a3_vitest`.
+
+**Boundary:** determinism, not policy — which of two simultaneously-updated live subscriptions SHOULD win is a
+product question this does not answer; it only makes the answer the same everywhere. The "one live
+subscription per account" invariant is still not enforced by the database. The six nil-consequence sites are
+listed so nobody re-derives them. Gated: pending (this touches `src/db`; full-capture `--all` follows).

@@ -12,6 +12,20 @@ import {
   COLLECTING_SUBSCRIPTION_STATUSES,
 } from '../../../src/db/subscription-status-sets.js';
 
+/**
+ * V-2131 — mirrors the SQL `ORDER BY created_at DESC, id DESC`: newer wins, and a
+ * created_at tie goes to the greater id. Before this the double kept the FIRST
+ * inserted row on a tie while Postgres returned whichever the scan reached, so the
+ * two halves of the contract could disagree on identical data.
+ */
+function newerThan(
+  a: { createdAt: Date; id: string },
+  b: { createdAt: Date; id: string },
+): boolean {
+  const dt = a.createdAt.getTime() - b.createdAt.getTime();
+  return dt > 0 || (dt === 0 && a.id > b.id);
+}
+
 export class InMemoryBillingRepo implements BillingRepo {
   private readonly accounts = new Map<string, BillingAccountSnapshot>();
   private readonly subscriptions = new Map<string, SubscriptionMirror>();
@@ -46,7 +60,7 @@ export class InMemoryBillingRepo implements BillingRepo {
     for (const s of this.subscriptions.values()) {
       if (s.accountId !== accountId) continue;
       if (!(ACTIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(s.status)) continue;
-      if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
+      if (found === null || newerThan(s, found)) found = s;
     }
     return Promise.resolve(found);
   }
@@ -59,7 +73,7 @@ export class InMemoryBillingRepo implements BillingRepo {
     for (const s of this.subscriptions.values()) {
       if (s.accountId !== accountId) continue;
       if (!(COLLECTING_SUBSCRIPTION_STATUSES as readonly string[]).includes(s.status)) continue;
-      if (found === null || s.createdAt.getTime() > found.createdAt.getTime()) found = s;
+      if (found === null || newerThan(s, found)) found = s;
     }
     return Promise.resolve(found);
   }
@@ -68,7 +82,7 @@ export class InMemoryBillingRepo implements BillingRepo {
     let latest: SubscriptionMirror | null = null;
     for (const s of this.subscriptions.values()) {
       if (s.accountId !== accountId) continue;
-      if (latest === null || s.createdAt.getTime() > latest.createdAt.getTime()) latest = s;
+      if (latest === null || newerThan(s, latest)) latest = s;
     }
     return Promise.resolve(latest);
   }
