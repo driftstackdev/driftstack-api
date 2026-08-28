@@ -14,7 +14,10 @@ const LAYOUT = resolve(REPO_ROOT, 'apps/customer-dashboard/src/layouts/Dashboard
 const PAGES_DIR = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages');
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   for (const e of readdirSync(dir)) {
     const full = resolve(dir, e);
     if (statSync(full).isDirectory()) walk(full, out);

@@ -11131,3 +11131,27 @@ naming the missing root, where before it passed on an empty unit list; one plant
 **Boundary:** apps/server only — docs (22), customer-dashboard (21), admin-panel (5) remain, and A2 owns the
 marketing-site (28) and gui-client members. The 7 remaining `continue` sites and the `dist/` walker are
 counted, classified, and not defects.
+
+## V-2135 — the docs, customer-dashboard and admin-panel walkers throw too: 48 sites converted, the walk-swallow ceiling drops 87 → 39 (2026-08-28)
+
+The remaining members of `project_walk_swallow_debt_capped_at_89` in this lane: 22 docs, 21
+customer-dashboard, 5 admin-panel test files — every one a single `if (!existsSync(dir)) return out;` inside a
+walk helper (48 of 48 byte-identical), every helper called only with a constant root, and every root a
+tracked source tree: `apps/docs/src/pages` (+ `api/`, `guides/`), `apps/server/src/routes`,
+`packages/sdk-typescript/src/resources`, `apps/marketing-site/src/pages` (read by two docs sweeps),
+`apps/customer-dashboard/src` (+ `pages/`), `apps/admin-panel/src/pages` (+ `shells/`). No `dist/`, no
+optional root, no `continue` form — the judgement was uniform, and the same lesson applies: the population was
+a debt marker, and these 48 were the mechanical part of it.
+
+**Result:** 48 sites → throws with the consequence in the message; walker population 87 / 85 → **39 / 37**;
+ceiling set to 39. 48 files + guard: 159 tests green. The three apps' pinned typecheck backlogs
+(`scripts/typecheck-test-backlog.mjs`) read 12 / 168 / 94 before and after, with 0 errors in the touched
+files — the conversion added no type debt to trees that carry some.
+
+**Mutation proof:** `apps/admin-panel/src/pages` moved aside → 42 admin-panel test files fail at load
+naming the missing root (every sweep there walks pages), where before this change each walker returned `[]`
+and every emptiness assertion passed. Restored byte-identical; `git status` shows only the intended edits.
+
+**Boundary:** what remains in the ceiling is 7 `continue` sites (per-workspace lookups where absence is a
+property of the workspace), the `dist/` walker, the `return true` filter, and the 28 marketing-site + 1
+gui-client members A2 owns. The debt marker is now mostly A2's lane plus classified keeps.
