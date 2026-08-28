@@ -83,7 +83,10 @@ interface Offender {
 }
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     // `throwIfNoEntry: false` + skip, rather than a bare statSync: this walk runs

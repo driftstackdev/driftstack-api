@@ -173,7 +173,10 @@ const VERIFIED_UNDOCUMENTED: Record<string, string> = {
 
 /** Every markdown file under the docs tree, at any depth. */
 function markdownFiles(dir: string): string[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
@@ -193,7 +196,10 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
   const pairs: Pair[] = [];
   let matched = 0;
   let labelled = 0;
-  if (!existsSync(DOCS)) return { pairs, matched, labelled };
+  if (!existsSync(DOCS))
+    throw new Error(
+      `walk root is missing: ${DOCS} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
 
   for (const file of markdownFiles(DOCS)) {
     const text = readFileSync(file, 'utf8');
@@ -246,7 +252,10 @@ function scan(): { pairs: Pair[]; matched: number; labelled: number } {
  */
 function scanRaw(): Set<string> {
   const out = new Set<string>();
-  if (!existsSync(DOCS)) return out;
+  if (!existsSync(DOCS))
+    throw new Error(
+      `walk root is missing: ${DOCS} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   for (const file of markdownFiles(DOCS)) {
     const text = readFileSync(file, 'utf8');
     for (const m of text.matchAll(/Response \(`?(\d{3})`?\)[^\n]*:\s*\n+```json\n([\s\S]*?)```/g)) {

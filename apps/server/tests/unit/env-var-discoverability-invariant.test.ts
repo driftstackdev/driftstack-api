@@ -55,7 +55,10 @@ const UNDOCUMENTED_BASELINE: readonly string[] = [
 ];
 
 function filesUnder(dir: string): string[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
@@ -77,7 +80,10 @@ function operatorCorpus(): string {
   let corpus = '';
   for (const src of OPERATOR_SOURCES) {
     const full = resolve(REPO_ROOT, src);
-    if (!existsSync(full)) continue;
+    if (!existsSync(full))
+      throw new Error(
+        `walk root is missing: ${full} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
     if (statSync(full).isFile()) corpus += readFileSync(full, 'utf8');
     else for (const f of filesUnder(full)) corpus += readFileSync(f, 'utf8');
   }

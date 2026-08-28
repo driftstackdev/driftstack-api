@@ -49,24 +49,26 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
  * `||`-joined pair of subjects outright and could not tell a walker's swallow
  * from a single-subject one.
  */
-const SWALLOWS = /if\s*\(([^\n]*?!\s*existsSync\([^\n]*?)\)\s*(?:return\b|\{\s*return\b)/;
+const SWALLOWS =
+  /if\s*\(([^\n]*?!\s*existsSync\([^\n]*?)\)\s*(?:return\b|continue\b|\{\s*(?:return|continue)\b)/;
 /** Global twin of SWALLOWS — `matchAll` needs /g to count every site in a file. */
 const SWALLOWS_G = new RegExp(SWALLOWS.source, 'g');
 
-// Measured 2026-08-28: 94 walker occurrences across 90 files, scanning apps,
-// packages AND scripts. It was 92 across 89 the day before — the +2 are the two
-// census walkers in `scripts/tests/verify-suite.test.ts`, which the earlier scan
-// never reached (its roots omitted `scripts/`, though vitest.node.config.ts runs
-// `scripts/tests/**`). A guard scoped narrower than the suite it polices leaves
-// a place for the population to grow unseen, so the roots now match the suite.
-// Ceiling, not a pin — shrinking is the goal.
+// Measured 2026-08-28 (V-2134): 87 walker occurrences across 85 files, scanning
+// apps, packages AND scripts, with the family widened to the `continue` form.
+// Earlier the same day: 94 / 90 before apps/server's 17 source-tree sites were
+// converted to throws (V-2134), and 92 / 89 before the scan reached `scripts/`
+// (V-2128 — a guard scoped narrower than the suite it polices leaves a place
+// for the population to grow unseen). Of the 87, 7 are `continue` sites in
+// root-list loops, most of them legitimately optional (a workspace's `tests/`
+// dir). Ceiling, not a pin — shrinking is the goal.
 //
 // The unit is OCCURRENCES, not files, and that distinction is load-bearing: two
 // files carry more than one swallow site (3 and 2). A file-count ceiling cannot
 // see a file it already counts gaining another occurrence, so the population
 // could grow with the number unchanged — a population expressed in one unit and
 // enforced in another.
-const CEILING = 94;
+const CEILING = 87;
 
 /** The suite's own roots — vitest.node.config.ts `include` names all three. */
 const ROOTS = ['apps', 'packages', 'scripts'] as const;
@@ -218,6 +220,10 @@ describe('a walk helper that swallows a missing root does not spread', () => {
     // block whose first statement is the return.
     expect(SWALLOWS.test('if (!existsSync(a) || !existsSync(b)) return;')).toBe(true);
     expect(SWALLOWS.test('if (!existsSync(dir)) {\n    return out;\n  }')).toBe(true);
+    // V-2134 — the loop form: a missing entry in a list of roots is skipped, and
+    // the sweep over the remaining roots reads as complete.
+    expect(SWALLOWS.test('if (!existsSync(base)) continue;')).toBe(true);
+    expect(SWALLOWS.test('if (!existsSync(d)) {\n      continue;\n    }')).toBe(true);
     expect(SWALLOWS.test('if (!existsSync(dir)) throw new Error("missing root");')).toBe(false);
     expect(SWALLOWS.test('if (existsSync(dir)) return out;')).toBe(false);
     expect(SWALLOWS.test('const files = readdirSync(dir);')).toBe(false);

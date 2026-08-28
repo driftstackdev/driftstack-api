@@ -350,7 +350,10 @@ describe('a workspace declares what its TypeScript source imports', () => {
 
   it('V-1558 CRITICAL the repo\'s own scripts declare what they import. `scripts/*` runs against the ROOT manifest, and eight of them imported `playwright`, `postgres` and `sharp`, which no manifest in the repo named — they resolved only because another dependency happened to hoist them there. None is referenced by a package.json script or a workflow, so the breakage would have surfaced as "this tool is broken" long after the dependency that carried them changed. A workspace CONFIG file is judged differently and deliberately: `apps/*/vitest.config.ts` importing `vitest` is correct, because the root declares it and the root runner executes the config — that is resolution working as designed, not a phantom.', () => {
     const scriptsDir = resolve(REPO_ROOT, 'scripts');
-    if (!existsSync(scriptsDir)) return;
+    if (!existsSync(scriptsDir))
+      throw new Error(
+        `walk root is missing: ${scriptsDir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+      );
 
     const rootPkg = JSON.parse(readFileSync(resolve(REPO_ROOT, 'package.json'), 'utf8')) as Record<
       string,

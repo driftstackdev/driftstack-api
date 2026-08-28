@@ -74,7 +74,10 @@ const KNOWN_UNREAD = new Set<string>([
 ]);
 
 function walk(dir: string, out: string[]): void {
-  if (!existsSync(dir)) return;
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   for (const entry of readdirSync(dir)) {
     const p = join(dir, entry);
     let isDir = false;

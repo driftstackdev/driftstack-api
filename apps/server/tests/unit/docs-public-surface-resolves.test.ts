@@ -48,7 +48,10 @@ const FOREIGN_PATH_EXEMPTIONS: ReadonlyArray<{ path: string; owner: string }> = 
 ];
 
 function walk(dir: string, out: string[] = []): string[] {
-  if (!existsSync(dir)) return out;
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
     if (statSync(full).isDirectory()) walk(full, out);
@@ -256,7 +259,10 @@ describe('public docs reference only surfaces that actually exist', () => {
 
     for (const root of appRoots) {
       const base = resolve(REPO_ROOT, root);
-      if (!existsSync(base)) continue;
+      if (!existsSync(base))
+        throw new Error(
+          `walk root is missing: ${base} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+        );
       const stack = [base];
       while (stack.length > 0) {
         const dir = stack.pop()!;

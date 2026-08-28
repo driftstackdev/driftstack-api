@@ -11095,3 +11095,39 @@ restored into one helper default → the helper arm names the set. Both snapshot
 **Boundary:** static text over `apps/server/src`; a requirement passed through a helper parameter
 (`app.requireScope(requiredScope)`, 2 sites) is seen only at the literal its callers pass, which today are all
 granular or staff scopes. One new file: ratchets 3078 → 3079 / 3255 → 3256.
+
+## V-2134 — the apps/server half of the walk-swallow debt is paid: 17 source-tree sites throw, the ceiling drops 94 → 87, and a fourth shape (`continue`) joins the family (2026-08-28)
+
+Closes the `apps/server` lane of `project_walk_swallow_debt_capped_at_89`, which prescribed the remedy —
+make the helper THROW, not add a floor — and warned that every site needs one judgement: does the root always
+exist (throw) or is it build output (skip is right)?
+
+**Judgement per site, not per file.** 13 files, 16 `return` sites, read with the roots each helper is CALLED
+with, because a helper shared between a required root and an optional one must not throw for both. Every
+root was checked to exist AND be git-tracked before its site was converted: `scripts`, `apps/server/src`,
+the three SDK source dirs, `apps/docs/src/pages`, `apps/marketing-site/src/pages`, `infra/systemd`,
+`infra/env-templates`, `infra/bootstrap`, `docs/{runbooks,deployment,operations,internal}`, the five site
+`src/pages` AND `public/` dirs (all five have a tracked `public/`, so `walkAll` throws too), and the consumer
+roots. **Kept as skips, deliberately:** `dist-reading-suites-have-fresh-artifacts` walks `apps/<app>/dist`,
+gitignored and legitimately absent on a fresh checkout; `every-app-the-guards-read-is-actually-built:51`
+returns `true` from a filter with unrelated semantics.
+
+**A fourth shape.** The residual grep on the edited files found `if (!existsSync(x)) continue;` inside loops
+over root LISTS — a missing entry is skipped and the sweep over the rest reads as complete. 9 sites in 8
+walker files, all in `apps/server`; 0 single-subject. Two read tracked trees (`appRoots`, `DOC_DIRS`) and were
+converted; the rest are per-workspace `src/` and `tests/` lookups where absence is a property of the
+workspace, not a broken invocation, and stay counted. The guard's regex now matches the loop form, with
+controls for inline and block `continue`.
+
+**Result:** 15 `return` + 2 `continue` sites → throws with the consequence in the message ("a sweep over a
+missing tree reports nothing to sweep, which reads as clean"), in 11 files. Walker population 94 / 90 → **87 /
+85** with the widened family (80 `return` + 7 `continue`); ceiling set to 87 so the judgement is recorded.
+12 touched files + guard: 74 tests green, `it(` counts unchanged, server test tsconfig clean.
+
+**Mutation proofs:** `infra/systemd` moved aside → `docs-systemd-facts-match-the-unit-file` fails at load
+naming the missing root, where before it passed on an empty unit list; one planted `continue` swallow in
+`scripts/tests/verify-suite.test.ts` → ceiling red at 88 > 87. Both restored byte-identical.
+
+**Boundary:** apps/server only — docs (22), customer-dashboard (21), admin-panel (5) remain, and A2 owns the
+marketing-site (28) and gui-client members. The 7 remaining `continue` sites and the `dist/` walker are
+counted, classified, and not defects.

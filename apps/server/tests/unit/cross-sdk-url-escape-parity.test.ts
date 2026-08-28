@@ -34,7 +34,10 @@ function read(p: string): string {
 }
 
 function readDir(dir: string, suffix: string): string[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   return readdirSync(dir)
     .filter((f) => f.endsWith(suffix))
     .map((f) => resolve(dir, f));

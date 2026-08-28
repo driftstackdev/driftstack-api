@@ -66,7 +66,10 @@ const FIRST_PARTY_HOSTS: Record<string, string> = {
 };
 
 function walk(dir: string): string[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -120,7 +123,10 @@ function routesOf(site: string): { staticRoutes: Set<string>; dynamic: RegExp[] 
 
 /** Every file under a directory, whatever its extension. */
 function walkAll(dir: string): string[] {
-  if (!existsSync(dir)) return [];
+  if (!existsSync(dir))
+    throw new Error(
+      `walk root is missing: ${dir} — a sweep over a missing tree reports nothing to sweep, which reads as clean; if the tree moved, update the root`,
+    );
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
