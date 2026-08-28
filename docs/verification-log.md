@@ -17375,3 +17375,64 @@ the cost of skipping it was one full measurement plus a write-up that omitted it
 Memory refreshed with today's figures and the scope bound rather than left to rot.
 
 Related: V-2083 (the mirror case), V-2084 (the config audit that prompted the run).
+
+---
+
+## V-2086 — V-2083's 26 unexecuted methods, classified: 11 are a real work-list and the rest are not (2026-08-28)
+
+V-2083 measured ~26 Drizzle methods whose SQL never executes against Postgres and called it a
+work-list. **A raw list is not a work-list**, which is the lesson A2 and I converged on yesterday, so
+this classifies it before anything is written.
+
+### The classification, and the three instrument corrections it took
+
+**Pass 1 — "does src call it?" keyed on `\.name\(`.** Returned 17 called / 8 uncalled. ⛔ Unsound:
+the key is the METHOD NAME with no receiver, so `.create(`, `.getById(`, `.upsert(`, `.listAll(`
+matched any object. It attributed `status-subscribers-repo.listAll` to `routes/admin-api-keys.ts`,
+which is plainly wrong.
+
+**Pass 2 — bound it by name uniqueness inside `src/db`.** 12 names are defined in exactly one db file
+(so a bare call attributes correctly); 5 are defined in 3–6 files each (`upsert`, `getById`, `listAll`,
+`create`, `purgeForTerminatedAccountsBefore`) and cannot be attributed by grep at all. ⛔ Still
+unsound: uniqueness was measured **within the db layer**, and a caller may be invoking a same-named
+SERVICE method. `routes/team.ts:268` calls `service.removeMember(...)`, not the repo's.
+
+**Pass 3 — require a repo receiver.** Confirmed 7, dropped 5. ⛔ **Four of the five drops were false.**
+The regex wanted `this.repo.` or `…Repo.`, and the real call sites are `this.deps.repo.countAllByStatus()`,
+`this.deps.repo.setEgressCapabilityReport()`, and bare `repo.touchWebSessionLastUsed()` /
+`repo.getDetail()`. Only `removeMember` was correctly dropped.
+
+**The answer came from reading all five call sites, not from a fourth regex.**
+
+### Read-verified result
+
+    ✅ REAL — called on a repo in src, SQL never executed (11)
+       sessions-repo         countAllByStatus, setEgressCapabilityReport
+       auth-flows-repo       findAccountById, markEmailVerified
+       webhooks-repo         enqueueDelivery, resetDeliveryToPending, deleteDelivery
+       status-subscribers    findByConfirmTokenHash
+       auth-repo             touchWebSessionLastUsed
+       fleet-nodes-repo      getDetail
+       stripe-webhooks-repo  upsertSubscription
+
+    ⚪ NOT a gap — no dot-invocation in src at all (8): findSessionUnscoped, emptySessionStatusCounts,
+       touchWebSession, setGuiControlKey, setPairModeState, rowWrappersAreV2, setExpiresAt,
+       _processedStripeEventsAliasNote
+    ⚪ UNATTRIBUTABLE by grep (5 ambiguous names) + removeMember (a service call, not the repo's)
+
+⭐⭐ **`findSessionUnscoped` is the one that would have been a mistake to "fix", and it is worth naming.**
+It reads as the highest-value target on the raw list: an UNSCOPED by-id read in a codebase whose
+isolation boundary IS the account predicate, with zero coverage. It is a **deliberate legacy escape
+hatch pinned at zero callers** — `unscoped-finders-admin-only-sweep.test.ts` asserts exactly that, with
+the discrimination written out ("a CALL is a dot-invocation … the definition and the interface
+declaration have no leading dot"), because admin force-actions now use atomic primitives with an
+explicit `accountId: null` instead. **Its SQL never running is correct.** Writing the integration test
+I had planned would have added execution to deliberately dead code and improved a number without
+improving safety — a checkbox, and the guard scans `apps/server/src` only, so nothing would have
+stopped me.
+
+⚠️ Boundary in the same sentence as the result: "called on a repo in src" is established by reading
+every call site of the 12 uniquely-named candidates; the 5 ambiguous names are **unresolved, not
+cleared**, and resolving them needs type information rather than grep.
+
+Related: V-2083 (the raw measurement), V-2085 (classify before reporting, from the other side).
