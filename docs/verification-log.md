@@ -16728,3 +16728,78 @@ rule about itself is invisible to it, and a rule stated in a doc rather than bes
 register) will not appear.
 
 Related: V-2072 (the family this replaces), V-2073 (the finding this generalises).
+
+---
+
+## V-2075 — the file warns on the benign race and is silent on the defect; a backstop that fires without a trace (2026-08-28)
+
+Working V-2074's list of 46 self-claims. **Five checked this firing, four held.**
+
+### The four that held
+
+- `routes/auth.ts`: _"Every endpoint here is public … EXCEPT POST /v1/auth/mfa/step-up."_ **Exact.** 12
+  registrations, exactly one behind `requireAuth`, and it is the one named; the header's route list is
+  12 for 12 with no drift either way — notable because the comment records that the list was wrong
+  once ("stopped at ten"). ⭐ It is also already **enforced**, by
+  `route-auth-coverage-invariant.test.ts` — surfaced only by the quoted-basename grep, never by the
+  import-path one, which is why the rule is to run both. That guard discovers the surface with the
+  TypeScript compiler, carries an "exact, unique and **non-stale**" arm on its exemption list, and is
+  mutation-paired with `route-registration-locations-are-pinned`. A guard of mine would have been
+  strictly worse.
+- `routes/auth-cli.ts`: _"Every failed bind must retire the just-minted key, including
+  infrastructure/serialization failures."_ **Holds.** The mint completes and `try` opens on the next
+  line — nothing between them can throw — and the catch revokes unconditionally for any error type,
+  logs a secondary compensation failure, and rethrows the original. The route declares no response
+  schema and returns only primitives, so Fastify serialization cannot fail after the handler returns.
+  (Residual, inherent to compensation rather than a defect: a crash between mint and bind leaves a key
+  whose plaintext never left the process — inert storage, and the comment says exactly that.)
+- `db/sessions-repo.ts` / `db/admin-accounts-repo.ts`: _"every status/tier is present (no hardcoded
+  list to drift from the enum)."_ **Holds** — but the claim lives in helpers the comment does not
+  show, and both iterate `SessionStatusSchema.options` / `AccountTierSchema.options`. `emptyTierCounts`
+  exists twice, byte-identical; both derive from the same enum, so 2 copies but 1 behaviour and no
+  drift surface.
+- `services/anthropic-key-tester.ts`: _"Every failure reason is fixed customer-safe copy: upstream
+  response bodies, native transport errors, and the plaintext key never enter the result."_ **Holds** —
+  all five failure returns use module-level constants, and the second half of the claim is real too:
+  `void response.body?.cancel()`.
+- `services/fleet-control-registry.ts`: _"Every HarnessOutbound member must be dispatched here."_
+  **Holds**, via `const _exhaustive: never = frame` — with the reason written down (V-1915:
+  `noImplicitReturns` cannot see the omission because the function returns void).
+
+### ⭐⭐ The finding, three lines below that last one
+
+The same `switch` is wrapped in `} catch {` — **no binding, no log, nothing**. Its comment justifies
+swallowing (the node's receive loop and the process must survive, which is right) and stops there.
+
+**The class holds a logger, and this very file already uses it twice** — `this.logger?.warn(...)` at
+`:480` and `:520`, both for a _stale/superseded connection dropping a frame_, which is a benign
+reconnect race. Then it goes silent for the strictly more serious case: a frame that passed admission,
+JSON parsing **and** schema validation, whose handler threw. **The idiom was two hundred lines away,
+applied to the lesser signal and not the greater one.**
+
+Severity is bounded and I checked the bound rather than assuming it: every registered handler logs its
+own handled failures (5–8 logger references each), so this catch only sees an error that escaped a
+handler — which makes it rarer and _more_ interesting, not less. Nothing retries it either: unlike the
+pending-teardown path below (which retains the id for the next reconnect), the frame is dropped
+permanently.
+
+⭐ **Swept the SHAPE rather than the site: five bare `catch {` in this file.** One is legitimately
+silent — `:529`, a non-JSON frame from an untrusted node is expected garbage, not a defect signal. The
+other four swallow errors in our own code. I fixed only `:713`, because it is the one whose own comment
+calls itself a "last-resort backstop" and the only one where nothing retries; `:874`/`:971` (reaper-hook
+errors) and `:891` (a re-dispatch that RETAINS the id) have different, arguable justifications and are
+recorded here rather than swept up in one edit.
+
+**Fixed:** `catch (err)` with a warn carrying `component`, `nodeId`, `frameType` and `err`.
+⚠️ **Frame TYPE only** — the body carries customer page state, cookies and profile data; `err` is safe
+because the logger's serializer runs `redactText` over every string in a serialized error (W342).
+
+**Proof.** New arm asserts the throw is recorded, names the frame type, carries the error, AND that the
+payload never reaches the log record (a `sessionId` sentinel must be absent). Removing the warn reds
+exactly that arm; source restored byte-identical from a path-keyed snapshot, proved to differ first.
+`it(` 44 → 45, no new file so no ratchet change, `tsc -p apps/server/tsconfig.test.json` clean, and all
+**16** files importing the registry pass (291 tests) — the thirteen importers were enumerated with both
+grep patterns.
+
+Related: V-2074 (the instrument), and the pre-existing arm at `:511` which proved the throw does not
+escape — surviving was tested, recording was not.

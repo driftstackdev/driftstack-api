@@ -6,6 +6,7 @@
 // the prior connection.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Logger } from '../../src/lib/logger.js';
 import {
   FleetControlConnection,
   FleetControlRegistry,
@@ -525,6 +526,42 @@ describe('FleetControlConnection', () => {
         JSON.stringify({ type: 'profileSaved', sessionId: 's', profile_id: 'p', stored: true }),
       ),
     ).not.toThrow();
+  });
+  it('the backstop RECORDS the throw it swallows. Surviving is half the contract: this catch is the last-resort net for a frame that already passed admission, JSON parsing AND schema validation, so a throw here is a defect in one of our handlers rather than a reconnect race — and unlike the two stale-connection cases the same file already warns about, nothing retries it and the frame is dropped for good. A backstop that fires silently cannot report that it fired.', () => {
+    const warn = vi.fn();
+    const conn = new FleetControlConnection(
+      'node-1',
+      () => {},
+      () => {
+        throw new Error('handler blew up');
+      },
+      undefined, // onChallengeDetected
+      undefined, // onPageState
+      undefined, // onProfileSaveFailed
+      undefined, // onHeartbeat
+      undefined, // onSessionStatus
+      { warn } as unknown as Logger,
+    );
+
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'profileSaved',
+        sessionId: 's-secret',
+        profile_id: 'p',
+        stored: true,
+      }),
+    );
+
+    expect(warn, 'the swallowed handler throw is recorded').toHaveBeenCalledTimes(1);
+    const [obj, msg] = warn.mock.calls[0] as [Record<string, unknown>, string];
+    expect(obj.frameType, 'names which frame type failed').toBe('profileSaved');
+    expect(obj.nodeId).toBe('node-1');
+    expect(obj.err, 'carries the error for triage').toBeInstanceOf(Error);
+    expect(msg).toMatch(/handler threw/i);
+
+    // PRIVACY: the frame body carries customer page state, cookies and profile
+    // data. Only the discriminant may be logged, never the payload.
+    expect(JSON.stringify(obj), 'no frame payload in the log record').not.toContain('s-secret');
   });
 
   it('routes a TERMINAL sessionStatus (ended | errored) → invokes onSessionStatus (A3 W2682 worker-connected auto-close)', () => {

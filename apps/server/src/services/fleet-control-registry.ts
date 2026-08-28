@@ -710,10 +710,32 @@ export class FleetControlConnection {
           break;
         }
       }
-    } catch {
+    } catch (err) {
       // A handler threw on a valid frame — swallow so the node's receive loop (and
       // the process) survives. Handlers are independently tested; this is the
       // last-resort backstop for the documented no-crash guarantee.
+      //
+      // RECORD it, because a backstop that fires silently can never report that it
+      // fired. This is the strictly MORE serious case than the two stale-connection
+      // warns above: the frame passed admission, JSON parsing AND schema validation,
+      // so a throw here is a defect in one of our handlers rather than a reconnect
+      // race — and unlike the pending-teardown retain below, nothing retries it, so
+      // the frame is dropped permanently. Every registered handler logs its own
+      // handled failures, which makes an escape past one of them rarer and more
+      // interesting, not less.
+      //
+      // Frame TYPE only: the body carries customer page state, cookies and profile
+      // data. `err` is safe to attach — the logger's serializer runs redactText over
+      // every string in a serialized error (W342).
+      this.logger?.warn(
+        {
+          component: 'fleet-control-registry',
+          nodeId: this.nodeId,
+          frameType: frame.type,
+          err,
+        },
+        'harness frame handler threw; frame dropped',
+      );
     }
   }
 
