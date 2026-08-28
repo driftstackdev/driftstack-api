@@ -11031,3 +11031,67 @@ in-memory half. Both halves verified to RUN (verbose reporter; the reachability 
 product question this does not answer; it only makes the answer the same everywhere. The "one live
 subscription per account" invariant is still not enforced by the database. The six nil-consequence sites are
 listed so nobody re-derives them. Gated: pending (this touches `src/db`; full-capture `--all` follows).
+
+## V-2132 — four more historical-fix families re-run at 7ed30d8cb: all clean, each with the layer that makes it so (2026-08-28)
+
+The V-2131 method applied to four more fixes, recorded so nobody re-derives them from a grep that measures
+the wrong layer — which is exactly how three of the four would read as findings.
+
+- **Re-entrancy of `tickOnce` sweepers** (from `project_pairmode_sweep_reentrancy_fix`). 14 of 16 sweeper
+  classes carry no in-class `running` guard — a dramatic, uniform result, and the instrument. Every one of the
+  14 is wired through `wireDailyMaintenanceSweep` / scheduled_jobs, whose locked single executor is what
+  prevents overlap (V-2127's family). The five bare-`setInterval` callees in `bootstrap.ts` — pair-mode sweep,
+  webhook delivery worker, validation harness, health probe, status snapshot — each carry a `running` guard.
+  Overlap is prevented at the wiring layer for one set and the class layer for the other; the grep saw only
+  the second.
+- **Single-use `consume()` return checked** (from `project_mfa_challenge_single_use_concurrency_fix`). Seven
+  call sites; the rate-limit stores read their result; `auth-flows.ts:1037` checks the MFA challenge's `null`
+  (the fix); `:984` and `:1016` discard it deliberately — they BURN a corrupt or attempts-exhausted challenge,
+  where the return has no meaning. Reading the sites, not counting them, is what separates the two.
+- **`${JSON.stringify(v)}::jsonb` double-encoding** (from the postgres-js feedback note). Three production
+  CAS predicates use that shape (`agent-sessions-repo.ts` transcript conversion, `recipes-repo.ts` intentLog /
+  transcriptSnapshot conversion). Probed against `driftstack_a3_vitest` rather than reasoned: raw postgres-js →
+  `jsonb_typeof = 'string'`, equality FALSE (the note is right); Drizzle's `sql` template → `'object'`, TRUE.
+  The trap is the raw client in test fixtures; the production sites are correct, and their Postgres-backed
+  migration tests asserting `converted: N` are real evidence. The note's scope is now recorded.
+- **Lease released with the acquirer's identity** (from `feedback_lease_acquired_with_identity_released_without_checking`).
+  The pair-mode takeover lock's `release` takes `clientId`; the in-memory impl compares it and the Redis impl
+  is an atomic Lua CAS-DEL. The bundled-turn concurrency slot is a counting semaphore with no identity, and its
+  `release` in the route's `finally` is guarded by `bundledSlotAcquired`, so a refused `tryAcquire` never
+  decrements — the undercount that would have widened the soft-cap limiter is not reachable.
+
+**Boundary:** each is a read of the current tree plus one direct probe (the jsonb one); no mutation, no new
+guard. These are do-not-re-audit records with their reasons attached, not proofs that the wiring cannot change.
+
+## V-2133 — the literal `admin` scope rule becomes a guard: 234 requirement sites, 0 literal, and the helper default that used to mask one is pinned (2026-08-28)
+
+Post-condition re-run of `feedback_literal_admin_scope_is_latent_v174_bug` (2026-08-28): any
+`requireScope('admin')` / `throwIfMissingScope(ctx, 'admin')` is satisfied only by a legacy `admin` key — a
+customer dashboard session carries `account_owner`, a staff SSO session `driftstack_internal_admin`, and the
+V-174 alias runs the other way — so such a route is unreachable for every live credential while every test
+stays green, because the integration app helper defaulted keys to `['read','write','admin']`.
+
+**Measured:** 342 source files, **234 scope-requirement sites**, **0** literal `admin` requirements outside
+the two alias-predicate implementations (`lib/errors-helpers.ts`, `services/auth.ts`, which must name the
+legacy value to alias it). The helper's two defaults now read
+`['read','write','account_owner','driftstack_internal_admin']` — the masking is gone. Both halves hold; nothing
+pinned either, so the rule lived in a memory note.
+
+**The key is the requirement SHAPE, not the token.** A first census of the bare `'admin'` literal returned the
+team-role enum, the OpenAPI `tags: ['admin']` and the alias predicate itself — 20+ hits, none a requirement.
+The guard matches `requireScope | throwIfMissingScope | hasScope | scopesSatisfy` with `'admin'` as the scope
+argument (closing quote immediately after, so `'admin:billing'` — a real granular scope — is not a member),
+skips prose lines, and excludes the predicate files by path.
+
+**Guard** (`no-route-requires-the-legacy-admin-scope-by-name.test.ts`, 3 arms): offenders `[]` with the
+consequence in the message and floors on files (300) and requirement sites (150) so a blind matcher cannot pass
+on silence; the helper's `scopes: opts.scopes ?? [...]` defaults contain no `'admin'`, re-anchored by count so a
+rewritten helper is noticed rather than vacuously passed; matcher controls for all four shapes, spacing, and
+the four non-members.
+
+**Mutation proofs:** a planted `requireScope('admin')` on a real route → offenders arm names it; `'admin'`
+restored into one helper default → the helper arm names the set. Both snapshot-restored, byte-identical after.
+
+**Boundary:** static text over `apps/server/src`; a requirement passed through a helper parameter
+(`app.requireScope(requiredScope)`, 2 sites) is seen only at the literal its callers pass, which today are all
+granular or staff scopes. One new file: ratchets 3078 → 3079 / 3255 → 3256.
