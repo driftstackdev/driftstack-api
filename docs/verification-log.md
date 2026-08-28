@@ -15011,3 +15011,43 @@ zero, and their control — does the class even define a setter — also returne
 agreeing read as corroboration when they were one instrument failing twice.** A control that runs
 through the same mechanism is a second sample, not a check. Proving a detector on a known positive
 only works if the proof does not share the detector's blind spot.
+
+## V-2044 — the pair-mode takeover lock, audited against the repo's own lease defect (2026-08-27)
+
+`services/agent-pair-mode-lock.ts` was never audited, and V-2030 established it is the DISTRIBUTED
+half of pair mode (Redis) while the heartbeat tracker beside it is per-process. Audited it against
+the checklist from this repo's known lease defect — claim sets an owner, settle writes `WHERE id`
+with no reference to the lease — rather than against a generic Redis-lock list.
+
+**It does not have that defect.** Acquire is `SET pair_lock:<sessionId> <clientId> NX EX 30`; release
+is the canonical Lua compare-and-delete, `if redis.call("get", KEYS[1]) == ARGV[1] then del else 0`.
+The release IS fenced on the owner — precisely the fencing the `scheduled_jobs` settle lacks.
+
+⭐ **The security-relevant part is an ORDERING, and it is right at both call sites.** `clientId` is
+`parsed.data.client_id` — it comes from the REQUEST BODY, and the Lua CAS matches on the stored
+VALUE. So if the `try/finally` that releases the lock also wrapped the acquire, a contending client
+could send the holder's `client_id`, fail to acquire, and have its own `finally` delete the holder's
+lock. Measured at both usages in `routes/agent-sessions.ts`:
+
+    3894  tryAcquire(...)
+    3898  if (!lockResult.acquired) throw new PairModeConflictError(...)   <- OUTSIDE the try
+    3901  try { ...transition... } finally { release(...) }
+
+    4210 / 4214 / 4217 — identical ordering
+
+A failed acquire throws before the `try` is entered, so `release` is unreachable without a successful
+acquire and the customer-supplied identity cannot be turned into a lock-steal. Both copies agree;
+this is the kind of sequence where one divergent copy would be the whole defect.
+
+⚠️ One residual, and it is smaller here than the prior art implies. The CAS script returns 1 on
+delete and 0 when the value did not match — meaning the caller's lock had already expired or been
+taken — and `release` discards it (`Promise<void>`, documented as a no-op when not held). My lease
+memory argues that discarded result is the only in-band evidence of a duplicate execution. **That
+argument does not transfer at full strength**: in the queue case an unfenced settle OVERWRITES the
+new owner's row, so the lost signal accompanies real corruption. Here the fenced release simply does
+nothing, so the cost is observability alone — nobody learns that a 30s TTL expired under a live
+holder. Worth knowing, not worth a change.
+
+Also clean, from the same pass: `db/profile-session-lock.ts` — its claim that both customer
+session-create surfaces serialise on one key holds, verified with both the symbol and the literal
+patterns (`agent-sessions-repo.ts:357`, `sessions-repo.ts:105`, and the literal appears nowhere else).
