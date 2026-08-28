@@ -17311,3 +17311,51 @@ their numbers.
 
 Related: V-2083 (the same config's db exclusion, from the other side), V-2074 (the self-claim
 instrument this applies).
+
+---
+
+## V-2085 — running a workspace's own vitest project is not running its tests, and the split is by file extension (2026-08-28)
+
+A2 reported that their first gui-client coverage numbers were invalid: running from inside
+`apps/gui-client` executed 176 test files where the suite holds 258, so they measured most of the
+source against two thirds of the tests. Their invalid run listed **18 files at 0% functions** and they
+had begun classifying it as a gap list — including `sanitize-ui-diagnostic.ts`, a credential redactor
+that read 0% and looked like the day's best security finding. **It has a dedicated test file that
+simply had not run.** The corrected run reports 3 files at 0%, two of them artifacts.
+
+**Measured the mechanism, because a ratio is not a cause:**
+
+    apps/gui-client/vitest.config.ts:18   include: ['tests/**/*.test.tsx']    ← .tsx ONLY
+    vitest.node.config.ts:9               'apps/**/tests/**/*.test.ts'        ← .ts ONLY
+
+`*.test.ts` does not match `*.test.tsx`. gui-client holds **176 `.test.tsx` + 82 `.test.ts` = 258**, so
+the two projects **partition by file extension** with no overlap and no double-counting, and the 176 is
+exactly the `.tsx` half. Running the workspace's own project therefore silently omits the 82 `.ts`
+files — which is not a subset "roughly two thirds", it is a specific, nameable set.
+
+⭐ **Bounded across the repo: only two workspaces have their own vitest project, and only one has the
+hazard.** `apps/server`'s include is `tests/**/*.test.ts` and it holds 2420 `.test.ts` and **zero**
+`.test.tsx`, so its own project collects all of its tests. gui-client is the only app carrying both
+extensions, and therefore the only one where "run the workspace project" ≠ "run the workspace tests".
+
+### ⛔ I checked whether this invalidated my own run before writing any of it
+
+V-2083's db-layer coverage used `--root apps/server tests/integration`.
+`find apps/server/tests/integration -name '*.test.ts'` → **397 on disk, 397 collected.** Complete. The
+reason is incidental rather than clever: I passed an explicit path filter under a root that collects
+everything, instead of running inside a workspace project. Had the target been a workspace with its own
+config, I would have hit A2's case exactly. **V-2083 stands, and only because of a choice I did not
+make deliberately.**
+
+⭐⭐ **The pair is the artifact worth keeping.** `sanitize-ui-diagnostic.ts` read **0%** and looked like
+a credential redactor with no tests; `account-proxies-repo.ts` (V-2083) read **75% functions** and
+looked like a credential repo a quarter unexercised. **Both manufacture a security finding out of a
+coverage number, in opposite directions, and in both cases the tell was two readings disagreeing** —
+A2's "0% but a test file exists", mine "739 functions vs the artifact's 2959". Neither instrument
+announced itself; neither error was visible in the number alone.
+
+⚠️ And both reductions landed in the same place: A2's 18 zero-coverage files became **one** genuinely
+untested live view plus a misdescribing comment; my 190 Astro test files became a **9-module** tail.
+Classify before reporting has out-produced every detector either of us built today.
+
+Related: V-2083 (the mirror case), V-2084 (the config audit that prompted the run).
