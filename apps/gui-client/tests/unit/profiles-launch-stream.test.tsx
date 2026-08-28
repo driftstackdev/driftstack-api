@@ -7,7 +7,8 @@
 // retry-able error — never open an in-app page (the legacy polling viewer was
 // removed). Pins the create-profile → launch → simulator path + its failure mode.
 
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { openSimulatorWindow } from '../../src/lib/open-simulator';
 
@@ -166,6 +167,26 @@ describe('ProfilesView launch → stream', () => {
     vi.mocked(openSimulatorWindow).mockClear();
   });
 
+  // proxy-probe-cache is deliberately UN-mocked here (the launch arms exercise the
+  // real pre-launch flow), so its Tauri persistence throws in jsdom and ProfilesView's
+  // fallback warns "pre-launch proxy re-test failed". That is the branch WORKING, but
+  // unswallowed it printed as unattributed stderr noise in every full-gate capture.
+  // Swallow exactly that message and pin it below as an assertion; every other warn
+  // still passes through so this file cannot hide an unrelated caveat.
+  let preLaunchWarn: MockInstance<typeof console.warn>;
+  beforeEach(() => {
+    const realWarn = console.warn.bind(console);
+    preLaunchWarn = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].startsWith('pre-launch proxy re-test failed')) {
+        return;
+      }
+      realWarn(...(args as Parameters<typeof console.warn>));
+    });
+  });
+  afterEach(() => {
+    preLaunchWarn.mockRestore();
+  });
+
   it('keeps the clicked row visibly busy throughout the slow proxy-probe create', async () => {
     let resolveCreate: ((value: unknown) => void) | undefined;
     agentCreate.mockImplementationOnce(
@@ -196,6 +217,12 @@ describe('ProfilesView launch → stream', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
     await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+    // The un-mocked probe persistence threw and the fallback branch spoke — pin the
+    // message so a silent regression of this warn cannot hide behind green launches.
+    expect(preLaunchWarn).toHaveBeenCalledWith(
+      expect.stringContaining('pre-launch proxy re-test failed'),
+      expect.anything(),
+    );
     // Launch attaches THIS profile (file 57) — the canonical prof_<uuid> id is
     // passed as-is (the API normalizes it server-side, W335/W336) — and starts in
     // manual mode (a GUI launch opens the simulator for the user to drive).

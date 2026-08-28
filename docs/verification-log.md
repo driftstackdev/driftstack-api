@@ -11406,3 +11406,22 @@ to 26". Both mutations asserted to differ before running and restored from snaps
 
 **Boundary:** the 5 server/scripts members and the 19 compensated marketing members are unchanged;
 their next reduction requires the same per-file reading, not a sweep.
+
+## V-2144 — the pre-launch proxy warn: capture noise became a pinned assertion (2026-08-28)
+
+Every full-gate capture carried 4 unattributed stderr lines: `pre-launch proxy re-test failed; using
+the cached verdict TypeError: Cannot read properties of undefined (reading 'invoke')` from
+`profiles-launch-stream.test.tsx`. Cause read, not guessed: the file mocks `testProxy` but leaves
+`proxy-probe-cache` real, so its Tauri persistence throws in jsdom and `ProfilesView`'s fallback
+branch warns — the branch WORKING, printing as noise. Same family as V-2141's cause (an un-stubbed
+Tauri call in jsdom), but in-test and harmless.
+
+Fix in the test only: a targeted `console.warn` spy that swallows exactly that message (every other
+warn passes through — a blanket silence could hide an unrelated caveat) plus an assertion in the
+first launch arm pinning that the message fired. The noise is now a detector: 11/11 green with 0
+noise lines (was 4); mutation — the source warn removed — turns the pin red (1 failed | 10 passed),
+restored from a path-keyed snapshot, cmp-verified.
+
+**Boundary:** the un-mocked persistence path is unchanged and still exercised; only its console
+output is intercepted, in this one file. The message text is now load-bearing in a test — renaming
+it in `ProfilesView.tsx` must update the pin in the same commit.
