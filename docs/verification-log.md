@@ -17069,3 +17069,55 @@ defect found. **The instrument that keeps being wrong is mine, not the codebase'
 was caught by reading the source rather than by a better regex.
 
 Related: V-2072 (the previous family to saturate), V-2073 (this one's single defect), V-2079.
+
+---
+
+## V-2081 — W-10 re-derived independently at HEAD: 39, and its preventive half was already built (2026-08-28)
+
+V-2080 said the claims instrument is saturating and a firing should not be only that. Switched to my
+own blocked open item on the principle that **a blocked item usually has an unblocked preventive
+half**.
+
+**W-10's facts, re-derived from scratch at HEAD.** Boundary in the same sentence: measured against the
+GENERATED artifact `packages/sdk-python/openapi.json` (2,068,750 B, committed same day as its
+builder), not against `lib/openapi.ts` — the builder constructs refs programmatically and contains
+only two literal `#/components/schemas/` strings, so counting it would measure the file that NAMES the
+spec rather than the one that IS it.
+
+    declared component schemas              83
+    reachable from an operation (transitive) 44
+    ORPHANED                                 39
+
+⭐ **39 exactly — matching the figure W-10 has carried, re-derived with a different implementation.**
+That is the post-condition form: not "the number was 39 when recorded", but "the set is still exactly
+that today".
+
+⛔ **My first attempt said 37.** I tested reachability with a substring (`'#/components/schemas/' + name`
+appearing anywhere), which matches `…/ApiKeyList` when looking for `ApiKey` — marking a schema
+referenced when only a longer-named sibling is, and therefore UNDER-counting orphans. Fixed by walking
+the document and collecting actual `$ref` VALUES, with a control asserting every extracted name
+resolves to a declared schema. Seventh population error of this stretch, same family as the rest.
+
+### The preventive half already exists, and is better than the one I was about to write
+
+`the-openapi-orphan-set-does-not-grow-while-w10-is-open.test.ts` (V-1918). It is explicit that it does
+not take the owner's decision — it only stops the set growing in silence — and three of its choices
+are ones I would not have made:
+
+- ⭐ **Frozen by NAME, not by count**: _"A count would let one orphan be fixed and another appear on
+  the same day and still pass, and it could never say which schema moved."_
+- **Transitive reachability on purpose**, with both readings measured and recorded: transitive gives
+  39, operation-`$ref`-only gives 43, _"so the naive reading over-accuses four schemas"_.
+- It names the guard that covers the INVERSE case (`openapi-spec-validity-invariant` catches a
+  dangling `$ref`) and states that an orphan is the mirror of it, which nothing covered.
+
+**So W-10 is engineering-complete: the gap is frozen, growth is impossible in silence, and what
+remains is only the contract decision.** Recorded plainly because "still open" on an item whose
+preventive work is done reads as more outstanding than it is — the same stale-status shape as V-2059.
+
+⭐ **Fifth prior-art pre-emption of this session**, and the fourth where the existing guard was
+stronger than my plan. All five were found by grepping before building. The rule is earning its keep
+at a rate I did not expect: `route-auth-coverage-invariant`, the scheduled-jobs settle pins,
+`every-sse-stream-shares-one-buffer-ceiling`, the harness bound census, and now this.
+
+Related: V-1918 (the guard), V-2080 (why I switched axis), V-2059 (a status reading worse than reality).
