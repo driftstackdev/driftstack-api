@@ -15893,3 +15893,50 @@ weakness — a safe-list nothing re-reads — is generic to every audit register
 this arm does not reach them.
 
 Related: V-2059 (the finding), V-2054 (the same register class, opposite direction).
+
+---
+
+## V-2061 — REFUTED: the redaction posture's prose rule holds for all nine callers, by two different mechanisms (2026-08-27)
+
+Continuing the V-2059/V-2060 vein into the population those entries pointed at: **28 "do NOT
+re-audit / don't re-sweep" markers across 13 registers in `docs/internal`**, all dated 2026-05-16 to
+2026-06-23 — two to three months of change ago. A clean verdict that instructs future readers not to
+check it is the maximally unguarded case: it cannot be falsified by anyone following it.
+
+Took the highest-risk one whose subject I had recently touched.
+`2026-06-09-credential-redaction-posture.md` lists five covered egress channels under "What's covered
+(don't re-audit)", and the channel where V-2039's live privacy defect sat (`publicAgentIntent`, the
+agent-intent payload) is **not among them** — so that finding does not falsify this list; the channel
+was never on it.
+
+Its next section states a rule in prose: a new free-text egress channel must run through `redactText`
+(server) or `scrubText` (gui) **and pin the wiring in a content-parity test**, because "un-wiring a
+redactor is a silent re-leak". A rule stated only in prose is the shape that has produced findings
+here repeatedly, so I measured it.
+
+**Nine modules call `redactText`** (comments stripped, so a mention in a comment is not a call):
+`sentry`, `logger`, `durable-webhook-delivery`, `scheduled-jobs`, `webhook-worker`,
+`scrub-node-diagnostics`, `agent-intent-result`, `agent-executor`, `cost-alert-dispatcher`. Seven
+carry a content-parity pin naming both the module and `redactText`.
+
+⛔ **My first verdict was that the other two were unpinned. Wrong, and the detector is why.** Keying
+on "a test naming both the module and the identifier `redactText`" cannot see a test that asserts the
+redacted OUTPUT instead of the call. Both have exactly that, and it is the stronger form: proved by
+mutation rather than inferred — un-wiring `redactText` from `scrub-node-diagnostics.ts` and
+`agent-intent-result.ts` reds **5 arms across the two files**, including one asserting
+`https://[redacted]@internal.test/put?token=[redacted]`, which is `redactText`'s output and not that
+module's own IP scrubbing. Both restored byte-identical; 28/28 green after.
+
+**No finding. The rule holds for all nine, by two mechanisms.**
+
+⭐ **The reusable part is the near-miss.** A sweep keyed on "is the wiring pinned in a content-parity
+test?" — the literal words of the documented rule — reports two false positives, because the rule
+names ONE acceptable mechanism and the codebase uses two. **A prose rule that prescribes a mechanism
+will be enforced by a sweep that greps for that mechanism, and every compliant-by-other-means site
+becomes a finding.** Ask what property the rule protects (here: un-wiring cannot be silent), then
+test THAT — by mutation — rather than the mechanism the prose happens to name.
+
+⚠️ Scope: this checks one rule in one of 13 registers carrying such markers. The other 27 markers are
+unmeasured, and the population is now enumerated for whoever takes it next.
+
+Related: V-2059, V-2060 (the register class), V-2039 (the agent-intent channel this doc never listed).
