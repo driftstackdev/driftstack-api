@@ -229,6 +229,38 @@ describe('#128 RedisExitIdentityStore', () => {
     await expect(store.get('acc', 'prx')).resolves.toBeUndefined();
   });
 
+  // The wire schema is strict (country exactly 2 chars; region/city/timezone
+  // min(1)-or-null) and serializeSessionAssign THROWS on a violation, which would
+  // fail the session launch over the new-tab panel. A value read back from Redis
+  // must therefore be validated, not merely parsed.
+  it('never returns a value the strict wire schema would reject — an empty geo field becomes null', async () => {
+    const redis = fakeRedis();
+    const store = new RedisExitIdentityStore(redis as never);
+    redis.map.set(
+      exitIdentityRedisKey('acc', 'prx'),
+      JSON.stringify({
+        identity: { ip: '203.0.113.7', country: 'US', region: '', city: '', timezone: '' },
+        at: 1700000000000,
+      }),
+    );
+    const hit = await store.get('acc', 'prx');
+    expect(hit?.identity.region).toBeNull();
+    expect(hit?.identity.city).toBeNull();
+    expect(hit?.identity.timezone).toBeNull();
+  });
+
+  it('a country that is not exactly two letters is a MISS, not a launch-failing block', async () => {
+    const redis = fakeRedis();
+    const store = new RedisExitIdentityStore(redis as never);
+    for (const bad of ['USA', '', 'us', 'U1']) {
+      redis.map.set(
+        exitIdentityRedisKey('acc', 'prx'),
+        JSON.stringify({ identity: { ip: '203.0.113.7', country: bad }, at: 1700000000000 }),
+      );
+      expect(await store.get('acc', 'prx')).toBeUndefined();
+    }
+  });
+
   it('preserves nullable geo fields as null rather than dropping or coercing them', async () => {
     const redis = fakeRedis();
     const store = new RedisExitIdentityStore(redis as never);
