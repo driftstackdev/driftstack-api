@@ -15051,3 +15051,67 @@ holder. Worth knowing, not worth a change.
 Also clean, from the same pass: `db/profile-session-lock.ts` — its claim that both customer
 session-create surfaces serialise on one key holds, verified with both the symbol and the literal
 patterns (`agent-sessions-repo.ts:357`, `sessions-repo.ts:105`, and the literal appears nowhere else).
+
+## V-2045 — a guard that predicted my sweep's two false positives, in writing (2026-08-27)
+
+Audited the request-correlator family: nine files under `apps/server/src/services` that hold
+`pending` entries keyed by a request id and settle them from frames arriving on a SHARED fleet
+connection — one socket carries every session on a node, so a frame echoing a known request id but
+belonging to a different session must be dropped rather than used to settle. Settling it hands one
+account's page output — DOM, screenshot, extracted text, cookie jar — to another account's in-flight
+request.
+
+**Boundary: the 9 correlator files; "compares" = a non-comment line comparing an incoming frame's id
+against the pending record's. My sweep reported 7 of 9 comparing and accused two.** Both accusations
+were wrong:
+
+- `session-readiness-correlator.ts` keys its pending map BY `sessionId`
+  (`pending.set(sessionId, …)`, `pending.has(frame.sessionId)`), so the lookup IS the check.
+- `harness-dispatch-correlator.ts:181` carries `if (target.sessionId !== header.data.sessionId) return;`
+  under a comment naming it the cross-session spoof guard. **My regex listed `pending.` / `entry.` /
+  `p.` as the receiver names and this one is `target.`** — a hand-listed set under-counting, for the
+  third time this session.
+
+⛔⛔ **And the family guard already exists — `every-correlator-drops-a-key-mismatched-frame.test.ts`
+(V-1932) — whose header names BOTH of my false positives before I made them:**
+
+> "The guard is keyed on the CORRELATION KEY, not on `sessionId`. Sweeping for `sessionId` reports two
+> false gaps … trim-profile keys on `profileId` … session-readiness is CONNECTION-LOCAL … A
+> token-level check would accuse both."
+
+It carries four arms: the on-disk roster must equal the recorded one (so a tenth correlator fails
+until reviewed), every non-exempt correlator must drop on ITS OWN key, every exemption must carry a
+reason, and — the arm I would not have thought to write — **the matcher itself is proved against a
+correlator that does not compare**, so the detector cannot silently stop detecting.
+
+⭐ The lesson is not "the sweep was wrong", it is **where the answer already was**: a file named
+`every-correlator-drops-a-key-mismatched-frame.test.ts` would have told me the whole shape, including
+the two variations, before I wrote a line of detector. Grep the guard corpus for the FAMILY NAME
+before measuring the family.
+
+### ⛔ I contaminated a peer's suite window, and the rule I had was aimed at the wrong action
+
+To test whether the property was guarded, I removed the guard line from
+`harness-dispatch-correlator.ts`, ran the unit subset (4 tests across 3 files failed — it IS caught),
+and restored byte-identical. A2 started a full `verify-suite --all` at 21:09:45, inside or adjacent
+to that window. I disclosed the exact timing and which failures would be mine.
+
+**My standing quiescence rule is phrased as a precondition for LAUNCHING a suite. A mutation is a
+WRITE, and a peer's run is ruined by a write exactly as thoroughly as by a second suite** — the
+standing order says so in both directions, and I had still filed the rule under the wrong verb.
+Check for a running suite before touching the tree, not only before starting one.
+
+### Two more never-audited files, both clean
+
+**`lib/sse-backpressure.ts`** exists because a 4 MB socket ceiling was declared three times with three
+content-parity tests each pinning its own copy — "Every copy was covered; nothing said they had to
+AGREE" — and it removes the failure mode rather than guarding it. Checked the post-condition rather
+than the change: **no `4_000_000` / `4 * 1024 * 1024` ceiling literal survives anywhere under
+`apps/server/src`**, and all three consumers import the constants, with the heartbeat lane correctly
+taking the tighter 64 KiB bound. ⚠️ My literal sweep did flag `1780314000000` in a migration journal —
+a digit-substring match on a timestamp, the characteristic false positive of numeric-literal sweeps.
+
+**`lib/unhandled-rejection-backstop.ts`** makes an ordering claim — installed before any async wiring
+so a bootstrap-window rejection is caught. Verified: `index.ts:25` installs, `index.ts:29` is the
+first `await`. Its metric sink documents that a second attach would double-count, and there is
+exactly one call site (`bootstrap.ts:606`).
