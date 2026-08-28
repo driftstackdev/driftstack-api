@@ -14778,3 +14778,46 @@ flaw and do NOT have it: they match inside an attribute selector, which always c
 fixtures and none of the 16 pre-existing ones. Restored byte-identical; 33 tests in the file;
 `agent-public-redaction` consumers green; `tsc -p apps/server/tsconfig.test.json` clean. No parity
 pin quotes the regex source — checked with both the import-path and the symbol-name patterns.
+
+## V-2040 — cross-node session ownership: enforced everywhere, and one expired justification (2026-08-27)
+
+`services/fleet-session-ownership.ts` (1.2 KB, never audited) is the shared predicate that stops a
+compromised fleet NODE injecting events into another customer's session — inbound frames resolve
+their target purely from the attacker-controllable `frame.sessionId`.
+
+    isCrossNodeSpoof(sessionNodeId, reportingNodeId) =
+      reportingNodeId !== undefined && sessionNodeId !== reportingNodeId
+
+⭐ **The `undefined` arm is a fail-open**: no reporting node means the frame is allowed. The JSDoc
+says it is "retained only for legacy callers that do not enter through FleetControlRegistry".
+
+**All three frame types the header names are protected, though not all by this predicate.**
+`challenge-relay.ts:65` and `profile-save-failed-relay.ts:70` call it; `agent-session-terminal-close.ts:110`
+calls it; and **pageState does not** — `session-page-state-relay.ts` enforces the same rule INLINE
+with a REQUIRED parameter (`(frame, reportingNodeId: string)`, dropping when
+`session === null || session.nodeId !== reportingNodeId`). That inline form is equivalent, and
+strictly stronger on the null case, since a required parameter cannot reach the fail-open at all.
+Two further paths enforce ownership below the service layer — `agent-sessions.ts:720` inline, and
+`agent-sessions-repo.ts:717` in the WHERE clause (`eq(agentSessions.nodeId, reportingNodeId)`).
+
+**The fail-open is unreachable from production.** The only field typed optional is
+`AgentSessionTerminalCloseArgs.reportingNodeId?`, and the sole production caller of
+`closeAgentSessionOnTerminalStatus` is line 199, inside `makeAgentSessionTerminalStatusRelay`, whose
+own signature is `(frame: SessionStatus, reportingNodeId: string)` — required. `bounded-node-latest-relay`
+types it required throughout too.
+
+⚠️ **But the justification has expired.** "Retained only for legacy callers that do not enter through
+FleetControlRegistry" — measured, there are no such callers in `apps/server/src`. The reason written
+for the fail-open no longer describes anything real, which is the same shape as a parity pin
+freezing a claim that has stopped being true. Tightening the field to required is the obvious
+hardening and I have NOT done it: several test files construct these args, so the change has test
+impact and it narrows a security predicate's contract — the owner's call, not a sweep's. Recorded so
+the choice is visible rather than inherited.
+
+### Boundary-idiom sweep from V-2039
+
+Swept the generalisation of the combinator bug. Boundary: 342 tracked `.ts` under `apps/server/src`,
+comment lines excluded, matching the regex boundary idiom with an explicit character class
+(`(?:^|[…])`, `(?=$|[…])`, `(?<=[…])`). Detector validated against the PRE-fix bytes of
+`agent-sensitive-input.ts` (2 hits). **Population: 2 sites, both in the file V-2039 already fixed.**
+No second instance of a hand-listed token boundary in server source.
