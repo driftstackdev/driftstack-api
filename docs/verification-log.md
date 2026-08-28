@@ -17023,3 +17023,49 @@ right size, nor that the outbound ids we mint are in fact short.
 
 Related: V-2073 (the same claim shape, which DID find a gap), V-2078 (count occurrences before
 building a detector), and the trust-boundary scoping rule this is an instance of.
+
+---
+
+## V-2080 — the SSE ceiling claim holds and is already guarded; the claims instrument is saturating too (2026-08-28)
+
+`lib/sse-backpressure.ts`: _"`reply.raw.writableLength` grows without bound until the process is out
+of memory. **Every stream therefore ends its own representation past a ceiling.**"_
+
+**Holds: 4 streams, 4 ceilings.** Enumerated the population independently of who imports the constants
+— files setting `text/event-stream` — which gives five files, and reading each separated them:
+`account-notifications.ts` (1 stream, ceiling at L153), `status-stream.ts` (1, L117),
+`agent-sessions.ts` (2 — the event lane at L3592/L3581 and the heartbeat lane at L5237/L5272), while
+`middleware/auth.ts:41` is JSDoc on `requireAuthEventSource` and `lib/openapi.ts` is the published
+spec. ⭐ Two of `agent-sessions.ts`'s four `text/event-stream` lines are a content-type **check** and a
+**comment** — the count says four, the population is two.
+
+⭐ **And it is already enforced, better than I would have.**
+`every-sse-stream-shares-one-buffer-ceiling.test.ts` carries four arms: a non-vacuity floor ("the scan
+found the streaming routes, so a clean result is a real one"), the forward assertion, an
+**anti-redeclaration** arm ("no route compares against a redeclared or inline ceiling"), and an
+ordering arm keeping the heartbeat ceiling far below the payload one. The anti-redeclaration arm is
+the one I would have missed: the original defect was not a missing bound but **three copies that
+nothing required to agree**, each with its own passing content-parity pin.
+
+### ⚠️ The instrument is saturating, and I should say so before it wastes another firing
+
+Fifteen claims checked across V-2075–V-2080. **Fifteen held.** The yield:
+
+- **1 defect** — V-2073's unbounded `freeze_count`, found before I had named the method.
+- **1 imprecision** — V-2078's fence comment omitting its deliberate exception.
+- **1 adjacent finding** — V-2075's silent backstop, from reading _around_ a claim that held.
+- **4 claims already enforced by a purpose-built guard** I found only by grepping prior art:
+  `route-auth-coverage-invariant`, the scheduled-jobs settle pins, `every-sse-stream-shares-one-buffer-ceiling`,
+  and the harness-protocol bound census.
+
+**That is not a failing instrument — it is a well-guarded codebase, and the claims are true because
+someone checked them.** But the marginal claim is now returning "already correct, already guarded",
+which is the same curve the name-absence family hit in V-2072 after 253 hits. The remaining ~27
+claims are worth finishing (they are cheap, and V-2073 came from one), but they should not be the only
+thing a firing does.
+
+⭐ Six populations mis-specified across this stretch (V-2076 ×2, V-2077 ×2, V-2078, V-2079) against one
+defect found. **The instrument that keeps being wrong is mine, not the codebase's** — and every one
+was caught by reading the source rather than by a better regex.
+
+Related: V-2072 (the previous family to saturate), V-2073 (this one's single defect), V-2079.
