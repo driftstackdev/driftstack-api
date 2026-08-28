@@ -17436,3 +17436,62 @@ every call site of the 12 uniquely-named candidates; the 5 ambiguous names are *
 cleared**, and resolving them needs type information rather than grep.
 
 Related: V-2083 (the raw measurement), V-2085 (classify before reporting, from the other side).
+
+---
+
+## V-2087 — a content-parity pin is a SHAPE assertion, and 8 of the 11 have nothing but that (2026-08-28)
+
+V-2086 produced a read-verified list of 11 repo methods called in production whose SQL never executes.
+Asked the next question: **what IS guarding them?**
+
+**Measured across `apps/server/tests` (both spellings, 500+ test files): 8 of the 11 are pinned only by
+source-TEXT guards** — `*-content-parity` and `*-cross-source-invariant` files carrying regexes over
+the method body — with no execution behind them:
+
+    countAllByStatus, setEgressCapabilityReport, findAccountById, markEmailVerified,
+    resetDeliveryToPending, deleteDelivery, findByConfirmTokenHash, touchWebSessionLastUsed
+
+⚠️ The other three (`enqueueDelivery`, `getDetail`, `upsertSubscription`) showed apparent behavioural
+arms in my proxy — "the name appears in an integration file that also contains `new Drizzle`" — which
+is a **file-level co-occurrence, not a call**. Coverage is the authority and reports zero execution for
+all eleven, so my proxy over-counts by three. Stated rather than quietly dropped, because it is the
+same over-attribution that cost three passes in V-2086.
+
+### Why this is the sharper version of V-2085
+
+`markEmailVerified` is the clean example. Its guard is real and well-written —
+`db-auth-flows-repo-content-parity` pins the whole body, and
+`db-auth-flows-repo-v079-cross-source-invariant` states the property out loud: _"markEmailVerified
+once-only guard — and(eq(id), isNull(emailVerifiedAt)) — prevents overwriting the verification
+timestamp."_ Four pins across four files.
+
+**Every one of them asserts what the source SAYS.** The method is a CAS first-transition claim —
+`UPDATE … WHERE id = ? AND emailVerifiedAt IS NULL RETURNING id` — whose boolean gates the one-time
+signup-welcome email, and **no test has ever asked Postgres whether the second call actually loses.**
+
+⭐⭐ **So a content-parity pin is subject to exactly the limit V-2085 found in reading.** I wrote there
+that "reading proves the shape, not that it executes"; a text pin is reading, mechanised and repeated
+on every run. It catches an EDIT to the source. It cannot catch the database disagreeing with the
+source's assumption — a migration adding a default to `email_verified_at`, a nullability change, or
+`.returning()` behaving differently than the author assumed. **Checked the live column: nullable, no
+default**, so the guard is behaviourally reachable and correct today; that is a fact no text pin
+establishes.
+
+⭐ The in-memory double was worth checking and is **faithful** here — missing account → false,
+already-verified → false, otherwise claim — so this is not a V-1209 divergence. The gap is execution
+alone.
+
+⚠️ Boundary in the same sentence: "pinned only by source text" means no test in `apps/server/tests`
+calls the method on a Drizzle instance, established by coverage rather than by grep; the guard census
+itself is a name-match over content-parity/cross-source filenames and would miss a behavioural arm
+living in a differently-named file.
+
+**The recipe for closing one, worked out but not yet landed** (a peer holds the machine):
+`db-canonical-email-dedup-is-enforced-drizzle.test.ts` already constructs `DrizzleAuthFlowsRepo` with
+seeding and cleanup helpers, so the arm is: create an unverified account → `markEmailVerified` → expect
+**true** → call again → expect **false** → **read `email_verified_at` back and assert it is the FIRST
+timestamp**. That last step is the one that matters: the boolean alone cannot distinguish a working
+`isNull` guard from a broken one that returns true twice and moves the timestamp.
+
+Related: V-2086 (the classified list), V-2085 (reading proves the shape), V-1209 (the divergence class
+this is NOT).
