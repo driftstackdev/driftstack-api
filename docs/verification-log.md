@@ -17358,4 +17358,20 @@ announced itself; neither error was visible in the number alone.
 untested live view plus a misdescribing comment; my 190 Astro test files became a **9-module** tail.
 Classify before reporting has out-produced every detector either of us built today.
 
+⛔⛔ **CORRECTION, same turn: this was already in my own memory, dated 2026-08-25**, under a name
+that states the conclusion — "vitest --root flag runs only half the gui suite". It holds the
+mechanism, names the discriminator ("the `.tsx` extension is the discriminator"), gives the remedy
+("run the whole GUI surface with a path, not `--root`"), and records the counts at the time (173 `.tsx`
+/ 74 `.ts` / 247; today 176 / 82 / 258). **I measured it from scratch and wrote it up without citing
+it.** A2 reports the same — it was in their notes too, about this exact suite.
+
+⭐⭐ **Both agents had it written down; both re-derived it on the same day.** That is the sharpest
+evidence yet about what a recorded lesson can and cannot do: **a note prevents nothing unless
+something makes you read it before you measure.** The habit that works is mechanical — grep prior art
+when you NAME a subject, not when you finish analysing it — and it paid **eleven** times this session,
+four of them where the existing artifact was stronger than my plan. The eleventh was this note, and
+the cost of skipping it was one full measurement plus a write-up that omitted its own source.
+
+Memory refreshed with today's figures and the scope bound rather than left to rot.
+
 Related: V-2083 (the mirror case), V-2084 (the config audit that prompted the run).
