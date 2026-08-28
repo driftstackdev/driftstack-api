@@ -19143,7 +19143,60 @@ the distinction recorded earlier today; here the subject carries no uncommitted 
 is the right expectation.
 
 **The remaining 78 are a measured work-list, not a claim** — several will be defensive asserts like the
-rate-limit one and several more will be my window's false positives. What this establishes is that the
-axis is productive where function coverage was exhausted.
+rate-limit one and several more will be my window's false positives.
+
+⛔ **Corrected in V-2114: "a new axis" is wrong.** V-973 ran branch coverage on `routes/agent-sessions.ts`
+before me and its guard's comment says so outright. The transfer-race finding above stands and was
+genuinely unclosed; the framing did not.
 
 Related: V-2111 (function coverage exhausted), V-2112 (the audit that preceded this).
+
+---
+
+## V-2114 — the agent-sessions branch cluster triaged, and V-2113's "new axis" retracted (2026-08-28)
+
+Worked the largest cluster from V-2113: **24 refusal-shaped untaken branches in
+`routes/agent-sessions.ts`**, boundary as before (the all-green 3251-file run, `apps/server/src`
+excluding `db/`). It resolves entirely, and one of the resolutions corrects me.
+
+### ⛔ Branch coverage is not a new axis here, and the prior art says so in as many words
+
+V-2113 closed by saying the axis "is productive where function coverage was exhausted", which reads as
+though nobody had used it. **V-973 had.** `v2-37-agent-message-kinds-parity` carries this:
+
+> _"Coverage shows none of these four translations is executed by any test — the cap itself IS tested,
+> one layer down in agent-runtime.test.ts, so what went unchecked is the mapping to HTTP."_
+
+I had independently reached exactly that about `account-turn-limit`: proven in `agent-runtime.test.ts`
+at the service layer, never executed at the route that turns it into a customer-visible 429. The guard
+already closes it the only way available — executing it needs a fabricated runtime result, so it pins
+WHICH error class each kind maps to, with the consequence spelled out: `sdk-typescript/src/retry.ts`
+retries 429 and no other 4xx, so demoting that cap to a 409 makes the customer's turn fail permanently
+where it used to succeed once a slot freed. **An existence pin would not notice, because the branch is
+still there.** ⭐ That is a better close than a test would have been.
+
+The transfer-race finding in V-2113 stands — it was real, unclosed, and is now executed. The claim of
+novelty did not.
+
+### The other 20, and why the cluster is reassuring rather than alarming
+
+- **~10 are Zod body-validation refusals** — `CreateAgentSession`, `SetCookies`, `NavigateHistory`,
+  `UploadFile`, `DownloadFetchQuery`, `Handback`, `ResumeSession` and three bare
+  `if (!parsed.success) throw new ValidationError(...)`. No test sends a malformed BODY to these
+  endpoints. Uniform machinery, low per-endpoint risk, and a genuine gap in the "400 on malformed
+  input" contract — recorded, not closed, because ten near-identical arms is a decision about test
+  weight rather than a defect.
+- **4 are V-973's translations**, already pinned structurally.
+- **The rest are fail-closed defensive branches**, and I read them rather than assuming. The pair at
+  `:4115`/`:4119` is the instructive one: when the caller is NOT the session owner — a control-key
+  caller or a team admin — the handler looks up the OWNER's tier rather than the caller's, and refuses
+  with `ForbiddenError` if the auth repo is unwired or the owner account has vanished. **Both arms
+  refuse; neither falls through to the permissive path.** Cold is the correct state for a branch that
+  only fires when a dependency is missing or an account was deleted mid-session.
+
+⭐ **The pattern worth keeping from the whole cluster: every business-logic refusal I read fails
+CLOSED.** A never-executed refusal is worrying exactly when the untaken arm is the permissive one, and
+none here is. That is a cheaper triage question than "is this tested" and it disposes of most of a
+79-item list.
+
+Related: V-2113 (the axis, and the finding that stands), V-973 (the prior art that corrects it).
