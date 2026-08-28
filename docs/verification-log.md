@@ -16971,3 +16971,55 @@ amended.
 
 Related: V-2076, V-2077 (the earlier false-positive pairs), V-2075 (`routes/auth.ts` as the pattern
 this file now follows).
+
+---
+
+## V-2079 — a 30/25 split that reads as drift is the trust boundary applied field by field (2026-08-28)
+
+`schemas/harness-control-protocol.ts`: _"Inbound fleet frames share a 96 MiB socket allowance, so
+**every string that is retained or persisted must have its own much smaller semantic bound**."_
+Same shape as V-2073's `freeze_count`, on the file that parses everything an authenticated harness
+node sends.
+
+**Counted before building anything on it**, per V-2078's rule: **179 `z.string()` occurrences**, of
+which 64 carry no `.max`/`.length`/`.uuid`/`.regex`. **That 64 is not a finding and I did not report
+it** — the claim is scoped to strings that are _retained or persisted_, and most of the 64 are
+transient routing ids. A count whose population does not match the claim's population is not evidence.
+
+Narrowing to id-shaped fields (`requestId`, `sessionId`, `intentId`, `challengeId`, `profile_id`,
+`tabId`) gave **55 fields: 30 bounded by `HARNESS_FRAME_ID_MAX_LENGTH`, 25 unbounded** — a near-even
+split, which reads exactly like a convention half-applied. The obvious story was attractive: a
+correlator key is retained in a Map until its request settles, so an attacker-controlled multi-megabyte
+`requestId` would be a memory-amplification vector up to the frame cap.
+
+⛔ **It is not drift. Grouped by enclosing schema, the split is perfect and it falls on the trust
+boundary:**
+
+    30 bounded    →  IntentResultIdentity/Header, ProfileSaved, ChallengeDetected, ProfileSaveFailed,
+                     PageStateFrame, CookiesResult, SetCookiesResult, NavigateHistoryResult,
+                     UploadResult, DownloadsListResult, DownloadDataResult, SetEgressResult,
+                     SessionStatus, ErrorEventPayload, CapabilityReportPayload, TrimProfileResult
+                     — every one an INBOUND frame the harness sends US.
+
+    25 unbounded  →  NavigateHistoryRequest, IntentDispatch, ResumeSession, CookiesRequest,
+                     SetCookiesRequest, UploadFileRequest, ListDownloadsRequest,
+                     FetchDownloadRequest, TrimProfileRequest, SetEgressRequest,
+                     SessionAssign, SessionAssignProfile, SessionEnd, PauseSession
+                     — every one an OUTBOUND command WE send, carrying ids WE mint.
+
+**30 of 30 and 25 of 25.** Not one exception in either direction. The claim holds exactly, and the
+file applies it per-field on the direction of travel.
+
+⭐⭐ **Sixth population error of the session, and the first whose discriminator no regex could see.**
+The previous five keyed on the wrong token (`opts.` qualifier, a literal occurring seventeen times, a
+call-order assumption). This one keyed on the right token — the field name — and still had the wrong
+population, because whether `requestId` needs a bound depends on **which direction the frame is
+travelling**, which is a property of the enclosing schema, not of the field. **"Is this input
+untrusted?" is answered one level up from wherever the input appears.**
+
+⚠️ Boundary in the same sentence as the result: this is a static read of one schema file. It confirms
+every inbound id field carries `HARNESS_FRAME_ID_MAX_LENGTH`; it does not confirm the bound is the
+right size, nor that the outbound ids we mint are in fact short.
+
+Related: V-2073 (the same claim shape, which DID find a gap), V-2078 (count occurrences before
+building a detector), and the trust-boundary scoping rule this is an instance of.
