@@ -17176,3 +17176,82 @@ local Postgres/Redis (the `e2e-local` path exists and is guarded), and the ~27 r
 (cheap, and V-2073 came from one).
 
 Related: V-1209 (the sweep this re-invented), V-2080 (the saturation call), V-2081.
+
+---
+
+## V-2083 — the db layer measured against real Postgres: 26 Drizzle methods whose SQL has never run (2026-08-28)
+
+V-2082 named runtime execution as the untried axis. **It was tried — V-1035 — and recorded in
+`verify-suite.mjs`'s own comment block**, a file whose OUTPUT I had quoted twice this session without
+reading its source. Tenth prior-art pre-emption, and the first where I had already published the claim
+that it was untried.
+
+### The post-condition, re-derived at HEAD
+
+V-1035 measured `apps/server/tests/integration` against a disposable migrated Postgres: 357 files,
+3258 tests, zero skipped, all passing. **At HEAD: 397 files, 3857 tests, zero skipped, all passing**
+(108.8s, `driftstack_a3_vitest` at 115/115 migrations, Redis index 13 chosen because it held 0 keys
+while 0/11/12/14/15 hold live data; no `flushdb` exists in the vitest integration path). The set has
+grown 40 files and 599 tests and still runs clean — so "nothing has decayed behind the gate" is true
+today, not merely when written.
+
+### The instrument the guard names, run for the first time over the whole layer
+
+`every-drizzle-repo-is-driven-against-a-real-postgres.test.ts` states its own limit — _"asserts
+EXECUTION, not assertion quality"_ — and names the closer: **v8 coverage over the db layer, NOT a
+method-name census** (that census was retired in V-1835 at ~10 of 12 false positives). V-1849 ran it
+for ONE file (`oauth-store`, 24/24). Run over the layer:
+
+    db-layer coverage from the integration suite:
+      Functions   94.58%  (699/739)   → 40 never executed
+      Statements  87.66%   Branches 75.33%   Lines 89.79%
+
+**Boundary in the same sentence: this is coverage from `tests/integration` alone**, so `migrate.ts`,
+`seed.ts` and `seed-target-guard.ts` read 0% as a scope artifact — they are CLI/unit-tested surfaces,
+and `seed-target-guard` is the very file V-2070 audited through its unit test.
+
+⭐ **Excluding those, ~26 Drizzle methods have never had their SQL executed.** Naming them, because a
+Drizzle method builds SQL at runtime and one that never runs has never been validated at all:
+
+    sessions-repo            findSessionUnscoped, countAllByStatus, setEgressCapabilityReport,
+                             emptySessionStatusCounts
+    auth-flows-repo          findAccountById, markEmailVerified, touchWebSession
+    webhooks-repo            enqueueDelivery, resetDeliveryToPending, deleteDelivery
+    agent-sessions-repo      setGuiControlKey, setPairModeState
+    crypto-orders-repo       upsert, getById
+    status-subscribers-repo  findByConfirmTokenHash, listAll
+    account-proxies-repo     create, rowWrappersAreV2
+    api-keys-repo            setExpiresAt          auth-repo         touchWebSessionLastUsed
+    fleet-nodes-repo         getDetail             team-members-repo removeMember
+    stripe-webhooks-repo     upsertSubscription    agent-turn-receipts-repo purgeForTerminatedAccountsBefore
+    audit-archive-repo       _processedStripeEventsAliasNote
+
+⚠️ `countAllByStatus` and `emptySessionStatusCounts` are the pair I verified **by reading** in V-2077.
+The claim ("every status is present, no hardcoded list") is true; the code implementing it has never
+run against a database. Reading proves the shape, not that it executes.
+
+### ⛔ Two instrument traps caught, and one guard corrected
+
+**1. A stale coverage artifact that reads exactly like a fresh one.** `coverage/coverage-summary.json`
+at the repo root reported 311 files and 2959 functions. My run wrote
+`apps/server/coverage/coverage-summary.json` (739 functions) because `--root apps/server` moves the
+output. The root file was 54 minutes old, from a different, wider run. **Caught only because its
+totals disagreed with the text report I had just read** — not by noticing the path.
+
+**2. One file makes the recommended instrument read false, and nothing said so.**
+`account-proxies-repo.ts` reports **75% functions** and reads as a credential-handling repo with a
+quarter of its methods unexercised. It is the ONLY file of 47 that keeps its in-memory double beside
+the Drizzle class — deliberately, per its own comment ("for unit tests + the in-memory app stack") —
+and an integration run against Postgres cannot execute a double. **Of its 9 unexecuted functions,
+SEVEN are the in-memory class; only `create` and `rowWrappersAreV2` are Drizzle.** I read it as a
+25% gap for several minutes. Added the caveat to the guard header where the coverage run is
+recommended, so the next person reads it before the number.
+
+**3. The guard's header number was never right.** It said _"53 source files sit in it"_. The directory
+held **54** at the guard's own commit and holds **55** now — wrong at birth, then drifted. Fixed by
+removing the hand-typed number and having the completeness arm report the population it walks;
+planting a class-less `db/*.ts` now fails with `classified 56 db/*.ts files; …`, proved by mutation and
+the probe removed.
+
+Related: V-1035 (the measurement re-derived), V-1849 (the single-file version), V-1835 (the retired
+census), V-2077 (the claim whose implementation turns out never to run).

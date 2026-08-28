@@ -8,7 +8,10 @@
 // justification its own comment records as expired. And `verify-suite --all` is CI
 // job `build-test`, which does not run the e2e job at all. So the directory the
 // coverage gate declines to measure is also the directory the unit gate never
-// executes, and 53 source files sit in it.
+// executes. The completeness arm below reports how many files it classified, so the
+// number is derived rather than typed here — the sentence this replaces said 53 while
+// the directory held 54 on the day it was written (55 at 2026-08-28), so it was never
+// right, not merely stale.
 //
 // What DOES execute this SQL is `tests/integration/**`, whenever DATABASE_URL is
 // set: those files construct the Drizzle classes directly and drive them against
@@ -16,6 +19,14 @@
 // repo added tomorrow — or an existing one whose only real-Postgres test is deleted
 // — takes its SQL out of every gate at once, silently, because a repo with no test
 // fails nothing.
+//
+// ⚠️ IF YOU RUN THAT COVERAGE, ONE FILE READS FALSE. `account-proxies-repo.ts` is the
+// ONLY file of 47 keeping its in-memory double beside the Drizzle class (deliberately —
+// "for unit tests + the in-memory app stack"), and an integration run against real
+// Postgres cannot execute a double. v8 therefore reports it at 75% FUNCTIONS, reading as
+// a credential repo with a quarter of its methods unexercised. Measured 2026-08-28: of
+// its 9 unexecuted functions SEVEN are the in-memory class and only two are Drizzle.
+// Every other db file keeps its double in `tests/integration/_helpers`.
 //
 // ⚠️ This asserts EXECUTION, not assertion quality. A repo can be constructed by a
 // test that only uses two of its methods, and that is exactly what happened with
@@ -148,14 +159,16 @@ describe('every Drizzle repo is driven against a real Postgres', () => {
 
   it('CRITICAL the classification is complete: every db/*.ts either has a repo class or is on the list. A file that is neither is a file the rule silently skipped, which is how a new persistence module would slip past — the census must account for all of them, not most.', () => {
     const unclassified: string[] = [];
+    let seen = 0;
     for (const fileName of readdirSync(DB_DIR).sort()) {
       if (!fileName.endsWith('.ts')) continue;
+      seen += 1;
       const hasClass = repoClasses(readFileSync(join(DB_DIR, fileName), 'utf8')).length > 0;
       if (!hasClass && !NO_PERSISTENCE_CLASS.has(fileName)) unclassified.push(fileName);
     }
     expect(
       unclassified,
-      `neither a repo class nor listed as having none:\n  ${unclassified.join('\n  ')}`,
+      `classified ${String(seen)} db/*.ts files; neither a repo class nor listed as having none:\n  ${unclassified.join('\n  ')}`,
     ).toEqual([]);
   });
 });
