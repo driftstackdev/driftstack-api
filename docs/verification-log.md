@@ -15597,3 +15597,56 @@ the webhook test family A2 is actively working, so it goes to them rather than b
 second agent in the same area. `rate-limit-overrides-repo-contract` (2000) and
 `db-agent-session-transcript-migration-drizzle` (1970) are in the same date space but touch different
 tables, so they do not join this namespace.
+
+## V-2056 — amending my own remedy: isolation that works per-file can fail in aggregate (2026-08-27)
+
+### The recommendation I recorded is wrong at n=3
+
+V-2055 closed by pointing at the fix A2 had already applied — give the colliding test its own database
+via `ensureIsolatedDatabase` — and called it structural rather than moving dates. **That advice does
+not survive being applied to the rest of the namespace.** Converting the two remaining files, A2
+measured: the reminder file passes **13/13 alone**, and running the three webhook files together
+produces **2 failed | 1 passed**. The breakage is in the interaction, not in any file — three workers
+concurrently creating and migrating fresh isolated databases, **115 migrations each**, against one
+Postgres.
+
+⭐ So the property to state is sharper than "use an isolated database": **isolation that works
+per-file and fails in aggregate is not isolation.** A per-file remedy verified per-file reproduces
+exactly the blind spot the original defect had — green alone, green in every narrow run, red only at
+full scale. And the asymmetry is the same one as the 117 skipped files, one layer down: this would
+surface in a full gate and never in a targeted one.
+
+Amending rather than leaving the earlier line to be followed: the remedy for that namespace needs to
+be chosen with n=3 in mind, not n=1.
+
+### ⛔ Correcting a correction — the third adopter calls two sweeps, not three
+
+A2 reported that `webhook-sweeps-survive-one-undecryptable-row` calls three global sweeps, adding
+`findEndpointsNeedingGraceExpiringNotice` to the two I recorded. Checked both versions before
+accepting it:
+
+    committed HEAD      .findEndpointsNeedingForceRotation( x1   .findEndpointsNeedingRotationReminder( x2
+    working tree (theirs) identical — same two
+
+`findEndpointsNeedingGraceExpiringNotice` occurs exactly once in that file, on **line 5, inside the
+header comment** naming the sweep family the file is about. It is never invoked. V-2055's "two global
+sweeps" stands. This is the comment-versus-code trap that cost me nine phantom audit actions earlier
+in this same turn — a name appearing in a file is not a call, and a header that lists a family reads
+exactly like code that uses it.
+
+### The gate I killed, and what it cost to not kill it
+
+Launched gate-37 on `690216e6c` with a clean pre-flight. Ninety-three seconds in, A2 disclosed that
+two `apps/server/tests/integration` files were dirty and BROKEN in the tree my run was importing, plus
+two vitest invocations of their own inside my window. **Killed the run rather than asking them to
+freeze**: it would have produced either a red I must discard or a green that says nothing about the
+files in question, and holding a peer for 300s to protect an uninterpretable result is a bad trade.
+Declined their offer to revert — a revert is a second write into the same import window and makes the
+state harder to reason about, not easier.
+
+⭐⭐ The structural point, now with evidence from both sides: **two agents adopted "check quiescence
+before any write" explicitly, and both breached it within one hour** — mine by writing 22 seconds into
+their run, theirs by writing and then running tests inside mine, each after running the check and
+finding it true. A point-in-time check cannot establish a property that must hold over an interval, in
+either direction. **The rule is not the fix and cannot be**; a worktree makes the interference
+structurally impossible, which is what both of us skipped because the edit felt small.
