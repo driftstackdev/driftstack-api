@@ -16212,3 +16212,47 @@ own honest note that the 117 collected-but-never-executed files gate on `DATABAS
 3129 of 3246 discovered**, which is the number that means anything.
 
 Related: V-2061 (population), V-2063 and V-2065 (first two samples).
+
+---
+
+## V-2067 — CORRECTION to V-2065/V-2066: the stale-surfaced-item pattern was recorded in memory on 2026-06-07, and I re-derived it (2026-08-27)
+
+Grepped memory _after_ landing V-2065 and V-2066 rather than before, and it holds the result twice
+over.
+
+`project_auth_token_single_use_concurrency_fix` records the fix at commit `e1dc85f1` (2026-06-06):
+`consumeAuthToken` returning `rows.length > 0`, all three callers rejecting the race-loser.
+`project_auth_flow_token_audit_2026_05_31` records it **again** under "UPDATE 2026-06-07 — LOW
+HARDENING NOTE ALREADY RESOLVED (verified before churning)" and a third time as "W427 (2026-06-10) —
+✅ RESOLVED … Don't re-surface."
+
+⛔⛔ **And that same memory already states V-2066's generalisation, in one line:** _"the surfaced-LOW
+backlog has been actively hardened; treat old 'SURFACED not fixed' notes as likely-resolved,
+verify-then-skip."_ I presented "two of three sampled registers carry a stale surfaced item" as a
+pattern worth naming. It was named ten weeks ago, by me, from three instances in a single session.
+
+**What survives as new, stated narrowly:**
+
+- The **register itself** was never annotated. Memory knew three times; `docs/internal/2026-05-31-auth-flow-token-audit.md` still read "SURFACED, not fixed" until this turn. That gap — memory current, document stale — is real, and is the same doc→repo asymmetry as V-2060 with memory as the third store.
+- The **`consumeAuthTokenFamily` escalation is in neither memory.** Both record `consumeAuthToken`
+  returning a boolean with callers at `auth-flows.ts:554/818/880`. Current code calls
+  `consumeAuthTokenFamily` at `:815/1118/1203`, consuming every unconsumed sibling of the account —
+  which closes the _sequential_ old-or-resent-link case that neither the original note nor the fix
+  addressed. The code moved again after 2026-06-10 and no store recorded it.
+- Single-token `consumeAuthToken` having **no production caller** is in neither store.
+
+**V-2063 and V-2066 are unaffected** — the MFA operator asymmetry, the `dedupAfterRunAt` cohort fix
+across 16 services, and the V-1523 precondition arm were each verified directly this turn and appear
+in no prior store I can find.
+
+⭐ **The failure is procedural and I have recorded it before.** My memory index says, in its own
+header, to grep prior art **before the first measurement, not after** — and notes that three errors in
+one day were memories I had already written and never read. This is the fourth. The cost here was low
+(the doc annotation was worth doing regardless) but the shape is the expensive one: **a re-derived
+result reads exactly like a discovery, and nothing in the measurement itself can tell the two apart.**
+The only instrument that distinguishes them is a grep I keep running afterwards.
+
+⭐ Sharpening it into something mechanical, since intending to remember has now failed four times:
+**the trigger is naming a document, symbol, or subsystem — not finishing an analysis.** The moment
+`2026-05-31-auth-flow-token-audit.md` appeared in my sampling list was the moment to grep memory for
+`auth.flow.token`, and that is a cheaper action than the measurement it would have replaced.
