@@ -16863,3 +16863,48 @@ Running total on the V-2074 instrument: **8 claims checked, 7 held, 1 finding** 
 from reading the code _around_ a claim that held, not from the claim itself.
 
 Related: V-2075 (the finding this sweeps), V-2074 (the instrument).
+
+---
+
+## V-2077 — two more claims hold, and my detectors went 0-for-4 on true positives this firing (2026-08-28)
+
+- `services/webhook-worker.ts`: _"Cannot spin: every claimed row is marked in_flight and settles to
+  delivered, dlq, or pending with a FUTURE next_attempt_at, so it leaves the ready set."_ **Holds.**
+- `db/schema.ts` / `lib/webhook-signing.ts`: _"During the grace, every outbound delivery is signed
+  twice (`v1=<curr>, v1=<prev>`)."_ **Holds** — `signWebhookPayload` pushes the second `v1=` whenever
+  `secretPrev` is set, and the worker computes `dualSign` as `secretPrev !== null && secretPrevExpiresAt
+  > nowMs`, passing the prev secret only then. ⭐ Its `secretPrev !== ''` guard is the same defence as
+  > V-1465's Stripe empty-signing-secret refusal: an empty HMAC key produces a valid-looking digest, so
+  > "empty means absent" is the safe reading in both places. Consistent discipline, arrived at twice.
+
+### ⛔⛔ The spin claim looked false twice, and both were my instrument
+
+`grep 'nextAttemptAt: at'` — the current time, where the retry paths at `:285` and `:493` compute
+`at + backoffMs + jitterMs` — returned two sites, and a row re-queued to `pending` with a
+non-future attempt time stays in the ready set and spins the drain loop. That is a real liveness
+hazard, and both hits were false:
+
+- `webhook-worker.ts:317` is the branch where **the recovery write itself failed**. The row stays
+  `in_flight` — which is OUT of the ready set — for stale reclaim, and the path logs `error` with
+  "row stays in_flight for stale reclaim". The returned `{ kind: 'retry', nextAttemptAt: at }` is a
+  report to the caller, not a database write; the write is what just failed.
+- `webhooks-repo.ts:1125` is `resetDeliveryToPending`, an operator replay path. Immediate eligibility
+  is the _point_ there, and it is not a worker settle.
+
+**Scoreboard for this firing: my detectors produced four false positives and zero true positives.**
+Two on the settle fence (`opts.workerId` vs `workerId`, V-2076), two here. **Every finding came from
+reading — including V-2075, which came from reading the code AROUND a claim that held.** The claims
+themselves are holding at 10 of 10; their value is not that they are wrong, it is that checking one
+puts you in the right file with a specific question, and the defect is usually three lines away.
+
+⭐ Both false-positive pairs have the identical cause and it is now the most repeated lesson of the
+session: **I matched a token where the property needed a shape and a context.** `nextAttemptAt: at` is
+only a spin if the row is also written to `pending`; neither hit was. A grep cannot see the second
+half of a conjunction, so a one-token detector on a two-part property will fail exactly this way every
+time.
+
+Running total on the V-2074 instrument: **10 claims checked, 10 held, 1 finding** (V-2075, adjacent to
+a held claim).
+
+Related: V-2076 (the first false-positive pair), V-2075 (the finding), V-1465 (the empty-secret
+defence this one mirrors).
