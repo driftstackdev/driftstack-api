@@ -18287,3 +18287,61 @@ deliberately.
 
 Related: V-2099 (the truncation this swept for), and the standing preference for asserting a
 relationship over pinning a number.
+
+---
+
+## V-2101 — the consequential-action gate is enforced per class, not per interface (2026-08-28)
+
+Checking another header claim: `services/agent-executor.ts` says _"Both real executors halt BEFORE
+dispatching an unapproved consequential action (W443/W445)."_
+
+**The claim holds, and understates itself — all THREE implementations gate, not two.** Boundary:
+`apps/server/src`, classes matching `class X implements AgentExecutor`, comments stripped, bodies
+brace-matched. `StubAgentExecutor`, `RealAgentExecutor` and `ControlPlaneAgentExecutor` each call the
+shared `consequentialHalt`, and in the two that dispatch, the call precedes the first `await this.…`.
+Verified by reading, then mechanically.
+
+⭐ That header is also one of the better ones in the repo: it has been corrected twice in place, once
+because it claimed both real executors halt on the first failing intent when only one does (V-1099), and
+once because it described a stub-only slice after the real executor had shipped from the same file
+(V-808). Both corrections sit at the paragraph a reader stops at rather than in a later section.
+
+### What nothing covered
+
+The gate turns a purchase, payment or account deletion the customer has not approved this run into a
+halt BEFORE the dispatch. **Which executor runs is a deployment detail** — they are selected by
+configuration, and the control-plane one says so itself: _"Identical gate to Stub/RealAgentExecutor:
+the go-live swap must NOT silently drop it (a real box would otherwise execute the action for real)."_
+
+Existing coverage is real but keyed on the members that exist: three behavioural test files, one per
+CLASS, and a content-parity guard naming two FILE paths. **A fourth executor — a new transport, a new
+file — is covered by neither, and nothing would fail.** That is the recurring shape: an invariant over
+an interface, enforced once per implementation.
+
+Added `every-agent-executor-gates-consequential-actions`, a source-shape guard. The reasoning for
+preferring source shape over behaviour here is already written in
+`every-intent-emission-goes-through-the-public-projection` and I am not restating it: such a guard
+"has to fail for code that does not exist yet, which no runtime assertion can do".
+
+Three arms: the scan finds exactly the three known classes with non-trivial bodies (floored in both
+directions — an empty set satisfies every assertion below it, and a truncated brace-match would report
+every class ungated); every implementation calls the shared gate; and in each implementation that
+dispatches, the gate precedes the first dispatch, with a floor so that arm cannot go vacuous if the
+dispatch idiom changes.
+
+⚠️ **Scope stated rather than implied:** this asserts each implementation CALLS the shared gate before
+dispatching. It cannot assert the gate is correct — `agent-consequential-action` owns that — nor catch
+an executor that dispatches through a free function rather than a method.
+
+⛔ Comments stripped, and it matters here: all three files discuss the gate at length in prose, and the
+control-plane one names `consequentialHalt` in a comment four lines above where it calls it. A raw-text
+scan would report a class as gated on the strength of a sentence describing the gate — the same failure
+as V-2096, V-2098 and V-2099, now anticipated rather than discovered.
+
+**Both arms mutation-proved separately, on the real subject rather than the guard's own list.**
+Neutralising the gate in `RealAgentExecutor` reds the gate arm naming it; MOVING the gate to after the
+dispatch — a change that reads almost identically in a diff and is worthless, since the purchase has
+already happened — reds only the ordering arm. Restored byte-identical both times, with no peer suite
+running during the window.
+
+Ratchets 3073 → 3074 and 3250 → 3251 for the one file added.
