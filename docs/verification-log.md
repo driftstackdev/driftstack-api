@@ -14602,3 +14602,58 @@ at load 40+. Load-sensitive teardown race, consistent with the known gui jsdom f
 rejection** and warns it "might cause false positive tests". A plain `vitest run` reads green here.
 Only verify-suite's own verdict line caught it — which is exactly why the gate echoes that verdict
 instead of trusting an exit code.
+
+## V-2036 — my own quiescence check counts postgres backends as vitest (2026-08-27)
+
+**Gate-33: 3244 files, 32246 passed, 16 skipped, 0 teardown errors, 285.11s, `verify-suite: OK`.**
+Against gate-32's 497.81s and one error, on the same HEAD plus three doc/test commits. The flake is
+now **1 of 30 retained full-suite runs**, and the one occurrence is the second-slowest in the set.
+
+### A2 refuted the causal half of my attribution, correctly
+
+I told A2 the trigger was likely the heavy console output in the named file — the "view exploded" /
+ToastProvider error-boundary fixtures. **Wrong on both counts.** Those fixtures live in
+`ErrorBoundary.test.tsx`, which already suppresses them with four `spyOn(console)` calls, and
+`simulator-window-control-actions.test.tsx` has no console calls at all. ⭐ **A teardown RPC race
+names a LOCATION, not a cause** — the file vitest reports is where the shared worker happened to be
+when the rpc closed. The claim never reached the verification log (it was in the message only), but
+the log did frame the named file as "originating", which reads as attribution; it is not.
+
+A2's own account is the better one: gate-32 is the single run where their marketing suite overlapped
+my gate, which is a violation of the one-at-a-time protocol rather than a defect in any file.
+
+### The finding: the check the standing order prescribes over-matches
+
+Building a mid-run contention sampler, I ran it as a control against my OWN live gate — every worker
+on the machine descends from my run, so the correct answer is zero foreign runners. It reported
+**six**:
+
+    FOREIGN 73859: postgres: driftstack driftstack_a3_vitest ::1(57633) idle in transaction
+    FOREIGN 73861: postgres: driftstack driftstack_a3_vitest ::1(57634) SELECT waiting
+    …
+
+⛔ **They are postgres backends.** The test database is named `driftstack_a3_vitest`, so the token
+`vitest` is inside the DATABASE NAME, and `ps -Ao pid,command | grep "[v]itest"` — the exact check the
+standing order specifies, and the one I have run every turn — matches every backend connected to it.
+Measured live: at one moment 6 of the matches were postgres, at another 0 of 11 were. It is
+intermittent, tracking whether a suite currently holds connections.
+
+⭐ Consequence is mild and in the safe direction — the check over-reports "busy", so the gate waits
+or aborts rather than running contended — but every "vitest procs: N" figure I have quoted this
+session is an upper bound, not a count. **The fix is one token: `| grep -v 'postgres:'`, or require
+the module path `node_modules/vitest`.** Sweep the shape, not the token: `vitest` identifies a
+runner only when it is a path component, never as a bare substring.
+
+### The harness gap it came from
+
+The pre-flight is **point-in-time**. It proves the machine was quiet at the instant the suite started
+and says nothing about the 300–500s that follow, so a peer starting mid-run is invisible and the
+resulting red looks like a defect in whichever file the dying worker was running. `gate2.sh` now runs
+the suite in the background and samples throughout for a vitest process whose ancestor chain does not
+reach the suite's own PID, printing the verdict next to the exit line. Written as a NEW file rather
+than an edit, because `gate.sh` was being executed by a live background job at the time and bash
+reads a script incrementally.
+
+⭐ The sampler is only trustworthy because the control ran first: a detector that reported six
+foreign runners on an uncontended run would have labelled every future gate as contended, and the
+label would have been believed exactly when a real red needed explaining.
