@@ -14700,3 +14700,37 @@ proof cost no machine time while a peer held it.
 component, an exec name — never as a bare substring of a line that other software is free to
 compose.** A database name and a shell's own argv are both "other software composing the line". The
 only reason either was found is that a control ran first, on a case where the answer was known.
+
+## V-2038 — two more never-audited lib files, both clean (2026-08-27)
+
+Continuing the V-2028 list.
+
+**`lib/canonical-one-time-token-url.ts` (633 B) — clean.** It exists so a one-time token never rides
+through Cloudflare's slashless→slash redirect, which would preserve the query string. The security
+question is whether `baseUrl` can be customer-influenced: a token appended to an attacker-supplied
+origin is mailed to the attacker. Traced all six call sites — `config.authFlowUrls.verifyEmail`
+(×2), `.magicLink`, `.passwordReset`, `` `${dashboardBaseUrl}/team/accept` ``, and
+`` `${config.dashboardOrigin}/auth/oauth-client/confirm-merge` `` — **every one operator config, none
+request-derived**, and `dashboardOrigin` is `z.string().url()` with a trailing-slash transform at
+config parse. Root-path edge holds too: `'/'` → strip → `''` → `'/'`.
+
+**`lib/bounded-memory-rate-limit-store.ts` — clean, and the interesting part is a path that would be
+a bypass if it existed.** The store deletes a bucket BEFORE deciding (delete-then-set is how it moves
+the key to the newest slot so FIFO eviction targets the least-recently-touched one). That makes any
+early return a rate-limit bypass: a denied request would erase its own bucket and the next one would
+start with a full bucket, so a caller could never be limited. Read both exits — the allowed path sets
+`{tokens: remaining}` and the denied path sets `{tokens: refilled}` ("persist refilled tokens but
+don't consume"). **No path leaves the bucket deleted.** The bound itself holds: at `maxBuckets` a new
+key evicts the oldest before inserting, `maxBuckets < 1` throws, and the refill divides by
+`Math.max(refillPerSecond, 0.0001)`.
+
+⭐ Its two wirings differ, and the difference is justified rather than drift:
+`middleware/ip-rate-limit.ts:37` is MODULE-level because that file builds many gate instances from a
+factory and the comment says so ("across the many factory-built gate instances during an outage");
+`middleware/rate-limit.ts:99` is per-plugin-instance because a Fastify plugin registers once, and its
+comment says that. A store constructed per REQUEST would silently defeat the fallback — neither is.
+
+Both files were on the never-mentioned list from V-2028, which has now yielded four clean audits
+(boot key verification, the two nonce caches, the MFA challenge store, these two) against two
+findings (V-2027's parser coupling, V-2030's per-replica sweep). **Recording the clean ones is the
+point: a file that has been read to the bottom and found sound should not be re-swept.**
