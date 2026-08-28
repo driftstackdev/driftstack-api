@@ -18720,3 +18720,63 @@ The wrapper itself stays recorded rather than deleted — the owner's call, cons
 superseded methods.
 
 Related: V-2104 (the cold list), V-2105 (the first item worked), V-2095 (the roster this hardens).
+
+---
+
+## V-2107 — a re-derivation, and the one figure in it that had rotted (2026-08-28)
+
+**Gate first: 3251 files, 32331 tests, 1 failed, 192s**, against the migrated disposable database.
+The failure is `production-bootstrap-arms-every-chain`, on the `MFA_ENCRYPTION_KEY` mismatch —
+and it **passes 2/2 in isolation**. Mechanism: the suite writes `webhook_endpoints` rows under a
+test key during the run, and the production bootstrap then cannot decrypt them with the `.env` key.
+Shared-database interference, transient (`webhook_endpoints` is back to 0 rows after the run), and
+not attributable to my commits, none of which touch bootstrap or the job chains. The same file failed
+against the dev database earlier tonight, so it predates the window.
+
+### ⛔ The main body of this work was a re-derivation
+
+I set out from the observation that the coverage `include` names only `apps/server/src/**` and
+`packages/sdk-typescript/src/**`, leaving six packages with source and tests unmeasured — verified
+that each of the six loads its own `src` by relative import (so all are measurable), and proved it
+empirically on `webhook-delivery`: **49/51 functions, 296/305 statements from its own 66 tests, and
+invisible to the gate.**
+
+All of it was already known. `a-gate-that-does-not-name-its-blind-spot-reads-as-total` carries a
+`PACKAGES_OUTSIDE_COVERAGE` roster naming all six WITH per-package figures, a membership arm requiring
+any new package to be included-or-named, and a rot arm. Its header even explains the dist-resolution
+nuance I re-derived from `package.json`. **I named "the coverage include" and did not grep prior art
+before measuring — my own rule, and the second time this week.**
+
+### What the re-derivation was nonetheless worth
+
+Six packages, 67 source files, 31 test files, 518 tests, all passing:
+**functions 246/280 (87.85%), statements 1562/1915 (81.56%)**.
+
+Compared against the figures recorded on 2026-08-23, **five reproduce exactly** —
+behavioural-simulation 98.4, recapture-automation 97.7, recipe-library 99.4, webrtc-streaming 89.4 —
+to the tenth. webhook-delivery moved 96.6 → 97.0. That exactness is what makes the sixth meaningful
+rather than noise: **api-types recorded 25.1%, measures 15.5%, a 9.6-point drop.**
+
+⛔ Three hypotheses refuted before accepting drift. Not the `all` flag — `all=true` and `all=false`
+both give 15.53%. Not a different quantity — lines 15.9%, functions 22.6%, files-loaded 8.3%, none of
+them 25.1%. Not file growth — 24 src and 4 test files then and now, identical.
+
+**It is real, and the cause is structural rather than accidental.** api-types grew by 216 insertions
+across 11 files in five days — schemas added to `profiles.ts`, `sessions.ts`, `webhooks.ts` — while its
+own tests load 2 of its 24 files. Every schema added to the API surface grows the denominator and
+nothing grows the numerator, so the figure decays monotonically. ⭐ The five stable packages changed in
+the same window too (6–69 insertions each) and did NOT move, because their own tests load everything
+they ship. **The contrast is what identifies the mechanism**: this is not a roster that rots, it is one
+entry that cannot help rotting.
+
+Corrected to 15.5%, dated, with the decay direction stated so the next reader treats it as a moving
+floor rather than a fact. ⚠️ Stated rather than automated: the file says its arm is "membership only",
+and none of these figures can be re-measured by a unit test — coverage is not available in-process. So
+a date and a direction is the remedy available, not a check.
+
+Boundary: the six packages are unmeasured, not untested — 518 of their own tests pass, and five sit at
+86–100%. The gate's silence about them is recorded in that roster, not in the config's "Excludes:"
+prose, which names api-types with a reason ("no `.test.ts` imports") that is true of its consumers and
+false of its own four tests, three of which import `../src/`.
+
+Related: V-1422 (the measurement this reproduces), V-2104 (the db-layer equivalent).

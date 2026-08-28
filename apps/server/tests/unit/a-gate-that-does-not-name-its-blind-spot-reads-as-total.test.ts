@@ -346,7 +346,15 @@ describe('a gate that does not name its blind spot reads as total', () => {
   const PACKAGES_OUTSIDE_COVERAGE: ReadonlyArray<readonly [pkg: string, note: string]> = [
     [
       'api-types',
-      'measures 25.1% of src, but consumers load dist — a floor, not a result (V-1422)',
+      // ⚠️ 25.1% when V-1422 measured it on 2026-08-23; 15.5% statements re-measured
+      // 2026-08-28, with the package byte-identical in file COUNT (24 src, 4 tests) but
+      // 216 insertions heavier across 11 files. This figure is not stable and cannot be:
+      // its own tests load 2 of 24 files, so every schema added to the API surface grows
+      // the denominator and nothing grows the numerator. It decays monotonically, which
+      // makes the "floor" argument stronger over time and the recorded NUMBER wrong very
+      // quickly. The five entries below held to a tenth across the same window despite
+      // changing too, because their own tests load everything they ship.
+      'measures 15.5% of src (2026-08-28; was 25.1% on 2026-08-23 — decays as schemas are added), but consumers load dist — a floor, not a result (V-1422, re-measured V-2107)',
     ],
     ['behavioural-simulation', 'measures 98.4% statements — unmeasured, not untested'],
     ['recapture-automation', 'measures 97.7% statements — unmeasured, not untested'],
