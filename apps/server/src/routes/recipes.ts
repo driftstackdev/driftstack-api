@@ -17,6 +17,8 @@ import { PaginationQuerySchema } from '@driftstack/api-types';
 import { FeatureUnavailableError, NotFoundError, ValidationError } from '../lib/errors.js';
 import { suggestRecipeMetadata, type RecipesRepo, type RecipeRecord } from '../services/recipes.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
+import type { AccountAuditService } from '../services/account-audit.js';
+import { readClientIp } from '../lib/client-ip.js';
 import { callerCanAccessAgentSession } from './agent-sessions.js';
 import type { AgentIntent } from '../services/agent-decomposer.js';
 import { publicAgentIntent } from '../services/agent-public-redaction.js';
@@ -97,10 +99,47 @@ function publicRecipeDetail(rec: RecipeRecord): PublicRecipeDetail {
 export interface RecipesRoutesDeps {
   recipes: RecipesRepo;
   agentSessions: AgentSessionsRepo;
+  /** Optional, matching every other audit-emitting route: absent simply omits the row. */
+  accountAudit?: AccountAuditService;
 }
 
 export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesDeps): void {
-  const { recipes, agentSessions } = deps;
+  const { recipes, agentSessions, accountAudit } = deps;
+
+  /**
+   * Best-effort audit of a recipe lifecycle event. Mirrors the shape
+   * `account-web-sessions.ts` uses: null-guarded, swallowing, and never able to
+   * fail the operation the customer asked for — an audit hiccup must not turn a
+   * successful delete into an error.
+   *
+   * `actorKeyId` is the point of the row. The surface is account-scoped, so both
+   * `accountId` and `actorAccountId` are the caller's own account and neither
+   * distinguishes one human from another on an account whose keys are shared. The
+   * key id does.
+   */
+  async function emitRecipeAudit(
+    req: FastifyRequest,
+    ctx: NonNullable<FastifyRequest['account']>,
+    action: 'recipe.created' | 'recipe.deleted',
+    recipeId: string,
+    payload: Record<string, unknown>,
+  ): Promise<void> {
+    if (!accountAudit) return;
+    try {
+      await accountAudit.record({
+        accountId: ctx.account.id,
+        actorType: 'customer',
+        actorAccountId: ctx.account.id,
+        actorKeyId: ctx.apiKey.id,
+        action,
+        targetResourceId: `recipe_${recipeId}`,
+        payload,
+        ipAddress: readClientIp(req),
+      });
+    } catch {
+      // Swallow — an audit failure must not fail the recipe operation.
+    }
+  }
 
   // Doc-132 §5.2 (recipe auto-generation) v1.0 slice — a deterministic
   // label/description suggestion derived from the session's OWN
@@ -178,6 +217,11 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
         intentLog,
         transcriptSnapshot: source.transcript,
       });
+      await emitRecipeAudit(req, ctx, 'recipe.created', created.id, {
+        label: created.label,
+        agent_session_id: source.id,
+        intent_count: intentLog.length,
+      });
       return reply.code(201).send(publicRecipe(created));
     },
   );
@@ -227,8 +271,16 @@ export function registerRecipesRoutes(app: FastifyInstance, deps: RecipesRoutesD
     { preHandler: [app.requireAuth, app.requireScope('write'), app.rateLimit('global')] },
     async (req, reply) => {
       const ctx = requireCtx(req);
+      // Read before deleting so the audit row can carry the label. The row is the
+      // ONLY trace that survives the delete — recording a bare id would say that
+      // something was destroyed without saying what. One indexed lookup on a rare
+      // operation. A concurrent delete between the two still 404s, unchanged.
+      const existing = await recipes.getById({ accountId: ctx.account.id, id: req.params.id });
       const deleted = await recipes.deleteById({ accountId: ctx.account.id, id: req.params.id });
       if (!deleted) throw new NotFoundError(`Recipe ${req.params.id} not found.`);
+      await emitRecipeAudit(req, ctx, 'recipe.deleted', req.params.id, {
+        ...(existing !== null ? { label: existing.label } : {}),
+      });
       return reply.code(204).send();
     },
   );

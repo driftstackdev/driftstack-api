@@ -50,6 +50,13 @@ const RESOLVED_BY_HAND: Record<string, string> = {
   'account.login': 'same emitAuditBestEffort() helper — customer.',
   'account.logout': 'same emitAuditBestEffort() helper — customer.',
   'account.password_changed': 'same emitAuditBestEffort() helper — customer.',
+  // Listed rather than raising the unresolved ceiling: the ceiling is a number and
+  // bumping it explains nothing, which is how an allowlist becomes a blindfold.
+  'recipe.created':
+    'routes/recipes.ts emitRecipeAudit() takes `action` as a parameter and hardcodes ' +
+    "actorType: 'customer' — read it; it also sets actorKeyId from ctx.apiKey.id, which " +
+    'is the field the row exists for on an account whose API keys are shared.',
+  'recipe.deleted': 'same emitRecipeAudit() helper — customer.',
 };
 
 /** Every `{ … action: '…' … actorType: '…' … }` object literal in the server. */

@@ -19,7 +19,7 @@
 // EXECUTION stays v1.1 (harness-executor-gated). These tests exercise
 // the create + list + get/delete surfaces.
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 
 describe('AI-B4 POST /v1/recipes — wired', () => {
@@ -618,6 +618,71 @@ describe('V-530.J GET + DELETE /v1/recipes/:id (wired)', () => {
       headers: { authorization: `Bearer ${fx.plaintext}` },
     });
     expect(del.statusCode).toBe(204);
+    const after = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(after.statusCode).toBe(404);
+  });
+
+  // ── audit (V-530.I/.J) ───────────────────────────────────────────────────────
+  // Recipes carry `intent_log` and `transcript_snapshot` — full customer URLs
+  // including query — and until now a create or a delete left NO record of which
+  // credential did it, while profiles (the analogous customer-owned object) have
+  // been audited since V-303. `actor_key_id` is the field that closes it: the
+  // surface is account-scoped, so accountId and actorAccountId are both the
+  // caller's own account and neither distinguishes one human from another on an
+  // account whose API keys are shared.
+  it('CRITICAL saving a recipe writes an audit row naming the CREDENTIAL that did it, not just the account', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createRecipe('audited save');
+
+    const rows = fx.accountAuditRepo.getAll().filter((r) => r.action === 'recipe.created');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.targetResourceId).toBe(`recipe_${id}`);
+    expect(rows[0]?.actorType).toBe('customer');
+    // The point of the row. Without it a shared-key account records that SOMETHING
+    // saved a recipe and nothing about who.
+    expect(rows[0]?.actorKeyId, 'the ACTING credential, not merely some string').toBe(fx.apiKeyId);
+    expect(rows[0]?.payload).toMatchObject({ label: 'audited save' });
+  });
+
+  it('CRITICAL deleting a recipe records the LABEL, because the audit row is the only trace that survives the delete', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createRecipe('about to vanish');
+    const del = await fx.app.inject({
+      method: 'DELETE',
+      url: `/v1/recipes/${id}`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(del.statusCode).toBe(204);
+
+    const rows = fx.accountAuditRepo.getAll().filter((r) => r.action === 'recipe.deleted');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.targetResourceId).toBe(`recipe_${id}`);
+    expect(rows[0]?.actorKeyId, 'the ACTING credential, not merely some string').toBe(fx.apiKeyId);
+    // A bare id would say something was destroyed without saying what.
+    expect(rows[0]?.payload).toMatchObject({ label: 'about to vanish' });
+  });
+
+  it('CRITICAL an audit failure does NOT fail the delete — the customer asked for a deletion, not for a log entry', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const id = await createRecipe('audit will throw');
+    const spy = vi
+      .spyOn(fx.accountAuditRepo, 'insert')
+      .mockRejectedValue(new Error('audit store unreachable'));
+    try {
+      const del = await fx.app.inject({
+        method: 'DELETE',
+        url: `/v1/recipes/${id}`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+      });
+      expect(del.statusCode, 'the delete still succeeds').toBe(204);
+    } finally {
+      spy.mockRestore();
+    }
+    // And it really is gone, not rolled back by the audit failure.
     const after = await fx.app.inject({
       method: 'GET',
       url: `/v1/recipes/${id}`,

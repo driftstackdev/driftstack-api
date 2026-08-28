@@ -256,6 +256,15 @@ export const AccountAuditActionSchema = z.enum([
   'profile.exported',
   'profile.imported',
   'subscription.tier_changed',
+  // V-530.I/.J — customer recipe lifecycle. A recipe carries `intent_log` and
+  // `transcript_snapshot`, which hold full customer URLs including query, which is
+  // why the retention sweeper purges them for terminated accounts. Profiles, the
+  // analogous customer-owned object, have carried audit actions since V-303; these
+  // did not, so a create or a delete left no record of WHICH credential performed
+  // it. `actorKeyId` is the field that closes that: on an account whose API keys
+  // are shared, the key id is the only thing distinguishing one caller from another.
+  'recipe.created',
+  'recipe.deleted',
   'webhook_endpoint.created',
   'webhook_endpoint.updated',
   'webhook_endpoint.deleted',

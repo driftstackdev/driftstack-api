@@ -33,6 +33,8 @@ const ACTION_LABEL: Record<string, string> = {
   'profile.exported': 'Profile exported',
   'profile.imported': 'Profile imported',
   'subscription.tier_changed': 'Subscription changed',
+  'recipe.created': 'Recipe saved',
+  'recipe.deleted': 'Recipe deleted',
   'webhook_endpoint.created': 'Webhook created',
   'webhook_endpoint.updated': 'Webhook updated',
   'webhook_endpoint.deleted': 'Webhook deleted',
@@ -112,6 +114,8 @@ const FILTER_OPTIONS = [
   { value: 'profile.created', label: 'Profiles created (incl. clones / snapshot restores)' },
   { value: 'profile.deleted', label: 'Profiles deleted' },
   { value: 'profile.restored', label: 'Profiles restored (recycle bin)' },
+  { value: 'recipe.created', label: 'Recipes saved' },
+  { value: 'recipe.deleted', label: 'Recipes deleted' },
   { value: 'profile.purged', label: 'Profiles permanently deleted (recycle bin)' },
   // V-480 — profile import/export audit entries.
   { value: 'profile.exported', label: 'Profiles exported' },

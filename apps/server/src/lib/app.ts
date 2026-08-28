@@ -1647,6 +1647,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // snapshotting its transcript). Without either, registers 503 stubs.
   if (deps.recipesRepo !== undefined && deps.agentSessionsRepo !== undefined) {
     registerRecipesRoutes(app, {
+      ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
       recipes: deps.recipesRepo,
       agentSessions: deps.agentSessionsRepo,
     });

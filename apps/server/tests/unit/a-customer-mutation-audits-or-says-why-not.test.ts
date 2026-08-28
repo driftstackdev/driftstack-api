@@ -61,10 +61,6 @@ const NO_AUDIT_REVIEWED: ReadonlyMap<string, string> = new Map([
     'status-subscribe.ts',
     'public status-page double-opt-in, unauthenticated and IP-gated — account_audit is account-scoped and there is no account to attribute a public subscriber to',
   ],
-  [
-    'recipes.ts',
-    'GAP, recorded not excused (V-2054): POST /v1/recipes and DELETE /v1/recipes/:id are authenticated write-scoped mutations that emit nothing, and no recipe.* action exists in AccountAuditActionSchema. Adding one extends a published enum the three SDKs consume — a Class-A change per the 2026-05-19 audit, so it is the owner call',
-  ],
 ]);
 
 function code(p: string): string {
