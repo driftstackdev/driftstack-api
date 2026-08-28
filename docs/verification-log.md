@@ -17121,3 +17121,58 @@ at a rate I did not expect: `route-auth-coverage-invariant`, the scheduled-jobs 
 `every-sse-stream-shares-one-buffer-ceiling`, the harness bound census, and now this.
 
 Related: V-1918 (the guard), V-2080 (why I switched axis), V-2059 (a status reading worse than reality).
+
+---
+
+## V-2082 — the differential axis is covered 29/29, and it was swept by the same method I just re-invented (2026-08-28)
+
+Switched off static reading to a **differential** axis: route tests run against in-memory repo doubles
+(the V-1576 seam — `buildTestApp` wires them with zero drizzle references), so a double that diverges
+from its real counterpart makes route tests pass against a fiction. That is a genuine hazard class and
+nothing I had measured.
+
+**Measured: 29 in-memory doubles under `tests/integration/_helpers`, 30 `*-repo-contract.test.ts`
+files, and every one of the 29 is referenced by at least one contract test. Zero uncovered.**
+
+⛔ **My first pass said 19 of 29 were uncovered.** I matched double-name against contract-test-name —
+and the contract tests are named for the CLAIM (`mfa-totp-replay`, `session-cap`,
+`account-audit-count`), not the repo. That is this repo's stated naming convention and it is written
+in my own memory as the reason topic-keyword filename greps miss guards here. **Eighth population
+error of the session**, and the one with the least excuse.
+
+### And the axis was already swept, by this exact method
+
+`team-members-repo-contract.test.ts` (V-1209) says so in its header: _"The fourth of the twenty-nine…
+**I swept every double/repo pair for it** rather than waiting to trip over the next one: for each
+Drizzle method carrying an `ORDER BY`, does its double impose the same order? Eight candidates, of
+which **three were false positives from my own heuristic**… **Four were real.**"_ The divergence it
+fixed was not a different order but the REVERSE one — the real repo newest-first, the double insertion
+order — so "the team list a unit test believed it was asserting was upside down relative to the one
+the customer is shown."
+
+⭐ Its arms are genuinely dual (`…, in both`), and it records a vacuity trap I would have walked into:
+a first draft backdated the SECOND row, which makes write order and newest-first coincide, so _"all
+nine arms passed against a double that does not order at all"_.
+
+### Axis state, recorded so the next firing does not re-derive it
+
+| axis                            | state                            | evidence                               |
+| ------------------------------- | -------------------------------- | -------------------------------------- |
+| name-absence (5 variants)       | **exhausted**                    | 253 hits, 0 defects (V-2072)           |
+| file self-claims                | **saturating**                   | 15 checked, 15 held, 1 defect (V-2080) |
+| ranking by audit attention      | **exhausted, and mis-specified** | reads 42% of the record (V-2072)       |
+| recency / code-newer-than-audit | **exhausted**                    | 1 of 60, a false positive (V-2078)     |
+| double-vs-repo differential     | **covered 29/29**                | this entry                             |
+| W-10 orphan set                 | **engineering-complete**         | frozen by name (V-2081)                |
+
+⭐⭐ **Six prior-art pre-emptions in one session, four where the existing artifact was stronger than my
+plan.** The pattern is now the most reliable predictor I have: on a mature surface, the hypothesis that
+feels novel is usually one someone already had, and the artifact they left encodes a constraint the
+fresh version misses. Grepping first is not politeness toward past work — it is the cheapest way to
+inherit a decision.
+
+⚠️ What is genuinely untried, for whoever picks this up: runtime probing of a booted server against
+local Postgres/Redis (the `e2e-local` path exists and is guarded), and the ~27 remaining self-claims
+(cheap, and V-2073 came from one).
+
+Related: V-1209 (the sweep this re-invented), V-2080 (the saturation call), V-2081.
