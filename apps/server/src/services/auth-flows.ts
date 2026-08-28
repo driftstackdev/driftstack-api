@@ -1004,6 +1004,14 @@ export class AuthFlowsService {
         mfaChallengeAttemptsKey(args.challengeToken),
         MFA_CHALLENGE_TTL_SECONDS,
       );
+      // The sibling bound in stepUpReauth reads `attempts > MAX`, not `>=`, and the
+      // difference is load-bearing rather than an inconsistency: this counter is
+      // incremented ONLY on a failed verification, so `attempts` is the failure count
+      // including this one and `>=` kills the token on the fifth. Step-up reserves a
+      // slot BEFORE verifying, so its count includes the in-flight call and `>` refuses
+      // the sixth. Both permit exactly MAX failures. Unifying the operators would move
+      // a brute-force bound in opposite directions; the integration arm that submits
+      // exactly 5 wrong codes and then a CORRECT one is what catches it here.
       if (attempts >= MAX_MFA_CHALLENGE_ATTEMPTS) {
         await this.mfaChallenges.consume(challengeKey);
         throw new AuthFlowError(
@@ -1351,6 +1359,12 @@ export class AuthFlowsService {
     const attemptKey = stepUpAttemptsKey(args.accountId);
     if (this.mfaChallenges) {
       const attempts = await this.mfaChallenges.incrAttempts(attemptKey, MFA_CHALLENGE_TTL_SECONDS);
+      // Reads `>` where completeMfaChallenge's sibling bound reads `>=`. Deliberate:
+      // that counter increments only on a failed verification, while this one reserves
+      // a slot before verification for every proof, so the in-flight call is already
+      // counted here. Both permit exactly MAX failures. A consistency cleanup that
+      // unified them would silently tighten one side and loosen the other; the content
+      // -parity pin on this line is what catches it here.
       if (attempts > MAX_MFA_CHALLENGE_ATTEMPTS) {
         await this.releaseStepUpAttemptBestEffort(attemptKey);
         throw new AuthFlowError(

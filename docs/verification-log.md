@@ -16048,3 +16048,58 @@ identity would be a remote lockout vector.
 the other 27.
 
 Related: V-2061 (the enumerated population), V-2059/V-2060.
+
+---
+
+## V-2064 — two amendments after peer review: a third disclosed row, and the operator asymmetry is already netted (2026-08-27)
+
+### Amending V-2062 — a third candidate row, verified at source
+
+A2 checked my correction rather than accepting it and found a row I had missed, which cuts against
+their own position rather than for it. Verified verbatim at `docs/legal/privacy-policy.md:469`:
+
+    | Authentication data (hashed API keys, key metadata) | Until revocation; 90 days after
+      revocation the record is anonymised — the key hash and key name are destroyed. …
+
+**Three candidate rows now, not two.** A `web_sessions` row is a hashed authentication credential
+carrying a `revoked_at` — the ordinary reading of that promise covers it, and the parenthetical
+`(hashed API keys, key metadata)` narrows it. Genuinely arguable in both directions, which is exactly
+why the classification is a legal call and not one I should make. What changes is that the
+severity band is now wider, not narrower: indefinite / 90-days-operational / 90-days-post-revocation.
+
+The engineering facts are unchanged and are what the decision actually turns on: the two columns
+exist, and `retention-scrub-repo.ts` names `web_sessions` **zero** times while stating a principle
+that reaches it.
+
+### Amending V-2063 — the asymmetry is guarded in both directions, by different mechanisms
+
+A2 read the `>=` / `>` pair as a live hazard because "both sites would still look right" after a
+consistency cleanup. **Measured instead of accepted, and it is already netted — each direction is
+caught, by a different mechanism:**
+
+- Unifying the login site to `>` leaves the token alive after the fifth failure.
+  `tests/integration/auth-mfa-challenge.test.ts` submits **exactly 5** wrong codes and then asserts a
+  CORRECT code still fails; that arm goes green-to-red. The bound is pinned **behaviourally**.
+- Unifying the step-up site to `>=` breaks a literal content-parity regex,
+  `/if \(attempts > MAX_MFA_CHALLENGE_ATTEMPTS\) \{\s*await this\.releaseStepUpAttemptBestEffort/`.
+  Pinned **textually**.
+
+⭐ **Half-pinned in a way worth naming, though:** the login `>=` has no textual pin at all, and the
+step-up `>` has no behavioural one. Neither site is guarded twice, and the two guards fail for
+different reasons — so a change that defeats one is not automatically caught by the other. They are
+adequate, not redundant.
+
+Landed the cheap half of A2's suggestion regardless: a comment at each site naming the other, stating
+why the operators differ and which guard catches a unification there. **The comments do not add
+safety; they make an existing red legible.** A parity failure reading "expected `>` " on a line
+someone just "fixed" for consistency looks like the test is wrong, and that is how a correct guard
+gets edited away. Content-parity pin verified still matching after the edit (28/28), plus 58/58
+across the three auth-flows guards, `tsc -p tsconfig.test.json` clean.
+
+⭐⭐ **A2 also stated the sharper version of the method point from V-2062, and it belongs here because
+it is about me as much as them:** scepticism applied only to claims from outside is not scepticism.
+Their tell is better than mine — **the claim cost them nothing.** It resolved an open item, agreed
+with their prior, and required no work; any one of those should prompt a harder check, and all three
+together did not. The direction matters for the same reason the doc→repo asymmetry does: a
+severity-LOWERING claim closes an investigation, so a false one is silent, while a false
+severity-raising claim gets chased and dies of its own accord.
