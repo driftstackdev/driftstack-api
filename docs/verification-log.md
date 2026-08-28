@@ -11248,3 +11248,43 @@ is a claim for the owner to verify by reading that file, not one this entry make
 **Boundary:** the gate at `31c057574` covers the five test/docs-only commits since `7ed30d8cb`; the flake
 was not reproduced, so its trigger is unknown; the process correction (judge line first, verbatim; `rc`
 captured before echo) is in memory and in this entry, not in a script.
+
+## V-2139 — "gated is not a property of the route registration" becomes a guard: 22 auth-only routes, each pinned to the file and method that asserts its scope (2026-08-28)
+
+Post-condition re-run of `feedback_gated_is_not_a_property_of_the_route_registration`, which recorded the
+V-1792 near-miss: `GET /v1/account/audit-log` registers `preHandler: [requireAuth, rateLimit]` with no scope
+while every sibling gates explicitly, and that read as "the most sensitive account endpoint is the least
+gated" — the enforcement is `throwIfMissingScope(ctx, 'read:audit')` in `services/account-audit.ts`. A
+preHandler-only audit yields false negatives, and nothing made the audit read the right layer.
+
+**Measured:** 219 route registrations; **22** with `requireAuth` and no scope in the preHandler. Every one is
+enforced below the registration: 17 in a service method (`services/webhooks.ts` ×9 — `read:webhooks` for
+reads, `account_owner` for writes, `getWithCounts` delegating to `get`; `services/api-keys.ts` create/rotate/
+revoke `account_owner`, list `read:api-keys`; `services/email-preferences.ts` list/set `account_owner`;
+`services/account-audit.ts` list `read:audit` for both the list and the export route), 3 by a handler-level
+refusal of every non-web-session credential (`mfa/step-up`, `cli-authorize/bind-device-code`,
+`oauth/authorize/complete`), and 2 with no scope by design (`/v1/legal/documents`, a public catalogue;
+`/v1/legal/required`, the caller's own acceptance status).
+
+**Guard** (`every-auth-only-route-names-where-its-scope-is-asserted.test.ts`, 5 arms): the auth-only
+population is computed from `routes/*.ts` (generic-aware registration matcher, `:param` → `{}`) and must be
+covered by `ENFORCED_AT` entirely; every entry must still be an auth-only registered route (a route that
+gains a preHandler scope or is retired makes its entry stale — delete it); every `enforcedIn` entry's method
+must still contain its assertion text and every `handlerRefuses` token must still sit in that handler; floors
+on registrations (200) and auth-only routes (15); matcher controls.
+
+**The instrument error on the first run:** five live assertions read as vanished. The services declare an
+INTERFACE whose member names match the implementing class at the same indent, and "find `async list(`" hit
+the signature first — a body with nothing in it. Resolving a method by name picked a sibling, the same shape
+as the day's other misresolutions; the guard now scans every occurrence and passes if any body asserts, with
+a control fixture that carries both an interface signature and an implementation.
+
+**Mutation proofs — 3 of 3 killed, snapshot-restored:** the assertion removed from `webhooks.listDeliveries`
+→ named by the enforcement arm; `/v1/legal/documents` given `requireScope('read')` in its preHandler → the
+stale arm names the entry; a new `requireAuth`-only route planted in `routes/status.ts` → the population arm
+names it with the consequence ("callable by EVERY key of the account, including a read-only one, unless
+something below the route asserts").
+
+**Boundary:** static text; a service method that asserts through a helper the map does not name would need
+the helper's text in the entry; the two "by design" entries are reasons, not assertions, and are the place a
+future reader should look first. One new file: ratchets 3079 → 3080 and 3256 → 3257.
