@@ -17665,3 +17665,59 @@ session that converting an intention into a precondition is what actually worked
 enum-derived zero-fill, a jsonb round-trip. The coverage number located them; it was never the point.
 
 Related: V-2089, V-2088 (the earlier closures), V-2077 (the claim this loop closes), V-2086 (the list).
+
+---
+
+## V-2091 — the Stripe event-recency guard, and a one-character boundary now pinned by execution (2026-08-28)
+
+Seventh of the eleven, and the richest. `upsertSubscription` is not a plain upsert: it carries an
+**event-recency guard**, because Stripe re-delivers failed events for up to three days with no ordering
+guarantee.
+
+    target:   subscriptions.stripeSubscriptionId
+    setWhere: `${subscriptions.updatedAt} <= excluded.updated_at`
+    returns:  { applied: result.length > 0 }
+
+A stale event matches the conflict target but fails the WHERE, so Postgres writes nothing,
+`.returning()` yields no row, and `applied` is false. **Callers gate the tier mutation on that
+boolean** — so a guard that stopped biting lets a re-delivered event move a customer's tier.
+
+⭐⭐ **And `<=` rather than `<` is deliberate**: `event.created` is second-granularity, so two genuinely
+ordered events (a `created` immediately followed by an `updated`) can share a second and must both
+apply. That is a one-character boundary, and **no source-text pin can check which way it points** — it
+only shows the operator is written.
+
+**The arm** (in `db-stripe-event-idempotency-drizzle.test.ts`, whose subject this exactly is): fresh
+insert applies → a NEWER event applies, updates in place, and leaves **one** row not two → a STRICTLY
+OLDER event returns `applied: false` and the tier does not move → an **EQUAL-time** event still applies.
+
+**Proof — two mutations, each redding its own assertion:**
+
+    setWhere removed        → "a stale re-delivered event must NOT apply" reds
+    <= changed to <         → "an equal-time event must still apply - the guard uses <= not <" reds
+
+Each reds exactly one arm, they red DIFFERENT ones, and source was restored byte-identical from a
+path-keyed snapshot both times. That is the difference between an arm that executes a method and an
+arm that pins a boundary.
+
+### ⛔ The indentation trap, fourth time, and the fix that finally holds
+
+The first attempt aborted on `assert t.count(cleanup) == 1` → 0. I had typed a six-space anchor read
+from terminal output carrying a `sed 's/^/  /'` display prefix; the file uses four. **Nothing was
+written, because every assert runs before the single write** — that structure is why four
+indentation mistakes this session have cost retries instead of broken files.
+
+⭐ The fix is not care, it is derivation: the anchor is now found with
+`re.search(r'^([ \t]*)await client\.end\(\{ timeout: 5 \}\);$', t, re.M)` and its indentation
+taken from the match. **Never type whitespace you read from a pager.**
+
+### Running total
+
+**7 of 11 closed.** Remaining: `findAccountById`, `touchWebSessionLastUsed`, `findByConfirmTokenHash`,
+`getDetail` — the four thinnest, all plain by-id or by-hash reads. ⭐ `findByConfirmTokenHash` is the
+one still worth real care: `status_subscribers` holds **two** token-hash columns
+(`confirm_token_hash`, `unsubscribe_token_hash`) with a lookup each, so cross-kind isolation — a
+confirm token must not resolve an unsubscribe lookup — is a genuine security property and the natural
+arm.
+
+Related: V-2090, V-2089, V-2088 (the earlier closures), V-2086 (the classified list).
