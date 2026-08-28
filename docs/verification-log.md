@@ -17721,3 +17721,55 @@ confirm token must not resolve an unsubscribe lookup — is a genuine security p
 arm.
 
 Related: V-2090, V-2089, V-2088 (the earlier closures), V-2086 (the classified list).
+
+---
+
+## V-2092 — the eighth closure lands in a CONTRACT test, so it pins parity as well as execution (2026-08-28)
+
+`findByConfirmTokenHash` and `findByUnsubscribeTokenHash` are two token-credential lookups against one
+table holding **two** hash columns. Neither had executed a line of SQL, and neither was mentioned
+anywhere in `status-subscriber-confirm-repo-contract.test.ts` — the file whose whole subject is confirm
+tokens (0 mentions each).
+
+⭐ **This one goes in a contract test**, unlike the previous seven: the arm runs against BOTH the
+in-memory double and Drizzle, so it pins **parity** as well as execution. That was not available for
+`markEmailVerified` (V-2088), where the auth contract's `inMemorySubject().account()` returns a bare
+UUID without creating a row. Here `Subject.pending()` creates a real pending subscriber in both, so the
+arm just works. **Both implementations pass** — no divergence.
+
+**What it pins:** a positive control that a live pending row resolves by its confirm hash; an unknown
+hash resolves nothing; after `markConfirmed` the spent confirm hash **no longer resolves** (the column
+is nulled, so the link cannot replay); the unsubscribe token resolves through its own lookup; and —
+the non-trivial one — **that same live unsubscribe hash must NOT resolve a CONFIRM lookup**. The
+cross-kind check matters precisely because the unsubscribe hash IS stored, so a lookup matching the
+wrong column would find it.
+
+**Proof, and an honest overlap.** Pointing `findByConfirmTokenHash` at the unsubscribe column reds my
+positive control (`expected undefined to be '<uuid>'`). Removing `confirmTokenHash: null` from
+`markConfirmed` reds **two** arms — mine and an existing contract arm, _"the same confirmation link was
+accepted twice"_. ⚠️ **So single-use was already guarded**, through `markConfirmed` refusing a second
+call. My arm adds a different observable — the spent hash no longer RESOLVES — which overlaps rather
+than duplicates, and I would rather say so than present the mutation as proof of new coverage it does
+not provide.
+
+### ⛔ Two aborts, both caught by asserts rather than by review
+
+**1. The arm landed outside the contract function.** My anchor was "the last `it(` in the file", and
+the last one lives outside `statusSubscriberContract`, in a scope with no `make` or `enabled`. tsc said
+`Cannot find name 'enabled'`, and the run showed 1 of 18 failing — **which looked exactly like an
+implementation divergence.** It was my arm failing to compile. Re-anchored on the last arm whose body
+calls `enabled()`, which is provably inside the contract.
+
+**2. `confirmTokenHash: null` occurs TWICE** — `markConfirmed` and `purgeEmails`. The mutation refused
+on `assert t.count(...) == 1` rather than silently editing the wrong method, and the fix was to scope
+the replacement to `markConfirmed`'s body. That is the V-2078 rule paying out again: **count a literal
+before building on it.**
+
+### Running total
+
+**8 of 11 closed.** Remaining: `findAccountById`, `touchWebSessionLastUsed`, `getDetail` — all three
+plain by-id reads with no fence, no guard and no boundary, which is why they are last: for these,
+execution genuinely is the whole property, and an arm would assert little beyond "the row comes back".
+
+Related: V-2091, V-2090, V-2089, V-2088 (the closures), V-2086 (the list), V-1209 (the divergence class
+this contract format exists to catch).

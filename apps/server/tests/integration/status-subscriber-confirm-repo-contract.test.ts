@@ -269,6 +269,37 @@ function statusSubscriberContract(
         'the force-unsubscribed address is still on the confirmed list',
       ).toBe(false);
     });
+
+    it('CRITICAL the confirm token is CONSUMED on use and does not cross-match the unsubscribe lookup, in both. markConfirmed nulls confirm_token_hash, so a confirmation link must not resolve twice. And the table holds TWO token-hash columns, so a lookup matching the wrong one would resolve a live unsubscribe token as a confirm token -- the unsubscribe hash IS stored, which is what makes that check non-trivial. Neither lookup had executed a line of SQL before this.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const p = await s.pending();
+      const unsubHash = `unsub-${randomUUID()}`;
+
+      // Positive control - the lookup finds a live pending row by its confirm hash.
+      expect((await s.repo.findByConfirmTokenHash(p.confirmHash))?.id).toBe(p.id);
+      expect(
+        await s.repo.findByConfirmTokenHash(`nope-${randomUUID()}`),
+        'an unknown confirm hash must not resolve anything',
+      ).toBeNull();
+
+      await confirm(s, p, unsubHash);
+
+      // SINGLE USE - markConfirmed nulls the column, so the link cannot replay.
+      expect(
+        await s.repo.findByConfirmTokenHash(p.confirmHash),
+        'a spent confirmation link still resolves - it can be replayed',
+      ).toBeNull();
+
+      // The unsubscribe token now resolves through its OWN lookup.
+      expect((await s.repo.findByUnsubscribeTokenHash(unsubHash))?.id).toBe(p.id);
+
+      // CROSS-KIND - that same live hash must not resolve a CONFIRM lookup.
+      expect(
+        await s.repo.findByConfirmTokenHash(unsubHash),
+        'an unsubscribe token resolved a confirm lookup - the columns are crossed',
+      ).toBeNull();
+    });
   });
 }
 
