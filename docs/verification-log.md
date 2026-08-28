@@ -18645,3 +18645,78 @@ drizzle half; dropping its WHERE so it stamps every row reds the leaves-another-
 
 Related: V-2104 (the cold measurement this works), V-2102 (the same text-versus-execution distinction,
 found by mutation instead).
+
+---
+
+## V-2106 — the rest of the cold list: crypto orders clean, a vestigial purge wrapper, and my own roster's key (2026-08-28)
+
+Closing out V-2104's residual twelve.
+
+### Crypto orders — audited, clean
+
+`CryptoOrdersRepo.upsert` and `.getById` are cold with five production callers between them, which is
+the shape that produced V-2105. Both are sound, and both readings needed the call sites rather than the
+method.
+
+⚠️ `upsert`'s `onConflictDoUpdate` **sets `accountId`**, so an upsert onto an existing `order_id` would
+reassign the order to another account — while the sibling `insertWithIdempotencyKey` deliberately does
+`DO NOTHING` and re-selects. **Not reachable:** the single caller is `service.create`, whose only route
+passes `order_id: newOrderId()` (server-minted) and `account_id: ctx.account.id`. A fresh uuid never
+conflicts, which is exactly why the method is cold. Latent only if a caller ever supplies `order_id`;
+recorded at that weight, not dramatised.
+
+`getById(orderId)` carries no account predicate at all, and all four call sites are covered:
+`createIdempotent` reads an id out of the server's own account-scoped idempotency cache; `getReceipt`
+checks `order.account_id !== args.account_id`; `getOrderEvents` is documented and wired admin-only; and
+the customer-facing `GET /v1/billing/crypto-orders/:order_id` checks
+`order.account_id !== ctx.account.id` and throws **404 rather than 403** (anti-enumeration). Unscoped
+at the repo, scoped at the route, shared with admin surfaces that legitimately read any order.
+
+### Two corrections to my own triage
+
+- **`auth-flows-repo.findAccountById` is NOT dead** — three production callers in
+  `services/auth-flows.ts`. My "resolve the generic name by its declaring interface" heuristic returned
+  _no calls in any file naming AuthFlowsRepo_, because the service holds it as `this.repo`. The
+  heuristic fixed one false-positive class and introduced a false-negative one; reading caught it.
+- **`audit-archive-repo._processedStripeEventsAliasNote` is a no-op doc anchor** —
+  `function _processedStripeEventsAliasNote(): void {}` followed by `void …;`, existing to hang a
+  comment on. Cold by construction and not a gap. ⚠️ It will sit in every future cold census as a
+  permanent false positive.
+
+### A vestigial wrapper whose use would undo a documented decoupling
+
+`DrizzleAgentTurnReceiptsRepo.purgeForTerminatedAccountsBefore` is a **one-line delegation** to the
+exported `purgeTurnReceiptsForTerminatedAccountsBefore`. Production never calls the method — bootstrap
+wires the free function directly — and the isolated purge test drives the function too. The file says
+why the standalone exists: _"Standalone so the purge does NOT depend on the encryption key… Wiring the
+sweeper to the class would have made an unset key silently switch off a retention commitment that has
+no relationship to it."_
+
+⭐ So the method is not merely unused: **calling it reconstructs `DrizzleAgentTurnReceiptsRepo`, which
+requires `MFA_ENCRYPTION_KEY`, reintroducing precisely the coupling that comment records removing.** The
+obvious name is the trap.
+
+### ⛔ …and the roster cannot express it, which is a finding about my own guard
+
+The natural home is `a-superseded-repo-method-keeps-zero-callers`. Adding the entry **breaks it**:
+`purgeForTerminatedAccountsBefore` is declared on THREE db repos, and the roster's matcher is keyed on
+a **bare method name**. Measured with a probe entry: three arms red, and the zero-callers arm reports
+`lib/bootstrap.ts` and `services/account-deletion-purge-sweeper.ts` as offenders — both legitimately
+calling the profiles and snapshots methods of that name. **Resolving an identifier by name alone picks
+a stranger**, in the guard I wrote to catch exactly this family.
+
+The four existing entries are each declared in exactly one db file, so the key has been sound and
+silently so. Added the arm that makes the assumption explicit: every roster weak-name must be declared
+in exactly ONE file under `src/db`, floored so a broken read cannot report every name as unique. A
+future shared-name entry now fails **there**, with the declaring files named, instead of two files away
+with a wrong accusation. `it(` 3 → 4.
+
+**Mutation-proved with the same probe:** the new arm reports
+`purgeForTerminatedAccountsBefore declared in 3: agent-turn-receipts-repo.ts, profile-snapshots-repo.ts,
+profiles-repo.ts`. Restored; the residual `git diff` is the arm itself, checked by stat rather than
+expected to be empty, because the file legitimately carries uncommitted work.
+
+The wrapper itself stays recorded rather than deleted — the owner's call, consistent with the other
+superseded methods.
+
+Related: V-2104 (the cold list), V-2105 (the first item worked), V-2095 (the roster this hardens).

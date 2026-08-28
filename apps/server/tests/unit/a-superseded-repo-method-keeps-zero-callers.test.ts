@@ -146,6 +146,24 @@ describe('a superseded repo method keeps zero callers', () => {
     expect(offenders, 'superseded repo method(s) called from production:').toEqual([]);
   });
 
+  it("CRITICAL every roster weak-name is declared in exactly ONE db file. The matcher below is keyed on a BARE METHOD NAME, so it discriminates only while that name is unique across repos — and several method names here are not (`purgeForTerminatedAccountsBefore` is declared on three). Adding such an entry makes the zero-callers arm report another repo's legitimate calls as offenders: measured 2026-08-28, a probe entry for that name produced `lib/bootstrap.ts` and `services/account-deletion-purge-sweeper.ts` as false offenders, both calling the profiles and snapshots methods of the same name. This arm makes the key's assumption explicit, so a shared name fails HERE with a reason instead of two files away with a wrong accusation.", () => {
+    const dbDir = resolve(SRC, 'db');
+    const dbFiles = readdirSync(dbDir).filter((f) => f.endsWith('.ts'));
+    // Floor first: a broken read would find zero declarations of everything and
+    // report every name as unique, which is the reassuring direction.
+    expect(dbFiles.length, 'files read out of src/db').toBeGreaterThan(20);
+    const shared = SUPERSEDED.map(({ weak }) => {
+      const declaring = dbFiles.filter((f) =>
+        new RegExp(`\\basync\\s+${weak}\\s*\\(`).test(readFileSync(resolve(dbDir, f), 'utf8')),
+      );
+      return { weak, declaring };
+    }).filter(({ declaring }) => declaring.length !== 1);
+    expect(
+      shared.map((s) => `${s.weak} declared in ${s.declaring.length}: ${s.declaring.join(', ')}`),
+      'roster weak-name(s) that are not unique across src/db — the bare-name matcher cannot attribute a call to the right repo:',
+    ).toEqual([]);
+  });
+
   it('CRITICAL every roster entry still names a live pair. An entry whose weak method was deleted is a fossil that makes this file look broader than it is, and an entry whose REPLACEMENT vanished means the supersession was undone -- in which case the zero-caller rule above is enforcing the wrong thing.', () => {
     const stale: string[] = [];
     for (const { weak, strong, file } of SUPERSEDED) {
