@@ -10945,6 +10945,4 @@ logger, { agentSessions, profiles })`), six refusal arms in `profile-store.test.
 
 **Boundary:** every claim above is a grep or a read of the current tree at `6258e4487`, plus the landing commit
 found by `git log -S`; no suite run and no behavioural re-derivation of the fixes. Memory: three notes marked
-CLOSED with the landing SHA, two refreshed. The pattern is now 7 for 7 — every open-note re-run this week found
-the NOTE stale, never the code — which says the stale half of a finding is the record, and the record needs its
-post-condition re-run on a cadence.
+CLOSED with the landing SHA, two refreshed. The tally is seven stale notes across the seven re-runs that YIELDED this week — but two of today's re-runs found the note accurate and the defect still open, so the method's lesson is "the record is the likelier stale half", not "the record is always wrong". Either way the record needs its post-condition re-run on a cadence.
