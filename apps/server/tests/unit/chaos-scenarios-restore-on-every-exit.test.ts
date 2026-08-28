@@ -35,7 +35,14 @@
 // added.
 
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -107,6 +114,17 @@ describe('chaos scenarios undo their fault injection on every exit path', () => 
       injecting.length,
       'scenarios that run at least one command in the sandbox',
     ).toBeGreaterThan(2);
+  });
+
+  it('CRITICAL every scenario script on disk is in the runner roster. The floor above is a magic number, and a magic number cannot see the gap that matters: a scenario ADDED to scripts/chaos but never added to run-all.sh is executed by neither the chaos suite nor this guard, and five-or-six still clears a floor of four. The roster is the thing being trusted, so the assertion has to be the relationship — roster equals disk — rather than a count that happens to be right today.', () => {
+    const onDisk = readdirSync(CHAOS_DIR)
+      .filter((f) => /^\d\d-.*\.sh$/.test(f))
+      .map((f) => f.replace(/\.sh$/, ''))
+      .sort();
+    // Non-vacuity: a readdir that returned nothing would make the comparison
+    // agree with an empty roster, which is the failure this arm exists to catch.
+    expect(onDisk.length, 'numbered scenario scripts found in scripts/chaos').toBeGreaterThan(0);
+    expect([...SCENARIOS].sort(), 'run-all.sh roster vs scripts/chaos on disk').toEqual(onDisk);
   });
 
   for (const slug of SCENARIOS) {

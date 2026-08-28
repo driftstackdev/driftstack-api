@@ -18234,3 +18234,56 @@ identifier; the same mutation now fails naming `METRIC_NAMES.livekitTokenMintTot
 blind spot — the third instance this session of prose or a coarse key defeating a structural check.
 
 Related: V-2096 (prose satisfying a structural pattern, same class), V-2098 (comments parsed as SQL).
+
+---
+
+## V-2100 — sweeping the shape from V-2099, and a magic-number floor that cannot see the gap that matters (2026-08-28)
+
+V-2099 fixed one regex that ended a call capture at `);` and was truncated by prose inside a string
+argument. The standing rule is to sweep the SHAPE, not the token, so I did.
+
+⛔ **First attempt was the ranking-instrument failure again: 396 hits across `apps/server/tests`, and
+almost all correct by design.** Content-parity pins routinely match a SPAN between two anchors with
+`[\s\S]*?`, which is a different use — a truncated span makes an assertion FAIL, loudly, rather than
+silently yielding wrong data. The defect needs two properties together: the capture must BE the
+parenthesised argument list, and the result must be **parsed further as data** rather than merely
+asserted to exist.
+
+**Narrowed sweep, boundary stated: 3097 files across `apps/server/tests`, `apps/server/src`, `packages`
+and `scripts`; regex literals whose capture group is exactly the argument list, closed by an escaped
+`)`. Two hits.** Control first: the detector finds the pre-fix V-2099 regex in the version at
+`d26d60793~1`.
+
+One hit is the old pattern quoted inside the explanatory comment I wrote in V-2099 — prose, not live
+code. ⚠️ Worth noting anyway: documenting a pattern reproduces it into every sweep for that pattern,
+which is the same reason a retraction paraphrases rather than quotes. It is inert here only because the
+sweep is mine and reads the comment as text.
+
+### The live hit: the chaos-scenario roster
+
+`chaos-scenarios-restore-on-every-exit` derives its roster by parsing `SCENARIOS=(…)` out of
+`scripts/chaos/run-all.sh` — deliberately, and its header says why: _"a guard that hardcoded its own
+list would drift the same way the moment a scenario is added."_ The parse is
+`/SCENARIOS=\(([\s\S]*?)\)/` and returns `[]` when it fails.
+
+**No live defect.** The array holds five bare slugs with no parentheses, so nothing truncates it, and
+an empty roster is caught: an arm asserts `SCENARIOS.length > 4`. Roster and disk agree exactly —
+`01, 02, 03, 04, 06`, five files, five entries (`05` simply does not exist; the numbering skips it).
+
+⭐ **But the floor is a magic number, and a magic number cannot see the gap that matters.** A scenario
+script ADDED to `scripts/chaos` and never added to `run-all.sh` is executed by **neither the chaos
+suite nor this guard**, and a roster of five or six still clears a floor of four. The thing being
+trusted is the roster's COMPLETENESS, so the assertion has to be the relationship the repo owns —
+roster equals disk — not a count that happens to be right today. The count also degrades as the family
+grows: at five entries the floor catches losing one; at ten it would not notice losing five.
+
+Added that arm, with its own non-vacuity check (a `readdir` returning nothing would make the comparison
+agree with an empty roster, which is precisely the failure being guarded).
+
+**Proved two-sided, on the real subject rather than the guard's list.** Dropping an unrostered
+`07-probe-scenario.sh` into `scripts/chaos`: the new arm fails naming it; the existing floor stays green
+because the roster is still five and `5 > 4`. Probe removed, tree clean, 8/8 green. `it(` 3 → 4,
+deliberately.
+
+Related: V-2099 (the truncation this swept for), and the standing preference for asserting a
+relationship over pinning a number.
