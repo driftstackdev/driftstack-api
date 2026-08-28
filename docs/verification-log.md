@@ -18573,3 +18573,75 @@ did, which is exactly the `agent-turn-receipts` case in V-2102: warm, and its ac
 provable only by mutation. **Coverage bounds the cold set; it says nothing about the warm one.**
 
 No source change. The residual 12 are the next work-list, and unlike an hour ago it is a measured one.
+
+---
+
+## V-2105 — the web-session last-used write: pinned as text, stubbed to a no-op, never executed (2026-08-28)
+
+Working V-2104's residual twelve. ⛔ **First count was unreliable and the reason is a standing trap:**
+`upsert`, `getById`, `listAll` and `findAccountById` are declared on several repos, so a
+`grep '\.name('` census counts strangers. Resolved by the declaring interface instead —
+`CryptoOrdersRepo.upsert` has 1 production caller, `.getById` 4, `StatusSubscribersRepo.listAll` 1.
+**Resolving an identifier by name alone picks a stranger.**
+
+Two findings, on the same column, from the distinctively-named half of the list.
+
+### `auth-flows-repo.touchWebSession` is dead, and an exact duplicate
+
+Zero callers anywhere in `apps/server/src`. It is **behaviourally identical** to
+`auth-repo.touchWebSessionLastUsed` — same UPDATE, same SET, same WHERE, same table:
+
+    .update(webSessions).set({ lastUsedAt: at }).where(eq(webSessions.id, id))
+
+Two repos carrying the same write to `web_sessions.last_used_at`; production calls one of them.
+Deletion is the owner's call, recorded rather than taken — consistent with how the other superseded
+methods have been handled.
+
+### The live one was asserted by nothing that executes
+
+`auth-repo.touchWebSessionLastUsed` is production's only web-session touch, called from
+`services/auth.ts:681` on **every authenticated web-session request**. It was cold — never executed
+against Postgres (V-2104). Everything that looked like coverage was not:
+
+- `db-auth-repo-content-parity` pins its **exact SQL as TEXT**, which proves the statement is written.
+- At least a dozen unit tests supply `touchWebSessionLastUsed: () => Promise.resolve()` — a no-op stub,
+  which proves callers tolerate it doing nothing.
+- The in-memory double has a real local fallback, but **no seeded rows**: its writer `upsertWebSession`
+  had no caller. V-1268 kept that seam deliberately, saying removing it would leave three methods
+  "whose bodies can never do anything, which reads as working."
+
+⭐ **Text, a no-op stub, and an unexecuted branch are indistinguishable from a working write.** And the
+repo already knew this failure mode on the sibling column: the comment on
+`API_KEY_LAST_USED_THROTTLE_MS` records that an unthrottled double "once masked a real Drizzle bug
+where **last_used_at never updated**". The same bug on `web_sessions` had nothing standing in its way.
+
+⚠️ **Severity, checked rather than assumed: display-only.** Nothing prunes or expires on
+`web_sessions.last_used_at` — the sole reader is `orderBy(desc(webSessions.lastUsedAt))` behind the
+dashboard's session list. A silently-dead write would mis-order that list and show a wrong "last used",
+not admit anyone. Recorded at that weight.
+
+⚠️ **An asymmetry noted, not changed:** `api_keys.last_used_at` is throttled to one write per key per
+30s, with the stated reason that "the hot auth path doesn't write a row on every authenticated
+request". The web-session path has **no throttle** and writes unconditionally on every authenticated
+request. That is the owner's call, not a defect, and it is now written down next to the arm.
+
+### The fix
+
+Two arms added to `api-key-last-used-throttle-repo-contract` — the same repo, the same two
+implementations, beside the api-key arms they mirror: the touch MOVES `last_used_at`, and touching one
+session leaves another alone. They are the **first caller of `upsertWebSession`**, so the in-memory
+fallback gets its first exercise too. `it(` 9 → 11, deliberately.
+
+Two fixture facts worth recording. `web_sessions.last_used_at` is `DEFAULT now() NOT NULL` (migration
+ground truth) — unlike `api_keys`, there is no never-used state, so the arms assert the value MOVES and
+the fixture sets an explicitly old instant rather than letting the default seed "just used". And a bare
+`Date` in a `postgres` tagged template is rejected for a `timestamptz` parameter; the repo's own raw-SQL
+style is an ISO string with an explicit cast.
+
+**Mutation-proved on the real subject, both directions, arms confirmed BY NAME rather than by count:**
+neutralising the method to a no-op — the documented bug class exactly — reds the MOVES arm on the
+drizzle half; dropping its WHERE so it stamps every row reds the leaves-another-alone arm; clean tree
+20/20. Restored identical to HEAD by `git diff --quiet`.
+
+Related: V-2104 (the cold measurement this works), V-2102 (the same text-versus-execution distinction,
+found by mutation instead).

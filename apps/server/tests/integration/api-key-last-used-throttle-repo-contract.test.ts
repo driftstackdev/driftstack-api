@@ -65,6 +65,7 @@ beforeAll(async () => {
 afterAll(async () => {
   if (client) {
     for (const a of seeded) {
+      await client`DELETE FROM web_sessions WHERE account_id = ${a}::uuid`.catch(() => {});
       await client`DELETE FROM api_keys WHERE account_id = ${a}::uuid`.catch(() => {});
       await client`DELETE FROM accounts WHERE id = ${a}`.catch(() => {});
     }
@@ -81,6 +82,14 @@ interface Subject {
   repo: AccountAuthRepo;
   /** Creates a key whose `last_used_at` starts null, which is the never-used state. */
   key: () => Promise<Key>;
+  /**
+   * Creates a web session whose `last_used_at` is deliberately OLD.
+   *
+   * Unlike `api_keys`, the column here is `DEFAULT now() NOT NULL` (migration
+   * ground truth), so there is no never-used state to start from — the arms below
+   * assert the value MOVES rather than that it stops being null.
+   */
+  webSession: () => Promise<{ id: string; tokenHash: string }>;
 }
 
 function inMemorySubject(): Subject {
@@ -118,6 +127,26 @@ function inMemorySubject(): Subject {
       });
       return Promise.resolve({ id, prefix });
     },
+    webSession: () => {
+      const accountId = randomUUID();
+      const id = randomUUID();
+      const tokenHash = `wsh-${id.slice(0, 8)}`;
+      // First caller of `upsertWebSession`. V-1268 kept that seam explicitly
+      // because it is the only writer of the map the local `findActiveWebSession`
+      // / `touchWebSessionLastUsed` fallbacks read — with no writer those bodies
+      // "can never do anything, which reads as working".
+      repo.upsertWebSession({
+        id,
+        accountId,
+        tokenHash,
+        expiresAt: new Date(T0.getTime() + 86_400_000),
+        revokedAt: null,
+        lastUsedAt: T0,
+        mfaSatisfiedAt: null,
+        createdAt: T0,
+      });
+      return Promise.resolve({ id, tokenHash });
+    },
   };
 }
 
@@ -141,6 +170,25 @@ function drizzleSubject(): Subject {
               VALUES (${id}::uuid, ${accountId}::uuid, ${`k-${tag}`}, ${prefix},
                       ${`hash-${tag}`}, ${['read:profiles', 'write:profiles']})`;
       return { id, prefix };
+    },
+    webSession: async () => {
+      const accountId = randomUUID();
+      const id = randomUUID();
+      const tag = id.slice(0, 8);
+      const tokenHash = `wsh-${tag}`;
+      seeded.push(accountId);
+      await c`INSERT INTO accounts (id, email)
+              VALUES (${accountId}, ${`ws-${accountId}@test.local`})`;
+      // last_used_at set EXPLICITLY to an old instant: the column defaults to
+      // now(), so leaving it out would seed a row already at "just used" and the
+      // moved-forward assertion would be satisfied before the touch ran.
+      // ISO strings with an explicit cast, matching the repo's own raw-SQL style:
+      // a bare Date in the tagged template is rejected for a timestamptz param.
+      await c`INSERT INTO web_sessions (id, account_id, token_hash, expires_at, last_used_at)
+              VALUES (${id}::uuid, ${accountId}::uuid, ${tokenHash},
+                      ${new Date(T0.getTime() + 86_400_000).toISOString()}::timestamptz,
+                      ${T0.toISOString()}::timestamptz)`;
+      return { id, tokenHash };
     },
   };
 }
@@ -240,6 +288,40 @@ function apiKeyThrottleContract(label: string, make: () => Subject, enabled: () 
       await s.repo.touchApiKeyLastUsed(mine.id, T0);
 
       expect(await lastUsed(s, other.prefix), "another key's last_used_at was stamped").toBeNull();
+    });
+
+    it('CRITICAL touchWebSessionLastUsed actually MOVES last_used_at, in both. This is the sibling of the api-key write above and, unlike it, nothing executed it: the Drizzle method was never run against Postgres (measured 2026-08-28, V-2104), the in-memory fallback had no seeded rows because `upsertWebSession` had no caller, a content-parity pin freezes its SQL as TEXT, and a dozen unit tests stub it to `() => Promise.resolve()`. Text, a no-op stub and an unexecuted branch all read the same as a working write. The comment on API_KEY_LAST_USED_THROTTLE_MS records that this exact bug — last_used_at never updating — has happened once already on the api-key path and was masked by a double.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const ws = await s.webSession();
+      const later = new Date(T0.getTime() + 60_000);
+
+      await s.repo.touchWebSessionLastUsed(ws.id, later);
+
+      const row = await s.repo.findActiveWebSession({ tokenHash: ws.tokenHash, now: later });
+      expect(
+        row,
+        'the seeded web session is not readable — the fixture, not the write',
+      ).not.toBeNull();
+      expect(
+        row?.lastUsedAt?.getTime(),
+        'last_used_at did not move: the write silently did nothing',
+      ).toBe(later.getTime());
+    });
+
+    it('CRITICAL touching one web session leaves another alone, in both. Without this the arm above is satisfied by an implementation that stamps every session it holds — which would look correct on a single-session fixture and make every session read as freshly used, the same defeat the api-key arm above guards against.', async () => {
+      if (!enabled()) return;
+      const s = make();
+      const mine = await s.webSession();
+      const other = await s.webSession();
+      const later = new Date(T0.getTime() + 60_000);
+
+      await s.repo.touchWebSessionLastUsed(mine.id, later);
+
+      const row = await s.repo.findActiveWebSession({ tokenHash: other.tokenHash, now: later });
+      expect(row?.lastUsedAt?.getTime(), "another session's last_used_at was stamped").toBe(
+        T0.getTime(),
+      );
     });
   });
 }
