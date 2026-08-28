@@ -18058,4 +18058,52 @@ its parity pin. Zero callers, zero test calls, its consumer removed by an owner-
 the incentive the pin creates — deleting the dead method **reds a test**, so the guard prices removal as
 expensive and retention as free. That is the inverse of what a guard should do.
 
-Related: V-2094/V-2095 (the superseded-method family this census overlaps), V-756 (the guard fixed here).
+⛔ **Correction, same day (see V-2097): the closing point above is not new, and the repo said it first.**
+`unscoped-lookup-containment-invariant.test.ts` already states it in its header, about two other
+methods: _"They are pinned by several content-parity guards, so they will not be removed … Nothing
+would fail: the parity guards assert the method EXISTS, not that it stays out of customer reach."_
+It then answers it structurally rather than by deleting. The observation stands and the framing as a
+fresh insight does not — I found it after measuring instead of grepping the guards first, which is the
+recurring error, not a new one.
+
+Related: V-2094/V-2095 (the superseded-method family this census overlaps), V-756 (the guard fixed here),
+V-2097 (the refutation that corrected this entry).
+
+---
+
+## V-2097 — refuted: the unscoped-access guards are keyed correctly, and my widening was wrong (2026-08-28)
+
+V-2096's census left `setExpiresAt` (`api-keys-repo`) looking like a latent cross-tenant write: it
+updates on `eq(apiKeys.id, id)` with no account predicate, has zero callers, and sits beside
+`revokeApiKeyAtomic`, which carries an explicit nullable account scope. Two guards exist for this class
+— `unscoped-finders-admin-only-sweep` and `unscoped-lookup-containment-invariant` — and **both key on
+the NAME suffix `*Unscoped`**, which `setExpiresAt` does not carry. That reads like the familiar defect:
+a guard keyed more narrowly than the property it claims.
+
+**It is not, and the measurement is what says so.** Widening the key from the naming convention to the
+actual property — "a by-id predicate with no account predicate in the body" — over all 55 `db/*.ts`
+files yields **73 methods: 55 writes and 18 reads** (brace-matched method bodies, comments stripped;
+controls: `setExpiresAt` and `findSessionUnscoped` found, the scoped `findSession` correctly absent).
+
+Almost all 73 are correct by design. `agent-sessions-repo.get`, `scheduled-jobs-repo.markComplete`,
+`webhooks-repo.recordDelivered`, `admin-accounts-repo.setStatus` — the architecture checks ownership at
+the ROUTE and then acts by id, and a scheduled job or a delivery row has no owning account at all. **A
+73-item list where ~70 are by design is not a finding; it is the ranking-instrument failure mode again.**
+
+⭐ **What the `*Unscoped` convention actually marks is not "lacks an account predicate" — it is "a
+SCOPED SIBLING EXISTS and this one deliberately skips it."** `findApiKey`/`findApiKeyUnscoped` and
+`findSession`/`findSessionUnscoped` are pairs; picking the wrong half of a pair by autocomplete is the
+specific hazard, and the name is exactly the right key for it. `setExpiresAt` has no scoped sibling, so
+it is an ordinary by-id write like the other fifty, carrying the same caller-checks-ownership contract.
+Its risk is that it is dead, not that it is unscoped.
+
+**What I got wrong, recorded because the shape repeats:** I read a narrow key and inferred a gap before
+measuring the wider population. The guard's key being narrower than a property I named does not make it
+narrower than the property that matters — I have to state which property, then count. Here the count
+refuted me in one pass.
+
+⚠️ Also corrected V-2096 in place: its closing point about a parity pin pricing removal as expensive was
+already written in `unscoped-lookup-containment-invariant`'s header, for two other methods, before I
+derived it. Prior art found after the measurement instead of before it.
+
+Nothing changed in source. Recorded so the next sweep does not re-open these 73.
