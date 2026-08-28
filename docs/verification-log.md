@@ -16405,3 +16405,81 @@ toss that lands green.
 added. `tsc -p apps/server/tsconfig.test.json` clean.
 
 Related: V-2068 (attention vs protection), V-2060 (a guard whose key was coarser than its property).
+
+---
+
+## V-2070 — a safety predicate written to prevent duplication is duplicated; and V-2069's corpus missed a sixteenth test directory (2026-08-27)
+
+### First, a correction to my own boundary
+
+V-2069 states its measurement ran "across all fifteen `apps/*/tests` and `packages/*/tests`
+directories". **There are sixteen.** `scripts/tests/` holds 9 test files, is matched by
+`vitest.node.config.ts`'s `include` (`'scripts/tests/**/*.test.ts'`), and therefore runs in the gate
+like any other.
+
+⛔ **The fifteen came from a memory whose entire purpose is warning that a narrow test-dir scope
+produces false negatives** — it enumerates the dirs and misses this one. **A note about incomplete
+scope, itself incompletely scoped**, and I inherited the gap by trusting the enumeration instead of
+globbing for it. Corrected there too.
+
+**The numbers survive.** Re-measured with the corrected corpus: 4 of 623 source files are named by no
+test, all four in `apps/gui-client`. V-2069 reported 5 — the difference is
+`seed-local-fleet-node.ts`, which is no longer unnamed **because the guard V-2069 added names it**.
+The symbol measurement is unchanged at 75 of 1000. So the finding stands and only the stated boundary
+was wrong, which is exactly the kind of error that survives when a boundary is quoted rather than
+measured.
+
+### The finding: two copies of the destructive-target classifier
+
+`lib/loopback-host.ts` exists specifically to stop this, and says so:
+
+> "The classification lives here rather than in either caller because two copies of a safety predicate
+> is exactly the shape that drifted the session-lock key into two independent locks: one copy gets a
+> new spelling of loopback, the other does not, **and the weaker one is the one that matters**."
+
+Its two stated callers do import it — `db/seed-target-guard.ts` and
+`tests/e2e/helpers/destructive-target-guard.ts`. **A third does not.** `scripts/e2e-local.mjs:31`
+declares its own:
+
+    const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]']);   // script
+    const LOOPBACK_HOSTS = new Set([… , '0.0.0.0']);                              // canonical, 5 entries
+
+Both are consumed as _refuse unless loopback_, and the stakes are the same: this script's harness
+`TRUNCATE`s every table in whatever `DATABASE_URL` names and `flushdb()`s the Redis index.
+
+⭐ **No live defect, and the direction is why.** The script's set is a strict SUBSET, and it does not
+lower-case the parsed hostname where the canonical path does — `postgres:` is not a special scheme, so
+WHATWG leaves an opaque host's case intact. Both differences make the script REFUSE where the shared
+rule would allow. Fail-closed on both counts.
+
+**But the module's claim is false, the copy is structural, and nothing detects the next divergence.**
+`scripts/e2e-local.mjs` is plain `.mjs` and the classifier is TypeScript, so it cannot import it —
+this is not an oversight anyone can simply fix, which is precisely the case an invariant is for.
+
+### The invariant
+
+Added to `scripts/tests/e2e-local-target.test.ts` (7 → 9 arms, no new file, no ratchet change): the
+script's host set must be a **subset** of the canonical one. Deliberately subset and not equality —
+stricter is safe and is the status quo; more permissive means a host that authorises a TRUNCATE
+against a target the shared rule refuses.
+
+Mutation-proved with **fail-closed mutations only**, since this guards a destructive operation in a
+shared tree: dropping `'localhost'` from the canonical set (making it stricter) reds the subset arm
+naming `'localhost'` as the extra; renaming the script's constant so extraction yields nothing reds
+the **floor** (`expected 0 to be greater than or equal to 3`) rather than passing vacuously — a subset
+of nothing holds trivially, which is the failure mode this arm exists against. Both files restored
+byte-identical from path-keyed snapshots, each proved to differ before its result was read.
+
+⚠️ What it does not check: the two are compared as source-literal sets. It cannot see a divergence in
+how each is _applied_ — the case-folding difference above is real and invisible to this arm. Stated
+rather than implied.
+
+### Suite
+
+`verify-suite`: **exit 0** at the bumped ratchets (`EXPECTED_TEST_FILES` 3071,
+`EXPECTED_TEST_FILES_ALL` 3247). That is the post-condition my second standing lesson asks for — the
+bump was a derivation from the previous run's 3246, and a derivation confirms only that the change
+happened.
+
+Related: V-2069 (the measurement corrected here), and the exemption-list shape — a duplicated list
+whose copies nothing compares.
