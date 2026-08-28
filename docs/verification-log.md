@@ -10695,3 +10695,36 @@ name. Had I taken the api-types definition, the delegation would have been "veri
 
 **Boundary:** this establishes which surfaces publish `closed_reason` and what the wire schema admits into it.
 It does not exercise a hostile node against the live endpoint.
+
+## V-2124 — the V-174 literal-`admin` class is closed AND its detection mask is gone; the note warning about the mask was stale (2026-08-28)
+
+Second application of V-2123's technique — re-running an open note's post-condition rather than sweeping.
+Population: 86 memory entries whose description still reads open/latent/deferred, of which most sit in the fork
+and harness lanes outside this repo. `feedback_literal_admin_scope_is_latent_v174_bug` is one of the few
+scoped here, and it states a post-condition that is testable by grep.
+
+**The finding half holds and the class is closed.** The V-174 split moved `admin` → `account_owner` +
+`driftstack_internal_admin`, and the alias runs one way only: `admin` satisfies the two, never the reverse. So
+a literal-`admin` gate 403s every post-V-174 session. Re-run at HEAD with both spellings: **zero literal
+`throwIfMissingScope(ctx, 'admin')` or `requireScope('admin')` gates remain.** Every `'admin'` occurrence in
+`apps/server/src` is on the SATISFYING side — the alias predicate at `lib/errors-helpers.ts:64/86`, the
+`ELEVATED_SCOPES` list at `services/api-keys.ts:301`, a seed key's own scopes — or in a comment.
+
+⭐ **The stale half is the one worth recording, because it is the half that governs whether the class can come
+back.** The note warned that detection was MASKED: `tests/integration/_helpers/build-test-app.ts` defaulted
+`scopes` to `['read','write','admin']`, which satisfies a literal `admin`, so every admin test passed and hid
+the bug — and it instructed writing the proving test with the realistic session scopes by hand. **That default
+is now `['read', 'write', 'account_owner', 'driftstack_internal_admin']`.** The realistic set became the
+default, so a newly-added literal-`admin` gate now fails in tests rather than hiding. The class went from
+"fixed but silently regressible" to "fixed and self-detecting", and the note recording the hazard never caught
+up.
+
+⚠️ **Stated so the measurement is not read wider than it is:** 30 test files still construct
+`['read','write','admin']`. Those are deliberate legacy-key fixtures — schema round-trips, the seed's own
+scopes, `db-seed-cross-source-invariant` — not the app-builder default, and they are not a mask. The one that
+mattered is the integration helper, and only that one.
+
+**Boundary:** this is a source-text post-condition over `apps/server/src` plus a read of the integration
+helper's default. It establishes that no literal-`admin` requirement remains and that the helper no longer
+supplies a scope satisfying one; it does not re-derive the alias predicate's correctness, which
+`lib/errors-helpers.ts` and its guards already own.
