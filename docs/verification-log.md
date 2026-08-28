@@ -18502,5 +18502,74 @@ which belong to the "LK arc" section beginning at 5705. **The claim's own text e
 endpoints; reading that is what bounded the window correctly.** A count that disagrees with the prose
 beside it is the instrument, not the finding.
 
+⛔ **RETRACTED THE SAME NIGHT — see V-2104. The method works; the tree was the problem.** A single
+FAILING TEST anywhere in the run suppresses the entire coverage report, and every one of the five
+attempts above carried two environmental failures. The line "`--coverage.exclude` does not replace the
+config array" is simply WRONG — it does replace it. I varied the METHOD five times and never varied
+the TREE, which is the error worth keeping from this entry; the rest of it is superseded.
+
 No source change. Recorded so the cold-function work-list stays an open thread with its blockers named
 rather than a measurement someone assumes was taken.
+
+---
+
+## V-2104 — the db layer measured at last: 708/739 functions, 31 cold — and why V-2103 was wrong (2026-08-28)
+
+**708/739 functions (95.8%), 2276/2569 statements (88.59%), 31 cold, across 64 files under
+`apps/server/src/db`** — from an all-green 397-file / 3865-test integration run against a disposable
+database. Independently reproduced: the peer session got the identical 708/739 and 31 on a different
+database, which is what makes it a measurement rather than one machine's opinion.
+
+### ⛔ V-2103 was wrong, and the shape of the error is the lesson
+
+That entry reported the method as non-reproducing after five attempts. **The method works.** Two
+compounding causes, neither of them the method:
+
+1. **A single failing test suppresses the entire coverage report.** Isolated three ways on one file
+   each: a PASSING db file → report written; a FAILING file → no report; both together → no report.
+   Every one of my five attempts included two environmental failures, so none could ever have produced
+   a report regardless of flags. ⚠️ Note a _zero-test_ run ("No test files found", exit 1) DOES write
+   a report — so a non-zero exit is not the trigger; a failed test is.
+2. **I ran against the wrong database.** V-993's method names `driftstack_cov_dblayer`, a disposable
+   database it left in place. I used the dev database, whose stored webhook secrets are encrypted
+   under a different `MFA_ENCRYPTION_KEY`. **The method note contained the answer and I read past it.**
+
+⭐⭐ **I varied the METHOD five times and never varied the TREE.** CLI flags, probe configs inside and
+outside the repo, report directories, path filters — five variations of the instrument, zero of the
+environment, while the environment was the whole problem. The peer succeeded not because their flags
+differed (their exact invocation also produced nothing on my machine) but because their database was
+clean. **When a documented procedure fails, vary the state before varying the procedure.**
+
+⚠️ And the specific retraction: _"`--coverage.exclude` does not replace the config array"_ is false. It
+does. That claim came from a run that could not have written a report for an unrelated reason, and I
+attributed the silence to the nearest thing I had changed.
+
+Getting to green took: migrating the disposable database (115 migrations — it was current as of V-993
+on 2026-08-19 and had rotted since, failing `shared-database-is-migrated`), then clearing a leftover
+`account_mfa` row whose legacy secret failed a canonical-base64 decode at boot. Both are stale state in
+a throwaway database, not defects.
+
+### The 31, triaged
+
+| class                           | count | detail                                                                                             |
+| ------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| CLI entrypoints                 | 7     | `migrate.ts` (4), `seed.ts` (2), `seed-target-guard` — not test targets                            |
+| cold BY DESIGN, already guarded | 3     | `findSessionUnscoped` (containment guard), `removeMember` (V-2094 roster), `setExpiresAt` (V-2097) |
+| `account-proxies-repo`          | 9     | the peer reports 7 are its in-memory double rather than a gap                                      |
+| remaining                       | 12    | the residual worth reading                                                                         |
+
+⭐ **A convergence worth recording.** `agent-sessions-repo.setGuiControlKey` and `.setPairModeState` are
+both cold, and both are prefix-paired with conditional siblings that carry production's only callers
+(`setGuiControlKeyIfActive` 1 src caller, `compareAndSetPairModeState` 3; the bare pair have **0** src
+callers each). V-2095's prefix sweep flagged `setGuiControlKey` as a candidate and DEFERRED it for want
+of a stated supersession. It stays deferred under that rule — neither sibling's comment states one —
+but the candidate is now supported by **two independent instruments** (a static caller census and
+execution against Postgres) instead of one grep. That is a stronger place to leave it than either
+instrument alone.
+
+⚠️ Boundary, because the number invites over-reading: 95.8% of db-layer FUNCTIONS are executed by the
+integration suite — executed, not asserted. A function can run inside a test that never checks what it
+did, which is exactly the `agent-turn-receipts` case in V-2102: warm, and its account predicate still
+provable only by mutation. **Coverage bounds the cold set; it says nothing about the warm one.**
+
+No source change. The residual 12 are the next work-list, and unlike an hour ago it is a measured one.
