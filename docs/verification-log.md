@@ -14937,3 +14937,77 @@ reason is as visible as one missing.
 | rot: roster a file that issues no outbound request               | reds — `[ 'services/rate-limit.ts' ]`     |
 
 Ratchets 3068→3069 / 3244→3245; `tsc -p apps/server/tsconfig.test.json` clean.
+
+## V-2043 — retracting a stale claim of my own, and the advisory-lock family (2026-08-27)
+
+**Gate-35: 3245 files, 32261 passed, 16 skipped, `verify-suite: OK`, 30 contention samples, zero
+foreign runners.** V-2042's guard and ratchet bump verified.
+
+### ⛔ Retraction — V-2030's third class member is not open
+
+V-2030 listed the scheduled-jobs deduplicated-enqueue race as a live latent multi-replica defect and
+counted it as one of the class's known members, on the authority of a May internal handoff note that
+described the path as an unserialised check-then-insert with no unique-index backstop. **That
+description no longer matches the code.** `DrizzleScheduledJobsRepo.enqueue` now runs the whole
+`dedupOnAccountAndType` branch inside `db.transaction`, taking
+`pg_advisory_xact_lock(hashtextextended(JSON.stringify([accountId, jobType]), 0))` BEFORE the
+existence check and holding it through the insert. A Postgres advisory lock is database-scoped, so it
+serialises across replicas — which is precisely what the note said was missing. The source comment
+names the same scenario the note did, and
+`db-scheduled-jobs-repo-content-parity.test.ts:55` pins it with an arm titled "enqueue dedup is
+cross-replica atomic".
+
+So the defect was fixed after the note was written, by a route the note did not anticipate — the note
+proposed a partial unique index and rejected it as an unapplicable migration; someone solved it with
+a lock and no migration at all. **My entry inherited the note's staleness without re-checking the
+code, which is the whole failure mode of citing a document as evidence of a present state.** The
+class in V-2030 therefore has one confirmed live member (the pair-mode heartbeat tracker), not two.
+
+### The advisory-lock family — audited, and the rule is coherent
+
+Boundary: 342 tracked `.ts` under `apps/server/src`, every line calling `pg_advisory_*` — **12
+sites**. Ten build the key inline from a namespace literal, two call the shared
+`profileSessionAdvisoryLockKey`. That looked like neglect until the namespaces were counted:
+
+    profile-session:          2 files  -> shared constructor
+    mfa-credentials:          4 sites, ALL in db/mfa-repo.ts
+    account-proxy-create: / agent-session-create: / session-create: /
+    platform-secret-upsert: / webhook-endpoint-create:   1 site each
+
+⭐ **The one namespace used across two FILES is the one with a constructor**, and
+`db/profile-session-lock.ts` exists because those two drifted apart once. Every inline namespace is
+confined to a single file, where a reader sees all of its uses together. The rule is consistent, not
+absent. Verified the constructor's own claim with both patterns: both session-create surfaces call it
+(`agent-sessions-repo.ts:357`, `sessions-repo.ts:105`) and the literal `profile-session:` appears
+nowhere but inside the constructor. The twelfth site keys on a JSON tuple rather than a prefix.
+
+**`services/oauth-retention-sweeper.ts` + `OAuthStore.pruneExpired` — clean**, and a positive example
+of what V-2041 found missing elsewhere: `AUTHORIZATION_CODE_TTL_MS` is ONE constant with THREE
+consumers — the read path, the exchange check, and the prune cutoff — so the sweep deletes exactly
+what the auth path already rejects, and they cannot disagree. All three deletes run in one
+transaction, and the header's claim that the backing `api_keys` actor rows survive for
+session/audit foreign-key integrity is carried out and commented at the delete site.
+
+### Correction to V-2041: a NUL hides from READING too, not only from `git grep`
+
+I recorded that a raw NUL makes a file invisible to `git grep`. A2 measured the worse half: **the
+byte renders as nothing in ordinary terminal output**, so `sed -n '41p'` on the affected line shows
+what looks like a plain separator, and they had already read that exact line without seeing it. So
+"read the file instead of grepping it" is not the workaround.
+
+Re-measured the reveals myself rather than repeating the list:
+
+    cat -v            shows `^@`         ✓  (BSD cat lacks -A, but -v is there)
+    perl -ne '/\0/'   reports the line   ✓
+    python bytes      b'\x00' in data    ✓
+    grep -rlI         classifies binary  ✓  (its complement finds them)
+    grep -a <NUL pat> matched ALL 77 lines — the pattern behaves as empty, so it is useless here
+
+⚠️ That last row corrects advice I gave: `grep -a` makes an already-known file's content readable,
+but it cannot be used to FIND NUL-carrying files.
+
+⭐⭐ The generalisable lesson is A2's, from their own case: their grep for the cache's writer returned
+zero, and their control — does the class even define a setter — also returned zero. **Two zeros
+agreeing read as corroboration when they were one instrument failing twice.** A control that runs
+through the same mechanism is a second sample, not a check. Proving a detector on a known positive
+only works if the proof does not share the detector's blind spot.
