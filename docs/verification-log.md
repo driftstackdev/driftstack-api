@@ -18107,3 +18107,64 @@ already written in `unscoped-lookup-containment-invariant`'s header, for two oth
 derived it. Prior art found after the measurement instead of before it.
 
 Nothing changed in source. Recorded so the next sweep does not re-open these 73.
+
+---
+
+## V-2098 — a delete-detector that reads prose, and the rot arm that makes it loud (2026-08-28)
+
+Continuing the universal-claims sweep. `db/scheduled-jobs-repo.ts` claims _"every settle is fenced on
+`locked_by = workerId`"_. **It holds**: `markComplete`, `markRetry` and `markFailed` all carry
+`eq(scheduledJobs.lockedBy, workerId)`; the fourth write, `pruneFinished`, is a prune and not a settle.
+
+⛔ **Getting there needed three passes at my own instrument, and the first two lied.** Counting writes
+with a Drizzle-only matcher (`.update(`/`.delete(`) missed every raw-SQL statement — including
+`claimDue`'s own `UPDATE scheduled_jobs`, which is the file's central write. Fixing that produced a
+worse list: `\bUPDATE\b` matched `FOR UPDATE` (a SELECT row-lock, not a mutation), and non-greedy
+backtick pairing mis-aligned across comments containing backticks. Then `UPDATE without`,
+`UPDATE lost`, `UPDATE returned` — English inside _error-message strings_, matched only because the
+regex was case-insensitive; real SQL here is uppercase. **The known-positive control failed at every
+stage and is the only reason I noticed.**
+
+**Settled measurement, boundary stated:** in the 55 files of `apps/server/src/db`, comments and SQL
+`--` comments stripped, case-sensitive, `FOR UPDATE`/`DO UPDATE` excluded — **11 raw-SQL mutating
+statements**, 5 `UPDATE` and 6 `DELETE FROM`, on `account_proxies`, `agent_sessions`,
+`agent_turn_receipts`, `profile_snapshots`, `profiles`, `recipes`, `session_operations`, `sessions`,
+`api_keys`, `scheduled_jobs`, `webhook_deliveries`. **Any census of "every write in the db layer" built
+on Drizzle call syntax alone is missing these eleven.**
+
+### The guard that already knew, and the one gap in it
+
+`a-cascade-from-a-row-nobody-deletes-is-not-a-bound` maintains the roster of tables whose only removal
+path is a cascade from a parent nobody deletes. I expected it to be Drizzle-only and it is not — it
+matches `DELETE FROM` too, and none of the six raw-SQL-deleted tables appear in its roster, which is
+correct. Hypothesis refuted by reading the detector.
+
+⚠️ **What it does not do is strip comments**, and both its patterns need it. The raw-SQL matcher is
+case-INSENSITIVE, so ordinary prose parses as SQL. Measured across the same 55 files: **one phantom
+today** — `schema.ts:1983`, _"Cascade-delete from either side so…"_, capturing a table named `either`.
+Harmless only because nothing is called that.
+
+Direction matters: a phantom names a table → the table enters `direct` → `cascadeOnly()` skips it → it
+leaves the roster. The negative-sentinel arm has the mirror problem: a future comment explaining _why_
+accounts are never row-deleted would quote `DELETE FROM accounts` and fail the arm asserting nothing
+does.
+
+⭐⭐ **The rot arm contains it, and that is the finding worth keeping.** Because this guard asserts
+BOTH directions — no unrecorded cascade-only table, and no recorded table that has stopped being
+cascade-only — a phantom cannot shrink the roster quietly. Proven, not argued: planting the ordinary
+sentence _"Revocation is an UPDATE, not a delete from web_sessions -- the row stays."_ into
+`auth-flows-repo.ts` leaves the fixed guard **green 8/8**, and with only the two reads reverted to raw
+text it goes **red**: `recorded table(s) that are no longer cascade-only: expected [ 'web_sessions' ]`.
+Both files restored byte-identical. **So this was a fragility, not a defect** — the third arm my notes
+keep calling "the one usually missing" is present here and is doing exactly the job it exists for.
+
+Hardened anyway: both reads now use the shared `codeOnly`. A red traced back to a sentence costs a
+reader an hour, and the fix is one import. `it(` count unchanged at 8.
+
+⚠️ **The meta-guard cannot see this class.** `no-guard-strips-comments-by-hand` (V-1258) polices _how_
+a guard strips — forbidding hand-rolled regexes in favour of the shared helper — and says so in its own
+header: a guard that deliberately does not strip "is not a violation at all". A guard that strips
+nothing is therefore invisible to it. That is a correct scope, not a bug in the meta-guard, but it
+means "does this guard need stripping?" stays a human question.
+
+Related: V-2096 (prose satisfying a structural pattern, in the false-negative direction), V-2097.

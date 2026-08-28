@@ -51,6 +51,8 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+import { codeOnly } from './_helpers/code-only.js';
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const DB = resolve(HERE, '..', '..', 'src', 'db');
 
@@ -199,7 +201,16 @@ function parseDeletes(tables: Map<string, Table>): Deletes {
   const indirect: string[] = [];
   const bySql = new Map([...tables].map(([c, t]) => [t.sql, c]));
   for (const f of readdirSync(DB).filter((x) => x.endsWith('.ts'))) {
-    const src = readFileSync(resolve(DB, f), 'utf8');
+    // ⛔ Comments stripped, and both patterns need it. The raw-SQL matcher is
+    // case-INsensitive, so ordinary prose ("cascade-delete from either side")
+    // parses as a DELETE and names a table. Measured 2026-08-28 across the 55
+    // files here: one such phantom today, in schema.ts, capturing the word
+    // `either` -- harmless only because no table is called that. Had it named a
+    // real table, that table would enter `direct`, be skipped by cascadeOnly(),
+    // and leave the roster. The rot arm below turns that into a LOUD failure
+    // rather than a silent one, which is why this was a fragility and not a
+    // defect -- but a red traced back to a sentence costs a reader an hour.
+    const src = codeOnly(readFileSync(resolve(DB, f), 'utf8'));
     for (const m of src.matchAll(/\.delete\(\s*(\w+)\s*\)/g)) {
       const id = m[1] ?? '';
       if (tables.has(id)) direct.add(id);
@@ -231,9 +242,13 @@ describe('a cascade from a row nobody deletes is not a retention policy', () => 
   const tables = parseSchema();
 
   it('CRITICAL the premise holds: nothing deletes an account row. Every reading below rests on this one fact — if `deleteAccount` ever starts removing the row, fifteen cascades begin firing and this whole file is describing a system that no longer exists.', () => {
+    // Same reason as parseDeletes, opposite direction: this arm is a NEGATIVE
+    // sentinel, so a comment merely QUOTING `DELETE FROM accounts` -- exactly what
+    // a future note explaining why accounts are never row-deleted would say --
+    // fails it. Prose can neither create nor destroy a delete.
     const src = readdirSync(DB)
       .filter((f) => f.endsWith('.ts'))
-      .map((f) => readFileSync(resolve(DB, f), 'utf8'))
+      .map((f) => codeOnly(readFileSync(resolve(DB, f), 'utf8')))
       .join('\n');
     expect(src, 'an account row is now deleted — re-read this file from the top').not.toMatch(
       /\.delete\(\s*accounts\s*\)|DELETE FROM accounts\b/i,
