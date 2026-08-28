@@ -10541,3 +10541,61 @@ the parity guard assembles `[live, ...archives]` before matching, and the live h
 every split. The one place still requiring a manual, literal entry is `.prettierignore`, deliberately — its own
 comment records that a glob there would satisfy Prettier while leaving the guard red on a hook that was in fact
 fine.
+
+## V-2121 — a suspicion about hardcoded "MEASURED: N" prose in guards, raised and retired; and the crypto-replay mint predicate audited on the money path (2026-08-28)
+
+**The money path first.** `routes/billing-crypto.ts:315` claims "Every other replay state is non-minting:
+confirming/partial already has money in flight, and paid/failed/cancelled is terminal." Sound, on all three
+things that could make it false:
+
+- The predicate is **consulted**, not merely computed — `mayMintPayment` is declared at `:320` and appears as a
+  **conjunct** in the `else if` at `:366`, alongside the provider, callback-URL and floor conditions. A
+  predicate computed and never read prevents nothing, and the comment above it records that the broad `else if`
+  once minted an orphan provider payment for every non-pending replay.
+- Its enumeration is **complete**. The comment names pending / confirming / partial / paid / failed / cancelled
+  — exactly the six in `CryptoOrderStatusSchema` and exactly the six in the Drizzle `$type<>` union on the
+  column. Two sources of truth, checked separately, in agreement.
+- The admission is narrow by construction: `!replayed || (status === 'pending' && payment_id === null)`, so
+  even a status the comment failed to name could not mint.
+
+**The suspicion, and why it does not survive.** `database-check-enums-agree-with-the-code.test.ts` carries
+"MEASURED at 8 of 10" beside a hand-maintained `NO_EXPORTED_CONSTANT` set, which looked like the shape where a
+self-correcting mechanism updates the LIST while every sentence citing it goes false. Two measurements killed
+it:
+
+1. ⛔ **The set is bidirectionally self-correcting, which I did not expect.** Its arm forces an unaccounted
+   constraint IN, and a second half — "an entry here that has since GAINED a constant is stale, and leaving it
+   would suppress a comparison that could now run" — forces a stale one OUT. It cannot drift either way. That
+   guard also names its own blind spot in its header: it compares 2 of 10 enumerations and lists the other 8
+   individually, "because a comparison that walks only the pairs it happens to find reports everything verified
+   while covering two of ten."
+2. **The class as a whole is provenance, not enforcement.** 216 `MEASURED`-number claims across 154 guard
+   files; narrowing to undated claims whose number appears nowhere in the file's own code leaves 136 (detector
+   validated against a known positive first). Sampling those: in every case the number sits beside a **set
+   comparison** — `expect(violations, '…').toEqual([])` — or a deliberately slack non-vacuity floor, never
+   standing in as the enforcement. `db-schema-matches-the-migrations-drizzle.test.ts` is the clearest: its
+   comment records "52 tables and 539 columns" while the assertions are `>= 45` and `>= 500`, and the real
+   regression detection is the next arm's table-by-table set comparison. A slack floor is right there: its job
+   is to refuse a vacuous pass, not to detect a one-table regression.
+
+⭐ So the numbers are dated-in-spirit records beside a mechanism that enumerates offenders by name — the repo's
+own "enumerate the set, never report the size" discipline, one level up. **Suspicion retired, and recorded so
+it is not raised again.**
+
+⛔ **Three instrument errors on the way, all mine, all caught before anything was reported.**
+
+- **A comment-stripping regex swallowed 12 of 53 table declarations.** `re.sub(r'/\*.*?\*/', '', t, DOTALL)`
+  ate 36,918 characters of `schema.ts`, because the file holds 59 `/*` against 54 `*/` and the regex ran from
+  an unbalanced opener to a distant closer. The tell was that ALL FOUR of my counts came out low at once — a
+  uniform result is the instrument, not four independent errors in someone's prose. Line-level stripping cannot
+  swallow a region and gives 53.
+- **`grep -c "\$type<'"` returned 0 on a file I had just read the idiom in**, because the double quotes let the
+  shell expand `$type`. A shell error and a true zero are indistinguishable in the output.
+- **A character class `[a-z_]+` was my first suspect for the missing tables** and was innocent — checked by
+  enumerating what the wider class caught, which was nothing. Worth recording because it is the kind of guess
+  that gets "fixed" without ever being tested, leaving the real cause in place.
+
+**Boundary:** the sampling of the 136 is a sample, not a census; it establishes that the idiom is provenance
+beside a set comparison in the cases read, not that no counter-example exists. The crypto-replay result is a
+source-text audit of the admission predicate and its two enum sources — it does not exercise a replay against a
+live provider.
