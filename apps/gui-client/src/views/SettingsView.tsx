@@ -481,7 +481,9 @@ export function SettingsView(): JSX.Element {
         >
           <div className="h-11 w-11 shrink-0 animate-pulse rounded-xl bg-surface-inset" />
           <div className="flex flex-col gap-1.5">
-            <span className="section-label">Settings</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-ink-muted">
+              Settings
+            </span>
             <div className="h-6 w-44 animate-pulse rounded bg-surface-inset" />
             <div className="mt-1 h-4 w-80 animate-pulse rounded bg-surface-inset" />
           </div>
@@ -658,7 +660,9 @@ export function SettingsView(): JSX.Element {
             <IconCog />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Settings</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+              Settings
+            </span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
               API connection
             </h2>

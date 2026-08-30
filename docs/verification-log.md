@@ -11542,3 +11542,32 @@ the derivation throws its re-anchor error before any arm runs.
 **Boundary:** static reads of the workflow, the manifests and the launcher source; it does not download a
 release or inspect a DMG, so a workflow that builds the companion but fails to upload it would pass the flipped
 arm — that half belongs to a release-artifact check when packaging lands.
+
+## V-2149 — two owner-reported GUI defects: a destructive menu that opened on hover, and a page whose own name was its faintest text (2026-08-30)
+
+**"the clear shouldn't be hover but click to expand".** The profile card's `Clear…` disclosure opened
+on `onMouseEnter` (and on `onFocus`). The rows underneath are the destructive ones — clear cookies,
+clear history, clear everything — so a pointer merely crossing the word "Clear…" slid one of them
+under the cursor, and a keyboard user tabbing past expanded it without ever choosing to look. Both
+handlers are gone; the button toggles on click (Enter/Space when focused), which is what a disclosure
+button promises. It still stays open once opened — that part was deliberate and is unchanged: a
+submenu that retracts while the pointer travels toward it turns a careful click into a mis-click.
+The doc comment that argued FOR hover was rewritten in the same edit rather than left contradicting
+the code.
+
+**"isn't properly viewable at settings tab page, the top Settings label".** The Settings hero rendered
+the page's own name with `.section-label` — 10px, `tracking-widest`, uppercase, accent — above a 24px
+`API connection` heading. That treatment is right for a divider INSIDE a page and wrong for the title
+OF one: the page read as "API connection" and the word "Settings" was the least legible text on it.
+Now 12px semibold with tighter tracking, and the loading skeleton was changed identically so the
+title does not resize when the real hero replaces it. No layout bug was involved — the Save block is
+`ml-auto` in the same flex row and never overlapped; this was a typographic hierarchy error, checked
+before changing anything.
+
+**Proofs.** 3 suites green (profile-phone-card, profiles-lifecycle-actions, SettingsView) — 49 passed
+| 6 skipped. New arm asserts hover does NOT expand, focus does NOT expand, click expands, click again
+collapses. Mutation, snapshot-restored and cmp-verified: `onMouseEnter` reintroduced → that arm red.
+
+**Boundary:** the label change is scoped to the Settings hero and its skeleton; the other 101
+`.section-label` uses are untouched, since a section divider at 10px is the size it should be. Whether
+the remaining page heroes deserve the same promotion was not measured here.

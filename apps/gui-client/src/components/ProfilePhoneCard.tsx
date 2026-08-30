@@ -852,8 +852,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
  *
  * ⚠️ Opens on hover AND on click/focus, deliberately. Hover alone is what a mouse
  * user asks for and it is unreachable by keyboard and unusable on touch — the
- * disclosure would simply never open. Hover is the convenience; the button is the
- * mechanism.
+ * disclosure would simply never open.
+ *
+ * ⛔ CLICK ONLY — hover-to-open was removed (owner 2026-08-30: "the clear
+ * shouldn't be hover but click to expand"). Opening a group of DESTRUCTIVE rows
+ * because a pointer crossed the word "Clear…" pushes those rows under the cursor
+ * without the customer choosing to look at them. `onFocus` went with it: tabbing
+ * to a disclosure should not expand it either. Click (or Enter/Space on the
+ * focused button) toggles, which is what a disclosure button is expected to do.
  *
  * Stays open once opened rather than closing on mouseleave: the rows below are
  * destructive, and a submenu that retracts while the pointer travels toward it
@@ -878,8 +884,6 @@ function MenuGroup({
         aria-label={label}
         aria-expanded={open}
         title={label}
-        onMouseEnter={() => setOpen(true)}
-        onFocus={() => setOpen(true)}
         onClick={(e) => {
           e.stopPropagation();
           setOpen((v) => !v);

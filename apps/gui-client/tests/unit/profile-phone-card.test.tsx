@@ -322,3 +322,33 @@ describe('ProfilePhoneCard', () => {
     cleanup();
   });
 });
+
+describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
+  it('⛔ pointing at "Clear…" does not reveal the destructive rows', () => {
+    // The group only exists when a trim handler does.
+    render(<ProfilePhoneCard {...props({ onTrim: vi.fn() })} />);
+    fireEvent.click(screen.getByLabelText('More actions'));
+    const group = screen.getByLabelText(/^Clearing options for /);
+
+    // Hovering the group must not expand it: the rows below DESTROY state the
+    // customer cannot get back, and expanding on hover slides one of them under
+    // a cursor that was only passing through.
+    fireEvent.mouseEnter(group);
+    expect(screen.queryByLabelText(/^Clear history for /)).toBeNull();
+    expect(group.getAttribute('aria-expanded')).toBe('false');
+
+    // Nor does merely focusing it (keyboard traversal is not a choice to look).
+    fireEvent.focus(group);
+    expect(screen.queryByLabelText(/^Clear history for /)).toBeNull();
+
+    // A click — the thing a disclosure button promises — opens it.
+    fireEvent.click(group);
+    expect(group.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByLabelText(/^Clear history for /)).not.toBeNull();
+
+    // And toggles shut again.
+    fireEvent.click(group);
+    expect(screen.queryByLabelText(/^Clear history for /)).toBeNull();
+    cleanup();
+  });
+});
