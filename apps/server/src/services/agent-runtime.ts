@@ -381,6 +381,24 @@ export const AGENT_TRANSCRIPT_MAX_ENTRIES = 256;
 export const AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES = 1024 * 1024;
 const AGENT_TURN_OUTPUT_RESERVE_BYTES = 128 * 1024;
 
+/**
+ * The ceilings a SEEDED transcript (continue_from_agent_session_id) must fit
+ * UNDER, exported from here so they cannot drift from the admission preflight
+ * above — these are the preflight's own numbers, minus what one full AI turn
+ * reserves (3 entries; the 128KiB output reserve plus the largest admissible
+ * 8,000-char user message entry, rounded up to 16KiB for JSON framing).
+ *
+ * ⛔ Why not seed to AGENT_TRANSCRIPT_MAX_ENTRIES: the preflight CLOSES a
+ * session it cannot reserve capacity in — it does not trim. A seed at the raw
+ * ceiling produced a session whose very first message closed it with
+ * 'transcript-limit', i.e. "continue this session" manufactured a dead session.
+ * And entries alone are not the ceiling: the preflight also enforces the byte
+ * ceiling, which a 256-entry clamp never looked at.
+ */
+export const AGENT_SEED_MAX_ENTRIES = AGENT_TRANSCRIPT_MAX_ENTRIES - 3;
+export const AGENT_SEED_MAX_SERIALIZED_BYTES =
+  AGENT_TRANSCRIPT_MAX_SERIALIZED_BYTES - AGENT_TURN_OUTPUT_RESERVE_BYTES - 16 * 1024;
+
 // #130 — reconstruct the plan the customer is APPROVING from the transcript so a
 // consequential-approval turn re-runs the reviewed plan instead of re-decomposing.
 // Re-decomposing on approval would (a) charge a SECOND flat $0.10 bundled row + burn

@@ -41,7 +41,8 @@ import {
 import {
   agentTurnAdmissionForSession,
   agentTurnAdmissionMatchesSnapshot,
-  AGENT_TRANSCRIPT_MAX_ENTRIES,
+  AGENT_SEED_MAX_ENTRIES,
+  AGENT_SEED_MAX_SERIALIZED_BYTES,
   type AgentTurnAdmission,
   type AgentRuntime,
 } from '../services/agent-runtime.js';
@@ -2164,7 +2165,16 @@ export function registerAgentSessionsRoutes(
         // 404'd a session that existed and was owned. The zod bound on the field caps
         // the input; ownership and status below are the real controls.
         const source = await sessions.get(sourceId);
-        if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
+        // ⛔ Owned by the OWNER account this create runs on, not merely reachable
+        // by the caller. `callerCanAccessAgentSession` answers a different
+        // question — "may this caller touch that session where it lives" — and a
+        // caller who is admin of TWO owners passed it while seeding owner A's new
+        // session with owner B's transcript: a cross-account copy neither owner
+        // authorized. Equality with ownerAccountId is what "mirrors the strict-FK
+        // treatment of driftstack_session_id above" actually means; every
+        // legitimate continue satisfies it, because launch rights on the owner
+        // were already enforced by resolveEffectiveAccount.
+        if (source === null || source.accountId !== ownerAccountId) {
           throw new NotFoundError(`AgentSession ${sourceId} not found.`);
         }
         if (source.status !== 'closed') {
@@ -2172,13 +2182,23 @@ export function registerAgentSessionsRoutes(
             `AgentSession ${sourceId} is ${source.status}; only a closed session can be continued.`,
           );
         }
-        // Keep the MOST RECENT entries: the tail is the part the next turn needs, and
-        // the runtime enforces the same ceiling on append, so seeding above it would
-        // hand the new session a transcript it must immediately trim.
-        seedTranscript =
-          source.transcript.length > AGENT_TRANSCRIPT_MAX_ENTRIES
-            ? source.transcript.slice(-AGENT_TRANSCRIPT_MAX_ENTRIES)
-            : source.transcript;
+        // Keep the MOST RECENT entries — the tail is the part the next turn needs —
+        // clamped UNDER the runtime's admission preflight, on both of its axes.
+        // ⛔ The preflight does not trim, it CLOSES: a seed at the raw entry
+        // ceiling (or over the byte ceiling, which the old clamp never measured —
+        // 256 entries can serialize well past 1MiB) produced a session whose
+        // first message closed it with 'transcript-limit'. The ceilings are
+        // exported by the runtime next to the preflight they mirror.
+        let seed = source.transcript.slice(-AGENT_SEED_MAX_ENTRIES);
+        while (
+          seed.length > 0 &&
+          Buffer.byteLength(JSON.stringify(seed), 'utf8') > AGENT_SEED_MAX_SERIALIZED_BYTES
+        ) {
+          // Halve from the FRONT (oldest first) rather than re-serializing per
+          // entry: the transcript is bounded, so this converges in ≤8 steps.
+          seed = seed.slice(Math.ceil(seed.length / 2));
+        }
+        seedTranscript = seed;
       }
 
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;

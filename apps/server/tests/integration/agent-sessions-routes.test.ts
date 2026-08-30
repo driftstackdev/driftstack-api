@@ -17,7 +17,11 @@ import type {
   ProxyProbeResult,
 } from '../../src/services/proxy-connectivity-probe.js';
 import { hashAgentTurnRequest } from '../../src/services/agent-turn-receipts.js';
-import { AgentRuntime } from '../../src/services/agent-runtime.js';
+import {
+  AgentRuntime,
+  AGENT_SEED_MAX_ENTRIES,
+  AGENT_SEED_MAX_SERIALIZED_BYTES,
+} from '../../src/services/agent-runtime.js';
 
 describe('AI-D /v1/agent-sessions/* (activation gate off — runtime not wired)', () => {
   let fx: TestAppFixture;
@@ -4150,6 +4154,153 @@ describe('continuing a finished chat carries its transcript (V-2161)', () => {
     // 404, never 403 — a 403 would confirm the session exists.
     expect(res.statusCode, 'a foreign session must not be continuable').toBe(404);
     expect(res.json<{ status?: number }>().status).toBe(404);
+  });
+
+  it('⛔ V-2167: a team ADMIN cannot seed a personal session from the team owner\u2019s transcript', async () => {
+    // The hole: the source check used callerCanAccessAgentSession, which answers
+    // "may this caller touch that session where it lives" — and an admin may.
+    // But this create runs on the caller's PERSONAL account, so passing it copied
+    // the team owner's conversation into a space the owner cannot see or delete.
+    // The source must belong to the OWNER account of the create, full stop.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const TEAM_OWNER = '00000000-0000-4000-8000-000000000c01';
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000c02',
+        ownerAccountId: TEAM_OWNER,
+        role: 'admin',
+      },
+    ]);
+    const ownersSession = await fx.agentSessionsRepo!.create({
+      accountId: TEAM_OWNER,
+      tokenBudgetTotal: 50_000,
+    });
+    await fx.agentSessionsRepo!.appendTranscript(ownersSession.id, {
+      at: new Date().toISOString(),
+      role: 'user',
+      body: 'the team owner\u2019s private conversation',
+    });
+    await fx.agentSessionsRepo!.closeWithReason(ownersSession.id, 'customer-closed');
+
+    // NO X-Driftstack-Account header: the create is personal. The admin CAN read
+    // that session via the session-scoped routes — and still must not be able to
+    // copy it here. 404, not 403: same no-existence-oracle rule as the arm above.
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, continue_from_agent_session_id: ownersSession.id },
+    });
+    expect(res.statusCode, 'cross-owner seeding must be refused').toBe(404);
+  });
+
+  it('an admin continuing WITHIN the owner scope still works — the fix narrows, not breaks', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const TEAM_OWNER = '00000000-0000-4000-8000-000000000c01';
+    fx.authRepo.upsertAccount({
+      id: TEAM_OWNER,
+      email: 'continue-owner@driftstack.local',
+      name: 'Continue Owner',
+      tier: 'team_manual',
+      status: 'active',
+      timezone: null,
+      avatarR2Key: null,
+      slug: null,
+      region: null,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    fx.authRepo.setTeamMemberships(fx.accountId, [
+      {
+        membershipId: '00000000-0000-4000-8000-000000000c02',
+        ownerAccountId: TEAM_OWNER,
+        role: 'admin',
+      },
+    ]);
+    const ownersSession = await fx.agentSessionsRepo!.create({
+      accountId: TEAM_OWNER,
+      tokenBudgetTotal: 50_000,
+    });
+    await fx.agentSessionsRepo!.closeWithReason(ownersSession.id, 'customer-closed');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: {
+        authorization: `Bearer ${fx.plaintext}`,
+        'x-driftstack-account': `acc_${TEAM_OWNER}`,
+      },
+      payload: { token_budget: 50_000, continue_from_agent_session_id: ownersSession.id },
+    });
+    expect(res.statusCode, 'same-owner continue must stay allowed').toBe(201);
+    expect(res.json<{ account_id: string }>().account_id).toBe(TEAM_OWNER);
+  });
+
+  it('⛔ V-2167: the seed is clamped UNDER the runtime ceiling — continuing must not mint a session that closes on its first message', async () => {
+    // The runtime's admission preflight does not trim, it CLOSES: it refuses when
+    // transcript.length + reserve exceeds the ceiling. The old clamp seeded AT the
+    // ceiling, so the continued session died with 'transcript-limit' on message
+    // one. The seed must sit low enough to admit a full AI turn.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const oversize = Array.from({ length: AGENT_SEED_MAX_ENTRIES + 10 }, (_, i) => ({
+      at: new Date(1700000000000 + i).toISOString(),
+      role: 'user' as const,
+      body: `entry ${String(i)}`,
+    }));
+    const source = await fx.agentSessionsRepo!.create({
+      accountId: fx.accountId,
+      tokenBudgetTotal: 50_000,
+      seedTranscript: oversize,
+    });
+    await fx.agentSessionsRepo!.closeWithReason(source.id, 'customer-closed');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, continue_from_agent_session_id: source.id },
+    });
+    expect(res.statusCode).toBe(201);
+    const continued = await fx.agentSessionsRepo!.get(res.json<{ id: string }>().id);
+    expect(continued?.transcript.length).toBe(AGENT_SEED_MAX_ENTRIES);
+    // The tail is what the next turn needs — the NEWEST entries survive the clamp.
+    expect(continued?.transcript.at(-1)?.body).toBe(`entry ${String(AGENT_SEED_MAX_ENTRIES + 9)}`);
+  });
+
+  it('⛔ V-2167: the seed is clamped under the BYTE ceiling too — entries alone are not the limit', async () => {
+    // 120 entries of ~8KB serialize past the byte headroom while sitting far
+    // under the entry ceiling — the axis the old clamp never measured. The
+    // runtime preflight enforces both, so the seed must too.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const fat = Array.from({ length: 120 }, (_, i) => ({
+      at: new Date(1700000000000 + i).toISOString(),
+      role: 'user' as const,
+      body: `entry ${String(i)} ${'x'.repeat(8_000)}`,
+    }));
+    const source = await fx.agentSessionsRepo!.create({
+      accountId: fx.accountId,
+      tokenBudgetTotal: 50_000,
+      seedTranscript: fat,
+    });
+    await fx.agentSessionsRepo!.closeWithReason(source.id, 'customer-closed');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, continue_from_agent_session_id: source.id },
+    });
+    expect(res.statusCode).toBe(201);
+    const continued = await fx.agentSessionsRepo!.get(res.json<{ id: string }>().id);
+    expect(continued).not.toBeNull();
+    const serialized = Buffer.byteLength(JSON.stringify(continued?.transcript ?? []), 'utf8');
+    expect(serialized).toBeLessThanOrEqual(AGENT_SEED_MAX_SERIALIZED_BYTES);
+    // Something must survive — a clamp that empties the transcript is not a
+    // continue — and it must be the newest slice.
+    expect(continued?.transcript.length).toBeGreaterThan(0);
+    expect(continued?.transcript.at(-1)?.body).toBe(fat.at(-1)?.body);
   });
 
   it('omitting the field is unchanged: a fresh session starts with an empty transcript', async () => {
