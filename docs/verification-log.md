@@ -11506,3 +11506,39 @@ has no source. The owner's machine was fixed out-of-band (both variants rebuilt 
 quarantine cleared, ad-hoc re-signed); that install predates this code, so it exercised the manual
 path, not this one. A3's `the-release-workflow-ships-every-app-the-launcher-requires` guard pins the
 packaging gap so it cannot be forgotten between the two halves.
+
+## V-2148 — the release DMG ships one of the two apps the launcher requires; the gap is now a pinned assertion that flips when packaging closes it (2026-08-30)
+
+**The finding is V-2147's** (`ca03d60a8`): the release DMG carries `Driftstack.app` alone while the launcher
+hard-requires `Driftstack Simulator.app`, so a clean customer install dead-ends at "Install the Driftstack
+Simulator app". Verified here independently before anything was written: zero `simulator` references in
+`.github/workflows/gui-release.yml` (`tauri-apps/tauri-action@v0`, default config only);
+`SIMULATOR_INSTALL_PATH = "/Applications/Driftstack Simulator.app"` in `src-tauri/src/lib.rs` with the
+"is not installed" refusal; the companion built only by the dev-local `scripts/build-install-gui.sh`
+(`tauri:build:simulator` → `tauri.simulator.conf.json`, product `Driftstack Simulator`, id
+`dev.driftstack.simulator`); and five server guards reading the workflow, none pinning its artifact set — the
+gap had no instrument. V-2147 landed the self-repair half; the packaging half is the follow-on. This entry is
+the instrument that keeps the gap visible between the two.
+
+**The instrument** (`the-release-workflow-ships-every-app-the-launcher-requires.test.ts`, 3 arms, one new file;
+ratchets 3080 → 3081 / 3257 → 3258). Keyed off the LAUNCHER's requirement and the manifests, not the word
+"simulator": the companion's config path is derived from the `tauri:build:simulator` script, its product name and
+identifier from that config, and the launcher must still name that product (literal path or the
+`SIMULATOR_INSTALL_PATH` constant) with the refusal copy still present — so a rename moves the pin instead of
+detaching it, and if the launcher ever stops requiring the companion the first arm goes red and the pin is
+retired. The third arm is the **KNOWN GAP**: it asserts, with the customer consequence in its message, that the
+release workflow does NOT reference the companion build. When A2's packaging change lands (companion built in
+CI or nested in the main bundle's Resources), that arm goes red and must be flipped in the same commit, citing
+this entry — a gap written as an assertion instead of a message.
+
+**Proofs:** 3 arms + the census test green (9 tests); server test tsconfig clean; ratchets verified against a disk census
+(3081 `.test.ts` / 3258 with `.tsx`) rather than arithmetic, since A2's `ca03d60a8` landed between the bump and
+the commit and added no file. **Mutations, 3 of 3 killed, snapshot-restored byte-identical:** a companion build
+step appended to the workflow → the KNOWN GAP arm flips red with the retire message; the product renamed in
+`tauri.simulator.conf.json` → the launcher arm fails naming the constant's actual value
+(`/Applications/Driftstack Simulator.app`) against the renamed product; the build script renamed →
+the derivation throws its re-anchor error before any arm runs.
+
+**Boundary:** static reads of the workflow, the manifests and the launcher source; it does not download a
+release or inspect a DMG, so a workflow that builds the companion but fails to upload it would pass the flipped
+arm — that half belongs to a release-artifact check when packaging lands.
