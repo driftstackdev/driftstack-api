@@ -12060,3 +12060,29 @@ were bookkeeping the repo demands of exactly this kind of change.
 **Boundary:** the weakening in (4) is the only one, it is scoped to that single route, and the inline
 check is still present in the source today. Anyone hardening that guard should make the roster hold a
 SET of gates; then this entry's warning can be deleted rather than carried.
+
+## V-2164 — the team-gate roster holds a SET of gates per route, closing V-2163's named weakening (2026-08-30)
+
+V-2161 gave `POST /v1/agent-sessions` a second gate — the inline `effective.role` check gates the CREATE,
+`callerCanAccessAgentSession` gates the `continue_from_agent_session_id` source lookup — and
+`every-team-scoped-write-is-gated` recorded only `gates[0]`, so the roster read as the helper and a future
+removal of the inline check would not have been caught. V-2163 named that weakening rather than hiding it and
+asked for the proper fix; this is it.
+
+**Change (guard test only, no src, no ratchet):** `ROSTER` becomes `Readonly<Record<string, readonly
+string[]>>` — a SET of gates per route — and the "still carries the gate" arm compares the FULL gate set,
+sorted, instead of `gates[0]`. Every single-gate route keeps its one member; `POST /v1/agent-sessions` pins
+both `['callerCanAccessAgentSession', 'inline role check']`. The `r.gates` array already carried both (the
+handler segment contains both markers); only the guard was discarding all but the first. V-2163's ⚠️ comment
+is deleted — once the weakness is enforced against, a comment describing it is a stale claim.
+
+**Mutation proofs — 2 of 2, snapshot-restored byte-identical (A2's second requested to prove the set sees BOTH
+members, not just the first):** neutralize the create's inline `effective.role` check → the arm goes red with
+`POST /v1/agent-sessions: registered callerCanAccessAgentSession + inline role check, now
+callerCanAccessAgentSession` (the failure that could NOT be caught under `gates[0]`); drop
+`callerCanAccessAgentSession` from the continue-source lookup → red with `…now inline role check`. 5 arms green,
+`it(` unchanged, server test tsconfig clean.
+
+**Boundary:** the roster still pins the gate SET, not the ORDER or the number of call sites — two routes that
+each carry the same two gates are indistinguishable to it, which is correct (the property is "these gates are
+present", not "in this arrangement"). The other 46 routes are unchanged single-member sets.

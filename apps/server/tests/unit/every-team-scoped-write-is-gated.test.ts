@@ -101,60 +101,58 @@ interface Route {
  *
  * `inline` means an `effective.role !== 'admin'` comparison in the handler itself.
  */
-const ROSTER: Readonly<Record<string, string>> = {
-  'DELETE /v1/agent-sessions/:id': 'callerCanAccessAgentSession',
-  'DELETE /v1/api-keys/:id': 'effectiveAccountIdForKeyWrite',
-  'DELETE /v1/profile-snapshots/:id': 'effectiveAccountIdForWrite',
-  'DELETE /v1/profiles/:id': 'effectiveAccountIdForWrite',
-  'DELETE /v1/profiles/:id/purge': 'effectiveAccountIdForWrite',
-  'DELETE /v1/sessions/:id': 'inline role check',
-  'DELETE /v1/webhooks/:id': 'effectiveAccountIdForWrite',
-  'PATCH /v1/profiles/:id': 'effectiveAccountIdForWrite',
-  'PATCH /v1/webhooks/:id': 'effectiveAccountIdForWrite',
-  // ⚠️ This route now carries TWO gates and the detector records only `gates[0]`,
-  // which orders helpers before the inline check. The inline `effective.role`
-  // comparison still gates the CREATE itself; `callerCanAccessAgentSession` gates
-  // the separate `continue_from_agent_session_id` source lookup (V-2161). Naming
-  // the consequence rather than hiding it: while this entry reads as the helper, a
-  // future removal of the inline check would NOT be caught here.
-  'POST /v1/agent-sessions': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/cookies/set': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/files': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/handback': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/history': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/input-event': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/livekit-token': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/mode': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/resume': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/takeover': 'callerCanAccessAgentSession',
-  'POST /v1/agent-sessions/:id/transport-report': 'callerCanAccessAgentSession',
-  'POST /v1/api-keys': 'effectiveAccountIdForKeyWrite',
-  'POST /v1/api-keys/:id/rotate': 'effectiveAccountIdForKeyWrite',
-  'POST /v1/profile-snapshots/:id/restore': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/:id/clone': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/:id/launch': 'inline role check',
-  'POST /v1/profiles/:id/restore': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/:id/snapshots': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/:id/transfer': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/:id/trim': 'effectiveAccountIdForWrite',
-  'POST /v1/profiles/import': 'effectiveAccountIdForWrite',
-  'POST /v1/recipes': 'callerCanAccessAgentSession',
-  'POST /v1/sessions': 'inline role check',
-  'POST /v1/sessions/:id/capture': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/extract': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/gui-input': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/interact': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/login': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/navigate': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/search': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/sessions/:id/wait': 'effectiveAccountIdForLiveOperation',
-  'POST /v1/webhook-deliveries/:deliveryId/replay': 'effectiveAccountIdForWrite',
-  'POST /v1/webhooks': 'effectiveAccountIdForWrite',
-  'POST /v1/webhooks/:id/rotate-secret': 'effectiveAccountIdForWrite',
-  'POST /v1/webhooks/:id/test': 'effectiveAccountIdForWrite',
-  'PUT /v1/account/email-preferences': 'inline role check',
-  'PUT /v1/account/me/organization': 'inline role check',
+const ROSTER: Readonly<Record<string, readonly string[]>> = {
+  'DELETE /v1/agent-sessions/:id': ['callerCanAccessAgentSession'],
+  'DELETE /v1/api-keys/:id': ['effectiveAccountIdForKeyWrite'],
+  'DELETE /v1/profile-snapshots/:id': ['effectiveAccountIdForWrite'],
+  'DELETE /v1/profiles/:id': ['effectiveAccountIdForWrite'],
+  'DELETE /v1/profiles/:id/purge': ['effectiveAccountIdForWrite'],
+  'DELETE /v1/sessions/:id': ['inline role check'],
+  'DELETE /v1/webhooks/:id': ['effectiveAccountIdForWrite'],
+  'PATCH /v1/profiles/:id': ['effectiveAccountIdForWrite'],
+  'PATCH /v1/webhooks/:id': ['effectiveAccountIdForWrite'],
+  // Two gates, both pinned (V-2164, closing the V-2163 gates[0] weakening): the inline
+  // `effective.role` check gates the CREATE; `callerCanAccessAgentSession` gates the
+  // `continue_from_agent_session_id` source lookup (V-2161). A future removal of either
+  // now fails the "still carries the gate" arm, which compares the full set.
+  'POST /v1/agent-sessions': ['callerCanAccessAgentSession', 'inline role check'],
+  'POST /v1/agent-sessions/:id/cookies/set': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/files': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/handback': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/history': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/input-event': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/livekit-token': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/mode': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/resume': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/takeover': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/transport-report': ['callerCanAccessAgentSession'],
+  'POST /v1/api-keys': ['effectiveAccountIdForKeyWrite'],
+  'POST /v1/api-keys/:id/rotate': ['effectiveAccountIdForKeyWrite'],
+  'POST /v1/profile-snapshots/:id/restore': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/:id/clone': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/:id/launch': ['inline role check'],
+  'POST /v1/profiles/:id/restore': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/:id/snapshots': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/:id/transfer': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/:id/trim': ['effectiveAccountIdForWrite'],
+  'POST /v1/profiles/import': ['effectiveAccountIdForWrite'],
+  'POST /v1/recipes': ['callerCanAccessAgentSession'],
+  'POST /v1/sessions': ['inline role check'],
+  'POST /v1/sessions/:id/capture': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/extract': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/gui-input': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/interact': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/login': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/navigate': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/search': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/sessions/:id/wait': ['effectiveAccountIdForLiveOperation'],
+  'POST /v1/webhook-deliveries/:deliveryId/replay': ['effectiveAccountIdForWrite'],
+  'POST /v1/webhooks': ['effectiveAccountIdForWrite'],
+  'POST /v1/webhooks/:id/rotate-secret': ['effectiveAccountIdForWrite'],
+  'POST /v1/webhooks/:id/test': ['effectiveAccountIdForWrite'],
+  'PUT /v1/account/email-preferences': ['inline role check'],
+  'PUT /v1/account/me/organization': ['inline role check'],
 };
 
 /**
@@ -236,13 +234,18 @@ describe('V-1069 every team-scoped write is gated', () => {
   });
 
   it('CRITICAL every registered write still carries the gate it was registered with. The derived arm above cannot see the 22 writes whose only team-scope signal IS their gating helper: deleting it drops them out of the scan rather than flagging them, which a mutation proved by staying green. Comparing against the roster is what makes a deletion visible.', () => {
-    const found = new Map(writes().map((r) => [`${r.method} ${r.path}`, r.gates[0] ?? 'NONE']));
+    // V-2164 — compare the FULL gate SET, sorted, not just gates[0]. A route that
+    // carries two gates (e.g. POST /v1/agent-sessions: the inline CREATE check plus
+    // the continue-from source lookup) now pins both, so dropping either is caught.
+    const found = new Map(
+      writes().map((r) => [`${r.method} ${r.path}`, [...r.gates].sort().join(' + ') || 'NONE']),
+    );
     const drifted: string[] = [];
     for (const [route, expected] of Object.entries(ROSTER)) {
+      const want = [...expected].sort().join(' + ');
       const actual = found.get(route);
-      if (actual === undefined)
-        drifted.push(`${route}: registered with ${expected}, no longer found`);
-      else if (actual !== expected) drifted.push(`${route}: registered ${expected}, now ${actual}`);
+      if (actual === undefined) drifted.push(`${route}: registered with ${want}, no longer found`);
+      else if (actual !== want) drifted.push(`${route}: registered ${want}, now ${actual}`);
     }
     expect(
       drifted.sort(),
