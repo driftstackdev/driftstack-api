@@ -15,6 +15,9 @@ import {
   DOUBLE_TAP_MS,
   KEY_REPEAT_INITIAL_MS,
   KEY_REPEAT_START_MS,
+  keyFlexBasis,
+  KEY_GAP_PX,
+  KEY_COLUMNS,
 } from '../../src/components/IOSKeyboard';
 import { DeviceToolbar } from '../../src/views/SimulatorWindow';
 import type { InputEvent, Room } from '../../src/lib/livekit';
@@ -583,5 +586,63 @@ describe('DeviceToolbar — keyboard show/hide toggle', () => {
     });
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(container.querySelector('[data-component="ios-keyboard"]')).toBeNull();
+  });
+});
+
+// V-2168 — iPhone key GEOMETRY. The letters rows have 10, 9 and 7 keys, and a
+// real iPhone renders all of them at ONE key width, centring the shorter rows so
+// they sit inset. The old `grow basis-0` gave each row an equal share of the
+// full board instead, so `asdf` keys were visibly wider than `qwerty` keys and
+// `zxcv` wider still — the clearest single tell that this was a web keyboard
+// rather than the device's. These arms pin the sizing rule, which is what
+// survives a restyle, rather than a pixel measurement jsdom cannot produce.
+describe('IOSKeyboard — one key width across rows (V-2168)', () => {
+  it('⛔ every character key is sized from the same 10-column unit, not a per-row share', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const charKeys = [...container.querySelectorAll('[data-key-kind="char"]')];
+    expect(charKeys.length).toBeGreaterThan(20); // all three letter rows rendered
+
+    const bases = new Set(charKeys.map((k) => (k as HTMLElement).style.flexBasis));
+    // ONE sizing rule for every key on the board — a per-row share would give
+    // three different values here (10, 9 and 7 keys per row).
+    expect(bases.size, `expected one basis, saw: ${[...bases].join(' | ')}`).toBe(1);
+    expect([...bases][0]).not.toBe('');
+    // And no key may GROW: growth is exactly what stretched the short rows.
+    expect(
+      charKeys.every((k) => (k as HTMLElement).style.flexGrow === '0'),
+      'a character key that grows re-stretches its row',
+    ).toBe(true);
+  });
+
+  it('the sizing rule itself: one key unit, and shift/delete at 1.5 of it', () => {
+    // Assert the PURE rule, not the serialised style string — a CSS engine
+    // normalises calc() (jsdom rewrites it and introduces float noise), so a
+    // string match on the DOM would pin the parser, not the design.
+    expect(keyFlexBasis(1)).toBe('calc((100% - 54px) * 1 / 10)');
+    expect(keyFlexBasis(1.5)).toBe('calc((100% - 54px) * 1.5 / 10)');
+    // 54px = 9 gaps × 6px — derived, so a gap change moves both together.
+    expect(keyFlexBasis(1)).toContain(String(KEY_GAP_PX * (KEY_COLUMNS - 1)));
+  });
+
+  it('shift and delete really use the 1.5-unit rule on the rendered board', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const shift = container.querySelector<HTMLElement>('[aria-label="Shift"]');
+    const del = container.querySelector<HTMLElement>('[aria-label="Delete"]');
+    expect(shift).not.toBeNull();
+    expect(del).not.toBeNull();
+    for (const key of [shift, del]) {
+      if (key === null) continue;
+      // A row-3 flank must not GROW into slack — that would re-stretch the row
+      // the uniform sizing exists to keep inset.
+      expect(key.style.flexGrow).toBe('0');
+      expect(key.style.flexBasis).not.toBe('');
+    }
+  });
+
+  it('character glyphs render at the iOS letter size, not the compact web size', () => {
+    const { container } = render(<IOSKeyboard room={ROOM} />);
+    const anyChar = container.querySelector('[data-key-kind="char"]');
+    expect(anyChar?.className).toContain('text-[22px]');
+    expect(anyChar?.className).not.toContain('text-[17px]');
   });
 });

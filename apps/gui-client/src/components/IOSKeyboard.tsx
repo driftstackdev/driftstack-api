@@ -69,6 +69,27 @@ const SYMBOL_ROWS: readonly (readonly string[])[] = [
   ['.', ',', '?', '!', "'"],
 ];
 
+/** Gap between keys, in px — the board, the rows and the sizing rule share it. */
+export const KEY_GAP_PX = 6;
+/** Keys per letter row on an iPhone: the unit EVERY key is measured in. */
+export const KEY_COLUMNS = 10;
+
+/**
+ * The flex `basis` for a key `units` wide, in real key units.
+ *
+ * ⛔ V-2168 — one rule for the whole board. The rows hold 10, 9 and 7 keys, and
+ * a real iPhone renders all of them at the SAME width, centring the short rows
+ * so they sit inset. The old `grow basis-0` instead split each row's full width
+ * among its own keys, so `asdf` keys came out wider than `qwerty` keys and
+ * `zxcv` wider still — the clearest single tell that this was a web keyboard.
+ * Expressed as one multiplication so a CSS engine can normalise it without
+ * float noise.
+ */
+export function keyFlexBasis(units = 1): string {
+  const gaps = KEY_GAP_PX * (KEY_COLUMNS - 1);
+  return `calc((100% - ${String(gaps)}px) * ${String(units)} / ${String(KEY_COLUMNS)})`;
+}
+
 /** Apply the live shift state to a letter (numbers/symbols pass through). */
 export function applyShift(ch: string, shift: ShiftState): string {
   if (shift === 'off') return ch;
@@ -257,8 +278,17 @@ export function IOSKeyboard({
       // Keep window-drag off the keyboard (its keys must receive presses).
       data-tauri-drag-region="false"
     >
-      {/* Character rows. Letters row 2 (asdf…) + row 3 (zxc…) are inset like iOS;
-          row 3 is flanked by shift (left) + delete (right). */}
+      {/* Character rows.
+          ⛔ V-2168 — the keys are a UNIFORM WIDTH across every row, and short
+          rows are INSET by the leftover space. The comment here used to claim
+          that, but `grow basis-0` gave each row's keys an equal share of the
+          FULL width, so the 9-key `asdf` row rendered wider keys than the
+          10-key `qwerty` row above it and the 7-key `zxcv` row wider still.
+          A real iPhone keeps one key size and centres the shorter rows; the
+          stretched look was the clearest tell that this was not an iPhone
+          keyboard. `justify-center` + a fixed basis reproduces the real inset
+          without hand-positioning anything. Row 3 is flanked by shift (left)
+          and delete (right), which take the iOS ~1.5-unit width. */}
       {charRows.map((row, rowIndex) => {
         const isLastCharRow = rowIndex === charRows.length - 1;
         return (
@@ -404,7 +434,10 @@ function CharKey({
       onPointerUp={onUp}
       onPointerLeave={onUp}
       onPointerCancel={onUp}
-      className="relative h-[42px] min-w-0 grow basis-0 rounded-[5px] bg-white text-[17px] leading-none text-[#1c1c1e] shadow-[0_1px_0_rgba(0,0,0,0.28)] transition-colors active:bg-[#e6e7ea]"
+      className="relative h-[42px] min-w-0 shrink rounded-[5px] bg-white text-[22px] font-normal leading-none text-[#1c1c1e] shadow-[0_1px_0_rgba(0,0,0,0.3)] transition-colors active:bg-[#e6e7ea]"
+      // One key unit — see keyFlexBasis. The glyph is 22px, the real iOS letter
+      // size; 17px read as a compact web keyboard rather than the device's.
+      style={{ flexGrow: 0, flexShrink: 1, flexBasis: keyFlexBasis(1) }}
     >
       {label}
       {/* iOS key pop-up magnifier — the enlarged glyph balloon above the pressed
@@ -547,9 +580,14 @@ function FnKey({
       className={`flex h-[42px] min-w-0 items-center justify-center rounded-[5px] text-[15px] leading-none shadow-[0_1px_0_rgba(0,0,0,0.28)] transition-colors ${
         disabled === true ? 'cursor-default opacity-40' : 'active:brightness-95'
       } ${base}`}
+      // Sized in KEY UNITS off the same grid the character keys use, so
+      // shift/delete are ~1.5 real keys wide rather than 1.5 shares of a
+      // remainder that changed with the row's key count. The bottom row's wide
+      // keys may grow into slack; a row-3 flank must not.
       style={{
-        flexGrow: flex ?? (wide ? 1.5 : 1),
-        flexBasis: 0,
+        flexGrow: flex !== undefined ? 1 : 0,
+        flexShrink: 1,
+        flexBasis: keyFlexBasis(flex ?? (wide === true ? 1.5 : 1)),
       }}
     >
       {label}
