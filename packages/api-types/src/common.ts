@@ -664,12 +664,15 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  *  1. A1's browser-family gate: the chrome family is OPEN (distribution-policy
  *     weights + founder ATP reference not finalized). A family must be CLOSED
  *     before its archetypes are sellable.
- *  2. A measured fingerprint defect: the fork's canvas-family predicate parses
+ *  2. A measured fingerprint defect, ADJUDICATED 2026-08-30 on two real device
+ *     models (iPhone 15 + iPhone 17 Pro, CriOS, both md5 57186fab = Family B):
+ *     the CONFIG is right and the fork's predicate is the defect — it parses
  *     the Safari version out of the archetype SLUG, a chrome slug carries no
- *     safari token, so all three land in canvas Family A while their config
- *     (base_archetype = iphone17_ios18_7_safari26_4) says Family B — a
- *     detectable canvas tell. Unadjudicable today: zero CriOS captures exist in
- *     the corpus. A1 has a capture chain queued to settle which side is right.
+ *     safari token, so all three render canvas Family A while their config
+ *     says Family B: a detectable canvas tell, live in the fork TODAY. Not
+ *     sellable until A1's fork fix (plumb the effective Safari version to the
+ *     predicate — never rename slugs) lands and passes the on-box
+ *     bit-identical run.
  *
  * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
  * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
