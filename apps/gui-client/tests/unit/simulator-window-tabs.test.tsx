@@ -15,7 +15,13 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, fireEvent, within, act, waitFor } from '@testing-library/react';
 import { getLogEntries, clearLogEntries } from '../../src/lib/log-buffer';
 
-const sendTabListUpdate = vi.fn(() => Promise.resolve());
+// A2/A3 2026-08-30 — GATE-ABLE, default immediate. The old unconditional immediate
+// resolve hid the real wire ordering from every test in this suite: in production
+// `sendTabListUpdate` is single-flight and can queue behind an in-flight publish,
+// while `sendActivateTab` publishes immediately. A test that arms `tabListGate`
+// holds the publish open and can observe what happens while it is pending.
+let tabListGate: Promise<void> | null = null;
+const sendTabListUpdate = vi.fn(() => tabListGate ?? Promise.resolve());
 const sendActivateTab = vi.fn(
   (_room: unknown, _payload: unknown, onRequestId?: (requestId: string) => void) => {
     onRequestId?.('req_1');
@@ -156,6 +162,7 @@ function lastTabListCall(): { sessionId: string; tabs: unknown[]; activeTabId: s
 
 describe('SimulatorWindow — page tab strip', () => {
   beforeEach(() => {
+    tabListGate = null;
     sendTabListUpdate.mockClear();
     sendActivateTab.mockReset();
     sendActivateTab.mockImplementation((_room, _payload, onRequestId) => {
@@ -396,6 +403,38 @@ describe('SimulatorWindow — page tab strip', () => {
       ).toBe(false);
     } finally {
       vi.useRealTimers();
+    }
+  });
+
+  // A2/A3 2026-08-30 — the wire ordering, pinned as CONTRACT. A first-touch tab's
+  // activateTab may reach the harness BEFORE the tabListUpdate that registers its
+  // id, because the list publish queues single-flight while the activate sends
+  // immediately. The GUI deliberately does NOT defer the user's action on the
+  // publish (that fix was built and reverted: it made a user-visible action
+  // asynchronous and spent latency on the owner's slowest interaction); instead
+  // the HARNESS registers the unknown id under its 64-tab cap. This arm holds the
+  // publish open and proves the activate does not wait for it.
+  it('a first-touch activateTab is sent while its tab-list publish is still pending (harness registers-under-cap)', () => {
+    let release!: () => void;
+    tabListGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      const { container } = renderSim();
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      // Both went to the wire in the same tick: the list publish was ISSUED (and
+      // is still pending behind the gate) and the activate did NOT wait for it.
+      expect(sendTabListUpdate).toHaveBeenCalled();
+      expect(sendActivateTab).toHaveBeenCalled();
+      const activated = sendActivateTab.mock.calls.at(-1)?.[1] as { tabId?: string };
+      const published = lastTabListCall().tabs as Array<{ id: string }>;
+      expect(
+        published.some((t) => t.id === activated.tabId),
+        'the activate names the new tab the (pending) list publish carries',
+      ).toBe(true);
+    } finally {
+      release();
+      tabListGate = null;
     }
   });
 

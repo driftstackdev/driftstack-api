@@ -12163,3 +12163,24 @@ snapshot-restored and cmp-verified: the two `group-hover:` classes put back → 
 **Boundary:** two other `group-hover` reveals on the card are untouched and intended — the selection
 tick and the WebRTC/QUIC capability chips. Neither is an action; revealing a status glyph on hover is
 not the reported defect.
+
+## V-2168 — the tab suite can now HOLD a tab-list publish open, and the first arm pins the ordering the harness fix rides on (2026-08-30)
+
+The harness half of owner item #2 (driftstack 73774ed1a) registers a first-touch activateTab id under the
+64-cap because the GUI legitimately sends the activate while the single-flight tabListUpdate publish is
+still pending. The GUI suite could not previously SAY that: its `sendTabListUpdate` mock resolved
+immediately, so no test could exist in the in-between state. The mock is now gate-able (`tabListGate`,
+reset each test), and a new arm — "a first-touch activateTab is sent while its tab-list publish is still
+pending (harness registers-under-cap)" — arms the gate, clicks New tab, and asserts the activate went to
+the wire while the publish is pending AND names a tab the pending publish carries. That is the wire
+contract the harness's register-under-cap depends on, pinned where it originates.
+
+**Non-vacuity was earned, not assumed.** A first source mutation (short-circuiting the activate in the
+SWITCH path, `emitTabList(tabs, id, ...)` site) SURVIVED — which indicted the plant, not the arm: the
+new-tab click activates via `sendActivateAttemptRef.current` in the new-tab handler (~SimulatorWindow.tsx:7033),
+not the switch path. Re-planted there (trapped snapshot, single invocation, cmp-verified restore), the arm
+went red: `Tests 1 failed | 57 skipped`. With the gate never resolving, "activate deferred behind the
+publish" is observationally identical to "activate never sent", so this mutation is the faithful
+regression shape. Full file under the ROOT vitest config: rc=0, `Test Files 1 passed`, `Tests 58 passed
+(58)` — the earlier "No test files found" rc=1 was the node-config/.tsx trap (vitest.node.config.ts
+includes only .test.ts); the gui project's config owns .tsx.
