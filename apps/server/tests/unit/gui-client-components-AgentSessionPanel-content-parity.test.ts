@@ -39,7 +39,14 @@ describe('gui-client components/AgentSessionPanel content parity', () => {
     // Low-latency: on subscribe, minimize the receiver jitter buffer for the
     // interactive simulator (pairs with adaptiveStream:false). Guarded no-op on
     // older livekit-client.
-    expect(body).toMatch(/track\.setPlayoutDelay\?\.\(0\);/);
+    //
+    // ⛔ V-2168 — pinned to the CONSTANT, not to a literal 0. The subscribe used
+    // to re-arm a ZERO buffer on every TrackSubscribed, including a
+    // freeze-recovery resubscribe, which silently undid whatever the adaptive
+    // controller had ramped. This pin previously froze that literal in place, so
+    // it would have failed the fix rather than the regression — the resting
+    // value is ADAPTIVE_PLAYOUT.MIN_S and the pin follows it.
+    expect(body).toMatch(/track\.setPlayoutDelay\?\.\(ADAPTIVE_PLAYOUT\.MIN_S\);/);
   });
 
   it('subscriber-only LK.6.b scope pinned: input capture (LK.6.d) + latency measurement (LK.6.e) are deferred to follow-up sub-slices. Drift to growing the panel into input/latency would mix concerns that the LK.6.* split deliberately separates', () => {

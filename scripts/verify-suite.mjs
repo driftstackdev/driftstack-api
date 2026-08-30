@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 3082;
+export const EXPECTED_TEST_FILES = 3083;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -59,7 +59,7 @@ export const EXPECTED_TEST_FILES = 3082;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3262;
+export const EXPECTED_TEST_FILES_ALL = 3263;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
