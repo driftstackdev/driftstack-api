@@ -75,7 +75,17 @@ describe('services/agent-decomposer-claude content parity', () => {
     // throwing the turn away. Ban the old wording so the refusal cannot creep
     // back: it discarded an already-billed Anthropic call and 500'd the
     // customer over a plan that was one step too long.
-    expect(body).toMatch(/if \(out\.length === MAX_PLAN_INTENTS\) break;/);
+    // V-2167 reshaped the break to record WHERE it truncated (the tail is then
+    // scanned for a dropped capture) — the pin follows: still a break at the
+    // cap, never a throw.
+    expect(body).toMatch(
+      /if \(out\.length === MAX_PLAN_INTENTS\) \{\n\s*truncatedAtIndex = index;\n\s*break;/,
+    );
+    // The capture-rescue is load-bearing product behaviour now; pin its guard so
+    // a refactor cannot silently drop it back to cut-the-capture.
+    expect(body).toMatch(
+      /truncatedAtIndex !== null && out\[out\.length - 1\]\?\.kind !== 'capture'/,
+    );
     expect(body).not.toMatch(/Anthropic plan\.intents exceeded/);
     expect(body).not.toMatch(/if \(raw\.length > MAX_PLAN_INTENTS\)/);
     expect(body).toMatch(/Number\.isSafeInteger\(inputTokens\)/);
