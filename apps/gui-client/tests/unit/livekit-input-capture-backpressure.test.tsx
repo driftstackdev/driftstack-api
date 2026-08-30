@@ -49,29 +49,40 @@ function makeRoom(): {
   fireReconnected: () => void;
   state: { on: number; off: number; hasHandler: boolean };
 } {
-  const handlers = new Map<string, (...args: unknown[]) => void>();
+  // V-2168 — a LIST per event, not one slot: the hook now registers the
+  // DataChannel-health listeners TWICE (a room-scoped latch-maintenance effect
+  // plus the capture effect's local mirror), and a single-slot map silently
+  // dropped the first — modelling a Room that real livekit is not.
+  const handlers = new Map<string, Array<(...args: unknown[]) => void>>();
   const state = {
     on: 0,
     off: 0,
     get hasHandler() {
-      return handlers.has('dcBufferStatusChanged');
+      return (handlers.get('dcBufferStatusChanged')?.length ?? 0) > 0;
     },
   };
   const room = {
     on(_e: string, cb: (isLow: boolean, kind: number) => void): void {
       state.on += 1;
-      handlers.set(_e, cb as (...args: unknown[]) => void);
+      const list = handlers.get(_e) ?? [];
+      list.push(cb as (...args: unknown[]) => void);
+      handlers.set(_e, list);
     },
-    off(_e: string, _cb: unknown): void {
+    off(_e: string, cb: unknown): void {
       state.off += 1;
-      handlers.delete(_e);
+      const list = handlers.get(_e) ?? [];
+      const i = list.indexOf(cb as (...args: unknown[]) => void);
+      if (i !== -1) list.splice(i, 1);
     },
   } as unknown as Room;
+  const fire = (e: string, ...args: unknown[]): void => {
+    for (const cb of [...(handlers.get(e) ?? [])]) cb(...args);
+  };
   return {
     room,
     state,
-    fireDC: (isLow, kind) => handlers.get('dcBufferStatusChanged')?.(isLow, kind),
-    fireReconnected: () => handlers.get('reconnected')?.(),
+    fireDC: (isLow, kind) => fire('dcBufferStatusChanged', isLow, kind),
+    fireReconnected: () => fire('reconnected'),
   };
 }
 
@@ -131,7 +142,9 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('registers a DCBufferStatusChanged listener on the room', () => {
     const { room, state } = makeRoom();
     mount(room);
-    expect(state.on).toBe(2);
+    // V-2168 — four registrations: DC + Reconnected from the room-scoped latch
+    // effect, and the same pair from the capture effect's local mirror.
+    expect(state.on).toBe(4);
     expect(state.hasHandler).toBe(true);
   });
 
@@ -269,6 +282,41 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
     expect(reattachCalls).not.toContainEqual([false, room]);
     scroll(video);
     expect(emitted()).toHaveLength(0);
+  });
+
+  it('⛔ V-2168: a reconnect WHILE capture is torn down still clears the latch — input must come back', () => {
+    // The owner's exact failure: "if I press Reconnect it reconnects, but not
+    // listening to any of my inputs anymore." Authority is suspended for the
+    // whole reconnect (connState !== 'connected'), which tears the capture
+    // effect down — and BOTH of the latch's clearing paths used to live inside
+    // it. RoomEvent.Reconnected then fired with nobody listening, the fresh
+    // DataChannel started low (no crossing event would ever come), and every
+    // input shed at the source forever. The room-scoped latch effect must
+    // survive the teardown and catch that Reconnected.
+    const { room, fireDC, fireReconnected } = makeRoom();
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    stubVideo(video);
+    function Wired({ enabled }: { enabled: boolean }): JSX.Element {
+      useInputCapture({
+        room,
+        videoElement: video,
+        enabled,
+        authorityEpoch: AUTHORITY_EPOCH,
+        canSend: (ownerRoom, epoch) => ownerRoom === room && epoch === AUTHORITY_EPOCH,
+      });
+      return <span />;
+    }
+    const mounted = render(<Wired enabled />);
+    fireDC(false, 0); // congested
+    // The reconnect window: capture torn down, THEN the room reconnects.
+    mounted.rerender(<Wired enabled={false} />);
+    fireReconnected();
+    // Capture returns (authority restored). The fresh channel never crosses a
+    // threshold, so if the latch survived the window, this scroll sheds forever.
+    mounted.rerender(<Wired enabled />);
+    scroll(video);
+    expect(emitted().length).toBeGreaterThan(0);
   });
 
   it('preserves same-Room congestion across capture off/on until buffer-low or reconnect', () => {
@@ -444,9 +492,10 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('unregisters the buffer-status listener on unmount', () => {
     const { room, state } = makeRoom();
     const { unmount } = mount(room);
-    expect(state.on).toBe(2);
+    // V-2168 — two effects × (DC + Reconnected); both must unwind fully.
+    expect(state.on).toBe(4);
     unmount();
-    expect(state.off).toBe(2);
+    expect(state.off).toBe(4);
     expect(state.hasHandler).toBe(false);
   });
 });

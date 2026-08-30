@@ -458,6 +458,51 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
   // a single resolved pair.
   const logicalW = opts.logical?.width ?? DEVICE_LOGICAL_WIDTH;
   const logicalH = opts.logical?.height ?? DEVICE_LOGICAL_HEIGHT;
+  // ⛔ V-2168 — the LATCH's life-support runs on a ROOM-scoped effect, never
+  // gated by `enabled` or input authority. The capture effect below is torn
+  // down for the entire duration of a reconnect (authority is suspended while
+  // connState !== 'connected'), which unsubscribed BOTH of the latch's clearing
+  // paths — so when an in-place reconnect replaced the DataChannel,
+  // RoomEvent.Reconnected fired with nobody listening, the WeakSet latch stayed
+  // set, the fresh channel started low (no crossing event would ever come), and
+  // every input source shed at the source forever: "reconnects, but not
+  // listening to any of my inputs anymore". Congestion belongs to the Room; its
+  // bookkeeping must outlive whoever currently owns input.
+  useEffect(() => {
+    if (room === null) return;
+    if (typeof (room as unknown as { on?: unknown }).on !== 'function') return;
+    // Tell the panel the current state at attach (a re-mount must not assume
+    // "not congested" while the store says otherwise).
+    onCongestionChangeRef.current?.(isReliableInputCongested(room), room);
+    const onDC = (isLow: boolean, kind: number): void => {
+      if (kind !== 0) return; // reliable channel only — see the capture effect
+      setReliableInputCongested(room, !isLow);
+      onCongestionChangeRef.current?.(!isLow, room);
+    };
+    const onReconnected = (): void => {
+      // A reconnect replaced the channel with a fresh, empty one. Its buffer
+      // begins low, so no low-threshold crossing is guaranteed; clear the prior
+      // channel's latch or input stays paused forever.
+      setReliableInputCongested(room, false);
+      onCongestionChangeRef.current?.(false, room);
+    };
+    (room as { on: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).on(
+      RoomEvent.DCBufferStatusChanged,
+      onDC,
+    );
+    (room as { on: (e: string, cb: () => void) => void }).on(RoomEvent.Reconnected, onReconnected);
+    return () => {
+      (room as { off: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off(
+        RoomEvent.DCBufferStatusChanged,
+        onDC,
+      );
+      (room as { off: (e: string, cb: () => void) => void }).off(
+        RoomEvent.Reconnected,
+        onReconnected,
+      );
+    };
+  }, [room]);
+
   useEffect(() => {
     if (!enabled || room === null || video === null || !ownsAuthority(room)) return;
     // The captured-frame logical frame the injector addresses (per-archetype). Used
@@ -486,15 +531,15 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // legitimately reattaches when first-frame logical dimensions settle; inherit the
     // same Room's latch so that re-key cannot accidentally resume input mid-stall.
     let reliableCongested = isReliableInputCongested(room);
-    onCongestionChangeRef.current?.(reliableCongested, room);
+    // V-2168 — the STORE and the panel callback are maintained by the
+    // room-scoped effect above, which survives this effect's teardown. Here we
+    // only mirror into the hot-path local and run the gesture-interruption side
+    // effects, so a torn-down capture can no longer strand the latch. No
+    // authority gate on the mirror: state bookkeeping is not an input action.
     const setCongested = (congested: boolean): void => {
-      if (!ownsAuthority(room)) return;
       reliableCongested = congested;
-      setReliableInputCongested(room, congested);
-      onCongestionChangeRef.current?.(congested, room);
     };
     const onDCBufferStatus = (isLow: boolean, kind: number): void => {
-      if (!ownsAuthority(room)) return;
       // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
       // lossy channel already self-drops under congestion, so we gate only on
       // reliable; if livekit ever renumbered the enum the flag simply never trips and
@@ -517,7 +562,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Its buffer begins low, so no low-threshold crossing is guaranteed; explicitly
     // clear the prior channel's latch or input could remain paused forever.
     const onRoomReconnected = (): void => {
-      if (ownsAuthority(room)) setCongested(false);
+      setCongested(false);
     };
 
     const send = (event: InputEvent, reliable: boolean): void => {
