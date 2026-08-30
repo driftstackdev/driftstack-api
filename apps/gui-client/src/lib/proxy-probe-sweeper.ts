@@ -34,6 +34,18 @@ export const SWEEP_GAP_MS = 2_000;
 export const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
 /**
+ * V-2168 — how long a FAILING verdict stands before the sweeper retries it.
+ * A failure is negative caching and must expire faster than the 6h positive
+ * TTL: the owner's proxies are mobile-carrier exits where one transient
+ * handshake failure (or a probe that "could not be scheduled") wrote a durable
+ * red "Not reachable" badge that nothing would revisit for six hours — it
+ * survived reload (the cache is disk-persisted and re-read at mount) and only
+ * a manual Retest cleared it. One sweep interval is the natural floor: the
+ * next pass after the failure re-checks it.
+ */
+export const SWEEP_FAILURE_RETRY_MS = 15 * 60 * 1000;
+
+/**
  * Which proxies this sweep should re-probe, oldest verdict FIRST so a capped
  * sweep spends its budget on the least trustworthy entries.
  *
@@ -71,6 +83,11 @@ export function planSweep(
       const p = byId.get(id);
       if (p === undefined) return false; // deleted proxy, lingering entry
       if (p.scheme !== undefined && p.scheme !== 'socks5') return false; // not SOCKS5-probeable
+      // A failing verdict is retried after SWEEP_FAILURE_RETRY_MS instead of
+      // waiting out the full positive TTL — see the constant above. Display
+      // freshness is untouched: the badge keeps showing the failure until a
+      // retry actually overturns it.
+      if (c.result.reachable === false && now - c.at >= SWEEP_FAILURE_RETRY_MS) return true;
       return isProbeStale(c.at, now);
     })
     .sort((a, b) => a[1].at - b[1].at) // oldest verdict first

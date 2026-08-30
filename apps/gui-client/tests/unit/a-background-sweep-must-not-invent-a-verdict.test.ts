@@ -9,6 +9,7 @@ import {
   runSweep,
   SWEEP_MAX_PER_RUN,
   __resetSweepLatchForTests,
+  SWEEP_FAILURE_RETRY_MS,
 } from '../../src/lib/proxy-probe-sweeper';
 
 /**
@@ -46,6 +47,10 @@ function proxy(id: string, over: Partial<ProxyConfig> = {}): ProxyConfig {
   };
 }
 const entry = (at: number): ProbeCacheMap[string] => ({ result: OK, at });
+const failedEntry = (at: number): ProbeCacheMap[string] => ({
+  result: { ...OK, reachable: false, auth_ok: false, can_route: false, message: 'no answer' },
+  at,
+});
 
 describe('probeFreshness', () => {
   it('calls a probe younger than the TTL fresh', () => {
@@ -81,6 +86,25 @@ describe('planSweep', () => {
   it('picks a stale socks5 proxy', () => {
     const plan = planSweep({ a: entry(stale) }, [proxy('a')], NOW);
     expect(plan.map((p) => p.id)).toEqual(['a']);
+  });
+
+  it('⛔ V-2168: retries a FAILING verdict after one sweep interval instead of the 6h TTL', () => {
+    // Negative caching must expire faster than positive: one transient
+    // handshake failure wrote a durable "Not reachable" badge nothing would
+    // revisit for six hours. Fresh-by-TTL but past the failure-retry window →
+    // swept.
+    const cache = { a: failedEntry(NOW - SWEEP_FAILURE_RETRY_MS) };
+    expect(planSweep(cache, [proxy('a')], NOW).map((p) => p.id)).toEqual(['a']);
+  });
+
+  it('V-2168: a RECENT failure is not hammered — the retry window still gates it', () => {
+    const cache = { a: failedEntry(NOW - SWEEP_FAILURE_RETRY_MS + 1_000) };
+    expect(planSweep(cache, [proxy('a')], NOW)).toEqual([]);
+  });
+
+  it('V-2168: a healthy verdict of the same age stays un-swept — only failures retry early', () => {
+    const cache = { a: entry(NOW - SWEEP_FAILURE_RETRY_MS) };
+    expect(planSweep(cache, [proxy('a')], NOW)).toEqual([]);
   });
 
   it('leaves a fresh verdict alone', () => {
