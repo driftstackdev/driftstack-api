@@ -221,6 +221,7 @@ function makeRepo(
       Promise.resolve(new Set(ids.filter((id) => rows.some((r) => r.id === id)))),
     touch: () => Promise.resolve(),
     recordSave: () => Promise.resolve(),
+    recordTrimResult: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };
   return { repo, state: { rows } };

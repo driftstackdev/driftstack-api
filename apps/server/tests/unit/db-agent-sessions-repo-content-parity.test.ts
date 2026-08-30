@@ -53,8 +53,10 @@ describe('db/agent-sessions-repo content parity', () => {
   });
 
   it('binds every production write/read to account+session, keeps ordinary reads v2-only, and CAS-migrates legacy rows before serving', () => {
+    // V-2168 — create() now seeds continue_from history (args.seedTranscript),
+    // re-sealed under the NEW id; both create paths seal the seed (?? []).
     expect(body).toMatch(
-      /encryptAgentSessionTranscript\(\[\], key, \{\s*accountId: args\.accountId,\s*sessionId: id,\s*\}\)/,
+      /encryptAgentSessionTranscript\(args\.seedTranscript \?\? \[\], key, \{\s*accountId: args\.accountId,\s*sessionId: id,\s*\}\)/,
     );
     expect(body).toMatch(/readAgentSessionTranscript\(existing\.transcript, key, context\)/);
     expect(body).toMatch(/encryptAgentSessionTranscript\(nextTranscript, key, context\)/);

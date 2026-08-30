@@ -207,6 +207,7 @@ function makeRepos(
       Promise.resolve(new Set(ids.filter((id) => profiles.some((p) => p.id === id)))),
     touch: () => Promise.resolve(),
     recordSave: () => Promise.resolve(),
+    recordTrimResult: () => Promise.resolve(),
     getWrappedDek: () => Promise.resolve(null),
   };
   return { snapshotsRepo, profilesRepo, state: { profiles, snapshots } };

@@ -108,7 +108,7 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── ProfilesRepo 8-method interface ─────────────────────────
 
-  it('CRITICAL ProfilesRepo has 18 methods, and this arm pins 8 of them — insert + countByAccount + findById + findByAccountAndName + list + update + delete + touch. The ten it does not pin arrived with the recycle bin, per-profile storage accounting and the sealed-store key path. This arm covers CRUD + name-collision lookup + last-used-at update.', () => {
+  it('CRITICAL ProfilesRepo has 19 methods, and this arm pins 8 of them — insert + countByAccount + findById + findByAccountAndName + list + update + delete + touch. The eleven it does not pin arrived with the recycle bin, per-profile storage accounting, the sealed-store key path, and the V-2168 trim-result write. This arm covers CRUD + name-collision lookup + last-used-at update.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
     expect(p).toMatch(/export interface ProfilesRepo \{/);
     expect(p).toMatch(/insert\(input: NewProfileInput\): Promise<ProfileRecord>;/);
