@@ -11674,3 +11674,45 @@ parity 9/9, decomposer 64/64, runtime 81/81, plus the two GUI model files.
 Anthropic `model` field, so an id a customer's BYOK key cannot access fails at turn time; Opus 5 and
 Sonnet 5 are the two the owner named. The DB CHECK now permits six ids — adding a seventh requires
 another migration, not just an enum edit.
+
+## V-2153 — a Bing tab silently became a second "New Tab" (2026-08-30)
+
+Owner: _"when opening new tab, sometimes the previous tab title is false, and changes to the same tab
+name, for example it had bing and new tab, and both were called new tab on opening."_
+
+**Mechanism, read end to end.** The strip labels a tab from its URL, not its title
+(`SimulatorWindow.tsx` `label()`): a blank-tab URL renders "New Tab" whatever the stored title says.
+Page-state frames from the REST poll carry no `tabId` in production, and `resolvePageStateTabTarget`
+routes a tabId-less frame to whatever tab is active _right now_. The protection against a lagging
+frame is a grace window in which a frame whose URL is already held by a DIFFERENT tab is discarded as
+that tab's stale poll. Two holes let the frame through:
+
+1. **The grace was never armed on the two revert paths.** All four forward transitions
+   (tabListRestore, new tab, close tab, activate tab) armed `lastSwitchAtRef`; the reject-revert
+   (`activateTabResult{ok:false}`) and the congestion-revert did not — even though the code's own
+   comment at the reject site says the box is publishing the rejected tab at that exact moment. A
+   revert IS a switch, and it left the reverted-to tab unprotected precisely when a frame for the
+   other tab was in flight. Both now arm it.
+2. **The window was smaller than the thing it guards.** `PAGE_STATE_GRACE_MS` was 2500ms while a
+   switch can take `ACTIVATE_ACK_TIMEOUT_MS × ACTIVATE_MAX_ATTEMPTS` = 3600ms and the affordance waits
+   `SWITCH_AFFORDANCE_TIMEOUT_MS` = 6000ms, because a cold tab is a real page load on the device. It
+   is now derived from that timeout (`SWITCH_AFFORDANCE_TIMEOUT_MS + 500`) instead of being an
+   independent literal that could drift out from under it again.
+
+The damage was not cosmetic: the frame writes `url` AND `title`, so tab 1's real title was destroyed,
+never re-derived. It was also self-fulfilling — clicking the renamed tab afterwards asks the box to
+navigate it to the new-tab page, because the activate path maps a blank-looking URL to `NEW_TAB_URL`.
+
+**Why "sometimes":** it needs the grace to have lapsed, which is why it tracks slow/cold switches.
+
+**Proofs.** 57/57 in simulator-window-tabs with a new arm that reproduces the owner's exact sequence
+(real page → "+" → back to tab 1 → 5s → tab-less frame carrying the OTHER tab's url) and asserts tab
+1 keeps both its url and its title. Mutation, snapshot-restored and cmp-verified: the grace put back
+to the literal 2500 → exactly that arm red.
+
+**Boundary:** this closes the routing hole for tab-less frames during and after a switch. The
+investigation also surfaced three adjacent weaknesses left UNFIXED and unmeasured here — `onNewTab`
+does not publish `tabsRef.current` synchronously the way close/restore do, `emitTabList` is called
+from inside a `setTabs` updater (an impure updater React may defer or double-invoke), and
+`updateActiveTab` reads `activeTabId` state rather than the synchronous ref every other writer uses.
+None is needed to explain this report; each is a real race worth its own entry.

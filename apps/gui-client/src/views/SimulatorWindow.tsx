@@ -343,7 +343,14 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // the founder's "2nd switch stays on the same url" clobber. Both the ~2s poll AND the
 // one-shot reconcile gate their url write on this (the title still applies; titles
 // self-heal). A tabId-bearing frame routes precisely and is never suppressed.
-const PAGE_STATE_GRACE_MS = 2500;
+// ⛔ Must outlast the switch it protects, or it protects nothing. It was 2500ms
+// while the operations in flight during a switch run longer: ACTIVATE_ACK_TIMEOUT_MS
+// × ACTIVATE_MAX_ATTEMPTS = 3600ms, and the affordance waits
+// SWITCH_AFFORDANCE_TIMEOUT_MS = 6000ms because a cold tab is a real page load on
+// the device. Once the window lapsed, the next tabId-less poll was routed to
+// whichever tab was active and wrote the OTHER tab's url over it — which is how a
+// Bing tab silently became a second "New Tab" (owner 2026-08-30).
+const PAGE_STATE_GRACE_MS = SWITCH_AFFORDANCE_TIMEOUT_MS + 500;
 // Client-side fallback for a load whose terminal page_state is dropped. A3 emits
 // its own timeout-stall advisory at ~40s; keep the browser bar truthful until just
 // after that window, then replace it with the same actionable Retry treatment.
@@ -4922,6 +4929,11 @@ export function SimulatorWindow(): JSX.Element {
               tabsRef.current.find((tab) => tab.id === pending.tabId) ??
               tabsRef.current[0];
             if (fallbackTab === undefined) return;
+            // A revert IS a switch: the box is publishing the tab we just left, so
+            // the same lagging-frame window applies. Every forward path arms this;
+            // the two revert paths did not, leaving the reverted-to tab unprotected
+            // at exactly the moment a frame for the OTHER tab lands.
+            lastSwitchAtRef.current = Date.now();
             setActiveTabIdSynchronized(fallbackTab.id);
             // audit wb1w3015f #6 — reset the (window-global) page chrome on the revert
             // exactly like the forward-switch paths do, so the REJECTED tab's overlay /
@@ -7241,6 +7253,9 @@ export function SimulatorWindow(): JSX.Element {
           if (activeTabIdRef.current !== ctx.tabId) return;
           discardActivationOwner(owner);
           resolveSwitchRef.current(ctx.tabId);
+          // Same reasoning as the reject-revert above: a backwards switch needs
+          // the lagging-frame grace exactly as much as a forward one.
+          lastSwitchAtRef.current = Date.now();
           setActiveTabIdSynchronized(ctx.prevTabId);
           resetPageChromeForSwitch();
           emitTabListRef.current(tabsRef.current, ctx.prevTabId, ctx.authorityEpoch);

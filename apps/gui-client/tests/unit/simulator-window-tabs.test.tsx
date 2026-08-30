@@ -1135,6 +1135,45 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(addressInput.value).toBe('two.example');
   });
 
+  it('(V-2153) ⛔ a lagging tab-less frame must not rename the tab you switched BACK to', () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      expect(dataHandler).not.toBeNull();
+      const NEWTAB = 'https://driftstack.dev/newtab/';
+
+      // Tab 1 is a real page; "+" opens tab 2, which sits on the new-tab url.
+      pushPageState({ state: 'loaded', url: 'https://bing.com/', title: 'Bing' });
+      const tab1Id = (lastTabListCall().tabs[0] as { id: string }).id;
+      fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
+      pushPageState({ state: 'loaded', url: NEWTAB, title: 'New Tab · Driftstack' });
+      const tab2Id = (lastTabListCall().tabs[1] as { id: string }).id;
+      expect(tabsById().get(tab1Id)?.title).toBe('Bing');
+
+      // Back to tab 1, then let more time pass than the OLD 2500ms grace — a cold
+      // switch on the device routinely takes longer than that.
+      act(() => {
+        fireEvent.click(tabEls(container)[0] as Element);
+      });
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+
+      // The box's tab-less poll now reports the tab the user LEFT. Routed to the
+      // active tab it writes the new-tab url over Bing; because the strip labels
+      // from the URL, BOTH tabs then read "New Tab" and tab 1's real title is
+      // destroyed rather than hidden (owner 2026-08-30).
+      pushPageState({ state: 'loaded', url: NEWTAB, title: 'New Tab · Driftstack' });
+
+      const byId = tabsById();
+      expect(byId.get(tab1Id)?.url, 'tab 1 keeps its own url').toBe('https://bing.com/');
+      expect(byId.get(tab1Id)?.title, 'tab 1 keeps its own title').toBe('Bing');
+      expect(byId.get(tab2Id)?.url).toBe(NEWTAB);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('(e) a present UNRECOGNISED tabId is metadata/chrome-inert while absent and current tags retain normal routing', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
