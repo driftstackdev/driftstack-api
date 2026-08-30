@@ -143,18 +143,27 @@ describe('SimulatorWindow — floating iPhone', () => {
     const shown = container
       .querySelector('[data-component="simulator-statusbar"]')
       ?.querySelector('span')?.textContent;
-    const expected = new Intl.DateTimeFormat('en-US', {
+    // ⛔ Build the expectation from parts, NOT from `.format()` — the old test
+    // computed `expected` with the very `Intl…format()` call the code used, so
+    // it reproduced the "9:26 PM" bug in BOTH sides and passed while the status
+    // bar showed AM/PM (V-2168). iOS shows h:mm, 12-hour, no leading zero, and
+    // crucially NO day period.
+    const tokyoParts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'Asia/Tokyo',
       hour: 'numeric',
       minute: '2-digit',
       hourCycle: 'h12',
-    }).format(new Date());
+    }).formatToParts(new Date());
+    const tokyoHourStr = tokyoParts.find((p) => p.type === 'hour')?.value ?? '';
+    const tokyoMinStr = tokyoParts.find((p) => p.type === 'minute')?.value ?? '';
+    const expected = `${tokyoHourStr}:${tokyoMinStr}`;
     expect(shown).toBe(expected);
+    // The whole point: no AM/PM, ever — the defect this test now actually catches.
+    expect(shown).not.toMatch(/[AP]M/i);
     // Guard against a vacuous pass: the assertion only means something when the
     // host zone actually differs from Tokyo right now.
     const hostHour = new Date().getHours() % 12 || 12;
-    const tokyoHour = Number(expected.split(':')[0]);
-    if (hostHour !== tokyoHour) {
+    if (hostHour !== Number(tokyoHourStr)) {
       expect(shown).not.toBe(
         `${String(hostHour)}:${String(new Date().getMinutes()).padStart(2, '0')}`,
       );

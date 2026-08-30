@@ -205,9 +205,9 @@ export interface CreateAgentSessionRequest {
   mode?: 'manual' | 'ai' | 'pair';
   /**
    * 6.c — the Claude model the AI agent runs for this session.
-   * Defaults server-side to 'claude-opus-4-8' when omitted. Picking a
-   * cheaper model (Sonnet 4.6 / Haiku 4.5) lowers cost-to-serve.
-   * 'claude-opus-4-7' stays accepted for back-compat.
+   * Defaults server-side to 'claude-opus-5' when omitted (the current
+   * generation). Picking a cheaper model (Sonnet 5 / Haiku 4.5) lowers
+   * cost-to-serve. Every 4.x id stays accepted for back-compat.
    */
   model?:
     | 'claude-opus-5'

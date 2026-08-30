@@ -820,13 +820,19 @@ function formatStatusTime(d: Date, timeZone?: string): string {
   // host time: the old behaviour, and better than a blank strip.
   if (timeZone !== undefined && timeZone !== '') {
     try {
-      // hourCycle h12 with no dayPeriod gives iOS's "h:mm" (no AM/PM).
-      return new Intl.DateTimeFormat('en-US', {
+      // ⛔ hourCycle 'h12' still EMITS the day period — `.format()` returns
+      // "9:26 PM", not iOS's "9:26". There is no Intl option to drop it, so build
+      // the string from parts and keep only hour + minute (the iOS status bar
+      // shows neither AM/PM nor a leading zero).
+      const parts = new Intl.DateTimeFormat('en-US', {
         timeZone,
         hour: 'numeric',
         minute: '2-digit',
         hourCycle: 'h12',
-      }).format(d);
+      }).formatToParts(d);
+      const hour = parts.find((p) => p.type === 'hour')?.value;
+      const minute = parts.find((p) => p.type === 'minute')?.value;
+      if (hour !== undefined && minute !== undefined) return `${hour}:${minute}`;
     } catch {
       // A stale or unmappable IANA id must not blank the bar — fall through.
     }

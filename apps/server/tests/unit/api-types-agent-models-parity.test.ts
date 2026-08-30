@@ -5,10 +5,16 @@
 // usage writer + cost monitor, so a drift silently mis-charges cost-to-serve.
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { AgentModelSchema, CLAUDE_MODELS, DEFAULT_AGENT_MODEL } from '@driftstack/api-types';
 
+const HERE = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
+
 describe('agent-models registry parity', () => {
-  it('AgentModelSchema = the 4 Claude 4.x picker models (Opus 4.8 added; 4.7 kept for back-compat)', () => {
+  it('AgentModelSchema = the 6 picker models: Claude 5 (Opus/Sonnet) first, then 4.x kept for back-compat', () => {
     expect(AgentModelSchema.options).toEqual([
       'claude-opus-5',
       'claude-sonnet-5',
@@ -19,7 +25,7 @@ describe('agent-models registry parity', () => {
     ]);
   });
 
-  it('DEFAULT_AGENT_MODEL is Opus 4.8 (latest/highest-capability default)', () => {
+  it('DEFAULT_AGENT_MODEL is Opus 5 (current-generation, highest-capability default)', () => {
     expect(DEFAULT_AGENT_MODEL).toBe('claude-opus-5');
   });
 
@@ -47,5 +53,28 @@ describe('agent-models registry parity', () => {
     expect(CLAUDE_MODELS['claude-opus-4-7'].label).toBe('Claude Opus 4.7');
     expect(CLAUDE_MODELS['claude-sonnet-4-6'].label).toBe('Claude Sonnet 4.6');
     expect(CLAUDE_MODELS['claude-haiku-4-5'].label).toBe('Claude Haiku 4.5');
+  });
+
+  it('⛔ V-2168: the GUI picker lists EXACTLY the registry models — owner "no Opus 5" was GUI/registry drift', () => {
+    // The GUI keeps a hand-written MODELS array + a ChatModel union (it cannot
+    // import the api-types RUNTIME registry — it depends on the SDK, which
+    // exports the ids as a TYPE only). So a model added to the registry does not
+    // reach the picker until someone edits the GUI too; the owner reported
+    // exactly that gap. Pin both GUI copies to the registry as source of truth.
+    const view = readFileSync(
+      resolve(REPO_ROOT, 'apps/gui-client/src/views/AgentChatView.tsx'),
+      'utf8',
+    );
+    const block = /const MODELS:[^[]*\[([\s\S]*?)\];/.exec(view)?.[1] ?? '';
+    const pickerIds = [...block.matchAll(/id:\s*'([a-z0-9-]+)'/g)].map((m) => m[1]);
+    expect(pickerIds).toEqual([...AgentModelSchema.options]);
+
+    const chat = readFileSync(
+      resolve(REPO_ROOT, 'apps/gui-client/src/lib/use-agent-chat.ts'),
+      'utf8',
+    );
+    const union = /export type ChatModel =([\s\S]*?);/.exec(chat)?.[1] ?? '';
+    const unionIds = [...union.matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]);
+    expect(unionIds.sort()).toEqual([...AgentModelSchema.options].sort());
   });
 });
