@@ -488,7 +488,11 @@ export function AgentChatView({
     setActiveChatId(c.id);
     setProfileId(c.profileId);
     setModel(c.model);
-    chat.restore(c.turns);
+    // Hand over the session this chat last ran on. If it is still LIVE the adopt
+    // below takes it and clears this; if it is CLOSED — the ordinary case, since
+    // leaving the view closes it — the next send continues from it and the agent
+    // keeps the conversation (V-2161).
+    chat.restore(c.turns, c.sessionId ?? null);
     // Reopening a chat whose session is still running should REJOIN it, not
     // abandon a live session and start a second one against the same profile.
     // restore() has just bumped the cancel generation, so this call is bound to

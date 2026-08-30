@@ -11997,3 +11997,37 @@ not keep its memory until `use-agent-chat` passes the stored `sessionId` of the 
 That is the next commit, not this one. Also unchanged: the session is still closed on unmount (the
 resource protection is deliberate), and a continued chat is a NEW session — its budget, its node, and
 its cost accounting start fresh.
+
+## V-2162 — the GUI half: a reopened chat now asks to continue its closed session (2026-08-30)
+
+V-2161 built the server side; nothing sent the field, so the owner's chat still had no memory. This
+wires it. `restore(turns, continueFromSessionId)` remembers the session the reopened chat last ran on;
+the next create carries it as `continue_from_agent_session_id`, and the server carries the transcript
+across. `AgentChatView` passes the stored `sessionId` it already had.
+
+Three cases where continuing would be WRONG, each handled and two of them pinned:
+
+- **adopt() wins.** If the old session is still active the hook adopts it and clears the pending
+  source — forking a session we already hold would create a second one for the same chat.
+- **New chat inherits nothing.** `reset()` clears the source, so New chat cannot resurrect the
+  transcript of the chat being left.
+- **No prior session** sends no field at all.
+
+**⛔ A mutation SURVIVED and the honest fix was to change the TEST, not add code.** I wrote an arm
+claiming to prove the one-shot clear after a successful create; deleting that clear left it green.
+The arm was vacuous: a second send never reaches `create()` because the session is reused. Reading
+the hook, the only two paths that null `session` — `reset()` and `restore()` — both set the ref
+themselves, so the clear cannot be observed today. Rather than inflate a proof or delete a line that
+guards a future third path, the arm now pins what is actually true and load-bearing (ONE create per
+chat, so the transcript cannot be seeded twice) and the source comment states plainly that the clear
+is defensive and unprovable today. A comment claiming more than the tests show is the thing this repo
+keeps getting burned by.
+
+**Proofs.** 5/5 in the new file, 28/28 approve, 6/6 live-session adoption. Mutations, snapshot-restored
+and cmp-verified: the field never sent → 2 arms red; `reset()`'s clear removed → the New-chat arm red.
+The third (one-shot clear) survives by construction, as described above.
+
+**Boundary:** the session is still closed on unmount — that resource protection is deliberate and
+unchanged. A continued chat is a NEW session: fresh budget, fresh node, fresh cost accounting; only
+the transcript carries. And the carry is bounded by `AGENT_TRANSCRIPT_MAX_ENTRIES`, so a very long
+chat continues from its most recent entries, not all of them.

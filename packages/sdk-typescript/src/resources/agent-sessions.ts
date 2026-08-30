@@ -188,6 +188,13 @@ export interface AgentSessionsListPage {
 
 export interface CreateAgentSessionRequest {
   driftstack_session_id?: string;
+  /**
+   * Continue a FINISHED chat: the named session's transcript is carried into
+   * the new session, so the agent still has the conversation. The source must
+   * be owned (404 otherwise) and closed (409 while it is still active).
+   * Omit for an ordinary session with no history.
+   */
+  continue_from_agent_session_id?: string;
   token_budget?: number;
   /**
    * Arc 2 sub-slice 8.5 (v2-#8 AI chat + manual). Defaults to 'ai'

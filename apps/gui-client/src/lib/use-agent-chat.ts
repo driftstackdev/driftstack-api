@@ -157,7 +157,14 @@ export interface UseAgentChatResult {
   /** Load a saved transcript into the view (reopening a past chat). The live
    *  server session is dropped — continuing the chat starts a fresh session,
    *  while the restored transcript stays visible as the chat's memory. */
-  restore: (turns: ReadonlyArray<ChatTurn>) => void;
+  /**
+   * Reopen a stored chat. `continueFromSessionId` is the server session that
+   * chat last ran on: the next send carries it as
+   * `continue_from_agent_session_id`, so the fresh session INHERITS that
+   * transcript instead of starting blank. Omit/null when there is no prior
+   * server session to inherit from.
+   */
+  restore: (turns: ReadonlyArray<ChatTurn>, continueFromSessionId?: string | null) => void;
   /** Try to reattach a reopened chat to the server session that produced it.
    *  No-ops unless that session is still `active`. Safe to call unconditionally
    *  — it drops its own answer if the customer moves on while it is in flight. */
@@ -214,6 +221,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // leave abandons the old agent session (and any dispatched Mac) to the idle
   // reaper — a cost + fleet-slot leak that can hit the per-account active cap.
   const sessionIdRef = useRef<string | null>(null);
+  /** The CLOSED session a reopened chat is continuing, consumed by the next
+   *  create and then cleared — continuing is a one-shot per reopen, not a
+   *  property of the chat. Null for a new chat or one already adopted live. */
+  const continueFromRef = useRef<string | null>(null);
   sessionIdRef.current = session?.id ?? null;
   // The SDK client, mirrored into a ref so the unmount cleanup closes via the
   // client that was current at unmount without re-running the effect on every
@@ -359,6 +370,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     void Promise.resolve(c.agentSessions.get(sid))
       .then((s) => {
         if (adoptionOutcome(s.status, cancelGenRef.current !== gen) !== 'adopt') return;
+        // The chat is still LIVE, so there is nothing to continue from — clear the
+        // pending source or the next send would fork a session we already hold.
+        continueFromRef.current = null;
         setSession(s);
         // The adopted session's own transcript holds these turns, so they are
         // no longer history the agent cannot see.
@@ -457,6 +471,13 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             // before. Without this an AI session on a proxied profile silently
             // exited via the operator/datacenter IP instead of the configured exit.
             ...(opts.proxyId !== undefined ? { proxy_id: opts.proxyId } : {}),
+            // V-2161 — carry the reopened chat's transcript into this new session so
+            // the agent still has the conversation. Server-side the source must be
+            // owned and closed; an unknown/foreign id is a 404 and a still-live one a
+            // 409, both handled by the catch below like any other create failure.
+            ...(continueFromRef.current !== null
+              ? { continue_from_agent_session_id: continueFromRef.current }
+              : {}),
           });
           // Stop/reset/restore (a chat switch or New chat) may have happened while
           // create() was in flight. Without this guard, setSession(created) would
@@ -474,7 +495,18 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             closeServerSession(created.id);
             return false;
           }
+          // Defensive, and honestly labelled as such: both paths that can null `session`
+          // — reset() and restore() — set this ref themselves, so today no second create
+          // can reach a stale source and a mutation of this line survives every test. It
+          // stays because a THIRD path that clears the session without touching the ref
+          // would otherwise seed the same transcript twice; what stops that today is
+          // session reuse (one create per chat), which IS pinned.
+          const continuedFrom = continueFromRef.current;
+          continueFromRef.current = null;
           setSession(created);
+          // The carried turns are the new session's own transcript now, so the honest
+          // "the agent can't see these" divider no longer applies to them.
+          if (continuedFrom !== null) setRestoredHistoryCount(0);
           // Profiles-hub parity — when this AI session attaches to a saved
           // profile, write the SAME local binding the manual launch does
           // (ProfilesView.handleLaunch). Without it the Profiles hub reads the
@@ -630,6 +662,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   }, [pendingConfirmation]);
 
   const reset = useCallback((): void => {
+    // A new chat inherits nothing: drop any pending continue-source so New chat
+    // cannot resurrect the transcript of the chat being left.
+    continueFromRef.current = null;
     // Bump the cancel-generation so any in-flight post() for the PREVIOUS chat
     // discards its result on resolve instead of writing the response onto this
     // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
@@ -653,7 +688,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   }, [closeServerSession, clearProfileBinding]);
 
   const restore = useCallback(
-    (restoredTurns: ReadonlyArray<ChatTurn>): void => {
+    (restoredTurns: ReadonlyArray<ChatTurn>, continueFromSessionId?: string | null): void => {
       // Invalidate any in-flight post() from the chat we're switching AWAY from, so
       // its late response can't attach to (and persist onto) the restored chat.
       cancelGenRef.current += 1;
@@ -664,10 +699,19 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setSending(false);
       setTurns([...restoredTurns]);
       // Drop the live session: continuing a reopened chat starts a FRESH server
-      // session (the prior one is gone / now closed), and the run-loop rebuilds
-      // history from the server transcript — so the restored turns are local
-      // memory only and the agent won't see them. The view surfaces an honest
-      // "continuing starts a new session" divider so this isn't invisible.
+      // session (the prior one is gone / now closed) and the run-loop rebuilds
+      // history from the SERVER transcript.
+      //
+      // ⭐ V-2161 — that fresh session no longer starts blank. Remember the session
+      // this chat last ran on; the next send passes it as
+      // `continue_from_agent_session_id` and the server carries its transcript
+      // across. That is what makes a reopened chat still have its memory, instead
+      // of the agent answering "I don't have a previous task on record in this
+      // session" (owner 2026-08-30). A chat with no prior session id is unchanged.
+      continueFromRef.current =
+        typeof continueFromSessionId === 'string' && continueFromSessionId !== ''
+          ? continueFromSessionId
+          : null;
       setSession(null);
       setError(null);
       setResolvedTurnId(null);
