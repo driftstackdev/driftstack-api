@@ -16,6 +16,7 @@ import {
   ProxyConnectivityProbe,
   ProbeDialError,
   parseExitIdentityFromResponseTail,
+  exitIdentityMissDetail,
   type ProbeProxyDescriptor,
 } from '../../src/services/proxy-connectivity-probe.js';
 
@@ -442,6 +443,95 @@ describe('ProxyConnectivityProbe — SOCKS5', () => {
     const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
     const res = await probe.probe(SOCKS5_PROXY);
     expect(res.ok).toBe(true);
+  });
+});
+
+describe('the exit identity survives a body that arrives late (V-2154)', () => {
+  const IDENTITY_BODY = JSON.stringify({
+    ip: '203.0.113.7',
+    country: 'NL',
+    region: 'North Holland',
+    city: 'Amsterdam',
+    timezone: 'Europe/Amsterdam',
+  });
+
+  /** A SOCKS5 proxy whose tunneled origin answers the GET in TWO writes: the head
+   *  first, the body `bodyDelayMs` later. That is what a TLS-fronted origin through
+   *  a remote proxy actually does — and it is precisely what the old peek-only
+   *  capture could not see. */
+  function splitBodyProxy(bodyDelayMs: number): Promise<{
+    dial: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
+  }> {
+    return fakeProxy((sock) => {
+      let step = 0;
+      sock.on('data', (chunk) => {
+        if (step === 0) {
+          expect(chunk[0]).toBe(0x05);
+          sock.write(Buffer.from([0x05, 0x00]));
+          step = 1;
+        } else if (step === 1) {
+          sock.write(Buffer.from([0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
+          step = 2;
+        } else {
+          sock.write(
+            `HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: ${String(
+              Buffer.byteLength(IDENTITY_BODY),
+            )}\r\n\r\n`,
+          );
+          setTimeout(() => sock.write(IDENTITY_BODY), bodyDelayMs);
+        }
+      });
+    });
+  }
+
+  it('⛔ captures the identity when the body lands AFTER the status line, not before', async () => {
+    // The old capture peeked whatever was buffered the instant the status line
+    // parsed, so this returned no identity — and because the identity is baked into
+    // the box fork's env once at launch, every new tab in the session then read
+    // "No exit IP" with an empty panel for the session's whole life.
+    const { dial } = await splitBodyProxy(120);
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(true);
+    expect(res.exitIdentity).toEqual({
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+    });
+  });
+
+  it('a body that never arrives still PASSES the probe — the verdict is already decided', async () => {
+    // The invariant the bounded wait must not break: waiting for a panel field can
+    // never turn a working proxy into a failed launch.
+    const { dial } = await splitBodyProxy(60_000);
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(true);
+    expect(res.exitIdentity).toBeUndefined();
+    // …and it says WHY, so the miss is diagnosable server-side instead of only
+    // showing up as an empty panel on someone's phone.
+    expect(res.detail).toMatch(/exit identity unavailable/);
+  }, 15_000);
+});
+
+describe('exitIdentityMissDetail names the reason a 200 carried no identity', () => {
+  it('separates a chunked response from a slow one — outage vs race', () => {
+    const chunked = Buffer.from(
+      'Content-Type: application/json\r\nTransfer-Encoding: chunked\r\n\r\n1a\r\n{}',
+    );
+    // Chunked fails the parse EVERY time, so it is a permanent outage, not a race.
+    expect(exitIdentityMissDetail(chunked)).toMatch(/chunked/);
+
+    const noLength = Buffer.from('Content-Type: application/json\r\n\r\n{}');
+    expect(exitIdentityMissDetail(noLength)).toMatch(/no content-length/);
+
+    const headless = Buffer.from('Content-Type: application/js');
+    expect(exitIdentityMissDetail(headless)).toMatch(/headers did not arrive/);
+
+    const truncated = Buffer.from('Content-Length: 99\r\n\r\n{"ip":"1.2');
+    expect(exitIdentityMissDetail(truncated)).toMatch(/incomplete or unparseable/);
   });
 });
 

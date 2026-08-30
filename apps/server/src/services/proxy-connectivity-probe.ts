@@ -120,6 +120,50 @@ export function parseExitIdentityFromResponseTail(tail: Buffer): ProbeExitIdenti
   }
 }
 
+/** Is the buffered tail a COMPLETE HTTP response?
+ *
+ * ⛔ This is the stopping condition for the capture wait, and it is deliberately NOT
+ * "did the identity parse". A complete body that simply carries no `ip` (our echo
+ * answers `{}` when Cloudflare's visitor-location headers are off) is a finished
+ * answer, not a slow one — waiting on it would burn the whole cap on the launch path
+ * for a response that already arrived. Completeness is what the wait is for;
+ * usefulness is the parser's business. */
+export function isResponseTailComplete(tail: Buffer): boolean {
+  const sep = tail.indexOf('\r\n\r\n');
+  if (sep === -1) return false;
+  const headerBlock = tail.subarray(0, sep).toString('utf8');
+  const clMatch = /content-length:\s*(\d+)/i.exec(headerBlock);
+  // No content-length (e.g. chunked) — nothing here can say when the body ends, so
+  // do not spin: report complete and let the parser refuse it, with
+  // `exitIdentityMissDetail` naming chunked as the cause.
+  if (!clMatch) return true;
+  const len = Number(clMatch[1]);
+  if (!Number.isInteger(len) || len < 0) return true;
+  return tail.length - (sep + 4) >= len;
+}
+
+/** How long the probe waits for the echo body AFTER the connectivity verdict is
+ *  already decided. Small on purpose: this sits on the launch path, and a missing
+ *  panel field costs far less than a slow launch. */
+const EXIT_IDENTITY_TAIL_CAP_MS = 1_500;
+
+/** Name WHY a 200 produced no exit identity. The failure was previously invisible —
+ *  it surfaced only as "No exit IP" on the device, with nothing server-side to
+ *  separate "headers never arrived" (a race) from "no content-length" (a chunked
+ *  response fails the parse EVERY time, a permanent outage). Those must not look
+ *  alike to whoever reads the probe result next. */
+export function exitIdentityMissDetail(tail: Buffer): string {
+  const sep = tail.indexOf('\r\n\r\n');
+  if (sep === -1) return 'exit identity unavailable: response headers did not arrive in time';
+  const headerBlock = tail.subarray(0, sep).toString('utf8');
+  if (!/content-length:\s*\d+/i.test(headerBlock)) {
+    return /transfer-encoding:\s*chunked/i.test(headerBlock)
+      ? 'exit identity unavailable: echo response was chunked (no content-length), which the parser cannot read'
+      : 'exit identity unavailable: echo response carried no content-length';
+  }
+  return 'exit identity unavailable: body incomplete or unparseable within the capture window';
+}
+
 /** The minimal resolved-proxy shape the probe needs. A superset of
  *  SocksProxyConfig (host/port/username/password) plus the protocol. The launch
  *  gate adapts AccountProxiesService.resolveForDispatch's output into this. VPN
@@ -493,13 +537,31 @@ export class ProxyConnectivityProbe {
     // much as a 2xx does; the proxy is fine even if our echo endpoint throttled or
     // challenged this exit IP.
     if (status === 200) {
-      // #128 — best-effort, PEEK-ONLY capture of the exit identity from the echo
-      // body. A tiny Connection:close response arrives in one TCP segment, so by
-      // the time the status line parsed the body is already buffered; we read it
-      // WITHOUT awaiting (snapshot), so this can never delay the round-trip or flip
-      // the already-decided PASS. Absent/partial/non-200 ⇒ no identity, ok unchanged.
-      const exitIdentity = parseExitIdentityFromResponseTail(streamReader.snapshot());
-      return exitIdentity ? { ok: true, exitIdentity } : { ok: true };
+      // #128 — best-effort capture of the exit identity from the echo body.
+      //
+      // ⛔ This used to peek `snapshot()` with no await, on the assumption that "a
+      // tiny Connection:close response arrives in one TCP segment". Through a real
+      // remote proxy with a TLS upgrade that does not hold: the body frequently had
+      // not arrived when the status line parsed, the parse returned undefined,
+      // nothing was cached, and — because the identity is baked into the box fork's
+      // environment ONCE at launch — every new tab in that session then showed
+      // "No exit IP" and an empty panel for the life of the session.
+      //
+      // So wait for it, but briefly and never fatally: the PASS is already decided
+      // above, and `awaitTail` cannot throw.
+      const tail = await streamReader.awaitTail(isResponseTailComplete, EXIT_IDENTITY_TAIL_CAP_MS);
+      const exitIdentity = parseExitIdentityFromResponseTail(tail);
+      // A 200 that yields no identity is the exact silent failure above. Name it in
+      // `detail` so a miss is diagnosable server-side instead of only surfacing as an
+      // empty panel on the device.
+      if (exitIdentity) return { ok: true, exitIdentity };
+      // Name the miss ONLY when the response never completed — that is the silent
+      // failure this fix exists for. A complete body carrying no `ip` is the echo
+      // endpoint's own answer, with a different cause (visitor-location headers),
+      // and must not be dressed up as a capture failure.
+      return isResponseTailComplete(tail)
+        ? { ok: true }
+        : { ok: true, detail: exitIdentityMissDetail(tail) };
     }
     if (status > 0) {
       return { ok: true };
@@ -581,6 +643,39 @@ class SocketReader {
    *  deadline-raced path, so it can never delay/flip the connectivity verdict. */
   snapshot(): Buffer {
     return this.buf;
+  }
+
+  /**
+   * Wait — bounded — until `done(buf)` holds, the peer closes, or `capMs` elapses,
+   * then return the buffer as it stands. NEVER throws and never consumes.
+   *
+   * ⛔ Why: the exit identity used to be read with `snapshot()` alone, a peek of
+   * whatever bytes happened to be buffered the instant the STATUS LINE parsed. The
+   * parser needs the whole header block, a content-length, AND the entire body.
+   * Through a real remote proxy with a TLS upgrade, headers and body routinely land
+   * in separate records, so the peek saw a partial response and the identity came
+   * back undefined. That miss is not recoverable: the identity is baked into the box
+   * fork's environment ONCE at launch, so one miss leaves every new tab in the
+   * session reading "No exit IP" for the session's whole life.
+   *
+   * The connectivity verdict is ALREADY decided when this runs, and that is the
+   * invariant it protects: a slow, truncated or absent tail degrades to "no
+   * identity", never to a failed probe. Hence the small cap and no throwing path.
+   */
+  async awaitTail(done: (buf: Buffer) => boolean, capMs: number): Promise<Buffer> {
+    const deadline = Date.now() + capMs;
+    for (;;) {
+      if (done(this.buf)) return this.buf;
+      if (this.errored !== null || this.closed) return this.buf;
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) return this.buf;
+      let timer: NodeJS.Timeout | undefined;
+      await new Promise<void>((resolve) => {
+        this.waiter = resolve;
+        timer = setTimeout(resolve, remaining);
+      });
+      if (timer !== undefined) clearTimeout(timer);
+    }
   }
 
   /** Read EXACTLY n bytes (consuming them from the buffer). */

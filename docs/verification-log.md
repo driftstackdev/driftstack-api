@@ -11716,3 +11716,51 @@ does not publish `tabsRef.current` synchronously the way close/restore do, `emit
 from inside a `setTabs` updater (an impure updater React may defer or double-invoke), and
 `updateActiveTab` reads `activeTabId` state rather than the synchronous ref every other writer uses.
 None is needed to explain this report; each is a real race worth its own entry.
+
+## V-2154 — "no exit IP, everything empty": the identity was captured by a peek that raced the socket (2026-08-30)
+
+Owner: the Simulator's new-tab panel shows _"no exit ip, everything empty"_.
+
+**The panel is not the marketing page.** `https://driftstack.dev/newtab/` is a SENTINEL: the fork
+intercepts it before egress and serves a box-local page whose fields come from
+`DRIFTSTACK_EXIT_IDENTITY_JSON`, injected as `window.__DS_EXIT_IDENTITY`. Empty fields therefore mean
+that env var was never set — the marketing page is irrelevant to this report.
+
+**Root cause.** The env var is sourced from `SessionAssign.exit_identity`, which the control plane
+fills from the exit-identity cache, which is written in exactly one place: the pre-launch connectivity
+probe. That capture read the body with `snapshot()` — a NON-awaiting peek of whatever bytes happened
+to be buffered the instant the STATUS LINE parsed — justified in a comment by "a tiny Connection:close
+response arrives in one TCP segment". Through a real remote proxy with a TLS upgrade that does not
+hold: headers and body land in separate records, the parser (which needs the complete header block, a
+content-length, AND the whole body) returned undefined, and nothing was cached. The result is not a
+transient glitch — the identity is baked into the fork's environment ONCE at launch, so a single
+missed capture leaves every new tab in that session reading "No exit IP" for the session's entire life.
+
+**Fix.** `awaitTail(done, capMs)` waits — bounded, non-consuming, and unable to throw — until the
+response is complete, the peer closes, or 1.5s elapses. The connectivity verdict is already decided
+when it runs, and that invariant is the reason for every one of those properties: waiting for a panel
+field must never turn a working proxy into a failed launch.
+
+**The stopping condition is completeness, NOT parse success** — and getting that wrong first is worth
+recording. My initial predicate waited for the identity to parse, which stalled the full 1.5s on any
+complete body without an `ip` (our echo answers `{}` when Cloudflare's visitor-location headers are
+off) and broke an unrelated auth arm by adding 1.5s to it. A finished answer is not a slow one.
+
+**The miss now names itself.** A 200 whose response never completed returns a `detail` distinguishing
+"headers did not arrive" (a race) from "no content-length / chunked" (a permanent outage — chunked
+fails the parse every single time, and the two must not look alike). A complete body carrying no `ip`
+is deliberately NOT dressed up as a capture failure: that is the echo endpoint's own answer, with a
+different cause.
+
+**Proofs.** 33/33 in proxy-connectivity-probe, including two new end-to-end arms driving a real fake
+SOCKS5 proxy whose origin writes the head first and the body 120ms later — the exact shape the peek
+could not see — plus one asserting that a body which NEVER arrives still passes the probe with the
+verdict intact. Mutation, snapshot-restored and cmp-verified: `awaitTail` reverted to `snapshot()` →
+exactly the late-body arm red. exit-identity-cache 19/19 unaffected.
+
+**Boundary:** this fixes the CAPTURE. The investigation named four other paths to the same empty panel
+that this does not touch, each real and each needing its own decision: a session with no customer
+proxy omits the block entirely; VPN egress schemes are never probed; the cache TTL is 15 minutes, so a
+create→dispatch gap longer than that is a miss; and even on a HIT, `region`/`city`/`timezone` are null
+unless Cloudflare's visitor-location transform is enabled — a live proxied capture on 2026-07-06
+recorded exactly those nulls, which renders Location blank on the device.
