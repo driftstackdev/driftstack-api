@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { RoomEvent, sendInputEvent, type Room } from './livekit';
+import { noteRoomRtt } from './livekit-input-ack';
 
 /** Send a ping every 2s. Tight enough that a customer with eyes
  *  on the panel sees fresh numbers; loose enough that the ping
@@ -62,6 +63,7 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     // Reconnect swaps in a NEW Room; without this the badge + Copy-diagnostics kept
     // showing the DEAD room's RTT (e.g. a healthy '80ms') until the 6s staleness
     // sweep expired it — a stuck healthy number that actively lies in a bug report.
+    if (room !== null) noteRoomRtt(room, null);
     setState({ rttMs: null, lastSeenAt: null });
     if (room === null || !enabled) return;
 
@@ -94,6 +96,9 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
       const rttMs = Date.now() - ts;
       // Drop stale samples (the harness was slow / network-jittered).
       if (rttMs > LIVEKIT_PING_FRESH_WINDOW_MS) return;
+      // The receipt deadline reads the same measurement the badge shows, so a
+      // slow link widens the ack budget instead of accusing the device.
+      if (room !== null) noteRoomRtt(room, rttMs);
       setState({ rttMs, lastSeenAt: Date.now() });
     };
 
@@ -134,6 +139,9 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     // Keep lastSeenAt so consumers still know WHEN the link last echoed.
     const sweep = (): void => {
       if (cancelled) return;
+      // A stale sample stops being evidence of link quality; the deadline goes
+      // back to the flat budget rather than holding a lucky old number.
+      if (room !== null) noteRoomRtt(room, null);
       setState((prev) => {
         if (prev.rttMs === null || prev.lastSeenAt === null) return prev;
         if (Date.now() - prev.lastSeenAt <= LIVEKIT_PING_FRESH_WINDOW_MS) return prev;

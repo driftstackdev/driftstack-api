@@ -46,6 +46,74 @@ interface ReceiptState {
 export const INPUT_RECEIPT_DEADLINE_MS = 5_000;
 
 /**
+ * How much of the receipt budget is spent on the network rather than on the
+ * device applying the input. A tap's ack makes a full round trip (publish →
+ * apply → ack), so the link cost is at least one RTT; 3× leaves headroom for
+ * jitter and the second leg without turning one slow sample into a minute of
+ * silence.
+ */
+const RTT_DEADLINE_MULTIPLIER = 3;
+
+/** Time budgeted for the DEVICE itself, on top of the link cost. */
+const DEVICE_APPLY_BUDGET_MS = 2_000;
+
+/**
+ * Ceiling on the adaptive deadline. Past this the badge stops being a latency
+ * report and starts being a way to never say anything, which is the failure the
+ * badge exists to prevent.
+ */
+export const INPUT_RECEIPT_MAX_DEADLINE_MS = 30_000;
+
+/**
+ * The receipt deadline for a link whose measured round trip is `rttMs`.
+ *
+ * ⛔ MONOTONE UPWARD — never returns less than the flat budget. A proxied mobile
+ * session is the product's ordinary case, not its bad case, and a fixed 5s
+ * declares a healthy 1.5s-RTT link dead: "Device did not confirm the last
+ * input" for input the device applied. Shortening the budget on a fast link
+ * would trade that false alarm for a new one, so a fast link simply keeps the
+ * flat deadline it already had.
+ *
+ * `null` (no fresh sample — the ping is stale or the room just connected) also
+ * keeps the flat budget: an unmeasured link is not evidence of a slow one.
+ */
+export function receiptDeadlineForRtt(rttMs: number | null): number {
+  if (rttMs === null || !Number.isFinite(rttMs) || rttMs <= 0) {
+    return INPUT_RECEIPT_DEADLINE_MS;
+  }
+  const adaptive = rttMs * RTT_DEADLINE_MULTIPLIER + DEVICE_APPLY_BUDGET_MS;
+  return Math.min(
+    INPUT_RECEIPT_MAX_DEADLINE_MS,
+    Math.max(INPUT_RECEIPT_DEADLINE_MS, Math.round(adaptive)),
+  );
+}
+
+/**
+ * Latest RTT per room, written by the latency ping and read when a receipt is
+ * registered. A module-level map rather than a parameter because the measurement
+ * lives in a React hook and the publish path is plain module code — threading it
+ * through every caller would put a UI concern in the wire layer.
+ *
+ * Keyed by Room so two rooms cannot borrow each other's link quality, and it is
+ * a WeakMap so a closed room's sample cannot keep the room object alive.
+ */
+const roomRtt = new WeakMap<Room, number>();
+
+/** Record the newest RTT sample for `room`. `null` clears it (stale / dead). */
+export function noteRoomRtt(room: Room, rttMs: number | null): void {
+  if (rttMs === null || !Number.isFinite(rttMs) || rttMs <= 0) {
+    roomRtt.delete(room);
+    return;
+  }
+  roomRtt.set(room, rttMs);
+}
+
+/** The deadline a receipt on `room` gets when the caller names none. */
+export function currentReceiptDeadline(room: Room): number {
+  return receiptDeadlineForRtt(roomRtt.get(room) ?? null);
+}
+
+/**
  * How many receipts in a row must go unanswered before we accuse the device.
  *
  * A missing ack is NOT a failed input: the harness injects first and acks
@@ -164,9 +232,12 @@ function expireOldest(state: ReceiptState): void {
 export function registerInputReceipt(
   room: Room,
   id: string,
-  deadlineMs = INPUT_RECEIPT_DEADLINE_MS,
+  /** Omit to get the link-adaptive budget; pass one to override it (bulk text
+   *  scales with character count and must not be shortened by a fast link). */
+  deadlineMs?: number,
 ): void {
-  if (!INPUT_ID.test(id) || !Number.isFinite(deadlineMs) || deadlineMs <= 0) return;
+  const effectiveDeadline = deadlineMs ?? currentReceiptDeadline(room);
+  if (!INPUT_ID.test(id) || !Number.isFinite(effectiveDeadline) || effectiveDeadline <= 0) return;
   const state = stateFor(room);
   const prior = state.pending.get(id);
   // A re-registered id supersedes any earlier verdict about it, including a timeout we
@@ -182,7 +253,7 @@ export function registerInputReceipt(
     state.pending.delete(id);
     rememberTimeout(state, id, sequence);
     noteMissedAck(state, sequence);
-  }, deadlineMs);
+  }, effectiveDeadline);
   state.pending.set(id, { sequence, timer });
 }
 

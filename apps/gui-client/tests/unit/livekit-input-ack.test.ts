@@ -10,6 +10,11 @@ import {
   noteDeviceLiveness,
   resetInputReceipts,
   subscribeInputReceiptIssues,
+  INPUT_RECEIPT_DEADLINE_MS,
+  INPUT_RECEIPT_MAX_DEADLINE_MS,
+  receiptDeadlineForRtt,
+  noteRoomRtt,
+  currentReceiptDeadline,
 } from '../../src/lib/livekit-input-ack';
 
 const room = (): Room => ({}) as Room;
@@ -241,5 +246,75 @@ describe('per-Room committed input receipts', () => {
     handleInputAck(r, { type: 'inputAck', id: 'after_reset', status: 'dropped' });
 
     expect(issues).toEqual([null, 'failed', null, 'dropped']);
+  });
+});
+
+describe('the receipt deadline follows the measured link (V-2150)', () => {
+  it('⛔ never shorter than the flat budget — a fast link keeps what it had', () => {
+    // Shortening on a fast link would trade the slow-link false alarm for a new
+    // one, so the adaptation is deliberately one-directional.
+    expect(receiptDeadlineForRtt(10)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    expect(receiptDeadlineForRtt(200)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    // An unmeasured link is not evidence of a slow one.
+    expect(receiptDeadlineForRtt(null)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+  });
+
+  it('a proxied mobile link gets a budget that fits it', () => {
+    // 1.5s RTT is an ordinary proxied session, not a broken one. Flat 5s calls
+    // it dead; 3×RTT + 2s device budget = 6.5s does not.
+    expect(receiptDeadlineForRtt(1_500)).toBe(6_500);
+    expect(receiptDeadlineForRtt(3_000)).toBe(11_000);
+  });
+
+  it('is capped, so the badge cannot be silenced by one wild sample', () => {
+    expect(receiptDeadlineForRtt(60_000)).toBe(INPUT_RECEIPT_MAX_DEADLINE_MS);
+  });
+
+  it('a nonsense sample is ignored rather than trusted', () => {
+    expect(receiptDeadlineForRtt(0)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    expect(receiptDeadlineForRtt(-5)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    expect(receiptDeadlineForRtt(Number.NaN)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    expect(receiptDeadlineForRtt(Number.POSITIVE_INFINITY)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+  });
+
+  it('each room reads its OWN link, and a cleared sample returns to the flat budget', () => {
+    const slow = room();
+    const fast = room();
+    noteRoomRtt(slow, 1_500);
+    expect(currentReceiptDeadline(slow)).toBe(6_500);
+    // A second room must not borrow the first room's link quality.
+    expect(currentReceiptDeadline(fast)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+    // Staleness/disconnect clears it — a lucky old number is not evidence.
+    noteRoomRtt(slow, null);
+    expect(currentReceiptDeadline(slow)).toBe(INPUT_RECEIPT_DEADLINE_MS);
+  });
+
+  it('a registered receipt actually USES the adaptive budget', () => {
+    vi.useFakeTimers();
+    const r = room();
+    const issues: Array<string | null> = [];
+    subscribeInputReceiptIssues(r, (issue) => issues.push(issue));
+    noteRoomRtt(r, 1_500); // -> 6.5s
+    registerInputReceipt(r, 'tap_slow');
+
+    // At the OLD flat deadline the receipt is still open: this is the false
+    // alarm the change removes.
+    vi.advanceTimersByTime(INPUT_RECEIPT_DEADLINE_MS + 100);
+    expect(pendingInputReceiptCount(r)).toBe(1);
+
+    // It still expires — the budget moved, it did not disappear.
+    vi.advanceTimersByTime(2_000);
+    expect(pendingInputReceiptCount(r)).toBe(0);
+    resetInputReceipts(r);
+  });
+
+  it('an explicit deadline still wins (bulk text scales with its own length)', () => {
+    vi.useFakeTimers();
+    const r = room();
+    noteRoomRtt(r, 1_500);
+    registerInputReceipt(r, 'text_1', 60_000);
+    vi.advanceTimersByTime(10_000);
+    expect(pendingInputReceiptCount(r), "the caller's budget was not shortened").toBe(1);
+    resetInputReceipts(r);
   });
 });

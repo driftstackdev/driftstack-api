@@ -11571,3 +11571,38 @@ collapses. Mutation, snapshot-restored and cmp-verified: `onMouseEnter` reintrod
 **Boundary:** the label change is scoped to the Settings hero and its skeleton; the other 101
 `.section-label` uses are untouched, since a section divider at 10px is the size it should be. Whether
 the remaining page heroes deserve the same promotion was not measured here.
+
+## V-2150 — the input-receipt deadline follows the measured link, so a proxied session stops being called dead (2026-08-30)
+
+**The last genuinely open piece of the "Device did not confirm the last input" work.** The receipt
+budget was a flat `INPUT_RECEIPT_DEADLINE_MS = 5_000` for every input on every link, while
+`livekit-latency-ping.ts` was already measuring RTT two feet away and showing it to the customer. A
+proxied mobile session — the product's ORDINARY case — can sit at 1.5s RTT, where a tap's round trip
+(publish → apply → ack) does not fit in 5s, so the badge accused the device of losing input it had
+applied.
+
+`receiptDeadlineForRtt` is pure and **monotone upward**: `3 × RTT + 2s` device budget, floored at the
+old flat 5s and capped at 30s. The floor matters as much as the adaptation — shortening the budget on
+a fast link would trade the slow-link false alarm for a new one, so a fast link keeps exactly what it
+had, and an unmeasured link (`null`, a stale ping, a just-connected room) also keeps it, because an
+unmeasured link is not evidence of a slow one. The cap matters too: past it the badge stops being a
+latency report and becomes a way to never say anything, which is the failure it exists to prevent.
+
+Wiring: the ping writes each sample to a per-Room `WeakMap` (`noteRoomRtt`) that the receipt layer
+reads. Per-Room so two rooms cannot borrow each other's link quality; a WeakMap so a closed room's
+sample cannot keep the room alive. Staleness and disconnect both clear it, using the same events that
+already blank the displayed reading. An explicit `deadlineMs` still wins outright, so bulk text — which
+scales with character count — cannot be shortened by a fast link.
+
+**Proofs.** 19/19 in livekit-input-ack (7 new arms: never-shorter; 1.5s → 6.5s; capped; nonsense
+samples ignored; per-room isolation + clearing; a registered receipt still open at the OLD deadline
+and expiring at the new one; an explicit budget unshortened), plus 3 latency-ping suites 9/9 green.
+Mutations, snapshot-restored and cmp-verified: adaptation flattened → 4 arms red; the cap removed →
+exactly the cap arm red.
+
+**Boundary:** the multiplier and device budget are judgement, calibrated to the shape of the failure
+(one round trip plus apply time) rather than measured against a distribution of real sessions — if
+the badge still cries wolf on a slow link, those two constants are where to look, not the mechanism.
+The other three items of this arc were checked and left alone: the miss decay already exists, and the
+eviction-counts-a-miss and strict-ack-shape behaviours are RECORDED decisions with their reasoning in
+the source, not oversights.
