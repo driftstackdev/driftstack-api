@@ -343,14 +343,28 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // the founder's "2nd switch stays on the same url" clobber. Both the ~2s poll AND the
 // one-shot reconcile gate their url write on this (the title still applies; titles
 // self-heal). A tabId-bearing frame routes precisely and is never suppressed.
-// ⛔ Must outlast the switch it protects, or it protects nothing. It was 2500ms
-// while the operations in flight during a switch run longer: ACTIVATE_ACK_TIMEOUT_MS
-// × ACTIVATE_MAX_ATTEMPTS = 3600ms, and the affordance waits
-// SWITCH_AFFORDANCE_TIMEOUT_MS = 6000ms because a cold tab is a real page load on
-// the device. Once the window lapsed, the next tabId-less poll was routed to
-// whichever tab was active and wrote the OTHER tab's url over it — which is how a
-// Bing tab silently became a second "New Tab" (owner 2026-08-30).
-const PAGE_STATE_GRACE_MS = SWITCH_AFFORDANCE_TIMEOUT_MS + 500;
+// ⛔ Do NOT widen this to fix one call site. It gates TWELVE different things —
+// error raising, nav settling, data-channel state, reconcile suppression — so a
+// longer window here defers ERROR REPORTING, which is the opposite of what the
+// product needs (V-2153 widened it and the page-state error-grace test caught the
+// regression). The lagging-frame window that V-2153 actually needed is
+// SWITCH_LAGGING_FRAME_GRACE_MS below.
+const PAGE_STATE_GRACE_MS = 2500;
+
+/**
+ * How long after a tab switch a tabId-LESS frame may still be describing the tab
+ * we just left. Unlike PAGE_STATE_GRACE_MS this gates exactly one thing: the
+ * cross-tab url dedup in `writeTabPageState`, whose whole job is to refuse a frame
+ * whose url another tab demonstrably holds.
+ *
+ * Derived from the switch it covers rather than being an independent literal: a
+ * switch can take ACTIVATE_ACK_TIMEOUT_MS × ACTIVATE_MAX_ATTEMPTS = 3600ms, and the
+ * affordance waits SWITCH_AFFORDANCE_TIMEOUT_MS because a cold tab is a real page
+ * load on the device. At 2500ms the window expired mid-switch and the next poll
+ * wrote the OTHER tab's url over the active one — a Bing tab silently became a
+ * second "New Tab" (owner 2026-08-30).
+ */
+const SWITCH_LAGGING_FRAME_GRACE_MS = SWITCH_AFFORDANCE_TIMEOUT_MS + 500;
 // Client-side fallback for a load whose terminal page_state is dropped. A3 emits
 // its own timeout-stall advisory at ~40s; keep the browser bar truthful until just
 // after that window, then replace it with the same actionable Retry treatment.
@@ -4604,7 +4618,7 @@ export function SimulatorWindow(): JSX.Element {
       // just-switched-to tab is exactly the revert.
       const inSwitchGrace =
         (frame.tabId === undefined || frame.tabId === null) &&
-        Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
+        Date.now() - lastSwitchAtRef.current < SWITCH_LAGGING_FRAME_GRACE_MS;
       setTabs((prev) => {
         if (manualInputControlRef.current.epoch !== expectedAuthorityEpoch) return prev;
         // Suppress ONLY the provably-stale case: an in-grace tabId-less frame whose url

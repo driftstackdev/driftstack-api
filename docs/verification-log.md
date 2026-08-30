@@ -11912,3 +11912,40 @@ of `null` → exactly the null arm red.
 to WebKit, which cannot do it. The rest of the owner's log — rooms connecting then disconnecting
 within seconds, and `[flight-recorder] previous run ended without shutting down` — is NOT explained by
 this entry and remains uninvestigated.
+
+## V-2160 — the gate's five reds: one of them was V-2153 widening a constant that gates twelve things (2026-08-30)
+
+The first full gate after fourteen queued commits came back NOT TRUSTWORTHY — 5 files, 8 tests. Every
+one was mine, and the important one is the first.
+
+**1. I widened a shared constant to fix one call site.** V-2153 raised `PAGE_STATE_GRACE_MS` from 2500
+to `SWITCH_AFFORDANCE_TIMEOUT_MS + 500` to stop a lagging frame renaming a tab. That constant has
+TWELVE consumers — nav settling, data-channel state, reconcile suppression, and **error raising**. The
+page-state error-grace test caught it: "once the grace window expires, a still-errored store DOES
+raise" advances ~4s, which was past 2500 and is not past 6500, so the error stayed deferred. I had
+widened the window in which a page error is NOT reported — on the same day the owner's loudest
+complaint is that a failed load says nothing. The single-file runs I did for V-2153
+(simulator-window-tabs) could not see it; only the full gate could.
+
+Fixed properly: `PAGE_STATE_GRACE_MS` is back to 2500 with a comment naming the twelve consumers and
+saying not to widen it again, and the lagging-frame window is its own constant,
+`SWITCH_LAGGING_FRAME_GRACE_MS`, used at exactly one site — the cross-tab url dedup V-2153 was about.
+Both suites green afterwards (tabs 57/57 including the V-2153 arm, pagestate-poll 7/7), so the tab-title
+fix stands and error reporting is no longer deferred.
+
+**2. Prettier reflowed a union and a single-line pin stopped matching.** The six-member model union in
+the TS SDK wraps across lines now, so the parity regex — written as one physical line — failed. It
+matches the SHAPE (`\s*`-joined) rather than a line, which is the recorded trap made concrete. Two
+stale "Claude 4.x" doc comments in the SDK corrected in the same pass.
+
+**3–5. Two environment reds that were real signals, not noise.** `dist-reading-suites-have-fresh-artifacts`
+named the docs app: I edited `api/agent-sessions.md` for the model rollout and never rebuilt, so a
+suite was asserting against markup the source no longer produces — the direction that PASSES, which is
+why the guard exists. And `shared-database-is-migrated` plus the four
+`database-check-enums-agree-with-the-code` arms failed because the test database had been migrated
+BEFORE migration 0115 existed: the CHECK still carried four model names while the code declared six.
+Rebuilt docs; re-migrated (116 applied). All five files green individually.
+
+**The lesson worth keeping is the first one:** a single-file run proves a file, not a change. V-2153's
+mutation proof was real and its arm was correct — and the change was still wrong, in a way only a
+whole-suite run could show, because the constant it touched was shared.

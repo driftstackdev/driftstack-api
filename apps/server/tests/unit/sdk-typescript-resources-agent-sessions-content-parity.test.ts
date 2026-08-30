@@ -63,7 +63,10 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/mode: 'manual' \| 'ai' \| 'pair';/);
     // 6.c — per-session model picker field on the read shape.
     expect(body).toMatch(
-      /model: 'claude-opus-5' \| 'claude-sonnet-5' \| 'claude-opus-4-8' \| 'claude-opus-4-7' \| 'claude-sonnet-4-6' \| 'claude-haiku-4-5';/,
+      // Prettier wraps a union this long across lines, so the pin matches the SHAPE
+      // rather than one physical line — a single-line regex here silently fails
+      // the moment the formatter reflows it (recorded trap).
+      /model:\s*\|?\s*'claude-opus-5'\s*\|\s*'claude-sonnet-5'\s*\|\s*'claude-opus-4-8'\s*\|\s*'claude-opus-4-7'\s*\|\s*'claude-sonnet-4-6'\s*\|\s*'claude-haiku-4-5';/,
     );
     expect(body).toMatch(/pair_mode_state: \{ kind: string; \[k: string\]: unknown \} \| null;/);
     expect(body).toMatch(/livekit\?: LiveKitInfo;/);
