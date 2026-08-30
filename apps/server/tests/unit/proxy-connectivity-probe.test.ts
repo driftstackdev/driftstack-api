@@ -502,6 +502,27 @@ describe('the exit identity survives a body that arrives late (V-2154)', () => {
     });
   });
 
+  it('⛔ V-2167: a late body near the DEADLINE still passes — the tail wait is clamped', async () => {
+    // The unclamped defect: the tail wait held a fixed 1.5s cap while the outer
+    // `Promise.race` in `probe()` was armed with whatever budget remained. When the
+    // deadline fired mid-wait, the race settled with the deadline's REJECTION —
+    // and the PASS already decided from the 200 status line never left the round
+    // trip. Net effect: a WORKING proxy, hard-blocked at launch as
+    // `{ok:false, reason:'timeout'}`, because we waited for a cosmetic panel field.
+    //
+    // Reproduce it exactly: a probe whose total budget (600ms) is smaller than the
+    // tail cap (1500ms), against a proxy that answers the handshake + status line
+    // fast and then delays the body past the deadline. The clamp keeps the wait
+    // below the deadline, so the probe must PASS with no identity — never time out.
+    const { dial } = await splitBodyProxy(60_000);
+    const probe = new ProxyConnectivityProbe({ dial, targetUrl: TARGET, timeoutMs: 600 });
+    const res = await probe.probe(SOCKS5_PROXY);
+    expect(res.ok).toBe(true);
+    expect(res.reason).toBeUndefined();
+    expect(res.exitIdentity).toBeUndefined();
+    expect(res.detail).toMatch(/exit identity unavailable/);
+  });
+
   it('a body that never arrives still PASSES the probe — the verdict is already decided', async () => {
     // The invariant the bounded wait must not break: waiting for a panel field can
     // never turn a working proxy into a failed launch.

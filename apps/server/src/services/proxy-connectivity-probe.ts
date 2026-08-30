@@ -75,8 +75,9 @@ export interface ProxyProbeResult {
   detail?: string;
   /** #128 best-effort exit identity captured from the echo round-trip. Present
    *  ONLY when the proxy returned a clean, fully-buffered 200 JSON body; undefined
-   *  otherwise. Capture is PEEK-ONLY (no extra await) so it can NEVER delay or flip
-   *  the ok/reason connectivity verdict — a launch is never blocked by its absence. */
+   *  otherwise. Capture may wait briefly for the body, but the wait is clamped
+   *  below the probe's own deadline, so it can never flip the ok/reason
+   *  connectivity verdict — a launch is never blocked by its absence. */
   exitIdentity?: ProbeExitIdentity;
 }
 
@@ -144,8 +145,17 @@ export function isResponseTailComplete(tail: Buffer): boolean {
 
 /** How long the probe waits for the echo body AFTER the connectivity verdict is
  *  already decided. Small on purpose: this sits on the launch path, and a missing
- *  panel field costs far less than a slow launch. */
+ *  panel field costs far less than a slow launch. ⛔ A CEILING, not the wait: the
+ *  actual wait is clamped below the probe's own deadline (minus the margin below),
+ *  because the outer `Promise.race` in `probe()` REJECTS when that deadline fires —
+ *  an unclamped 1.5s tail wait after a slow dial turned an already-decided PASS
+ *  into `{ok:false, reason:'timeout'}` and hard-blocked launches on working
+ *  proxies. */
 const EXIT_IDENTITY_TAIL_CAP_MS = 1_500;
+
+/** Headroom kept between the tail wait and the probe deadline so the round-trip's
+ *  `return {ok:true}` wins the race against the deadline rejection. */
+const EXIT_IDENTITY_DEADLINE_MARGIN_MS = 100;
 
 /** Name WHY a 200 produced no exit identity. The failure was previously invisible —
  *  it surfaced only as "No exit IP" on the device, with nothing server-side to
@@ -282,7 +292,7 @@ export class ProxyConnectivityProbe {
     // Shared deadline state so the egress round-trip can tell a deadline-triggered
     // socket close (→ honest `timeout`) apart from a target-side connection RESET
     // before the deadline (→ tunnel-proven PASS, the Cloudflare hard-drop case).
-    const deadlineState = { expired: false };
+    const deadlineState = { expired: false, deadlineAt: Date.now() + remainingMs };
     const deadline = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         deadlineState.expired = true;
@@ -320,7 +330,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     targetPort: number,
     useTls: boolean,
-    deadlineState: { expired: boolean },
+    deadlineState: { expired: boolean; deadlineAt: number },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
     const hasAuth = proxy.username !== undefined && proxy.password !== undefined;
@@ -410,7 +420,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     targetPort: number,
     useTls: boolean,
-    deadlineState: { expired: boolean },
+    deadlineState: { expired: boolean; deadlineAt: number },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
     const authority = `${targetHost}:${targetPort}`;
@@ -475,7 +485,7 @@ export class ProxyConnectivityProbe {
     targetHost: string,
     _targetPort: number,
     useTls: boolean,
-    deadlineState: { expired: boolean },
+    deadlineState: { expired: boolean; deadlineAt: number },
   ): Promise<ProxyProbeResult> {
     let stream: Socket = socket;
     let streamReader: SocketReader = reader;
@@ -547,9 +557,18 @@ export class ProxyConnectivityProbe {
       // environment ONCE at launch — every new tab in that session then showed
       // "No exit IP" and an empty panel for the life of the session.
       //
-      // So wait for it, but briefly and never fatally: the PASS is already decided
-      // above, and `awaitTail` cannot throw.
-      const tail = await streamReader.awaitTail(isResponseTailComplete, EXIT_IDENTITY_TAIL_CAP_MS);
+      // So wait for it, but briefly and never fatally. `awaitTail` cannot throw —
+      // but the wait itself CAN lose the outer `Promise.race` in `probe()`: when
+      // the probe deadline fires mid-wait, the race settles with the deadline's
+      // REJECTION and the PASS decided above never leaves this function. So the
+      // cap is clamped below whatever deadline budget remains (a non-positive
+      // clamp makes `awaitTail` an immediate peek), keeping the verdict's
+      // invariant true instead of asserted.
+      const tailCapMs = Math.min(
+        EXIT_IDENTITY_TAIL_CAP_MS,
+        deadlineState.deadlineAt - Date.now() - EXIT_IDENTITY_DEADLINE_MARGIN_MS,
+      );
+      const tail = await streamReader.awaitTail(isResponseTailComplete, tailCapMs);
       const exitIdentity = parseExitIdentityFromResponseTail(tail);
       // A 200 that yields no identity is the exact silent failure above. Name it in
       // `detail` so a miss is diagnosable server-side instead of only surfacing as an
@@ -660,7 +679,10 @@ class SocketReader {
    *
    * The connectivity verdict is ALREADY decided when this runs, and that is the
    * invariant it protects: a slow, truncated or absent tail degrades to "no
-   * identity", never to a failed probe. Hence the small cap and no throwing path.
+   * identity", never to a failed probe. This function's half is the no-throwing
+   * path and honoring `capMs` (non-positive = immediate peek); the CALLER's half
+   * is clamping `capMs` below the probe deadline, without which the outer race
+   * rejects mid-wait and the decided PASS is lost.
    */
   async awaitTail(done: (buf: Buffer) => boolean, capMs: number): Promise<Buffer> {
     const deadline = Date.now() + capMs;

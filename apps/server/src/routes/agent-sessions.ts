@@ -1564,8 +1564,9 @@ export async function runProxyPrelaunchGate(args: {
   // #128 — the probe observed the exit identity the world sees THROUGH this proxy
   // (present only on a clean 200 echo-body tail; absent otherwise). Stash it keyed
   // by (accountId, proxyId) so the later dispatch build can emit exit_identity for
-  // the box new-tab IP panel. Best-effort + peek-only upstream: it can never have
-  // affected the pass/fail verdict, and a miss just omits the optional block.
+  // the box new-tab IP panel. Best-effort upstream, and its wait is clamped below
+  // the probe deadline, so it cannot have affected the pass/fail verdict; a miss
+  // just omits the optional block.
   if (result.exitIdentity !== undefined) {
     await exitIdentityCache?.set(accountId, proxyId, result.exitIdentity);
   }
