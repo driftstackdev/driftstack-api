@@ -154,6 +154,15 @@ function cleanChat(raw: unknown): StoredChat | null {
     profileId: r.profileId,
     model: r.model as ChatModel,
     turns: r.turns as ChatTurn[],
+    // ⛔ Load-bearing, and it was omitted. `cleanChat` rebuilds the record
+    // field-by-field, so anything not named here is DROPPED on load — which made
+    // every stored chat come back with `sessionId: undefined`, and V-2162's
+    // "continue the closed session" could never fire for a chat read from disk.
+    // The field is optional, so its absence was invisible to types and to tests
+    // that build a StoredChat in memory instead of round-tripping one.
+    ...(typeof r.sessionId === 'string' && r.sessionId.length > 0
+      ? { sessionId: r.sessionId }
+      : {}),
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

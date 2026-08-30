@@ -73,6 +73,9 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     // echoes still resolve. Cardinality is bounded by the polling
     // interval and the freshness window.
     const outstanding = new Map<number, true>();
+    /** When the last echo landed. The sweep's staleness input, held here rather
+     *  than read from state so the decision happens BEFORE any updater runs. */
+    let lastEchoAt: number | null = null;
 
     const onData = (payload: Uint8Array): void => {
       if (cancelled) return;
@@ -99,7 +102,8 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
       // The receipt deadline reads the same measurement the badge shows, so a
       // slow link widens the ack budget instead of accusing the device.
       if (room !== null) noteRoomRtt(room, rttMs);
-      setState({ rttMs, lastSeenAt: Date.now() });
+      lastEchoAt = Date.now();
+      setState({ rttMs, lastSeenAt: lastEchoAt });
     };
 
     (room as any).on(RoomEvent.DataReceived, onData);
@@ -139,14 +143,19 @@ export function useLatencyPing(opts: UseLatencyPingOpts): LatencyState {
     // Keep lastSeenAt so consumers still know WHEN the link last echoed.
     const sweep = (): void => {
       if (cancelled) return;
-      // A stale sample stops being evidence of link quality; the deadline goes
-      // back to the flat budget rather than holding a lucky old number.
+      // ⛔ Staleness is decided HERE, not inside the updater. Clearing the
+      // receipt-deadline's copy used to run unconditionally on every sweep tick
+      // (LIVEKIT_PING_STALE_SWEEP_MS = 1s) while samples land every
+      // LIVEKIT_PING_INTERVAL_MS = 2s, so the adaptive deadline saw `null` almost
+      // always and V-2150 quietly degraded to the flat budget it was written to
+      // replace. Moving it INTO the updater would be worse: an updater must be
+      // pure and may be replayed or deferred.
+      if (lastEchoAt === null) return;
+      if (Date.now() - lastEchoAt <= LIVEKIT_PING_FRESH_WINDOW_MS) return;
       if (room !== null) noteRoomRtt(room, null);
-      setState((prev) => {
-        if (prev.rttMs === null || prev.lastSeenAt === null) return prev;
-        if (Date.now() - prev.lastSeenAt <= LIVEKIT_PING_FRESH_WINDOW_MS) return prev;
-        return { rttMs: null, lastSeenAt: prev.lastSeenAt };
-      });
+      setState((prev) =>
+        prev.rttMs === null ? prev : { rttMs: null, lastSeenAt: prev.lastSeenAt },
+      );
     };
     const sweepHandle = setInterval(sweep, LIVEKIT_PING_STALE_SWEEP_MS);
 

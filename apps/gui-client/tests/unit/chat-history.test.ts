@@ -128,3 +128,54 @@ describe('chat-history store', () => {
     expect(all.map((c) => c.id)).toEqual(['ok']);
   });
 });
+
+// V-2167 — `cleanChat` rebuilds a stored chat FIELD BY FIELD, so any key it
+// does not name is silently dropped on load. `sessionId` was such a key: the
+// type marks it optional, so its disappearance was invisible to the compiler,
+// and every arm above builds a `StoredChat` in memory rather than round-tripping
+// one through the store — so nothing could see it. The consequence was that
+// V-2162's "reattach to the session this chat was using" never fired for a chat
+// read from disk, which is every chat after an app restart.
+//
+// ⛔ The arm below is keyed on the SHAPE, not on `sessionId`. A guard that names
+// one member of a growing record goes blind the moment a second optional field
+// is added — which is exactly how this one got through.
+describe('chat-history round trip', () => {
+  it('preserves every field of a stored chat, not only the required ones', async () => {
+    const full: StoredChat = chat({
+      id: 'round-trip',
+      title: 'Warm up this profile',
+      profileId: 'p-42',
+      sessionId: 'agsess_abc123',
+      turns: [{ role: 'user', text: 'hello' } as StoredChat['turns'][number]],
+      createdAt: 1,
+      updatedAt: 2,
+    });
+
+    // `at` becomes updatedAt, so pass the record's own value and the round
+    // trip compares like for like.
+    await upsertChat(full, full.updatedAt);
+    const [loaded] = await loadChats();
+    expect(loaded, 'the chat did not survive the store round trip at all').toBeDefined();
+
+    // Enumerate the source record rather than asserting a hand-written list:
+    // a field added to StoredChat later joins this check for free.
+    for (const key of Object.keys(full) as (keyof StoredChat)[]) {
+      expect({ key, value: loaded[key] }, `cleanChat dropped "${key}" on load`).toEqual({
+        key,
+        value: full[key],
+      });
+    }
+    expect(Object.keys(loaded).sort()).toEqual(Object.keys(full).sort());
+  });
+
+  it('drops a sessionId that is not a usable string', async () => {
+    // The store is on disk and hand-editable, and a blank id would send the
+    // reattach path off to `GET /v1/agent-sessions/` — so the field is admitted
+    // only when it can actually name a session.
+    seed([{ ...chat({ id: 'bad' }), sessionId: '' }]);
+    const [loaded] = await loadChats();
+    expect(loaded.id).toBe('bad');
+    expect(loaded.sessionId).toBeUndefined();
+  });
+});
