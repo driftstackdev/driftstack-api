@@ -290,7 +290,11 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         accountId: args.accountId,
         driftstackSessionId: args.driftstackSessionId ?? null,
         status: 'active',
-        transcript: encryptAgentSessionTranscript([], key, {
+        // Same seed handling as createIfUnderActiveCap below — the in-memory twin
+        // honors seedTranscript on BOTH creates, and a twin that seeds where the
+        // real repo silently encrypts [] is exactly the kind of double that hides
+        // the real artifact. Re-sealed under the NEW id (AAD binds the session).
+        transcript: encryptAgentSessionTranscript(args.seedTranscript ?? [], key, {
           accountId: args.accountId,
           sessionId: id,
         }),
