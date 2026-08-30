@@ -142,9 +142,10 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('registers a DCBufferStatusChanged listener on the room', () => {
     const { room, state } = makeRoom();
     mount(room);
-    // V-2168 — four registrations: DC + Reconnected from the room-scoped latch
-    // effect, and the same pair from the capture effect's local mirror.
-    expect(state.on).toBe(4);
+    // V-2168 — ONE subscription point: the room-scoped latch effect owns DC +
+    // Reconnected; the capture effect reads the room-keyed store instead of
+    // subscribing a second time.
+    expect(state.on).toBe(2);
     expect(state.hasHandler).toBe(true);
   });
 
@@ -492,10 +493,9 @@ describe('useInputCapture — reliable-channel backpressure shed', () => {
   it('unregisters the buffer-status listener on unmount', () => {
     const { room, state } = makeRoom();
     const { unmount } = mount(room);
-    // V-2168 — two effects × (DC + Reconnected); both must unwind fully.
-    expect(state.on).toBe(4);
+    expect(state.on).toBe(2);
     unmount();
-    expect(state.off).toBe(4);
+    expect(state.off).toBe(2);
     expect(state.hasHandler).toBe(false);
   });
 });

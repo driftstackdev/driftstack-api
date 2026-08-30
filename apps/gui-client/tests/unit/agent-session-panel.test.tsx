@@ -99,14 +99,40 @@ describe('AgentSessionPanel overlay UX', () => {
     const handlersB: Record<string, (...args: unknown[]) => void> = {};
     const roomA = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-        handlersA[event] = handler;
+        {
+          // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+          // congestion effect subscribing 'reconnected' alongside the panel's own
+          // handler, and real livekit delivers to every listener. A single-slot
+          // mock silently dropped whichever registered first.
+          const prev = handlersA[event];
+          handlersA[event] =
+            prev === undefined
+              ? handler
+              : (...args: unknown[]) => {
+                  prev(...args);
+                  handler(...args);
+                };
+        }
       }),
       off: vi.fn(),
       disconnect: vi.fn(),
     };
     const roomB = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-        handlersB[event] = handler;
+        {
+          // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+          // congestion effect subscribing 'reconnected' alongside the panel's own
+          // handler, and real livekit delivers to every listener. A single-slot
+          // mock silently dropped whichever registered first.
+          const prev = handlersB[event];
+          handlersB[event] =
+            prev === undefined
+              ? handler
+              : (...args: unknown[]) => {
+                  prev(...args);
+                  handler(...args);
+                };
+        }
       }),
       off: vi.fn(),
       disconnect: vi.fn(),
@@ -167,14 +193,40 @@ describe('AgentSessionPanel overlay UX', () => {
       const handlersB: Record<string, (...args: unknown[]) => void> = {};
       const roomA = {
         on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-          handlersA[event] = handler;
+          {
+            // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+            // congestion effect subscribing 'reconnected' alongside the panel's own
+            // handler, and real livekit delivers to every listener. A single-slot
+            // mock silently dropped whichever registered first.
+            const prev = handlersA[event];
+            handlersA[event] =
+              prev === undefined
+                ? handler
+                : (...args: unknown[]) => {
+                    prev(...args);
+                    handler(...args);
+                  };
+          }
         }),
         off: vi.fn(),
         disconnect: vi.fn(),
       };
       const roomB = {
         on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-          handlersB[event] = handler;
+          {
+            // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+            // congestion effect subscribing 'reconnected' alongside the panel's own
+            // handler, and real livekit delivers to every listener. A single-slot
+            // mock silently dropped whichever registered first.
+            const prev = handlersB[event];
+            handlersB[event] =
+              prev === undefined
+                ? handler
+                : (...args: unknown[]) => {
+                    prev(...args);
+                    handler(...args);
+                  };
+          }
         }),
         off: vi.fn(),
         disconnect: vi.fn(),
@@ -242,14 +294,40 @@ describe('AgentSessionPanel overlay UX', () => {
       const handlersB: Record<string, (...args: unknown[]) => void> = {};
       const roomA = {
         on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-          handlersA[event] = handler;
+          {
+            // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+            // congestion effect subscribing 'reconnected' alongside the panel's own
+            // handler, and real livekit delivers to every listener. A single-slot
+            // mock silently dropped whichever registered first.
+            const prev = handlersA[event];
+            handlersA[event] =
+              prev === undefined
+                ? handler
+                : (...args: unknown[]) => {
+                    prev(...args);
+                    handler(...args);
+                  };
+          }
         }),
         off: vi.fn(),
         disconnect: vi.fn(),
       };
       const roomB = {
         on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-          handlersB[event] = handler;
+          {
+            // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+            // congestion effect subscribing 'reconnected' alongside the panel's own
+            // handler, and real livekit delivers to every listener. A single-slot
+            // mock silently dropped whichever registered first.
+            const prev = handlersB[event];
+            handlersB[event] =
+              prev === undefined
+                ? handler
+                : (...args: unknown[]) => {
+                    prev(...args);
+                    handler(...args);
+                  };
+          }
         }),
         off: vi.fn(),
         disconnect: vi.fn(),
@@ -301,14 +379,40 @@ describe('AgentSessionPanel overlay UX', () => {
     const handlersB: Record<string, (...args: unknown[]) => void> = {};
     const roomA = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-        handlersA[event] = handler;
+        {
+          // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+          // congestion effect subscribing 'reconnected' alongside the panel's own
+          // handler, and real livekit delivers to every listener. A single-slot
+          // mock silently dropped whichever registered first.
+          const prev = handlersA[event];
+          handlersA[event] =
+            prev === undefined
+              ? handler
+              : (...args: unknown[]) => {
+                  prev(...args);
+                  handler(...args);
+                };
+        }
       }),
       off: vi.fn(),
       disconnect: vi.fn(),
     };
     const roomB = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-        handlersB[event] = handler;
+        {
+          // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+          // congestion effect subscribing 'reconnected' alongside the panel's own
+          // handler, and real livekit delivers to every listener. A single-slot
+          // mock silently dropped whichever registered first.
+          const prev = handlersB[event];
+          handlersB[event] =
+            prev === undefined
+              ? handler
+              : (...args: unknown[]) => {
+                  prev(...args);
+                  handler(...args);
+                };
+        }
       }),
       off: vi.fn(),
       disconnect: vi.fn(),
@@ -1201,7 +1305,20 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
     const handlers: Record<string, (...args: unknown[]) => void> = {};
     const room = {
       on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
-        handlers[event] = handler;
+        {
+          // V-2168 — FAN OUT, do not overwrite: the hook now has a room-scoped
+          // congestion effect subscribing 'reconnected' alongside the panel's own
+          // handler, and real livekit delivers to every listener. A single-slot
+          // mock silently dropped whichever registered first.
+          const prev = handlers[event];
+          handlers[event] =
+            prev === undefined
+              ? handler
+              : (...args: unknown[]) => {
+                  prev(...args);
+                  handler(...args);
+                };
+        }
       }),
       off: vi.fn(),
       disconnect: vi.fn(),

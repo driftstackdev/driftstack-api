@@ -430,6 +430,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     onPublishErrorRef.current = opts.onPublishError;
   }, [opts.onPublishError]);
   const onCongestionChangeRef = useRef(opts.onCongestionChange);
+  // V-2168 — the capture effect's congestion-ONSET side effects (lift the
+  // finger, cancel the fling, release held keys), registered here so the single
+  // room-scoped subscription below can invoke them while capture is attached.
+  // Null whenever capture is torn down — the state bookkeeping continues, the
+  // input actions do not.
+  const congestionInterruptRef = useRef<(() => void) | null>(null);
   useEffect(() => {
     onCongestionChangeRef.current = opts.onCongestionChange;
   }, [opts.onCongestionChange]);
@@ -474,12 +480,24 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Tell the panel the current state at attach (a re-mount must not assume
     // "not congested" while the store says otherwise).
     onCongestionChangeRef.current?.(isReliableInputCongested(room), room);
+    // A retired effect's handlers go INERT rather than relying on `.off` alone:
+    // a late event captured by a test double (or an emitter delivering after
+    // unsubscribe) must not let a PREVIOUS room write congestion state.
+    let disposed = false;
     const onDC = (isLow: boolean, kind: number): void => {
-      if (kind !== 0) return; // reliable channel only — see the capture effect
+      if (disposed) return;
+      // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable).
+      // The lossy channel already self-drops under congestion; if livekit ever
+      // renumbered, the flag never trips and we degrade to no-backpressure.
+      if (kind !== 0) return;
       setReliableInputCongested(room, !isLow);
       onCongestionChangeRef.current?.(!isLow, room);
+      // Congestion ONSET: stop any in-flight gesture at the source (registered
+      // only while capture is attached and owning input).
+      if (!isLow) congestionInterruptRef.current?.();
     };
     const onReconnected = (): void => {
+      if (disposed) return;
       // A reconnect replaced the channel with a fresh, empty one. Its buffer
       // begins low, so no low-threshold crossing is guaranteed; clear the prior
       // channel's latch or input stays paused forever.
@@ -492,11 +510,17 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     );
     (room as { on: (e: string, cb: () => void) => void }).on(RoomEvent.Reconnected, onReconnected);
     return () => {
-      (room as { off: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off(
+      disposed = true;
+      // ⛔ `.off?.` — optional on purpose. Plenty of test/stub Rooms implement
+      // `on` without `off` (the latency-ping hook makes the same allowance); an
+      // unguarded call here threw from a React unmount destructor, and one
+      // throwing destructor took down not just its own suite but the worker
+      // running it — the full gate went 3071-files-red off this single line.
+      (room as { off?: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off?.(
         RoomEvent.DCBufferStatusChanged,
         onDC,
       );
-      (room as { off: (e: string, cb: () => void) => void }).off(
+      (room as { off?: (e: string, cb: () => void) => void }).off?.(
         RoomEvent.Reconnected,
         onReconnected,
       );
@@ -527,42 +551,27 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // On a healthy link this flag never leaves `false` (livekit only emits on a
     // threshold crossing, and it starts "low"), so behavior is byte-identical to
     // before; it only changes the actual failure case.
-    // Congestion belongs to the Room, not this particular listener effect. The effect
-    // legitimately reattaches when first-frame logical dimensions settle; inherit the
-    // same Room's latch so that re-key cannot accidentally resume input mid-stall.
-    let reliableCongested = isReliableInputCongested(room);
-    // V-2168 — the STORE and the panel callback are maintained by the
-    // room-scoped effect above, which survives this effect's teardown. Here we
-    // only mirror into the hot-path local and run the gesture-interruption side
-    // effects, so a torn-down capture can no longer strand the latch. No
-    // authority gate on the mirror: state bookkeeping is not an input action.
-    const setCongested = (congested: boolean): void => {
-      reliableCongested = congested;
-    };
-    const onDCBufferStatus = (isLow: boolean, kind: number): void => {
-      // DataChannelKind.RELIABLE === 0 (livekit-client internal enum, stable). The
-      // lossy channel already self-drops under congestion, so we gate only on
-      // reliable; if livekit ever renumbered the enum the flag simply never trips and
-      // we degrade safely to the prior (no-backpressure) behavior.
-      if (kind !== 0) return;
-      setCongested(!isLow);
-      if (!reliableCongested) return;
-
-      // Stop any gesture already in progress as soon as congestion is reported. A
-      // committed finger MUST still receive its release; an uncommitted tap has put
-      // nothing on the wire and is simply discarded. This bounds the stale tail at one
-      // essential touchEnd instead of allowing later moves/re-centres/taps to queue.
+    // Congestion belongs to the Room, not this particular listener effect: the
+    // V-2168 room-scoped effect above owns the single subscription, the store,
+    // and the panel callback, and it SURVIVES this effect's teardown (the old
+    // in-effect subscription was torn down for the whole of a reconnect, so the
+    // latch's clearing paths went unheard and input stayed shed forever). Hot
+    // paths read the room-keyed store directly — a WeakSet lookup — so this
+    // effect re-keying can never resume input mid-stall, and a torn-down
+    // capture can no longer strand the latch.
+    const reliablyCongestedNow = (): boolean => isReliableInputCongested(room);
+    // Congestion ONSET side effects, registered for the room-scoped handler to
+    // invoke: stop any gesture already in progress as soon as congestion is
+    // reported. A committed finger MUST still receive its release; an
+    // uncommitted tap has put nothing on the wire and is simply discarded. This
+    // bounds the stale tail at one essential touchEnd instead of letting later
+    // moves/re-centres/taps queue.
+    congestionInterruptRef.current = () => {
       liftActiveFinger();
       cancelFling(true);
       window.clearTimeout(wheelTimer);
       endWheelDrag();
       releaseForwardedKeys();
-    };
-    // A reconnect can replace the underlying DataChannel with a fresh, empty one.
-    // Its buffer begins low, so no low-threshold crossing is guaranteed; explicitly
-    // clear the prior channel's latch or input could remain paused forever.
-    const onRoomReconnected = (): void => {
-      setCongested(false);
     };
 
     const send = (event: InputEvent, reliable: boolean): void => {
@@ -673,7 +682,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Do not enqueue a new press behind a stalled ordered channel. Replaying a
       // seconds-old tap after the page has changed is actively unsafe; the next press
       // works normally once DCBufferStatusChanged reports the buffer low again.
-      if (reliableCongested) return;
+      if (reliablyCongestedNow()) return;
       const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       try {
@@ -786,7 +795,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       if (!g.committed) {
         // Congestion may begin between press and release. No touchStart was emitted
         // yet, so discard the whole pending tap rather than enqueueing stale intent.
-        if (reliableCongested) return;
+        if (reliablyCongestedNow()) return;
         send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         return;
@@ -1103,7 +1112,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // (the flag clears on the next DCBufferStatusChanged). An in-flight wheelDrag is
       // lifted cleanly by its WHEEL_IDLE_MS idle-end touchEnd (one essential message),
       // so no finger is left pressed.
-      if (reliableCongested) return;
+      if (reliablyCongestedNow()) return;
       const p = pointerToViewport(e, video, logical);
       if (p === null) return;
       wheelCursorX = clampX(p.x);
@@ -1168,7 +1177,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // into the wrong field/page after recovery. Keys whose down was sent before the
       // stall remain in forwardedKeys, so their keyUp is still delivered below and no
       // remote modifier/key is stranded. Self-heals when the buffer reports low again.
-      if (reliableCongested) return;
+      if (reliablyCongestedNow()) return;
       const modifiers = modifiersFromEvent(e);
       const id = keyId(e);
       const priorKey = forwardedKeys.get(id);
@@ -1221,19 +1230,6 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
 
     video.addEventListener('mousedown', onMouseDown);
     video.addEventListener('wheel', onWheel, { passive: true });
-    // Track reliable-channel congestion so the wheel path can shed the scroll flood
-    // while the link is backed up (see reliableCongested). Guarded: a stubbed Room in
-    // unit tests has no `.on`, and it's absent-safe (the flag just stays false).
-    if (typeof (room as unknown as { on?: unknown }).on === 'function') {
-      (room as { on: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).on(
-        RoomEvent.DCBufferStatusChanged,
-        onDCBufferStatus,
-      );
-      (room as { on: (e: string, cb: () => void) => void }).on(
-        RoomEvent.Reconnected,
-        onRoomReconnected,
-      );
-    }
     // Move + release on WINDOW, not just the video: the streamed phone is small
     // (~330px wide), so a drag easily wanders off it. onMouseMove no-ops unless a
     // gesture is active, so a window listener keeps a drag scrolling once it leaves
@@ -1261,16 +1257,9 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     return () => {
       video.removeEventListener('mousedown', onMouseDown);
       video.removeEventListener('wheel', onWheel);
-      if (typeof (room as unknown as { off?: unknown }).off === 'function') {
-        (room as { off: (e: string, cb: (isLow: boolean, kind: number) => void) => void }).off(
-          RoomEvent.DCBufferStatusChanged,
-          onDCBufferStatus,
-        );
-        (room as { off: (e: string, cb: () => void) => void }).off(
-          RoomEvent.Reconnected,
-          onRoomReconnected,
-        );
-      }
+      // V-2168 — un-register the congestion-onset input actions; the room-scoped
+      // subscription and its state bookkeeping deliberately stay live.
+      congestionInterruptRef.current = null;
       // Do not clear the room-owned latch here: this cleanup can be a same-Room
       // logical-dimension reattach, not a disconnect. WeakSet ownership means an
       // actually discarded Room is collectible without explicit deletion. Do not
