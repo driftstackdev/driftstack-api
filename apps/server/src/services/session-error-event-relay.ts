@@ -93,7 +93,24 @@ export function makeSessionErrorEventRelay(
   });
 
   return (frame: HarnessErrorEvent, reportingNodeId: string): void => {
-    if (frame.sessionId === undefined) return;
+    if (frame.sessionId === undefined) {
+      // A node-scoped failure has no session to persist on and no customer to
+      // notify — but dropping it SILENTLY left the server log empty exactly when
+      // an operator asks "the load just stopped, what happened?" (V-2155). Log
+      // the code, never summary/detail: those can carry the node's own IP.
+      logger.warn(
+        {
+          component: 'session-error-event-relay',
+          reportingNodeId,
+          code: frame.code,
+          severity: frame.severity,
+          customerActionable: frame.customerActionable,
+          retryable: frame.retryable,
+        },
+        'node-scoped errorEvent (no sessionId) — not persisted, not notified; correlate by node + time',
+      );
+      return;
+    }
     receiveSessionScoped(frame as SessionScopedHarnessErrorEvent, reportingNodeId);
   };
 }

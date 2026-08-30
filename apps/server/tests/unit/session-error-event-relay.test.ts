@@ -77,6 +77,20 @@ describe('makeSessionErrorEventRelay', () => {
     await Promise.resolve();
     expect((await repo.get(session.id))?.lastErrorEvent).toBeNull();
     expect(publish).not.toHaveBeenCalled();
+    // V-2155 — the node-scoped drop is no longer silent: one warn naming the
+    // node and the code (never summary/detail, which can carry the node's IP),
+    // so an operator reading the server log can correlate a "load just stopped"
+    // report with the failure the box actually reported.
+    await vi.waitFor(() => expect(log.warn).toHaveBeenCalledTimes(2));
+    const nodeScoped = (log.warn as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c) => typeof c[1] === 'string' && c[1].startsWith('node-scoped errorEvent'),
+    );
+    expect(nodeScoped, 'no warn for the node-scoped drop').toBeDefined();
+    const ctx = nodeScoped?.[0] as Record<string, unknown>;
+    expect(ctx.reportingNodeId).toBe('node-1');
+    expect(ctx.code).toBe(frame({ sessionId: undefined }).code);
+    expect(ctx).not.toHaveProperty('summary');
+    expect(ctx).not.toHaveProperty('detail');
   });
 
   it('re-applies bounds after IP redaction expands customer-visible text', async () => {

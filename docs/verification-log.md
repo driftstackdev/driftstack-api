@@ -11764,3 +11764,37 @@ proxy omits the block entirely; VPN egress schemes are never probed; the cache T
 create→dispatch gap longer than that is a miss; and even on a HIT, `region`/`city`/`timezone` are null
 unless Cloudflare's visitor-location transform is enabled — a live proxied capture on 2026-07-06
 recorded exactly those nulls, which renders Location blank on the device.
+
+## V-2155 — a node-scoped harness errorEvent was dropped with no log line; the api-side half of "the load just stops, no error code" (2026-08-30)
+
+The owner's most frustrating live report: a page load that fails and "just stops — no error code, nothing".
+The harness half is A2's/A1's; this is the api half, traced read-only before anything was changed.
+
+**Two lanes carry a failed load to the customer, and one of them was leaking.** (a) `pageState`: the harness
+sends `state: 'errored' | 'stalled'` with `error{kind,message}`; `session-page-state-store` scrubs it and
+`GET /v1/agent-sessions/:id/page-state` serves it; the GUI renders per-kind copy (`page-error-copy.ts`,
+`SimulatorWindow.tsx:4230-4290`). Complete end-to-end — and `SimulatorWindow.tsx:306` records that the
+harness emits `page_state.errored` ONLY for a main-frame navigation failure, so a load that produces neither
+`errored` nor `stalled` reaches the GUI as silence by construction: that is the harness-side question. (b)
+`errorEvent`: `session-error-event-relay` persists it on the agent session (`last_error_event`: code,
+scrubbed summary/detail) and publishes `session.errored` with the code only (the toast says "Session X hit
+`<code>`"). But `errorEvent.sessionId` is optional, and the relay's entry was literally
+`if (frame.sessionId === undefined) return;` — a node-scoped failure (a driver fault the box does not
+attribute to a session; a cold tab open is a plausible shape) vanished with no persistence, no notification
+AND no log line. The test arm pinned the first two as intended ("drops … without customer mutation or
+notification"); nothing asserted the third, so the server log was empty exactly when an operator would read it.
+
+**Change:** the drop now logs one `warn` — component, reporting node, code, severity, actionable/retryable —
+and never summary/detail, which the forward-guard on this relay exists to keep off customer state because they
+can carry the node's own IP. Persistence and notification are unchanged (still none). The existing arm gains
+the assertions: a second warn, its message prefix, the node and code in its context, and NO summary/detail
+keys. 9 arms green, server test tsconfig clean, `it(` count unchanged.
+
+**Mutation proof:** the silent `return` restored → the arm fails at `toHaveBeenCalledTimes(2)` ("no warn for
+the node-scoped drop"); relay restored byte-identical, 9/9 green.
+
+**Boundary:** a log line, not a customer signal — the node-scoped event still cannot be shown to a customer
+because the api does not know whose it is. Whether the harness attaches `sessionId` to tab-open failures, and
+why a failed load can produce neither `errored` nor `stalled`, are the harness questions that decide the
+owner's report; this entry only guarantees the server log stops being blank. Single-file run only — the full
+gate is held behind A1's capture loop.
