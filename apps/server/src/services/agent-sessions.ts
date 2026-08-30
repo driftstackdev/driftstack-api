@@ -162,6 +162,18 @@ export interface AgentSessionAuthoritySnapshot {
 export interface CreateAgentSessionArgs {
   accountId: string;
   tokenBudgetTotal: number;
+  /**
+   * Prior conversation to carry into the new session, for a chat the customer
+   * is CONTINUING (`continue_from_agent_session_id`). Omitted → a fresh empty
+   * transcript, which is every other create.
+   *
+   * ⛔ Entries, not ciphertext. The stored envelope's AAD binds
+   * `{accountId, sessionId}`, so a byte-copy from the source row cannot be
+   * opened under the new id — the caller decrypts with the SOURCE context and
+   * the repo re-encrypts under the TARGET. Anything that skips that produces a
+   * row nothing can ever read.
+   */
+  seedTranscript?: ReadonlyArray<TranscriptEntry>;
   /** Optional pre-attached driftstack session id (when the customer
    *  starts the agent-chat from inside an already-running session). */
   driftstackSessionId?: string;
@@ -486,7 +498,11 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       accountId: args.accountId,
       driftstackSessionId: args.driftstackSessionId ?? null,
       status: 'active',
-      transcript: [],
+      // #13 — a continued chat starts with the source's entries. The Drizzle repo
+      // re-encrypts them under the new id; here there is no envelope, so a copy of
+      // the array is the whole job — but it MUST be a copy, since the caller's
+      // array is the source session's own transcript.
+      transcript: args.seedTranscript !== undefined ? [...args.seedTranscript] : [],
       tokenBudgetTotal: args.tokenBudgetTotal,
       tokenBudgetRemaining: args.tokenBudgetTotal,
       closedReason: null,

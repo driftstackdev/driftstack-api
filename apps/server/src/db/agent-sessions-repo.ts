@@ -402,7 +402,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
           accountId: args.accountId,
           driftstackSessionId: args.driftstackSessionId ?? null,
           status: 'active',
-          transcript: encryptAgentSessionTranscript([], key, {
+          // Encrypted under the NEW id: the envelope's AAD binds
+          // {accountId, sessionId}, so a continued chat's entries must be
+          // re-sealed here rather than copied as ciphertext.
+          transcript: encryptAgentSessionTranscript(args.seedTranscript ?? [], key, {
             accountId: args.accountId,
             sessionId: id,
           }),

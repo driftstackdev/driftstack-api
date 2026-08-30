@@ -11949,3 +11949,51 @@ Rebuilt docs; re-migrated (116 applied). All five files green individually.
 **The lesson worth keeping is the first one:** a single-file run proves a file, not a change. V-2153's
 mutation proof was real and its arm was correct — and the change was still wrong, in a way only a
 whole-suite run could show, because the constant it touched was shared.
+
+## V-2161 — a continued chat keeps its memory: `continue_from_agent_session_id` (2026-08-30)
+
+Owner, twice: _"it seems to have no memory still when returning later to the same chat"_, and the
+agent's own words in their transcript — _"I don't have a previous task on record in this session."_
+
+**Why it happened.** `use-agent-chat` closes the server session in an unmount effect, deliberately, so
+leaving the AI view does not strand a running session and its dispatched Mac until the reaper. The
+conversation lives in that session's transcript, and a new session starts empty — so coming back
+creates a session with no history, and the planner is told nothing about what came before. The
+owner's paste carries the corroborating evidence: per-turn token counts sat flat at ~1.2–1.5k across
+the conversation, which is not what an accumulating history looks like.
+
+**The fix.** `POST /v1/agent-sessions` accepts `continue_from_agent_session_id`. The source must be
+OWNED (404 otherwise — never 403, which would confirm a stranger's session exists) and CLOSED (409
+otherwise: forking a live transcript races the runtime's own appends under the CAS). Its entries are
+carried into the new session, capped at `AGENT_TRANSCRIPT_MAX_ENTRIES` keeping the MOST RECENT, since
+the tail is what the next turn needs and the runtime enforces the same ceiling on append.
+
+**Entries, never ciphertext.** The stored envelope's AAD binds `{accountId, sessionId}`, so a byte
+copy from the source row would insert something no one can ever decrypt — and it would fail as a
+broken session later, not as a rejected create. The route decrypts under the SOURCE context and the
+repo re-seals under the TARGET id.
+
+**⛔ The mutation that SURVIVED, and what it exposed.** Deleting the ownership half of the guard left
+all 157 tests green. "Unknown id" and "someone else's id" are different refusals and I had only
+covered the first — so the arm that mattered most for a customer-settable cross-account pointer did
+not exist. Added: a foreign account's closed session with a transcript, asserted 404. The mutation is
+caught now. An unmutated guard is an unproven guard, and this is the second time today that rule paid.
+
+**Two implementations, one interface.** The first green run returned 201 with an EMPTY transcript: I
+had seeded the Drizzle repo and forgotten the in-memory one the integration fixture uses. Both seed
+now. A related fixture lesson: my first draft gated the lookup on a canonical `agt_<uuid>` regex,
+which 404'd a session that existed and was owned, because the in-memory repo mints `agt_inmem_…`. The
+gate encoded ONE id shape and rejected every other; it is gone, and `get` + ownership + status are the
+controls. The zod bound caps the input.
+
+**Proofs.** 158/158 integration arms, plus published-vs-enforced schema parity 5/5 and openapi parity
+15/15 (the field is declared in `lib/openapi.ts` as well, or the published document would promise less
+than the route enforces). Mutations, snapshot-restored and cmp-verified: status gate disabled → red;
+the seed dropped on the way to create → red; ownership half removed → red (only after the arm above
+existed).
+
+**Boundary — the SERVER half only.** Nothing in the GUI sends this field yet, so the owner's chat does
+not keep its memory until `use-agent-chat` passes the stored `sessionId` of the chat being reopened.
+That is the next commit, not this one. Also unchanged: the session is still closed on unmount (the
+resource protection is deliberate), and a continued chat is a NEW session — its budget, its node, and
+its cost accounting start fresh.

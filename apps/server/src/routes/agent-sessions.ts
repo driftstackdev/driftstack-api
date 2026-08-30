@@ -41,11 +41,12 @@ import {
 import {
   agentTurnAdmissionForSession,
   agentTurnAdmissionMatchesSnapshot,
+  AGENT_TRANSCRIPT_MAX_ENTRIES,
   type AgentTurnAdmission,
   type AgentRuntime,
 } from '../services/agent-runtime.js';
 import { consequentialSignature } from '../services/agent-executor.js';
-import type { DecomposeUsage } from '../services/agent-decomposer.js';
+import type { DecomposeUsage, TranscriptEntry } from '../services/agent-decomposer.js';
 import {
   publicAgentIntent,
   publicIntentResult,
@@ -235,6 +236,16 @@ const CreateAgentSessionRequestSchema = z.object({
   // makes both true, and `parseProfileId` still runs downstream as the
   // normalizer it is.
   profile_id: z.string().regex(PROFILE_ID_INPUT_RE).optional(),
+  // #13 — CONTINUE a finished chat. The conversation lives in the SOURCE
+  // session's transcript and a new session starts empty, so returning to a chat
+  // whose session has closed makes the agent answer "I don't have a previous
+  // task on record in this session" (owner 2026-08-30). Supplying the prior id
+  // carries its transcript into this one.
+  //
+  // Same shape as driftstack_session_id: bounded string here, exact validation
+  // in the handler, which requires the source to be OWNED and CLOSED and 404s a
+  // foreign or unknown id rather than confirming it exists.
+  continue_from_agent_session_id: z.string().min(1).max(100).optional(),
   // ARC A — per-session customer proxy. When supplied, the dispatched session
   // browses through this account proxy instead of the operator default.
   // Validated to be an owned proxy before dispatch; a cross-account/unknown id
@@ -2136,6 +2147,39 @@ export function registerAgentSessionsRoutes(
         }
       }
 
+      // #13 — resolve the chat being CONTINUED. Mirrors the strict-FK treatment of
+      // driftstack_session_id above, for the same reason: this id is customer-
+      // settable and must never become a cross-account pointer.
+      //   - unknown OR another account's  -> 404, never 403 (no existence oracle)
+      //   - not CLOSED                    -> 409; forking a live transcript races the
+      //                                      runtime's own append under the CAS
+      let seedTranscript: ReadonlyArray<TranscriptEntry> | undefined;
+      if (parsed.data.continue_from_agent_session_id !== undefined) {
+        const sourceId = parsed.data.continue_from_agent_session_id;
+        // No id-FORMAT gate here, on purpose. `get` is an equality lookup, so an
+        // unparseable id simply misses and lands on the 404 below — whereas a format
+        // check encodes ONE id shape and rejects every other, which is exactly what it
+        // did when I tried: the in-memory repo mints `agt_inmem_00000001`, so the guard
+        // 404'd a session that existed and was owned. The zod bound on the field caps
+        // the input; ownership and status below are the real controls.
+        const source = await sessions.get(sourceId);
+        if (source === null || !callerCanAccessAgentSession(ctx, source.accountId)) {
+          throw new NotFoundError(`AgentSession ${sourceId} not found.`);
+        }
+        if (source.status !== 'closed') {
+          throw new ConflictError(
+            `AgentSession ${sourceId} is ${source.status}; only a closed session can be continued.`,
+          );
+        }
+        // Keep the MOST RECENT entries: the tail is the part the next turn needs, and
+        // the runtime enforces the same ceiling on append, so seeding above it would
+        // hand the new session a transcript it must immediately trim.
+        seedTranscript =
+          source.transcript.length > AGENT_TRANSCRIPT_MAX_ENTRIES
+            ? source.transcript.slice(-AGENT_TRANSCRIPT_MAX_ENTRIES)
+            : source.transcript;
+      }
+
       const idempotencyKey = idempotency.kind === 'valid' ? idempotency.key : null;
       if (idempotencyKey !== null) {
         const existing = await sessions.findByIdempotencyKey(ownerAccountId, idempotencyKey);
@@ -2312,6 +2356,10 @@ export function registerAgentSessionsRoutes(
             // out-of-session trim can refuse a trim against a profile bound to a
             // live session (avoids a two-writer R2 lost-update on the sealed blob).
             ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
+            // #13 — the continued chat's history, re-sealed under the NEW session id by
+            // the repo (the envelope's AAD binds {accountId, sessionId}, so ciphertext
+            // cannot be carried across).
+            ...(seedTranscript !== undefined ? { seedTranscript } : {}),
           },
           MAX_ACTIVE_AGENT_SESSIONS_PER_ACCOUNT,
         );

@@ -4807,6 +4807,11 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': {
             schema: z.object({
               driftstack_session_id: z.string().min(1).max(100).optional(),
+              // #13 — continue a finished chat: carries the SOURCE session's transcript
+              // into the new one, so returning to a closed chat keeps its history instead
+              // of starting the agent with no memory of it. Canonical agt_<uuid>; must be
+              // owned and CLOSED (unknown/not-owned -> 404, still active -> 409).
+              continue_from_agent_session_id: z.string().min(1).max(100).optional(),
               token_budget: z.number().int().positive().max(10_000_000).optional(),
               mode: z.enum(['manual', 'ai', 'pair']).optional(),
               model: AgentModelSchema.optional(),

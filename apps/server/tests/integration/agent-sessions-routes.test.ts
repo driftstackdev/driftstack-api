@@ -4026,3 +4026,143 @@ describe('read:sessions floor on GET /v1/agent-sessions/:id/transcript', () => {
     },
   );
 });
+
+describe('continuing a finished chat carries its transcript (V-2161)', () => {
+  let fx: Awaited<ReturnType<typeof buildTestApp>> | undefined;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+    fx = undefined;
+  });
+
+  /** Create a session, put a turn in its transcript, then close it. */
+  async function closedSessionWithHistory(
+    auth: Record<string, string>,
+  ): Promise<{ id: string; transcriptLength: number }> {
+    const created = await fx!.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, mode: 'manual' },
+    });
+    expect(created.statusCode).toBe(201);
+    const id = created.json<{ id: string }>().id;
+    // Give it history the way the runtime does (one entry per call), then close
+    // it through the repo's own close path so `closed_reason` is set exactly as a
+    // customer close sets it.
+    await fx!.agentSessionsRepo.appendTranscript(id, {
+      at: new Date().toISOString(),
+      role: 'user',
+      body: 'book me a flight to Lisbon',
+    });
+    await fx!.agentSessionsRepo.closeWithReason(id, 'customer-closed');
+    const after = await fx!.agentSessionsRepo.get(id);
+    expect(after?.status, 'the fixture must actually close it').toBe('closed');
+    return { id, transcriptLength: after?.transcript.length ?? 0 };
+  }
+
+  it('⛔ the continued session can READ the carried transcript — it is re-sealed under the NEW id, not copied', async () => {
+    // The envelope's AAD binds {accountId, sessionId}. A ciphertext copy would
+    // insert a row that decrypts for nobody, and the failure would surface as a
+    // broken session rather than a rejected create — so this asserts the entries
+    // come back, which only holds if they were re-encrypted.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const source = await closedSessionWithHistory(auth);
+    expect(source.transcriptLength).toBeGreaterThan(0);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, continue_from_agent_session_id: source.id },
+    });
+
+    expect(res.statusCode, 'continuing an owned closed chat is allowed').toBe(201);
+    const continued = await fx.agentSessionsRepo.get(res.json<{ id: string }>().id);
+    expect(continued?.transcript.map((t) => t.body)).toEqual(['book me a flight to Lisbon']);
+  });
+
+  it('an unknown source is 404 — never 403, which would confirm it exists', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    for (const sourceId of [
+      'agt_00000000-0000-4000-8000-0000000000ff',
+      'not-an-agent-session-id',
+    ]) {
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: '/v1/agent-sessions',
+        headers: auth,
+        payload: { token_budget: 50_000, continue_from_agent_session_id: sourceId },
+      });
+      expect(res.statusCode, sourceId).toBe(404);
+    }
+  });
+
+  it('a session that is still ACTIVE cannot be continued — forking a live transcript races its own appends', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const live = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000, mode: 'manual' },
+    });
+    expect(live.statusCode).toBe(201);
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: {
+        token_budget: 50_000,
+        continue_from_agent_session_id: live.json<{ id: string }>().id,
+      },
+    });
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("⛔ ANOTHER account's closed chat is 404, not a transcript — the id is customer-settable", async () => {
+    // The mutation that survived before this arm existed: deleting the ownership
+    // half of the guard left every test green, because "unknown id" and "someone
+    // else's id" are different refusals and only the first was covered. A caller
+    // who guesses an id must not receive a stranger's conversation.
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const FOREIGN_ACCOUNT = '00000000-0000-4000-8000-0000000000fe';
+    const foreign = await fx.agentSessionsRepo.create({
+      accountId: FOREIGN_ACCOUNT,
+      tokenBudgetTotal: 50_000,
+    });
+    await fx.agentSessionsRepo.appendTranscript(foreign.id, {
+      at: new Date().toISOString(),
+      role: 'user',
+      body: 'a stranger private conversation',
+    });
+    await fx.agentSessionsRepo.closeWithReason(foreign.id, 'customer-closed');
+
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, continue_from_agent_session_id: foreign.id },
+    });
+
+    // 404, never 403 — a 403 would confirm the session exists.
+    expect(res.statusCode, 'a foreign session must not be continuable').toBe(404);
+    expect(res.json<{ status?: number }>().status).toBe(404);
+  });
+
+  it('omitting the field is unchanged: a fresh session starts with an empty transcript', async () => {
+    fx = await buildTestApp({ enableAgentRuntime: true });
+    const auth = { authorization: `Bearer ${fx.plaintext}` };
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: auth,
+      payload: { token_budget: 50_000 },
+    });
+    expect(res.statusCode).toBe(201);
+    const fresh = await fx.agentSessionsRepo.get(res.json<{ id: string }>().id);
+    expect(fresh?.transcript).toEqual([]);
+  });
+});
