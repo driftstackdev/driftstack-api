@@ -34774,6 +34774,11 @@
                     "minLength": 1,
                     "maxLength": 100
                   },
+                  "continue_from_agent_session_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  },
                   "token_budget": {
                     "type": "integer",
                     "exclusiveMinimum": 0,

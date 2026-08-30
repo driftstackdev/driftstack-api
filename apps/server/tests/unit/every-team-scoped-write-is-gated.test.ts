@@ -111,7 +111,13 @@ const ROSTER: Readonly<Record<string, string>> = {
   'DELETE /v1/webhooks/:id': 'effectiveAccountIdForWrite',
   'PATCH /v1/profiles/:id': 'effectiveAccountIdForWrite',
   'PATCH /v1/webhooks/:id': 'effectiveAccountIdForWrite',
-  'POST /v1/agent-sessions': 'inline role check',
+  // ⚠️ This route now carries TWO gates and the detector records only `gates[0]`,
+  // which orders helpers before the inline check. The inline `effective.role`
+  // comparison still gates the CREATE itself; `callerCanAccessAgentSession` gates
+  // the separate `continue_from_agent_session_id` source lookup (V-2161). Naming
+  // the consequence rather than hiding it: while this entry reads as the helper, a
+  // future removal of the inline check would NOT be caught here.
+  'POST /v1/agent-sessions': 'callerCanAccessAgentSession',
   'POST /v1/agent-sessions/:id/cookies/set': 'callerCanAccessAgentSession',
   'POST /v1/agent-sessions/:id/files': 'callerCanAccessAgentSession',
   'POST /v1/agent-sessions/:id/handback': 'callerCanAccessAgentSession',

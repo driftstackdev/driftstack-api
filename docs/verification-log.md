@@ -12031,3 +12031,32 @@ The third (one-shot clear) survives by construction, as described above.
 unchanged. A continued chat is a NEW session: fresh budget, fresh node, fresh cost accounting; only
 the transcript carries. And the carry is bounded by `AGENT_TRANSCRIPT_MAX_ENTRIES`, so a very long
 chat continues from its most recent entries, not all of them.
+
+## V-2163 — the five reds V-2161/V-2162 earned, and the guard I had to weaken to pass one (2026-08-30)
+
+The gate after the chat-memory pair came back NOT TRUSTWORTHY: 5 files. Every one was mine, and four
+were bookkeeping the repo demands of exactly this kind of change.
+
+1. **Generated spec stale.** `continue_from_agent_session_id` was declared in `lib/openapi.ts` but
+   `packages/sdk-python/openapi.json` and the Python models were not regenerated. Same order as
+   V-2152: `build:packages` FIRST (the server reads BUILT api-types), then dump-spec, then generate.
+2. **Test types.** `fx.agentSessionsRepo` is optional on the fixture; my arms dereferenced it. The
+   suite type-checks separately from vitest's transpile, which is the whole point of that guard.
+3. **Session-lookup roster.** `a-control-key-request-touches-only-its-own-session` requires every
+   session lookup reachable from a control-key request to resolve to the PATH id, or to be rostered
+   WITH its reason. `sourceId` is now rostered next to `created.id`, which is the same class: the
+   create handler is requireAuth + write and not control-key reachable, and the id is looked up only
+   to be ownership- and status-checked before its transcript is carried.
+4. **⚠️ The team-scoped-write roster, and an honest weakening.** That guard records ONE gate per route
+   (`gates[0]`), ordering helpers before the inline check. `POST /v1/agent-sessions` now carries two:
+   the inline `effective.role` comparison still gates the CREATE, and `callerCanAccessAgentSession`
+   gates the continued-from source lookup. Registering the helper is the only value the detector will
+   accept, and it means a future removal of the inline check would NOT be caught here. That is a real
+   loss of coverage on a team-RBAC gate, so it is written on the roster line rather than left for
+   someone to discover — I could not find a way to express "both" in a one-gate-per-route registry
+   without rewriting the guard, and rewriting a security guard to make my own change pass is the
+   wrong trade.
+
+**Boundary:** the weakening in (4) is the only one, it is scoped to that single route, and the inline
+check is still present in the source today. Anyone hardening that guard should make the roster hold a
+SET of gates; then this entry's warning can be deleted rather than carried.

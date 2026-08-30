@@ -73,6 +73,8 @@ const RESOLVES_TO_PATH_SESSION: Record<string, string> = {
     'resolveAgentMessageAdmission; both call sites pass req.params.id as the first argument',
   'created.id':
     'the freshly created session on POST /v1/agent-sessions, which is requireAuth + write and not control-key reachable',
+  sourceId:
+    'continue_from_agent_session_id on POST /v1/agent-sessions — the same create handler as created.id above: requireAuth + requireScope(write), never control-key reachable. It is looked up ONLY to be ownership-checked (callerCanAccessAgentSession) and status-checked before its transcript is carried; a foreign or unknown id 404s there.',
 };
 
 /** Cut `//` to end of line, leaving string literals intact. */

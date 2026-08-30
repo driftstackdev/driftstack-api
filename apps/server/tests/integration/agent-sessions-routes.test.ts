@@ -4049,13 +4049,13 @@ describe('continuing a finished chat carries its transcript (V-2161)', () => {
     // Give it history the way the runtime does (one entry per call), then close
     // it through the repo's own close path so `closed_reason` is set exactly as a
     // customer close sets it.
-    await fx!.agentSessionsRepo.appendTranscript(id, {
+    await fx!.agentSessionsRepo!.appendTranscript(id, {
       at: new Date().toISOString(),
       role: 'user',
       body: 'book me a flight to Lisbon',
     });
-    await fx!.agentSessionsRepo.closeWithReason(id, 'customer-closed');
-    const after = await fx!.agentSessionsRepo.get(id);
+    await fx!.agentSessionsRepo!.closeWithReason(id, 'customer-closed');
+    const after = await fx!.agentSessionsRepo!.get(id);
     expect(after?.status, 'the fixture must actually close it').toBe('closed');
     return { id, transcriptLength: after?.transcript.length ?? 0 };
   }
@@ -4078,7 +4078,7 @@ describe('continuing a finished chat carries its transcript (V-2161)', () => {
     });
 
     expect(res.statusCode, 'continuing an owned closed chat is allowed').toBe(201);
-    const continued = await fx.agentSessionsRepo.get(res.json<{ id: string }>().id);
+    const continued = await fx.agentSessionsRepo!.get(res.json<{ id: string }>().id);
     expect(continued?.transcript.map((t) => t.body)).toEqual(['book me a flight to Lisbon']);
   });
 
@@ -4129,16 +4129,16 @@ describe('continuing a finished chat carries its transcript (V-2161)', () => {
     // who guesses an id must not receive a stranger's conversation.
     fx = await buildTestApp({ enableAgentRuntime: true });
     const FOREIGN_ACCOUNT = '00000000-0000-4000-8000-0000000000fe';
-    const foreign = await fx.agentSessionsRepo.create({
+    const foreign = await fx.agentSessionsRepo!.create({
       accountId: FOREIGN_ACCOUNT,
       tokenBudgetTotal: 50_000,
     });
-    await fx.agentSessionsRepo.appendTranscript(foreign.id, {
+    await fx.agentSessionsRepo!.appendTranscript(foreign.id, {
       at: new Date().toISOString(),
       role: 'user',
       body: 'a stranger private conversation',
     });
-    await fx.agentSessionsRepo.closeWithReason(foreign.id, 'customer-closed');
+    await fx.agentSessionsRepo!.closeWithReason(foreign.id, 'customer-closed');
 
     const res = await fx.app.inject({
       method: 'POST',
@@ -4162,7 +4162,7 @@ describe('continuing a finished chat carries its transcript (V-2161)', () => {
       payload: { token_budget: 50_000 },
     });
     expect(res.statusCode).toBe(201);
-    const fresh = await fx.agentSessionsRepo.get(res.json<{ id: string }>().id);
+    const fresh = await fx.agentSessionsRepo!.get(res.json<{ id: string }>().id);
     expect(fresh?.transcript).toEqual([]);
   });
 });
