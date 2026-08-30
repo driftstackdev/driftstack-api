@@ -658,8 +658,8 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
 
 /**
  * ⛔ CHROME-ON-iOS ARCHETYPES (iphone17_ios18_7_chrome148/149/150) ARE HELD OUT
- * of this registry on A1's direct instruction (2026-08-30), for TWO independent
- * reasons — do not add them when only one clears:
+ * of this registry on A1's direct instruction (2026-08-30), for THREE
+ * independent reasons — do not add them when only one clears:
  *
  *  1. A1's browser-family gate: the chrome family is OPEN (distribution-policy
  *     weights + founder ATP reference not finalized). A family must be CLOSED
@@ -679,8 +679,34 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  *     resolver already exists unused; the fix wires the predicate to consult it
  *     and stops Unknown collapsing to A. Boundary registry stays sole authority,
  *     no slug renames, and it needs the on-box bit-identical run before chrome
- *     is sellable.
+ *     is sellable. A1 confirmed this fix behaviourally on the box (2026-08-30,
+ *     commit f204f294e): 18 surfaces flip chrome149 to byte-identical with
+ *     safari26_4, and the regression bar held — glyphHash unchanged, no critical
+ *     cumrig diffs. Canvas is closed on BOTH halves, which is exactly why
+ *     reason 3 exists: closing canvas is not closing chrome.
+ *  3. A SECOND, CHEAPER-TO-DETECT DEFECT on a different axis, found while
+ *     confirming reason 2 (A1, 2026-08-30). `performance.observerEntryTypes`:
+ *     chrome149 serves the OLD Safari API surface (mark, measure, navigation,
+ *     paint, resource) while DECLARING 26.4 — missing event, first-input and
+ *     largest-contentful-paint, which safari26_4 exposes. Same shape as the
+ *     canvas bug, different predicate: driftstackArchetypeSafariAtLeast() also
+ *     does sv.find("safari") and returns false when the token is absent, so a
+ *     chrome slug reads as older than EVERY version target. Measured blast
+ *     radius: FOUR copy-pasted definitions (WebPage.cpp:5735,
+ *     RenderThemeMac.mm:467, StyleExtractorCustom.h:91, RenderThemeCocoa.mm:116)
+ *     across 16 call sites, gating origin-API, web-animations progress, 26.5
+ *     prototype members, the :open pseudo-class, event timing, LCP, two
+ *     style-extraction behaviours and a RenderThemeMac colour — all sixteen
+ *     answer "older" for chrome.
+ *     ⚠️ WORSE than the canvas tell for our purposes: reading
+ *     PerformanceObserver.supportedEntryTypes is ONE property access — no
+ *     canvas, no timing, no sampling, no statistics. A detector gets it free.
+ *     A1 is applying the same resolution and collapsing the four copies into
+ *     one (four definitions of a predicate are four places for the next fix to
+ *     miss — which is what just happened). Needs its own build and the same
+ *     two-sided verification.
  *
+ * ⛔ SO: "canvas is fixed" IS NOT "chrome is sellable". All three must clear.
  * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
  * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
  * STALE (June 2026 numbers, per A1) and must not be treated as a readiness feed.
