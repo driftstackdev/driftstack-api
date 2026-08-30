@@ -11832,3 +11832,49 @@ in `sessionAssign.exitIdentity`. Those can disagree, and the client's can be nul
 is not. This makes the clock right in the ordinary case using data already on the machine; making it
 provably identical to what sites see needs the server's resolved value exposed to the GUI, which is a
 new route or data-channel frame and is NOT done here.
+
+## V-2158 — the planner was instructed to give up: "keep plans short" plus "always end with a capture" (2026-08-30)
+
+Owner, on a signup task: _"it just goes to drifstack.dev and finishes up"_ — and separately, on the
+"warm up this profile … browse naturally, scroll, read, follow a few internal links, pause between
+pages" preset: _"it feels kinda very slow, need to ensure it really can use all things we have for
+undetectable automation and is well instructed."_ The pasted transcript is one shape twice: `navigated
+→ wait → wait → captured screenshot`, then done.
+
+**That is what the prompt asked for.** The tail read _"OTHERWISE: emit a plan. Keep plans short (1-8
+intents). Always end a plan with a capture intent so the customer gets something back."_ Two
+instructions that compose into giving up: stay well under a small budget, and finish with a
+screenshot. A navigate-wait-capture satisfies both perfectly while accomplishing nothing.
+
+**The ceiling is not the problem.** `MAX_PLAN_INTENTS = 8` is enforced by the parser, which truncates
+rather than throwing (a deliberate earlier fix: an over-long plan continues on the next turn instead
+of discarding a paid turn). So the model does not need to be talked down to 1-8 — the cap is
+structural. The prompt's job is to say the budget should be SPENT, and that a plan is one step of a
+task that spans turns.
+
+Rewritten to say exactly that, and to instruct the human-cadence verbs rather than merely listing
+them: `behavioral_pause` between and within pages, multi-step scrolling instead of one jump, and
+following in-page links rather than typing every destination — because a burst of navigations with no
+reading time is the most obvious automation tell, and for an open-ended "browse naturally" task the
+pauses and the scrolling ARE the task.
+
+**Proofs.** Parity 20/20 with the pin rewritten in the same commit (it pinned the old sentence
+verbatim); decomposer 64/64 and runtime 81/81 unaffected. Mutation, snapshot-restored and
+cmp-verified: the new framing replaced with "Plans should be short." → the pin red.
+
+**Boundary — this does NOT add autonomous continuation, and that is the larger half of the owner's
+report.** One customer message is one turn is one plan; there is no loop that keeps going until the
+task is done. A long flow still needs the customer to say "continue". This change stops the agent
+from stopping EARLY within a turn and makes open-ended browsing behave like browsing; it does not
+make a signup flow complete unattended. A step-budgeted continue-until-done loop is a separate piece
+of work with its own cost-control questions, and it is not started.
+
+**Also NOT fixed here, same report:** _"it seems to have no memory still when returning later to the
+same chat."_ Diagnosed, not repaired — `use-agent-chat` closes the server session in an unmount
+effect (deliberately, so leaving the view does not strand a running session and its dispatched Mac
+until the reaper). Coming back therefore creates a NEW session with an empty transcript, which is
+precisely why the agent answered _"I don't have a previous task on record in this session."_ The
+supporting evidence is in the owner's own paste: per-turn token counts stay flat at ~1.2–1.5k across
+the conversation, so history is not accumulating. The fix is the scoped `continue_from_agent_session_id`
+revive (transcript copied into the new session under a re-derived envelope), not simply leaving the
+session open.
