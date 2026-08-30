@@ -666,13 +666,20 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  *     before its archetypes are sellable.
  *  2. A measured fingerprint defect, ADJUDICATED 2026-08-30 on two real device
  *     models (iPhone 15 + iPhone 17 Pro, CriOS, both md5 57186fab = Family B):
- *     the CONFIG is right and the fork's predicate is the defect — it parses
- *     the Safari version out of the archetype SLUG, a chrome slug carries no
- *     safari token, so all three render canvas Family A while their config
- *     says Family B: a detectable canvas tell, live in the fork TODAY. Not
- *     sellable until A1's fork fix (plumb the effective Safari version to the
- *     predicate — never rename slugs) lands and passes the on-box
- *     bit-identical run.
+ *     the CONFIG is right and the fork's predicate is the defect. The real
+ *     mechanism (A1, corrected): driftstackArchetypeIsFamilyB() takes a
+ *     "no _safari token → Family A" FALLBACK whose comment justifies it as
+ *     "legacy pre-26.4 slug" — true for the ONLY slug class that existed when it
+ *     was written. Chrome archetypes are 26.4-era yet carry no _safari token, so
+ *     they silently joined a branch whose stated reasoning does not cover them:
+ *     a correct assumption that quietly expired. Result: all three render canvas
+ *     Family A while their config says Family B — a detectable tell, live in the
+ *     fork TODAY. The fork already parses the true version
+ *     (DriftstackArchetypeConfig::safariVersion() → "26.4") and a three-valued
+ *     resolver already exists unused; the fix wires the predicate to consult it
+ *     and stops Unknown collapsing to A. Boundary registry stays sole authority,
+ *     no slug renames, and it needs the on-box bit-identical run before chrome
+ *     is sellable.
  *
  * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
  * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
