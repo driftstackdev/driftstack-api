@@ -20,8 +20,28 @@
 
 /** Playout-delay control law bounds/steps, in SECONDS (setPlayoutDelay's unit). */
 export const ADAPTIVE_PLAYOUT = {
-  /** Clean-network floor — the existing low-latency default. */
-  MIN_S: 0,
+  /**
+   * Resting floor — ONE frame interval at the 30fps publish cadence (0.033s,
+   * rounded to the control law's 1/100s grid).
+   *
+   * ⛔ It was 0, and that made the whole controller REACTIVE: with an empty
+   * buffer, the first arrival hiccup IS a visible freeze, and only after that
+   * freeze is observed does the ramp begin. Worse, the owner's own reported
+   * link (2026-08-30: "loss 0.7%, jitter 5ms, freezes 12") sits in the
+   * hysteresis HOLD band — 0.7% is above LOSS_CALM_PCT so it never reads calm,
+   * and below LOSS_STRESS_PCT so it never reads stressed — so from a 0 start
+   * the delay stays 0 indefinitely on exactly the link the owner is
+   * complaining about. Simulated against this function: 40 consecutive samples
+   * at those numbers leave the delay at 0.
+   *
+   * One frame of buffer absorbs single-frame arrival jitter before it can
+   * become a dropped presentation, at a latency cost far below the 0.3s this
+   * same controller already accepts under stress — the trade the owner asked
+   * for ("smooth like a local browser"). It is a FLOOR, not a fixed delay: a
+   * genuinely stressed link still ramps to MAX_S, and a calm one eases back to
+   * here rather than to nothing.
+   */
+  MIN_S: 0.03,
   /** Ceiling: enough buffer to ride out a bad leg without unbounded lag. At
    *  0.3s the stream is noticeably delayed but SMOOTH — the founder's stated
    *  preference over "frozen + unusable". Only reached under sustained stress. */

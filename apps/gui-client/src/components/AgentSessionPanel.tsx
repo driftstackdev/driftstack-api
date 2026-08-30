@@ -27,7 +27,11 @@ import {
 } from '../lib/livekit';
 import { useInputCapture } from '../lib/livekit-input-capture';
 import { parseConnectionStats } from '../lib/livekit-connection-stats';
-import { nextPlayoutDelay, recentPacketLossPct } from '../lib/livekit-adaptive-playout';
+import {
+  ADAPTIVE_PLAYOUT,
+  nextPlayoutDelay,
+  recentPacketLossPct,
+} from '../lib/livekit-adaptive-playout';
 
 export interface AgentSessionPanelProps {
   /** The LiveKit join info returned by the server — either from the
@@ -676,8 +680,13 @@ export function AgentSessionPanel({
       // control surface where input→pixel lag matters most. Pairs with the
       // publisher's real-time config + adaptiveStream:false. Guarded — an older
       // livekit-client without setPlayoutDelay just no-ops.
+      //
+      // ⛔ The RESTING FLOOR, not zero. A literal 0 here re-armed a zero buffer
+      // on every subscribe (including a freeze-recovery resubscribe), so the
+      // first arrival hiccup after each one was a visible freeze — see
+      // ADAPTIVE_PLAYOUT.MIN_S for why the resting state is one frame.
       try {
-        track.setPlayoutDelay?.(0);
+        track.setPlayoutDelay?.(ADAPTIVE_PLAYOUT.MIN_S);
       } catch {
         /* setPlayoutDelay unsupported — ignore */
       }
@@ -838,7 +847,8 @@ export function AgentSessionPanel({
     let prevFreeze = 0;
     let prevPacketCounters: { packetsLost: number | null; packetsReceived: number | null } | null =
       null;
-    let delay = 0;
+    // Start the control law at the resting floor, not below it.
+    let delay: number = ADAPTIVE_PLAYOUT.MIN_S;
     // Mutable holder: `tick` must be able to stop its own interval, and the id
     // does not exist until after `tick` is defined.
     const timer: { id?: ReturnType<typeof setInterval> } = {};

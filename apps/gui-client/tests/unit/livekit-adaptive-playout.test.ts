@@ -49,8 +49,17 @@ describe('recentPacketLossPct — adaptive playout sampling', () => {
 });
 
 describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
-  it('holds at 0 on a clean link (no freeze, low loss + jitter)', () => {
-    expect(nextPlayoutDelay(0, { freezeDelta: 0, packetLossPct: 0.1, jitterMs: 8 })).toBe(0);
+  it('rests at the FLOOR on a clean link (no freeze, low loss + jitter)', () => {
+    // Asserted against the constant, not a literal: V-2168 raised the floor off
+    // zero, and a hard-coded 0 here would have pinned the very default the
+    // change exists to move.
+    expect(
+      nextPlayoutDelay(ADAPTIVE_PLAYOUT.MIN_S, {
+        freezeDelta: 0,
+        packetLossPct: 0.1,
+        jitterMs: 8,
+      }),
+    ).toBe(ADAPTIVE_PLAYOUT.MIN_S);
   });
 
   it('ramps UP on a fresh freeze', () => {
@@ -89,12 +98,48 @@ describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
     expect(nextPlayoutDelay(0.15, { freezeDelta: 0, packetLossPct: 1.0, jitterMs: 30 })).toBe(0.15);
   });
 
-  it('never goes below 0 (floor) when already at 0 and calm', () => {
-    expect(nextPlayoutDelay(0, { freezeDelta: 0, packetLossPct: 0, jitterMs: 0 })).toBe(0);
+  it('never goes below the floor when already at it and calm', () => {
+    expect(
+      nextPlayoutDelay(ADAPTIVE_PLAYOUT.MIN_S, {
+        freezeDelta: 0,
+        packetLossPct: 0,
+        jitterMs: 0,
+      }),
+    ).toBe(ADAPTIVE_PLAYOUT.MIN_S);
+    // …and a delay that somehow starts BELOW the floor is lifted to it.
+    expect(nextPlayoutDelay(0, { freezeDelta: 0, packetLossPct: 0, jitterMs: 0 })).toBe(
+      ADAPTIVE_PLAYOUT.MIN_S,
+    );
   });
 
   it('treats null loss/jitter as 0 (unknown → calm, not a spurious ramp)', () => {
-    expect(nextPlayoutDelay(0, { freezeDelta: 0, packetLossPct: null, jitterMs: null })).toBe(0);
+    expect(
+      nextPlayoutDelay(ADAPTIVE_PLAYOUT.MIN_S, {
+        freezeDelta: 0,
+        packetLossPct: null,
+        jitterMs: null,
+      }),
+    ).toBe(ADAPTIVE_PLAYOUT.MIN_S);
+  });
+
+  it("⛔ V-2168: the owner's own link sits in the HOLD band — with a 0 floor the buffer never builds", () => {
+    // Reported 2026-08-30: "udp · direct, decode 50 fps, loss 0.7%, jitter 5ms,
+    // freezes 12, RENDER 34fps". 0.7% is ABOVE LOSS_CALM_PCT (never calm) and
+    // BELOW LOSS_STRESS_PCT (never stressed), and most 3s samples carry no NEW
+    // freeze — so the control law HOLDS on every one of them. From a zero start
+    // that is zero forever, on exactly the link being complained about: the
+    // controller could only react AFTER a freeze the customer had already seen.
+    // The floor makes the resting state a real (if tiny) buffer.
+    const sample = { freezeDelta: 0, packetLossPct: 0.7, jitterMs: 5 };
+    let delay = ADAPTIVE_PLAYOUT.MIN_S;
+    for (let i = 0; i < 40; i += 1) delay = nextPlayoutDelay(delay, sample);
+    expect(delay, 'the hold band must hold, not decay below the floor').toBe(
+      ADAPTIVE_PLAYOUT.MIN_S,
+    );
+    expect(ADAPTIVE_PLAYOUT.MIN_S).toBeGreaterThan(0);
+    // And the floor stays far below the stressed ceiling this controller
+    // already accepts — it buys smoothness without spending felt latency.
+    expect(ADAPTIVE_PLAYOUT.MIN_S).toBeLessThan(ADAPTIVE_PLAYOUT.MAX_S / 5);
   });
 });
 
