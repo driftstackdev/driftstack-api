@@ -562,13 +562,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         <div ref={footerRef} className="relative z-10">
           {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
               2026-06-17), anchored above the dock so it never collides with
-              Launch/Open. Revealed on hover (mouse) OR by the ⋯ toggle
-              (tap/trackpad). Rows stay in the DOM (opacity-toggled) so the
+              Launch/Open.
+              ⛔ Opened ONLY by the ⋯ toggle. It also opened on card HOVER
+              (group-hover:opacity-100), so moving the pointer across the grid unfurled
+              every action — the destructive ones included — over whatever card the
+              cursor passed (owner 2026-08-30: "hover over profile currently expands all
+              options, but it should just happen when clicking the … dots"). Same
+              correction as the Clear group in V-2149, one level up.
+              Rows stay in the DOM (opacity-toggled) so the
               accessible labels are always queryable. */}
           <div
             data-component="card-actions-menu"
             role="menu"
-            className={`absolute bottom-full right-1.5 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 ${
+            className={`absolute bottom-full right-1.5 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
               actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >

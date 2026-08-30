@@ -351,4 +351,35 @@ describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
     expect(screen.queryByLabelText(/^Clear history for /)).toBeNull();
     cleanup();
   });
+
+  it('(V-2166) ⛔ hovering a card does not unfurl its actions — only the ⋯ toggle opens them', () => {
+    // The menu carried `group-hover:opacity-100 group-hover:pointer-events-auto`, so
+    // dragging the pointer across the grid opened every card's actions in turn,
+    // including Delete and the Clear group, over whatever card the cursor reached
+    // (owner 2026-08-30). Same correction as V-2149's Clear group, one level up.
+    const { container } = render(<ProfilePhoneCard {...props({ onTrim: vi.fn() })} />);
+    const menu = container.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
+    expect(
+      menu,
+      'the menu is always in the DOM (opacity-toggled) so labels stay queryable',
+    ).not.toBeNull();
+
+    // Closed: no hover class may make it interactive, and it must not be reachable.
+    expect(menu.className).not.toMatch(/group-hover:opacity-100/);
+    expect(menu.className).not.toMatch(/group-hover:pointer-events-auto/);
+    expect(menu.className).toMatch(/pointer-events-none/);
+    expect(menu.className).toMatch(/opacity-0/);
+
+    // Hovering the CARD changes nothing.
+    const card = container.querySelector('[role="button"]') as HTMLElement;
+    fireEvent.mouseEnter(card);
+    expect(menu.className).toMatch(/pointer-events-none/);
+
+    // The ⋯ toggle is the only opener.
+    fireEvent.click(screen.getByLabelText('More actions'));
+    const opened = container.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
+    expect(opened.className).toMatch(/pointer-events-auto/);
+    expect(opened.className).toMatch(/opacity-100/);
+    cleanup();
+  });
 });

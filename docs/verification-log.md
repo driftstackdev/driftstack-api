@@ -12133,3 +12133,33 @@ blockers that were provable statically, both of which would break downloads ther
 machine in this session, so nothing here is verified on the platform the owner reported; the
 remaining Windows risk (a borderless transparent window's resize hit-test, and the aspect-lock's
 110ms settle firing inside a modal resize loop) is read but unverified and untouched.
+
+## V-2166 — two owner-reported UI corrections: the card menu opened on hover, and proxy passwords were masked (2026-08-30)
+
+**"Hover over profile currently expands all options, but it should just happen when clicking the … dots."**
+The card's action menu carried `group-hover:opacity-100 group-hover:pointer-events-auto`, so it was
+not merely revealed on hover — it became INTERACTIVE. Dragging the pointer across the grid unfurled
+each card's actions in turn, Delete and the Clear group included, over whatever card the cursor
+reached next. Exactly the defect V-2149 fixed for the Clear group, one level up: the menu is now
+opened only by the ⋯ toggle, and the comment that documented hover as intentional was rewritten in the
+same edit rather than left contradicting the code.
+
+**"Proxy password should just be clean visible, not hidden."** The three proxy credential inputs
+(ProxiesView SOCKS + OpenVPN, and the inline proxy form in ProfilesView) were `type="password"`. A
+proxy credential is configuration the operator pastes and must be able to VERIFY against their
+provider's dashboard, and masking hides a typo in the one field whose typo surfaces downstream as
+`auth_failed` on a working proxy. They are `type="text"` now, with `autoCapitalize`/`autoCorrect`/
+`spellCheck` off so a mobile-style keyboard cannot corrupt them.
+
+**⛔ What was deliberately NOT unmasked:** the API-key fields in `FirstRunWizard` (×2) and
+`SettingsView`. Those are account secrets, not proxy configuration, and the owner's request named the
+proxy password specifically. Widening it to every masked field would have been the easy misreading.
+
+**Proofs.** profile-phone-card 21/21 with a new arm asserting the closed menu carries neither
+hover class, that hovering the card changes nothing, and that the ⋯ toggle is the only opener;
+profiles-lifecycle-actions 12/12 (+6 skipped) and profiles-launch-stream 11/11 unaffected. Mutation,
+snapshot-restored and cmp-verified: the two `group-hover:` classes put back → exactly the new arm red.
+
+**Boundary:** two other `group-hover` reveals on the card are untouched and intended — the selection
+tick and the WebRTC/QUIC capability chips. Neither is an action; revealing a status glyph on hover is
+not the reported defect.

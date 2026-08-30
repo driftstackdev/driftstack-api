@@ -5141,7 +5141,16 @@ function CreateProfileModal({
                           className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
                         />
                         <input
-                          type="password"
+                          type="text"
+                          // ⛔ NOT type="password". A proxy credential is configuration the operator
+                          // is pasting and needs to VERIFY against their provider's dashboard; masking
+                          // it hides typos in the one field whose typo reads downstream as
+                          // "auth_failed" on a working proxy (owner 2026-08-30: "proxy password
+                          // should just be clean visible, not hidden"). It is not a login secret and
+                          // there is no shoulder-surfing threat model for a local desktop tool.
+                          autoCapitalize="off"
+                          autoCorrect="off"
+                          spellCheck={false}
                           value={newProxy.password}
                           onChange={(e) => {
                             setNewProxy((p) => ({ ...p, password: e.target.value }));
