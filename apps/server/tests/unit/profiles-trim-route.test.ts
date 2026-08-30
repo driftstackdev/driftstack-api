@@ -31,9 +31,19 @@ function fakeService(opts: {
   dekThrows?: boolean; // getProfileDek() rejects (corrupt/rotated wrapped-DEK)
 }): {
   service: ProfilesService;
-  recordTrimCalls: Array<{ profileId: string; accountId: string; newSizeBytes: number }>;
+  recordTrimCalls: Array<{
+    profileId: string;
+    accountId: string;
+    newSizeBytes: number;
+    clearedSavedTabs?: boolean;
+  }>;
 } {
-  const recordTrimCalls: Array<{ profileId: string; accountId: string; newSizeBytes: number }> = [];
+  const recordTrimCalls: Array<{
+    profileId: string;
+    accountId: string;
+    newSizeBytes: number;
+    clearedSavedTabs?: boolean;
+  }> = [];
   const service = {
     get: (args: { id: string; accountId: string }) => {
       if (opts.ownedProfileUuid !== undefined && args.id === opts.ownedProfileUuid) {
@@ -490,8 +500,71 @@ describe('POST /v1/profiles/:id/trim', () => {
     });
     // The new (smaller) size was persisted to the OWNER's row.
     expect(recordTrimCalls).toEqual([
-      { profileId: PROFILE_UUID, accountId: ACCOUNT_ID, newSizeBytes: 4_000 },
+      // V-2168 — a default (cache) trim leaves the saved-tabs stamp alone.
+      {
+        profileId: PROFILE_UUID,
+        accountId: ACCOUNT_ID,
+        newSizeBytes: 4_000,
+        clearedSavedTabs: false,
+      },
     ]);
+  });
+
+  it('⛔ V-2168: a history trim records clearedSavedTabs — the "Saved tabs reopen" badge must go out with the tabs', async () => {
+    // recordTrim used to ride the SAVE path, stamping last_saved_at = now — so
+    // clearing your history lit the badge for the tabs just deleted.
+    const { service, recordTrimCalls } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-trim-h', (frame) => ({
+      profileId: frame.profileId,
+      ok: true,
+      newSizeBytes: 4_000,
+      bytesReclaimed: 0,
+      scope: 'history',
+    }));
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: true }),
+    });
+    const res = await trim(app, PROFILE_ID, { scope: 'history' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json<TrimBody>()).toMatchObject({ status: 'ok' });
+    expect(recordTrimCalls).toEqual([expect.objectContaining({ clearedSavedTabs: true })]);
+  });
+
+  it('⛔ V-2168: a refusal-flavored unavailable declares blocked:true; a genuine nothing-to-clear does not', async () => {
+    // Without the flag the GUI cannot tell "there was nothing to clear" (benign
+    // notice) from "your destructive request did NOT run" (an error the customer
+    // must see) — both arrived as the same auto-dismissing notice.
+    // Refusal: wired + blob exists + NO node connected.
+    const { service } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    app = await buildHarness({
+      service,
+      fleetControlRegistry: new FleetControlRegistry(),
+      r2: fakeR2({ blobExists: true }),
+    });
+    const refused = await trim(app);
+    expect(refused.json<TrimBody & { blocked?: boolean }>().blocked).toBe(true);
+    await app.close();
+
+    // Benign: fresh profile, no sealed blob → nothing to clear, NOT blocked.
+    const { service: s2 } = fakeService({ ownedProfileUuid: PROFILE_UUID });
+    const registry = new FleetControlRegistry();
+    registerEchoNode(registry, 'node-trim-b', (frame) => ({
+      profileId: frame.profileId,
+      ok: true,
+      newSizeBytes: 0,
+      bytesReclaimed: 0,
+    }));
+    app = await buildHarness({
+      service: s2,
+      fleetControlRegistry: registry,
+      r2: fakeR2({ blobExists: false }),
+    });
+    const benign = await trim(app);
+    expect(benign.json<TrimBody>()).toMatchObject({ status: 'unavailable' });
+    expect(benign.json<TrimBody & { blocked?: boolean }>().blocked).toBeUndefined();
   });
 
   it('admits one expensive trim per owner account and releases the slot after settle', async () => {

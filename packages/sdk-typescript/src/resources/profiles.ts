@@ -62,7 +62,11 @@ export type TrimProfileScope = 'cache' | 'cookies' | 'history' | 'all';
 
 export type TrimProfileResponse =
   | { status: 'ok'; size_bytes: number; bytes_reclaimed: number }
-  | { status: 'unavailable'; reason: string }
+  /** `blocked: true` marks an unavailable that REFUSED to run (node offline,
+   *  profile in use, another trim in flight …) rather than "nothing to clear".
+   *  A refused destructive request must not be presented as a benign no-op.
+   *  Absent on older servers — treat absent as the benign flavor. */
+  | { status: 'unavailable'; reason: string; blocked?: boolean }
   | { status: 'timeout' }
   | { status: 'error'; reason: string };
 

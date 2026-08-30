@@ -61,6 +61,10 @@ const profilesTrim = vi.fn<(id: string, body?: { scope?: string }) => Promise<un
   Promise.resolve({ status: 'ok', size_bytes: 1024, bytes_reclaimed: 2_097_152 }),
 );
 const refreshAccountMe = vi.fn(() => Promise.resolve());
+// V-2168 — counters so the refresh-on-every-terminal-outcome arm can see a
+// reload. The view loads through iterate (not list), so count both.
+const profilesList = vi.fn(() => Promise.resolve({ data: [profile()] }));
+const profileLoads = { n: 0 };
 
 function profile() {
   return {
@@ -87,9 +91,10 @@ let capState = { profile_cap: 10, profile_count: 1 };
 // per-render only when the cap changes (capState is a module-level let).
 const stableClient = {
   profiles: {
-    list: () => Promise.resolve({ data: [profile()] }),
+    list: () => profilesList(),
     // eslint-disable-next-line @typescript-eslint/require-await
     iterate: async function* () {
+      profileLoads.n += 1;
       yield profile();
     },
     update: (id: string, body: unknown) => profilesUpdate(id, body),
@@ -410,6 +415,69 @@ describe('ProfilesView profile-lifecycle actions', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
       await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
       expect(await screen.findByText(/no saved state to trim yet/)).toBeTruthy();
+    });
+
+    it('⛔ V-2168: a blocked unavailable renders as a persistent ERROR, not the benign notice', async () => {
+      // The server sets blocked:true when the clear could NOT run (node offline,
+      // profile in use, another trim in flight). Presenting that as the same
+      // 5-second notice as "nothing to clear" made a refused destructive action
+      // read as success.
+      profilesTrim.mockResolvedValueOnce({
+        status: 'unavailable',
+        reason: 'no fleet node is connected',
+        blocked: true,
+      });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+      await openClearGroup();
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
+      await waitFor(() => expect(profilesTrim).toHaveBeenCalledWith('prof_1'));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(/Couldn't clear/);
+      expect(alert.textContent).toMatch(/no fleet node is connected/);
+    });
+
+    it('V-2168: every terminal trim outcome refreshes the grid, not only ok', async () => {
+      profilesTrim.mockResolvedValueOnce({
+        status: 'error',
+        reason: 'node reported a failure',
+      });
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      // The mount itself lists once (or more); measure the delta caused by the
+      // failed trim rather than pinning an absolute count.
+      await screen.findByRole('button', { name: 'More actions' });
+      const listsBefore = profilesList.mock.calls.length + profileLoads.n;
+      fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+      await openClearGroup();
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache for Demo' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Clear cache' }));
+      await waitFor(() => expect(profilesTrim).toHaveBeenCalled());
+      await waitFor(() => {
+        expect(profilesList.mock.calls.length + profileLoads.n).toBeGreaterThan(listsBefore);
+      });
+    });
+  });
+
+  describe('saved-tabs badge (V-2168)', () => {
+    it('⛔ keys on last_saved_at ALONE — size_bytes kept the badge lit after the tabs were cleared', async () => {
+      // profile() has size_bytes set and last_saved_at absent — the exact state
+      // a history clear leaves behind. The badge must NOT render.
+      render(
+        <ConfirmProvider>
+          <ProfilesView onGoToSettings={vi.fn()} />
+        </ConfirmProvider>,
+      );
+      await screen.findByRole('button', { name: 'More actions' });
+      expect(screen.queryByText('Saved tabs reopen')).toBeNull();
     });
   });
 

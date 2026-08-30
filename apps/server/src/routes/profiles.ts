@@ -635,12 +635,17 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         return {
           status: 'unavailable' as const,
           reason: 'profile is currently in use — stop its running session before clearing its data',
+          blocked: true as const,
         };
       }
 
       // Control plane / R2 not wired (stateless deploy) → graceful unavailable.
       if (fleetControlRegistry === undefined || r2 === undefined) {
-        return { status: 'unavailable' as const, reason: 'profile storage trim is not enabled' };
+        return {
+          status: 'unavailable' as const,
+          reason: 'profile storage trim is not enabled',
+          blocked: true as const,
+        };
       }
       // Resolve the per-profile DEK (KMS→TMK→DEK, file 57). Null → profiles feature
       // inert (PROFILE_MASTER_KEY unset) or this profile has no stored DEK → nothing
@@ -659,6 +664,7 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
         return {
           status: 'unavailable' as const,
           reason: 'could not resolve the profile encryption key',
+          blocked: true as const,
         };
       }
       if (dek === null) {
@@ -680,7 +686,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
           { component: 'profile-trim', profileId: id, err },
           'profile trim R2 url-mint failed',
         );
-        return { status: 'unavailable' as const, reason: 'could not prepare profile storage' };
+        return {
+          status: 'unavailable' as const,
+          reason: 'could not prepare profile storage',
+          blocked: true as const,
+        };
       }
       if (block.sealedBlobUrl === undefined) {
         return {
@@ -692,13 +702,23 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       // no assigned node; any reachable node can run the blob→blob transform.
       const conn = fleetControlRegistry.pickAnyConnected();
       if (conn === undefined) {
-        return { status: 'unavailable' as const, reason: 'no fleet node is connected' };
+        // ⛔ `blocked` separates "there is nothing to clear" (benign) from "the
+        // clear could not run" (the customer asked for a destructive action and it
+        // did NOT happen). The GUI renders the second as a persistent error; before
+        // this flag both flavors were a 5-second auto-dismissing notice, so a
+        // refused clear was indistinguishable from a successful no-op.
+        return {
+          status: 'unavailable' as const,
+          reason: 'no fleet node is connected',
+          blocked: true as const,
+        };
       }
       const releaseProfileTrim = reserveProfileTrim(accountId);
       if (releaseProfileTrim === null) {
         return {
           status: 'unavailable' as const,
           reason: 'another profile trim is already in progress — retry when it finishes',
+          blocked: true as const,
         };
       }
       try {
@@ -757,6 +777,9 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
               profileId: id,
               accountId,
               newSizeBytes: outcome.newSizeBytes,
+              // 'history'/'all' delete the remembered tabs, so the saved-tabs
+              // stamp must go with them — see recordTrim.
+              clearedSavedTabs: scope === 'history' || scope === 'all',
             });
           } catch (err) {
             req.log.warn(

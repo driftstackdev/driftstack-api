@@ -319,6 +319,24 @@ export class InMemoryProfilesRepo implements ProfilesRepo {
     return Promise.resolve();
   }
 
+  // V-2168 — mirrors the prod recordTrimResult: size update WITHOUT a save
+  // stamp; clearSavedTabs nulls lastSavedAt (history/all deleted the tabs).
+  recordTrimResult(args: {
+    id: string;
+    accountId: string;
+    sizeBytes: number;
+    clearSavedTabs: boolean;
+  }): Promise<void> {
+    const r = this.rows.get(args.id);
+    if (!r || r.accountId !== args.accountId || r.deletedAt !== null) return Promise.resolve();
+    this.rows.set(r.id, {
+      ...r,
+      sizeBytes: args.sizeBytes,
+      ...(args.clearSavedTabs ? { lastSavedAt: null } : {}),
+    });
+    return Promise.resolve();
+  }
+
   // L4b — trashed rows only, most-recently trashed first (matches the prod
   // orderBy(desc(deletedAt), desc(id))).
   listTrashed(args: { accountId: string }): Promise<ProfileRecord[]> {

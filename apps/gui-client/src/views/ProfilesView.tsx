@@ -1687,11 +1687,25 @@ export function ProfilesView({
           ...s,
           error: `Clearing ${copy.verb} for "${name}" timed out — the session node didn't respond. Try again shortly.`,
         }));
+      } else if (result.blocked === true) {
+        // V-2168 — the server says the clear could NOT run (node offline,
+        // profile in use, another trim in flight …). The customer asked for a
+        // destructive action and it did not happen: that is an ERROR banner
+        // that stays until dismissed, never a 5-second notice that reads as
+        // success.
+        setState((s) => ({
+          ...s,
+          error: `Couldn't clear ${copy.verb} for "${name}": ${result.reason}.`,
+        }));
       } else {
-        // unavailable — informative, not an error: a fresh profile with no saved
-        // state has nothing to clear.
+        // unavailable without `blocked` — informative, not an error: a fresh
+        // profile with no saved state has nothing to clear.
         setState((s) => ({ ...s, notice: `Nothing to clear for "${name}": ${result.reason}.` }));
       }
+      // V-2168 — refresh on EVERY terminal outcome, not only ok. The card must
+      // reflect reality after a refusal too (e.g. the in-use guard means a
+      // session row exists that the card may be rendering as idle).
+      if (result.status !== 'ok') await refresh(false);
     } catch (err) {
       setState((s) => ({ ...s, error: friendlyError(err, settings.baseUrl) }));
     } finally {
@@ -4176,9 +4190,7 @@ export function ProfilesView({
                           selected={selectedIds.has(profile.id)}
                           lastUsedIso={profile.last_used_at}
                           sizeLabel={fmtBytes(profile.size_bytes)}
-                          savedTabsReopen={
-                            profile.last_saved_at != null || profile.size_bytes !== null
-                          }
+                          savedTabsReopen={profile.last_saved_at != null}
                           folder={profilesMeta[profile.id]?.folder ?? ''}
                           tags={profilesMeta[profile.id]?.tags ?? []}
                           note={profilesMeta[profile.id]?.note ?? ''}
@@ -4297,7 +4309,7 @@ export function ProfilesView({
                       tags: profilesMeta[profile.id]?.tags ?? [],
                       note: profilesMeta[profile.id]?.note ?? '',
                       sizeLabel: fmtBytes(profile.size_bytes),
-                      savedTabsReopen: profile.last_saved_at != null || profile.size_bytes !== null,
+                      savedTabsReopen: profile.last_saved_at != null,
                       createdAtIso: profile.created_at,
                       lastUsedIso: profile.last_used_at,
                       selected: selectedIds.has(profile.id),

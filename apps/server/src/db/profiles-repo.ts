@@ -499,6 +499,25 @@ export class DrizzleProfilesRepo implements ProfilesRepo {
       .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
   }
 
+  // V-2168 — persist a confirmed trim outcome. Distinct from recordSave on
+  // purpose: a trim is not a save-back, so it never stamps lastSavedAt; and a
+  // history/all trim deleted the remembered tabs, so it CLEARS the stamp the
+  // GUI's "Saved tabs reopen" badge is keyed on. Account-scoped + notDeleted
+  // like the rest of the write paths.
+  async recordTrimResult(args: {
+    id: string;
+    accountId: string;
+    sizeBytes: number;
+    clearSavedTabs: boolean;
+  }): Promise<void> {
+    const sets: Record<string, unknown> = { sizeBytes: args.sizeBytes };
+    if (args.clearSavedTabs) sets.lastSavedAt = null;
+    await this.database.db
+      .update(profiles)
+      .set(sets)
+      .where(and(eq(profiles.id, args.id), eq(profiles.accountId, args.accountId), notDeleted));
+  }
+
   // L4b recycle bin — inverse of the live read paths: ONLY trashed rows
   // (deletedAt IS NOT NULL), most-recently trashed first so the newest deletions
   // surface at the top of the Trash view.

@@ -224,6 +224,14 @@ export interface ProfilesRepo {
    * untouched (a pre-emit harness must not clobber a known size with NULL).
    */
   recordSave(args: { id: string; accountId: string; at: Date; sizeBytes?: number }): Promise<void>;
+  /** V-2168 — persist a confirmed trim: size meter update WITHOUT the save
+   *  stamp, clearing lastSavedAt when the trim deleted the remembered tabs. */
+  recordTrimResult(args: {
+    id: string;
+    accountId: string;
+    sizeBytes: number;
+    clearSavedTabs: boolean;
+  }): Promise<void>;
   /**
    * Read ONLY the wrapped DEK for a profile (file 57). Deliberately NOT on
    * ProfileRecord — the wrapped DEK is a secret that must never ride a record
@@ -544,22 +552,29 @@ export class ProfilesService {
 
   /**
    * doc-150 §8 — persist the new sealed size after a successful out-of-session
-   * trim. Reuses the SAME account-scoped `recordSave` repo path the profileSaved
-   * persister uses (stamps `last_saved_at = now` + `size_bytes = newSizeBytes` on
-   * the owning, non-deleted row), so the storage meter + the launch quota gate pick
-   * up the reclaimed bytes immediately. Account-scoped → a foreign id is a no-op.
+   * trim. Account-scoped `recordTrimResult` (size_bytes = newSizeBytes on the
+   * owning, non-deleted row) so the storage meter + the launch quota gate pick
+   * up the reclaimed bytes immediately; NOT the save path, and never a
+   * last_saved_at stamp. Account-scoped → a foreign id is a no-op.
    * Only called on a confirmed `trimResult{ok}`; an error/timeout never reaches here.
    */
   async recordTrim(args: {
     profileId: string;
     accountId: string;
     newSizeBytes: number;
+    /** True when the trim's scope deleted the remembered tabs (history/all). */
+    clearedSavedTabs?: boolean;
   }): Promise<void> {
-    await this.repo.recordSave({
+    // ⛔ NOT recordSave. A trim used to ride the save path, which stamps
+    // last_saved_at = now — so clearing your history LIT the card's "Saved tabs
+    // reopen" badge for the tabs that had just been deleted. A trim updates the
+    // size meter; it is not a save, and when it deleted the tabs it must clear
+    // the stamp the badge reads.
+    await this.repo.recordTrimResult({
       id: args.profileId,
       accountId: args.accountId,
-      at: new Date(),
       sizeBytes: args.newSizeBytes,
+      clearSavedTabs: args.clearedSavedTabs === true,
     });
   }
 
