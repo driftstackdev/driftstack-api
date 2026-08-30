@@ -656,6 +656,25 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
   enterprise: null,
 };
 
+/**
+ * ⛔ CHROME-ON-iOS ARCHETYPES (iphone17_ios18_7_chrome148/149/150) ARE HELD OUT
+ * of this registry on A1's direct instruction (2026-08-30), for TWO independent
+ * reasons — do not add them when only one clears:
+ *
+ *  1. A1's browser-family gate: the chrome family is OPEN (distribution-policy
+ *     weights + founder ATP reference not finalized). A family must be CLOSED
+ *     before its archetypes are sellable.
+ *  2. A measured fingerprint defect: the fork's canvas-family predicate parses
+ *     the Safari version out of the archetype SLUG, a chrome slug carries no
+ *     safari token, so all three land in canvas Family A while their config
+ *     (base_archetype = iphone17_ios18_7_safari26_4) says Family B — a
+ *     detectable canvas tell. Unadjudicable today: zero CriOS captures exist in
+ *     the corpus. A1 has a capture chain queued to settle which side is right.
+ *
+ * The flip event is A1 saying so — a direct message to A2 or a `[for A2]` line
+ * in operations/agent-bus/live/A1.md. `operations/archetype-catalog.json` is
+ * STALE (June 2026 numbers, per A1) and must not be treated as a readiness feed.
+ */
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   {
     id: LOCKED_ARCHETYPE_ID,
