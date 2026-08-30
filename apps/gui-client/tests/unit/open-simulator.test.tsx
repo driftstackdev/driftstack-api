@@ -48,7 +48,8 @@ vi.mock('@tauri-apps/api/webviewWindow', () => ({
   WebviewWindow: WebviewWindowCtor,
 }));
 
-const { openSimulatorWindow, openSessionById } = await import('../../src/lib/open-simulator');
+const { openSimulatorWindow, openSessionById, isSimulatorNotInstalled } =
+  await import('../../src/lib/open-simulator');
 
 const info = { ws_url: 'wss://lk.example', token: 'tok', room_name: 'room-1' } as LiveKitInfo;
 
@@ -249,5 +250,77 @@ describe('openSessionById — session-open deep-link reopen', () => {
     expect(res.opened).toBe(false);
     expect(res.reason).toMatch(/closed/);
     expect(invoke).not.toHaveBeenCalledWith('launch_simulator', expect.anything());
+  });
+});
+
+describe('the Simulator installs itself when it is missing (V-2147)', () => {
+  beforeEach(() => {
+    invoke.mockReset();
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {};
+  });
+
+  it('⛔ the failure a customer cannot act on self-heals: repair, relaunch, opened', async () => {
+    // The shipped macOS DMG contains Driftstack.app alone, so "Install the
+    // Driftstack Simulator app" names an app the customer was never given.
+    let launches = 0;
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'launch_simulator') {
+        launches += 1;
+        return launches === 1
+          ? Promise.reject(new Error('Driftstack Simulator.app is not installed'))
+          : Promise.resolve(undefined);
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const res = await openSimulatorWindow({ sessionId: 'agt_heal', info, countryCode: 'US' });
+
+    expect(res.opened).toBe(true);
+    expect(res.repaired).toBe(true);
+    expect(invoke.mock.calls.filter((c) => c[0] === 'repair_simulator_install')).toHaveLength(1);
+    expect(launches, 'exactly one retry, never a loop').toBe(2);
+    expect(WebviewWindowCtor).not.toHaveBeenCalled();
+  });
+
+  it('a failure reinstalling cannot fix is NOT retried — no pointless install', async () => {
+    invoke.mockImplementation((cmd: string) =>
+      cmd === 'launch_simulator'
+        ? Promise.reject(new Error('invalid simulator session payload'))
+        : Promise.resolve(undefined),
+    );
+
+    const res = await openSimulatorWindow({ sessionId: 'agt_bad', info, countryCode: 'US' });
+
+    expect(res.opened).toBe(false);
+    expect(res.reason).toBe('invalid simulator session payload');
+    expect(invoke.mock.calls.some((c) => c[0] === 'repair_simulator_install')).toBe(false);
+  });
+
+  it('when the install itself fails the customer sees the ORIGINAL reason, not the repair error', async () => {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'launch_simulator') {
+        return Promise.reject(new Error('Driftstack Simulator.app is not installed'));
+      }
+      if (cmd === 'repair_simulator_install') {
+        return Promise.reject(new Error('no Simulator bundle is available to install from'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const res = await openSimulatorWindow({ sessionId: 'agt_norepair', info, countryCode: 'US' });
+
+    expect(res.opened).toBe(false);
+    // The launcher's reason is the one the error copy is keyed off; the repair
+    // failure is a diagnostic, not the customer-facing sentence.
+    expect(res.reason).toBe('Driftstack Simulator.app is not installed');
+    expect(res.repaired).toBeUndefined();
+  });
+
+  it('the predicate is narrow: only a missing app is self-healable', () => {
+    expect(isSimulatorNotInstalled('Driftstack Simulator.app is not installed')).toBe(true);
+    expect(isSimulatorNotInstalled('app not installed')).toBe(true);
+    expect(isSimulatorNotInstalled('invalid simulator session payload')).toBe(false);
+    expect(isSimulatorNotInstalled('the separate simulator app is macOS-only')).toBe(false);
+    expect(isSimulatorNotInstalled('')).toBe(false);
   });
 });

@@ -11468,3 +11468,41 @@ the click → exactly the "navigates AND closes" arm red.
 **Boundary:** #18 is now closed end-to-end (bell, panel, durable history, click-through, update
 notices). Deep-linking a specific session row (sessions-history scoped to the errored session id)
 would need a View payload change and is future polish, not a gap in this entry.
+
+## V-2147 — a missing Simulator now installs itself, because the DMG never shipped one (2026-08-30)
+
+**The defect is distribution, not configuration.** The owner hit "Install the Driftstack Simulator
+app, then try again" — copy that names an app they cannot obtain. `gui-release.yml` runs
+`tauri:build` only and has ZERO Simulator references, so the shipped macOS DMG contains
+`Driftstack.app` alone; `Driftstack Simulator.app` is produced solely by `scripts/build-install-gui.sh`,
+a dev-local script. `launch_simulator` (lib.rs) hard-requires `/Applications/Driftstack Simulator.app`
+and there is no in-app fallback by design (V-1611's "still the same window" saga). So on a clean
+customer install the live-view feature is unreachable and the error tells them to go get something
+that does not exist. Diagnosed from the owner's own machine: BOTH apps absent from /Applications, and
+their running instance was `Driftstack 3.app` under `AppTranslocation` — a quarantined copy outside
+/Applications, which satisfies the eye but not the launcher's path check.
+
+**Runtime fix (this entry).** `repair_simulator_install`: idempotent (an existing install returns
+without copying), resolves a source through a pure ordered policy — the copy shipped inside the
+running bundle's `Contents/Resources` FIRST (the only candidate that can exist on a customer machine),
+then a sibling of the running `.app` (dev output; both apps dragged from one DMG) — refuses with a
+stated reason when neither exists rather than inventing a path, then `ditto` + an ad-hoc re-sign
+(a copied bundle's seal reads "code has no resources but signature indicates they must be present"
+and macOS then refuses to open it — the recorded "cant open ap" trap). The launcher, on a
+missing-app failure ONLY, repairs and retries exactly once; any other failure is not retried, and a
+failed repair surfaces the ORIGINAL launcher reason, not the repair error.
+
+**Proofs.** Rust: 3 arms on the source policy (shipped copy wins; no source outside a `.app`;
+first-existing with an injected `exists`) plus one that the repair target IS the path
+`simulator_open_args` uses — a drifted constant would "succeed" while the customer stayed broken.
+TS: 15/15 in open-simulator, including that a non-installable failure never triggers an install.
+Mutations, snapshot-restored and cmp-verified: the repair branch disabled → the self-heal arm red;
+the predicate widened to `true` → the narrowness arms red (the retry-loop risk is pinned, not assumed).
+
+**Boundary:** this makes the missing Simulator RECOVERABLE, and on a customer machine it is only
+recoverable once the packaging half ships a Simulator copy inside the main bundle — until then
+`simulator_repair_sources`' first candidate does not exist there and the repair correctly reports it
+has no source. The owner's machine was fixed out-of-band (both variants rebuilt from HEAD, installed,
+quarantine cleared, ad-hoc re-signed); that install predates this code, so it exercised the manual
+path, not this one. A3's `the-release-workflow-ships-every-app-the-launcher-requires` guard pins the
+packaging gap so it cannot be forgotten between the two halves.

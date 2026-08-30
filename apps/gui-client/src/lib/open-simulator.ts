@@ -62,6 +62,10 @@ export interface OpenSimulatorArgs {
 
 export interface OpenSimulatorResult {
   opened: boolean;
+  /** True when the Simulator was missing and this call installed it before
+   *  launching. Callers need not react; it exists so the behaviour is
+   *  observable in tests and logs rather than being an invisible side effect. */
+  repaired?: boolean;
   /** Why the separate window did NOT open (shown to the user by the caller —
    *  an invisible fallback caused a multi-hour "still the same window"
    *  debugging saga, founder-hit 2026-06-12). */
@@ -367,9 +371,39 @@ export async function openSimulatorWindow({
     // simulator" error (a silent fallback caused the founder's "still the same
     // window" saga).
     const reason = err instanceof Error ? err.message : String(err);
+    // ⭐ Self-heal the ONE failure a customer cannot act on. The macOS DMG ships
+    // Driftstack.app alone, so "Install the Driftstack Simulator app" names
+    // something they were never given; the app carries its own copy and installs
+    // it here instead. Exactly ONE retry: if the launch fails again the ORIGINAL
+    // reason is surfaced, so a genuine fault still reports itself rather than
+    // disappearing into a retry loop.
+    if (isSimulatorNotInstalled(reason)) {
+      try {
+        await invoke('repair_simulator_install');
+        await invoke('launch_simulator', {
+          payload: btoa(params.toString()),
+          sessionLabel: sessionId,
+        });
+        return { opened: true, repaired: true };
+      } catch (repairErr) {
+        const repairReason = repairErr instanceof Error ? repairErr.message : String(repairErr);
+        console.warn('[simulator] auto-install of the Simulator failed:', repairReason);
+        return { opened: false, reason };
+      }
+    }
     console.warn('[simulator] launch_simulator failed; no in-app fallback:', reason);
     return { opened: false, reason };
   }
+}
+
+/** Does this launcher failure mean the Simulator app simply is not installed?
+ *
+ * Matched on the Rust error text rather than a code because `launch_simulator`
+ * returns plain strings. Narrow deliberately: only the missing-app case is
+ * self-healable, and treating a spawn failure or a rejected payload as
+ * "reinstall and retry" would retry an error reinstalling cannot fix. */
+export function isSimulatorNotInstalled(reason: string): boolean {
+  return reason.toLowerCase().includes('not installed');
 }
 
 /** Reopen the floating-iPhone window for an already-running agent session given

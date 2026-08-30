@@ -441,6 +441,7 @@ pub fn run() {
             endpoint_resolve,
             simulator_app_supported,
             launch_simulator,
+            repair_simulator_install,
             set_dock_tile,
             reset_dock_tile,
         ])
@@ -1176,7 +1177,7 @@ fn launch_simulator(
         if !is_valid_b64_payload(&payload) {
             return Err("invalid or oversized simulator session payload".to_string());
         }
-        let app_path = "/Applications/Driftstack Simulator.app";
+        let app_path = SIMULATOR_INSTALL_PATH;
         if !std::path::Path::new(app_path).exists() {
             return Err("Driftstack Simulator.app is not installed".to_string());
         }
@@ -1204,6 +1205,101 @@ fn launch_simulator(
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (payload, session_label);
+        Err("the separate simulator app is macOS-only".to_string())
+    }
+}
+
+/// The Simulator's installed location — the ONE path `launch_simulator` checks.
+const SIMULATOR_INSTALL_PATH: &str = "/Applications/Driftstack Simulator.app";
+const SIMULATOR_APP_FILE_NAME: &str = "Driftstack Simulator.app";
+
+/// Ordered places a Simulator bundle can be recovered from, given the running
+/// main-app executable (`<Something>.app/Contents/MacOS/driftstack-gui`).
+///
+/// ⛔ Order is the policy, not an implementation detail:
+///   1. `Contents/Resources/` INSIDE the running bundle — the copy shipped with
+///      the app. This is the only candidate that exists on a customer machine
+///      with no dev tree, so it must be tried first.
+///   2. A sibling of the running `.app` — a developer's `bundle/macos` output and
+///      the case where both apps were dragged out of one DMG together.
+///
+/// Returns an empty vec when the executable is not inside a `.app` at all
+/// (`cargo run`), because then neither location is meaningful — better to report
+/// "no source" than to invent a path.
+fn simulator_repair_sources(main_exe: &std::path::Path) -> Vec<std::path::PathBuf> {
+    // <bundle>.app/Contents/MacOS/<exe>  ->  <bundle>.app
+    let bundle = match main_exe
+        .parent()
+        .and_then(|macos| macos.parent())
+        .and_then(|contents| contents.parent())
+    {
+        Some(bundle) if bundle.extension().is_some_and(|ext| ext == "app") => bundle,
+        _ => return Vec::new(),
+    };
+    let mut out = vec![bundle
+        .join("Contents")
+        .join("Resources")
+        .join(SIMULATOR_APP_FILE_NAME)];
+    if let Some(parent) = bundle.parent() {
+        out.push(parent.join(SIMULATOR_APP_FILE_NAME));
+    }
+    out
+}
+
+/// First candidate that exists. `exists` is injected so the ordering policy is
+/// testable without touching the filesystem.
+fn pick_simulator_repair_source(
+    candidates: &[std::path::PathBuf],
+    exists: impl Fn(&std::path::Path) -> bool,
+) -> Option<std::path::PathBuf> {
+    candidates.iter().find(|c| exists(c)).cloned()
+}
+
+/// Install the Simulator into /Applications from a copy this build already
+/// carries, so a missing Simulator self-heals instead of dead-ending the
+/// customer at "Install the Driftstack Simulator app, then try again" — an
+/// instruction that names an app the macOS DMG does not ship.
+///
+/// Idempotent: an already-installed Simulator returns Ok without copying.
+/// The copy is `ditto` (bundle-aware) followed by an ad-hoc re-sign, because a
+/// copied bundle's seal reads "code has no resources but signature indicates
+/// they must be present" and macOS then refuses to open it.
+#[tauri::command]
+fn repair_simulator_install(window: tauri::WebviewWindow) -> Result<String, String> {
+    ensure_main_gui_command(&window)?;
+    #[cfg(target_os = "macos")]
+    {
+        let target = std::path::Path::new(SIMULATOR_INSTALL_PATH);
+        if target.exists() {
+            return Ok("already-installed".to_string());
+        }
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let candidates = simulator_repair_sources(&exe);
+        let source = pick_simulator_repair_source(&candidates, |p| p.exists()).ok_or_else(|| {
+            "no Simulator bundle is available to install from this build".to_string()
+        })?;
+        let copied = std::process::Command::new("/usr/bin/ditto")
+            .arg(&source)
+            .arg(target)
+            .status()
+            .map_err(|e| e.to_string())?;
+        if !copied.success() {
+            return Err(format!("ditto failed with status {copied}"));
+        }
+        // A ditto-copied bundle's seal is broken; re-sign ad-hoc (no keychain,
+        // so this never prompts) or the customer gets "cant open ap".
+        let _ = std::process::Command::new("/usr/bin/codesign")
+            .args(["--force", "--deep", "--sign", "-"])
+            .arg(target)
+            .status();
+        if target.exists() {
+            Ok(format!("installed from {}", source.display()))
+        } else {
+            Err("the Simulator was copied but is not present afterwards".to_string())
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
         Err("the separate simulator app is macOS-only".to_string())
     }
 }
@@ -3038,6 +3134,60 @@ mod tests {
         let _ = std::fs::remove_file(sim_payload_path(&session, handoff_id));
         // No file written → Ok(None), never Err.
         assert_eq!(take_sim_payload(&session, handoff_id).expect("take"), None);
+    }
+
+    #[test]
+    fn simulator_repair_prefers_the_shipped_copy_over_a_sibling() {
+        let exe = std::path::Path::new("/Applications/Driftstack.app/Contents/MacOS/driftstack-gui");
+        let sources = simulator_repair_sources(exe);
+        assert_eq!(
+            sources,
+            vec![
+                std::path::PathBuf::from(
+                    "/Applications/Driftstack.app/Contents/Resources/Driftstack Simulator.app"
+                ),
+                std::path::PathBuf::from("/Applications/Driftstack Simulator.app"),
+            ],
+            "the copy shipped INSIDE the bundle must be tried first: it is the only \
+             candidate that exists on a customer machine with no dev tree"
+        );
+    }
+
+    #[test]
+    fn simulator_repair_has_no_source_outside_an_app_bundle() {
+        // `cargo run` — neither location means anything, so report none rather
+        // than inventing a path that would ditto garbage into /Applications.
+        let exe = std::path::Path::new("/Users/dev/project/target/release/driftstack-gui");
+        assert!(simulator_repair_sources(exe).is_empty());
+    }
+
+    #[test]
+    fn simulator_repair_picks_the_first_candidate_that_exists() {
+        let shipped = std::path::PathBuf::from("/A/Driftstack.app/Contents/Resources/Sim.app");
+        let sibling = std::path::PathBuf::from("/A/Sim.app");
+        let candidates = vec![shipped.clone(), sibling.clone()];
+
+        // Both present -> the shipped copy wins.
+        assert_eq!(
+            pick_simulator_repair_source(&candidates, |_| true),
+            Some(shipped)
+        );
+        // Only the sibling present -> fall through to it rather than failing.
+        assert_eq!(
+            pick_simulator_repair_source(&candidates, |p| p == sibling.as_path()),
+            Some(sibling)
+        );
+        // Neither -> None, which the command turns into a stated error.
+        assert_eq!(pick_simulator_repair_source(&candidates, |_| false), None);
+    }
+
+    #[test]
+    fn the_repair_target_is_the_exact_path_launch_checks() {
+        // A drifted constant would install the Simulator somewhere `launch_simulator`
+        // never looks, and the repair would "succeed" while the customer stayed broken.
+        let args = simulator_open_args(SIMULATOR_INSTALL_PATH, "agt_x", "h1");
+        assert!(args.contains(&SIMULATOR_INSTALL_PATH.to_string()));
+        assert!(SIMULATOR_INSTALL_PATH.ends_with(SIMULATOR_APP_FILE_NAME));
     }
 
     #[test]
