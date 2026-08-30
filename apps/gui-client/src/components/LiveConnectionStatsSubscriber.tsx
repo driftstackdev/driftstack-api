@@ -18,6 +18,16 @@ const EMPTY_STATS: ConnectionStats = {
   jitterMs: null,
   decodeFps: null,
   freezeCount: null,
+  framesDecoded: null,
+  framesDropped: null,
+  framesRendered: null,
+  totalFreezesDurationS: null,
+  pauseCount: null,
+  jitterBufferDelayS: null,
+  jitterBufferEmittedCount: null,
+  framesDecodedRecent: null,
+  framesDroppedRecent: null,
+  framesRenderedRecent: null,
 };
 
 export interface LiveConnectionStatsStore {

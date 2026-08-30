@@ -61,6 +61,32 @@ export interface ConnectionStats {
   decodeFps: number | null;
   /** Cumulative freeze count on the inbound video. */
   freezeCount: number | null;
+  /**
+   * V-2168 — the presentation-attribution counters. Decode>render was
+   * undiagnosable because the product read NONE of the counters that separate
+   * "decoded but never presented by the sink" (framesDropped — delivery jitter
+   * against the playout buffer, or a starved compositor) from "presented"
+   * (framesRendered) — the adversarial review's one agreed conclusion. All
+   * cumulative, per WebRTC inbound-rtp.
+   */
+  framesDecoded: number | null;
+  framesDropped: number | null;
+  framesRendered: number | null;
+  /** Cumulative seconds of freeze + pause on the inbound video. */
+  totalFreezesDurationS: number | null;
+  pauseCount: number | null;
+  /** Jitter-buffer behaviour: cumulative delay (s) over emitted frame count —
+   *  their RATIO is the average buffer depth the sink actually held, the direct
+   *  read on whether the playout-delay policy is buffering at all. */
+  jitterBufferDelayS: number | null;
+  jitterBufferEmittedCount: number | null;
+  /** Per-poll-interval deltas of the attribution counters, computed by the
+   *  hook (null until two polls land). decodedRecent-renderedRecent-
+   *  droppedRecent is the "where did the frames go" answer for the LAST
+   *  interval, which the cumulative numbers dilute. */
+  framesDecodedRecent: number | null;
+  framesDroppedRecent: number | null;
+  framesRenderedRecent: number | null;
 }
 
 const EMPTY: ConnectionStats = {
@@ -74,6 +100,16 @@ const EMPTY: ConnectionStats = {
   jitterMs: null,
   decodeFps: null,
   freezeCount: null,
+  framesDecoded: null,
+  framesDropped: null,
+  framesRendered: null,
+  totalFreezesDurationS: null,
+  pauseCount: null,
+  jitterBufferDelayS: null,
+  jitterBufferEmittedCount: null,
+  framesDecodedRecent: null,
+  framesDroppedRecent: null,
+  framesRenderedRecent: null,
 };
 
 /** Find the first subscribed remote video track on the room, or null. */
@@ -139,6 +175,17 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     if (s?.type !== 'inbound-rtp' || s.kind !== 'video') return;
     if (typeof s.framesPerSecond === 'number') out.decodeFps = Math.round(s.framesPerSecond);
     if (typeof s.freezeCount === 'number') out.freezeCount = s.freezeCount;
+    if (typeof s.framesDecoded === 'number') out.framesDecoded = s.framesDecoded;
+    if (typeof s.framesDropped === 'number') out.framesDropped = s.framesDropped;
+    // framesRendered is not in every UA; track-sink stats sometimes name it
+    // framesRendered on inbound-rtp (Safari/WebKit) — read it when present.
+    if (typeof s.framesRendered === 'number') out.framesRendered = s.framesRendered;
+    if (typeof s.totalFreezesDuration === 'number')
+      out.totalFreezesDurationS = s.totalFreezesDuration;
+    if (typeof s.pauseCount === 'number') out.pauseCount = s.pauseCount;
+    if (typeof s.jitterBufferDelay === 'number') out.jitterBufferDelayS = s.jitterBufferDelay;
+    if (typeof s.jitterBufferEmittedCount === 'number')
+      out.jitterBufferEmittedCount = s.jitterBufferEmittedCount;
     if (typeof s.jitter === 'number') out.jitterMs = Math.round(s.jitter * 1000);
     const lost = typeof s.packetsLost === 'number' ? s.packetsLost : null;
     const recv = typeof s.packetsReceived === 'number' ? s.packetsReceived : null;
@@ -173,10 +220,15 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
   // short burst to ~0). Reset to null whenever we drop to EMPTY so a stale
   // pre-resubscribe sample can't diff against a fresh, lower cumulative count.
   const prevCountersRef = useRef<{ lost: number; recv: number } | null>(null);
+  // V-2168 — prior cumulative frame counters, diffed the same way so the HUD
+  // can answer "in the last interval, how many frames were decoded / presented
+  // / dropped" — the numbers the cumulative counters dilute.
+  const prevFramesRef = useRef<{ decoded: number; dropped: number; rendered: number } | null>(null);
 
   useEffect(() => {
     if (room === null || !enabled) {
       prevCountersRef.current = null;
+      prevFramesRef.current = null;
       setStats(EMPTY);
       return;
     }
@@ -193,6 +245,7 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
       // udp/tcp + RTT that hides a transport change during recovery.
       if (track === null || typeof track.getRTCStatsReport !== 'function') {
         prevCountersRef.current = null;
+        prevFramesRef.current = null;
         setStats(EMPTY);
         return;
       }
@@ -222,6 +275,24 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
               }
             }
             prevCountersRef.current = { lost: parsed.packetsLost, recv: parsed.packetsReceived };
+          }
+          if (parsed.framesDecoded !== null) {
+            const prev = prevFramesRef.current;
+            const dropped = parsed.framesDropped ?? 0;
+            const rendered = parsed.framesRendered ?? 0;
+            if (
+              prev !== null &&
+              parsed.framesDecoded >= prev.decoded &&
+              dropped >= prev.dropped &&
+              rendered >= prev.rendered
+            ) {
+              parsed.framesDecodedRecent = parsed.framesDecoded - prev.decoded;
+              if (parsed.framesDropped !== null)
+                parsed.framesDroppedRecent = dropped - prev.dropped;
+              if (parsed.framesRendered !== null)
+                parsed.framesRenderedRecent = rendered - prev.rendered;
+            }
+            prevFramesRef.current = { decoded: parsed.framesDecoded, dropped, rendered };
           }
           setStats(parsed);
         })

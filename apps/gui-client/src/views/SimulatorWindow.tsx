@@ -936,7 +936,7 @@ export function DeviceToolbar({
       <div
         onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
-        className="flex h-[34px] w-full items-center gap-2 rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
+        className="flex h-[34px] w-full items-center gap-2 rounded-t-[16px] bg-[#1d1e24] px-3 ring-1 ring-white/[0.12] shadow-[inset_0_1px_0_rgba(255,255,255,0.10),inset_0_-1px_0_rgba(0,0,0,0.45)]"
       >
         {/* Left — window controls. The window is BORDERLESS (the iPhone look),
             so these ARE the only close/minimize affordance. */}
@@ -3570,6 +3570,12 @@ export function SimulatorWindow(): JSX.Element {
       packetLossPct: conn.packetLossPct,
       jitterMs: conn.jitterMs,
       freezeCount: conn.freezeCount,
+      framesDecoded: conn.framesDecoded,
+      framesDropped: conn.framesDropped,
+      framesRendered: conn.framesRendered,
+      totalFreezesDurationS: conn.totalFreezesDurationS,
+      jitterBufferDelayS: conn.jitterBufferDelayS,
+      jitterBufferEmittedCount: conn.jitterBufferEmittedCount,
       build: typeof __BUILD_STAMP__ !== 'undefined' ? __BUILD_STAMP__ : 'dev',
     });
     const flagFailed = (): void => {
@@ -8678,216 +8684,236 @@ export function SimulatorWindow(): JSX.Element {
                       now lives in the pinned status strip.) */}
                     {activePane === 'diagnostics' && (
                       <LiveConnectionStatsSubscriber store={connectionStatsStore}>
-                        {(conn) => (
-                          <LiveLatencySubscriber store={latencyStore}>
-                            {(latency) =>
-                              (() => {
-                                // The latency value the strip/Copy report, with its
-                                // health color (#139 sweep: neutral ink < 150ms, else the
-                                // kept amber "warn" cue — good stays quiet, slow warns).
-                                const rttMs = latency.rttMs !== null ? latency.rttMs : conn.rttMs;
-                                const rttFromLink = latency.rttMs === null && conn.rttMs !== null;
-                                const rttHealthy = rttMs !== null && rttMs < 150;
-                                return (
-                                  <section
-                                    data-component="drawer-diagnostics"
-                                    className="space-y-2.5 text-[11px] text-white/80"
+                        {(conn) =>
+                          (() => {
+                            // V-2168 — the 2s latency subscriber used to WRAP this whole
+                            // ~230-line section, so the diagnostics pane re-rendered all of
+                            // it on every ping — including the Render-fps readout, i.e. the
+                            // instrument loaded the thing it measures. It now wraps ONLY the
+                            // Latency tile below.
+                            return (
+                              <section
+                                data-component="drawer-diagnostics"
+                                className="space-y-2.5 text-[11px] text-white/80"
+                              >
+                                <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                                  <span aria-hidden="true" className="text-accent">
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    >
+                                      <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
+                                    </svg>
+                                  </span>
+                                  <span>Diagnostics</span>
+                                  <button
+                                    type="button"
+                                    data-action="copy-diagnostics"
+                                    onClick={copyDiagnostics}
+                                    className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 transition-colors hover:bg-white/10"
                                   >
-                                    <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
-                                      <span aria-hidden="true" className="text-accent">
-                                        <svg
-                                          width="14"
-                                          height="14"
-                                          viewBox="0 0 24 24"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        >
-                                          <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
-                                        </svg>
-                                      </span>
-                                      <span>Diagnostics</span>
-                                      <button
-                                        type="button"
-                                        data-action="copy-diagnostics"
-                                        onClick={copyDiagnostics}
-                                        className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80 transition-colors hover:bg-white/10"
-                                      >
-                                        <span aria-hidden="true">⧉</span>
-                                        {diagCopyFailed
-                                          ? "Couldn't copy"
-                                          : diagCopied
-                                            ? 'Copied ✓'
-                                            : 'Copy'}
-                                      </button>
-                                    </div>
+                                    <span aria-hidden="true">⧉</span>
+                                    {diagCopyFailed
+                                      ? "Couldn't copy"
+                                      : diagCopied
+                                        ? 'Copied ✓'
+                                        : 'Copy'}
+                                  </button>
+                                </div>
 
-                                    {/* 2-up stat tiles — Render fps + Latency (live number). */}
-                                    <div className="grid grid-cols-2 gap-2">
-                                      <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                        <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                          Render
+                                {/* 2-up stat tiles — Render fps + Latency (live number). */}
+                                <div className="grid grid-cols-2 gap-2">
+                                  <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                      Render
+                                    </div>
+                                    <LiveFpsSubscriber store={fpsStore}>
+                                      {(fps) => (
+                                        <div className="mt-0.5 text-[16px] font-bold leading-none">
+                                          {fps ?? '—'}
+                                          <span className="ml-0.5 text-[10px] font-medium text-white/45">
+                                            fps
+                                          </span>
                                         </div>
-                                        <LiveFpsSubscriber store={fpsStore}>
-                                          {(fps) => (
-                                            <div className="mt-0.5 text-[16px] font-bold leading-none">
-                                              {fps ?? '—'}
-                                              <span className="ml-0.5 text-[10px] font-medium text-white/45">
-                                                fps
-                                              </span>
-                                            </div>
-                                          )}
-                                        </LiveFpsSubscriber>
-                                      </div>
-                                      <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                        <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                          Latency
-                                        </div>
-                                        {rttMs !== null ? (
-                                          <>
-                                            <div
-                                              className={`mt-0.5 text-[16px] font-bold leading-none ${
-                                                rttHealthy ? 'text-ink-secondary' : 'text-amber-300'
-                                              }`}
-                                            >
-                                              {rttMs}
-                                              <span className="ml-0.5 text-[10px] font-medium text-white/45">
-                                                ms{rttFromLink ? ' (link)' : ''}
-                                              </span>
-                                            </div>
-                                            {/* Audit #16: the old "sparkline" here was a static
-                                        hardcoded polyline — a fabricated shape, not real
-                                        RTT history — so it implied a trend that didn't
-                                        exist. Removed in favor of the honest live number
-                                        (a real history ring buffer is a separate, larger
-                                        change and was flagged, not hand-rolled). */}
-                                          </>
+                                      )}
+                                    </LiveFpsSubscriber>
+                                  </div>
+                                  <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                      Latency
+                                    </div>
+                                    <LiveLatencySubscriber store={latencyStore}>
+                                      {(latency) => {
+                                        // The latency value the strip/Copy report, with its
+                                        // health color (#139 sweep: neutral ink < 150ms, else
+                                        // the kept amber "warn" cue).
+                                        const rttMs =
+                                          latency.rttMs !== null ? latency.rttMs : conn.rttMs;
+                                        const rttFromLink =
+                                          latency.rttMs === null && conn.rttMs !== null;
+                                        const rttHealthy = rttMs !== null && rttMs < 150;
+                                        return rttMs !== null ? (
+                                          <div
+                                            className={`mt-0.5 text-[16px] font-bold leading-none ${
+                                              rttHealthy ? 'text-ink-secondary' : 'text-amber-300'
+                                            }`}
+                                          >
+                                            {rttMs}
+                                            <span className="ml-0.5 text-[10px] font-medium text-white/45">
+                                              ms{rttFromLink ? ' (link)' : ''}
+                                            </span>
+                                          </div>
                                         ) : (
                                           <div className="mt-0.5 text-[11px] text-white/50">
                                             measuring…
                                           </div>
-                                        )}
-                                      </div>
-                                    </div>
+                                        );
+                                        // Audit #16: the old "sparkline" here was a static
+                                        // hardcoded polyline — removed in favor of the
+                                        // honest live number.
+                                      }}
+                                    </LiveLatencySubscriber>
+                                  </div>
+                                </div>
 
-                                    {/* Transport + decode/loss/jitter/freeze line (preserved). */}
-                                    <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed">
-                                      <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                        Transport
-                                      </div>
-                                      <div className="mt-0.5 truncate">
-                                        {conn.transport !== null ? (
-                                          <span
-                                            className={
-                                              conn.transport === 'udp' && conn.relayed !== true
-                                                ? 'text-ink-secondary'
-                                                : 'text-status-error'
-                                            }
-                                          >
-                                            {conn.transport}
-                                            {conn.relayed ? ' · relay ⚠' : ' · direct'}
-                                          </span>
-                                        ) : (
-                                          <span className="text-white/50">measuring…</span>
-                                        )}
-                                      </div>
-                                      {/* Finding #4 — flex-wrap (was `truncate`) so jitter +
+                                {/* Transport + decode/loss/jitter/freeze line (preserved). */}
+                                <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed">
+                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    Transport
+                                  </div>
+                                  <div className="mt-0.5 truncate">
+                                    {conn.transport !== null ? (
+                                      <span
+                                        className={
+                                          conn.transport === 'udp' && conn.relayed !== true
+                                            ? 'text-ink-secondary'
+                                            : 'text-status-error'
+                                        }
+                                      >
+                                        {conn.transport}
+                                        {conn.relayed ? ' · relay ⚠' : ' · direct'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-white/50">measuring…</span>
+                                    )}
+                                  </div>
+                                  {/* Finding #4 — flex-wrap (was `truncate`) so jitter +
                                   freezes flow onto a second line instead of clipping
                                   off-screen at the narrow drawer width (~212px usable);
                                   freezes>0 in amber is the stall signal an operator
                                   needs. gap-x-2 supplies the separator spacing the
                                   dropped ` · ` characters provided. */}
-                                      {(conn.decodeFps !== null ||
-                                        conn.packetLossPct !== null ||
-                                        conn.freezeCount !== null) && (
-                                        <div className="mt-1 flex flex-wrap gap-x-2 text-white/70">
-                                          {conn.decodeFps !== null && (
-                                            <span>decode {conn.decodeFps} fps</span>
-                                          )}
-                                          {conn.packetLossPct !== null && (
-                                            <span
-                                              className={
-                                                conn.packetLossPct > 1 ? 'text-amber-300' : ''
-                                              }
-                                            >
-                                              loss {conn.packetLossPct}%
-                                            </span>
-                                          )}
-                                          {conn.jitterMs !== null && (
-                                            <span>jitter {conn.jitterMs}ms</span>
-                                          )}
-                                          {conn.freezeCount !== null && (
-                                            <span
-                                              className={
-                                                conn.freezeCount > 0 ? 'text-amber-300' : ''
-                                              }
-                                            >
-                                              freezes {conn.freezeCount}
-                                            </span>
-                                          )}
-                                        </div>
+                                  {(conn.decodeFps !== null ||
+                                    conn.packetLossPct !== null ||
+                                    conn.freezeCount !== null) && (
+                                    <div className="mt-1 flex flex-wrap gap-x-2 text-white/70">
+                                      {conn.decodeFps !== null && (
+                                        <span>decode {conn.decodeFps} fps</span>
+                                      )}
+                                      {conn.packetLossPct !== null && (
+                                        <span
+                                          className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}
+                                        >
+                                          loss {conn.packetLossPct}%
+                                        </span>
+                                      )}
+                                      {conn.jitterMs !== null && (
+                                        <span>jitter {conn.jitterMs}ms</span>
+                                      )}
+                                      {conn.freezeCount !== null && (
+                                        <span
+                                          className={conn.freezeCount > 0 ? 'text-amber-300' : ''}
+                                        >
+                                          freezes {conn.freezeCount}
+                                        </span>
+                                      )}
+                                      {/* V-2168 — WHERE the frames went, last
+                                              interval: decoded vs presented vs
+                                              dropped-by-the-sink. This is the number
+                                              that separates a delivery/playout stall
+                                              from a compositing one — before it, the
+                                              product could not tell decode-50-
+                                              render-34 apart from either cause. */}
+                                      {conn.framesDecodedRecent !== null && (
+                                        <span
+                                          className={
+                                            (conn.framesDroppedRecent ?? 0) > 0
+                                              ? 'text-amber-300'
+                                              : ''
+                                          }
+                                        >
+                                          frames {conn.framesDecodedRecent} dec
+                                          {conn.framesRenderedRecent !== null
+                                            ? ` / ${String(conn.framesRenderedRecent)} shown`
+                                            : ''}
+                                          {conn.framesDroppedRecent !== null
+                                            ? ` / ${String(conn.framesDroppedRecent)} dropped`
+                                            : ''}
+                                        </span>
                                       )}
                                     </div>
+                                  )}
+                                </div>
 
-                                    {/* Info cards — Profile / Device / Link / Egress (preserved values). */}
-                                    {profileName !== '' && (
-                                      <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                        <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                          Profile
-                                        </div>
-                                        <div className="mt-0.5 truncate">{profileName}</div>
-                                      </div>
-                                    )}
-                                    <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                      <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                        Device
-                                      </div>
-                                      <div className="mt-0.5 truncate">{deviceName}</div>
+                                {/* Info cards — Profile / Device / Link / Egress (preserved values). */}
+                                {profileName !== '' && (
+                                  <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                      Profile
                                     </div>
-                                    <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                      <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                        Link
-                                      </div>
-                                      <div className="mt-0.5 truncate">
-                                        {info ? wsHost(info.ws_url) : 'not connected'}
-                                        {info && (
-                                          <span className="text-ink-secondary"> · ws ✓</span>
-                                        )}
-                                      </div>
+                                    <div className="mt-0.5 truncate">{profileName}</div>
+                                  </div>
+                                )}
+                                <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    Device
+                                  </div>
+                                  <div className="mt-0.5 truncate">{deviceName}</div>
+                                </div>
+                                <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    Link
+                                  </div>
+                                  <div className="mt-0.5 truncate">
+                                    {info ? wsHost(info.ws_url) : 'not connected'}
+                                    {info && <span className="text-ink-secondary"> · ws ✓</span>}
+                                  </div>
+                                </div>
+                                {proxyLabel !== '' && (
+                                  <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                      Egress
                                     </div>
-                                    {proxyLabel !== '' && (
-                                      <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                        <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                          Egress
-                                        </div>
-                                        <div className="mt-0.5 truncate">🌍 {proxyLabel}</div>
-                                      </div>
-                                    )}
+                                    <div className="mt-0.5 truncate">🌍 {proxyLabel}</div>
+                                  </div>
+                                )}
 
-                                    {/* Identity facts (preserved). */}
-                                    <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-white/80">
-                                      <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
-                                        Identity
-                                      </div>
-                                      <div className="mt-0.5 truncate">
-                                        engine-deep · bit-exact device
-                                      </div>
-                                      <div className="truncate">input human-cadence native</div>
-                                      <div className="truncate text-white/40">
-                                        build{' '}
-                                        {typeof __BUILD_STAMP__ !== 'undefined'
-                                          ? __BUILD_STAMP__
-                                          : 'dev'}
-                                      </div>
-                                    </div>
-                                  </section>
-                                );
-                              })()
-                            }
-                          </LiveLatencySubscriber>
-                        )}
+                                {/* Identity facts (preserved). */}
+                                <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-white/80">
+                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    Identity
+                                  </div>
+                                  <div className="mt-0.5 truncate">
+                                    engine-deep · bit-exact device
+                                  </div>
+                                  <div className="truncate">input human-cadence native</div>
+                                  <div className="truncate text-white/40">
+                                    build{' '}
+                                    {typeof __BUILD_STAMP__ !== 'undefined'
+                                      ? __BUILD_STAMP__
+                                      : 'dev'}
+                                  </div>
+                                </div>
+                              </section>
+                            );
+                          })()
+                        }
                       </LiveConnectionStatsSubscriber>
                     )}
 

@@ -91,3 +91,26 @@ describe('#48 formatSessionDiagnostics', () => {
     expect(out).toContain('transport: udp · relay');
   });
 });
+
+// V-2168 — the frame ledger reaches the paste-ready report.
+describe('frame attribution (V-2168)', () => {
+  it('renders decoded / presented / dropped / frozen / avg buffer on one line', () => {
+    const text = formatSessionDiagnostics({
+      ...FULL,
+      framesDecoded: 3000,
+      framesRendered: 2040,
+      framesDropped: 960,
+      totalFreezesDurationS: 4.25,
+      jitterBufferDelayS: 12.5,
+      jitterBufferEmittedCount: 2500,
+    });
+    expect(text).toContain(
+      'frames: decoded 3000 · presented 2040 · dropped 960 · frozen 4.3s · avg buffer 5ms',
+    );
+  });
+
+  it('omits the line entirely when no counter is known — never prints null or 0-by-default', () => {
+    const text = formatSessionDiagnostics(FULL);
+    expect(text).not.toContain('frames:');
+  });
+});

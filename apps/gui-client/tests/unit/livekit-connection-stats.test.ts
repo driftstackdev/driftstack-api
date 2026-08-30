@@ -93,6 +93,48 @@ describe('parseConnectionStats', () => {
     expect(r.packetLossPct).toBe(0);
   });
 
+  it('⛔ V-2168: reads the frame-attribution counters — decoded / dropped / rendered / freezes duration / jitter buffer', () => {
+    // The decode>render owner report was UNDIAGNOSABLE because none of these
+    // were read: nothing could separate "decoded but never presented by the
+    // sink" from a compositing stall. The parser must surface every counter the
+    // browser exposes, and stay null (not 0) for the ones it does not.
+    const r = parseConnectionStats(
+      report([
+        {
+          id: 'in',
+          type: 'inbound-rtp',
+          kind: 'video',
+          framesPerSecond: 50,
+          framesDecoded: 3000,
+          framesDropped: 960,
+          framesRendered: 2040,
+          totalFreezesDuration: 4.25,
+          pauseCount: 2,
+          jitterBufferDelay: 12.5,
+          jitterBufferEmittedCount: 2500,
+        },
+      ]),
+    );
+    expect(r.framesDecoded).toBe(3000);
+    expect(r.framesDropped).toBe(960);
+    expect(r.framesRendered).toBe(2040);
+    expect(r.totalFreezesDurationS).toBe(4.25);
+    expect(r.pauseCount).toBe(2);
+    expect(r.jitterBufferDelayS).toBe(12.5);
+    expect(r.jitterBufferEmittedCount).toBe(2500);
+  });
+
+  it('V-2168: a UA that does not expose the frame counters yields null, never 0', () => {
+    const r = parseConnectionStats(
+      report([{ id: 'in', type: 'inbound-rtp', kind: 'video', framesPerSecond: 30 }]),
+    );
+    expect(r.framesDecoded).toBeNull();
+    expect(r.framesDropped).toBeNull();
+    expect(r.framesRendered).toBeNull();
+    expect(r.totalFreezesDurationS).toBeNull();
+    expect(r.jitterBufferDelayS).toBeNull();
+  });
+
   it('returns nulls (never throws) for an empty / unknown report', () => {
     const r = parseConnectionStats(report([{ id: 'x', type: 'codec' }]));
     expect(r.transport).toBeNull();

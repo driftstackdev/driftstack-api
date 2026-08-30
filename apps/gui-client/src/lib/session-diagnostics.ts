@@ -26,6 +26,15 @@ export interface SessionDiagnosticsInput {
   packetLossPct: number | null;
   jitterMs: number | null;
   freezeCount: number | null;
+  /** V-2168 — frame attribution (cumulative): where decoded frames went. The
+   *  decode>render bug class is unattributable without these, so the paste-
+   *  ready report carries them whenever the browser exposes them. */
+  framesDecoded?: number | null;
+  framesDropped?: number | null;
+  framesRendered?: number | null;
+  totalFreezesDurationS?: number | null;
+  jitterBufferDelayS?: number | null;
+  jitterBufferEmittedCount?: number | null;
   build: string;
 }
 
@@ -62,6 +71,25 @@ export function formatSessionDiagnostics(d: SessionDiagnosticsInput): string {
   if (d.jitterMs !== null) media.push(`jitter ${d.jitterMs}ms`);
   if (d.freezeCount !== null) media.push(`freezes ${d.freezeCount}`);
   if (media.length > 0) lines.push(media.join(' · '));
+
+  // V-2168 — the frame ledger: decoded vs presented vs dropped-by-the-sink,
+  // plus the playout buffer's real average depth. One line, only when known.
+  const frames: string[] = [];
+  if (d.framesDecoded != null) frames.push(`decoded ${d.framesDecoded}`);
+  if (d.framesRendered != null) frames.push(`presented ${d.framesRendered}`);
+  if (d.framesDropped != null) frames.push(`dropped ${d.framesDropped}`);
+  if (d.totalFreezesDurationS != null)
+    frames.push(`frozen ${Math.round(d.totalFreezesDurationS * 10) / 10}s`);
+  if (
+    d.jitterBufferDelayS != null &&
+    d.jitterBufferEmittedCount != null &&
+    d.jitterBufferEmittedCount > 0
+  ) {
+    frames.push(
+      `avg buffer ${Math.round((d.jitterBufferDelayS / d.jitterBufferEmittedCount) * 1000)}ms`,
+    );
+  }
+  if (frames.length > 0) lines.push(`frames: ${frames.join(' · ')}`);
 
   lines.push(`build: ${d.build}`);
   return lines.join('\n');
