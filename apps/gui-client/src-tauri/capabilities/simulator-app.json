@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "simulator-app",
-  "description": "Least-privilege capability for the SEPARATE 'Driftstack Simulator' macOS app build (tauri.simulator.conf.json). The first config-created window keeps label `main`; Rust consumes and unlinks the complete owner-only 0600 single-use handoff file selected by the validated non-secret `--ds-label` and unique `--ds-handoff` routing arguments before applying its internal URL/event. Each launch uses a distinct file path, so an older same-session opener cannot consume its successor. Rust stores any short-lived gui_control credential in its bounded process-memory store first, then exposes only the non-secret `cg` generation for control authorization to the WebView. This capability targets `main`; dynamically-created per-session windows inherit the same explicit set. The separate-app build sets app.security.capabilities=[\"simulator-app\"] in its config, which OVERRIDES the default auto-inclusion of capabilities/*.json — so the separate app gets ONLY this set and NEVER the broad `default` capability (audit 1.8 least-privilege). Deliberately EXCLUDES shell / updater / process / deep-link / create-webview-window — none are reachable from the simulator entry (main.tsx ?window=simulator → RecordingsProvider + SimulatorWindow). The grants below are exactly what the simulator window + the libs it imports actually use:\n  • window mutation: start-dragging (frame drag), close + destroy (X button + onCloseRequested teardown), minimize, set-size (rotate/resize), set-always-on-top (pin), set-focus.\n  • core:window:default — read-only window queries.\n  • core:webview:default — getCurrentWebviewWindow + onCloseRequested.\n  • core:event:default — listen('ds-session') relaunch re-point.\n  • core / app / resources — baseline IPC.\n  • store:default — lib/settings.ts LazyStore get/set/save in loadSettings(); never gui_control credential storage.\n  • fs (read/write text, mkdir, remove, exists, read-dir) scoped to $APPDATA/recordings/** — RecordingsProvider.loadIndex() runs on mount; the Record pill persists frames there.\n  • fs:scope $DOWNLOAD/** + fs:allow-write-file — the snapshot button writes a PNG to Downloads.\nApp-defined commands need no ACL entry in Tauri v2, so Rust enforces their bundle/window/session origins. Simulator WebViews may call only the dedicated `simulator_control_key_load` / `simulator_control_key_delete` credential commands plus their simulator UI commands; generic `secret_save` / `secret_load` / `secret_delete` OS-Keychain commands deny the Simulator bundle. `set_dock_tile` / `reset_dock_tile` provide the dynamic macOS Dock icon (proxy country flag captioned with the profile name).",
+  "description": "Least-privilege capability for the SEPARATE 'Driftstack Simulator' macOS app build (tauri.simulator.conf.json). The first config-created window keeps label `main`; Rust consumes and unlinks the complete owner-only 0600 single-use handoff file selected by the validated non-secret `--ds-label` and unique `--ds-handoff` routing arguments before applying its internal URL/event. Each launch uses a distinct file path, so an older same-session opener cannot consume its successor. Rust stores any short-lived gui_control credential in its bounded process-memory store first, then exposes only the non-secret `cg` generation for control authorization to the WebView. This capability targets `main`; dynamically-created per-session windows inherit the same explicit set. The separate-app build sets app.security.capabilities=[\"simulator-app\"] in its config, which OVERRIDES the default auto-inclusion of capabilities/*.json \u2014 so the separate app gets ONLY this set and NEVER the broad `default` capability (audit 1.8 least-privilege). Deliberately EXCLUDES shell / updater / process / deep-link / create-webview-window \u2014 none are reachable from the simulator entry (main.tsx ?window=simulator \u2192 RecordingsProvider + SimulatorWindow). The grants below are exactly what the simulator window + the libs it imports actually use:\n  \u2022 window mutation: start-dragging (frame drag), close + destroy (X button + onCloseRequested teardown), minimize, set-size (rotate/resize), set-always-on-top (pin), set-focus.\n  \u2022 core:window:default \u2014 read-only window queries.\n  \u2022 core:webview:default \u2014 getCurrentWebviewWindow + onCloseRequested.\n  \u2022 core:event:default \u2014 listen('ds-session') relaunch re-point.\n  \u2022 core / app / resources \u2014 baseline IPC.\n  \u2022 store:default \u2014 lib/settings.ts LazyStore get/set/save in loadSettings(); never gui_control credential storage.\n  \u2022 fs (read/write text, mkdir, remove, exists, read-dir) scoped to $APPDATA/recordings/** \u2014 RecordingsProvider.loadIndex() runs on mount; the Record pill persists frames there.\n  \u2022 fs:scope $DOWNLOAD/** + fs:allow-write-file \u2014 the snapshot button writes a PNG to Downloads.\nApp-defined commands need no ACL entry in Tauri v2, so Rust enforces their bundle/window/session origins. Simulator WebViews may call only the dedicated `simulator_control_key_load` / `simulator_control_key_delete` credential commands plus their simulator UI commands; generic `secret_save` / `secret_load` / `secret_delete` OS-Keychain commands deny the Simulator bundle. `set_dock_tile` / `reset_dock_tile` provide the dynamic macOS Dock icon (proxy country flag captioned with the profile name).",
   "windows": ["main", "sim-*"],
   "permissions": [
     "core:default",
@@ -20,7 +20,14 @@
     "store:default",
     {
       "identifier": "fs:scope",
-      "allow": [{ "path": "$APPDATA/recordings/**" }, { "path": "$DOWNLOAD/**" }]
+      "allow": [
+        {
+          "path": "$APPDATA/recordings/**"
+        },
+        {
+          "path": "$DOWNLOAD/**"
+        }
+      ]
     },
     "fs:allow-read-text-file",
     "fs:allow-write-text-file",
@@ -28,6 +35,7 @@
     "fs:allow-remove",
     "fs:allow-mkdir",
     "fs:allow-exists",
-    "fs:allow-read-dir"
+    "fs:allow-read-dir",
+    "fs:allow-open"
   ]
 }

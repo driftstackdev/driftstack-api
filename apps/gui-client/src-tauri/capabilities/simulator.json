@@ -14,6 +14,7 @@
     "core:window:allow-set-always-on-top",
     "core:webview:default",
     "core:event:default",
+    "core:resources:default",
     "store:default",
     {
       "identifier": "fs:scope",
@@ -32,6 +33,7 @@
     "fs:allow-remove",
     "fs:allow-mkdir",
     "fs:allow-exists",
-    "fs:allow-read-dir"
+    "fs:allow-read-dir",
+    "fs:allow-open"
   ]
 }

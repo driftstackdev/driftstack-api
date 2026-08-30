@@ -96,3 +96,99 @@ describe('a capability file that is not listed is inert', () => {
     expect(cap.platforms).toEqual(['macOS']);
   });
 });
+
+describe('the two simulator windows are granted what their code actually calls (V-2165)', () => {
+  /** The same index.html runs in BOTH simulator windows; only the CAPABILITY differs. */
+  const SIM_IN_PROCESS = 'capabilities/simulator.json'; // windows: simulator-* (Windows/Linux)
+  const SIM_MACOS_APP = 'capabilities/simulator-app.json'; // windows: main, sim-* (the separate app)
+
+  const permsOf = (file: string): string[] =>
+    (
+      JSON.parse(read(file)) as { permissions: (string | { identifier: string })[] }
+    ).permissions.map((x) => (typeof x === 'string' ? x : x.identifier));
+
+  /**
+   * The ONLY permissions the macOS app window may hold that the in-process window
+   * does not, each with why. Anything else is drift — which is exactly how the
+   * in-process window ended up without `core:resources:default` while
+   * `FileHandle.close()` routes through `plugin:resources|close`.
+   */
+  const MACOS_ONLY: Readonly<Record<string, string>> = {
+    'core:default':
+      'the separate app owns its own top-level window (label "main"), so it needs the umbrella set the host app has; the in-process window is a CHILD of a main window that already holds it',
+    'core:app:default':
+      'app-level lifecycle (getName/getVersion/show/hide) belongs to the app that IS the process; the in-process window is not that process',
+  };
+
+  it('CRITICAL neither simulator window is missing a permission its own code invokes. An ungranted permission does not warn — the IPC call just rejects, and download.ts turns that into `return false`', () => {
+    // Derived, not pinned: read the fs functions the simulator-reachable modules
+    // actually import and require the matching `fs:allow-*` in BOTH capabilities.
+    // `open` was imported by download.ts and granted NOWHERE, so the Simulator's
+    // file download returned false on every platform while every test stayed green
+    // (the suites mock @tauri-apps/plugin-fs, so the mock answers, not the grant).
+    const GUI = resolve(__dirname, '../../../../apps/gui-client/src');
+    // Modules the simulator window demonstrably executes: SimulatorWindow itself and
+    // what it imports for downloads, recordings, logs and its crash marker.
+    const SIM_MODULES = [
+      'views/SimulatorWindow.tsx',
+      'lib/download.ts',
+      'lib/recordings-store.ts',
+      'lib/log-buffer.ts',
+      'lib/simulator-crash-marker.ts',
+    ];
+    // Imported names that are NOT commands (enums/types carry no permission).
+    const NOT_A_COMMAND = new Set(['BaseDirectory', 'type']);
+    const kebab = (name: string): string => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
+    const required = new Set<string>();
+    let scanned = 0;
+    for (const rel of SIM_MODULES) {
+      const src = readFileSync(resolve(GUI, rel), 'utf8');
+      scanned += 1;
+      for (const m of src.matchAll(
+        /(?:import|const)\s*\{([^}]*)\}\s*(?:=\s*await\s+import\(|from\s+)'@tauri-apps\/plugin-fs'/g,
+      )) {
+        for (const raw of (m[1] ?? '').split(',')) {
+          const name =
+            raw
+              .trim()
+              .split(/\s+as\s+/)[0]
+              ?.trim() ?? '';
+          if (name === '' || NOT_A_COMMAND.has(name)) continue;
+          required.add(`fs:allow-${kebab(name)}`);
+        }
+      }
+    }
+    // Non-vacuity: this arm enumerates its own inputs, so a moved file or a broken
+    // regex would leave `required` empty and report GREEN — the same blindness as
+    // the defect above it.
+    expect(scanned, 'simulator module scan read nothing').toBe(SIM_MODULES.length);
+    expect(
+      [...required],
+      'no fs command was extracted — the import shape changed and this arm went blind',
+    ).toContain('fs:allow-open');
+
+    for (const file of [SIM_IN_PROCESS, SIM_MACOS_APP]) {
+      const granted = new Set(permsOf(file));
+      const missing = [...required].filter((p) => !granted.has(p)).sort();
+      expect(missing, `${file} does not grant fs commands its own code calls`).toEqual([]);
+    }
+  });
+
+  it('CRITICAL the two windows do not drift apart silently: every difference is stated', () => {
+    const inProcess = new Set(permsOf(SIM_IN_PROCESS));
+    const macApp = new Set(permsOf(SIM_MACOS_APP));
+
+    const macOnly = [...macApp].filter((p) => !inProcess.has(p)).sort();
+    const inProcessOnly = [...inProcess].filter((p) => !macApp.has(p)).sort();
+
+    expect(
+      macOnly,
+      'the macOS window holds a permission the in-process window lacks and MACOS_ONLY does not explain — either grant it there too or say why not',
+    ).toEqual(Object.keys(MACOS_ONLY).sort());
+    expect(
+      inProcessOnly,
+      'the in-process window holds a permission the macOS window lacks — the same code runs in both',
+    ).toEqual([]);
+  });
+});
