@@ -464,6 +464,63 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(res.intents.every((i) => i.kind === 'capture')).toBe(true);
     });
 
+    it('⛔ V-2167: truncation keeps the trailing CAPTURE — the customer must get something back', async () => {
+      // The overshoot this truncation exists for puts the capture LAST, past the
+      // ceiling — exactly the entry a keep-the-first-eight cut removed. The turn
+      // then ran seven actions and returned nothing visible, violating the
+      // prompt's own "ending with a capture" contract. The last kept intent is
+      // swapped for the dropped capture; the ceiling stays exact.
+      const working = Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS + 2 }, (_, i) => ({
+        kind: 'navigate',
+        url: `https://example.test/page-${String(i)}`,
+      }));
+      const intents = [...working, { kind: 'capture', capture: 'screenshot' }];
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents })]);
+
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toHaveLength(__TEST_ONLY__.MAX_PLAN_INTENTS);
+      expect(res.intents.at(-1)).toEqual({ kind: 'capture', capture: 'screenshot' });
+      // The swap replaces the LAST kept action; everything before it is intact.
+      expect(res.intents.slice(0, -1).every((i) => i.kind === 'navigate')).toBe(true);
+    });
+
+    it('a dropped tail with NO capture changes nothing — no invented intents', async () => {
+      const intents = Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS + 3 }, (_, i) => ({
+        kind: 'navigate',
+        url: `https://example.test/page-${String(i)}`,
+      }));
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents })]);
+
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toHaveLength(__TEST_ONLY__.MAX_PLAN_INTENTS);
+      expect(res.intents.every((i) => i.kind === 'navigate')).toBe(true);
+    });
+
+    it('an over-limit field in the DROPPED tail does not discard the billed turn', async () => {
+      // The tail was never validated before the capture-rescue scan existed, and
+      // must not start being: an oversize URL at index 9 belongs to an entry we
+      // are cutting anyway.
+      const intents = [
+        ...Array.from({ length: __TEST_ONLY__.MAX_PLAN_INTENTS }, (_, i) => ({
+          kind: 'navigate',
+          url: `https://example.test/page-${String(i)}`,
+        })),
+        {
+          kind: 'navigate',
+          url: `https://x.test/${'x'.repeat(__TEST_ONLY__.MAX_AGENT_URL_CHARS)}`,
+        },
+        { kind: 'capture', capture: 'dom_snapshot' },
+      ];
+      const { fetch } = sequenceFetch([jsonResponse({ kind: 'plan', intents })]);
+
+      const res = await new ClaudeAgentDecomposer({ fetch }).decompose(defaultArgs());
+      if (res.kind !== 'plan') throw new Error('type narrow');
+      expect(res.intents).toHaveLength(__TEST_ONLY__.MAX_PLAN_INTENTS);
+      expect(res.intents.at(-1)).toEqual({ kind: 'capture', capture: 'dom_snapshot' });
+    });
+
     it('rejects every recognized over-limit executable field instead of returning a partial plan', async () => {
       const cases: ReadonlyArray<{
         label: string;

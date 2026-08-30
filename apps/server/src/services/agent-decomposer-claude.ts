@@ -180,7 +180,9 @@ const SYSTEM_PROMPT = [
   'https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.',
   '',
   'OTHERWISE: emit a plan of at most 8 intents, ending with a capture so',
-  'the customer gets something back.',
+  'the customer gets something back. The capture COUNTS toward the 8:',
+  'plan at most 7 working intents plus the capture — a 9th intent is',
+  'never valid, and anything past the ceiling is cut server-side.',
   '',
   'A PLAN IS ONE STEP, NOT THE WHOLE TASK. Eight intents is a hard ceiling',
   'per turn, not a target to stay well under, and it is not a reason to',
@@ -724,8 +726,12 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
   // where this one stopped. Same posture as the zero-intent CLARIFY above:
   // degrade, never discard a turn the customer has already paid for.
   const out: AgentIntent[] = [];
+  let truncatedAtIndex: number | null = null;
   for (const [index, item] of raw.entries()) {
-    if (out.length === MAX_PLAN_INTENTS) break;
+    if (out.length === MAX_PLAN_INTENTS) {
+      truncatedAtIndex = index;
+      break;
+    }
     if (typeof item !== 'object' || item === null) continue;
     const i = normalizeIntentShape(item as Record<string, unknown>);
     const field = (name: string) => `plan.intents[${index}].${name}`;
@@ -835,6 +841,27 @@ function parseIntents(raw: unknown): ReadonlyArray<AgentIntent> {
             : {}),
         });
         break;
+    }
+  }
+  // ⛔ Truncation must not cut the CAPTURE. The prompt's own contract is "ending
+  // with a capture so the customer gets something back", and the overshoot case
+  // this truncation exists for puts the capture LAST — exactly the entry a
+  // keep-the-first-eight cut removes, so the customer's turn ran seven actions
+  // and returned nothing visible. When the dropped tail carries a capture and
+  // the kept plan does not end with one, the last kept intent is REPLACED by
+  // that capture: the ceiling stays exact, and the swapped-out action is not
+  // lost work — the runtime re-plans it from the resulting page next turn, same
+  // as the rest of the tail. Scanned without the field asserts on purpose: the
+  // tail was never validated before, and a limit-violating field in an entry we
+  // are dropping anyway must not start discarding the billed turn now.
+  if (truncatedAtIndex !== null && out[out.length - 1]?.kind !== 'capture') {
+    for (const item of raw.slice(truncatedAtIndex)) {
+      if (typeof item !== 'object' || item === null) continue;
+      const i = normalizeIntentShape(item as Record<string, unknown>);
+      if (i.kind === 'capture' && (i.capture === 'screenshot' || i.capture === 'dom_snapshot')) {
+        out[out.length - 1] = { kind: 'capture', capture: i.capture };
+        break;
+      }
     }
   }
   return out;
