@@ -2318,12 +2318,15 @@ export const agentSessions = pgTable(
       dataType: () => 'bytea',
     })('gui_control_key_ciphertext'),
     mode: text('mode').notNull().default('ai'),
-    // 6.c / #15 (migration 0066; default bumped to Opus 4.8 in 0087) — per-
-    // session model picker. Which Claude 4.x model the AI agent runs; drives the
-    // per-model cost-to-serve rate via the api-types CLAUDE_MODELS registry. New
-    // rows default to 'claude-opus-4-8'; 'claude-opus-4-7' stays accepted for
-    // back-compat. SDK/dashboard pick at create-time. CHECK lives in the migration.
-    model: text('model').notNull().default('claude-opus-4-8'),
+    // 6.c / #15 (migration 0066; default bumped to Opus 4.8 in 0087, to Opus 5
+    // in 0115) — per-session model picker. Which Claude model the AI agent runs;
+    // drives the per-model cost-to-serve rate via the api-types CLAUDE_MODELS
+    // registry. New rows default to 'claude-opus-5'; every earlier id stays
+    // accepted for back-compat. SDK/dashboard pick at create-time.
+    // ⛔ The allowed SET is a CHECK constraint in the migration, not in this
+    // file: adding an id to the TypeScript enum without the matching migration
+    // makes the database reject it at session-create time in production.
+    model: text('model').notNull().default('claude-opus-5'),
     // 2026-06-19 (migration 0086) — which fleet node this session was
     // dispatched to (the FleetControlRegistry key == the authed JWT iss /
     // config.env NODE_ID, with a uuid fallback for legacy uuid-keyed nodes).

@@ -74,7 +74,7 @@ describe('v2-#4 Q.1.e cost-tracking', () => {
       expect(res.usage?.decomposerKind).toBe('claude');
       expect(res.usage?.anthropicInputTokens).toBe(1_000_000);
       expect(res.usage?.anthropicOutputTokens).toBe(100_000);
-      expect(res.usage?.model).toBe('claude-opus-4-8');
+      expect(res.usage?.model).toBe('claude-opus-5');
       // 1M input * $5/MTok = $5.00 + 100k output * $25/MTok = $2.50
       // = $7.50 = 750 cents (Opus 4.8 mirrors 4.7's list rate).
       expect(res.usage?.costUsdCents).toBe(750);

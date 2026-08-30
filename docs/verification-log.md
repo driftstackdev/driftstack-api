@@ -11630,3 +11630,47 @@ green across the touched views.
 
 **Boundary:** the copy change is a customer-facing string, so the sentence itself is now load-bearing
 in that test table — changing it again means changing both in one commit.
+
+## V-2152 — the Claude 5 models, and the CHECK constraint that would have rejected them in production (2026-08-30)
+
+The picker offered four models, all 4.x, because the registry had not been touched since the Opus 4.8
+bump. Added `claude-opus-5` and `claude-sonnet-5`, listed first (that order IS the picker order on
+every surface), and bumped `DEFAULT_AGENT_MODEL` to Opus 5. Every 4.x id stays selectable AND stays
+accepted forever: `agent_sessions.model` holds them on existing rows, and an id the schema rejects
+cannot be read back.
+
+**⛔ The part that would have broken production.** The allowed set is not only a zod enum — it is a
+Postgres CHECK constraint, `agent_sessions_model_check`, created in migration 0087. Editing the
+TypeScript enum alone leaves the database rejecting every insert naming a 5-generation model, and the
+failure lands at session-create time in front of a customer, not in a test. Migration 0115 follows
+0087 exactly: DROP IF EXISTS + re-ADD with all six values (additive — no existing row violates it),
+then moves the column default. The journal entry was added in the same commit because `.husky/pre-push`
+blocks a migration without one. The schema comment now says the CHECK lives in the migration, so the
+next person to add a model finds out before shipping rather than after.
+
+**⚠️ The rates are PROVISIONAL and this is the honest part of the entry.** `CLAUDE_MODELS` carries
+cost-to-serve rates that are Anthropic list price. I did not have verified 5-generation list prices,
+so Opus 5 carries the Opus 4.x rate and Sonnet 5 carries Sonnet 4.6's, flagged in the source with the
+same treatment 4.8 got on its own bump. This is internal accounting only — it does not touch customer
+pricing — but it will under- or over-state margin until someone confirms the real figures. That is a
+known-wrong number shipped deliberately and labelled, not an oversight.
+
+**Surfaces updated in the same commit** (the registry is a cross-source invariant): api-types registry,
+migration + journal, schema default/comment, the GUI picker list + type union + default, the TS/Python/Go
+SDK unions and docstrings, the customer docs model lines and default sentence, the regenerated
+`openapi.json` and Python `_generated/models.py`, and six parity/behaviour tests that pinned the old
+list or the old default.
+
+**A trap worth recording:** the first `sdk:python:dump-spec` produced a spec with ZERO new values. The
+server consumes the BUILT `@driftstack/api-types`, not its source, so the spec was regenerated from
+stale `dist/`. `npm run build:packages` first, then dump — otherwise the generated artifacts silently
+disagree with the source that is supposed to define them.
+
+**Proofs.** Ten model-touching test files run individually: api-types parity 5/5, openapi parity 15/15,
+docs parity 14/14, TS-SDK parity 21/21, Python-SDK parity 14/14, cost tracking 12/12, response-schema
+parity 9/9, decomposer 64/64, runtime 81/81, plus the two GUI model files.
+
+**Boundary:** `claude-fable-5` was deliberately NOT added. The registry id is sent verbatim as the
+Anthropic `model` field, so an id a customer's BYOK key cannot access fails at turn time; Opus 5 and
+Sonnet 5 are the two the owner named. The DB CHECK now permits six ids — adding a seventh requires
+another migration, not just an enum edit.

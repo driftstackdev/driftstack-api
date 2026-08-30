@@ -108,10 +108,10 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/"mode": "ai \| manual \| pair"/);
   });
 
-  it("Per-session model picker (#15) pinned in resource + create body: 'model' field listing claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5 with claude-opus-4-7 as the omitted-default. The values + default are DERIVED from AgentModelSchema.options / DEFAULT_AGENT_MODEL, so adding/renaming a model or changing the default must update agent-sessions.md in lockstep — drift would leave the route's `model: AgentModelSchema.optional()` create field undocumented or misdocumented.", () => {
+  it("Per-session model picker (#15) pinned in resource + create body: 'model' field listing claude-opus-5 | claude-sonnet-5 | claude-opus-4-8 | claude-opus-4-7 | claude-sonnet-4-6 | claude-haiku-4-5 with claude-opus-4-7 as the omitted-default. The values + default are DERIVED from AgentModelSchema.options / DEFAULT_AGENT_MODEL, so adding/renaming a model or changing the default must update agent-sessions.md in lockstep — drift would leave the route's `model: AgentModelSchema.optional()` create field undocumented or misdocumented.", () => {
     // Structural shape: the inline pipe-separated field in both JSON blocks.
     expect(body).toMatch(
-      /"model": "claude-opus-4-8 \| claude-opus-4-7 \| claude-sonnet-4-6 \| claude-haiku-4-5"/,
+      /"model": "claude-opus-5 \| claude-sonnet-5 \| claude-opus-4-8 \| claude-opus-4-7 \| claude-sonnet-4-6 \| claude-haiku-4-5"/,
     );
     // Source-derived: every AgentModelSchema option must be documented (a 4th
     // model added to the enum but not the doc fails here).

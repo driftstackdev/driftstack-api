@@ -1083,14 +1083,14 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       expect(headers['content-type']).toBe('application/json');
     });
 
-    it('defaults to Claude Opus 4.8 when no model is picked', async () => {
+    it('defaults to Claude Opus 5 when no model is picked', async () => {
       const { fetch, calls } = sequenceFetch([
         jsonResponse({ kind: 'clarify', clarifyingQuestion: 'q?' }),
       ]);
       const dec = new ClaudeAgentDecomposer({ fetch });
       await dec.decompose(defaultArgs({ task: 'ambiguous' }));
       const body = JSON.parse(calls[0]!.init.body as string) as { model: string };
-      expect(body.model).toBe('claude-opus-4-8');
+      expect(body.model).toBe('claude-opus-5');
     });
 
     it('threads the session-picked model (6.c) into the Anthropic request body', async () => {

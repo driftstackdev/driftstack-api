@@ -10,6 +10,8 @@ import { AgentModelSchema, CLAUDE_MODELS, DEFAULT_AGENT_MODEL } from '@driftstac
 describe('agent-models registry parity', () => {
   it('AgentModelSchema = the 4 Claude 4.x picker models (Opus 4.8 added; 4.7 kept for back-compat)', () => {
     expect(AgentModelSchema.options).toEqual([
+      'claude-opus-5',
+      'claude-sonnet-5',
       'claude-opus-4-8',
       'claude-opus-4-7',
       'claude-sonnet-4-6',
@@ -18,7 +20,7 @@ describe('agent-models registry parity', () => {
   });
 
   it('DEFAULT_AGENT_MODEL is Opus 4.8 (latest/highest-capability default)', () => {
-    expect(DEFAULT_AGENT_MODEL).toBe('claude-opus-4-8');
+    expect(DEFAULT_AGENT_MODEL).toBe('claude-opus-5');
   });
 
   it('CLAUDE_MODELS covers every AgentModel with a label + rates', () => {

@@ -59,7 +59,7 @@ type AgentSession struct {
 	// Arc 2 sub-slice 8.5 (v2-#8) — operational mode.
 	Mode string `json:"mode"`
 	// 6.c — the Claude 4.x model the AI agent runs for this session
-	// (set at create-time; defaults to "claude-opus-4-8").
+	// (set at create-time; defaults to "claude-opus-5").
 	Model string `json:"model"`
 	// Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
 	// discriminator. nil when mode != "pair". {kind: "ai-driving" |
@@ -145,8 +145,9 @@ type CreateAgentSessionRequest struct {
 	// ('ai').
 	Mode string `json:"mode,omitempty"`
 	// 6.c — Claude 4.x model the AI agent runs. Empty string omits the
-	// field so the server applies its default ('claude-opus-4-8').
-	// Valid: "claude-opus-4-8" | "claude-opus-4-7" | "claude-sonnet-4-6" | "claude-haiku-4-5".
+	// field so the server applies its default ('claude-opus-5').
+	// Valid: "claude-opus-5" | "claude-sonnet-5" | "claude-opus-4-8" | "claude-opus-4-7" |
+	// "claude-sonnet-4-6" | "claude-haiku-4-5".
 	Model string `json:"model,omitempty"`
 	// Attach a saved profile (persistent browser identity) so the session
 	// resumes its stored state + saves back on end. Must be an owned profile id

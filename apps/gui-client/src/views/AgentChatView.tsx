@@ -50,6 +50,8 @@ import {
 } from '../lib/account-proxies';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
+  { id: 'claude-opus-5', label: 'Opus 5' },
+  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-opus-4-7', label: 'Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
@@ -264,7 +266,7 @@ export function AgentChatView({
    * watching the video — a session runs perfectly well with the pane closed.
    */
   const [liveSession, setLiveSession] = useState<AgentSession | null>(null);
-  const [model, setModel] = useState<ChatModel>('claude-opus-4-8');
+  const [model, setModel] = useState<ChatModel>('claude-opus-5');
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');

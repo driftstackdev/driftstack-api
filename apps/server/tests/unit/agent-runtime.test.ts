@@ -932,13 +932,13 @@ describe('AI-COMPOSE AgentRuntime.runTurn', () => {
       userMessage: 'a sufficiently long task description for clarity',
     });
     expect(seenModels[0]).toBe('claude-haiku-4-5');
-    // Default (no model picked) → Opus 4.8.
+    // Default (no model picked) → Opus 5 (migration 0115 bumped it).
     const def = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
     await runtime.runTurn({
       agentSessionId: def.id,
       userMessage: 'a sufficiently long task description for clarity',
     });
-    expect(seenModels[1]).toBe('claude-opus-4-8');
+    expect(seenModels[1]).toBe('claude-opus-5');
   });
 
   it('Q.3 token budget exhausted before turn: atomically closes and returns the terminal signal without a post-close refusal append', async () => {

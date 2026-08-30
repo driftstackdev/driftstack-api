@@ -806,6 +806,13 @@
       "when": 1786665600002,
       "tag": "0114_teams_entity",
       "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1786665600003,
+      "tag": "0115_agent_sessions_model_claude_5",
+      "breakpoints": true
     }
   ]
 }
