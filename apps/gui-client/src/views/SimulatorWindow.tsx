@@ -528,6 +528,8 @@ interface SessionQuery {
    *  Drives the macOS Dock-tile country badge (founder 2026-06-18). Empty
    *  string → no country (the Dock tile shows no badge). */
   countryCode: string;
+  /** IANA zone of the proxy exit, '' when unknown — drives the device clock. */
+  timezone: string;
   /** Non-secret generation for the Rust process-memory control-key entry.
    *  `null` means this is the deliberate in-app/account-key path; `0` means a
    *  malformed generation was supplied and control must remain fail-closed. */
@@ -615,6 +617,7 @@ export function infoFromQuery(search: string = window.location.search): SessionQ
   const sessionId = q.get('session') ?? '';
   // Proxy exit country (ISO alpha-2) for the macOS Dock tile (empty → no badge).
   const countryCode = q.get('cc') ?? '';
+  const timezone = q.get('tz') ?? '';
   // Rust consumes ck/cke from the protected 0600 handoff before creating or
   // updating the WebView. JavaScript receives only a non-secret generation.
   const rawControlGeneration = q.get('cg');
@@ -641,6 +644,7 @@ export function infoFromQuery(search: string = window.location.search): SessionQ
       proxyLabel,
       sessionId,
       countryCode,
+      timezone,
       controlGeneration,
       controlKey,
       baseUrl,
@@ -670,6 +674,7 @@ export function infoFromQuery(search: string = window.location.search): SessionQ
     proxyLabel,
     sessionId,
     countryCode,
+    timezone,
     controlGeneration,
     controlKey,
     baseUrl,
@@ -793,14 +798,32 @@ function formatFileSize(bytes: number): string {
 
 /** iOS-style h:mm (12-hour, no leading zero, no AM/PM — matches the iOS status
  *  bar). The streamed screen is web content with no device clock of its own. */
-function formatStatusTime(d: Date): string {
+function formatStatusTime(d: Date, timeZone?: string): string {
+  // ⛔ The device clock must read the PROXY's timezone, not this Mac's. A profile
+  // egressing through Amsterdam that displays the operator's local time is the one
+  // thing on screen contradicting everything the fingerprint claims — the owner
+  // spotted exactly that (2026-08-30). An empty or unrecognised zone falls back to
+  // host time: the old behaviour, and better than a blank strip.
+  if (timeZone !== undefined && timeZone !== '') {
+    try {
+      // hourCycle h12 with no dayPeriod gives iOS's "h:mm" (no AM/PM).
+      return new Intl.DateTimeFormat('en-US', {
+        timeZone,
+        hour: 'numeric',
+        minute: '2-digit',
+        hourCycle: 'h12',
+      }).format(d);
+    } catch {
+      // A stale or unmappable IANA id must not blank the bar — fall through.
+    }
+  }
   const hour = d.getHours() % 12 || 12;
   const minute = String(d.getMinutes()).padStart(2, '0');
   return `${hour}:${minute}`;
 }
 
-function useStatusClock(): string {
-  const [time, setTime] = useState(() => formatStatusTime(new Date()));
+function useStatusClock(timeZone?: string): string {
+  const [time, setTime] = useState(() => formatStatusTime(new Date(), timeZone));
   useEffect(() => {
     // Tick exactly on the minute boundary rather than on a fixed 15s interval — a
     // free-running interval can land up to ~15s AFTER a rollover, so the displayed
@@ -811,13 +834,13 @@ function useStatusClock(): string {
       const now = new Date();
       const msToNextMinute = 60_000 - (now.getSeconds() * 1000 + now.getMilliseconds());
       id = window.setTimeout(() => {
-        setTime(formatStatusTime(new Date()));
+        setTime(formatStatusTime(new Date(), timeZone));
         schedule();
       }, msToNextMinute + 50);
     };
     schedule();
     return () => window.clearTimeout(id);
-  }, []);
+  }, [timeZone]);
   return time;
 }
 
@@ -2229,8 +2252,8 @@ function TabStrip({
  * safe-area. Drag-region (drag the window by the strip); inner content
  * pointer-events-none so a click on the strip falls through to drag.
  */
-function IosStatusBar(): JSX.Element {
-  const time = useStatusClock();
+function IosStatusBar({ timeZone }: { timeZone?: string }): JSX.Element {
+  const time = useStatusClock(timeZone);
   return (
     <div
       aria-hidden="true"
@@ -2824,6 +2847,7 @@ export function SimulatorWindow(): JSX.Element {
     proxyLabel,
     sessionId,
     countryCode,
+    timezone,
     controlGeneration,
     controlKey,
     baseUrl,
@@ -7823,7 +7847,7 @@ export function SimulatorWindow(): JSX.Element {
                 data-component="simulator-screen"
                 className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
               >
-                <IosStatusBar />
+                <IosStatusBar timeZone={timezone} />
                 {/* Cold-switch blank (W3020 + #116): while a tab switch is in flight
                     (switchingTabId set) cover the video so the PREVIOUS tab's content
                     doesn't bleed through during the re-navigation. On a WARM swap the

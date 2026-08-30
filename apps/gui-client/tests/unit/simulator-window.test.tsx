@@ -130,6 +130,59 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(screen?.getAttribute('data-tauri-drag-region')).toBe('false');
   });
 
+  it("(V-2156) the status-bar clock reads the PROXY's timezone, not this Mac's", () => {
+    // A session egressing through Amsterdam that shows the operator's local time
+    // is the one thing on screen contradicting the whole fingerprint (owner
+    // 2026-08-30). The zone rides the handoff query as `tz`.
+    window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&tz=Asia%2FTokyo');
+    const { container } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    const shown = container
+      .querySelector('[data-component="simulator-statusbar"]')
+      ?.querySelector('span')?.textContent;
+    const expected = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Tokyo',
+      hour: 'numeric',
+      minute: '2-digit',
+      hourCycle: 'h12',
+    }).format(new Date());
+    expect(shown).toBe(expected);
+    // Guard against a vacuous pass: the assertion only means something when the
+    // host zone actually differs from Tokyo right now.
+    const hostHour = new Date().getHours() % 12 || 12;
+    const tokyoHour = Number(expected.split(':')[0]);
+    if (hostHour !== tokyoHour) {
+      expect(shown).not.toBe(
+        `${String(hostHour)}:${String(new Date().getMinutes()).padStart(2, '0')}`,
+      );
+    }
+  });
+
+  it('(V-2156) an absent or unusable timezone falls back to host time rather than blanking the clock', () => {
+    // A stale probe, a proxy geo we cannot map, or simply no proxy — the strip must
+    // still show a time. This is the pre-existing behaviour, kept.
+    for (const search of [
+      '/?window=simulator&ws=wss://lk&token=tok',
+      '/?window=simulator&ws=wss://lk&token=tok&tz=',
+      '/?window=simulator&ws=wss://lk&token=tok&tz=Not%2FAZone',
+    ]) {
+      window.history.pushState({}, '', search);
+      const { container, unmount } = render(
+        <RecordingsProvider>
+          <SimulatorWindow />
+        </RecordingsProvider>,
+      );
+      const shown = container
+        .querySelector('[data-component="simulator-statusbar"]')
+        ?.querySelector('span')?.textContent;
+      expect(shown, search).toMatch(/^\d{1,2}:\d{2}$/);
+      unmount();
+    }
+  });
+
   it('renders the iOS status bar as a dedicated strip ABOVE the content (never overlapping the page)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
     const { container } = render(

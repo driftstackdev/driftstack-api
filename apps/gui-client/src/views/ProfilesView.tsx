@@ -1826,12 +1826,18 @@ export function ProfilesView({
       const reopenProxy = pickProxy(profileId);
       const reopenCountry =
         reopenProxy !== null ? (probeCache[reopenProxy.id]?.exitCountry ?? null) : null;
+      // The probe already stored the exit's IANA zone right beside its country; it was
+      // simply never handed over, so the device clock showed the host Mac's time
+      // (owner 2026-08-30).
+      const reopenTimezone =
+        reopenProxy !== null ? (probeCache[reopenProxy.id]?.exitTimezone ?? null) : null;
       const sim = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
         deviceName: formatDeviceName(reopened?.archetype ?? ''),
         profileName: reopened?.name,
         countryCode: reopenCountry,
+        timezone: reopenTimezone,
         // Hand off the API host so the separate app's control calls hit the real
         // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
         baseUrl: settings.baseUrl,
@@ -2706,12 +2712,15 @@ export function ProfilesView({
         const launchProxy = pickProxy(profile.id);
         const launchCountry =
           launchProxy !== null ? (probeCache[launchProxy.id]?.exitCountry ?? null) : null;
+        const launchTimezone =
+          launchProxy !== null ? (probeCache[launchProxy.id]?.exitTimezone ?? null) : null;
         const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
           deviceName: formatDeviceName(profile.archetype),
           profileName: profile.name,
           countryCode: launchCountry,
+          timezone: launchTimezone,
           // Hand off the API host so the separate app's control calls hit the real
           // server (its store may be empty → defaults to localhost) — founder 2026-06-23.
           baseUrl: settings.baseUrl,

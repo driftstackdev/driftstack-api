@@ -46,6 +46,13 @@ export interface OpenSimulatorArgs {
    *  separate app's macOS Dock tile reflects the session's egress country
    *  (founder 2026-06-18). Omitted/null → no Dock-tile country badge. */
   countryCode?: string | null;
+  /** IANA timezone of the launching proxy's exit (e.g. "Europe/Amsterdam"), from
+   *  the proxy probe (`exitTimezone`). The Simulator's status-bar clock reads THIS
+   *  rather than the host Mac's zone: a session egressing through Amsterdam that
+   *  displays the operator's local time contradicts the whole fingerprint, and the
+   *  owner spotted it (2026-08-30). Omitted/null → the clock falls back to host
+   *  time, which is what it always did. */
+  timezone?: string | null;
   /** Per-session gui_control_key plus its server-owned expiry so the SEPARATE Driftstack
    *  Simulator app can drive the control endpoints WITHOUT the main
    *  app's keychain (which it can't read). Handed off securely (see
@@ -257,6 +264,7 @@ export async function openSimulatorWindow({
   profileName,
   proxyLabel,
   countryCode,
+  timezone,
   controlCredential,
   baseUrl,
 }: OpenSimulatorArgs): Promise<OpenSimulatorResult> {
@@ -299,6 +307,9 @@ export async function openSimulatorWindow({
     // country badge). Carried in the same query payload as the other handoff
     // fields (this is NOT a secret — it's the same country the world sees).
     cc: countryCode ?? '',
+    // Proxy exit timezone (IANA) for the device status-bar clock (empty → host
+    // time). Non-secret, like `cc` — it is the same zone the world sees.
+    tz: timezone ?? '',
     // Session id — lets the simulator window attach recordings to the
     // session (night-arc I Record pill).
     session: sessionId,

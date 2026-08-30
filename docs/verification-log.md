@@ -11798,3 +11798,37 @@ because the api does not know whose it is. Whether the harness attaches `session
 why a failed load can produce neither `errored` nor `stalled`, are the harness questions that decide the
 owner's report; this entry only guarantees the server log stops being blank. Single-file run only — the full
 gate is held behind A1's capture loop.
+
+## V-2156 — the Simulator's clock showed the operator's time, not the session's (2026-08-30)
+
+Owner: _"Timezone at the simulator thats showin is puttin the host's time, instead of the one from the
+iphone (the matching proxy IP timezone set inside browser)."_
+
+A profile egressing through Amsterdam displayed the operator's Mac clock. That is the one element on
+screen contradicting everything the fingerprint asserts — the fork exports the geo-resolved `TZ` to
+the WebProcess, so the PAGE reports the proxy's zone while the chrome above it reported ours.
+
+**It was a plumbing gap, not a wrong calculation.** The value already existed: the native
+`proxy_exit_probe` returns `geo.tz`, `CachedProbe.exitTimezone` persists it to disk, and both launch
+paths already read `exitCountry` from that same cached record. Nobody ever read the field next to it.
+The Simulator is a SEPARATE app bundle with its own store and cannot read the main app's probe cache,
+so everything it knows arrives in the launch handoff query — which carried `cc` and no zone. Added
+`tz` to the handoff, `timezone` to `SessionQuery`, and threaded it into `IosStatusBar`;
+`formatStatusTime` now formats through `Intl.DateTimeFormat` with that zone.
+
+Fallback is deliberate and unchanged in shape: an absent, empty or unrecognised IANA id falls back to
+host time rather than blanking the strip. A stale probe or an unmappable geo must not cost the clock.
+
+**Proofs.** 20/20 in simulator-window with two new arms — the clock formatted in `Asia/Tokyo` matches
+`Intl` for that zone (with a non-vacuity guard: the "differs from host" assertion only runs when the
+host zone actually differs right now), and absent / empty / garbage zones all still render `h:mm`.
+open-simulator 15/15 and simulator-window-tabs 57/57 unaffected. Mutation, snapshot-restored and
+cmp-verified: the zone branch disabled → exactly the Tokyo arm red.
+
+**Boundary — the value shown is the CLIENT's probe, not the harness's resolved zone.** The client
+probe reads lumtest through the proxy; the zone the browser actually applies is resolved server-side
+(Cloudflare `cf-timezone` → country-representative fallback → archetype default) and handed to the box
+in `sessionAssign.exitIdentity`. Those can disagree, and the client's can be null where the server's
+is not. This makes the clock right in the ordinary case using data already on the machine; making it
+provably identical to what sites see needs the server's resolved value exposed to the GUI, which is a
+new route or data-channel frame and is NOT done here.
