@@ -23,6 +23,7 @@ import {
   MAX_DEVICE_TEXT_BYTES,
   sendNavigate,
   sendText,
+  sendInputEvent,
   sendTabListUpdate,
   sendActivateTab,
   RoomEvent,
@@ -92,6 +93,7 @@ import {
 } from '../lib/simulator-control-key';
 import { useTransientNotice } from '../lib/use-transient-notice';
 import { pasteClipboardToDevice } from '../lib/device-paste';
+import { pasteAsHumanTyping, isHumanPasteChord, HUMAN_PASTE_MAX_CHARS } from '../lib/human-paste';
 import {
   getAgentSession,
   getAgentSessionPageState,
@@ -4055,6 +4057,56 @@ export function SimulatorWindow(): JSX.Element {
         !manualInputAuthorityCheckRef.current(requestSessionId, requestRoom, requestAuthorityEpoch)
       )
         return;
+      const stillOurs = (): boolean =>
+        manualInputAuthorityCheckRef.current(requestSessionId, requestRoom, requestAuthorityEpoch);
+
+      // ⛔ V-2168 (owner 2026-08-30) — ⌘/Ctrl+SHIFT+V types the clipboard at
+      // human cadence instead of delivering it as one text event. The plain
+      // ⌘V below is fast and is what you want for a long URL; but a field
+      // going from empty to 200 characters in a single event, with no
+      // keydown/keyup pair and no inter-key timing, is the clearest automation
+      // tell there is — so the shift variant exists for anywhere that matters.
+      if (isHumanPasteChord(e)) {
+        void (async () => {
+          if (navigator.clipboard === undefined) return;
+          showNotice('Typing the clipboard like a human…', 3000);
+          const res = await pasteAsHumanTyping({
+            readClipboard: () => navigator.clipboard.readText(),
+            // One keystroke, exactly the shape the host keyboard emits. The
+            // authority re-check runs per key so a takeover mid-paste stops it.
+            sendKey: (key) => {
+              if (!stillOurs()) return false;
+              void sendInputEvent(requestRoom, { type: 'keyDown', key }, { reliable: true }).catch(
+                () => undefined,
+              );
+              void sendInputEvent(requestRoom, { type: 'keyUp', key }, { reliable: true }).catch(
+                () => undefined,
+              );
+              return true;
+            },
+            sleep: (ms) => new Promise<void>((r) => window.setTimeout(r, ms)),
+            // Per-session seed: the cadence generator's default is derived from
+            // (persona, text) alone, so without this two sessions typing the
+            // same string would emit identical rhythm — a correlation tell.
+            seed: `${requestSessionId}:${String(requestAuthorityEpoch)}`,
+          });
+          if (!stillOurs()) return;
+          if (res.status === 'typed') {
+            showNotice(`Typed ${String(res.chars)} characters`, 2500);
+          } else if (res.status === 'too-long') {
+            showNotice(
+              `Too long to type — up to ${String(HUMAN_PASTE_MAX_CHARS)} characters (use ⌘V to paste it at once)`,
+              4000,
+            );
+          } else if (res.status === 'interrupted') {
+            showNotice(`Typing stopped after ${String(res.chars)} characters`, 3000);
+          } else if (res.status === 'unavailable') {
+            showNotice("Couldn't read the clipboard", 2500);
+          }
+        })();
+        return;
+      }
+
       void (async () => {
         if (navigator.clipboard === undefined) return;
         const result = await pasteClipboardToDevice(
@@ -4231,6 +4283,8 @@ export function SimulatorWindow(): JSX.Element {
   // poll re-stamps the TTL. Recording the live frame time lets the poll defer to a
   // fresher data-channel state instead of re-raising over a page that already recovered.
   const lastDataChannelStateAtRef = useRef(0);
+  // V-2168 — the box restarting a died SCStream capture (renderer alive).
+  const [captureStalled, setCaptureStalled] = useState(false);
   const applyStalledState = useCallback((isStalled: boolean): void => {
     if (isStalled) lastStalledAtRef.current = Date.now();
     else lastStalledAtRef.current = 0;
@@ -5081,7 +5135,13 @@ export function SimulatorWindow(): JSX.Element {
           msg.state === 'loading' ||
           msg.state === 'loaded' ||
           msg.state === 'errored' ||
-          msg.state === 'stalled';
+          msg.state === 'stalled' ||
+          // V-2168 (A3) — a DISTINCT diagnosis from 'stalled': the renderer is
+          // ALIVE and the page is fine, but the SCStream capture died and the box
+          // is restarting it. Unhandled it fell through to the unknown-frame
+          // breadcrumb and showed nothing at all. It only became reachable in
+          // production when the streaming health probe was armed on the fleet.
+          msg.state === 'capture_stalled';
         if (msg.type !== 'page_state' && !isHarnessState) {
           // Finding #6 — the frame matched NONE of the known discriminants
           // (activateTabResult / tabListRestore / page_state / a harness state). The
@@ -5211,6 +5271,12 @@ export function SimulatorWindow(): JSX.Element {
           // authoritative frame (the poll's un-TTL'd store can lag behind a recovery).
           lastDataChannelStateAtRef.current = Date.now();
           applyStalledState(msg.state === 'stalled' && !isLoadTimeoutStall);
+          // ⛔ Its own badge, not the "page unresponsive" one: the page is
+          // healthy and the video is coming back on its own in a few seconds,
+          // so telling the operator their page is unresponsive would send them
+          // to fix something that is not broken. Any other harness state means
+          // the capture is publishing again → clear.
+          setCaptureStalled(msg.state === 'capture_stalled');
         }
         // #72 + #135 — track when the CURRENT navigation reaches 'loaded'. navTargetOk
         // gates on the frame's url matching the current nav target so a STALE 'loaded'
@@ -8084,7 +8150,17 @@ export function SimulatorWindow(): JSX.Element {
                   so we overlay a calm reconnecting indicator on the visible frame
                   rather than blanking to black. Cleared the moment the box reports
                   any non-stalled page state. */}
-                {pageStalled && !streamingUnavailable && (
+                {captureStalled && !streamingUnavailable && (
+                  <div
+                    role="status"
+                    data-component="capture-stalled-badge"
+                    className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+                  >
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                    Restoring video&hellip;
+                  </div>
+                )}
+                {pageStalled && !captureStalled && !streamingUnavailable && (
                   <div
                     role="status"
                     data-component="page-stalled-badge"
@@ -8103,39 +8179,43 @@ export function SimulatorWindow(): JSX.Element {
                   recovering" only once a recovery (resubscribe / Room rebuild) is
                   actually in flight (`recovering`). It never claims to be reconnecting
                   when nothing is. */}
-                {videoFrozen && !pageStalled && pageError === null && !streamingUnavailable && (
-                  <div
-                    role="status"
-                    data-component="video-frozen-badge"
-                    data-recovering={recovering ? 'true' : 'false'}
-                    data-exhausted={freezeRecoveryExhausted ? 'true' : 'false'}
-                    className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
-                  >
-                    <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
-                    {freezeRecoveryExhausted && sessionEnded === null ? (
-                      <span>Video frozen — recovery didn&apos;t take.</span>
-                    ) : (
-                      <span>{recovering ? 'Video frozen — recovering' : 'Video frozen'}</span>
-                    )}
-                    {/* Manual escape hatch (founder: "stuck, nothing to do"). Once a
+                {videoFrozen &&
+                  !pageStalled &&
+                  !captureStalled &&
+                  pageError === null &&
+                  !streamingUnavailable && (
+                    <div
+                      role="status"
+                      data-component="video-frozen-badge"
+                      data-recovering={recovering ? 'true' : 'false'}
+                      data-exhausted={freezeRecoveryExhausted ? 'true' : 'false'}
+                      className="absolute left-1/2 top-1/2 z-20 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full bg-black/75 px-4 py-2 text-[11px] font-medium text-white shadow-lg backdrop-blur"
+                    >
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                      {freezeRecoveryExhausted && sessionEnded === null ? (
+                        <span>Video frozen — recovery didn&apos;t take.</span>
+                      ) : (
+                        <span>{recovering ? 'Video frozen — recovering' : 'Video frozen'}</span>
+                      )}
+                      {/* Manual escape hatch (founder: "stuck, nothing to do"). Once a
                         recovery is actually in flight (recovering, ~8s in) OR the auto
                         ladder has exhausted, let the user fire a full reconnect
                         IMMEDIATELY via the shared manualReconnect rather than waiting
                         out the multi-cycle ~16s ladder. Hidden pre-recovery (a sub-8s
                         blip usually self-clears) and on a terminally ended session (the
                         panel shows the "Session ended" overlay instead). */}
-                    {sessionEnded === null && (recovering || freezeRecoveryExhausted) && (
-                      <button
-                        type="button"
-                        data-component="video-frozen-reconnect"
-                        onClick={manualReconnect}
-                        className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 font-semibold text-white transition-colors hover:bg-white/25"
-                      >
-                        Reconnect now
-                      </button>
-                    )}
-                  </div>
-                )}
+                      {sessionEnded === null && (recovering || freezeRecoveryExhausted) && (
+                        <button
+                          type="button"
+                          data-component="video-frozen-reconnect"
+                          onClick={manualReconnect}
+                          className="shrink-0 rounded-full bg-white/15 px-2.5 py-0.5 font-semibold text-white transition-colors hover:bg-white/25"
+                        >
+                          Reconnect now
+                        </button>
+                      )}
+                    </div>
+                  )}
                 {/* W616 — honest page-navigation error overlay (DNS/TLS/HTTP/
                   timeout/net). The standalone Simulator previously dropped the
                   error payload entirely — the loading bar vanished and the frozen
@@ -8683,6 +8763,34 @@ export function SimulatorWindow(): JSX.Element {
                             </svg>
                           }
                         />
+                        {/* V-2168 (owner 2026-08-30: "on the simulator's bar you
+                            can display or add info about this new stuff") — the
+                            typing shortcuts, where someone looking at the controls
+                            will find them. A capability nobody can discover is not
+                            a capability. */}
+                        <div
+                          data-component="typing-shortcuts"
+                          className="mt-1 border-t border-white/[0.08] px-3 pb-1.5 pt-1.5 text-[10.5px] leading-relaxed text-ink-secondary"
+                        >
+                          <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                            Typing
+                          </div>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <kbd className="rounded border border-white/15 bg-white/5 px-1 py-px font-mono text-[9.5px] text-white/80">
+                              ⌘V
+                            </kbd>
+                            <span>Paste instantly — fastest, for a long URL</span>
+                          </div>
+                          <div className="mt-1 flex items-baseline gap-2">
+                            <kbd className="rounded border border-white/15 bg-white/5 px-1 py-px font-mono text-[9.5px] text-white/80">
+                              ⌘⇧V
+                            </kbd>
+                            <span>
+                              Type it like a person — real keystrokes with human timing, so the page
+                              sees typing rather than a field filling itself
+                            </span>
+                          </div>
+                        </div>
                       </section>
                     )}
 

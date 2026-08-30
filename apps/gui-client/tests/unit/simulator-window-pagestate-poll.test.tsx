@@ -254,6 +254,57 @@ describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', ()
 // read the STALE 'stalled' record and re-raise the "Reconnecting — page unresponsive"
 // badge — which then stays lit for the full TTL because every poll re-stamps it. The
 // fix defers the poll's stall flip to a fresher data-channel frame.
+// V-2168 — page_state{state:'capture_stalled'} is a DISTINCT diagnosis from
+// 'stalled': the renderer is alive and the page is fine, but the box's SCStream
+// capture died and it is restarting it (seconds, self-healing). Before this the
+// state was not even in the recognised set, so it fell through to the
+// unknown-frame breadcrumb and the operator saw a frozen picture with no
+// explanation. It became reachable in production only when the fleet's
+// streaming health probe was armed.
+describe('SimulatorWindow — capture_stalled says "restoring video", not "page unresponsive"', () => {
+  const captureBadge = (c: HTMLElement): Element | null =>
+    c.querySelector('[data-component="capture-stalled-badge"]');
+  const stalledBadge = (c: HTMLElement): Element | null =>
+    c.querySelector('[data-component="page-stalled-badge"]');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeRoom.on.mockClear();
+    pageStateMock.mockReset();
+    pageStateMock.mockResolvedValue(null);
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('⛔ raises its OWN badge — the page is healthy, so the unresponsive copy must not show', async () => {
+    const { container } = renderSim();
+    await flush();
+    act(() => fireDataFrame({ state: 'capture_stalled', url: 'https://x.invalid/' }));
+    expect(captureBadge(container)).not.toBeNull();
+    expect(captureBadge(container)?.textContent).toMatch(/Restoring video/);
+    expect(stalledBadge(container), 'the page is not unresponsive').toBeNull();
+  });
+
+  it('clears as soon as the capture publishes again', async () => {
+    const { container } = renderSim();
+    await flush();
+    act(() => fireDataFrame({ state: 'capture_stalled', url: 'https://x.invalid/' }));
+    expect(captureBadge(container)).not.toBeNull();
+    act(() => fireDataFrame({ state: 'loaded', url: 'https://x.invalid/' }));
+    expect(captureBadge(container)).toBeNull();
+  });
+
+  it('a renderer stall still reads as "page unresponsive" — the two diagnoses stay distinct', async () => {
+    const { container } = renderSim();
+    await flush();
+    act(() => fireDataFrame({ state: 'stalled', url: 'https://x.invalid/' }));
+    expect(stalledBadge(container)).not.toBeNull();
+    expect(captureBadge(container)).toBeNull();
+  });
+});
+
 describe('SimulatorWindow — page-stalled badge poll-re-raise gate', () => {
   const stalledBadge = (c: HTMLElement): Element | null =>
     c.querySelector('[data-component="page-stalled-badge"]');

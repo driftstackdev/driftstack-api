@@ -15,6 +15,7 @@
     "tauri:build:simulator": "tauri build --config src-tauri/tauri.simulator.conf.json"
   },
   "dependencies": {
+    "@driftstack/behavioural-simulation": "*",
     "@driftstack/sdk": "*",
     "@sentry/browser": "10.65.0",
     "@tauri-apps/api": "^2.1.0",
