@@ -11878,3 +11878,37 @@ supporting evidence is in the owner's own paste: per-turn token counts stay flat
 the conversation, so history is not accumulating. The fix is the scoped `continue_from_agent_session_id`
 revive (transcript copied into the new session under a re-derived envelope), not simply leaving the
 session open.
+
+## V-2159 — one warn every 3 seconds, for the life of every session (2026-08-30)
+
+The owner sent a LiveKit log to investigate. Most of it is `Playout delay not supported in this
+browser`, repeating every ~3s from connect to disconnect — hundreds of lines burying everything else
+in the file they were trying to read.
+
+**Ours, not the SDK's.** The adaptive playout controller samples RTP stats every 3s and re-asserts
+`track.setPlayoutDelay(delay)` (deliberately idempotent: a resubscribe resets the track to 0). But
+livekit-client's `setPlayoutDelay` does NOT throw when the browser lacks the hint — it checks
+`'playoutDelayHint' in this.receiver`, logs that warn, and returns. So the `try/catch` wrapped around
+the call, commented "setPlayoutDelay unsupported — ignore", never fired once: the SDK had already
+logged by the time control returned.
+
+Worse than noise: on such a browser the entire controller is dead weight — a `getRTCStatsReport()`
+every 3 seconds, parsed, fed through the control law, to produce a value nothing can apply. The
+Simulator's engine is WebKit, which has no `playoutDelayHint`, so this ran forever in exactly the
+place the product spends its time.
+
+`playoutDelaySupport()` mirrors the SDK's own test, and the tick stops the interval outright the first
+time it answers `false`.
+
+**The `null` case is the load-bearing part.** A track with no receiver yet is NOT unsupported, it is
+unsubscribed — reading those the same way would kill the controller on every session before it ever
+ran, turning a logging fix into a media regression. That distinction is what the mutation targets.
+
+**Proofs.** 13/13 in livekit-adaptive-playout (5 new assertions across two arms), 47/47 in
+agent-session-panel. Mutation, snapshot-restored and cmp-verified: absent receiver → `false` instead
+of `null` → exactly the null arm red.
+
+**Boundary:** this removes the repetition and the wasted sampling; it does not add playout adaptation
+to WebKit, which cannot do it. The rest of the owner's log — rooms connecting then disconnecting
+within seconds, and `[flight-recorder] previous run ended without shutting down` — is NOT explained by
+this entry and remains uninvestigated.

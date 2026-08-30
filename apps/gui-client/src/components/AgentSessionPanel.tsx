@@ -147,6 +147,25 @@ export const PUBLISHER_LOST_GRACE_MS = 2_000;
  *  close) sets the cancelled flag and never schedules a retry. */
 export const AUTO_RECONNECT_BACKOFF_MS = [1_000, 3_000, 9_000] as const;
 
+/**
+ * Does this browser implement the playout-delay hint the adaptive controller
+ * depends on? `null` = cannot tell yet (no receiver — the track is not
+ * subscribed), which must NOT be read as "unsupported".
+ *
+ * ⛔ Mirrors livekit-client's own test (`'playoutDelayHint' in this.receiver`)
+ * because `setPlayoutDelay` does not throw when unsupported — it logs
+ * "Playout delay not supported in this browser" and returns. Our try/catch
+ * therefore never fired and the controller re-asserted every 3s forever: one
+ * warn line every 3 seconds for the life of the session, which is what the
+ * owner's log was full of (2026-08-30). On such a browser the whole loop is
+ * dead weight — a getRTCStatsReport() every 3s feeding a value nothing applies.
+ */
+export function playoutDelaySupport(track: { receiver?: unknown } | null): boolean | null {
+  const receiver = track?.receiver;
+  if (receiver === undefined || receiver === null) return null;
+  return typeof receiver === 'object' && 'playoutDelayHint' in receiver;
+}
+
 /** W617 / #59 — how long a connected-but-videoless room waits before the panel
  *  declares the launch failed (no publisher). A WARM worker publishes in ~2-5s,
  *  but a COLD session spawn (the worker launches a fresh browser fork → loads the
@@ -480,6 +499,9 @@ export function AgentSessionPanel({
   const remoteVideoTrackRef = useRef<{
     getRTCStatsReport?: () => Promise<RTCStatsReport>;
     setPlayoutDelay?: (d: number) => void;
+    /** Read ONLY to ask whether this browser implements the playout-delay hint —
+     *  see `playoutDelaySupport`. Never written. */
+    receiver?: unknown;
   } | null>(null);
 
   // #8 auto-reconnect attempt counter — held in a REF so it survives the connect
@@ -817,10 +839,22 @@ export function AgentSessionPanel({
     let prevPacketCounters: { packetsLost: number | null; packetsReceived: number | null } | null =
       null;
     let delay = 0;
+    // Mutable holder: `tick` must be able to stop its own interval, and the id
+    // does not exist until after `tick` is defined.
+    const timer: { id?: ReturnType<typeof setInterval> } = {};
     const tick = (): void => {
       if (cancelled) return;
       const track = remoteVideoTrackRef.current;
       if (track === null || typeof track.getRTCStatsReport !== 'function') return;
+      // Stop the controller outright on a browser with no playout-delay hint: the
+      // sampling below exists only to feed a value that cannot be applied, and
+      // re-asserting it every 3s makes livekit-client warn every 3s for the life of
+      // the session. `null` means no receiver YET — not an answer, so keep ticking.
+      if (playoutDelaySupport(track) === false) {
+        cancelled = true;
+        if (timer.id !== undefined) clearInterval(timer.id);
+        return;
+      }
       void Promise.resolve(track.getRTCStatsReport())
         .then((report) => {
           if (cancelled || report === undefined) return;
@@ -852,10 +886,10 @@ export function AgentSessionPanel({
         })
         .catch(() => undefined);
     };
-    const handle = setInterval(tick, 3000);
+    timer.id = setInterval(tick, 3000);
     return () => {
       cancelled = true;
-      clearInterval(handle);
+      if (timer.id !== undefined) clearInterval(timer.id);
     };
   }, [room]);
 

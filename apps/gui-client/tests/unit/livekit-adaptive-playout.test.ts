@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { playoutDelaySupport } from '../../src/components/AgentSessionPanel';
 import {
   ADAPTIVE_PLAYOUT,
   nextPlayoutDelay,
@@ -94,5 +95,25 @@ describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
 
   it('treats null loss/jitter as 0 (unknown → calm, not a spurious ramp)', () => {
     expect(nextPlayoutDelay(0, { freezeDelta: 0, packetLossPct: null, jitterMs: null })).toBe(0);
+  });
+});
+
+describe('playoutDelaySupport — stop asking a browser that cannot answer (V-2159)', () => {
+  it('⛔ null (no receiver yet) is NOT "unsupported" — the track simply is not subscribed', () => {
+    // Reading a not-yet-subscribed track as unsupported would kill the controller
+    // on every session before it ever had a chance to run.
+    expect(playoutDelaySupport(null)).toBeNull();
+    expect(playoutDelaySupport({})).toBeNull();
+    expect(playoutDelaySupport({ receiver: undefined })).toBeNull();
+    expect(playoutDelaySupport({ receiver: null })).toBeNull();
+  });
+
+  it("mirrors livekit-client's own test: the hint is present on the receiver", () => {
+    expect(playoutDelaySupport({ receiver: { playoutDelayHint: 0 } })).toBe(true);
+    // WebKit (the Simulator's engine) has no such property — this is the case that
+    // produced one "Playout delay not supported in this browser" warn every 3s for
+    // the life of a session, because setPlayoutDelay logs instead of throwing.
+    expect(playoutDelaySupport({ receiver: {} })).toBe(false);
+    expect(playoutDelaySupport({ receiver: { someOtherProp: 1 } })).toBe(false);
   });
 });
