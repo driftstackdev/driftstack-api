@@ -207,8 +207,11 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
             <IconUsers />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Team</span>
-            <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">Team</h2>
+            {/* No eyebrow here: it read "Team" directly above a "Team" heading,
+                which tells the customer nothing twice. The other page heroes keep
+                theirs because they carry a CATEGORY the title does not ("Network"
+                above "Connectivity test"). */}
+            <h2 className="text-2xl font-semibold tracking-tight text-ink-primary">Team</h2>
             <p className="mt-1 max-w-xl text-sm text-ink-secondary">
               Invite teammates to your account. Members sign in with their own login; admins can
               launch and manage your profiles.

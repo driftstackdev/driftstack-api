@@ -11606,3 +11606,27 @@ the badge still cries wolf on a slow link, those two constants are where to look
 The other three items of this arc were checked and left alone: the miss decay already exists, and the
 eviction-counts-a-miss and strict-ack-shape behaviours are RECORDED decisions with their reasoning in
 the source, not oversights.
+
+## V-2151 — two labels that told the customer nothing useful (2026-08-30)
+
+**The Simulator error told them to do something impossible.** "Install the Driftstack Simulator app,
+then try again" survived V-2147, which established that the app is not distributed on its own — the
+macOS DMG ships `Driftstack.app` alone. Worse, after V-2147 the only way to REACH that sentence is
+for the automatic install to have run and found no copy to install, so the message was stale twice
+over. It now names the real state and the one action that can fix it: "The Simulator app is missing
+and could not be installed automatically. Reinstall Driftstack from your download, then try again."
+Nothing else in source pinned the old sentence (only stale `dist/` and `target/` artifacts).
+
+**A page hero that said its own name twice.** `TeamView` rendered a "Team" eyebrow directly above a
+"Team" heading. Measured before touching it: 12 view heroes use the eyebrow pattern and 11 are
+CORRECT — the eyebrow carries a category the title does not ("Network" above "Connectivity test",
+"Diagnostics" above "Logs"). Only Team duplicated, so only Team changed. This is the same defect
+class as V-2149's Settings hero but the opposite fix: there the page's name was demoted to the
+eyebrow, here the eyebrow added nothing to the name, and a sweep over all 12 would have damaged the
+10 that were right.
+
+**Proofs.** simulator-open-error 7/7 with the new sentence pinned in its table; 3 suites / 24 tests
+green across the touched views.
+
+**Boundary:** the copy change is a customer-facing string, so the sentence itself is now load-bearing
+in that test table — changing it again means changing both in one commit.

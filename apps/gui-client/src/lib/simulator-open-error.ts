@@ -10,7 +10,13 @@ export function friendlySimulatorOpenReason(reason: string | undefined): string 
     return 'Sign in to the desktop app first, then open the session again.';
   }
   if (normalized.includes('not installed')) {
-    return 'Install the Driftstack Simulator app, then try again.';
+    // ⛔ This sentence used to read "Install the Driftstack Simulator app, then
+    // try again" — an instruction the customer cannot follow, because the macOS
+    // DMG ships Driftstack.app alone and the Simulator is not distributed on its
+    // own (V-2147). Reaching this text now also means the automatic install was
+    // tried and could not find a copy to install, so the honest next step is
+    // reinstalling the app that carries it — not hunting for a separate download.
+    return 'The Simulator app is missing and could not be installed automatically. Reinstall Driftstack from your download, then try again.';
   }
   if (normalized.includes('browser preview') || normalized.includes('not running under tauri')) {
     return 'Open sessions from the desktop app; a browser preview cannot launch the Simulator.';

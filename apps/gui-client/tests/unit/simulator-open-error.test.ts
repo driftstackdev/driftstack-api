@@ -4,7 +4,10 @@ import { friendlySimulatorOpenReason } from '../../src/lib/simulator-open-error'
 describe('friendlySimulatorOpenReason', () => {
   it.each([
     ['not signed in', 'Sign in to the desktop app first, then open the session again.'],
-    ['app not installed', 'Install the Driftstack Simulator app, then try again.'],
+    [
+      'app not installed',
+      'The Simulator app is missing and could not be installed automatically. Reinstall Driftstack from your download, then try again.',
+    ],
     [
       'not running under Tauri (browser preview)',
       'Open sessions from the desktop app; a browser preview cannot launch the Simulator.',
