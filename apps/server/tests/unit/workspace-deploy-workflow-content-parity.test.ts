@@ -114,11 +114,17 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(sshDirs).toBe(2);
     const chmod600 = (body.match(/chmod 600 ~\/\.ssh\/id_ed25519/g) ?? []).length;
     expect(chmod600).toBe(2);
-    // Host IPs pinned as the `host=` var the robust keyscan loop reads.
-    const keyscanStaging = body.match(/host=116\.203\.22\.197/);
-    expect(keyscanStaging).not.toBeNull();
-    const keyscanProd = body.match(/host=128\.140\.37\.74/);
-    expect(keyscanProd).not.toBeNull();
+    // Host IPs pinned as the var the robust keyscan loop reads. TWO forms are
+    // legitimate: `host=<ip>` (prod job, one host) and `for host in <ip> <ip>`
+    // (staging job, which must ALSO prime prod because the DB-isolation
+    // pre-flight SSHes there). Pinning only the first froze a one-host staging
+    // job — the shape that broke every deploy from 2026-07-12.
+    for (const ip of ['116.203.22.197', '128.140.37.74']) {
+      const escaped = ip.replace(/\./g, '\\.');
+      const assigned = new RegExp(`host=${escaped}`).test(body);
+      const looped = new RegExp(`for host in [^\n;]*${escaped}`).test(body);
+      expect(assigned || looped, `${ip} is never fed to ssh-keyscan`).toBe(true);
+    }
     // Robust TOFU keyscan (retry + fail-clear, replacing the `|| true` swallow that
     // caused the eadc737 transient "Host key verification failed"): the var-based
     // scan + the clear-error guard must each appear once per env (staging + prod).

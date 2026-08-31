@@ -32,11 +32,36 @@ describe('deploy-bridge SSH/SCP transport liveness', () => {
   });
 
   it('routes every preflight, read, copy, mutation and metadata call through the wrappers', () => {
-    expect(body.match(/\brun_ssh(?=\s)/g)).toHaveLength(6);
+    // ⛔ REPOINTED. This asserted exactly 6 `run_ssh` occurrences, which is a
+    // proxy for the real property and breaks on any honest refactor — it went
+    // red when two duplicated inline SSH reads were folded into one helper,
+    // i.e. it resisted a change that improved the very thing it guards.
+    //
+    // The property is BYPASS, not arity: no transport call may skip the wrappers,
+    // because they carry ConnectTimeout + ServerAlive liveness detection. So
+    // assert `command ssh` / `command scp` appear ONLY inside the wrapper bodies,
+    // and keep a floor so a file that lost its calls entirely still fails.
+    const wrapperOnly = body.match(/command (?:ssh|scp)\b/g) ?? [];
+    expect(wrapperOnly, 'ssh/scp must be invoked only by run_ssh/run_scp').toHaveLength(2);
+    expect(
+      (body.match(/\brun_ssh(?=\s)/g) ?? []).length,
+      'no SSH calls left in the bridge at all — the parse is broken or the file is',
+    ).toBeGreaterThanOrEqual(5);
     expect(body.match(/\brun_scp(?=\s)/g)).toHaveLength(1);
 
-    expect(body).toMatch(/PROD_DB_HOST=\$\(run_ssh root@128\.140\.37\.74/);
-    expect(body).toMatch(/STAGING_DB_HOST=\$\(run_ssh root@116\.203\.22\.197/);
+    // ⛔ REPOINTED. These pinned the two DB-isolation reads as INLINE
+    // `run_ssh root@<ip>` literals. They were folded into one `_db_host_of`
+    // helper so the SSH stderr could be captured per host — the reason the
+    // pipeline sat broken for seven weeks was that both reads discarded it.
+    // Pin the property: each host is still read for its DB, still through the
+    // wrapper, and the assignment still exists.
+    expect(body).toMatch(/_db_host_of\s+128\.140\.37\.74/);
+    expect(body).toMatch(/_db_host_of\s+116\.203\.22\.197/);
+    expect(body).toMatch(/PROD_DB_HOST=/);
+    expect(body).toMatch(/STAGING_DB_HOST=/);
+    // The helper itself must go through the wrapper, or the fold above would be
+    // a way to bypass the transport options this whole file exists to protect.
+    expect(body).toMatch(/_db_host_of\(\)\s*\{\s*\n\s*run_ssh "root@\$1"/);
     expect(body).toMatch(/PREVIOUS_SHA=\$\(run_ssh "root@\$\{HOST\}"/);
     expect(body).toMatch(/if ! run_scp -q "\$BUNDLE" "root@\$\{HOST\}:\/tmp\/ds-deploy\.bundle"/);
     expect(body).toMatch(/^run_ssh "root@\$\{HOST\}" "set -euo pipefail;/m);

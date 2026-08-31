@@ -164,17 +164,30 @@ jobs:
           # swallow that, leave known_hosts empty, and the later deploy-bridge
           # ssh would fail with the cryptic "Host key verification failed"
           # (exit 255). Retry a few times and fail CLEAR if the key never lands.
-          host=116.203.22.197
-          for attempt in 1 2 3 4 5; do
-            ssh-keyscan -t ed25519 "$host" >> ~/.ssh/known_hosts 2>/dev/null || true
-            if grep -qF "$host" ~/.ssh/known_hosts; then break; fi
-            echo "ssh-keyscan attempt $attempt for $host returned no key; retrying in 3s..."
-            sleep 3
+          # ⛔ BOTH hosts, not just staging. deploy-bridge.sh's staging DB-isolation
+          # pre-flight SSHes to PROD to read its DATABASE_URL host and compare. With
+          # only the staging key primed that call died on "Host key verification
+          # failed", the guard's `2>/dev/null || echo ""` swallowed it, the prod host
+          # read as EMPTY, and the guard refused the deploy.
+          #
+          # That is not hypothetical: the guard was tightened on 2026-07-12 (after a
+          # staging migration reached prod) and this priming was never widened to
+          # match, so EVERY deploy failed from that day. Last green run 2026-07-12;
+          # 18 consecutive failures; production went 72 commits stale and the AI
+          # chat 400'd in front of customers for weeks. The pipeline was refusing
+          # correctly and saying so only in a swallowed stderr.
+          for host in 116.203.22.197 128.140.37.74; do
+            for attempt in 1 2 3 4 5; do
+              ssh-keyscan -t ed25519 "$host" >> ~/.ssh/known_hosts 2>/dev/null || true
+              if grep -qF "$host" ~/.ssh/known_hosts; then break; fi
+              echo "ssh-keyscan attempt $attempt for $host returned no key; retrying in 3s..."
+              sleep 3
+            done
+            if ! grep -qF "$host" ~/.ssh/known_hosts; then
+              echo "::error::could not obtain SSH host key for $host after 5 attempts (sshd unreachable?)"
+              exit 1
+            fi
           done
-          if ! grep -qF "$host" ~/.ssh/known_hosts; then
-            echo "::error::could not obtain SSH host key for $host after 5 attempts (staging sshd unreachable?)"
-            exit 1
-          fi
 
       - name: Run scripts/deploy-bridge.sh staging
         if: steps.gate.outputs.ready == 'true'

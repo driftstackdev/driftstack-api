@@ -90,16 +90,38 @@ echo "=== deploy-bridge: $ENV ($HOST) → $SHA ===" >&2
 # .env to point at a separate Neon project per the Slice E
 # remediation path.
 if [ "$ENV" = "staging" ] && [ "${DEPLOY_SKIP_STAGING_DB_ISOLATION_CHECK:-0}" != "1" ]; then
-  PROD_DB_HOST=$(run_ssh root@128.140.37.74 \
-    "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
-  STAGING_DB_HOST=$(run_ssh root@116.203.22.197 \
-    "grep '^DATABASE_URL=' /opt/driftstack/api/.env 2>/dev/null | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" 2>/dev/null || echo "")
+  # ⛔ STDERR IS KEPT. This guard sent both SSH calls to /dev/null, so when the
+  # prod read failed the operator was told only "prod host present = no" — true,
+  # useless, and identical whether sshd was down, the key was wrong, the host key
+  # was unknown, or DATABASE_URL had been renamed. It failed that way for SEVEN
+  # WEEKS (2026-07-12 → 2026-08-31, 18 consecutive runs) because the real reason,
+  # "Host key verification failed" for 128.140.37.74, was discarded by this line.
+  # A guard that refuses correctly but cannot say why is a guard nobody can clear.
+  _db_host_of() {
+    run_ssh "root@$1" \
+      "grep '^DATABASE_URL=' /opt/driftstack/api/.env | cut -d= -f2- | cut -d'@' -f2 | cut -d/ -f1" \
+      2>"$2"
+  }
+  PROD_ERR=$(mktemp); STAGING_ERR=$(mktemp)
+  PROD_DB_HOST=$(_db_host_of 128.140.37.74 "$PROD_ERR" || echo "")
+  STAGING_DB_HOST=$(_db_host_of 116.203.22.197 "$STAGING_ERR" || echo "")
   if [ -z "$PROD_DB_HOST" ] || [ -z "$STAGING_DB_HOST" ]; then
     echo "[bridge] ERROR: could not verify staging DB isolation — refusing staging deploy" >&2
     echo "[bridge]   staging host present = $([ -n "$STAGING_DB_HOST" ] && echo yes || echo no)" >&2
     echo "[bridge]   prod host present    = $([ -n "$PROD_DB_HOST" ] && echo yes || echo no)" >&2
+    if [ -z "$PROD_DB_HOST" ] && [ -s "$PROD_ERR" ]; then
+      echo "[bridge]   --- why prod could not be read ---" >&2
+      sed 's/^/[bridge]   prod: /' "$PROD_ERR" >&2
+    fi
+    if [ -z "$STAGING_DB_HOST" ] && [ -s "$STAGING_ERR" ]; then
+      echo "[bridge]   --- why staging could not be read ---" >&2
+      sed 's/^/[bridge]   staging: /' "$STAGING_ERR" >&2
+    fi
+    echo "[bridge]   (an empty reason means the ssh SUCCEEDED and DATABASE_URL is absent/renamed)" >&2
+    rm -f "$PROD_ERR" "$STAGING_ERR"
     exit 3
   fi
+  rm -f "$PROD_ERR" "$STAGING_ERR"
   if [ "$PROD_DB_HOST" = "$STAGING_DB_HOST" ]; then
     # Fail closed. The former warning allowed a regressed staging .env to run
     # the migration gate and migration apply against production on 2026-07-12.
