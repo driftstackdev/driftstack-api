@@ -186,6 +186,15 @@ jobs:
         # told to expect the original (triggering) SHA, causing a
         # false-negative auto-revert. Pinning github.sha makes the
         # bridge deploy the exact ref that triggered the workflow.
+        # ⛔ DEPLOY_VIA_BUNDLE=1 — do NOT let the host clone from GitHub.
+        # deploy-bridge.sh:186 defaults to an ANONYMOUS clone, which works only
+        # while this repo is public. Every operator runbook already prescribes the
+        # bundle path (:154); the workflow was the one caller that did not set it,
+        # so a repo-visibility flip would silently break prod deploys with CI
+        # still green. Shipping the scp'd bundle is also one fewer credential on
+        # the host.
+        env:
+          DEPLOY_VIA_BUNDLE: '1'
         run: bash scripts/deploy-bridge.sh staging '${{ github.sha }}'
 
   deploy-production:
@@ -252,4 +261,13 @@ jobs:
         if: steps.gate.outputs.ready == 'true'
         # 2026-05-20 — pass github.sha explicitly (same race-fix as
         # staging deploy step above).
+        # ⛔ DEPLOY_VIA_BUNDLE=1 — do NOT let the host clone from GitHub.
+        # deploy-bridge.sh:186 defaults to an ANONYMOUS clone, which works only
+        # while this repo is public. Every operator runbook already prescribes the
+        # bundle path (:154); the workflow was the one caller that did not set it,
+        # so a repo-visibility flip would silently break prod deploys with CI
+        # still green. Shipping the scp'd bundle is also one fewer credential on
+        # the host.
+        env:
+          DEPLOY_VIA_BUNDLE: '1'
         run: bash scripts/deploy-bridge.sh prod '${{ github.sha }}'

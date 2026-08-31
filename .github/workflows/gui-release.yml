@@ -363,3 +363,30 @@ jobs:
           print(f"assembled {len(platforms)} platform keys for {version}")
           PY
           gh release upload "$TAG" latest.json --repo "$GITHUB_REPOSITORY" --clobber
+
+      # ⛔ The updater fetches ANONYMOUSLY — tauri.conf.json's updater block has only
+      # `endpoints` and `pubkey`, no token and no header. So the manifest and its
+      # assets must be reachable with NO credentials, and that is a property of the
+      # REPO BEING PUBLIC, not of the release being built. When it stops being true
+      # the client swallows the fetch error to `null` — the same value as "up to
+      # date" — and renders "You are on the latest version." Every install would be
+      # frozen forever and told it is current. Assert it here so that failure is LOUD
+      # at release time instead of silent on customer machines.
+      - name: The updater endpoint must be reachable with NO credentials
+        run: |
+          set -euo pipefail
+          man="https://github.com/$GITHUB_REPOSITORY/releases/latest/download/latest.json"
+          # Empty Authorization header on purpose: an inherited credential would prove
+          # the wrong thing — that WE can read it, not that a customer can.
+          code=$(curl -sS -o /tmp/lj.json -w '%{http_code}' -L --max-time 60 -H 'Authorization:' "$man")
+          if [ "$code" != "200" ]; then
+            echo "::error::updater manifest NOT anonymously reachable (HTTP $code at $man). Every installed client would silently report 'You are on the latest version' forever. If this repo went private, move the updater endpoint off-repo and ship a client BEFORE the flip."
+            exit 1
+          fi
+          asset=$(python3 -c "import json;d=json.load(open('/tmp/lj.json'));print(next(iter(d['platforms'].values()))['url'])")
+          acode=$(curl -sS -o /dev/null -w '%{http_code}' -L --max-time 120 -H 'Authorization:' "$asset")
+          if [ "$acode" != "200" ]; then
+            echo "::error::manifest reachable but its ASSET is not (HTTP $acode at $asset) — clients would see an update and fail to download it"
+            exit 1
+          fi
+          echo "anonymous fetch OK: manifest + asset both 200"

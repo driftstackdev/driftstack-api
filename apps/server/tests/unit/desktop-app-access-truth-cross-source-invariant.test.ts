@@ -22,6 +22,11 @@ const overview = read('apps/customer-dashboard/src/pages/index.astro');
 const layout = read('apps/customer-dashboard/src/layouts/DashboardLayout.astro');
 const welcome = read('apps/customer-dashboard/src/pages/welcome.astro');
 const pricing = read('apps/marketing-site/src/pages/pricing.astro');
+// V-2171 — the SITE-WIDE header carries the same download CTA TWICE (desktop nav
+// + mobile menu) and was ungated: this invariant read four surfaces and the two
+// most-seen links on the marketing site were not among them. Every page inherits
+// this component, so a wrong URL here is wrong everywhere at once.
+const header = read('apps/marketing-site/src/components/Header.astro');
 
 describe('desktop app access public truth', () => {
   it('every customer-facing app-access action points at the ONE public release download', () => {
@@ -30,6 +35,7 @@ describe('desktop app access public truth', () => {
       ['layout', layout],
       ['welcome', welcome],
       ['pricing', pricing],
+      ['header', header],
     ] as const) {
       expect(body, name).toContain(DOWNLOAD_URL);
       // Ban the retired route outright. While an installer existed and these
@@ -41,6 +47,13 @@ describe('desktop app access public truth', () => {
     expect(layout).toContain("label: 'Download desktop app'");
     expect(welcome).toContain('Download the desktop app');
     expect(pricing).toContain('Download the desktop app');
+    // BOTH header entries, not just one: the desktop nav and the mobile menu are
+    // separate markup, so a fix applied to one reads as done while the other
+    // still points somewhere else.
+    expect(
+      header.split(DOWNLOAD_URL).length - 1,
+      'the desktop-nav AND mobile-menu download links must both point at the public release',
+    ).toBeGreaterThanOrEqual(2);
   });
 
   it('states the real distribution truth: public, cross-platform, and NOT OS-code-signed', () => {
@@ -57,6 +70,7 @@ describe('desktop app access public truth', () => {
       ['layout', layout],
       ['welcome', welcome],
       ['pricing', pricing],
+      ['header', header],
     ] as const) {
       expect(body, name).not.toMatch(/Apple-silicon macOS app/);
       expect(body, name).not.toMatch(/no public installer link/i);
