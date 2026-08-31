@@ -202,9 +202,13 @@ if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
     echo "[bridge] scp bundle failed" >&2; rm -f "$BUNDLE"; exit 1
   fi
   rm -f "$BUNDLE"
-  REMOTE_CLONE="git clone /tmp/ds-deploy.bundle . > /dev/null 2>&1"
+  # ⛔ STDERR KEPT (`-q` quiets progress; the redirect is gone). This was
+  # `> /dev/null 2>&1`, so a failing clone surfaced as a bare "exit code 128"
+  # with no reason — the same defect that made the DB-isolation guard
+  # unclearable for seven weeks, one layer down in the same script.
+  REMOTE_CLONE="git clone -q /tmp/ds-deploy.bundle ."
 else
-  REMOTE_CLONE="git clone --depth 400 https://github.com/driftstackdev/driftstack-api.git . > /dev/null 2>&1"
+  REMOTE_CLONE="git clone -q --depth 400 https://github.com/driftstackdev/driftstack-api.git ."
 fi
 
 # All work happens in /tmp/driftstack-deploy-<unix> on the host so we
