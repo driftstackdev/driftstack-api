@@ -127,3 +127,86 @@ describe('SessionsHistoryView', () => {
     expect(screen.queryByText('ses_live')).toBeNull();
   });
 });
+
+describe('a history row names the session instead of showing only its id', () => {
+  // Owner 2026-08-31: "a completely useless page right now with no logs nothing,
+  // just session names like ses_43814912331". `label`, `purpose` and
+  // `egress_capabilities` were in every payload this view already fetched and
+  // none of them was rendered — the raw id was shown INSTEAD of the name.
+
+  it('renders the label as the title and keeps the id as secondary', async () => {
+    sessionsList.mockResolvedValue({
+      data: [
+        session({
+          id: 'ses_labelled',
+          label: 'Checkout smoke run',
+          status: 'destroyed',
+          destroyed_at: '2026-08-31T10:00:00.000Z',
+        }),
+      ],
+    });
+    render(<SessionsHistoryView />);
+    expect(await screen.findByText('Checkout smoke run')).toBeTruthy();
+    // The id must survive — it is what support and the SDK ask for.
+    expect(screen.getByText('ses_labelled')).toBeTruthy();
+  });
+
+  it('says "Untitled session" rather than falling back to the id as a name', async () => {
+    sessionsList.mockResolvedValue({
+      data: [
+        session({
+          id: 'ses_unlabelled',
+          label: null,
+          status: 'destroyed',
+          destroyed_at: '2026-08-31T10:00:00.000Z',
+        }),
+      ],
+    });
+    render(<SessionsHistoryView />);
+    expect(await screen.findByText('Untitled session')).toBeTruthy();
+    expect(screen.getByText('ses_unlabelled')).toBeTruthy();
+  });
+
+  it('surfaces egress warnings the harness reported and nothing showed', async () => {
+    sessionsList.mockResolvedValue({
+      data: [
+        session({
+          id: 'ses_leaky',
+          label: 'Leaky run',
+          status: 'destroyed',
+          destroyed_at: '2026-08-31T10:00:00.000Z',
+          egress_capabilities: {
+            udp_associate: false,
+            quic_route: true,
+            dns_remote_resolve: false,
+            warnings: [],
+          },
+        }),
+      ],
+    });
+    render(<SessionsHistoryView />);
+    // DNS resolved locally is the classic proxy leak; it was collected, stored,
+    // and rendered nowhere, so a leaking session looked exactly like a clean one.
+    const line = await screen.findByText(/DNS resolved locally/);
+    expect(line.textContent).toContain('no UDP associate');
+  });
+
+  it('⛔ says NOTHING when the harness never reported capabilities', async () => {
+    // Absent must read as UNMEASURED, never as healthy. A row that silently
+    // implies a clean egress from missing data is the failure this guards.
+    sessionsList.mockResolvedValue({
+      data: [
+        session({
+          id: 'ses_unreported',
+          label: 'Unreported run',
+          status: 'destroyed',
+          destroyed_at: '2026-08-31T10:00:00.000Z',
+          egress_capabilities: null,
+        }),
+      ],
+    });
+    render(<SessionsHistoryView />);
+    await screen.findByText('Unreported run');
+    expect(screen.queryByText(/^Egress:/)).toBeNull();
+  });
+});

@@ -156,7 +156,15 @@ export function SessionsHistoryView(): JSX.Element {
             return (
               <li key={s.id} className="flex items-center justify-between gap-4 px-5 py-3">
                 <div className="min-w-0">
-                  <p className="mono text-sm text-ink-primary">{s.id}</p>
+                  {/* Owner 2026-08-31: "just session names like ses_43814912331".
+                      `label` was already in every payload this view fetched and was
+                      never rendered — the raw id was shown INSTEAD of the name the
+                      customer gave the session. Name leads; the id stays, demoted,
+                      because it is what support and the SDK ask for. */}
+                  <p className="truncate text-sm text-ink-primary">
+                    {s.label ?? 'Untitled session'}
+                  </p>
+                  <p className="mono mt-0.5 truncate text-2xs text-ink-muted">{s.id}</p>
                   <p className="mt-1 text-2xs text-ink-muted">
                     {s.archetype} · {fmtDuration(s.created_at, endedIso)} ·{' '}
                     {endedIso ? (
@@ -168,6 +176,26 @@ export function SessionsHistoryView(): JSX.Element {
                       '—'
                     )}
                   </p>
+                  {/* Non-production purposes are internal rigs and probes. Showing the
+                      raw enum would be jargon, and showing nothing for the ordinary
+                      case is right — this only fires when a row is NOT a customer
+                      session, which is exactly when it needs explaining. */}
+                  {typeof s.purpose === 'string' &&
+                    s.purpose.length > 0 &&
+                    s.purpose !== 'production_customer' && (
+                      <p className="mt-0.5 text-2xs text-ink-muted">
+                        Internal session · {s.purpose.replace(/_/g, ' ')}
+                      </p>
+                    )}
+                  {/* The harness already reports what the egress could not do. It was
+                      collected, stored and never shown, so a session that browsed with
+                      no UDP associate or with DNS resolved locally looked identical to
+                      a clean one. */}
+                  {egressWarnings(s).length > 0 && (
+                    <p className="mt-0.5 text-2xs text-status-warn">
+                      Egress: {egressWarnings(s).join(' · ')}
+                    </p>
+                  )}
                   {s.status === 'errored' && (
                     <p className="mt-0.5 text-2xs text-ink-muted italic">
                       Reason not reported by the harness
@@ -182,6 +210,36 @@ export function SessionsHistoryView(): JSX.Element {
       )}
     </div>
   );
+}
+
+/**
+ * What the harness said this session's egress could NOT do.
+ *
+ * `egress_capabilities` is stored on every session and was rendered nowhere, so a
+ * session that browsed without UDP associate, without a QUIC route, or resolving
+ * DNS locally read exactly like a clean one. Local DNS resolution is the one worth
+ * naming plainly: it is the classic proxy leak.
+ *
+ * Absent capabilities mean the harness never reported — NOT that everything passed
+ * — so this returns [] and says nothing rather than implying health.
+ */
+function egressWarnings(s: { egress_capabilities: unknown }): string[] {
+  const cap = s.egress_capabilities;
+  if (cap === null || typeof cap !== 'object') return [];
+  const c = cap as {
+    udp_associate?: unknown;
+    quic_route?: unknown;
+    dns_remote_resolve?: unknown;
+    warnings?: unknown;
+  };
+  const out: string[] = [];
+  if (c.udp_associate === false) out.push('no UDP associate');
+  if (c.quic_route === false) out.push('no QUIC route');
+  if (c.dns_remote_resolve === false) out.push('DNS resolved locally');
+  if (Array.isArray(c.warnings)) {
+    for (const w of c.warnings) if (typeof w === 'string' && w.length > 0) out.push(w);
+  }
+  return out;
 }
 
 // Mirrors SessionsView.formatTime — wall-clock of the last refresh.
