@@ -331,6 +331,4 @@ def test_empty_secret_refuses_a_signature_forged_with_the_empty_key() -> None:
     body = b'{"id":"evt_1"}'
     ts = int(time.time())
     forged = _hmac.new(b"", f"{ts}.".encode() + body, hashlib.sha256).hexdigest()
-    assert not verify_webhook_signature(
-        body=body, header=f"t={ts},v1={forged}", secret=""
-    )
+    assert not verify_webhook_signature(body=body, header=f"t={ts},v1={forged}", secret="")
