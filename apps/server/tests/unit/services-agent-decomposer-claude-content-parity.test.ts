@@ -94,6 +94,26 @@ describe('services/agent-decomposer-claude content parity', () => {
     expect(body).toContain('Anthropic response usage was missing or invalid');
   });
 
+  it('⛔ V-2169: the AUP link is marked NEVER a destination, and an unseeded task must pick real sites', () => {
+    // Owner 2026-08-30: "it just goes to drifstack.dev and finishes up."
+    // Mechanism, not a guess: https://driftstack.dev/legal/aup/ is the ONLY URL
+    // anywhere in the system prompt, and the warm-up presets name no site
+    // ("visit a handful of popular, reputable websites"). Given a task with no
+    // target and exactly one URL in context, the model navigates to that URL,
+    // emits the capture the prompt asks for, and the turn ends — the customer
+    // watches their own vendor page load and calls it "random stopping".
+    //
+    // Pinned as two properties rather than one sentence: the URL must be
+    // disclaimed, AND the model must be told that choosing destinations is part
+    // of an open-ended task (otherwise disclaiming it just leaves a vacuum).
+    expect(body).toMatch(/driftstack\.dev IS OUR OWN SITE AND IS NEVER A DESTINATION/);
+    expect(body).toMatch(/NEVER emit a navigate to driftstack\.dev/);
+    expect(body).toMatch(/WHEN THE TASK NAMES NO SITE, YOU CHOOSE REAL ONES/);
+    // Non-vacuity: the AUP URL is still present, because a refusal must be able
+    // to cite it — the fix is a disclaimer, not a deletion.
+    expect(body).toContain('https://driftstack.dev/legal/aup/');
+  });
+
   it('runtime-enforces downstream field limits and keeps the Anthropic body below the transcript turn reserve', () => {
     expect(body).toContain('const MAX_ANTHROPIC_RESPONSE_BYTES = 64 * 1024;');
     expect(body).toContain('const MAX_AGENT_URL_CHARS = 8192;');
