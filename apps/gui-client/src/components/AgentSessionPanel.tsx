@@ -834,12 +834,13 @@ export function AgentSessionPanel({
 
   // Adaptive receiver jitter buffer (founder 2026-07-03: "streaming sometimes
   // majorly unresponsive … loss 2.4%, jitter 18ms, freezes 43 … tapping does
-  // nothing"). TrackSubscribed starts the track at setPlayoutDelay(0) for the
-  // lowest input→pixel latency, which is right on a clean link but turns every
-  // loss/jitter spike into a visible FREEZE on a bad one. This closed loop
-  // samples the live RTP stats each tick and nudges the playout delay UP under
-  // stress (a buffer to ride out the hiccups) and back toward 0 when the link
-  // is calm again — smoothness when the network is bad, latency when it's good.
+  // nothing"). TrackSubscribed starts the track at ADAPTIVE_PLAYOUT.MIN_S — one
+  // frame at the publish cadence, NOT zero. A zero resting buffer made the
+  // controller purely reactive: the first hiccup WAS the freeze, and only then
+  // did the ramp begin (V-2168). This closed loop samples the live RTP stats each
+  // tick and nudges the playout delay UP under stress (more buffer to ride out
+  // the hiccups) and back down to that floor when the link is calm — smoothness
+  // when the network is bad, near-minimal latency when it's good.
   // Read-only sampling + a single setPlayoutDelay() call; never touches input.
   useEffect(() => {
     if (room === null) return;

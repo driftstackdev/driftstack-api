@@ -1,9 +1,10 @@
 // Adaptive receiver jitter buffer for the interactive simulator stream.
 //
-// The panel starts the subscribed video track at setPlayoutDelay(0) — a zero
-// jitter buffer, the lowest input→pixel latency, which is what you want on a
-// clean network. But on a lossy/jittery leg (founder 2026-07-03: "udp·direct,
-// decode 17fps, loss 2.4%, jitter 18ms, freezes 43 … tapping does nothing")
+// The panel starts the subscribed video track at MIN_S — one frame at the
+// publish cadence. It used to start at setPlayoutDelay(0), a zero jitter buffer
+// chosen for the lowest input→pixel latency, and on a lossy/jittery leg
+// (founder 2026-07-03: "udp·direct, decode 17fps, loss 2.4%, jitter 18ms,
+// freezes 43 … tapping does nothing")
 // a zero buffer turns every packet-loss / jitter spike into a visible FREEZE:
 // the decoder has nothing queued to play while it waits for the retransmit or
 // the next keyframe. The stream stutters and taps land on a frozen frame.

@@ -1041,7 +1041,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const cache = new InMemoryExitIdentityCache();
-    cache.set('acc_1', 'prx_1', EXIT);
+    await cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
@@ -1083,7 +1083,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const cache = new InMemoryExitIdentityCache();
-    cache.set('acc_1', 'prx_1', EXIT);
+    await cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
@@ -1114,7 +1114,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const registry = new FleetControlRegistry();
     registry.register(NODE_ID, (d) => sent.push(d));
     const cache = new InMemoryExitIdentityCache();
-    cache.set('acc_1', 'prx_vpn', EXIT);
+    await cache.set('acc_1', 'prx_vpn', EXIT);
 
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
@@ -1177,7 +1177,7 @@ describe('dispatchSessionAssignOnCreate', () => {
     const cache = new InMemoryExitIdentityCache();
     // Even a stale cache entry can't leak in: with no proxyId the dispatch never
     // reads the cache (the key requires both accountId AND proxyId).
-    cache.set('acc_1', 'prx_1', EXIT);
+    await cache.set('acc_1', 'prx_1', EXIT);
 
     await dispatchSessionAssignOnCreate({
       ownerTier: 'api_builder',
