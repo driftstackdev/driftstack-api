@@ -282,9 +282,20 @@ jobs:
           probe="$(mktemp -d)"
           /usr/bin/ditto -x -k "$nested" "$probe"
           plist="$probe/Driftstack Simulator.app/Contents/Info.plist"
-          exe="$probe/Driftstack Simulator.app/Contents/MacOS/Driftstack Simulator"
           [ -f "$plist" ] || { echo "::error::the shipped archive does not unpack to a Simulator bundle"; exit 1; }
-          [ -x "$exe" ]   || { echo "::error::unpacked Simulator's main binary is missing or not executable ($exe) — it would install and refuse to launch"; exit 1; }
+          # ⛔ Do NOT hard-code the binary name. tauri names the executable after
+          # the CRATE (driftstack-gui), not productName — asserting "Driftstack
+          # Simulator" failed a perfectly good archive on the previous attempt.
+          # Assert the PROPERTY that matters instead: Contents/MacOS holds at
+          # least one executable file, whatever it is called.
+          macos_dir="$probe/Driftstack Simulator.app/Contents/MacOS"
+          exe_count=$(find "$macos_dir" -maxdepth 1 -type f -perm -u+x 2>/dev/null | wc -l | tr -d ' ')
+          if [ "$exe_count" -lt 1 ]; then
+            echo "::error::unpacked Simulator has no executable in Contents/MacOS — it would install and refuse to launch. Contents:"
+            ls -la "$macos_dir" || true
+            exit 1
+          fi
+          echo "  executable(s) in the unpacked bundle:"; ls -la "$macos_dir"
           echo "verified: archive $(du -sh "$nested" | cut -f1) unpacks to a launchable Simulator"
 
   # ── latest.json, assembled ONCE after every platform has uploaded ─────────
