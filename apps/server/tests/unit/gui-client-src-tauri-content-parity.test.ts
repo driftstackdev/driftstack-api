@@ -16,6 +16,25 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+/**
+ * The app version, READ from apps/gui-client/package.json rather than frozen
+ * here as a literal.
+ *
+ * ⛔ Both version pins below used to hard-code the number. That made this drift
+ * guard fail on every release bump — it went red on 0.1.7 -> 0.1.8 for no reason
+ * but its own staleness — and it told nobody anything, because
+ * `three-copies-of-the-app-version-must-agree.test.ts` already owns the property
+ * that these three files carry the SAME version. Derived, this still asserts what
+ * belongs here (Cargo.toml and tauri.conf.json carry the real app version) and
+ * stops charging a release for the privilege.
+ */
+const APP_VERSION: string = (
+  JSON.parse(readFileSync(resolve(REPO_ROOT, 'apps/gui-client/package.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
+const APP_VERSION_RE = APP_VERSION.replace(/\./g, '\\.');
+
 const DESKTOP_CSP = {
   'default-src': "'self' customprotocol: asset:",
   'connect-src': 'ipc: http://ipc.localhost http: https: ws: wss:',
@@ -41,11 +60,11 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('build.rs'))).toBe(true);
   });
 
-  it('Cargo.toml: driftstack-gui crate 0.1.7 MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + plugins + zeroize process-memory control keys + V-241 keyring + custom-protocol pinned', () => {
+  it('Cargo.toml: driftstack-gui crate carries the app version + MIT non-publish + lib triplet (staticlib/cdylib/rlib) + Tauri 2.0 + plugins + zeroize process-memory control keys + V-241 keyring + custom-protocol pinned', () => {
     const body = read(T('Cargo.toml'));
     expect(body).toMatch(/^\[package\]$/m);
     expect(body).toMatch(/^name = "driftstack-gui"$/m);
-    expect(body).toMatch(/^version = "0\.1\.7"$/m);
+    expect(body).toMatch(new RegExp(`^version = "${APP_VERSION_RE}"$`, 'm'));
     expect(body).toMatch(/^description = "Driftstack self-hosted GUI client"$/m);
     expect(body).toMatch(/^edition = "2021"$/m);
     expect(body).toMatch(/^license = "MIT"$/m);
@@ -507,7 +526,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     expect(existsSync(T('capabilities/updater-windows-linux.json'))).toBe(true);
   });
 
-  it('tauri.conf.json: productName=Driftstack 0.1.7 + identifier dev.driftstack.gui + frontendDist ../dist + devUrl localhost:1420 + 1 main window (1280×800 / min 960×600 / Overlay titleBarStyle / hiddenTitle / #0b0f14) + 5-target bundle (app/dmg/nsis/appimage/deb) DeveloperTool + macOS minimumSystemVersion 12.0 + Entitlements.plist + V-243 updater endpoint github releases latest + $TAURI_UPDATER_PUBKEY placeholder + V-328 deep-link scheme driftstack desktop-only pinned', () => {
+  it('tauri.conf.json: productName=Driftstack + the app version + identifier dev.driftstack.gui + frontendDist ../dist + devUrl localhost:1420 + 1 main window (1280×800 / min 960×600 / Overlay titleBarStyle / hiddenTitle / #0b0f14) + 5-target bundle (app/dmg/nsis/appimage/deb) DeveloperTool + macOS minimumSystemVersion 12.0 + Entitlements.plist + V-243 updater endpoint github releases latest + $TAURI_UPDATER_PUBKEY placeholder + V-328 deep-link scheme driftstack desktop-only pinned', () => {
     const body = read(T('tauri.conf.json'));
     const config = JSON.parse(body) as {
       app: { security: { capabilities: string[] } };
@@ -518,7 +537,7 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     };
     expect(body).toMatch(/"\$schema": "https:\/\/schema\.tauri\.app\/config\/2"/);
     expect(body).toMatch(/"productName": "Driftstack"/);
-    expect(body).toMatch(/"version": "0\.1\.7"/);
+    expect(body).toMatch(new RegExp(`"version": "${APP_VERSION_RE}"`));
     expect(body).toMatch(/"identifier": "dev\.driftstack\.gui"/);
     expect(body).toMatch(/"frontendDist": "\.\.\/dist"/);
     expect(body).toMatch(/"devUrl": "http:\/\/localhost:1420"/);
