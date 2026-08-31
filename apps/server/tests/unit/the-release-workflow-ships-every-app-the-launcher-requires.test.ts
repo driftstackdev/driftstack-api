@@ -137,6 +137,17 @@ describe('the GUI release ships every app the launcher requires', () => {
         'repair_simulator_install would have nothing to install from',
     ).toMatch(/bundle\.resources|Contents\/Resources/);
 
+    // ⛔ And it must ship the companion as an ARCHIVE. The first gui-v0.1.8
+    // build embedded it as a nested .app directory; tauri's own resource copy
+    // stripped the main binary's executable bit, producing a Simulator that
+    // installs and refuses to launch — caught by the verify step, not by a
+    // presence check. A single file cannot be corrupted that way, and
+    // `ditto -x -k` restores permissions and symlinks on extraction.
+    expect(
+      wf,
+      'the companion is embedded as a bundle directory again — tauri copies resources itself and that copy is lossy for an .app',
+    ).toMatch(/Simulator\.app\.zip/);
+
     // And the embed must be VERIFIED in CI, not assumed: Tauri copies the resource
     // itself, and a lossy copy of an .app yields a bundle that exists and cannot
     // launch — invisible to any check that only tests for presence.

@@ -184,12 +184,15 @@ jobs:
             echo "::error::the Simulator build produced no bundle at $src — the main app would ship without it and every clean install would dead-end again"
             exit 1
           fi
-          dest='apps/gui-client/src-tauri/Driftstack Simulator.app'
-          rm -rf "$dest"
-          # ditto, not cp -r: an .app carries symlinks and exec bits, and a lossy
-          # copy yields a bundle that EXISTS but cannot launch — the failure mode
-          # hardest to notice in CI.
-          /usr/bin/ditto "$src" "$dest"
+          dest='apps/gui-client/src-tauri/Driftstack Simulator.app.zip'
+          rm -f "$dest"
+          # ⛔ ZIP it, do not nest the .app directory. gui-v0.1.8 proved tauri's
+          # own `resources` copy is LOSSY for a bundle: the nested Simulator
+          # arrived with its main binary stripped of the executable bit — an app
+          # that installs and refuses to launch. An archive is a single file the
+          # copier cannot corrupt, and `ditto -x -k` restores permissions and
+          # symlinks exactly when repair_simulator_install unpacks it.
+          /usr/bin/ditto -c -k --sequesterRsrc --keepParent "$src" "$dest"
           # Point the main bundle at it. Injected here rather than committed to
           # tauri.conf.json because the path only exists after the step above; a
           # static entry would break the Windows and Linux legs and every local
@@ -198,7 +201,7 @@ jobs:
             const fs = require('fs');
             const path = 'apps/gui-client/src-tauri/tauri.conf.json';
             const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
-            cfg.bundle.resources = JSON.parse('{\"Driftstack Simulator.app\":\"Driftstack Simulator.app\"}');
+            cfg.bundle.resources = JSON.parse('{\"Driftstack Simulator.app.zip\":\"Driftstack Simulator.app.zip\"}');
             fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
           "
 
@@ -268,16 +271,21 @@ jobs:
           set -euo pipefail
           app=$(find apps/gui-client/src-tauri/target -maxdepth 6 -type d -name 'Driftstack.app' -path '*/bundle/macos/*' | head -1)
           if [ -z "$app" ]; then echo "::error::no built Driftstack.app to verify"; exit 1; fi
-          nested="$app/Contents/Resources/Driftstack Simulator.app"
-          if [ ! -d "$nested" ]; then
-            echo "::error::$app shipped WITHOUT the nested Simulator — repair_simulator_install has nothing to install from, so a clean install still dead-ends at 'Install the Driftstack Simulator app'"
+          nested="$app/Contents/Resources/Driftstack Simulator.app.zip"
+          if [ ! -f "$nested" ]; then
+            echo "::error::$app shipped WITHOUT the nested Simulator archive — repair_simulator_install has nothing to install from, so a clean install still dead-ends at 'Install the Driftstack Simulator app'"
             exit 1
           fi
-          plist="$nested/Contents/Info.plist"
-          exe="$nested/Contents/MacOS/Driftstack Simulator"
-          [ -f "$plist" ] || { echo "::error::nested Simulator has no Info.plist — the copy was lossy"; exit 1; }
-          [ -x "$exe" ]   || { echo "::error::nested Simulator's main binary is missing or not executable ($exe) — it would install and refuse to launch"; exit 1; }
-          echo "verified nested Simulator: $(du -sh "$nested" | cut -f1), executable present"
+          # ⛔ Unpack it and check the RESULT, not the archive. The whole reason
+          # this is a zip is that the previous shape passed a presence check and
+          # still produced an app that could not launch.
+          probe="$(mktemp -d)"
+          /usr/bin/ditto -x -k "$nested" "$probe"
+          plist="$probe/Driftstack Simulator.app/Contents/Info.plist"
+          exe="$probe/Driftstack Simulator.app/Contents/MacOS/Driftstack Simulator"
+          [ -f "$plist" ] || { echo "::error::the shipped archive does not unpack to a Simulator bundle"; exit 1; }
+          [ -x "$exe" ]   || { echo "::error::unpacked Simulator's main binary is missing or not executable ($exe) — it would install and refuse to launch"; exit 1; }
+          echo "verified: archive $(du -sh "$nested" | cut -f1) unpacks to a launchable Simulator"
 
   # ── latest.json, assembled ONCE after every platform has uploaded ─────────
   #

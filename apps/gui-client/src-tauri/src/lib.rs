@@ -1212,6 +1212,15 @@ fn launch_simulator(
 /// The Simulator's installed location — the ONE path `launch_simulator` checks.
 const SIMULATOR_INSTALL_PATH: &str = "/Applications/Driftstack Simulator.app";
 const SIMULATOR_APP_FILE_NAME: &str = "Driftstack Simulator.app";
+/// The companion shipped as a ZIP inside the main bundle's Resources.
+///
+/// ⛔ NOT a bare `.app` directory. tauri copies `bundle.resources` itself, and a
+/// `.app` is a tree of symlinks and executable bits — the gui-v0.1.8 build proved
+/// the copy is lossy: the nested bundle arrived with its main binary missing its
+/// executable permission, i.e. an app that installs and refuses to launch. A
+/// single archive is a file the copier cannot corrupt; `ditto -x -k` restores
+/// permissions and symlinks exactly on extraction.
+const SIMULATOR_ARCHIVE_FILE_NAME: &str = "Driftstack Simulator.app.zip";
 
 /// Ordered places a Simulator bundle can be recovered from, given the running
 /// main-app executable (`<Something>.app/Contents/MacOS/driftstack-gui`).
@@ -1236,14 +1245,24 @@ fn simulator_repair_sources(main_exe: &std::path::Path) -> Vec<std::path::PathBu
         Some(bundle) if bundle.extension().is_some_and(|ext| ext == "app") => bundle,
         _ => return Vec::new(),
     };
-    let mut out = vec![bundle
-        .join("Contents")
-        .join("Resources")
-        .join(SIMULATOR_APP_FILE_NAME)];
+    let resources = bundle.join("Contents").join("Resources");
+    // Archive FIRST: it is what the release ships, and it is the only form whose
+    // fidelity does not depend on how it was copied here.
+    let mut out = vec![
+        resources.join(SIMULATOR_ARCHIVE_FILE_NAME),
+        resources.join(SIMULATOR_APP_FILE_NAME),
+    ];
     if let Some(parent) = bundle.parent() {
         out.push(parent.join(SIMULATOR_APP_FILE_NAME));
     }
     out
+}
+
+/// True when a repair source is the zipped companion rather than a bundle
+/// directory. Split out so the install path is decided by the SOURCE, not by a
+/// guess about which one was picked.
+fn simulator_source_is_archive(source: &std::path::Path) -> bool {
+    source.extension().is_some_and(|ext| ext == "zip")
 }
 
 /// First candidate that exists. `exists` is injected so the ordering policy is
@@ -1279,11 +1298,26 @@ fn repair_simulator_install(window: tauri::WebviewWindow) -> Result<String, Stri
             pick_simulator_repair_source(&candidates, |p| p.exists()).ok_or_else(|| {
                 "no Simulator bundle is available to install from this build".to_string()
             })?;
-        let copied = std::process::Command::new("/usr/bin/ditto")
-            .arg(&source)
-            .arg(target)
-            .status()
-            .map_err(|e| e.to_string())?;
+        // `ditto -x -k <zip> <dir>` unpacks INTO a directory, restoring the
+        // exec bits and symlinks a plain copy loses; a directory source is a
+        // straight bundle-to-bundle ditto as before.
+        let copied = if simulator_source_is_archive(&source) {
+            let parent = target
+                .parent()
+                .unwrap_or(std::path::Path::new("/Applications"));
+            std::process::Command::new("/usr/bin/ditto")
+                .args(["-x", "-k"])
+                .arg(&source)
+                .arg(parent)
+                .status()
+                .map_err(|e| e.to_string())?
+        } else {
+            std::process::Command::new("/usr/bin/ditto")
+                .arg(&source)
+                .arg(target)
+                .status()
+                .map_err(|e| e.to_string())?
+        };
         if !copied.success() {
             return Err(format!("ditto failed with status {copied}"));
         }
@@ -3146,12 +3180,25 @@ mod tests {
             sources,
             vec![
                 std::path::PathBuf::from(
+                    "/Applications/Driftstack.app/Contents/Resources/Driftstack Simulator.app.zip"
+                ),
+                std::path::PathBuf::from(
                     "/Applications/Driftstack.app/Contents/Resources/Driftstack Simulator.app"
                 ),
                 std::path::PathBuf::from("/Applications/Driftstack Simulator.app"),
             ],
-            "the copy shipped INSIDE the bundle must be tried first: it is the only \
-             candidate that exists on a customer machine with no dev tree"
+            "the ARCHIVE shipped inside the bundle must be tried first: it is what the \
+             release ships, and the only form whose fidelity does not depend on how it \
+             was copied. The bundle-directory forms stay as fallbacks for a dev tree."
+        );
+        assert!(
+            simulator_source_is_archive(&sources[0]),
+            "the first candidate must be recognised as an archive, or repair would \
+             ditto a zip file to /Applications as if it were a bundle"
+        );
+        assert!(
+            !simulator_source_is_archive(&sources[1]),
+            "a bundle directory must NOT be treated as an archive"
         );
     }
 

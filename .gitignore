@@ -82,3 +82,4 @@ docs/internal/OPEN-ITEMS.md
 # bundle can embed it in Contents/Resources. CI-only staging: a 200MB .app must
 # never reach a commit.
 apps/gui-client/src-tauri/Driftstack Simulator.app/
+apps/gui-client/src-tauri/Driftstack Simulator.app.zip
