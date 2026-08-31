@@ -113,6 +113,34 @@ describe('every host the deploy bridge SSHes to has its key primed', () => {
     expect(code.length).toBeGreaterThan(1000);
   });
 
+  it('any job that bundles the repo checks out FULL history', () => {
+    // ⛔ `git bundle create` from a SHALLOW clone produces a bundle the far side
+    // cannot clone — it dies "Failed to traverse parents" / "remote did not send
+    // all necessary objects". actions/checkout defaults to fetch-depth 1, so the
+    // bundle path was broken the moment DEPLOY_VIA_BUNDLE was switched on, and
+    // deploy-bridge.sh's own comment claiming the bundle "carries full
+    // origin/main history" was false in CI while being true on a laptop.
+    //
+    // Scoped per job: the source-map job never bundles and needs no history.
+    //
+    // ⚠️ An INVOCATION, not a mention: the file header and the source-map job both
+    // discuss deploy-bridge.sh in prose, and matching the bare string flags two
+    // jobs that never run it. Comment lines are dropped before the check.
+    const jobs = workflow.split(/\n {2}(?=[a-z0-9-]+:\n)/);
+    const invokes = (job: string): boolean =>
+      job
+        .split('\n')
+        .filter((line) => !/^\s*#/.test(line))
+        .some((line) => /bash\s+scripts\/deploy-bridge\.sh/.test(line));
+    const bundling = jobs.filter(invokes);
+    expect(bundling.length, 'no job invokes deploy-bridge.sh — the split is wrong').toBe(2);
+    for (const job of bundling) {
+      expect(job, 'a job that runs deploy-bridge.sh must checkout with fetch-depth: 0').toContain(
+        'fetch-depth: 0',
+      );
+    }
+  });
+
   it('the staging DB-isolation guard reports WHY it could not read a host', () => {
     // The refusal was correct; it was unclearable because the reason went to
     // /dev/null. "prod host present = no" reads identically whether sshd is

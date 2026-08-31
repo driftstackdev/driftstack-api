@@ -140,6 +140,15 @@ jobs:
       - name: Checkout (deploy-bridge.sh + post-deploy-verify.mjs live here)
         if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v6
+        with:
+          # ⛔ FULL history. deploy-bridge.sh's DEPLOY_VIA_BUNDLE path runs
+          # `git bundle create` from THIS checkout, and a bundle built from a
+          # shallow clone cannot be cloned on the far side: the remote fails
+          # "Failed to traverse parents" / "remote did not send all necessary
+          # objects". actions/checkout defaults to fetch-depth 1, so the
+          # script's own comment claiming the bundle "carries full origin/main
+          # history" was false the moment it ran in CI.
+          fetch-depth: 0
 
       - name: Set up Node 22 (post-deploy-verify.mjs is a node script)
         if: steps.gate.outputs.ready == 'true'
@@ -239,6 +248,15 @@ jobs:
       - name: Checkout
         if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v6
+        with:
+          # ⛔ FULL history. deploy-bridge.sh's DEPLOY_VIA_BUNDLE path runs
+          # `git bundle create` from THIS checkout, and a bundle built from a
+          # shallow clone cannot be cloned on the far side: the remote fails
+          # "Failed to traverse parents" / "remote did not send all necessary
+          # objects". actions/checkout defaults to fetch-depth 1, so the
+          # script's own comment claiming the bundle "carries full origin/main
+          # history" was false the moment it ran in CI.
+          fetch-depth: 0
 
       - name: Set up Node 22
         if: steps.gate.outputs.ready == 'true'
