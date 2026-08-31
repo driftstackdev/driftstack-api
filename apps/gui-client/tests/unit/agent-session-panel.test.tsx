@@ -1189,7 +1189,12 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
           info={INFO}
           interactive
           inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
-          canSendInput={(ownerRoom, epoch) => ownerRoom === room && epoch === INPUT_AUTHORITY_EPOCH}
+          canSendInput={(ownerRoom, epoch) =>
+            // `room` is the mock the panel was handed; widen for the identity
+            // check rather than typing the literal, which would propagate Room
+            // through every other use of it in this file.
+            (ownerRoom as unknown) === (room as unknown) && epoch === INPUT_AUTHORITY_EPOCH
+          }
         />,
       );
       const video = container.querySelector('video') as HTMLVideoElement;
@@ -1330,7 +1335,12 @@ describe('AgentSessionPanel optimistic tap ripple (#124 perceived-latency)', () 
         info={INFO}
         interactive
         inputAuthorityEpoch={INPUT_AUTHORITY_EPOCH}
-        canSendInput={(ownerRoom, epoch) => ownerRoom === room && epoch === INPUT_AUTHORITY_EPOCH}
+        canSendInput={(ownerRoom, epoch) =>
+          // `room` is the mock the panel was handed; widen for the identity
+          // check rather than typing the literal, which would propagate Room
+          // through every other use of it in this file.
+          (ownerRoom as unknown) === (room as unknown) && epoch === INPUT_AUTHORITY_EPOCH
+        }
         onInputCongestionChange={onInputCongestionChange}
       />,
     );

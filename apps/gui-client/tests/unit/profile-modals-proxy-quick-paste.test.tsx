@@ -23,9 +23,9 @@ function profileFixture() {
   };
 }
 
-const addProxy = vi.fn(() => Promise.resolve({ id: 'p_minted' }));
-const setDefaultProxy = vi.fn(() => Promise.resolve());
-const updateProfile = vi.fn(() => Promise.resolve({}));
+const addProxy = vi.fn((..._args: unknown[]) => Promise.resolve({ id: 'p_minted' }));
+const setDefaultProxy = vi.fn((..._args: unknown[]) => Promise.resolve());
+const updateProfile = vi.fn((..._args: unknown[]) => Promise.resolve({}));
 
 vi.mock('../../src/lib/SettingsContext', () => {
   const stable = {
