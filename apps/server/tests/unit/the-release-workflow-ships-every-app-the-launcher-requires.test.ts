@@ -1,6 +1,7 @@
-// The GUI release must ship every app the launcher requires — and today it
-// does not. Recorded here as a KNOWN GAP so it cannot be forgotten between the
-// self-repair arc and the packaging fix.
+// The GUI release must ship every app the launcher requires — and as of V-2169
+// it does. This began as a KNOWN GAP so the defect could not be forgotten
+// between the self-repair arc and the packaging fix; the gap is closed and the
+// arms assert the fix.
 //
 // 2026-08-30: an owner installed the desktop app from the release DMG, clicked
 // Launch, and got "Install the Driftstack Simulator app, then try again". The
@@ -12,11 +13,11 @@
 // unreachable on every clean customer install, and five guards that read the
 // workflow pinned other properties of it.
 //
-// This file pins three facts and the gap between them. When the packaging fix
-// lands (the workflow builds the simulator config, or the main bundle carries
-// the simulator inside its Resources), the KNOWN-GAP arm goes red and must be
-// retired in the same commit — that is the point of writing the gap down as an
-// assertion instead of a message.
+// ⭐ THE GAP CLOSED AS DESIGNED: the arm was written to go RED the moment
+// gui-release.yml referenced the companion build, forcing whoever shipped the
+// fix back here. That is exactly what happened (V-2169). A gap written down as
+// a failing-on-fix assertion gets retired; one written as a comment gets read
+// past.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -94,7 +95,24 @@ describe('the GUI release ships every app the launcher requires', () => {
     expect(read(DEV_SCRIPT)).toContain(SIM_SCRIPT);
   });
 
-  it('KNOWN GAP — the release workflow does NOT build the companion; a clean DMG install cannot open a live-view session. Retire this arm in the commit that ships it.', () => {
+  it('⛔ V-2169: the companion produces NO updater artifacts — it is embedded, not independently updatable', () => {
+    // The first 0.1.8 macOS leg failed here, AFTER building the bundle fine:
+    //   "A public key has been found, but no private key. Make sure to set
+    //    TAURI_SIGNING_PRIVATE_KEY"
+    // tauri merges --config over the base, so the companion INHERITED
+    // bundle.createUpdaterArtifacts:true from tauri.conf.json and demanded a
+    // signing key that step has no business holding. The companion is installed
+    // by the main app out of its own Resources — it has no updater endpoint and
+    // is never fetched alone, so it must not ask to be signed as if it were.
+    const simCfg = JSON.parse(read(resolve(REPO, 'apps/gui-client', sim.configPath))) as {
+      bundle?: { createUpdaterArtifacts?: boolean; targets?: string[] };
+    };
+    expect(simCfg.bundle?.createUpdaterArtifacts).toBe(false);
+    // And it stays app-only: a dmg/nsis target would make it look distributable.
+    expect(simCfg.bundle?.targets).toEqual(['app']);
+  });
+
+  it('CRITICAL the release workflow BUILDS the companion and EMBEDS it where the self-repair looks — a clean DMG install can open a live view (V-2169, closing the V-2148 gap)', () => {
     const wf = read(WORKFLOW);
     // Non-vacuity: this is the real release workflow, with the real build step.
     expect(wf).toMatch(/tauri-apps\/tauri-action@v0/);
