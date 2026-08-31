@@ -1275,9 +1275,10 @@ fn repair_simulator_install(window: tauri::WebviewWindow) -> Result<String, Stri
         }
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let candidates = simulator_repair_sources(&exe);
-        let source = pick_simulator_repair_source(&candidates, |p| p.exists()).ok_or_else(|| {
-            "no Simulator bundle is available to install from this build".to_string()
-        })?;
+        let source =
+            pick_simulator_repair_source(&candidates, |p| p.exists()).ok_or_else(|| {
+                "no Simulator bundle is available to install from this build".to_string()
+            })?;
         let copied = std::process::Command::new("/usr/bin/ditto")
             .arg(&source)
             .arg(target)
@@ -3138,7 +3139,8 @@ mod tests {
 
     #[test]
     fn simulator_repair_prefers_the_shipped_copy_over_a_sibling() {
-        let exe = std::path::Path::new("/Applications/Driftstack.app/Contents/MacOS/driftstack-gui");
+        let exe =
+            std::path::Path::new("/Applications/Driftstack.app/Contents/MacOS/driftstack-gui");
         let sources = simulator_repair_sources(exe);
         assert_eq!(
             sources,
