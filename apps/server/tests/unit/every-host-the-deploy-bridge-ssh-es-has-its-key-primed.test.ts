@@ -91,6 +91,28 @@ describe('every host the deploy bridge SSHes to has its key primed', () => {
     ).toContain(host);
   });
 
+  it('uses no BSD-only shell idioms — it is written on macOS and RUNS on ubuntu', () => {
+    // ⛔ `mktemp -t <name>` diverges: BSD/macOS treats the argument as a PREFIX,
+    // GNU/coreutils as a TEMPLATE and errors "too few X's in template". The
+    // script is hand-run on macOS and executes on an ubuntu runner, so this
+    // passed every local test and died the first time the bundle path actually
+    // ran in CI — which only happened once DEPLOY_VIA_BUNDLE was switched on,
+    // long after the code was written.
+    //
+    // ⚠️ Comments are STRIPPED first. The prose explaining the trap contains the
+    // very string being banned, and a naive grep flags the fix as the defect.
+    const code = bridge
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .join('\n');
+    expect(code, 'mktemp -t is BSD-only; use an explicit XXXXXX template').not.toMatch(
+      /mktemp\s+-t\s/,
+    );
+    // Non-vacuity: the strip must not have eaten the whole file.
+    expect(code).toContain('mktemp');
+    expect(code.length).toBeGreaterThan(1000);
+  });
+
   it('the staging DB-isolation guard reports WHY it could not read a host', () => {
     // The refusal was correct; it was unclearable because the reason went to
     // /dev/null. "prod host present = no" reads identically whether sshd is

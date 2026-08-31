@@ -183,7 +183,17 @@ if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
   fi
   echo "[bridge] GitHub-independent mode: bundling $SHA -> $HOST" >&2
   git branch -f __deploy_bundle_tmp "$SHA" >/dev/null 2>&1
-  BUNDLE=$(mktemp -t ds-deploy.bundle)
+  # ⛔ NOT `mktemp -t ds-deploy.bundle`. `-t` diverges: BSD/macOS treats the
+  # argument as a PREFIX and appends its own suffix, GNU/coreutils treats it as a
+  # TEMPLATE and fails "too few X's in template". This script is written and
+  # hand-run on macOS but EXECUTES on an ubuntu runner, so the macOS-only form
+  # passed every local test and died the first time the bundle path actually ran
+  # in CI (which was only after DEPLOY_VIA_BUNDLE was switched on in V-2171 —
+  # the branch had never executed there before).
+  #
+  # An explicit template under TMPDIR avoids `-t` entirely and behaves
+  # identically on both.
+  BUNDLE=$(mktemp "${TMPDIR:-/tmp}/ds-deploy.bundle.XXXXXX")
   if ! git bundle create "$BUNDLE" __deploy_bundle_tmp >/dev/null 2>&1; then
     echo "[bridge] bundle create failed" >&2; git branch -D __deploy_bundle_tmp >/dev/null 2>&1; rm -f "$BUNDLE"; exit 1
   fi
