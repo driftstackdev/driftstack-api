@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { HARNESS_INTENT_NAMES } from '../../src/schemas/harness-control-protocol';
+import { HARNESS_INTENT_NAMES } from '../../src/schemas/harness-control-protocol.js';
+import { codeOnly } from './_helpers/code-only.js';
 
 /**
  * The harness dispatches on `intent.intentName` with NO allowlist — it runs
@@ -30,13 +31,14 @@ function walk(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-/** Strip comments so prose naming a verb is never mistaken for an emit site. */
-function code(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(?<!:)\/\/[^\n]*/g, '');
-}
-
+// ⛔ `codeOnly`, not a hand-rolled stripper. The obvious two-regex version is
+// wrong in a way that reads as working: 18 files under apps/server/src carry a
+// `/*` inside a LINE comment (route paths like `/v1/agent-sessions/*`), and a
+// block-comment pass opens a comment there and closes it thousands of
+// characters later, deleting the code in between. That would silently empty the
+// very files this guard searches — a false pass. See _helpers/code-only.ts.
 const files = walk(SRC);
-const allCode = files.map((f) => code(readFileSync(f, 'utf8'))).join('\n');
+const allCode = files.map((f) => codeOnly(readFileSync(f, 'utf8'))).join('\n');
 
 /** Verbs the CP can actually put on the wire. */
 const emitted = new Set<string>();
