@@ -38,6 +38,7 @@ import {
   startFlightRecorder,
   startStallWatch,
   FLIGHT_STORE_FILE,
+  SIMULATOR_FLIGHT_STORE_FILE,
 } from './lib/main-thread-stall-detector';
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { RecordingsProvider } from './lib/recordings';
@@ -500,6 +501,24 @@ function Shell(): JSX.Element {
         title: 'The app closed unexpectedly last time',
         body: record.onStall
           ? 'It stopped responding before closing. A diagnostic snapshot was saved.'
+          : 'It closed without shutting down. A diagnostic snapshot was saved.',
+        tone: 'warn',
+      });
+    });
+
+    // ⛔ THE SIMULATOR'S RECORD IS REPORTED HERE, NOT IN THE SIMULATOR.
+    // It runs in its own webview on its own main thread and writes its own file
+    // (see SimulatorWindow). Reporting it there would be delivery to nobody: a
+    // freeze ends in a restart, the customer reopens the app, and the MAIN window
+    // is what comes back — the simulator may never be opened again. An instrument
+    // read only by the process that died is not an instrument.
+    const simulatorStore = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
+    void reportPreviousRun(simulatorStore, (line, record) => {
+      console.warn(line);
+      push({
+        title: 'The browser window stopped responding last time',
+        body: record.onStall
+          ? 'It froze before closing. A diagnostic snapshot was saved.'
           : 'It closed without shutting down. A diagnostic snapshot was saved.',
         tone: 'warn',
       });

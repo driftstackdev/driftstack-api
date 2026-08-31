@@ -16,6 +16,7 @@
 // window URL query — the opener encodes them when creating the window.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { LazyStore } from '@tauri-apps/plugin-store';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import type { LiveKitInfo } from '@driftstack/sdk';
@@ -42,6 +43,12 @@ import { buildRecordingExport, recordingExportFilename } from '../lib/recordings
 import { exportCookies } from '../lib/cookie-export';
 import { parseCookies } from '../lib/cookie-import';
 import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
+import {
+  browserStallCensusDeps,
+  startFlightRecorder,
+  startStallWatch,
+  SIMULATOR_FLIGHT_STORE_FILE,
+} from '../lib/main-thread-stall-detector';
 import { record } from '../lib/log-buffer';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
@@ -2863,6 +2870,44 @@ export function SimulatorWindow(): JSX.Element {
   // Room), and the listener below re-parses the payload exactly like the initial
   // location.search and updates this state.
   const [query, setQuery] = useState<SessionQuery>(() => infoFromQuery());
+
+  // P-25 — the freeze instrument, mounted on the thread that actually freezes.
+  //
+  // ⛔ THIS WINDOW WAS NOT INSTRUMENTED, AND IT IS THE ONE THE REPORT IS ABOUT.
+  // The stall watch and flight recorder were wired in `App.tsx`, but `main.tsx`
+  // gives the simulator its own webview and never imports `App` — two React
+  // roots, two JS contexts, two independent main threads. The diagnostic built
+  // for "the app freezes while I browse" was watching the chrome window and
+  // would have reported a clean bill of health through every freeze the owner
+  // hit. Instrumenting the wrong thread is indistinguishable from finding
+  // nothing, which is the more dangerous of the two.
+  //
+  // ⚠️ NOT redundant with `startSimulatorCrashMarker` below. That answers "did a
+  // simulator window die?" and stores {at,url,sid}; this answers "holding WHAT?"
+  // — videos, DOM nodes, pending receipts, heap. The marker also cannot see a
+  // freeze the customer force-quits out of, because a hung thread and a dead one
+  // both stop heartbeating; the periodic census is what distinguishes them.
+  //
+  // ⚠️ Own store FILE, not merely its own key — see SIMULATOR_FLIGHT_STORE_FILE.
+  // The main window is normally the half that exits cleanly, and one shared key
+  // lets its clean mark erase this window's evidence.
+  //
+  // Delivery is deliberately elsewhere: this window is a bare device with no app
+  // chrome and no toast host, and after a freeze the customer restarts and gets
+  // the MAIN window — which reads this file on launch and reports it there.
+  useEffect(() => {
+    const store = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
+    const deps = browserStallCensusDeps();
+    const recorder = startFlightRecorder(store, deps, undefined, 'simulator');
+    const stopWatch = startStallWatch((line, census) => {
+      console.warn(line, census);
+      recorder.recordStall(census);
+    }, deps);
+    return () => {
+      stopWatch();
+      void recorder.stop();
+    };
+  }, []);
   const {
     info,
     deviceName,

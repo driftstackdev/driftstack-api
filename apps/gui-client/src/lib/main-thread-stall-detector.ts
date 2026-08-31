@@ -220,6 +220,12 @@ export interface FlightRecord {
   census: StallCensus;
   /** True when written because a stall was detected, not on the schedule. */
   onStall: boolean;
+  /**
+   * Which webview produced it. Absent on records written before this field
+   * existed, which is why every reader treats it as optional rather than
+   * assuming the main window.
+   */
+  window?: string;
 }
 
 export const FLIGHT_RECORDER_INTERVAL_MS = 30_000;
@@ -244,12 +250,30 @@ export function shouldSurfaceRecord(record: FlightRecord | null, cleanShutdown: 
 export function formatFlightRecord(record: FlightRecord): string {
   const when = new Date(record.at).toISOString();
   const why = record.onStall ? 'after a detected stall' : 'last periodic snapshot';
-  return `[flight-recorder] previous run ended without shutting down — ${why} at ${when}: ${formatStall(record.census)}`;
+  // ⛔ WHICH WINDOW FROZE IS THE FIRST THING THE RECORD MUST SAY. The app runs two
+  // independent webviews on two independent main threads, and "it froze" means
+  // something different for each: the main window is chrome, the simulator is
+  // where the customer actually browses. A record that does not name the thread
+  // sends the next investigation to the wrong one.
+  const where = record.window === undefined ? '' : ` [${record.window}]`;
+  return `[flight-recorder]${where} previous run ended without shutting down — ${why} at ${when}: ${formatStall(record.census)}`;
 }
 
 /** Separate from settings.json: a diagnostic must not risk the file that holds
  *  the customer's configuration. */
 export const FLIGHT_STORE_FILE = 'diagnostics.json';
+
+/**
+ * The simulator webview records to its OWN file.
+ *
+ * ⛔ Not a stylistic choice — a correctness one, and the same one `log-buffer.ts`
+ * already made for the same reason (#137). The two windows are separate JS
+ * contexts writing one store; sharing a key means the main window's CLEAN-shutdown
+ * mark erases the simulator's crash evidence, and a clean main window is the
+ * normal case when the simulator is the half that froze. Separate files cannot
+ * clobber each other.
+ */
+export const SIMULATOR_FLIGHT_STORE_FILE = 'diagnostics-simulator.json';
 const FLIGHT_KEY = 'lastRun';
 const CLEAN_KEY = 'cleanShutdown';
 
@@ -301,9 +325,15 @@ export function startFlightRecorder(
   store: FlightStore,
   deps: StallCensusDeps,
   intervalMs: number = FLIGHT_RECORDER_INTERVAL_MS,
+  windowLabel?: string,
 ): { stop: () => Promise<void>; recordStall: (census: StallCensus) => void } {
   const write = (census: StallCensus, onStall: boolean): void => {
-    const record: FlightRecord = { at: Date.now(), census, onStall };
+    const record: FlightRecord = {
+      at: Date.now(),
+      census,
+      onStall,
+      ...(windowLabel === undefined ? {} : { window: windowLabel }),
+    };
     void (async () => {
       try {
         await store.set(FLIGHT_KEY, record);
