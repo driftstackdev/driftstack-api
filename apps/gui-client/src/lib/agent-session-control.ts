@@ -680,6 +680,35 @@ export async function setSessionMode(
   };
 }
 
+/**
+ * Resume a session the harness auto-paused on a detected bot challenge, once the
+ * operator has solved it in the live view.
+ *
+ * ⛔ `challengeId` is ROUND-TRIPPED, never minted here. The harness validates it
+ * against the challenge that is actually active and REFUSES a mismatch (the
+ * session stays paused), so inventing one would silently fail to resume — or
+ * worse, resume the wrong stall. It comes from the box's own challengeDetected
+ * frame; omitting it is a manual resume, which the server also accepts.
+ *
+ * The server does NOT 409 for this case: a harness challenge-pause leaves the
+ * session status 'active' (the pause is harness-internal), and only a terminal
+ * session is unresumable.
+ */
+export async function resumeChallengedSession(
+  id: string,
+  challengeId: string | null,
+  auth: ControlAuth = null,
+): Promise<void> {
+  await authedFetch(
+    `/v1/agent-sessions/${encodeURIComponent(id)}/resume`,
+    {
+      method: 'POST',
+      body: JSON.stringify(challengeId !== null ? { challenge_id: challengeId } : {}),
+    },
+    auth,
+  );
+}
+
 /** Human grabs control in pair mode. Returns the new pair_mode_state.kind.
  *  client_id is a stable per-window id so the takeover lock is coherent. */
 export async function takeoverSession(

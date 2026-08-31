@@ -114,6 +114,7 @@ import {
   type ControlAuth,
   type SessionCookie,
   type SessionFileHandle,
+  resumeChallengedSession,
 } from '../lib/agent-session-control';
 
 /** Human input is an allowlisted ownership state, not merely "anything except AI".
@@ -2917,6 +2918,24 @@ export function SimulatorWindow(): JSX.Element {
     loadedControlAuth.baseUrl === baseUrl
       ? loadedControlAuth.auth
       : controlAuthBoundary.auth;
+
+  // V-2170 — the operator solved the challenge in the live view; tell the harness
+  // to carry on. The challengeId is round-tripped from the box's own frame, never
+  // minted: the harness validates it and stays paused on a mismatch.
+  const resumeAfterChallenge = (): void => {
+    if (challenge === null || sessionId === '') return;
+    setResumingChallenge(true);
+    void resumeChallengedSession(sessionId, challenge.id, controlAuth)
+      .then(() => {
+        // Clear ONLY on success. Clearing on failure would leave the operator
+        // looking at a paused session with nothing on screen saying so — the
+        // exact blindness this feature exists to remove.
+        setChallenge(null);
+        showNotice('Resuming the session…', 2500);
+      })
+      .catch(() => showNotice("Couldn't resume — try again once the challenge is solved", 4000))
+      .finally(() => setResumingChallenge(false));
+  };
   useEffect(() => {
     // A new room/session starts with a clean control-health slate — never carry
     // a latched controlUnreachable badge across a session switch.
@@ -4285,6 +4304,13 @@ export function SimulatorWindow(): JSX.Element {
   const lastDataChannelStateAtRef = useRef(0);
   // V-2168 — the box restarting a died SCStream capture (renderer alive).
   const [captureStalled, setCaptureStalled] = useState(false);
+  // V-2170 — the bot challenge the harness auto-paused on. Null = none.
+  const [challenge, setChallenge] = useState<{
+    id: string;
+    kind: string;
+    detail: string | null;
+  } | null>(null);
+  const [resumingChallenge, setResumingChallenge] = useState(false);
   const applyStalledState = useCallback((isStalled: boolean): void => {
     if (isStalled) lastStalledAtRef.current = Date.now();
     else lastStalledAtRef.current = 0;
@@ -4926,6 +4952,12 @@ export function SimulatorWindow(): JSX.Element {
         const msg = JSON.parse(new TextDecoder().decode(payload)) as {
           type?: string;
           state?: string;
+          // A3 48bc7c7aa — published on the SAME room data channel as page_state,
+          // reliable, once per stall, at the auto-pause transition. `challengeId`
+          // must be ROUND-TRIPPED to resume: the harness validates it against the
+          // active challenge and stays paused on a mismatch.
+          challengeId?: string;
+          challenge?: { type?: string; confidence?: number; detail?: string };
           url?: string;
           title?: string;
           loading?: boolean;
@@ -5142,6 +5174,18 @@ export function SimulatorWindow(): JSX.Element {
           // breadcrumb and showed nothing at all. It only became reachable in
           // production when the streaming health probe was armed on the fleet.
           msg.state === 'capture_stalled';
+        // ⛔ V-2170 — the challenge auto-pause. Before this the GUI had NO
+        // surface: the box queued ChallengeDetected only to the CONTROL PLANE, so
+        // nothing reached the channel this window listens on, and a captcha
+        // silently stopped the session with the last frame still on screen.
+        if (msg.type === 'challengeDetected' && typeof msg.challengeId === 'string') {
+          setChallenge({
+            id: msg.challengeId,
+            kind: typeof msg.challenge?.type === 'string' ? msg.challenge.type : 'challenge',
+            detail: typeof msg.challenge?.detail === 'string' ? msg.challenge.detail : null,
+          });
+          return;
+        }
         if (msg.type !== 'page_state' && !isHarnessState) {
           // Finding #6 — the frame matched NONE of the known discriminants
           // (activateTabResult / tabListRestore / page_state / a harness state). The
@@ -8150,7 +8194,37 @@ export function SimulatorWindow(): JSX.Element {
                   so we overlay a calm reconnecting indicator on the visible frame
                   rather than blanking to black. Cleared the moment the box reports
                   any non-stalled page state. */}
-                {captureStalled && !streamingUnavailable && (
+                {/* ⛔ V-2170 — the bot challenge the harness auto-paused on. This
+                    takes priority over every other badge: the session is stopped
+                    and will not resume until a person acts, which is not true of
+                    a stall or a freeze. Before this the operator saw the last
+                    frame and nothing else — the captcha was on screen, the agent
+                    had silently stopped, and no part of the UI said so. */}
+                {challenge !== null && !streamingUnavailable && (
+                  <div
+                    role="status"
+                    data-component="challenge-paused-badge"
+                    className="absolute left-1/2 top-1/2 z-30 flex max-w-[86%] -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-2 rounded-xl bg-black/85 px-4 py-3 text-center text-[11px] font-medium text-white shadow-lg backdrop-blur"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                      Paused — {challenge.kind} challenge detected
+                    </span>
+                    <span className="text-[10px] font-normal leading-snug text-white/70">
+                      Solve it in this window, then continue. The agent is stopped until you do.
+                    </span>
+                    <button
+                      type="button"
+                      data-action="resume-after-challenge"
+                      disabled={resumingChallenge}
+                      onClick={resumeAfterChallenge}
+                      className="mt-0.5 rounded-md bg-accent px-3 py-1 text-[11px] font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+                    >
+                      {resumingChallenge ? 'Resuming…' : "I've solved it — continue"}
+                    </button>
+                  </div>
+                )}
+                {captureStalled && challenge === null && !streamingUnavailable && (
                   <div
                     role="status"
                     data-component="capture-stalled-badge"
@@ -8160,7 +8234,7 @@ export function SimulatorWindow(): JSX.Element {
                     Restoring video&hellip;
                   </div>
                 )}
-                {pageStalled && !captureStalled && !streamingUnavailable && (
+                {pageStalled && !captureStalled && challenge === null && !streamingUnavailable && (
                   <div
                     role="status"
                     data-component="page-stalled-badge"

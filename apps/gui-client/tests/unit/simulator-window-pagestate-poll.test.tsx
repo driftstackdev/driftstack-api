@@ -66,7 +66,9 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
   },
 }));
 
+const resumeChallengedSessionMock = vi.fn(() => Promise.resolve());
 vi.mock('../../src/lib/agent-session-control', () => ({
+  resumeChallengedSession: (...args: unknown[]) => resumeChallengedSessionMock(...args),
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),
@@ -261,6 +263,90 @@ describe('SimulatorWindow — page-state poll error grace gate (Finding #7)', ()
 // unknown-frame breadcrumb and the operator saw a frozen picture with no
 // explanation. It became reachable in production only when the fleet's
 // streaming health probe was armed.
+// V-2170 — the bot-challenge auto-pause. The box detects a captcha, pauses the
+// session, and publishes challengeDetected on the SAME room data channel as
+// page_state. Before this the GUI had NO surface at all: the harness queued the
+// event only to the CONTROL PLANE, so nothing reached the channel this window
+// listens on. The operator saw the last frame, the agent had silently stopped,
+// and no part of the UI said so.
+describe('SimulatorWindow — a detected bot challenge is visible and resumable', () => {
+  const badge = (c: HTMLElement): Element | null =>
+    c.querySelector('[data-component="challenge-paused-badge"]');
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeRoom.on.mockClear();
+    resumeChallengedSessionMock.mockClear();
+    pageStateMock.mockReset();
+    pageStateMock.mockResolvedValue(null);
+  });
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+  });
+
+  it('⛔ raises the badge, naming the challenge, when the box reports one', async () => {
+    const { container } = renderSim();
+    await flush();
+    expect(badge(container), 'no challenge yet').toBeNull();
+    act(() =>
+      fireDataFrame({
+        type: 'challengeDetected',
+        sessionId: 'agt_x',
+        challengeId: 'chal_1',
+        challenge: { type: 'recaptcha', confidence: 0.97, detail: 'https://x.invalid/' },
+      }),
+    );
+    const b = badge(container);
+    expect(b).not.toBeNull();
+    expect(b?.textContent).toMatch(/recaptcha/);
+    expect(b?.textContent).toMatch(/agent is stopped/i);
+  });
+
+  it('⛔ ROUND-TRIPS the challengeId on resume — a minted id would be rejected and stay paused', async () => {
+    const { container } = renderSim();
+    await flush();
+    act(() =>
+      fireDataFrame({
+        type: 'challengeDetected',
+        challengeId: 'chal_round_trip',
+        challenge: { type: 'datadome' },
+      }),
+    );
+    const btn = container.querySelector('[data-action="resume-after-challenge"]');
+    expect(btn).not.toBeNull();
+    act(() => {
+      (btn as HTMLElement).click();
+    });
+    await flush();
+    expect(resumeChallengedSessionMock).toHaveBeenCalledTimes(1);
+    expect(resumeChallengedSessionMock.mock.calls[0]?.[1]).toBe('chal_round_trip');
+  });
+
+  it('⛔ A3 blind-spot arm: a render test cannot see whether the frame ARRIVES — pin the subscription', async () => {
+    // A3 found that their own frame-contract and queue-state tests both stayed
+    // green when the publish call itself was deleted. The client twin of that
+    // blind spot: asserting the badge given a synthetic frame proves nothing
+    // about whether this window is listening at all. So assert the listener.
+    renderSim();
+    await flush();
+    expect(
+      fakeRoom.on.mock.calls.some((c) => c[0] === 'dataReceived'),
+      'the window never subscribed to the room data channel — no box frame could reach it',
+    ).toBe(true);
+  });
+
+  it('a frame without a challengeId is ignored rather than raising an unactionable badge', async () => {
+    const { container } = renderSim();
+    await flush();
+    act(() => fireDataFrame({ type: 'challengeDetected', challenge: { type: 'recaptcha' } }));
+    expect(
+      badge(container),
+      'no id means no resume is possible, so the badge would be a dead end',
+    ).toBeNull();
+  });
+});
+
 describe('SimulatorWindow — capture_stalled says "restoring video", not "page unresponsive"', () => {
   const captureBadge = (c: HTMLElement): Element | null =>
     c.querySelector('[data-component="capture-stalled-badge"]');
