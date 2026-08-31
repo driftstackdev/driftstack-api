@@ -87,7 +87,9 @@ describe('sdk-python resources/agent_sessions content parity', () => {
     // 6.c — create() docstring documents the per-session model body field
     // (Python is loose-dict, so the docstring is the typed surface).
     expect(body).toMatch(
-      /"model"\?: "claude-opus-5"\|"claude-sonnet-5"\|"claude-opus-4-8"\|"claude-opus-4-7"\|"claude-sonnet-4-6"\|"claude-haiku-4-5"/,
+      // Tolerant of the line wrap the 100-char ruff limit forces: the six ids
+      // must all be there, in order, but the docstring may break between them.
+      /"model"\?: "claude-opus-5"\|"claude-sonnet-5"\|"claude-opus-4-8"\s*\|?\s*\|?"claude-opus-4-7"\|"claude-sonnet-4-6"\|"claude-haiku-4-5"/,
     );
     // file 57 — create() docstring documents the optional profile_id body field
     // (attach a saved profile). Drift to dropping it strands the live
