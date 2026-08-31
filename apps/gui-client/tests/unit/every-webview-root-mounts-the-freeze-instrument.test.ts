@@ -83,6 +83,19 @@ describe('every webview root mounts the P-25 freeze instrument', () => {
     expect(simulator).not.toBe(main);
   });
 
+  it('the simulator supplies the census probes only IT can answer', () => {
+    // ⛔ `tabCount` and `pendingReceipts` are OPTIONAL deps: a recorder wired with
+    // the bare defaults writes null for both and the record then names the
+    // resources it could not see while staying silent about the ones it could.
+    // Tabs and the input-receipt table exist in this window and nowhere else, so
+    // defaults here are a silent loss of the two most diagnostic fields.
+    const sim = read('views/SimulatorWindow.tsx');
+    expect(sim).toMatch(/browserStallCensusDeps\(\s*\{/);
+    expect(sim).toContain('tabCount:');
+    expect(sim).toContain('pendingReceipts:');
+    expect(sim).toContain('pendingInputReceiptCount(');
+  });
+
   it('the main window reports the simulator record, since it is what reopens', () => {
     const app = read('App.tsx');
     expect(app).toContain('SIMULATOR_FLIGHT_STORE_FILE');

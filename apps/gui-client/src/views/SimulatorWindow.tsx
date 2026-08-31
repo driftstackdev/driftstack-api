@@ -36,6 +36,7 @@ import {
   resetInputReceipts,
   noteDeviceLiveness,
   subscribeInputReceiptIssues,
+  pendingInputReceiptCount,
   type InputReceiptIssue,
 } from '../lib/livekit-input-ack';
 import { useRecordings, type Recording } from '../lib/recordings';
@@ -2895,9 +2896,31 @@ export function SimulatorWindow(): JSX.Element {
   // Delivery is deliberately elsewhere: this window is a bare device with no app
   // chrome and no toast host, and after a freeze the customer restarts and gets
   // the MAIN window — which reads this file on launch and reports it there.
+  // ⛔ The two most diagnostic census fields live in THIS window and nowhere else.
+  // `tabCount` and `pendingReceipts` are optional deps, and a recorder wired with
+  // the defaults writes null for both — so the record would name the resources it
+  // could not see and stay silent about the ones it could. Refs, because both
+  // sources are declared far below this hook and it must stay above every early
+  // return. A pinned `receipts=128` (the eviction ceiling) is the single clearest
+  // signal the ack table is the thing that wedged.
+  const censusTabCountRef = useRef<number | null>(null);
+  const censusRoomRef = useRef<Room | null>(null);
+
   useEffect(() => {
     const store = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
-    const deps = browserStallCensusDeps();
+    const deps = browserStallCensusDeps({
+      tabCount: () => censusTabCountRef.current,
+      pendingReceipts: () => {
+        const room = censusRoomRef.current;
+        if (room === null) return null;
+        try {
+          return pendingInputReceiptCount(room);
+        } catch {
+          // A census must never be the thing that throws during a stall.
+          return null;
+        }
+      },
+    });
     const recorder = startFlightRecorder(store, deps, undefined, 'simulator');
     const stopWatch = startStallWatch((line, census) => {
       console.warn(line, census);
@@ -4462,6 +4485,16 @@ export function SimulatorWindow(): JSX.Element {
   // must still be rejected.
   const tabSpaceEstablishedRef = useRef(false);
   const [tabs, setTabs] = useState<SimTab[]>(() => [seedTabRef.current]);
+
+  // Feed the P-25 flight recorder. Cheap, and deliberately NOT derived inside the
+  // census callback: reading React state from a timer that fires during a stall
+  // must not depend on a render having completed.
+  useEffect(() => {
+    censusTabCountRef.current = tabs.length;
+  }, [tabs.length]);
+  useEffect(() => {
+    censusRoomRef.current = roomBinding?.room ?? null;
+  }, [roomBinding]);
   const [activeTabId, setActiveTabId] = useState<string>(() => seedTabRef.current.id);
   // Data-channel replies can arrive before React commits the state update that
   // initiated their publish. Every active-tab transition goes through this owner so
