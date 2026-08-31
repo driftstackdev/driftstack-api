@@ -173,7 +173,7 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
   // empty-connect prompt (TeamView was the only one without one).
   if (!client) {
     return (
-      <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6">
+      <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
         <EmptyState
           title="Connect to manage your team"
           description="Add your API key in Settings to invite teammates and manage member roles."
@@ -188,7 +188,7 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6">
+    <div className="mx-auto flex h-full w-full max-w-3xl min-w-0 flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
       {/* Page hero: gradient card + identity glow with an accent icon chip —
           matching the Command Center / Settings card language. */}
       <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">

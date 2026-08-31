@@ -639,8 +639,21 @@ export function SettingsView(): JSX.Element {
   const effectiveTelemetry =
     draftTelemetry === null ? (cloudBaseUrl ? 'on' : 'off') : draftTelemetry ? 'on' : 'off';
 
+  // ⛔ `[&>*]:shrink-0` on the scroller below is load-bearing, not decoration.
+  //
+  // It is a FIXED-HEIGHT flex column (`h-full`) whose content runs ~2500px, so
+  // flex resolves the overflow by SHRINKING its children before the scroll
+  // container ever sees it. A flex item is normally protected by
+  // `min-height: auto` — but that automatic minimum applies only while the
+  // item's own `overflow` is `visible`. The hero <header> sets `overflow-hidden`
+  // for its rounded corners, which disables that protection, so it alone
+  // collapsed from 118px of content into a 42px bar and clipped its own
+  // contents: the owner saw the "API connection / Connected /
+  // https://api.driftstack.dev" block disappear and only "a small bar" remain.
+  // Every sibling card survived purely because none of them clips. Applied at
+  // the CONTAINER so the next child that sets overflow-hidden cannot inherit it.
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
       {/* Page hero: an icon-led title + subtitle, with the live API-connection
           status and the primary Save action anchored on the right — matching the
           Command Center's gradient card language. */}

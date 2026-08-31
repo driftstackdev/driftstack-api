@@ -187,7 +187,7 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   }
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6">
+    <div className="mx-auto flex h-full w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
       {/* Page hero — gradient + identity glow; an accent icon chip + the
           Network section label, mirroring the Command Center card language. */}
       <header className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-5">

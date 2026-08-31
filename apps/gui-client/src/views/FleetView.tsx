@@ -230,7 +230,7 @@ export function FleetView(): JSX.Element {
   const pinged = reachable + unreachable;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6">
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
       {/* Page hero — an accent icon chip + a radial identity glow, the
           local-only-registry framing, and the Ping all + Add member actions on
           the right. Matches the Command Center / Settings / Sessions gradient

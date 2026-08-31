@@ -383,7 +383,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   const visibleError = mutationError ?? state.error;
 
   return (
-    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6">
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-6 overflow-y-auto p-6 [&>*]:shrink-0">
       {/* Page hero — an accent icon chip + a radial identity glow, the
           at-a-glance live/cap context line, a live "refreshed" pill, and the
           primary Refresh + New session actions on the right. Matches the
