@@ -41,7 +41,12 @@ import {
   ReliableInputCongestedError,
   setReliableInputCongested,
 } from '../../src/lib/livekit-input-congestion';
-import { pendingInputReceiptCount, resetInputReceipts } from '../../src/lib/livekit-input-ack';
+import {
+  pendingInputReceiptCount,
+  resetInputReceipts,
+  subscribeInputReceiptIssues,
+  type InputReceiptIssue,
+} from '../../src/lib/livekit-input-ack';
 
 interface MinimalRoom {
   localParticipant: {
@@ -751,5 +756,145 @@ describe('isBenignTeardownError', () => {
   it('handles non-Error rejection values', () => {
     expect(isBenignTeardownError('PC manager is closed')).toBe(true);
     expect(isBenignTeardownError(null)).toBe(false);
+  });
+});
+
+describe('a reliable input publish that never settles is abandoned, not awaited forever', () => {
+  // ⛔ livekit-client 2.19.2 resolves publishData through `waitForBufferStatusLow`,
+  // which settles ONLY on a `bufferedamountlow` event and rejects only on engine
+  // close. There is no timer. A reliable channel that stays congested while the
+  // engine stays up therefore produces a promise that NEVER settles.
+  //
+  // The tab-sync path was bounded first because that wedged a single-flight drain.
+  // Input deadlocks nothing — every caller is fire-and-forget — but each abandoned
+  // publish retains its promise, closure and encoded frame for the life of the
+  // Room, and mandatory releases (touchEnd/keyUp/mouseUp) are exempt from
+  // congestion shedding by design, so they keep publishing and keep accumulating.
+
+  it('returns once the bound elapses instead of hanging on a promise that never settles', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const { room, publishData } = makeRoom();
+    // A publish that never settles — the real congested-channel shape.
+    publishData.mockReturnValue(new Promise<void>(() => undefined));
+
+    let done = false;
+    const sent = sendInputEvent(room, { type: 'keyUp', key: 'a' }).then(() => {
+      done = true;
+    });
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(done, 'must still be waiting before the bound elapses').toBe(false);
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await sent;
+    expect(done, 'must return once the bound elapses').toBe(true);
+  });
+
+  it('LEAVES THE RECEIPT ARMED on timeout, so the customer is still told', async () => {
+    vi.useFakeTimers();
+    const { room, publishData } = makeRoom();
+    onTestFinished(() => {
+      vi.useRealTimers();
+      resetInputReceipts(room);
+    });
+    publishData.mockReturnValue(new Promise<void>(() => undefined));
+
+    const issues: InputReceiptIssue[] = [];
+    const unsubscribe = subscribeInputReceiptIssues(room, (issue) => {
+      issues.push(issue);
+    });
+    onTestFinished(unsubscribe);
+
+    // TWO hung releases, not one: MISSED_ACKS_BEFORE_ALARM is 2, so a single
+    // missed ack deliberately does not raise the badge. Two is also the realistic
+    // congested case — releases are exempt from shedding, so they keep going out.
+    const sent = Promise.all([
+      sendInputEvent(room, { type: 'keyUp', key: 'b' }),
+      sendInputEvent(room, { type: 'keyUp', key: 'c' }),
+    ]);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await sent;
+
+    // ⛔ THIS IS THE WHOLE POINT OF THE FIX. Routing the timeout into the rejection
+    // path would call cancelInputReceipt, and a cancelled receipt reports NOTHING —
+    // the exact silence P-19 removed. The receipt is registered BEFORE the publish
+    // precisely so its own deadline can fire the "device did not confirm" badge.
+    //
+    // Asserting the ISSUE rather than a residual pending count on purpose: by the
+    // time the bound elapses the receipt deadline has also elapsed and correctly
+    // retired the entry, so the table is empty in BOTH the fixed and the broken
+    // build. What distinguishes them is whether the customer was told.
+    expect(
+      issues.filter((i) => i !== null),
+      'a timed-out publish must still raise the receipt issue, not cancel it into silence',
+    ).toContain('timeout');
+  });
+
+  it('a publish that DOES settle still resolves immediately and keeps its receipt', async () => {
+    // Non-vacuity: the arms above must be measuring the bound, not a helper that
+    // always waits 5s or always leaks a receipt.
+    vi.useFakeTimers();
+    const { room, publishData } = makeRoom();
+    onTestFinished(() => {
+      vi.useRealTimers();
+      resetInputReceipts(room);
+    });
+    publishData.mockResolvedValue(undefined);
+
+    let done = false;
+    const sent = sendInputEvent(room, { type: 'keyUp', key: 'c' }).then(() => {
+      done = true;
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await sent;
+    expect(done, 'a healthy publish must not wait for the bound').toBe(true);
+    expect(publishData).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the bound must not silence a receipt whose deadline is LONGER than the bound', () => {
+  // ⛔ The tap/key receipt deadline and the publish bound are both ~5s, and the
+  // receipt timer is armed first, so it wins that tie and reports before anything
+  // could cancel it. That coincidence hides the real hazard.
+  //
+  // `text` receipts do not share it: their deadline scales with character count
+  // (min 15s, up to 15 minutes) because the harness applies bulk text at human key
+  // cadence. So a bound that cancelled its receipt on timeout would retire a
+  // 15-second receipt after 5 seconds and report NOTHING — a long paste that never
+  // landed, with no badge. That is the P-19 silence, reintroduced.
+  it('a hung text publish still raises the badge at the receipt deadline, not the bound', async () => {
+    vi.useFakeTimers();
+    const { room, publishData } = makeRoom();
+    onTestFinished(() => {
+      vi.useRealTimers();
+      resetInputReceipts(room);
+    });
+    publishData.mockReturnValue(new Promise<void>(() => undefined));
+
+    const issues: InputReceiptIssue[] = [];
+    const unsubscribe = subscribeInputReceiptIssues(room, (issue) => {
+      issues.push(issue);
+    });
+    onTestFinished(unsubscribe);
+
+    const sent = Promise.all([
+      sendInputEvent(room, { type: 'text', text: 'hello' }),
+      sendInputEvent(room, { type: 'text', text: 'world' }),
+    ]);
+    await vi.advanceTimersByTimeAsync(6_000);
+    await sent;
+    expect(
+      issues.filter((i) => i !== null),
+      'the bound elapsed but the text receipt deadline (>=15s) has not — nothing to report yet',
+    ).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(
+      issues.filter((i) => i !== null),
+      'cancelling the receipt when the bound elapsed would retire a 15s receipt at 5s and report nothing',
+    ).toContain('timeout');
   });
 });

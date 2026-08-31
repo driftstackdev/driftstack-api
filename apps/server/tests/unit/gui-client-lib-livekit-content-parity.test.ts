@@ -80,7 +80,19 @@ describe('gui-client/lib/livekit content parity', () => {
   it("sendInputEvent reliable=true default framing pinned: 'lossy: false (TCP-style; mouse/key events MUST arrive in order). For high-frequency mouseMove streams, callers can opt-in to lossy: true to drop intermediate frames if the link congests — acceptable trade for cursor-tracking only.' + opts.reliable ?? true + receipt-aware wireEvent → publishData. Drift to reliable=false default would let click/keypress events drop silently", () => {
     expect(body).toContain('const reliable = opts.reliable ?? true;');
     expect(body).toContain('const data = new TextEncoder().encode(JSON.stringify(wireEvent));');
-    expect(body).toContain('await room.localParticipant.publishData(data, { reliable });');
+    // ⛔ REPOINTED (V-2174). This pinned the literal
+    // `await room.localParticipant.publishData(data, { reliable });` — i.e. it
+    // froze the UNBOUNDED await, which was the defect. livekit-client 2.19.2
+    // resolves that promise through `waitForBufferStatusLow`, which has no timer,
+    // so on a congested reliable channel it never settles and every abandoned
+    // publish leaks its frame for the life of the Room. A pin can only assert the
+    // shape someone chose; it cannot know the shape is correct
+    // (parity-pins-freeze-false-claims).
+    //
+    // What this file is actually for is the reliable=true DEFAULT and the framing,
+    // so pin those and pin that the publish is bounded — not the await itself.
+    expect(body).toContain('room.localParticipant.publishData(data, { reliable })');
+    expect(body).toContain('const outcome = await publishWithinInputBound(');
   });
 
   it('committed-input receipt ids are limited to tap/touchEnd/keyUp/text and registered before publish with cancellation on failure', () => {

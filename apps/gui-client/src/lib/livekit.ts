@@ -328,9 +328,29 @@ export async function sendInputEvent(
         : undefined;
     registerInputReceipt(room, receiptId, deadlineMs);
   }
-  try {
-    await room.localParticipant.publishData(data, { reliable });
-  } catch (err) {
+  const outcome = await publishWithinInputBound(
+    room.localParticipant.publishData(data, { reliable }),
+  );
+  if (outcome.kind === 'sent') return;
+  if (outcome.kind === 'timeout') {
+    // ⛔ THE RECEIPT IS DELIBERATELY LEFT ARMED. Routing a timeout into the
+    // rejection path below would call `cancelInputReceipt`, and a cancelled
+    // receipt reports nothing — which is exactly the silence P-19 removed. The
+    // receipt was registered BEFORE the publish precisely so the customer is
+    // told when input does not land; letting its deadline fire is the whole
+    // point. The console line is for us, the badge is for them.
+    if (!inputPublishTimeoutWarned.has(room)) {
+      inputPublishTimeoutWarned.add(room);
+      console.warn(
+        `[simulator] input publish exceeded ${String(INPUT_PUBLISH_TIMEOUT_MS)}ms and was ` +
+          `abandoned. The reliable DataChannel is likely congested; the input receipt is ` +
+          `left armed so the device-did-not-confirm badge still fires.`,
+      );
+    }
+    return;
+  }
+  {
+    const err = outcome.error;
     if (receiptId !== null) cancelInputReceipt(room, receiptId);
     // A publish that runs after the room/engine has been torn down rejects with
     // "PC manager is closed" (livekit UnexpectedConnectionState) or a
@@ -343,6 +363,61 @@ export async function sendInputEvent(
     if (isBenignTeardownError(err)) return;
     throw err;
   }
+}
+
+/**
+ * Bound on ONE input publish. Same 5s as the tab-sync bound and as the harness's
+ * own `dataPublishTimeoutSeconds` (W428) — if the two sides disagree about when
+ * the channel is dead, the tighter side manufactures phantom failures.
+ */
+const INPUT_PUBLISH_TIMEOUT_MS = 5_000;
+
+/** Rooms already warned about an abandoned input publish — once per Room. */
+const inputPublishTimeoutWarned = new WeakSet<Room>();
+
+type InputPublishOutcome =
+  | { kind: 'sent' }
+  | { kind: 'timeout' }
+  | { kind: 'failed'; error: unknown };
+
+/**
+ * Await `publish`, but give up after `INPUT_PUBLISH_TIMEOUT_MS`.
+ *
+ * ⛔ Why: `publishData` resolves through livekit's `waitForBufferStatusLow`,
+ * which (livekit-client 2.19.2) settles ONLY on a `bufferedamountlow` event and
+ * rejects only on engine close. There is no timer. On a reliable channel that
+ * stays congested while the engine stays up, the publish NEVER SETTLES.
+ *
+ * The tab-sync path was bounded first because a never-settling publish wedged its
+ * single-flight drain permanently. Input looked safe by comparison — every caller
+ * is fire-and-forget, so nothing deadlocks — but "nothing deadlocks" is not
+ * "nothing accumulates": each abandoned publish retains its promise, its closure
+ * and its encoded frame for the life of the Room. Congestion sheds NEW intent at
+ * source, yet mandatory releases (touchEnd / keyUp / mouseUp) are exempt by
+ * design, so they keep publishing into a congested channel and keep leaking. Over
+ * a long session that grows without bound, which is the shape of the failure this
+ * app is being investigated for.
+ *
+ * ⚠️ The race loser is NOT cancelled — the publish keeps running and may reject
+ * minutes later. Both handlers are attached to `publish` ITSELF (via `.then`'s
+ * two arms) rather than to the race, so an abandoned publish can never surface as
+ * an unhandled rejection attributed to nothing.
+ */
+function publishWithinInputBound(publish: Promise<void>): Promise<InputPublishOutcome> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<InputPublishOutcome>((resolve) => {
+    timer = setTimeout(() => {
+      resolve({ kind: 'timeout' });
+    }, INPUT_PUBLISH_TIMEOUT_MS);
+  });
+  const settled = publish.then(
+    (): InputPublishOutcome => ({ kind: 'sent' }),
+    (error: unknown): InputPublishOutcome => ({ kind: 'failed', error }),
+  );
+  return Promise.race([settled, timeout]).then((result) => {
+    if (timer !== undefined) clearTimeout(timer);
+    return result;
+  });
 }
 
 /** Send a `navigate` command over the SAME reliable LiveKit DataChannel as
