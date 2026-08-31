@@ -152,6 +152,56 @@ jobs:
           fi
           echo "release ${GITHUB_REF_NAME} exists; tauri-action will upload into it"
 
+      # ── The companion Simulator app ────────────────────────────────────
+      #
+      # ⛔ Until this existed, every clean DMG install dead-ended. The launcher
+      # hard-requires /Applications/Driftstack Simulator.app
+      # (SIMULATOR_INSTALL_PATH in src-tauri/src/lib.rs) and this workflow ran
+      # tauri-action against the DEFAULT config only — which builds
+      # `Driftstack.app` and nothing else. A customer installed the DMG, clicked
+      # Launch, and was told to install an app no release distributed. Pinned as
+      # a KNOWN GAP by V-2148; this closes it.
+      #
+      # macOS only by construction: the separate-window Simulator is a macOS
+      # design (Windows/Linux run it in-process) and repair_simulator_install
+      # answers "the separate simulator app is macOS-only" elsewhere. Building it
+      # FIRST and embedding it means ONE drag to /Applications still yields a
+      # working live view: the app self-heals through repair_simulator_install,
+      # whose first candidate is exactly
+      # <bundle>.app/Contents/Resources/Driftstack Simulator.app (V-2147).
+      - name: Build the companion Simulator app
+        if: matrix.platform == 'macos-latest'
+        working-directory: apps/gui-client
+        run: npm run tauri:build:simulator -- --target universal-apple-darwin
+
+      - name: Embed the Simulator in the main bundle's Resources
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          src='apps/gui-client/src-tauri/target/universal-apple-darwin/release/bundle/macos/Driftstack Simulator.app'
+          if [ ! -d "$src" ]; then
+            echo "::error::the Simulator build produced no bundle at $src — the main app would ship without it and every clean install would dead-end again"
+            exit 1
+          fi
+          dest='apps/gui-client/src-tauri/Driftstack Simulator.app'
+          rm -rf "$dest"
+          # ditto, not cp -r: an .app carries symlinks and exec bits, and a lossy
+          # copy yields a bundle that EXISTS but cannot launch — the failure mode
+          # hardest to notice in CI.
+          /usr/bin/ditto "$src" "$dest"
+          # Point the main bundle at it. Injected here rather than committed to
+          # tauri.conf.json because the path only exists after the step above; a
+          # static entry would break the Windows and Linux legs and every local
+          # `tauri build` on a missing resource.
+          node -e "
+            const fs = require('fs');
+            const path = 'apps/gui-client/src-tauri/tauri.conf.json';
+            const cfg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            cfg.bundle.resources = JSON.parse('{\"Driftstack Simulator.app\":\"Driftstack Simulator.app\"}');
+            fs.writeFileSync(path, JSON.stringify(cfg, null, 2));
+          "
+
       - name: Replace TAURI_UPDATER_PUBKEY placeholder
         shell: bash
         run: |
@@ -201,6 +251,33 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
+
+      # ⛔ VERIFY THE EMBED, do not assume it. Tauri copies `resources` itself, and
+      # an .app is a directory of symlinks and exec bits — a lossy copy produces a
+      # bundle that EXISTS and cannot launch, which is invisible to every check
+      # that only tests for presence. Assert the nested app has its Info.plist and
+      # an EXECUTABLE main binary.
+      #
+      # Failure here is deliberately safe: `publish-manifest` needs this job, so a
+      # red verification means no latest.json is written and NO running install is
+      # ever told to update to the broken build.
+      - name: Verify the Simulator really shipped inside the app
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app=$(find apps/gui-client/src-tauri/target -maxdepth 6 -type d -name 'Driftstack.app' -path '*/bundle/macos/*' | head -1)
+          if [ -z "$app" ]; then echo "::error::no built Driftstack.app to verify"; exit 1; fi
+          nested="$app/Contents/Resources/Driftstack Simulator.app"
+          if [ ! -d "$nested" ]; then
+            echo "::error::$app shipped WITHOUT the nested Simulator — repair_simulator_install has nothing to install from, so a clean install still dead-ends at 'Install the Driftstack Simulator app'"
+            exit 1
+          fi
+          plist="$nested/Contents/Info.plist"
+          exe="$nested/Contents/MacOS/Driftstack Simulator"
+          [ -f "$plist" ] || { echo "::error::nested Simulator has no Info.plist — the copy was lossy"; exit 1; }
+          [ -x "$exe" ]   || { echo "::error::nested Simulator's main binary is missing or not executable ($exe) — it would install and refuse to launch"; exit 1; }
+          echo "verified nested Simulator: $(du -sh "$nested" | cut -f1), executable present"
 
   # ── latest.json, assembled ONCE after every platform has uploaded ─────────
   #

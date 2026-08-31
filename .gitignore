@@ -77,3 +77,8 @@ scripts/.*-canary.mjs
 # decision accepted. So this entry is the only one with preventive value; the
 # rest is hygiene.
 docs/internal/OPEN-ITEMS.md
+
+# V-2169 — the release workflow ditto's the built companion here so the main
+# bundle can embed it in Contents/Resources. CI-only staging: a 200MB .app must
+# never reach a commit.
+apps/gui-client/src-tauri/Driftstack Simulator.app/

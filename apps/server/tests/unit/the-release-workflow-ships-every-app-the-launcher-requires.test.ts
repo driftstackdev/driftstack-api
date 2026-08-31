@@ -104,10 +104,28 @@ describe('the GUI release ships every app the launcher requires', () => {
     );
     expect(
       buildsCompanion.test(wf),
-      `gui-release.yml now references the companion build (${sim.productName} / ${sim.configPath}) — the packaging gap is closed. ` +
-        'Flip this arm to assert the build (and, if the bundle nests the companion, its install path), and drop the KNOWN GAP ' +
-        'wording; a pin that asserts a gap after it closes is a lie in the other direction. Until then: every customer who ' +
-        `installs from the release DMG and clicks Launch is told to install "${sim.productName}", an app no release distributes.`,
-    ).toBe(false);
+      `gui-release.yml no longer references the companion build (${sim.productName} / ${sim.configPath}). ` +
+        'The packaging gap has REOPENED: every customer who installs from the release DMG and clicks ' +
+        `Launch is told to install "${sim.productName}", an app no release would distribute.`,
+    ).toBe(true);
+
+    // Building it is not shipping it. The self-repair (V-2147) installs from
+    // <bundle>.app/Contents/Resources/<companion>, so the workflow must put it
+    // THERE. A build whose output is never embedded leaves the customer exactly
+    // where the gap left them.
+    expect(
+      wf,
+      'the workflow builds the companion but never embeds it in the main bundle Resources — ' +
+        'repair_simulator_install would have nothing to install from',
+    ).toMatch(/bundle\.resources|Contents\/Resources/);
+
+    // And the embed must be VERIFIED in CI, not assumed: Tauri copies the resource
+    // itself, and a lossy copy of an .app yields a bundle that exists and cannot
+    // launch — invisible to any check that only tests for presence.
+    expect(
+      wf,
+      'nothing in the release verifies the nested companion is intact; a lossy copy would ' +
+        'ship a Simulator that installs and refuses to launch',
+    ).toMatch(/Verify the Simulator really shipped/);
   });
 });
