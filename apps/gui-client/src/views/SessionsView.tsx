@@ -671,7 +671,7 @@ function EmptyConnect({
   onGoToSettings: () => void;
 }): JSX.Element {
   return (
-    <div className="mx-auto flex h-full w-full max-w-5xl flex-col p-6">
+    <div className="mx-auto flex h-full w-full max-w-5xl flex-col p-6 [&>*]:shrink-0">
       <section className="relative flex flex-col items-center gap-4 overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised px-8 py-14 text-center">
         <div
           aria-hidden="true"

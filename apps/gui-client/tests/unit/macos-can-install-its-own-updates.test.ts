@@ -40,11 +40,33 @@ describe('macOS can install its own updates', () => {
     expect(cap.permissions).toContain('process:default');
   });
 
-  it('the client no longer refuses to self-install on macOS', () => {
-    const src = readFileSync(resolve(__dirname, '../../src/lib/updater.ts'), 'utf8');
-    // The old implementation was `return !mac`, sniffing navigator.platform.
-    expect(src).not.toMatch(/return\s+!mac\s*;/);
-    expect(src).not.toMatch(/navigator\.platform\.startsWith\('Mac'\)/);
+  it('⛔ the REAL predicate says yes on macOS — behaviour, not source text', async () => {
+    // ⛔ THIS ARM WAS VACUOUS AND AN ADVERSARIAL CHECK PROVED IT BY EXECUTION.
+    // It pinned two TOKENS — `return !mac;` and `navigator.platform.startsWith('Mac')`
+    // — so reintroducing the identical bug in a different SHAPE
+    // (`/Mac/i.test(navigator.userAgent)`) passed all eight suites, 53/53, while
+    // driving a real macOS webview straight back to the "Download from GitHub"
+    // banner the owner reported. Pinning the token is not pinning the shape.
+    //
+    // So call the ACTUAL exported predicate under a macOS-looking navigator.
+    const { defaultDeps } = await import('../../src/lib/updater');
+    const original = globalThis.navigator;
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        platform: 'MacIntel',
+        userAgent:
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.4 Safari/605.1.15',
+      },
+      configurable: true,
+    });
+    try {
+      expect(
+        defaultDeps.canSelfInstall(),
+        'a macOS navigator must not be routed to the releases page',
+      ).toBe(true);
+    } finally {
+      Object.defineProperty(globalThis, 'navigator', { value: original, configurable: true });
+    }
   });
 
   it('⛔ keeps the download-only path alive for the platform that needs it next', () => {

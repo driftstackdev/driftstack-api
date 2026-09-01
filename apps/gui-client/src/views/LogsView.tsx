@@ -158,7 +158,7 @@ export function LogsView(): JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full flex-col gap-4 p-6 [&>*]:shrink-0">
       {/* Page hero — an accent icon chip + a radial identity glow, the live
           entry count / error tally, and the Copy + Clear actions anchored on
           the right. Matches the Command Center / Settings gradient-card

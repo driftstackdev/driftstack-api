@@ -81,7 +81,7 @@ export interface UpdaterDeps {
   /**
    * Whether THIS platform is allowed to replace its own bundle.
    *
-   * ⛔ False on macOS, and that is a capability fact rather than a preference:
+   * ⛔ (RETIRED 2026-09-01 — was false on macOS), and that is a capability fact rather than a preference:
    * `updater-check-macos` grants `updater:allow-check` and nothing else, so
    * `check()` resolves but `downloadAndInstall()` is denied at the IPC layer.
    * Without this, a successful check would hand the UI an Install button whose
@@ -139,7 +139,7 @@ function platformNeedsManualRelaunch(): boolean {
   return !win;
 }
 
-const defaultDeps: UpdaterDeps = {
+export const defaultDeps: UpdaterDeps = {
   canSelfInstall: platformCanSelfInstall,
   needsManualRelaunch: platformNeedsManualRelaunch,
   currentVersion: async () => {
@@ -208,14 +208,22 @@ export async function checkForUpdate(
   if (!update) return null;
 
   const offered = update;
-  // ⭐ THE macOS PATH, and it is why this function exists in this shape.
+  // ⭐ WHY THIS FUNCTION EXISTS IN THIS SHAPE — historical, and the history is
+  // now RETIRED. macOS used to hold `updater:allow-check` ONLY, so installing
+  // could not be offered: the capability denied it and the button could only
+  // ever fail. That is no longer true (V-2190, 2026-09-01) — macOS holds
+  // `updater:default` + `process:default` like every other platform, because
+  // the exclusion protected the code requirement of an OS-signed bundle and the
+  // shipped app is adhoc-signed with no Team ID.
   //
-  // macOS holds `updater:allow-check` ONLY. The check itself is Rust-side, so it
-  // is not subject to the webview CORS rule that silently broke the manifest
-  // fallback (GitHub's release-asset redirect sends no Access-Control-Allow-Origin,
-  // so `fetch` rejected before the app could read the version and the customer was
-  // told nothing). Checking works here; installing must not be offered, because
-  // the capability denies it and the button could only ever fail.
+  // ⚠️ The Rust-side check still matters and is unchanged: it is not subject to
+  // the webview CORS rule that silently broke the manifest fallback (GitHub's
+  // release-asset redirect sends no Access-Control-Allow-Origin, so `fetch`
+  // rejected before the app could read the version and the customer was told
+  // nothing at all).
+  //
+  // ⛔ The `!canInstall` branch below is therefore UNREACHABLE through
+  // `defaultDeps` today. It is kept, not deleted — see `downloadOnly`.
   const canInstall = deps.canSelfInstall();
   // Defend against a botched/rolled-back manifest that lists the installed
   // version (or older): Tauri's check() USUALLY filters, but with no app-side

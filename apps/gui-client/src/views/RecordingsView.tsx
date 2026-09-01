@@ -156,7 +156,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
   };
 
   return (
-    <div className="flex h-full flex-col gap-4 p-6">
+    <div className="flex h-full flex-col gap-4 p-6 [&>*]:shrink-0">
       {/* HERO — the gradient identity card shared with Command Center /
           Sessions / Settings: an accent icon chip + a radial identity glow,
           the section-label + title + at-a-glance context on the left.

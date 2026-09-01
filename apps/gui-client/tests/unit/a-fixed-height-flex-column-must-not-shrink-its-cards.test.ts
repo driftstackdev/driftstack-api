@@ -57,6 +57,51 @@ function fixedHeightScrollColumns(): Container[] {
   return found;
 }
 
+/**
+ * ⛔ THE CLIPPING HERO IS THE REAL POPULATION, and the first version of this
+ * guard missed two files by measuring the wrong thing.
+ *
+ * It required `overflow-y-auto` ON THE COLUMN — which is not part of the
+ * mechanism. The mechanism is: a fixed-height flex column, plus a direct child
+ * whose own overflow is not `visible`. Whether the column scrolls is incidental.
+ * That proxy covered 6 of 28 candidate columns and let LogsView, RecordingsView
+ * and SessionsView's EmptyConnect ship unprotected — the last being the FIRST
+ * screen a customer without an API key sees.
+ *
+ * So this arm derives from the clipping card itself. Any file that ships the
+ * hero must protect the column that holds it.
+ */
+const CLIPPING_HERO =
+  'relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised';
+
+describe('every view shipping the clipping hero protects its column', () => {
+  const withHero = walk(SRC).filter((f) => readFileSync(f, 'utf8').includes(CLIPPING_HERO));
+
+  it('finds the hero in more than the five originally claimed', () => {
+    // The original fix said "five views". It was seven. A non-vacuity floor set
+    // at the claimed number would have agreed with the mistake.
+    expect(withHero.length).toBeGreaterThanOrEqual(7);
+  });
+
+  it.each(withHero.map((f) => [f.slice(SRC.length + 1), f] as const))(
+    '%s protects its fixed-height column',
+    (_label, file) => {
+      const src = readFileSync(file, 'utf8');
+      const columns = [...src.matchAll(/className="([^"]*)"/g)]
+        .map((m) => m[1] ?? '')
+        .filter((c) => c.includes('flex-col') && c.includes('h-full'));
+      // ⭐ A hero in a column with NO `h-full` is SAFE and is the better pattern —
+      // CommandCenterView is exactly that, which is why it never clipped. The
+      // rule only binds where a fixed-height column exists to do the shrinking.
+      if (columns.length === 0) return;
+      expect(
+        columns.some((c) => c.includes('[&>*]:shrink-0')),
+        `ships the clipping hero inside a fixed-height column with no [&>*]:shrink-0 — the hero collapses to a bar and clips its own title`,
+      ).toBe(true);
+    },
+  );
+});
+
 describe('a fixed-height flex column must not shrink its cards', () => {
   const columns = fixedHeightScrollColumns();
 
