@@ -81,10 +81,21 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
     expect(body).toContain('const RECENT_PROFILES_LIMIT = 5;');
   });
 
-  it('profileMonogram: first non-space char uppercased, blank → "?"', () => {
-    expect(body).toMatch(
-      /export function profileMonogram\(name: string\): string \{\s*const ch = name\.trim\(\)\.charAt\(0\);\s*return ch === '' \? '\?' : ch\.toUpperCase\(\);/,
-    );
+  it('profileMonogram is TOTAL — it takes unknown, not string', () => {
+    // ⛔ Repointed V-2191. This pinned `(name: string)` and `name.trim()`
+    // directly. It ran inside a render `.map()` over network data, and the SDK
+    // does `JSON.parse(text) as T` — it CASTS, never validates — so the
+    // compile-time `string` was a promise about the server, not a fact about the
+    // value. An absent name threw "Cannot read properties of undefined (reading
+    // 'trim')" and took the ENTIRE Command Center to the fatal error boundary.
+    // Reproduced in a real browser by rendering against a malformed profile.
+    //
+    // The pin now holds the TOTALITY rather than the old signature: the
+    // behaviour (first non-space char uppercased, blank → "?") is unchanged.
+    expect(body).toMatch(/export function profileMonogram\(name: unknown\): string \{/);
+    expect(body).toMatch(/if \(typeof name !== 'string'\) return '\?';/);
+    expect(body).toMatch(/const ch = name\.trim\(\)\.charAt\(0\);/);
+    expect(body).toMatch(/return ch === '' \? '\?' : ch\.toUpperCase\(\);/);
   });
 
   it('"Jump back in" keeps bounded workspace-scoped cached profiles visible while refreshing, then marks fresh or stale truthfully', () => {
@@ -102,8 +113,13 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
     );
     expect(body).toContain("? 'Refreshing recent profiles…'");
     expect(body).toContain(": 'Couldn’t refresh — showing your recent profiles.'");
+    // ⛔ Repointed V-2191: the map now COERCES at the boundary rather than
+    // trusting the cast, so each field is guarded instead of passed through.
+    expect(body).toMatch(/sortRecentProfiles\(/);
+    expect(body).toMatch(/id: typeof p\.id === 'string' \? p\.id : ''/);
+    expect(body).toMatch(/name: typeof p\.name === 'string' \? p\.name : ''/);
     expect(body).toMatch(
-      /sortRecentProfiles\(\s*page\.data\.map\(\(p\) => \(\{ id: p\.id, name: p\.name, last_used_at: p\.last_used_at \}\)\),\s*RECENT_PROFILES_LIMIT,\s*\)/,
+      /last_used_at: typeof p\.last_used_at === 'string' \? p\.last_used_at : null/,
     );
   });
 

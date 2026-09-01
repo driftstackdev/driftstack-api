@@ -590,6 +590,13 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
         'https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json',
       ],
       pubkey: '$TAURI_UPDATER_PUBKEY',
+      // ⛔ V-2191: stated, not defaulted. The owner hit "it installs, and then the
+      // program just shutdowns, no new update installed" on Windows — the app was
+      // relaunching itself while the NSIS installer was replacing the running
+      // .exe. The relaunch is now platform-conditional, and the install mode is
+      // written down next to the behaviour that depends on it rather than being
+      // inherited from a default nobody can see in this file.
+      windows: { installMode: 'passive' },
     });
     expect('active' in config.plugins.updater).toBe(false);
     // 2026-06-01 — `dialog` removed: it was a Tauri-v1 updater key that did
