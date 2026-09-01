@@ -38,6 +38,27 @@ describe('the AI composer is sized for the prompts it invites', () => {
     expect(body).toContain('rows={COMPOSER_ROWS}');
   });
 
+  it('⛔ the CSS cap matches the JS cap — they are two caps, in two languages', () => {
+    // The textarea carried `max-h-72` = 288px, the exact value this fix believed
+    // it had raised. `max-height` beats an inline `style.height`, so the JS cap
+    // was dead and the composer still stopped at the old size. An adversarial
+    // check found it; the suite did not, because nothing compared the two.
+    const cap = /const COMPOSER_MAX_HEIGHT_PX = (\d+);/.exec(body)?.[1];
+    expect(cap).toBeDefined();
+    expect(body, 'the Tailwind max-h must equal COMPOSER_MAX_HEIGHT_PX').toContain(
+      `max-h-[${String(cap)}px]`,
+    );
+    // And no fixed-rem cap may return: a Tailwind max-h-<n> is 288px at n=72 and
+    // reads as harmless. ⚠️ Comments stripped first — the prose above explaining
+    // this trap contains the banned token, so a naive negative flags the fix as
+    // the defect. Third time today a guard nearly accused its own explanation.
+    const code = body
+      .split('\n')
+      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line.trim()))
+      .join('\n');
+    expect(code).not.toMatch(/max-h-\d+\b/);
+  });
+
   it('the ceiling leaves room for a multi-step task', () => {
     const cap = /const COMPOSER_MAX_HEIGHT_PX = (\d+);/.exec(body)?.[1];
     expect(cap, 'COMPOSER_MAX_HEIGHT_PX must be declared').toBeDefined();

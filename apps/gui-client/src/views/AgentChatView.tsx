@@ -1028,7 +1028,7 @@ export function AgentChatView({
                   submit();
                 }
               }}
-              className="form-input max-h-72 min-h-[5.5rem] flex-1 resize-none text-sm leading-relaxed"
+              className="form-input max-h-[420px] min-h-[5.5rem] flex-1 resize-none text-sm leading-relaxed"
             />
             {chat.sending ? (
               <button
@@ -1825,6 +1825,19 @@ function AgentResponseBody({
  * path — and they were separate literals that could drift apart silently.
  */
 const COMPOSER_MAX_HEIGHT_PX = 420;
+
+/**
+ * ⛔ THE CSS CAP MUST MATCH `COMPOSER_MAX_HEIGHT_PX`, and it did not.
+ *
+ * The textarea carried `max-h-72` — Tailwind for **288px**, the exact value
+ * V-2183 believed it had raised. The inline `style.height` could be set to
+ * 420px and `max-height: 18rem` still won, so the composer kept stopping at the
+ * old height and the fix was invisible to the customer who reported it.
+ *
+ * Two caps that must agree, expressed in two languages, neither aware of the
+ * other — the same drift the shared constant was introduced to prevent, one
+ * layer down. Now `max-h-[420px]`, and pinned to this constant by a guard.
+ */
 
 /** Rows shown before any typing. */
 const COMPOSER_ROWS = 5;
