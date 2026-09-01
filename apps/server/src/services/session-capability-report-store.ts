@@ -32,6 +32,38 @@ export interface SessionCapabilityReport {
   streaming_health: NonNullable<CapabilityReport['streamingHealth']> | null;
 }
 
+/**
+ * The subset of a stored report that may cross to a CUSTOMER.
+ *
+ * ⛔ AN EXPLICIT ALLOWLIST, NOT A SPREAD. `GET /v1/agent-sessions/:id` used to
+ * assign the whole store record to `capability_report`, so every field added
+ * here for internal use silently became part of a public API response. That is
+ * leak-by-default: the safe case required remembering, and the unsafe case was
+ * the one that happened automatically.
+ *
+ * It happened immediately — adding `streaming_health` for operator diagnosis
+ * put eleven harness counters into a customer payload in the same commit, and
+ * only a shape test caught it. Adding a field to this function is now a
+ * deliberate act with a reviewer.
+ */
+export type CustomerSafeCapabilityReport = Omit<SessionCapabilityReport, 'streaming_health'>;
+
+export function customerSafeCapabilityReport(
+  report: SessionCapabilityReport,
+): CustomerSafeCapabilityReport {
+  return {
+    timestamp: report.timestamp,
+    manual_input_available: report.manual_input_available,
+    streaming_state: report.streaming_state,
+    egress_state: report.egress_state,
+    proxy_kind: report.proxy_kind,
+    proxy_udp_supported: report.proxy_udp_supported,
+    transport_mode_requested: report.transport_mode_requested,
+    transport_mode_active: report.transport_mode_active,
+    safeguards_passed: report.safeguards_passed,
+  };
+}
+
 export class SessionCapabilityReportStore {
   private readonly map = new Map<string, SessionCapabilityReport>();
 

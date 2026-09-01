@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { CapabilityReportSchema } from '../../src/schemas/harness-control-protocol.js';
-import { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
+import {
+  customerSafeCapabilityReport,
+  SessionCapabilityReportStore,
+} from '../../src/services/session-capability-report-store.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /**
  * B-9 — the control-plane half of A3's per-session streaming telemetry.
@@ -117,6 +122,50 @@ describe('streaming health: absent must never read as healthy', () => {
       { videoFpsMean: -3 },
     ]) {
       expect(CapabilityReportSchema.safeParse(frame({ streamingHealth: bad })).success).toBe(false);
+    }
+  });
+});
+
+describe('an internal store field must not leak into the customer payload', () => {
+  // ⛔ `GET /v1/agent-sessions/:id` assigned the WHOLE store record to
+  // `capability_report`, so every field added for internal use silently became
+  // part of a public API response. Leak-by-default: the safe case required
+  // remembering, the unsafe case happened automatically.
+  //
+  // It fired immediately — adding `streaming_health` for operator diagnosis put
+  // eleven harness counters into a customer payload in the same commit, and only
+  // a shape test caught it. The projection is now an explicit allowlist.
+
+  it('the customer projection drops streaming_health', () => {
+    const store = new SessionCapabilityReportStore();
+    const parsed = CapabilityReportSchema.safeParse(
+      frame({ streamingHealth: { subscribers: 3, videoFpsMin: 2 } }),
+    );
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) return;
+    store.set(parsed.data);
+    const stored = store.get('ses_health');
+    expect(stored?.streaming_health).toEqual({ subscribers: 3, videoFpsMin: 2 });
+
+    const projected = customerSafeCapabilityReport(stored!);
+    expect('streaming_health' in projected).toBe(false);
+  });
+
+  it('the projection names its fields explicitly rather than spreading', () => {
+    // A spread would re-open the leak the moment anyone adds a field. Read the
+    // source: the function must not use `...report`.
+    const src = readFileSync(
+      resolve(__dirname, '../../src/services/session-capability-report-store.ts'),
+      'utf8',
+    );
+    const body = src.slice(src.indexOf('export function customerSafeCapabilityReport'));
+    const fn = body.slice(0, body.indexOf('\n}'));
+    expect(fn, 'the customer projection must be an allowlist, not a spread').not.toMatch(
+      /\.\.\.\s*report/,
+    );
+    // And it must still carry the fields customers already depend on.
+    for (const field of ['timestamp', 'streaming_state', 'egress_state', 'safeguards_passed']) {
+      expect(fn).toContain(field);
     }
   });
 });

@@ -112,9 +112,10 @@ import type {
   SessionLivenessState,
 } from '../services/session-liveness-store.js';
 import type {
-  SessionCapabilityReport,
+  CustomerSafeCapabilityReport,
   SessionCapabilityReportStore,
 } from '../services/session-capability-report-store.js';
+import { customerSafeCapabilityReport } from '../services/session-capability-report-store.js';
 import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
@@ -390,7 +391,7 @@ interface PublicAgentSession {
   liveness?: { state: SessionLivenessState | null; fresh: boolean };
   /** Latest validated harness capability/health state. Omitted until a report
    * arrives (or when the fleet control plane is disabled). */
-  capability_report?: SessionCapabilityReport;
+  capability_report?: CustomerSafeCapabilityReport;
   /** Latest authenticated harness failure. Durable so the producer's
    * post-terminal errorEvent remains available after close/restart. */
   error_event: {
@@ -483,7 +484,11 @@ function publicAgentSession(
   if (liveness !== undefined) base.liveness = liveness;
   if (rec.status !== 'closed') {
     const capabilityReport = capabilityReportStore?.get(rec.id) ?? null;
-    if (capabilityReport !== null) base.capability_report = capabilityReport;
+    // ⛔ Projected, never spread — see customerSafeCapabilityReport. Assigning
+    // the store record directly made every internal field a public one.
+    if (capabilityReport !== null) {
+      base.capability_report = customerSafeCapabilityReport(capabilityReport);
+    }
   }
   return base;
 }

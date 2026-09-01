@@ -39,6 +39,9 @@ describe('SessionCapabilityReportStore', () => {
       transport_mode_requested: 'h2-and-h3',
       transport_mode_active: 'h2-and-h3',
       safeguards_passed: true,
+      // ⛔ null, not an object of zeroes: absent means the node never reported,
+      // which must never render as a healthy stream (V-2188).
+      streaming_health: null,
     });
 
     store.set(
