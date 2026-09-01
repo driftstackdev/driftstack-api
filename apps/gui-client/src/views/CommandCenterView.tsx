@@ -587,7 +587,11 @@ export function CommandCenterView({
             // number and visibly contradicting (audit: liveNow=3 vs Running=1).
             label="Active"
             value={liveNow !== null ? String(liveNow) : '—'}
-            accent
+            // ⛔ Conditional, not unconditional. This was a bare `accent`, so a
+            // count of ZERO rendered in the live/ready colour — the page's
+            // most-read number saying "running" while nothing was. Accent now
+            // means there IS something live; nothing live reads neutral.
+            accent={liveNow !== null && liveNow > 0}
             onClick={liveNowAction}
             title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
           />
@@ -949,15 +953,18 @@ function Kpi({
   const inner = (
     <>
       <span
-        className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'}`}
+        className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${accent ? 'bg-accent/15 text-accent' : 'bg-surface-inset text-ink-secondary'}`}
         aria-hidden="true"
       >
         {icon}
       </span>
       <div className="flex min-w-0 flex-col">
         <span className="section-label">{label}</span>
+        {/* The value, not the label, is what this card exists to show. It was
+            `text-xl` — barely above body copy — so a strip of four KPIs read as
+            four labels with footnotes. Owner: the page "looks too boring". */}
         <span
-          className={`mono text-xl font-semibold tabular-nums ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
+          className={`mono text-3xl font-semibold leading-none tabular-nums ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
         >
           {value}
         </span>
