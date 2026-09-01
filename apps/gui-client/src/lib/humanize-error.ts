@@ -16,14 +16,21 @@ export function humanizeError(
   // contract fields and never reflect that prose into the installed client.
   const record =
     error !== null && typeof error === 'object'
-      ? (error as { kind?: unknown; status?: unknown })
+      ? (error as { kind?: unknown; status?: unknown; issues?: unknown })
       : null;
   const kind = typeof record?.kind === 'string' ? record.kind : '';
   const status =
     typeof record?.status === 'number' && Number.isInteger(record.status) ? record.status : 0;
   if (kind !== '' && kind !== 'transport') {
     const problemKind = kind === 'validation' ? 'validation-failed' : kind.replaceAll('_', '-');
-    return fixedApiErrorMessage(`${PROBLEM_TYPE_PREFIX}${problemKind}`, status);
+    // The SDK's ValidationError carries the server's Zod flatten() in `issues`.
+    // Only the field NAMES cross into copy — see validationFieldNames.
+    return fixedApiErrorMessage(
+      `${PROBLEM_TYPE_PREFIX}${problemKind}`,
+      status,
+      undefined,
+      validationFieldNames(record?.issues),
+    );
   }
   if (status >= 400 && status <= 599) return fixedApiErrorMessage('', status);
 
@@ -51,6 +58,6 @@ export function humanizeError(
   }
   return fallback;
 }
-import { fixedApiErrorMessage } from './api-errors';
+import { fixedApiErrorMessage, validationFieldNames } from './api-errors';
 
 const PROBLEM_TYPE_PREFIX = 'https://errors.driftstack.dev/';

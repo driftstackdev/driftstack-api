@@ -63,10 +63,45 @@ const PROXY_REASON_COPY: Record<KnownReason, string> = {
     'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
 };
 
+/**
+ * The field names a server-side validation failure named, safe to show.
+ *
+ * ⛔ The owner hit a 400 whose only customer-facing text was "Some information
+ * was not accepted. Check your input and try again." — true, and useless. The
+ * cause was a `model` the deployed server's enum did not know, and finding that
+ * took reading the route's Zod schema and comparing the deployed SHA against
+ * main. The server HAD said which field: `ValidationError.issues` carries the
+ * Zod `flatten()`, and the GUI never read it.
+ *
+ * ⚠️ NAMES ONLY, NEVER MESSAGES. `humanize-error.ts` deliberately refuses to
+ * reflect remote prose into the installed client, and that rule is right — a
+ * `detail` string is attacker-influenced in a way a field key is not. So this
+ * takes only the KEYS, and only those shaped like an API field: lowercase
+ * snake_case, bounded length, at most three. Anything else is dropped rather
+ * than rendered.
+ */
+export function validationFieldNames(issues: unknown): string[] {
+  if (issues === null || typeof issues !== 'object') return [];
+  const fieldErrors = (issues as { fieldErrors?: unknown }).fieldErrors;
+  if (fieldErrors === null || typeof fieldErrors !== 'object' || Array.isArray(fieldErrors)) {
+    return [];
+  }
+  const SAFE_FIELD = /^[a-z][a-z0-9_]{0,40}$/;
+  const names: string[] = [];
+  for (const key of Object.keys(fieldErrors)) {
+    if (!SAFE_FIELD.test(key)) continue;
+    names.push(key);
+    if (names.length === 3) break;
+  }
+  return names;
+}
+
 export function fixedApiErrorMessage(
   problemType: string,
   status: number,
   reason?: KnownReason,
+  /** Field names from a server validation failure — see validationFieldNames. */
+  fields?: ReadonlyArray<string>,
 ): string {
   const kind = problemType.startsWith(PROBLEM_TYPE_PREFIX)
     ? problemType.slice(PROBLEM_TYPE_PREFIX.length)
@@ -100,6 +135,12 @@ export function fixedApiErrorMessage(
     return 'A usage limit was reached. Wait a moment or review your plan, then try again.';
   }
   if (['bad-request', 'validation-failed'].includes(kind)) {
+    // Naming the field turns an unactionable message into an actionable one.
+    // Without it the owner's 400 read identically whether the model, the proxy
+    // id or the token budget was rejected.
+    if (fields !== undefined && fields.length > 0) {
+      return `Some information was not accepted: ${fields.join(', ')}. Check it and try again.`;
+    }
     return 'Some information was not accepted. Check your input and try again.';
   }
   if (['conflict', 'pair-mode-conflict', 'pair-mode-invalid-transition'].includes(kind)) {
