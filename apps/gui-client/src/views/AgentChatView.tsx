@@ -634,7 +634,7 @@ export function AgentChatView({
       const end = el.value.length;
       el.setSelectionRange(end, end);
       el.style.height = 'auto';
-      el.style.height = `${Math.min(el.scrollHeight, 288)}px`;
+      el.style.height = `${Math.min(el.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
     });
   }
 
@@ -1013,14 +1013,14 @@ export function AgentChatView({
             <textarea
               ref={composerRef}
               aria-label="Message Driftstack AI"
-              rows={3}
+              rows={COMPOSER_ROWS}
               value={draft}
               placeholder="Describe a task in plain English — e.g. “Go to example.com, accept the cookie banner, then search for ‘pricing’ and screenshot the result.”  ⏎ to send · ⇧⏎ for a new line"
               onChange={(e) => {
                 setDraft(e.target.value);
                 // #139 — LLM-composer feel: grow with the content up to a cap.
                 e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 288)}px`;
+                e.target.style.height = `${Math.min(e.target.scrollHeight, COMPOSER_MAX_HEIGHT_PX)}px`;
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -1810,6 +1810,24 @@ function AgentResponseBody({
       return <p className="text-sm text-ink-muted">This step can’t be shown in this version.</p>;
   }
 }
+
+/**
+ * Composer autogrow ceiling.
+ *
+ * Owner 2026-08-31: "the text bar should be larger". The composer opened at 3
+ * rows and capped at 288px, which is cramped for the thing it actually asks for
+ * — its own placeholder is a two-clause task description, and the task the owner
+ * typed ("go to X, create an account with this email, tell me when a code is
+ * needed") does not fit in three rows. A prompt box smaller than the prompts it
+ * invites reads as a search field.
+ *
+ * Named because TWO sites grow this textarea — onChange and the restore-focus
+ * path — and they were separate literals that could drift apart silently.
+ */
+const COMPOSER_MAX_HEIGHT_PX = 420;
+
+/** Rows shown before any typing. */
+const COMPOSER_ROWS = 5;
 
 function PlanStep({ result, denied }: { result: AgentIntentResult; denied: boolean }): JSX.Element {
   const { glyph, cls, text } = describeResult(result, denied);
