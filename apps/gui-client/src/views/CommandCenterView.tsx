@@ -78,7 +78,23 @@ export function sortRecentProfiles(
 }
 
 // First letter of the profile name, for the monogram chip; '?' when blank.
-export function profileMonogram(name: string): string {
+export function profileMonogram(name: unknown): string {
+  // ⛔ TOTAL ON PURPOSE — it takes `unknown`, not `string`.
+  //
+  // This runs inside a render `.map()` over data that arrived from the network,
+  // and the SDK does `JSON.parse(text) as T`: it CASTS, it never validates. So
+  // the compile-time `name: string` is a promise about the server, not a fact
+  // about this value. When it was typed `string` an absent name threw
+  // "Cannot read properties of undefined (reading 'trim')" and took the ENTIRE
+  // Command Center — the app's home page — to the fatal error boundary, needing
+  // a reload. One missing string for a total page loss is a blast radius wildly
+  // out of proportion to its cause.
+  //
+  // ⚠️ Not currently reachable through a CONFORMING server: `ProfileSchema` has
+  // `name: z.string()`, required and non-nullable. This is defence in depth
+  // against the gap between that guarantee and the unvalidated cast, which is
+  // exactly the gap a rollback, a proxy, or a partial outage lands in.
+  if (typeof name !== 'string') return '?';
   const ch = name.trim().charAt(0);
   return ch === '' ? '?' : ch.toUpperCase();
 }
@@ -383,7 +399,15 @@ export function CommandCenterView({
       .then((page) => {
         if (cancelled) return;
         const profiles = sortRecentProfiles(
-          page.data.map((p) => ({ id: p.id, name: p.name, last_used_at: p.last_used_at })),
+          // Coerced at the boundary, not trusted: the SDK casts the response
+          // rather than parsing it, so a field the schema promises can still
+          // arrive absent. Normalising here keeps every downstream consumer
+          // total instead of each one re-guarding.
+          page.data.map((p) => ({
+            id: typeof p.id === 'string' ? p.id : '',
+            name: typeof p.name === 'string' ? p.name : '',
+            last_used_at: typeof p.last_used_at === 'string' ? p.last_used_at : null,
+          })),
           RECENT_PROFILES_LIMIT,
         );
         if (recentProfilesScope !== null) writeRecentProfilesCache(recentProfilesScope, profiles);

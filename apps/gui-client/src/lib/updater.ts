@@ -88,6 +88,9 @@ export interface UpdaterDeps {
    * only possible outcome is a permission error.
    */
   canSelfInstall: () => boolean;
+  /** False on Windows: its installer restarts the app itself. Optional so a
+   *  deps object predating it keeps the old always-relaunch behaviour. */
+  needsManualRelaunch?: () => boolean;
 }
 
 /**
@@ -108,8 +111,37 @@ function platformCanSelfInstall(): boolean {
   return true;
 }
 
+/**
+ * Whether THIS app must relaunch itself after installing, or whether the
+ * platform's installer owns the restart.
+ *
+ * ⛔ WINDOWS OWNS ITS OWN RESTART AND CALLING relaunch() THERE BREAKS THE UPDATE.
+ * Owner-reported on 0.1.8, 2026-09-01: "it installs, and then the program just
+ * shutdowns, no new update installed."
+ *
+ * On Windows `downloadAndInstall()` launches the NSIS installer and the app must
+ * EXIT so the installer can overwrite the running .exe. Calling `relaunch()`
+ * instead spawns a fresh copy of the OLD binary and exits the current one — so a
+ * process is still holding the file the installer is trying to replace. The
+ * install fails, the app disappears, and the customer is left on the old version
+ * with no error: exactly the reported symptom.
+ *
+ * macOS and Linux are the opposite: the bundle is swapped in place while the app
+ * runs, and nothing restarts it unless we do.
+ *
+ * ⚠️ UNVERIFIED ON WINDOWS FROM HERE — this box is a Mac. The reasoning is from
+ * Tauri v2's documented platform split plus the reported symptom; it should be
+ * confirmed on a real Windows install before this row is called closed.
+ */
+function platformNeedsManualRelaunch(): boolean {
+  if (typeof navigator === 'undefined') return true;
+  const win = /Win/i.test(navigator.platform ?? '') || /Windows/i.test(navigator.userAgent ?? '');
+  return !win;
+}
+
 const defaultDeps: UpdaterDeps = {
   canSelfInstall: platformCanSelfInstall,
+  needsManualRelaunch: platformNeedsManualRelaunch,
   currentVersion: async () => {
     try {
       const { resolveAppVersion } = await import('./app-version');
@@ -229,9 +261,19 @@ export async function checkForUpdate(
             break;
         }
       });
-      // The bundle is installed (and verified). Relaunch so the customer
-      // lands in the new version immediately rather than on next launch.
-      await deps.relaunch();
+      // The bundle is installed (and verified).
+      //
+      // ⛔ ONLY WHERE WE OWN THE RESTART. On Windows the NSIS installer owns it,
+      // and relaunching here respawns the OLD binary onto the file the installer
+      // is mid-way through replacing — the update then fails silently and the
+      // app vanishes. Elsewhere the bundle is swapped in place and nothing
+      // restarts the app unless we do, so the customer would sit on the old
+      // version until they quit.
+      // ⚠️ `?? true` — a deps object that predates this field keeps the OLD
+      // behaviour (always relaunch) instead of throwing. Only a caller that
+      // explicitly says "the installer owns the restart" skips it, so the
+      // dangerous direction requires an affirmative statement.
+      if (deps.needsManualRelaunch?.() ?? true) await deps.relaunch();
     },
   };
 }

@@ -102,7 +102,10 @@
       "endpoints": [
         "https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json"
       ],
-      "pubkey": "$TAURI_UPDATER_PUBKEY"
+      "pubkey": "$TAURI_UPDATER_PUBKEY",
+      "windows": {
+        "installMode": "passive"
+      }
     },
     "deep-link": {
       "mobile": [],
