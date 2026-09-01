@@ -18,6 +18,18 @@ export interface SessionCapabilityReport {
   transport_mode_requested: CapabilityReport['transportModeRequested'];
   transport_mode_active: CapabilityReport['transportModeActive'];
   safeguards_passed: boolean;
+  /**
+   * Per-session streaming degradation counters, when the node reported them.
+   *
+   * ⛔ `null` means UNKNOWN — the node never sent them (older build, or the
+   * `DRIFTSTACK_STREAMING_HEALTH_REPORT` flag is off) — and must never be
+   * rendered as healthy. This deliberately does NOT default to an object of
+   * zeroes: a zero fps for a session nobody measured reads as a dead stream,
+   * and a zero stall count for the same session reads as a clean one. Both are
+   * claims from no evidence, which is exactly the `safeguards_passed`-off-an-
+   * empty-array defect above.
+   */
+  streaming_health: NonNullable<CapabilityReport['streamingHealth']> | null;
 }
 
 export class SessionCapabilityReportStore {
@@ -47,6 +59,8 @@ export class SessionCapabilityReportStore {
       // "a check failed".
       safeguards_passed:
         frame.safeguardChecks.length > 0 && frame.safeguardChecks.every((check) => check.passed),
+      // `?? null` and never `?? {}` — see the field doc. Absent stays absent.
+      streaming_health: frame.streamingHealth ?? null,
     });
     if (this.map.size > this.maxEntries) {
       const oldest = this.map.keys().next().value;

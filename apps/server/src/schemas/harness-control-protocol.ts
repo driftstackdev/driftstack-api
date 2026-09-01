@@ -1248,6 +1248,56 @@ const CapabilityReportPayloadSchema = z.object({
   manualInputAvailable: z.boolean().optional(),
   streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),
   egressState: z.enum(['live', 'dead_proxy']).optional(),
+  /**
+   * Per-session streaming degradation counters (A3 B-9, harness half
+   * `d92f331ff` + `bc0b5a3ea`, gated on `DRIFTSTACK_STREAMING_HEALTH_REPORT=1`).
+   *
+   * These reached NOBODY before this field: each landed in the node's own
+   * stderr, `Heartbeat` carries host health only, and neither `PageState` nor
+   * this frame had anywhere to put them. So when the owner said "the stream is
+   * choppy", the evidence existed on a box nobody reads.
+   *
+   * ⛔ NOT `safeguardChecks`, which is shaped to fit and would have been WRONG.
+   * `layer` is an open string so the schema would have ACCEPTED a streaming
+   * entry — only the meaning would have broken. `session-capability-report-store`
+   * computes `safeguards_passed` with `.every(c => c.passed)`, and the relay
+   * pushes a customer-visible `safeguard_failed:<layer>` warning, so ONE choppy
+   * stream would have been reported as a session-wide safeguard failure. A
+   * validator that passes a semantically wrong value is worse than one that
+   * rejects it, because the rejection is the only place anyone looks.
+   *
+   * ⛔ EVERY FIELD IS OPTIONAL AND ABSENT UNTIL MEASURED — NEVER 0. Absent means
+   * UNKNOWN: never healthy, and never broken either. A zero fps for a session
+   * nobody has measured reads as a dead stream; a zero `inputStalls` for the
+   * same session reads as a clean one. Both are claims made from no evidence,
+   * which is the same defect as `safeguards_passed` returning true off an empty
+   * array. A3 pins nil harness-side so a refactor that "helpfully" defaults
+   * these to zero fails there rather than in the GUI.
+   *
+   * ⭐ Render `videoFpsMin`, not the mean: stutter is a MINIMUM problem, and a
+   * stream averaging 30fps that dips to 4 looks fine in the mean and awful to
+   * the operator. Loss is carried as the MAX for the same reason — a burst is
+   * what the viewer actually sees.
+   */
+  streamingHealth: z
+    .object({
+      // Counters. Bounded like every other number on this wire: a node is
+      // already JWT-authed, but a bounded field cannot become a surprise.
+      subscribers: z.number().int().min(0).max(10_000).optional(),
+      framesPublished: z.number().int().min(0).max(1_000_000_000).optional(),
+      timestampClamps: z.number().int().min(0).max(1_000_000_000).optional(),
+      inputAcksDropped: z.number().int().min(0).max(1_000_000_000).optional(),
+      inputAckPublishFailures: z.number().int().min(0).max(1_000_000_000).optional(),
+      inboundDroppedNoReceiver: z.number().int().min(0).max(1_000_000_000).optional(),
+      inputStalls: z.number().int().min(0).max(1_000_000_000).optional(),
+      // Measured directly from the SDK's per-track statistics — every counter
+      // above is a proxy for what these three measure.
+      videoFpsMean: z.number().min(0).max(1000).optional(),
+      videoFpsMin: z.number().min(0).max(1000).optional(),
+      videoLossFractionMax: z.number().min(0).max(1).optional(),
+      videoRttMsMean: z.number().min(0).max(600_000).optional(),
+    })
+    .optional(),
 });
 
 export const CapabilityReportSchema = CapabilityReportPayloadSchema.transform((frame, ctx) => {
