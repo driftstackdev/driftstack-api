@@ -360,6 +360,17 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // product needs (V-2153 widened it and the page-state error-grace test caught the
 // regression). The lagging-frame window that V-2153 actually needed is
 // SWITCH_LAGGING_FRAME_GRACE_MS below.
+/**
+ * When a navigation stops looking normal, and when it stops looking survivable.
+ *
+ * Deliberately generous: the fleet is remote and a real page on a real device
+ * over a real proxy is legitimately slow sometimes. These exist to distinguish
+ * a slow load from a dead one for the CUSTOMER, not to time anything out — the
+ * navigation is never cancelled, and a page that arrives at 90s still arrives.
+ */
+const NAV_SLOW_MS = 8_000;
+const NAV_STALLED_MS = 25_000;
+
 const PAGE_STATE_GRACE_MS = 2500;
 
 /**
@@ -1635,6 +1646,24 @@ function BrowserBar({
   // quite reaching it), snap to 100% on completion, then fade out.
   const [barProgress, setBarProgress] = useState(0);
   const [barVisible, setBarVisible] = useState(false);
+  /**
+   * How long this navigation has been running, bucketed for the customer.
+   *
+   * ⛔ Owner-reported TWICE: "it loads, the loading bar, and just suddenly
+   * stops. No error code nothing, it just stays on the old page… after like
+   * 1/2 minutes it jumped to this url. But we still need better handle this."
+   *
+   * The bar trickles toward 90% and DECELERATES, so a slow load looks exactly
+   * like a stopped one — the animation is asymptotic and never finishes, and
+   * nothing else on screen changes. The customer cannot tell "still working"
+   * from "gave up", because the UI renders them identically.
+   *
+   * This does not make the page load faster and does not need the harness. It
+   * makes the wait legible: at SLOW we say it is taking longer than usual, at
+   * STALLED we say it may not arrive and offer the reload the customer would
+   * otherwise reach for blindly.
+   */
+  const [navAge, setNavAge] = useState<'normal' | 'slow' | 'stalled'>('normal');
   const trickleRef = useRef<number | null>(null);
   const hideRef = useRef<number | null>(null);
   const loadingActiveRef = useRef(false);
@@ -1657,14 +1686,23 @@ function BrowserBar({
         // progress updates cannot make the bar jump mid-flight.
         setBarProgress(Math.max(0.08, Math.min(loadProgressRef.current ?? 0, 0.15)));
       }
+      if (startingNewLoad) setNavAge('normal');
       if (trickleRef.current === null) {
+        const startedAt = Date.now();
         trickleRef.current = window.setInterval(() => {
           setBarProgress((p) => (p >= 0.9 ? p : p + (0.9 - p) * 0.12));
+          const elapsed = Date.now() - startedAt;
+          // Thresholds, not a spinner: a page that has been loading for 8s is
+          // unusual, and one at 25s is very likely not coming without help.
+          setNavAge(
+            elapsed >= NAV_STALLED_MS ? 'stalled' : elapsed >= NAV_SLOW_MS ? 'slow' : 'normal',
+          );
         }, 400);
       }
     } else if (loadingActiveRef.current) {
       // Was loading, now done → snap to 100%, then fade the bar out.
       loadingActiveRef.current = false;
+      setNavAge('normal');
       if (trickleRef.current !== null) {
         window.clearInterval(trickleRef.current);
         trickleRef.current = null;
@@ -2063,6 +2101,35 @@ function BrowserBar({
               opacity: barProgress >= 1 ? 0 : 1,
             }}
           />
+        </div>
+      )}
+      {/* ⛔ THE BAR ALONE CANNOT SAY "STILL WORKING". It decelerates toward 90%
+          and never arrives, so a slow load and a dead one render identically —
+          which is exactly what the owner reported twice: "the loading bar just
+          suddenly stops. No error code nothing." This says which one it is.
+          It never cancels the navigation: a page that lands at 90s still lands,
+          and this disappears when it does. */}
+      {barVisible && navAge !== 'normal' && (
+        <div
+          data-component="simulator-slow-nav"
+          data-nav-age={navAge}
+          className="pointer-events-auto absolute bottom-2 left-1/2 z-20 -translate-x-1/2 rounded-full border border-surface-divider bg-surface-raised/95 px-3 py-1.5 text-2xs text-ink-secondary shadow-sm"
+        >
+          {navAge === 'slow' ? (
+            'Still loading — this page is taking longer than usual.'
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="text-ink-primary">Still loading. It may not arrive on its own.</span>
+              <button
+                type="button"
+                data-action="retry-slow-nav"
+                onClick={reload}
+                className="rounded-full bg-accent/15 px-2 py-0.5 font-semibold text-accent transition-colors hover:bg-accent/25"
+              >
+                Reload
+              </button>
+            </span>
+          )}
         </div>
       )}
     </div>
