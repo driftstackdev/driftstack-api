@@ -141,6 +141,28 @@ describe('every host the deploy bridge SSHes to has its key primed', () => {
     }
   });
 
+  it('a failing deploy tells somebody', () => {
+    // ⛔ The pipeline's real failure mode was SILENCE, not breakage. It last went
+    // green 2026-07-12 and then failed 18 consecutive times while production sat
+    // 72 commits stale and the AI chat 400'd at customers. Every run was
+    // correctly red and correctly reported, in a list nobody opens.
+    //
+    // Repairing the pipeline without an alert only resets the seven-week clock,
+    // so the alert is part of the fix and is guarded like one.
+    expect(workflow, 'deploy.yml must have a job that runs on failure').toMatch(
+      /if:\s*failure\(\)/,
+    );
+    expect(workflow).toContain('notify-on-failure');
+    // It must depend on the jobs that can actually fail, or it never fires.
+    expect(workflow).toMatch(/needs:\s*\[source-map-upload, deploy-staging, deploy-production\]/);
+    // ⚠️ And it must DEDUPE. 18 failures producing 18 issues is unread for the
+    // same reason one silent failure is.
+    expect(workflow, 'the alert must find an existing issue before opening one').toContain(
+      'deploy-failure-tracker',
+    );
+    expect(workflow).toContain('createComment');
+  });
+
   it('the staging DB-isolation guard reports WHY it could not read a host', () => {
     // The refusal was correct; it was unclearable because the reason went to
     // /dev/null. "prod host present = no" reads identically whether sshd is

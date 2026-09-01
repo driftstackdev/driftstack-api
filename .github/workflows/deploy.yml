@@ -302,3 +302,69 @@ jobs:
         env:
           DEPLOY_VIA_BUNDLE: '1'
         run: bash scripts/deploy-bridge.sh prod '${{ github.sha }}'
+
+  # ⛔ THE PIPELINE'S REAL FAILURE MODE WAS SILENCE, NOT BREAKAGE.
+  #
+  # deploy.yml last went green on 2026-07-12 and then failed 18 consecutive
+  # times — 4 on 2026-08-23, 14 on 2026-08-31 — while production sat 72 commits
+  # stale and the AI chat returned 400 to customers because the deployed server
+  # predated the model enum the GUI sends. Every one of those runs was correctly
+  # red and correctly reported, in a list nobody opens. Repairing the pipeline
+  # without this job just resets the seven-week clock.
+  #
+  # A GitHub issue rather than a chat ping: it needs no credential this repo does
+  # not already have, it persists until someone closes it, and it is the only
+  # channel here that survives nobody looking on the day it fires.
+  #
+  # ⚠️ DEDUPED ON PURPOSE. 18 failures must produce ONE issue with 18 comments,
+  # not 18 issues — an alert that floods is unread for the same reason a silent
+  # one is.
+  notify-on-failure:
+    name: Open or update the deploy-failure issue
+    needs: [source-map-upload, deploy-staging, deploy-production]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Create or comment the tracking issue
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const MARKER = '<!-- deploy-failure-tracker -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              MARKER,
+              `**Deploy failed** on \`${context.sha.slice(0, 9)}\` (${context.ref}).`,
+              '',
+              `Run: ${runUrl}`,
+              '',
+              'Production does not advance while this is failing. Check how far behind it is:',
+              '`curl -s https://api.driftstack.dev/version` and compare `git_sha` against `main`.',
+            ].join('\n');
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'deploy-failure',
+              per_page: 20,
+            });
+            const existing = open.data.find((i) => (i.body ?? '').includes(MARKER));
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              core.notice(`Commented on existing deploy-failure issue #${existing.number}`);
+              return;
+            }
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Deploy pipeline is failing — production is not advancing',
+              labels: ['deploy-failure'],
+              body,
+            });
+            core.notice(`Opened deploy-failure issue #${created.data.number}`);
