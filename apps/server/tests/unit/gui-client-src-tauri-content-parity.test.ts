@@ -452,16 +452,24 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
       permissions: string[];
       platforms: string[];
     };
-    expect(updaterCapability).toEqual({
+    // ⛔ The exact-description pin is repointed, not dropped: the file's identity
+    // and grant still matter, but its prose changed when macOS gained the same
+    // capability on 2026-09-01 (see updater-check-macos.json for the codesign /
+    // spctl measurement that retired the old justification).
+    expect(updaterCapability).toMatchObject({
       $schema: '../gen/schemas/desktop-schema.json',
       identifier: 'updater-windows-linux',
-      description:
-        'Updater install and relaunch permissions for the main Windows and Linux app only. macOS is intentionally excluded so a minisign-only updater artifact cannot replace the stable OS-signed bundle and change its code requirement.',
       windows: ['main'],
       permissions: ['updater:default', 'process:default'],
       platforms: ['windows', 'linux'],
     });
+    // ⚠️ This file stays Windows/Linux ONLY — macOS is granted in its own
+    // capability file, not by widening this one, so the two platforms keep
+    // separate schemas ('desktop' vs 'macOS') and can diverge again if signing
+    // ever makes that necessary.
     expect(updaterCapability.platforms).not.toContain('macOS');
+    // The description must still explain itself rather than merely being short.
+    expect(updaterCapability.description).toMatch(/macOS/);
 
     const simulatorCapability = JSON.parse(read(T('capabilities/simulator-app.json'))) as {
       description: string;

@@ -44,14 +44,19 @@ export interface AvailableUpdate {
   install: (onProgress?: (fraction: number) => void) => Promise<void>;
   /**
    * True when this app CANNOT install the update itself and the customer has to
-   * fetch it manually. macOS is the case: the updater capability is granted to
-   * Windows and Linux only, deliberately, so a minisign-only artifact cannot
-   * replace the bundle and change its code requirement.
+   * fetch it manually.
    *
-   * Before this existed, `check()` simply threw on macOS, was swallowed, and
-   * returned null — so a macOS customer was never told a new version existed at
-   * all. Silence is the worst of the three options: install it, tell them where
-   * to get it, or leave them on an old build unaware.
+   * ⚠️ NO PLATFORM SETS THIS TODAY (2026-09-01). macOS did, on the grounds that a
+   * minisign-only artifact must not replace an OS-signed bundle — but the shipped
+   * build is adhoc-signed with no Team ID and spctl rejects it, so there was no
+   * code requirement to protect and the guard only cost every Mac customer a
+   * manual download. See capabilities/updater-check-macos.json for the
+   * measurement.
+   *
+   * ⛔ KEPT, NOT DELETED. It becomes live again the moment a platform is granted
+   * `updater:allow-check` without `updater:default`, and Developer ID signing is
+   * exactly when that trade-off should be re-argued. Deleting it would mean the
+   * next platform in that position silently gets a button that always fails.
    */
   downloadOnly?: boolean;
   /** Where to send a `downloadOnly` customer. */
@@ -86,16 +91,21 @@ export interface UpdaterDeps {
 }
 
 /**
- * macOS detection, matching the convention already used by TitleBar and
- * ShortcutsCheatsheet. Injected through `UpdaterDeps` rather than read inline so
- * BOTH branches are reachable from a test — the install path and the
- * download-only path differ only by this bit.
+ * Whether this platform may install an update itself.
+ *
+ * ⛔ Was `return !mac`. macOS is now granted `updater:default` + `process:default`
+ * like Windows and Linux, because the reason it was withheld — protecting the
+ * code requirement of an OS-signed bundle — described a bundle that does not
+ * exist: `codesign` reports Signature=adhoc, TeamIdentifier=not set, and `spctl`
+ * rejects the shipped app outright. The owner's install sat two releases behind
+ * because of it.
+ *
+ * Still injected through `UpdaterDeps` so BOTH branches stay reachable from a
+ * test: the download-only path is dead code today but must keep working for the
+ * day a platform is granted check-without-install again.
  */
 function platformCanSelfInstall(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const mac =
-    navigator.platform.startsWith('Mac') || /Mac OS X|Macintosh/.test(navigator.userAgent);
-  return !mac;
+  return true;
 }
 
 const defaultDeps: UpdaterDeps = {

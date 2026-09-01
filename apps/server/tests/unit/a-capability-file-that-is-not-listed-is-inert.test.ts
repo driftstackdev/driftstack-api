@@ -85,14 +85,34 @@ describe('a capability file that is not listed is inert', () => {
 
   it('the macOS updater check is listed, since an unlisted grant is why 0.1.5 shipped without its fix', () => {
     expect(listed('tauri.conf.json')).toContain('updater-check-macos');
-    // The security property that makes the above safe: macOS may check and nothing
-    // else. If this file ever gains install or download, the reason it was excluded
-    // from updater-windows-linux is gone and that has to be a deliberate decision.
+    // ⛔ REPOINTED 2026-09-01, and this guard did exactly its job first. It said
+    // "if this file ever gains install or download, the reason it was excluded
+    // from updater-windows-linux is gone and that has to be a deliberate
+    // decision" — it went red, and forced the decision to be argued here.
+    //
+    // The decision: macOS now carries the same grant as Windows/Linux. The reason
+    // it was withheld — that a minisign-only artifact must not replace an
+    // OS-SIGNED bundle and change its code requirement — described a bundle that
+    // does not exist. Measured on the shipped app: codesign reports
+    // Signature=adhoc, TeamIdentifier=not set, and spctl rejects it with "no
+    // usable signature". The guard protected a property the build never had,
+    // while costing every Mac customer a manual download.
+    //
+    // ⚠️ So the pin moves from the PERMISSION to the JUSTIFICATION: the grant may
+    // be whatever the platform needs, but the file must still carry the
+    // measurement and the condition under which it must be re-argued. A future
+    // reader must not find a widened capability with no stated reason.
     const cap = JSON.parse(read('capabilities/updater-check-macos.json')) as {
       permissions: string[];
       platforms: string[];
+      description: string;
     };
-    expect(cap.permissions).toEqual(['updater:allow-check']);
+    expect(cap.permissions).toEqual(['updater:default', 'process:default']);
+    expect(cap.platforms).toEqual(['macOS']);
+    // The measurement that retired the old reason, and the trigger to revisit.
+    expect(cap.description).toMatch(/adhoc/i);
+    expect(cap.description).toMatch(/spctl/i);
+    expect(cap.description).toMatch(/DEVELOPER ID/i);
     expect(cap.platforms).toEqual(['macOS']);
   });
 });
