@@ -31,3 +31,18 @@ describe('the live KPI accent must mean something is live', () => {
     expect(body).toMatch(/mono text-3xl font-semibold leading-none tabular-nums/);
   });
 });
+
+describe('the onboarding checklist must not assert from unknown data', () => {
+  it('renders only once accountMe is known', () => {
+    // ⛔ The step predicates read `accountMe?.profile_count ?? 0`, which turns
+    // UNKNOWN into "you have none" — so before accountMe loads, or if it fails,
+    // a customer with 25 profiles is told to "Create a profile". The KPI strip
+    // renders the SAME field as "—" for exactly that case, so the page
+    // contradicted itself: one component said unknown, the other said
+    // incomplete.
+    //
+    // Same defect as accenting Active at 0 — a definite claim asserted from
+    // absent data — and the third instance of that shape on this one page.
+    expect(body).toMatch(/!onboardingDismissed && accountMe !== null && \(/);
+  });
+});

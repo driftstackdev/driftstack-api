@@ -534,7 +534,16 @@ export function CommandCenterView({
           also on the home so a new user sees the next step where they land (H2).
           Shared derive + dismissal via use-onboarding-steps; auto-hides once all
           three are done or the user dismisses it. */}
-      {!onboardingDismissed && (
+      {/* ⛔ `accountMe !== null` is load-bearing. The step predicates below read
+          `accountMe?.profile_count ?? 0`, which turns UNKNOWN into "you have
+          none" — so before accountMe loads, or if it fails, a customer with 25
+          profiles is told to "Create a profile". The KPI strip two elements down
+          renders the SAME field as "—" for exactly this case, so the page
+          contradicted itself: one component said unknown, the other said
+          incomplete. Same defect as accenting Active at 0 (V-2184) — a definite
+          claim asserted from absent data. Rendering nothing until we know is the
+          honest state; the checklist reappears the moment accountMe arrives. */}
+      {!onboardingDismissed && accountMe !== null && (
         <OnboardingChecklist
           steps={buildOnboardingSteps(
             {
