@@ -1227,7 +1227,10 @@ export async function dispatchSessionAssignOnCreate(args: {
         : undefined;
     const assign = serializeSessionAssign({
       sessionId,
-      archetype: profileArchetype ?? sessionDispatch.archetype,
+      archetype: resolveDispatchArchetype({
+        profileArchetype,
+        staticDefault: sessionDispatch.archetype,
+      }).archetype,
       behaviorProfile: sessionDispatch.behaviorProfile,
       // Customer-supplied initial_url wins; falls back to the operator-config
       // default when the create body omitted it.
@@ -1307,8 +1310,10 @@ export async function dispatchSessionAssignOnCreate(args: {
         // (profile-bound archetype, or the static operator default for stateless
         // runs). Lets us confirm the CP sent the right fingerprint vs what the box
         // actually rendered, without re-deriving from the DB.
-        archetype: profileArchetype ?? sessionDispatch.archetype,
-        archetypeSource: profileArchetype !== undefined ? 'profile' : 'static-default',
+        ...resolveDispatchArchetype({
+          profileArchetype,
+          staticDefault: sessionDispatch.archetype,
+        }),
       },
       'dispatched sessionAssign to fleet node',
     );
@@ -1761,6 +1766,32 @@ export async function dispatchResumeSession(args: {
       'resumeSession dispatch failed',
     );
   }
+}
+
+/** The archetype a dispatch provisions, and the invariant that it is STABLE.
+ *
+ *  Deliberately a pure function of its inputs with no randomness, no clock and
+ *  no I/O, so launching one profile twice provisions the same fingerprint twice.
+ *
+ *  ⛔ VERSION SAMPLING DOES NOT BELONG HERE. When the Chrome pool lands, the
+ *  weighted draw happens ONCE at profile CREATE and is persisted on the row —
+ *  never per launch. A profile is a persistent browser identity; re-sampling it
+ *  per session would walk one identity's browser major between launches under a
+ *  stable cookie jar and canvas, which is a per-identity instability tell
+ *  visible to a SINGLE observer over time. That is strictly worse than the
+ *  only-latest population tell the pool exists to remove. Sampling per session
+ *  is safe only where no persistent identity exists (a profile-less run), and
+ *  that draw belongs at its own call site with its own `archetypeSource`.
+ *
+ *  A re-sampling bug here would pass every other test in the suite and surface
+ *  only as fingerprint drift in the field, so the stability is pinned directly. */
+export function resolveDispatchArchetype(args: {
+  profileArchetype: string | undefined;
+  staticDefault: string;
+}): { archetype: string; archetypeSource: 'profile' | 'static-default' } {
+  return args.profileArchetype !== undefined
+    ? { archetype: args.profileArchetype, archetypeSource: 'profile' }
+    : { archetype: args.staticDefault, archetypeSource: 'static-default' };
 }
 
 export function registerAgentSessionsRoutes(
