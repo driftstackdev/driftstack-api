@@ -105,12 +105,24 @@ describe('the decomposer knows it is driving a phone', () => {
     expect(prompt).toMatch(/viewport is phone-width and portrait/);
   });
 
-  it('tells it to open a collapsed menu FIRST, since plans do not branch', () => {
-    // The decomposer emits an ordered plan up front with no conditionals, so
-    // "retry if not found" is not expressible — the menu tap must be planned.
+  it('prefers a nav-state-independent target over a planned menu tap', () => {
+    // V-2199 REVERSES the first shape of this rule. It used to say "tap the
+    // toggle FIRST … include that step rather than hoping the link is visible",
+    // which is wrong for the reason the rest of the rule gives: the plan is
+    // ordered with no branching and no retries, so a menu tap that was not
+    // needed is not a fallback — it is one more step the whole task dies on.
+    // Measured live on driftstack.dev: the header carries NO signup link at any
+    // width, and the page's signup link is in the footer, reachable without
+    // opening any menu. The old rule would have added a mandatory step to reach
+    // a link that was never behind the menu — and in the live run it did, and
+    // the run died there.
     expect(prompt).toMatch(/COLLAPSED behind a menu toggle/);
-    expect(prompt).toMatch(/aria-label\*="menu" i/);
-    expect(prompt).toMatch(/no', \n?\s*'\s*branching|no',\s*$|branching/m);
+    expect(prompt).toMatch(/PREFER A TARGET THAT DOES NOT DEPEND ON NAV/);
+    expect(prompt).toMatch(/NO BRANCHING and NO RETRIES/);
+    expect(prompt).toMatch(/Only plan a menu tap when the link/);
+    // The superseded instruction must be gone, not merely outweighed by newer
+    // text: two contradictory rules in one prompt is worse than either alone.
+    expect(prompt).not.toMatch(/tap the toggle FIRST/);
   });
 
   it('covers the other two phone-layout reach problems', () => {
