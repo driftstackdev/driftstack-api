@@ -10,9 +10,10 @@
 // transform — no hardcoded list).
 
 import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
-import { proxyCapabilities } from './ProxyCapabilities';
+import { ProxyOsChip, proxyCapabilities } from './ProxyCapabilities';
 import { RelativeTime } from './RelativeTime';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
+import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -68,6 +69,9 @@ export interface ProfilePhoneCardProps {
   latencyGood: boolean;
   probed: boolean;
   capabilities: ProxyTestResult | null;
+  /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
+   *  plane observed one. Undefined = never measured. */
+  osFingerprint?: OsFingerprint;
   checkedAtIso: string | null;
   // actions
   busy: boolean;
@@ -439,6 +443,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   >
                     UDP {caps === null ? '?' : udpOk ? '✓' : '✗'}
                   </span>
+                  {p.hasProxy && <ProxyOsChip fingerprint={p.osFingerprint} size="xs" />}
                 </div>
                 {/* A proxy that FAILED its last test says so, in place, with the
                     reason and a one-click retest.

@@ -12,6 +12,11 @@
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
+import {
+  isFingerprintConfidence,
+  isFingerprintedOs,
+  type OsFingerprint,
+} from './os-fingerprint-verdict';
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
@@ -199,4 +204,60 @@ export function buildOpenVpnProxyInput(
       ...(creds?.password ? { password: creds.password } : {}),
     },
   };
+}
+
+// N-2 — the control plane's connection test. Beyond ok/latency it carries the
+// passive OS fingerprint of the proxy's OWN TCP stack when the control plane
+// observed one: the proxy's kernel builds the SYN, only the destination of
+// that connection can read it, and the native probe in this app is the
+// proxy's client, not its destination. So this is the ONLY source of that
+// verdict, and only a proxy stored on the account can be tested for it.
+
+export type AccountProxyTestResult =
+  | { ok: true; latency_ms: number; os_fingerprint?: OsFingerprint }
+  | { ok: false; reason: string };
+
+/** A wire fingerprint is kept only when every field is one the verdict can
+ *  render. A value outside the closed set (a newer server, a proxy MITM-ing
+ *  the response) drops the FIELD — it must never become a green chip. */
+function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const f = raw as Record<string, unknown>;
+  if (!isFingerprintedOs(f.os) || !isFingerprintConfidence(f.confidence)) return undefined;
+  if (typeof f.reason !== 'string') return undefined;
+  return { os: f.os, confidence: f.confidence, reason: f.reason };
+}
+
+/** The server budgets ~12s for connectivity plus ~6s for the observer tunnel;
+ *  the client deadline sits above both so a slow-but-working proxy is not cut
+ *  off here and reported as a failure the server never saw. */
+const PROXY_TEST_DEADLINE_MS = 30_000;
+
+export async function testAccountProxy(
+  baseUrl: string,
+  apiKey: string,
+  id: string,
+): Promise<AccountProxyTestResult> {
+  const res = await fetchWithDeadline(
+    `${base(baseUrl)}/${encodeURIComponent(id)}/test`,
+    { method: 'POST', headers: authHeaders(apiKey) },
+    PROXY_TEST_DEADLINE_MS,
+  );
+  if (!res.ok) {
+    const status = res.status;
+    await disposeResponseBody(res);
+    throw new Error(`proxy test failed: ${status.toString()}`);
+  }
+  const body = await readBoundedApiJson<Record<string, unknown>>(res);
+  if (body.ok === true && typeof body.latency_ms === 'number') {
+    const fp = cleanWireFingerprint(body.os_fingerprint);
+    return {
+      ok: true,
+      latency_ms: body.latency_ms,
+      ...(fp !== undefined ? { os_fingerprint: fp } : {}),
+    };
+  }
+  if (body.ok === false && typeof body.reason === 'string')
+    return { ok: false, reason: body.reason };
+  throw new Error('proxy test: malformed response');
 }

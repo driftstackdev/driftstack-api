@@ -13,6 +13,17 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { makeWriteLock } from './store-write-lock';
 import { isProxyUsable, type ProxyExitProbeResult, type ProxyTestResult } from './proxies';
+import {
+  isFingerprintConfidence,
+  isFingerprintedOs,
+  type OsFingerprint,
+} from './os-fingerprint-verdict';
+
+/** N-2 — the control plane's passive OS fingerprint of the proxy's own stack,
+ *  with when it was recorded. */
+export interface CachedOsFingerprint extends OsFingerprint {
+  at: number;
+}
 
 export interface CachedProbe {
   result: ProxyTestResult;
@@ -27,6 +38,9 @@ export interface CachedProbe {
   exitRegion?: string | null;
   exitTimezone?: string | null;
   exitAsnOrg?: string | null;
+  /** N-2 — absent until the control plane observed the proxy's SYN; preserved
+   *  across capability re-tests like the exit-geo. */
+  osFingerprint?: CachedOsFingerprint;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -52,6 +66,9 @@ export interface ProbeViewState {
   testResults: Record<string, ProxyTestResult>;
   exitResults: Record<string, ProxyExitProbeResult | null>;
   testedAt: Record<string, number>;
+  /** N-2 — only for proxies whose last capability probe was usable (the
+   *  exit-geo rule): no OS verdict beside a red "unreachable" pill. */
+  osFingerprints: Record<string, CachedOsFingerprint>;
 }
 
 /**
@@ -71,9 +88,12 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
   const testResults: Record<string, ProxyTestResult> = {};
   const exitResults: Record<string, ProxyExitProbeResult | null> = {};
   const testedAt: Record<string, number> = {};
+  const osFingerprints: Record<string, CachedOsFingerprint> = {};
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
+    if (c.osFingerprint !== undefined && isProxyUsable(c.result))
+      osFingerprints[id] = c.osFingerprint;
     if (c.exitIp !== undefined && isProxyUsable(c.result)) {
       exitResults[id] = {
         ip: c.exitIp,
@@ -85,7 +105,7 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
       };
     }
   }
-  return { testResults, exitResults, testedAt };
+  return { testResults, exitResults, testedAt, osFingerprints };
 }
 
 export const PROBE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -182,6 +202,17 @@ function emitProbeCache(cache: ProbeCacheMap): void {
 // time).
 const writeLock = makeWriteLock();
 
+/** N-2 — a stored fingerprint is kept only when every field is one the verdict
+ *  can render; a value outside the closed set (a newer server, a corrupt store)
+ *  drops the fingerprint, never the whole entry, and never defaults to green. */
+function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const f = raw as Record<string, unknown>;
+  if (!isFingerprintedOs(f.os) || !isFingerprintConfidence(f.confidence)) return undefined;
+  if (typeof f.reason !== 'string' || typeof f.at !== 'number') return undefined;
+  return { os: f.os, confidence: f.confidence, reason: f.reason, at: f.at };
+}
+
 function cleanEntry(raw: unknown): CachedProbe | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
@@ -205,6 +236,7 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   const exitRegion = optStr(r.exitRegion);
   const exitTimezone = optStr(r.exitTimezone);
   const exitAsnOrg = optStr(r.exitAsnOrg);
+  const osFingerprint = cleanOsFingerprint(r.osFingerprint);
   return {
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
@@ -212,6 +244,7 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(exitRegion !== undefined ? { exitRegion } : {}),
     ...(exitTimezone !== undefined ? { exitTimezone } : {}),
     ...(exitAsnOrg !== undefined ? { exitAsnOrg } : {}),
+    ...(osFingerprint !== undefined ? { osFingerprint } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -265,6 +298,7 @@ export function saveProbeResult(
       ...(prior?.exitRegion !== undefined ? { exitRegion: prior.exitRegion } : {}),
       ...(prior?.exitTimezone !== undefined ? { exitTimezone: prior.exitTimezone } : {}),
       ...(prior?.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
+      ...(prior?.osFingerprint !== undefined ? { osFingerprint: prior.osFingerprint } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -299,6 +333,30 @@ export function saveExitResult(
       exitRegion: geo.region ?? null,
       exitTimezone: geo.timezone ?? null,
       exitAsnOrg: geo.asnOrg ?? null,
+    };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/** N-2 — persist the control plane's passive OS fingerprint onto the proxy's
+ *  cache entry. Like the exit-geo it rides on an existing capability entry and
+ *  is preserved across re-tests; a proxy with no entry has nothing to attach
+ *  it to, and none is invented. */
+export function saveOsFingerprint(
+  proxyId: string,
+  fp: OsFingerprint,
+  at: number,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    all[proxyId] = {
+      ...prior,
+      osFingerprint: { os: fp.os, confidence: fp.confidence, reason: fp.reason, at },
     };
     await getStore().set(KEY, all);
     await getStore().save();

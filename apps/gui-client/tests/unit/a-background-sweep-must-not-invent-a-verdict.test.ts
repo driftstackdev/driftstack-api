@@ -305,6 +305,11 @@ describe('deriveProbeViewState', () => {
   });
 
   it('is empty for an empty cache and never throws', () => {
-    expect(deriveProbeViewState({})).toEqual({ testResults: {}, exitResults: {}, testedAt: {} });
+    expect(deriveProbeViewState({})).toEqual({
+      testResults: {},
+      exitResults: {},
+      testedAt: {},
+      osFingerprints: {},
+    });
   });
 });

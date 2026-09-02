@@ -2393,7 +2393,20 @@ function buildRegistry(): OpenAPIRegistry {
   });
   const AccountProxyTestResultOpenApi = z
     .union([
-      z.object({ ok: z.literal(true), latency_ms: z.number().int() }),
+      z.object({
+        ok: z.literal(true),
+        latency_ms: z.number().int(),
+        // N-2 — present ONLY when the passive observer recorded the proxy's SYN.
+        os_fingerprint: z
+          .object({
+            os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
+            confidence: z.enum(['high', 'medium', 'low', 'none']),
+            reason: z.string(),
+            observed_ip: z.string(),
+            observed_via: z.enum(['proxy_host', 'exit_ip']),
+          })
+          .optional(),
+      }),
       z.object({ ok: z.literal(false), reason: z.string() }),
     ])
     .openapi('AccountProxyTestResult');

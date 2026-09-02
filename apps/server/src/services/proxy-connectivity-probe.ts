@@ -32,7 +32,14 @@
 // surface a box-reported launch failure the same clean way. See the route gate.
 
 import { connect, type Socket } from 'node:net';
+import { isIP } from 'node:net';
 import { classifyUnsafeHost } from '../lib/webhook-target-guard.js';
+import type { OsObserverLookup } from '../lib/os-observer-lookup.js';
+import {
+  fingerprintOs,
+  type OsFingerprintResult,
+  type TcpSynSignature,
+} from '../lib/tcp-os-fingerprint.js';
 
 /** Default neutral egress target. The Driftstack-owned exit-IP echo
  *  (GET /v1/egress/echo) is the design-doc-recommended endpoint (option A):
@@ -197,7 +204,35 @@ export interface ProxyConnectivityProbeDeps {
   timeoutMs?: number;
   /** Neutral egress target URL; default the Driftstack echo. */
   targetUrl?: string;
+  /** N-2 — passive OS fingerprint of the proxy's OWN TCP stack. When set,
+   *  `observeOs` CONNECTs through the proxy to `host:port` (the raw-socket
+   *  observer on the origin) and reads the recorded SYN back via `lookup`.
+   *  Unset → `observeOs` answers "not observed" without touching the network. */
+  osObserver?: { host: string; port: number; lookup: OsObserverLookup };
 }
+
+/** Budget for the observer tunnel — dial + handshake + CONNECT, no round-trip.
+ *  Off the launch path (only the Test route calls `observeOs`), so it need not
+ *  be tight, but a hung proxy must not hold a Test open for long. */
+export const OS_OBSERVE_TIMEOUT_MS = 6_000;
+
+/** What `observeOs` learned. `observed: false` carries WHY, because "no
+ *  fingerprint" has three unlike causes (observer off, tunnel refused, no SYN
+ *  recorded for either address) and whoever reads the next miss must be able
+ *  to tell them apart. */
+export type OsObservation =
+  | ({
+      observed: true;
+      /** The address the signature was found under. */
+      observedIp: string;
+      /** `proxy_host`: the address we dialled emitted the SYN (an application-
+       *  layer proxy connects upstream from its own host). `exit_ip`: the echo's
+       *  exit address did (the provider forwards the raw connection out of the
+       *  exit device). */
+      via: 'proxy_host' | 'exit_ip';
+      signature: TcpSynSignature;
+    } & OsFingerprintResult)
+  | { observed: false; reason: string };
 
 /** Default dialer: a RAW TCP connect with a bounded deadline. Re-asserts the
  *  connection-time SSRF guard (the SocksProxyBackend's defaultTcpProbe does the
@@ -252,11 +287,13 @@ export class ProxyConnectivityProbe {
   private readonly dial: (host: string, port: number, timeoutMs: number) => Promise<Socket>;
   private readonly timeoutMs: number;
   private readonly target: URL;
+  private readonly osObserver: ProxyConnectivityProbeDeps['osObserver'];
 
   constructor(deps: ProxyConnectivityProbeDeps = {}) {
     this.dial = deps.dial ?? defaultDial;
     this.timeoutMs = deps.timeoutMs ?? DEFAULT_PROBE_TIMEOUT_MS;
     this.target = new URL(deps.targetUrl ?? DEFAULT_PROBE_TARGET_URL);
+    this.osObserver = deps.osObserver;
   }
 
   async probe(proxy: ProbeProxyDescriptor): Promise<ProxyProbeResult> {
@@ -333,6 +370,21 @@ export class ProxyConnectivityProbe {
     deadlineState: { expired: boolean; deadlineAt: number },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
+    const failed = await this.socks5Tunnel(socket, reader, proxy, targetHost, targetPort);
+    if (failed !== null) return failed;
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
+  }
+
+  /** Greeting + (RFC 1929) auth + CONNECT. Returns the failure, or null once the
+   *  tunnel to `targetHost:targetPort` is up. Shared by the launch probe and the
+   *  OS observation so the two cannot drift in what they accept from a proxy. */
+  private async socks5Tunnel(
+    socket: Socket,
+    reader: SocketReader,
+    proxy: ProbeProxyDescriptor,
+    targetHost: string,
+    targetPort: number,
+  ): Promise<ProxyProbeResult | null> {
     const hasAuth = proxy.username !== undefined && proxy.password !== undefined;
 
     // Greeting: VER=5, advertise NO-AUTH (0x00) and, when we have creds,
@@ -407,8 +459,7 @@ export class ProxyConnectivityProbe {
     const atyp = replyHead[3];
     const addrLen = atyp === 0x01 ? 4 : atyp === 0x04 ? 16 : ((await reader.read(1))[0] ?? 0);
     await reader.read(addrLen + 2); // BND.ADDR + BND.PORT, discarded
-
-    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
+    return null;
   }
 
   // ── HTTP CONNECT ────────────────────────────────────────────────────────────
@@ -423,6 +474,19 @@ export class ProxyConnectivityProbe {
     deadlineState: { expired: boolean; deadlineAt: number },
   ): Promise<ProxyProbeResult> {
     const reader = new SocketReader(socket);
+    const failed = await this.httpTunnel(socket, reader, proxy, targetHost, targetPort);
+    if (failed !== null) return failed;
+    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
+  }
+
+  /** HTTP CONNECT. Returns the failure, or null once the tunnel is up. */
+  private async httpTunnel(
+    socket: Socket,
+    reader: SocketReader,
+    proxy: ProbeProxyDescriptor,
+    targetHost: string,
+    targetPort: number,
+  ): Promise<ProxyProbeResult | null> {
     const authority = `${targetHost}:${targetPort}`;
     let connectReq = `CONNECT ${authority} HTTP/1.1\r\nHost: ${authority}\r\n`;
     if (proxy.username !== undefined && proxy.password !== undefined) {
@@ -446,8 +510,92 @@ export class ProxyConnectivityProbe {
         detail: `proxy CONNECT returned "${statusLine.trim()}"`,
       };
     }
+    return null;
+  }
 
-    return this.egressRoundTrip(socket, reader, targetHost, targetPort, useTls, deadlineState);
+  // ── N-2 passive OS fingerprint ─────────────────────────────────────────────
+  /**
+   * Fingerprint the proxy's OWN TCP stack.
+   *
+   * A second, separate tunnel: CONNECT through the proxy to the observer's
+   * public port so the proxy host's kernel emits a SYN the observer records,
+   * then read that record back over loopback. Lookups are tried in the order
+   * the topology can produce them: the address we DIALLED first (an
+   * application-layer proxy opens the upstream connection from its own host —
+   * measured 2026-09-02: the SYN came from the gateway, not from the CGNAT exit
+   * the echo reported), then the echo's exit IP (a provider that forwards the
+   * raw connection out of the exit device). A miss on both is "not observed",
+   * never a guess.
+   *
+   * ⛔ Deliberately NOT part of `probe()`: that sits on the launch path and this
+   * costs a whole extra handshake. Only the Test route calls it, under its own
+   * budget, and it never throws — a dead observer must not turn a green test
+   * red.
+   */
+  async observeOs(proxy: ProbeProxyDescriptor, exitIp?: string): Promise<OsObservation> {
+    if (this.osObserver === undefined) {
+      return { observed: false, reason: 'observer not configured' };
+    }
+    const { host, port, lookup } = this.osObserver;
+    const msg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+    let socket: Socket;
+    try {
+      socket = await this.dial(proxy.host, proxy.port, OS_OBSERVE_TIMEOUT_MS);
+    } catch (err) {
+      return { observed: false, reason: `dial failed: ${msg(err)}` };
+    }
+    const peerIp = socket.remoteAddress;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => {
+        socket.destroy();
+        reject(new ProbeDialError('timeout', 'observer tunnel did not complete in time'));
+      }, OS_OBSERVE_TIMEOUT_MS);
+    });
+    try {
+      const reader = new SocketReader(socket);
+      const failed = await Promise.race([
+        proxy.protocol === 'socks5'
+          ? this.socks5Tunnel(socket, reader, proxy, host, port)
+          : this.httpTunnel(socket, reader, proxy, host, port),
+        deadline,
+      ]);
+      if (failed !== null) {
+        return {
+          observed: false,
+          reason: `observer tunnel refused: ${failed.detail ?? failed.reason ?? 'unknown'}`,
+        };
+      }
+    } catch (err) {
+      return { observed: false, reason: `observer tunnel failed: ${msg(err)}` };
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+      socket.destroy();
+    }
+    // The CONNECT succeeded, so the proxy completed a handshake with the
+    // observer and its SYN is on record — under whichever address it used.
+    const keys: string[] = [];
+    for (const ip of [peerIp, exitIp]) {
+      if (typeof ip === 'string' && isIP(ip) !== 0 && !keys.includes(ip)) keys.push(ip);
+    }
+    const misses: string[] = [];
+    for (const ip of keys) {
+      const r = await lookup(ip);
+      if (r.kind === 'observed') {
+        return {
+          observed: true,
+          observedIp: ip,
+          via: ip === peerIp ? 'proxy_host' : 'exit_ip',
+          signature: r.signature,
+          ...fingerprintOs(r.signature),
+        };
+      }
+      misses.push(`${ip}: ${r.kind === 'absent' ? 'no SYN recorded' : r.detail}`);
+    }
+    return {
+      observed: false,
+      reason: keys.length === 0 ? 'no address to look up' : misses.join('; '),
+    };
   }
 
   // ── egress round-trip ─────────────────────────────────────────────────────

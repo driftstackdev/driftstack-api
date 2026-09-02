@@ -3356,6 +3356,30 @@
               },
               "latency_ms": {
                 "type": "integer"
+              },
+              "os_fingerprint": {
+                "type": "object",
+                "properties": {
+                  "os": {
+                    "type": "string",
+                    "enum": ["macos-or-ios", "windows", "linux", "bsd", "unknown"]
+                  },
+                  "confidence": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low", "none"]
+                  },
+                  "reason": {
+                    "type": "string"
+                  },
+                  "observed_ip": {
+                    "type": "string"
+                  },
+                  "observed_via": {
+                    "type": "string",
+                    "enum": ["proxy_host", "exit_ip"]
+                  }
+                },
+                "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
               }
             },
             "required": ["ok", "latency_ms"]

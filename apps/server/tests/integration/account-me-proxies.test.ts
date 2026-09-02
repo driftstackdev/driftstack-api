@@ -362,6 +362,7 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
     fx = await buildTestApp({
       proxyConnectivityProbe: {
         probe: () => Promise.resolve({ ok: true }),
+        observeOs: () => Promise.resolve({ observed: false, reason: 'stub' }),
       } as unknown as ConstructorParameters<typeof Object>[0] as never,
       proxyTcpProbe: () => Promise.reject(new Error('the TCP fallback must not be consulted')),
     });

@@ -39,7 +39,7 @@ describe('disposeResponseBody', () => {
 
   it('guards every shared-fetch status-only or stale exit', () => {
     for (const [relative, expectedCalls] of [
-      ['../../src/lib/account-proxies.ts', 4],
+      ['../../src/lib/account-proxies.ts', 5],
       ['../../src/lib/account-organization.ts', 2],
       ['../../src/components/SettingsAccountCard.tsx', 2],
       ['../../src/lib/browser-sign-in.ts', 2],

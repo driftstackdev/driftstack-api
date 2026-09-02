@@ -32,6 +32,7 @@
 // everywhere.
 
 import { isProxyUsable, type ProxyTestResult } from '../lib/proxies';
+import { osFingerprintVerdict, type OsFingerprint } from '../lib/os-fingerprint-verdict';
 
 export interface ProxyCapability {
   key: 'webrtc' | 'quic' | 'http2';
@@ -120,5 +121,39 @@ export function ProxyCapabilityChips({
         </span>
       ))}
     </div>
+  );
+}
+
+/**
+ * N-2 — the proxy's passive OS fingerprint as a chip. Three tones, and the
+ * neutral one is load-bearing: not measured must never look like a pass. The
+ * colour rule itself lives in osFingerprintVerdict so the grid and the profile
+ * card cannot disagree about what a fingerprint means.
+ */
+export function ProxyOsChip({
+  fingerprint,
+  size = 'sm',
+}: {
+  fingerprint: OsFingerprint | undefined;
+  size?: 'xs' | 'sm';
+}): JSX.Element {
+  const v = osFingerprintVerdict(fingerprint);
+  const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
+  const tone =
+    v.tone === 'match'
+      ? 'bg-status-ready/15 text-status-ready'
+      : v.tone === 'mismatch'
+        ? 'bg-status-error/15 text-status-error'
+        : 'bg-surface-inset text-ink-muted';
+  return (
+    <span
+      title={v.hint}
+      data-component="proxy-os-fingerprint"
+      data-verdict={v.tone}
+      className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} ${tone}`}
+    >
+      <span aria-hidden="true">{v.glyph}</span>
+      {v.label}
+    </span>
   );
 }

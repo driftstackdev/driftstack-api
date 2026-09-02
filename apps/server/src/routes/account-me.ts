@@ -56,6 +56,7 @@ import {
   NotFoundError,
 } from '../lib/errors.js';
 import { requireTierFeature } from '../lib/errors-helpers.js';
+import type { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
  *  dashboard render doesn't churn signed URLs but short enough that
@@ -112,15 +113,9 @@ export interface AccountMeRoutesOptions {
    * with a green Test and a red launch has no way to reconcile the two, and the
    * reasonable conclusion is that the product is broken.
    */
-  proxyConnectivityProbe?: {
-    probe(descriptor: {
-      protocol: 'socks5';
-      host: string;
-      port: number;
-      username?: string;
-      password?: string;
-    }): Promise<{ ok: boolean; reason?: string }>;
-  };
+  /** The launch probe (and, N-2, its OS observation). Typed off the class so a
+   *  new method on the probe cannot be silently unknown here. */
+  proxyConnectivityProbe?: Pick<ProxyConnectivityProbe, 'probe' | 'observeOs'>;
   /**
    * Resolves the stored row to dispatch config (decrypts the password). Typed as
    * a Pick of the real service rather than a restated shape: `resolveForDispatch`
@@ -817,14 +812,40 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           await proxyTcpProbe(row.host, row.port, 8_000);
           return { ok: true as const, latency_ms: Date.now() - startedAt };
         }
-        const result = await proxyConnectivityProbe.probe({
-          protocol: 'socks5',
+        const descriptor = {
+          protocol: 'socks5' as const,
           host: resolved.host,
           port: resolved.port,
           ...(resolved.username !== undefined ? { username: resolved.username } : {}),
           ...(resolved.password !== undefined ? { password: resolved.password } : {}),
-        });
-        if (result.ok) return { ok: true as const, latency_ms: Date.now() - startedAt };
+        };
+        const result = await proxyConnectivityProbe.probe(descriptor);
+        if (result.ok) {
+          const latency_ms = Date.now() - startedAt;
+          // N-2 — passive OS fingerprint of the proxy's own TCP stack. Attached
+          // ONLY when a SYN was actually observed; a miss is logged with its
+          // reason and the field stays absent, so the client can never colour
+          // a cell on a value nobody measured.
+          const os = await proxyConnectivityProbe.observeOs(descriptor, result.exitIdentity?.ip);
+          if (!os.observed) {
+            request.log.debug(
+              { proxyId: row.id, reason: os.reason },
+              'proxy test: os fingerprint not observed',
+            );
+            return { ok: true as const, latency_ms };
+          }
+          return {
+            ok: true as const,
+            latency_ms,
+            os_fingerprint: {
+              os: os.os,
+              confidence: os.confidence,
+              reason: os.reason,
+              observed_ip: os.observedIp,
+              observed_via: os.via,
+            },
+          };
+        }
         // The same four sentences the desktop client renders, so a customer who
         // reads one and then the other is not told two different stories.
         const copy: Record<string, string> = {

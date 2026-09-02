@@ -87,6 +87,7 @@ import { DrizzleProfilesRepo } from '../db/profiles-repo.js';
 import { DrizzleAccountProxiesRepo } from '../db/account-proxies-repo.js';
 import { AccountProxiesService } from '../services/account-proxies.js';
 import { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
+import { DEFAULT_OS_OBSERVER_PORT, makeOsObserverLookup } from './os-observer-lookup.js';
 import { SessionsService } from '../services/sessions.js';
 import { ApiKeysService } from '../services/api-keys.js';
 import { MfaService } from '../services/mfa.js';
@@ -2029,11 +2030,29 @@ export async function createProductionDeps(
     const n = Number(raw);
     return Number.isFinite(n) && n > 0 ? n : undefined;
   })();
+  // N-2 — passive OS fingerprint observer. DS_OS_OBSERVER_HOST unset = off:
+  // no second CONNECT, no lookup, and the Test response carries no
+  // os_fingerprint field. A bad PORT falls back to the observer's default
+  // rather than disabling the feature silently.
+  const osObserverHost = process.env.DS_OS_OBSERVER_HOST;
+  const osObserverPort = ((): number => {
+    const n = Number(process.env.DS_OS_OBSERVER_PORT ?? '');
+    return Number.isInteger(n) && n > 0 && n <= 65535 ? n : DEFAULT_OS_OBSERVER_PORT;
+  })();
   const proxyConnectivityProbe = new ProxyConnectivityProbe({
     ...(process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL !== undefined
       ? { targetUrl: process.env.DRIFTSTACK_PROXY_PROBE_TARGET_URL }
       : {}),
     ...(proxyProbeTimeoutMs !== undefined ? { timeoutMs: proxyProbeTimeoutMs } : {}),
+    ...(osObserverHost !== undefined && osObserverHost !== ''
+      ? {
+          osObserver: {
+            host: osObserverHost,
+            port: osObserverPort,
+            lookup: makeOsObserverLookup(process.env.DS_OS_OBSERVER_LOOKUP),
+          },
+        }
+      : {}),
   });
   const profilesService = new ProfilesService(
     profilesRepo,

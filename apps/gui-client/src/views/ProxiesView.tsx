@@ -10,7 +10,8 @@ import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
-import { ProxyCapabilityChips } from '../components/ProxyCapabilities';
+import { ProxyCapabilityChips, ProxyOsChip } from '../components/ProxyCapabilities';
+import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 import {
   isProxyUsable,
   addProxy,
@@ -33,6 +34,8 @@ import {
   subscribeProbeCache,
   saveExitResult,
   saveProbeResult,
+  saveOsFingerprint,
+  type CachedOsFingerprint,
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
@@ -43,6 +46,7 @@ import {
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
   type AccountProxyScheme,
+  testAccountProxy,
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { useSettings } from '../lib/SettingsContext';
@@ -153,6 +157,7 @@ export function ProxiesView(): JSX.Element {
   // the card can show "tested <relative>" — a green 'healthy' pill is meaningless
   // without knowing whether the test ran 30s or 30 days ago (audit).
   const [testedAt, setTestedAt] = useState<Record<string, number>>({});
+  const [osFingerprints, setOsFingerprints] = useState<Record<string, CachedOsFingerprint>>({});
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -192,6 +197,7 @@ export function ProxiesView(): JSX.Element {
       setTestResults(view.testResults);
       setExitResults(view.exitResults);
       setTestedAt(view.testedAt);
+      setOsFingerprints(view.osFingerprints);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -212,6 +218,7 @@ export function ProxiesView(): JSX.Element {
         setTestResults(view.testResults);
         setExitResults(view.exitResults);
         setTestedAt(view.testedAt);
+        setOsFingerprints(view.osFingerprints);
       }),
     [],
   );
@@ -252,6 +259,7 @@ export function ProxiesView(): JSX.Element {
           void invalidateProbe(editId).catch(() => undefined);
           setTestResults((r) => dropKey(r, editId));
           setExitResults((r) => dropKey(r, editId));
+          setOsFingerprints((m) => dropKey(m, editId));
           // Invalidating alone leaves the row with NO verdict, which reads as
           // "untested" rather than "the endpoint changed" — and the next launch
           // is where that gets discovered. Re-test instead.
@@ -339,6 +347,7 @@ export function ProxiesView(): JSX.Element {
     void invalidateProbe(id).catch(() => undefined);
     setTestResults((r) => dropKey(r, id));
     setExitResults((r) => dropKey(r, id));
+    setOsFingerprints((m) => dropKey(m, id));
     // Clear any profile default-proxy bindings that referenced this proxy, so a
     // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
     // Launch would silently reroute that profile's egress to a different proxy
@@ -474,11 +483,33 @@ export function ProxiesView(): JSX.Element {
             asnOrg: exit.asn_org ?? null,
           }).catch(() => undefined);
         }
+        // N-2 — the passive OS fingerprint comes from the control plane's OWN
+        // test: only the destination of the proxy's connection can see the SYN
+        // the proxy's kernel built, and the native probe above is the proxy's
+        // client, not its destination. Only a proxy stored on the account can
+        // be tested there. Best-effort: a miss keeps the prior verdict, and
+        // nothing here can change the connectivity result above.
+        if (p.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
+          let fp: OsFingerprint | undefined;
+          try {
+            const t = await testAccountProxy(settings.baseUrl, settings.apiKey, p.serverId);
+            fp = t.ok ? t.os_fingerprint : undefined;
+          } catch {
+            fp = undefined;
+          }
+          if (stale()) return null;
+          if (fp !== undefined) {
+            const rec: CachedOsFingerprint = { ...fp, at: Date.now() };
+            setOsFingerprints((m) => ({ ...m, [p.id]: rec }));
+            void saveOsFingerprint(p.id, fp, rec.at).catch(() => undefined);
+          }
+        }
       } else {
         // Proxy is no longer usable (not reachable / auth failed) — drop any
         // exit-geo from a prior successful probe so the card can't show a
         // stale "exit IP · country" next to "Auth failed" / "Not reachable".
         setExitResults((r) => dropKey(r, p.id));
+        setOsFingerprints((m) => dropKey(m, p.id));
       }
       return result;
     } catch (err) {
@@ -496,6 +527,7 @@ export function ProxiesView(): JSX.Element {
       };
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setExitResults((r) => dropKey(r, p.id));
+      setOsFingerprints((m) => dropKey(m, p.id));
       return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
@@ -739,6 +771,7 @@ export function ProxiesView(): JSX.Element {
           testResults={testResults}
           exitResults={exitResults}
           testedAt={testedAt}
+          osFingerprints={osFingerprints}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -845,6 +878,7 @@ function ProxyTable({
   testResults,
   exitResults,
   testedAt,
+  osFingerprints,
   onEdit,
   onRemove,
   onTest,
@@ -858,6 +892,7 @@ function ProxyTable({
   testResults: Record<string, ProxyTestResult>;
   exitResults: Record<string, ProxyExitProbeResult | null>;
   testedAt: Record<string, number>;
+  osFingerprints: Record<string, CachedOsFingerprint>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
@@ -1030,6 +1065,7 @@ function ProxyTable({
               <Th label="Exit" />
               <Th label="Latency" sortKey="latency" align="right" />
               <Th label="Capabilities" />
+              <Th label="OS" />
               <Th label="Status" sortKey="status" />
               <Th label="Last test" sortKey="tested" />
               <Th label="" />
@@ -1048,6 +1084,7 @@ function ProxyTable({
                 result={testResults[p.id]}
                 exit={p.id in exitResults ? exitResults[p.id] : undefined}
                 testedAt={testedAt[p.id]}
+                osFingerprint={osFingerprints[p.id]}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -1111,6 +1148,7 @@ function ProxyRow({
   result,
   exit,
   testedAt,
+  osFingerprint,
   onEdit,
   onRemove,
   onTest,
@@ -1126,6 +1164,8 @@ function ProxyRow({
   // echo round-trip did not complete through this proxy (V-857).
   exit: ProxyExitProbeResult | null | undefined;
   testedAt: number | undefined;
+  /** N-2 — the control plane's passive OS fingerprint of this proxy's stack. */
+  osFingerprint: CachedOsFingerprint | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onTest: () => void;
@@ -1236,6 +1276,10 @@ function ProxyRow({
             {result !== undefined ? 'no egress' : 'untested'}
           </span>
         )}
+      </td>
+
+      <td className="px-3 py-2">
+        <ProxyOsChip fingerprint={osFingerprint} size="xs" />
       </td>
 
       <td className="px-3 py-2">

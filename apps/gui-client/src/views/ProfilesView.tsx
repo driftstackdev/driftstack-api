@@ -4254,6 +4254,7 @@ export function ProfilesView({
                           latencyGood={latGood}
                           probed={probe !== undefined}
                           capabilities={probe?.result ?? null}
+                          osFingerprint={exitOk ? probe?.osFingerprint : undefined}
                           checkedAtIso={
                             probe?.at !== undefined ? new Date(probe.at).toISOString() : null
                           }

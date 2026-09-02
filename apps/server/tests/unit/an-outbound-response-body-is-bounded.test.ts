@@ -35,6 +35,7 @@ const SRC_ROOT = resolve(REPO_ROOT, 'apps/server/src');
 const OUTBOUND_CALLERS: ReadonlyMap<string, string> = new Map([
   ['lib/nowpayments-api.ts', 'shared readBoundedResponseBody, 256 KiB'],
   ['lib/stripe-api.ts', 'shared readBoundedResponseBody'],
+  ['lib/os-observer-lookup.ts', 'shared readBoundedResponseBody, OS_OBSERVER_MAX_BODY_BYTES 4 KiB'],
   [
     'lib/oauth-client-exchange.ts',
     'local readBoundedResponseBody copy, MAX_OAUTH_RESPONSE_BODY_BYTES 256 KiB',
