@@ -622,18 +622,30 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     // W650/A3-W1254 — the pageState store is constructed alongside the registry
     // (behind the same flag) + wired as the registry's onPageState consumer.
     expect(body).toMatch(/const sessionPageStateStore = new SessionPageStateStore\(\);/);
-    // Local fleet-demo session-dispatch config (only assembled behind the flag).
-    // Discrete pins (no long \s*\n? chain — backtracking rule). Locks the demo
-    // archetype (current-code iphone16pro, NOT the canvas-gated iphone17 cutover)
-    // + the local gost proxy w/ h3 (udp_associate) on.
+    // Session-dispatch config (only assembled behind the flag). Discrete pins
+    // (no long \s*\n? chain — backtracking rule).
     expect(body).toMatch(/sessionDispatch: \{/);
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_6_safari18_6',/);
     expect(body).toMatch(/behaviorProfile: 'default',/);
     expect(body).toMatch(/initialUrl: 'https:\/\/driftstack\.dev',/);
-    expect(body).toMatch(/host: '127\.0\.0\.1',/);
-    expect(body).toMatch(/port: 1080,/);
+    // ⛔ THIS PIN USED TO LOCK `host: '127.0.0.1', port: 1080` AS THE DEFAULT
+    // EGRESS, and in doing so it froze the outage in place: that literal was a
+    // local fleet-demo value, the flag guarding it turned load-bearing, and
+    // every session created without an explicit proxy_id was dispatched onto a
+    // loopback address nothing listens on. A parity pin cannot tell a constant
+    // that is correct from one that is merely current, so it defended the bug
+    // as faithfully as it would have defended the fix.
+    //
+    // The default now comes from env and is ABSENT when unset. Pin the SHAPE
+    // that makes that possible — a conditional spread keyed on both halves
+    // being present — rather than any particular host, so a future host change
+    // is a config edit and only a REGRESSION to a hardcoded literal reds here.
+    expect(body).toMatch(/config\.defaultEgressHost !== undefined/);
+    expect(body).toMatch(/config\.defaultEgressPort !== undefined/);
     expect(body).toMatch(/udp_associate: true,/);
     expect(body).toMatch(/require_remote_dns: false,/);
+    // The literal must not come back.
+    expect(body).not.toMatch(/host: '127\.0\.0\.1',/);
     // Spread into AppDeps (empty object when the flag is off → 503 stub).
     expect(body).toMatch(/\.\.\.fleetControlPlaneDeps,/);
   });

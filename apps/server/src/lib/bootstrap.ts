@@ -2730,12 +2730,27 @@ export async function createProductionDeps(
             archetype: 'iphone16pro_ios18_6_safari18_6',
             behaviorProfile: 'default',
             initialUrl: 'https://driftstack.dev',
-            proxy: {
-              host: '127.0.0.1',
-              port: 1080,
-              udp_associate: true,
-              require_remote_dns: false,
-            },
+            // From env, or ABSENT. The literal that used to sit here
+            // (127.0.0.1:1080) was a local fleet-demo value that became the
+            // live production default; unset now means "no default egress",
+            // which a REQUIRE_PROXY=1 node refuses by name instead of routing
+            // a session into an address nothing listens on.
+            ...(config.defaultEgressHost !== undefined && config.defaultEgressPort !== undefined
+              ? {
+                  proxy: {
+                    host: config.defaultEgressHost,
+                    port: config.defaultEgressPort,
+                    udp_associate: true,
+                    require_remote_dns: false,
+                    ...(config.defaultEgressUsername !== undefined
+                      ? { username: config.defaultEgressUsername }
+                      : {}),
+                    ...(config.defaultEgressPassword !== undefined
+                      ? { password: config.defaultEgressPassword }
+                      : {}),
+                  },
+                }
+              : {}),
           },
         };
       })()
@@ -2755,6 +2770,11 @@ export async function createProductionDeps(
       fleetControlPlaneDeps as { sessionDispatch?: { proxy?: { host?: string } } }
     ).sessionDispatch?.proxy;
     const host = defaultEgress?.host ?? null;
+    if (host === null) {
+      logger.warn(
+        'NO DEFAULT EGRESS CONFIGURED — agent sessions created without an explicit proxy_id will be REFUSED by a require-proxy node with no_proxy_configured. That is the intended failure (a named error beats a dead route), but those sessions do not run. Set DEFAULT_EGRESS_HOST/PORT (+ USERNAME/PASSWORD if it authenticates) to give them one.',
+      );
+    }
     if (
       host !== null &&
       (host === 'localhost' ||

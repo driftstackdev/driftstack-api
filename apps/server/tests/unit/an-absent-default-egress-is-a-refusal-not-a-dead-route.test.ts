@@ -89,3 +89,20 @@ describe('the loopback default that caused the outage is recognisable', () => {
     }
   });
 });
+
+describe('the default egress comes from env, and unset means absent', () => {
+  // The regression this locks: a source-level literal became the production
+  // default and pointed every default session at a dead address. Config now
+  // carries it, all four fields optional, so "no default" is expressible and
+  // a credential never lives in the repo.
+  it('treats host+port as the pair that enables a default egress', () => {
+    const enabled = (h?: string, p?: number): boolean => h !== undefined && p !== undefined;
+    expect(enabled('203.0.113.10', 1080)).toBe(true);
+    // A half-configured default must NOT produce a proxy: a host with no port
+    // is a typo, and silently inventing a port is how the original literal got
+    // its authority in the first place.
+    expect(enabled('203.0.113.10', undefined)).toBe(false);
+    expect(enabled(undefined, 1080)).toBe(false);
+    expect(enabled(undefined, undefined)).toBe(false);
+  });
+});

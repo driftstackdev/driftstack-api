@@ -359,6 +359,25 @@ const ConfigSchema = z.object({
    */
   fleetControlPlaneEnabled: z.boolean().default(false),
   /**
+   * Operator-default egress: the proxy a dispatched session browses through
+   * when the create names no `proxy_id`.
+   *
+   * UNSET IS A VALID, DELIBERATE STATE. Omitted → the assign carries no
+   * `inlineProxyConfig`, and a node with REQUIRE_PROXY=1 refuses it with a
+   * named `no_proxy_configured`. That is the correct failure: an operator sees
+   * a specific error instead of every default session silently loading nothing.
+   *
+   * It lives in env rather than in source because the previous source constant
+   * (`127.0.0.1:1080`, a local fleet-demo value) became the live production
+   * default and pointed every default session at an address nothing listens on.
+   * A credential also has no business in the repo. Set all of HOST and PORT to
+   * enable; USERNAME/PASSWORD only if the proxy authenticates.
+   */
+  defaultEgressHost: z.string().min(1).optional(),
+  defaultEgressPort: z.number().int().positive().max(65535).optional(),
+  defaultEgressUsername: z.string().min(1).optional(),
+  defaultEgressPassword: z.string().min(1).optional(),
+  /**
    * V-487 — NowPayments crypto-rail scaffold. Conditional, opt-in
    * sub-processor (Estonia EEA-internal per the V-308a legal
    * scaffolding). When `ipnSecret` is unset, `cryptoOrdersService` is
@@ -846,6 +865,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     // V-820 — fleet control-plane activation. Boolean via `=== 'true'`
     // (z.coerce.boolean would invert FLEET_CONTROL_PLANE_ENABLED=false).
     fleetControlPlaneEnabled: envFlag(env.FLEET_CONTROL_PLANE_ENABLED),
+    ...(env.DEFAULT_EGRESS_HOST !== undefined && env.DEFAULT_EGRESS_HOST !== ''
+      ? { defaultEgressHost: env.DEFAULT_EGRESS_HOST }
+      : {}),
+    ...(env.DEFAULT_EGRESS_PORT !== undefined && env.DEFAULT_EGRESS_PORT !== ''
+      ? { defaultEgressPort: Number(env.DEFAULT_EGRESS_PORT) }
+      : {}),
+    ...(env.DEFAULT_EGRESS_USERNAME !== undefined && env.DEFAULT_EGRESS_USERNAME !== ''
+      ? { defaultEgressUsername: env.DEFAULT_EGRESS_USERNAME }
+      : {}),
+    ...(env.DEFAULT_EGRESS_PASSWORD !== undefined && env.DEFAULT_EGRESS_PASSWORD !== ''
+      ? { defaultEgressPassword: env.DEFAULT_EGRESS_PASSWORD }
+      : {}),
     // V-487 — NowPayments scaffold. All fields optional; presence of
     // BOTH apiKey + ipnSecret is what the route registration checks.
     nowpayments:
