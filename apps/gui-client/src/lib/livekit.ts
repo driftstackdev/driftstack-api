@@ -293,10 +293,19 @@ export async function sendInputEvent(
   // coordinator and remain eligible to converge receiver state after the drain.
   const requiredRelease =
     event.type === 'touchEnd' || event.type === 'keyUp' || event.type === 'mouseUp';
+  // ⛔ `navigate` is EXEMPT, and it is the most important exemption here.
+  // The rule above exists because fresh intent replayed late lands against page
+  // state it was not aimed at. A navigate does not have that problem: it
+  // REPLACES the page state, so arriving late is not incoherent — it is exactly
+  // what the user asked for. And it is the escape hatch. Blocking it meant a
+  // congested channel took away the one action that could recover the session,
+  // which is why the customer's report was "not a single input, not a single
+  // new URL" rather than just sluggish input.
   if (
     reliable &&
     isReliableInputCongested(room) &&
     !requiredRelease &&
+    event.type !== 'navigate' &&
     event.type !== 'tabListUpdate'
   ) {
     throw new ReliableInputCongestedError();

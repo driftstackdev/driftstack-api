@@ -84,12 +84,27 @@ function decodeEvent(call: DataCall): InputEvent {
 
 describe('sendInputEvent', () => {
   it('fails fresh reliable intent fast while the room channel is congested', async () => {
+    // Uses a TAP, not a navigate. This arm used to drive sendNavigate and so
+    // pinned the defect: it asserted that a congested channel refuses the one
+    // action that can recover the session. The backpressure property is real and
+    // still pinned here — on an event where refusing is correct, because a tap
+    // replayed late lands against page state it was not aimed at.
     const { room, publishData } = makeRoom();
     setReliableInputCongested(room, true);
-    await expect(sendNavigate(room, 'https://example.com/')).rejects.toBeInstanceOf(
-      ReliableInputCongestedError,
-    );
+    await expect(
+      sendInputEvent(room, { type: 'tap', x: 10, y: 10 } as never, { reliable: true }),
+    ).rejects.toBeInstanceOf(ReliableInputCongestedError);
     expect(publishData).not.toHaveBeenCalled();
+  });
+
+  it('NEVER refuses a navigate — it is the escape hatch out of a congested room', async () => {
+    // The customer-visible half of the freeze: "not a single input, not a single
+    // new URL". A navigate REPLACES page state, so arriving late is not
+    // incoherent, and blocking it removes the only recovery the user has.
+    const { room, publishData } = makeRoom();
+    setReliableInputCongested(room, true);
+    await expect(sendNavigate(room, 'https://example.com/')).resolves.toBeUndefined();
+    expect(publishData).toHaveBeenCalled();
   });
 
   it('still publishes mandatory releases while congested', async () => {
