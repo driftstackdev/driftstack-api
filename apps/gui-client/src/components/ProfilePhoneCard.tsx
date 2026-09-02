@@ -43,6 +43,12 @@ export interface ProfilePhoneCardProps {
   onSaveNote?: (note: string) => string | null | void | Promise<string | null | void>;
   // proxy / egress
   hasProxy: boolean;
+  /** The proxy's own LABEL, so the card says WHICH proxy it is using.
+   *  The card previously received only `hasProxy`, a boolean — the resolved
+   *  ProxyConfig carrying `label` was in scope at the call site and dropped
+   *  there, so a customer with several proxies could see that a profile had one
+   *  and never which. Null when unbound or unnamed. */
+  proxyName?: string | null;
   /**
    * Whether this profile is bound to that proxy DELIBERATELY, or merely inherits it.
    *
@@ -379,6 +385,25 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     {p.exitIp ?? (p.probed ? 'no exit IP' : 'run Test')}
                   </span>
                 </div>
+                {/* WHICH proxy. Its own row rather than squeezed beside the exit
+                    IP: with several saved proxies the name is the thing that
+                    tells two otherwise-identical cards apart. */}
+                {p.proxyName !== null && p.proxyName !== undefined && p.proxyName !== '' && (
+                  <div
+                    className="flex items-center gap-1.5"
+                    data-component="profile-card-proxy-name"
+                  >
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
+                      via
+                    </span>
+                    <span
+                      className="min-w-0 flex-1 truncate text-[11.5px] text-ink-secondary"
+                      title={p.proxyName}
+                    >
+                      {p.proxyName}
+                    </span>
+                  </div>
+                )}
                 {/* latency + UDP badge (red/green) */}
                 <div className="flex items-center gap-1.5">
                   <span className="flex items-center gap-1 text-[9.5px] text-ink-muted">

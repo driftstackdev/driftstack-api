@@ -4209,6 +4209,7 @@ export function ProfilesView({
                           note={profilesMeta[profile.id]?.note ?? ''}
                           onSaveNote={(note) => handleSaveNote(profile.id, note)}
                           hasProxy={px !== null}
+                          proxyName={px?.label ?? null}
                           proxyExplicit={proxyIsExplicit(profile.id)}
                           flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                           countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
