@@ -276,6 +276,11 @@ export const FLIGHT_STORE_FILE = 'diagnostics.json';
 export const SIMULATOR_FLIGHT_STORE_FILE = 'diagnostics-simulator.json';
 const FLIGHT_KEY = 'lastRun';
 const CLEAN_KEY = 'cleanShutdown';
+/** Surfaced records are moved here before the live key is cleared. Bounded: a
+ *  ring of the last few, never appended without a cap — the "bounded by
+ *  construction" rule at the top of this section still holds. */
+const HISTORY_KEY = 'history';
+export const FLIGHT_HISTORY_MAX = 5;
 
 /**
  * Read whatever the previous run left behind, report it, then clear it.
@@ -290,20 +295,46 @@ export async function reportPreviousRun(
     save: () => Promise<void>;
   },
   onReport: (line: string, record: FlightRecord) => void,
+  /** Durable sink for the formatted line — the log buffer's ERROR path, which
+   *  flushes to disk immediately rather than on the 1s debounce a crash loop
+   *  can outrun. Optional so callers without a sink still get the toast. */
+  persist?: (line: string) => void,
 ): Promise<void> {
   try {
     const record = (await store.get<FlightRecord>(FLIGHT_KEY)) ?? null;
     const clean = (await store.get<boolean>(CLEAN_KEY)) ?? false;
     if (shouldSurfaceRecord(record, clean) && record !== null) {
-      onReport(formatFlightRecord(record), record);
+      const line = formatFlightRecord(record);
+      // ⛔ THE ONLY COPY USED TO BE DESTROYED BY THE ACT OF REPORTING IT. The
+      // toast said "a diagnostic snapshot was saved" while the lines below
+      // deleted it, and console.warn was the sole other copy — in a release
+      // build that is delivery to nobody. Two durable copies now, BEFORE the
+      // clear: a bounded history in this store, and the line through the
+      // caller's sink.
+      const prior = (await store.get<FlightRecord[]>(HISTORY_KEY)) ?? [];
+      await store.set(HISTORY_KEY, [record, ...prior].slice(0, FLIGHT_HISTORY_MAX));
+      persist?.(line);
+      onReport(line, record);
     }
     // Cleared unconditionally, including when nothing was surfaced: a record
-    // left in place would be re-read on every subsequent launch.
+    // left in place would be re-read on every subsequent launch. HISTORY is
+    // what survives; this key is only the live "did the last run die" flag.
     await store.set(FLIGHT_KEY, null);
     await store.set(CLEAN_KEY, false);
     await store.save();
   } catch {
     /* a diagnostic must never break startup */
+  }
+}
+
+/** The surfaced-record history, newest first — the thing the toast promises. */
+export async function readFlightHistory(store: {
+  get: <T>(k: string) => Promise<T | undefined>;
+}): Promise<FlightRecord[]> {
+  try {
+    return (await store.get<FlightRecord[]>(HISTORY_KEY)) ?? [];
+  } catch {
+    return [];
   }
 }
 

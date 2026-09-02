@@ -66,6 +66,7 @@ import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
 import { friendlySimulatorOpenReason } from './lib/simulator-open-error';
 import { installAppDeepLinkSources } from './lib/app-deep-link-listener';
+import { record } from './lib/log-buffer';
 
 // The default Command Center and boot/first-run surfaces stay eager. Every other
 // destination is loaded only when selected, keeping crypto/billing, profile tooling,
@@ -484,27 +485,31 @@ function Shell(): JSX.Element {
     // timer running LATE, which needs the thread to recover, and the reported
     // failure never does. The customer cannot open devtools during it either —
     // the report is "nothing is usable, I have to restart".
-    void reportPreviousRun(store, (line, record) => {
-      console.warn(line);
-      // ⛔ console.warn ALONE was the whole delivery, and the comment above says why
-      // that fails: in a release build the customer cannot open devtools, and the
-      // freeze this exists for is exactly when they cannot. So the recorder worked,
-      // wrote a correct record, and delivered it somewhere nobody can read — an
-      // instrument that is right and unread, which is how this fleet ran a
-      // cryptominer for six days behind 43,661 correct saturation warnings.
-      //
-      // ⚠️ Gated by `shouldSurfaceRecord`, which returns false on a clean shutdown,
-      // so this fires once after a genuine unclean exit rather than on every launch.
-      // The body says what happened and that a snapshot exists; the raw census stays
-      // in the console, because a stall census is not customer-facing copy.
-      push({
-        title: 'The app closed unexpectedly last time',
-        body: record.onStall
-          ? 'It stopped responding before closing. A diagnostic snapshot was saved.'
-          : 'It closed without shutting down. A diagnostic snapshot was saved.',
-        tone: 'warn',
-      });
-    });
+    void reportPreviousRun(
+      store,
+      (line, record) => {
+        console.warn(line);
+        // ⛔ console.warn ALONE was the whole delivery, and the comment above says why
+        // that fails: in a release build the customer cannot open devtools, and the
+        // freeze this exists for is exactly when they cannot. So the recorder worked,
+        // wrote a correct record, and delivered it somewhere nobody can read — an
+        // instrument that is right and unread, which is how this fleet ran a
+        // cryptominer for six days behind 43,661 correct saturation warnings.
+        //
+        // ⚠️ Gated by `shouldSurfaceRecord`, which returns false on a clean shutdown,
+        // so this fires once after a genuine unclean exit rather than on every launch.
+        // The body says what happened and that a snapshot exists; the raw census stays
+        // in the console, because a stall census is not customer-facing copy.
+        push({
+          title: 'The app closed unexpectedly last time',
+          body: record.onStall
+            ? 'It stopped responding before closing. A diagnostic snapshot was saved.'
+            : 'It closed without shutting down. A diagnostic snapshot was saved.',
+          tone: 'warn',
+        });
+      },
+      (line) => record('error', [line]),
+    );
 
     // ⛔ THE SIMULATOR'S RECORD IS REPORTED HERE, NOT IN THE SIMULATOR.
     // It runs in its own webview on its own main thread and writes its own file
@@ -513,16 +518,20 @@ function Shell(): JSX.Element {
     // is what comes back — the simulator may never be opened again. An instrument
     // read only by the process that died is not an instrument.
     const simulatorStore = new LazyStore(SIMULATOR_FLIGHT_STORE_FILE);
-    void reportPreviousRun(simulatorStore, (line, record) => {
-      console.warn(line);
-      push({
-        title: 'The browser window stopped responding last time',
-        body: record.onStall
-          ? 'It froze before closing. A diagnostic snapshot was saved.'
-          : 'It closed without shutting down. A diagnostic snapshot was saved.',
-        tone: 'warn',
-      });
-    });
+    void reportPreviousRun(
+      simulatorStore,
+      (line, record) => {
+        console.warn(line);
+        push({
+          title: 'The browser window stopped responding last time',
+          body: record.onStall
+            ? 'It froze before closing. A diagnostic snapshot was saved.'
+            : 'It closed without shutting down. A diagnostic snapshot was saved.',
+          tone: 'warn',
+        });
+      },
+      (line) => record('error', [line]),
+    );
 
     const recorder = startFlightRecorder(store, deps);
     const stopWatch = startStallWatch((line, census) => {
