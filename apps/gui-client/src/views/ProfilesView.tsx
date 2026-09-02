@@ -3467,22 +3467,35 @@ export function ProfilesView({
             )}
           </div>
         )}
-      {!onboardingDismissed && (
+      {/* Gated on accountMe, exactly as Home is: before it arrives every
+          done-state below would be derived from `?? 0` over absent data, and a
+          returning user with profiles and sessions would be shown a first-run
+          checklist telling them they have neither. The checklist reappears the
+          moment accountMe lands. */}
+      {!onboardingDismissed && accountMe !== null && (
         <OnboardingChecklist
           steps={buildOnboardingSteps(
             {
               apiKeyPresent: settings.apiKey !== null,
               // profile_count is the server truth; state.profiles covers a
               // just-created profile before accountMe re-fetches.
-              hasProfile: (accountMe?.profile_count ?? 0) > 0 || state.profiles.length > 0,
+              hasProfile: accountMe.profile_count > 0 || state.profiles.length > 0,
               // `concurrent_session_active` + `activeSessions` are DRIVER-only; a GUI
               // launch binds an AGENT session (agt_…), so without activeAgentCount the
               // guided first-run path (create → launch a profile) never checks this off
               // and the checklist never completes/auto-hides (audit 2026-07-08).
+              // Any live session settles this to true. A false is only a fact
+              // once the agent-session list has actually loaded -- until then
+              // `activeAgentCount` is 0 because the array is empty, not because
+              // nothing is running, so the answer travels as unknown.
               hasLiveSession:
-                (accountMe?.concurrent_session_active ?? 0) > 0 ||
+                accountMe.concurrent_session_active > 0 ||
                 activeSessions.length > 0 ||
-                activeAgentCount > 0,
+                activeAgentCount > 0
+                  ? true
+                  : agentSessionsLoaded
+                    ? false
+                    : null,
             },
             { goConnect: onGoToSettings, goProfile: () => setCreateOpen(true) },
           )}

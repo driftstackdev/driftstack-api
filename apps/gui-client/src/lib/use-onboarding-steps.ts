@@ -39,8 +39,11 @@ export interface OnboardingData {
   apiKeyPresent: boolean;
   /** At least one profile exists. */
   hasProfile: boolean;
-  /** At least one session (driver or profile-launched agent) is live. */
-  hasLiveSession: boolean;
+  /** At least one session (driver or profile-launched agent) is live, or `null`
+   *  when the caller cannot yet tell. The agent-session count is a separate
+   *  fetch that can be unloaded or have failed, and a half-known answer must
+   *  travel as `null` rather than be coerced to `false` -- see ChecklistStep. */
+  hasLiveSession: boolean | null;
 }
 
 export interface OnboardingNav {

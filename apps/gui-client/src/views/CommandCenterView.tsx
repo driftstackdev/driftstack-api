@@ -452,10 +452,14 @@ export function CommandCenterView({
   const driverLiveNow =
     accountMe?.concurrent_session_active ??
     (health.kind === 'ready' ? health.health.running : null);
-  const liveNow =
-    driverLiveNow === null && activeAgentCount === null
-      ? null
-      : (driverLiveNow ?? 0) + (activeAgentCount ?? 0);
+  // A sum with an unknown operand is only a FACT when the known half already
+  // settles it. Adding `?? 0` for the unknown half made "driver 0 + agents
+  // unknown" print a confident "0" while a phone was running -- absent data
+  // rendered as a measurement. So: both known -> the exact total; one known and
+  // already non-zero -> a floor we can defend, shown as "3+"; otherwise unknown.
+  const liveNowExact = driverLiveNow !== null && activeAgentCount !== null;
+  const liveNowFloor = (driverLiveNow ?? 0) + (activeAgentCount ?? 0);
+  const liveNow = liveNowExact ? liveNowFloor : liveNowFloor > 0 ? liveNowFloor : null;
   // The "Live now" KPI is a jump-off to live runs only when there's something to
   // jump to — a 0 (or unloaded) count stays a passive stat.
   const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;
@@ -549,8 +553,16 @@ export function CommandCenterView({
             {
               apiKeyPresent: settings.apiKey !== null,
               hasProfile: (accountMe?.profile_count ?? 0) > 0,
+              // `activeAgentCount` is null while the agent-session count is
+              // unloaded or its fetch failed. A driver session already running
+              // settles the answer either way; otherwise an unknown count must
+              // stay unknown, or a returning user is told they never launched.
               hasLiveSession:
-                (accountMe?.concurrent_session_active ?? 0) > 0 || (activeAgentCount ?? 0) > 0,
+                (accountMe?.concurrent_session_active ?? 0) > 0
+                  ? true
+                  : activeAgentCount === null
+                    ? null
+                    : activeAgentCount > 0,
             },
             { goConnect: () => onNavigate('settings'), goProfile: () => onNavigate('profiles') },
           )}
@@ -619,7 +631,7 @@ export function CommandCenterView({
             // by design — labeling this "Active" stops them reading as the same
             // number and visibly contradicting (audit: liveNow=3 vs Running=1).
             label="Active"
-            value={liveNow !== null ? String(liveNow) : '—'}
+            value={liveNow !== null ? `${String(liveNow)}${liveNowExact ? '' : '+'}` : '—'}
             // ⛔ Conditional, not unconditional. This was a bare `accent`, so a
             // count of ZERO rendered in the live/ready colour — the page's
             // most-read number saying "running" while nothing was. Accent now

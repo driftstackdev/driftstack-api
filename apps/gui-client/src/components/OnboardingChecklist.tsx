@@ -10,7 +10,17 @@
 export interface ChecklistStep {
   id: string;
   label: string;
-  done: boolean;
+  /** `true` done, `false` not done, `null` NOT KNOWN YET.
+   *
+   *  The third state exists because the callers derive these from data that can
+   *  be absent: a count that has not loaded, or a fetch that failed. Coercing
+   *  that absence to `false` renders "you have not done this" as a fact about
+   *  the account, which is the one thing the checklist must never get wrong --
+   *  it is the surface that tells a returning user they are a new user.
+   *  An unknown step is never counted as done, so the card cannot auto-hide on
+   *  a guess, and never becomes the highlighted next action, so the user is
+   *  never sent somewhere on the strength of data we do not have. */
+  done: boolean | null;
   /** Optional click-through for the next incomplete step. */
   go?: () => void;
 }
@@ -22,9 +32,11 @@ export function OnboardingChecklist({
   steps: ChecklistStep[];
   onDismiss: () => void;
 }): JSX.Element | null {
-  const doneCount = steps.filter((s) => s.done).length;
+  const doneCount = steps.filter((s) => s.done === true).length;
   if (steps.length === 0 || doneCount === steps.length) return null;
-  const next = steps.find((s) => !s.done);
+  // Strictly `false` -- an unknown step must not be promoted to the call to
+  // action, because we cannot say it is outstanding.
+  const next = steps.find((s) => s.done === false);
 
   return (
     <div
@@ -50,9 +62,17 @@ export function OnboardingChecklist({
       <ul className="mt-2.5 flex flex-col gap-1.5">
         {steps.map((step) => (
           <li key={step.id} className="flex items-center gap-2 text-xs">
-            {step.done ? (
+            {step.done === true ? (
               <span aria-hidden="true" className="text-status-ready">
                 ✓
+              </span>
+            ) : step.done === null ? (
+              <span
+                aria-hidden="true"
+                className="text-ink-muted"
+                title="Not known yet — still checking"
+              >
+                ·
               </span>
             ) : step.id === next?.id ? (
               <span aria-hidden="true" className="text-accent">
@@ -63,7 +83,7 @@ export function OnboardingChecklist({
                 ○
               </span>
             )}
-            {!step.done && step.go ? (
+            {step.done === false && step.go ? (
               <button
                 type="button"
                 className={`underline-offset-2 hover:underline ${
@@ -74,8 +94,13 @@ export function OnboardingChecklist({
                 {step.label}
               </button>
             ) : (
-              <span className={step.done ? 'text-ink-muted line-through' : 'text-ink-muted'}>
+              <span
+                className={step.done === true ? 'text-ink-muted line-through' : 'text-ink-muted'}
+              >
                 {step.label}
+                {step.done === null ? (
+                  <span className="ml-1.5 text-2xs text-ink-muted">checking…</span>
+                ) : null}
               </span>
             )}
           </li>
