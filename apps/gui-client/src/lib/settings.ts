@@ -24,7 +24,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { makeWriteLock } from './store-write-lock';
 
 export type ThemeMode = 'light' | 'dark';
-export type ThemeAccent = 'violet' | 'oxblood' | 'teal';
+/** The one accent. Was 'violet' | 'oxblood' | 'teal'; the owner asked for the
+ *  original red only (2026-09-02), keeping the light/dark axis. A persisted
+ *  'violet' or 'teal' MIGRATES to this rather than being rejected — a customer
+ *  who picked one before must not land on a validation failure. */
+export type ThemeAccent = 'oxblood';
 
 export interface DriftstackSettings {
   apiKey: string | null;
@@ -267,12 +271,10 @@ export async function loadSettings(): Promise<DriftstackSettings> {
     persisted?.themeMode === 'dark' || persisted?.themeMode === 'light'
       ? persisted.themeMode
       : DEFAULT_SETTINGS.themeMode;
-  const themeAccent: ThemeAccent =
-    persisted?.themeAccent === 'violet' ||
-    persisted?.themeAccent === 'oxblood' ||
-    persisted?.themeAccent === 'teal'
-      ? persisted.themeAccent
-      : DEFAULT_SETTINGS.themeAccent;
+  // Accent is single-valued now, so every persisted value — including the
+  // retired 'violet'/'teal' — resolves here. Kept as a field rather than
+  // deleted so an old settings file round-trips without losing its other keys.
+  const themeAccent: ThemeAccent = DEFAULT_SETTINGS.themeAccent;
   // Start URL the remote browser opens on launch (GUI-local; passed per-launch as
   // agentSessions.create({ initial_url })). Non-empty string or the default.
   const startUrl =

@@ -839,31 +839,6 @@ export function SettingsView(): JSX.Element {
             ))}
           </div>
         </div>
-        <div className="mt-3 flex items-center gap-3">
-          <span className="w-24 text-sm text-ink-secondary">Accent</span>
-          <div className="flex items-center gap-2.5">
-            {(
-              [
-                ['violet', '#6d5efc'],
-                ['oxblood', '#722f37'],
-                ['teal', '#109a82'],
-              ] as const
-            ).map(([a, hex]) => (
-              <button
-                key={a}
-                type="button"
-                aria-label={`${a} accent`}
-                onClick={() => void update({ themeAccent: a })}
-                className={
-                  settings.themeAccent === a
-                    ? 'h-5 w-5 rounded-full ring-2 ring-ink-primary ring-offset-2 ring-offset-surface-raised transition-transform'
-                    : 'h-5 w-5 rounded-full opacity-70 transition-all hover:scale-110 hover:opacity-100'
-                }
-                style={{ background: hex }}
-              />
-            ))}
-          </div>
-        </div>
       </Panel>
 
       {!isFirstRun && (

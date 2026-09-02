@@ -1,18 +1,20 @@
-// ThemeSwitcher — chrome-level theme/accent control. Asserts the active
-// accent is marked pressed, that clicking an accent / the mode button / ⌘⇧D
-// each persist the right partial settings update. The SettingsProvider's
+// ThemeSwitcher — chrome-level LIGHT/DARK control. Asserts the mode button and
+// ⌘⇧D each persist the right partial settings update. The SettingsProvider's
 // <html> dataset effect is covered elsewhere; here we only verify the control
 // drives update().
+//
+// The two accent arms that used to live here were removed with the swatches
+// (2026-09-02, owner: keep the one original red). They pinned a picker that no
+// longer exists, so keeping them would have meant keeping the picker. The
+// replacement arm below asserts the ABSENCE, which is the property that can
+// actually regress: a future change re-adding a colour picker fails here.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
-import type { ThemeAccent, ThemeMode } from '../../src/lib/settings';
+import type { ThemeMode } from '../../src/lib/settings';
 
 const update = vi.fn(() => Promise.resolve());
-let settings: { themeMode: ThemeMode; themeAccent: ThemeAccent } = {
-  themeMode: 'light',
-  themeAccent: 'violet',
-};
+let settings: { themeMode: ThemeMode } = { themeMode: 'light' };
 
 vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ settings, update }),
@@ -24,20 +26,23 @@ describe('ThemeSwitcher', () => {
   beforeEach(() => {
     cleanup();
     update.mockClear();
-    settings = { themeMode: 'light', themeAccent: 'violet' };
+    settings = { themeMode: 'light' };
   });
 
-  it('marks the active accent pressed and the others not', () => {
+  it('offers NO accent picker — the product has one accent', () => {
+    // The removal, pinned. Matches any "<name> accent" control rather than the
+    // three that existed, so re-adding a picker under a new colour name still
+    // fails here.
     render(<ThemeSwitcher />);
-    expect(screen.getByLabelText('Violet accent').getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByLabelText('Oxblood accent').getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByLabelText('Teal accent').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryAllByLabelText(/accent/i)).toHaveLength(0);
+    expect(screen.queryByRole('group', { name: /accent/i })).toBeNull();
   });
 
-  it('clicking an accent persists it', () => {
+  it('still renders the light/dark control it exists for', () => {
+    // Vacuity control: the arm above must pass because the swatches are gone,
+    // not because the component renders nothing.
     render(<ThemeSwitcher />);
-    fireEvent.click(screen.getByLabelText('Teal accent'));
-    expect(update).toHaveBeenCalledWith({ themeAccent: 'teal' });
+    expect(screen.getByLabelText('Switch to dark mode')).toBeTruthy();
   });
 
   it('the mode button toggles light → dark', () => {
@@ -53,7 +58,7 @@ describe('ThemeSwitcher', () => {
   });
 
   it('in dark mode the button offers a switch back to light', () => {
-    settings = { themeMode: 'dark', themeAccent: 'oxblood' };
+    settings = { themeMode: 'dark' };
     render(<ThemeSwitcher />);
     fireEvent.click(screen.getByLabelText('Switch to light mode'));
     expect(update).toHaveBeenCalledWith({ themeMode: 'light' });

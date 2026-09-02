@@ -271,19 +271,16 @@
 
 /* ─── Fleet design-system token layer (2026-06-12 rework) ─────────────
    Contract: docs/internal/2026-06-12-design-system-spec.md. Two axes on
-   <html>: data-mode (light|dark) × data-accent (violet|oxblood|teal).
+   <html>: data-mode (light|dark) × data-accent (oxblood — the only accent).
    The semantic tailwind colors (surface/ink/accent/status) resolve to
    these vars, so the WHOLE GUI flips with the axes — no component
    changes. light+violet = the founder-locked default; dark = the
    pre-rework GUI palette, preserved as the dark theme. */
-[data-accent='violet'] {
-  --accent-rgb: 109 94 252;
-  --accent-hover-rgb: 88 71 224;
-  --accent-active-rgb: 76 61 208;
-  --accent-subtle-rgb: 109 94 252;
-  --accent: #6d5efc;
-  --accent-ring: rgba(109, 94, 252, 0.4);
-}
+/* The ONLY accent. The violet and teal variants were removed 2026-09-02 at
+   the owner's request — the original red only, with the light/dark axis
+   untouched. The selector is kept rather than folded into :root so the
+   attribute SettingsContext writes still matches, and nothing downstream
+   needs to know the axis collapsed to a single value. */
 [data-accent='oxblood'] {
   /* 2026-06-17 — founder "more red, like the status page": brightened the dark
      oxblood-700 (#722f37) to oxblood-500 (#a83b4d) so the accent + logo read as a
@@ -294,14 +291,6 @@
   --accent-subtle-rgb: 168 59 77;
   --accent: #a83b4d;
   --accent-ring: rgba(168, 59, 77, 0.4);
-}
-[data-accent='teal'] {
-  --accent-rgb: 16 154 130;
-  --accent-hover-rgb: 12 125 105;
-  --accent-active-rgb: 10 108 91;
-  --accent-subtle-rgb: 16 154 130;
-  --accent: #109a82;
-  --accent-ring: rgba(16, 154, 130, 0.4);
 }
 [data-mode='light'] {
   color-scheme: light;

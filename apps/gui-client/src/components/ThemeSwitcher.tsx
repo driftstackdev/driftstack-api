@@ -1,25 +1,17 @@
-// Theme/accent switcher — chrome-level control over the two theme axes
-// (data-mode light|dark × data-accent violet|oxblood|teal) that the
-// SettingsProvider applies to <html>. These were only reachable buried in
-// Settings; surfacing them in the title bar makes the whole-app restyle a
-// one-click delight. ⌘⇧D (Ctrl+⇧+D) toggles light/dark from anywhere.
+// Theme switcher — chrome-level control over light/dark, which the
+// SettingsProvider applies to <html>. ⌘⇧D (Ctrl+⇧+D) toggles from anywhere.
 //
-// Accent swatches use the fixed brand hexes (they identify the accent
-// regardless of the active theme), so they're inline styles, not tokens.
+// The accent swatches that used to sit here were removed 2026-09-02 at the
+// owner's request: the product keeps its one original red, and the light/dark
+// axis stays. A picker with a single option is not a choice, so the control is
+// gone rather than rendered disabled.
 
 import { useEffect } from 'react';
 import { useSettings } from '../lib/SettingsContext';
-import type { ThemeAccent } from '../lib/settings';
-
-const ACCENTS: ReadonlyArray<{ id: ThemeAccent; label: string; color: string }> = [
-  { id: 'violet', label: 'Violet', color: '#6d5efc' },
-  { id: 'oxblood', label: 'Oxblood', color: '#722f37' },
-  { id: 'teal', label: 'Teal', color: '#109a82' },
-];
 
 export function ThemeSwitcher(): JSX.Element {
   const { settings, update } = useSettings();
-  const { themeMode, themeAccent } = settings;
+  const { themeMode } = settings;
 
   // Global ⌘⇧D / Ctrl+⇧+D → toggle light/dark.
   useEffect(() => {
@@ -35,25 +27,6 @@ export function ThemeSwitcher(): JSX.Element {
 
   return (
     <div className="flex items-center gap-1.5" data-component="theme-switcher">
-      <div className="flex items-center gap-1" role="group" aria-label="Accent colour">
-        {ACCENTS.map((a) => {
-          const active = a.id === themeAccent;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              aria-label={`${a.label} accent`}
-              aria-pressed={active}
-              title={`${a.label} accent`}
-              onClick={() => void update({ themeAccent: a.id })}
-              className={`h-3 w-3 rounded-full border transition-transform hover:scale-110 ${
-                active ? 'border-ink-primary ring-1 ring-ink-primary/40' : 'border-transparent'
-              }`}
-              style={{ backgroundColor: a.color }}
-            />
-          );
-        })}
-      </div>
       <button
         type="button"
         aria-label={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
