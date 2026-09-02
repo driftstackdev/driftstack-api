@@ -657,9 +657,22 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
 };
 
 /**
- * ⛔ CHROME-ON-iOS ARCHETYPES (iphone17_ios18_7_chrome148/149/150) ARE HELD OUT
- * of this registry on A1's direct instruction (2026-08-30), for THREE
- * independent reasons — do not add them when only one clears:
+ * ⛔ CHROME-ON-iOS ARCHETYPES ARE HELD OUT of this registry on A1's direct
+ * instruction (2026-08-30). The held-out set, as of 2026-09-02, is SIX:
+ *
+ *     iphone17_ios18_7_chrome148/149/150   (original)
+ *     iphone17_ios18_7_chrome151/152/153   (added 2026-09-02, A3 4799420bc)
+ *
+ * 151/152/153 are version-invariant CLONES of the corrected chrome150 — UA
+ * token and version pin only, 14 differing leaves on a path-keyed diff — and
+ * they inherit every reason below unchanged, because a clone is not a render:
+ * nothing about them has been measured on a device. A3 holds them out on their
+ * side too (registry guard + catalog `held_out` with `verified:false`).
+ * ⛔ UN-HOLD AS A SET. Clearing one milestone does not clear a sibling that
+ * differs from it only by a version string; the defects below are in the fork's
+ * slug PREDICATES, which cannot distinguish 151 from 153.
+ *
+ * THREE independent reasons — do not add them when only one clears:
  *
  *  1. A1's browser-family gate: the chrome family is OPEN (distribution-policy
  *     weights + founder ATP reference not finalized). A family must be CLOSED
