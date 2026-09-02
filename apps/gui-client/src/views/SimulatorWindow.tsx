@@ -124,6 +124,7 @@ import {
   type SessionFileHandle,
   resumeChallengedSession,
 } from '../lib/agent-session-control';
+import { endAgentSessionOnUnload, shouldEndOnPageHide } from '../lib/agent-session-unload';
 
 /** Human input is an allowlisted ownership state, not merely "anything except AI".
  * `null` is the control API's still-loading/unknown state; failing open there can
@@ -6933,6 +6934,24 @@ export function SimulatorWindow(): JSX.Element {
     return () => {
       disposed = true;
       unlisten?.();
+    };
+  }, [sessionId, controlAuth, controlMode, controlModeConfirmed]);
+  // ⛔ App quit is not a window close. ⌘Q tears the webview down without ever
+  // firing onCloseRequested above, and the main GUI has no exit hook (its Tauri
+  // .run() takes no event callback), so a manual session's profile was never
+  // saved back on quit — only idle-reaped by the harness up to 30 minutes
+  // later. `pagehide` is the last event a document reliably sees; the DELETE
+  // rides a keepalive request that completes after the page is gone. Gated
+  // EXACTLY like the close handler via shouldEndOnPageHide.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!shouldEndOnPageHide(controlMode, controlModeConfirmed, sessionId)) return;
+    const onPageHide = (): void => {
+      endAgentSessionOnUnload(sessionId, controlAuth);
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      window.removeEventListener('pagehide', onPageHide);
     };
   }, [sessionId, controlAuth, controlMode, controlModeConfirmed]);
   // Dynamic macOS Dock icon (founder 2026-06-18: "the Dock should be the proxy

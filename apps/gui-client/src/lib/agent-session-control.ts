@@ -208,7 +208,7 @@ function errorEventOf(body: ApiSession): AgentSessionErrorEvent | undefined {
   };
 }
 
-async function authedResponse(
+export async function authedResponse(
   path: string,
   init: RequestInit,
   auth: ControlAuth,
