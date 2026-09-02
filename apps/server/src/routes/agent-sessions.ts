@@ -785,7 +785,23 @@ export interface SessionDispatchConfig {
   archetype: string;
   behaviorProfile: string;
   initialUrl: string;
-  proxy: SocksProxyConfig;
+  /** Operator-default egress for a session that names no `proxy_id`.
+   *
+   *  OPTIONAL, and that is the point. While this was required, a deployment had
+   *  to supply SOMETHING, so a local fleet-demo constant (`127.0.0.1:1080`) sat
+   *  here and became the production default the moment
+   *  `FLEET_CONTROL_PLANE_ENABLED` turned load-bearing — every session without
+   *  an explicit proxy was dispatched onto a dead loopback route, and the
+   *  comment above it still claimed the block was inert in prod.
+   *
+   *  Omitted → the assign carries NO `inlineProxyConfig`. The wire allows that
+   *  (the minimal valid assign is type/sessionId/archetype/behaviorProfile), and
+   *  a node with `REQUIRE_PROXY=1` then refuses with `no_proxy_configured` — a
+   *  named error an operator can act on, instead of a dead route that presents
+   *  as an unexplained freeze. A required field cannot express "no default"; an
+   *  optional one can, so the failure mode becomes a refusal rather than a
+   *  silent misroute. */
+  proxy?: SocksProxyConfig;
 }
 
 /** Idle-timeout for MANUAL (GUI) sessions (A3 W2813 idleTimeoutSeconds knob). A manual
@@ -1150,7 +1166,8 @@ export async function dispatchSessionAssignOnCreate(args: {
     // skips the dispatch (fail-closed: never run through an unsafe proxy).
     // socks5 operator default OR the customer's resolved socks5/VPN config (the
     // latter is the FLAT VPN wire for openvpn/wireguard — A3 W2163).
-    let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire = sessionDispatch.proxy;
+    let inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire | undefined =
+      sessionDispatch.proxy;
     if (proxyId !== undefined && accountId !== undefined && accountProxiesService !== undefined) {
       const resolved = await accountProxiesService.resolveForDispatch({
         proxyId,
@@ -1194,11 +1211,17 @@ export async function dispatchSessionAssignOnCreate(args: {
             region: cachedExit.identity.region,
             city: cachedExit.identity.city,
             timezone: cachedExit.identity.timezone,
+            // With no egress configured there is no proxy to be UDP-capable,
+            // so quicOk is false rather than a claim about a config that does
+            // not exist. (A cached exit identity can outlive the proxy that
+            // produced it, so this branch is reachable.)
             quicOk:
-              'type' in inlineProxyConfig &&
-              (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
-                ? true
-                : (inlineProxyConfig as { udp_capable?: boolean | null }).udp_capable === true,
+              inlineProxyConfig === undefined
+                ? false
+                : 'type' in inlineProxyConfig &&
+                    (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
+                  ? true
+                  : (inlineProxyConfig as { udp_capable?: boolean | null }).udp_capable === true,
             probedAt: cachedExit.probedAt,
           }
         : undefined;
@@ -1209,7 +1232,9 @@ export async function dispatchSessionAssignOnCreate(args: {
       // Customer-supplied initial_url wins; falls back to the operator-config
       // default when the create body omitted it.
       initialUrl: initialUrl ?? sessionDispatch.initialUrl,
-      inlineProxyConfig,
+      // Omit rather than send undefined: key presence is what decides whether
+      // the harness sees an egress at all.
+      ...(inlineProxyConfig !== undefined ? { inlineProxyConfig } : {}),
       livekit: {
         room: sessionId,
         token,

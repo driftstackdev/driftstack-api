@@ -2703,8 +2703,25 @@ export async function createProductionDeps(
             ),
             makeSessionErrorEventRelay(agentSessionsRepo, notificationEventBus, logger),
           )),
-          // Local fleet-demo: the config a dispatched session browses with. Only
-          // assembled behind FLEET_CONTROL_PLANE_ENABLED (so inert in prod). The
+          // The config a dispatched session browses with when it names no
+          // proxy_id.
+          //
+          // ⛔ THE COMMENT THAT USED TO BE HERE SAID "so inert in prod". IT WAS
+          // FALSE. This block is assembled whenever FLEET_CONTROL_PLANE_ENABLED
+          // is true, and that flag ALSO gates ControlPlaneAgentExecutor (:1353)
+          // — so it must be true for agent sessions to work at all, and prod
+          // sets it. The local-demo `127.0.0.1:1080` below was therefore the
+          // LIVE PRODUCTION default egress: nothing listens on 1080 on the
+          // fleet box, so every session without an explicit proxy_id was
+          // dispatched onto a dead loopback route and presented to the customer
+          // as an unexplained freeze. A flag that is both a demo gate and
+          // load-bearing cannot be turned off, so the demo config ships.
+          //
+          // `proxy` is now OPTIONAL (see SessionDispatchConfig): omit it and the
+          // assign carries no egress, which a REQUIRE_PROXY=1 node refuses with
+          // a named `no_proxy_configured` instead of misrouting. The value below
+          // is UNCHANGED pending the operator's choice of a real default; the
+          // startup check under it makes the current state loud meanwhile. The
           // archetype is the canonical current-code iPhone (NOT the canvas-gated
           // iphone17 cutover); the SOCKS5 proxy is the local gost (udp_associate
           // on for h3/QUIC = iPhone-coherent). Edit here to point a demo session
@@ -2723,6 +2740,34 @@ export async function createProductionDeps(
         };
       })()
     : {};
+
+  // A default egress on a loopback or link-local address cannot reach the
+  // public internet from the fleet node. It is not rejected here: a loopback
+  // CAN be legitimate (a local SOCKS forwarder onto a real upstream), so
+  // refusing it would break that deployment and is not this function's call.
+  // But on a node that requires a proxy it is overwhelmingly the cause of
+  // "every page is frozen", and it shipped once already behind a comment
+  // claiming the block was inert in production. So it is stated LOUDLY at boot
+  // rather than left for someone to find in a per-session transport log.
+  // Mirrors the box-side per-session warning A3 added in 4149f6080.
+  if (config.fleetControlPlaneEnabled) {
+    const defaultEgress = (
+      fleetControlPlaneDeps as { sessionDispatch?: { proxy?: { host?: string } } }
+    ).sessionDispatch?.proxy;
+    const host = defaultEgress?.host ?? null;
+    if (
+      host !== null &&
+      (host === 'localhost' ||
+        host.startsWith('127.') ||
+        host === '::1' ||
+        host.startsWith('169.254.'))
+    ) {
+      logger.warn(
+        { host, port: (defaultEgress as { port?: number } | undefined)?.port },
+        'DEFAULT EGRESS IS A LOOPBACK ADDRESS — every agent session created without an explicit proxy_id will be dispatched onto it. If nothing is forwarding on that address from the fleet node, those sessions load no page and present as an unexplained freeze. Set a real default egress, or omit sessionDispatch.proxy so the node refuses with no_proxy_configured instead of misrouting.',
+      );
+    }
+  }
 
   const deps: AppDeps = {
     logger,
