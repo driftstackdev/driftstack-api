@@ -31,6 +31,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { RateLimitStore } from '../services/rate-limit.js';
 import { ipRateLimit } from '../middleware/ip-rate-limit.js';
+import { resolveExitTimezone } from '../lib/exit-timezone.js';
 
 export const EGRESS_ECHO_IP_LIMIT = { capacity: 12, refillPerSecond: 12 / 60 };
 
@@ -70,7 +71,17 @@ export function registerEgressEchoRoutes(
       country,
       region: cfLocationHeader(req.headers['cf-region']),
       city: cfLocationHeader(req.headers['cf-ipcity']),
-      timezone: cfLocationHeader(req.headers['cf-timezone']),
+      // ⛔ NOT the raw header. `cf-timezone` arrives only with the "Add visitor
+      // location headers" Managed Transform, which is off here — measured
+      // 2026-09-02, this endpoint returned region/city/timezone ALL null while
+      // country resolved fine, because country rides `cf-ipcountry` (every
+      // plan) and the rest ride the transform. The harness falls back to the
+      // archetype when this is null, and the launch archetype is
+      // Europe/Istanbul, so every session worldwide rendered Turkey time
+      // regardless of where it egressed. Resolve to the country's zone when the
+      // edge cannot answer; still null when neither can, so "unknown" stays
+      // visible rather than becoming a guess.
+      timezone: resolveExitTimezone(cfLocationHeader(req.headers['cf-timezone']), country),
     };
   });
 }
