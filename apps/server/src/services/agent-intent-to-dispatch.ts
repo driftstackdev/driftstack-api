@@ -39,6 +39,7 @@ import {
   type HarnessIntentName,
 } from '../schemas/harness-control-protocol.js';
 import { selectorImpliesSensitiveInput } from './agent-sensitive-input.js';
+import { validateCssSelector } from './agent-selector-validation.js';
 
 export type AgentIntentDispatch =
   | { ok: true; intentName: HarnessIntentName; params: Record<string, unknown> }
@@ -125,6 +126,19 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
       if (intent.selector === undefined || intent.selector.length === 0) {
         return { ok: false, reason: 'interact:tap requires a selector' };
       }
+      {
+        // ⛔ Refuse a non-CSS locator HERE rather than letting WebDriver reject
+        // it. Dispatching `button:has-text('Sign up')` produced an opaque HTTP
+        // 500 with diagnosis "unknown"/not-retryable — measured live 2026-09-02
+        // on the owner's own prompt. A named reason lets the agent correct
+        // itself; a 500 tells it nothing.
+        const verdict = validateCssSelector(intent.selector);
+        if (!verdict.ok)
+          return {
+            ok: false,
+            reason: `interact:tap ${verdict.reason ?? 'has an invalid selector'}`,
+          };
+      }
       // CSS selector is the only locator the AgentIntent carries today.
       // The harness routes `strategy` straight to W3C WebDriver, so we emit the
       // W3C rawValue 'css selector' (NOT a friendly 'css') — the API translates
@@ -140,6 +154,14 @@ function mapInteract(intent: Extract<AgentIntent, { kind: 'interact' }>): AgentI
     case 'type': {
       if (intent.selector === undefined || intent.selector.length === 0) {
         return { ok: false, reason: 'interact:type requires a selector' };
+      }
+      {
+        const verdict = validateCssSelector(intent.selector);
+        if (!verdict.ok)
+          return {
+            ok: false,
+            reason: `interact:type ${verdict.reason ?? 'has an invalid selector'}`,
+          };
       }
       if (intent.value === undefined) {
         return { ok: false, reason: 'interact:type requires a value (the text to type)' };
