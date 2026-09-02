@@ -72,9 +72,18 @@ export function SettingsView(): JSX.Element {
     'idle',
   );
   const [foundUpdate, setFoundUpdate] = useState<AvailableUpdate | null>(null);
+  // ⛔ `foundUpdate` used to be stored and never used except to interpolate its
+  // version into "it will install shortly." Nothing installed it. The
+  // AvailableUpdate carries a working install() closure — the update BANNER
+  // calls it (App.tsx:698) — and Settings simply dropped it on the floor, so a
+  // customer who deliberately went looking for an update was told one was
+  // coming and then nothing happened. Reported by the owner exactly that way.
+  const [installState, setInstallState] = useState<'idle' | 'installing' | 'failed'>('idle');
+  const [installPct, setInstallPct] = useState(0);
   const runUpdateCheck = async (): Promise<void> => {
     setUpdateCheck('checking');
     setFoundUpdate(null);
+    setInstallState('idle');
     try {
       const u = await checkForUpdate();
       setFoundUpdate(u);
@@ -83,6 +92,20 @@ export function SettingsView(): JSX.Element {
       // checkForUpdate is documented not to throw, but a manual check must not
       // be able to strand the button on "Checking…" if that ever changes.
       setUpdateCheck('error');
+    }
+  };
+  const runInstall = async (): Promise<void> => {
+    if (foundUpdate === null) return;
+    setInstallState('installing');
+    setInstallPct(0);
+    try {
+      await foundUpdate.install((f) => setInstallPct(Math.round(f * 100)));
+      // On success the app relaunches into the new build, so there is no
+      // success state to render — anything after this is the failure path.
+    } catch {
+      // Surface it. The running app is untouched per install()'s contract, so
+      // "failed" is recoverable: the customer can retry or download manually.
+      setInstallState('failed');
     }
   };
   const [draftStartUrl, setDraftStartUrl] = useState(settings.startUrl);
@@ -1154,6 +1177,23 @@ export function SettingsView(): JSX.Element {
               >
                 {updateCheck === 'checking' ? 'Checking…' : 'Check for updates'}
               </button>
+              {/* The action the owner expected: offer to install NOW rather
+                  than promising it will happen "shortly" and then not. */}
+              {updateCheck === 'found' && foundUpdate !== null && (
+                <button
+                  type="button"
+                  data-action="install-update-now"
+                  disabled={installState === 'installing'}
+                  onClick={() => void runInstall()}
+                  className="btn-primary text-xs disabled:opacity-50"
+                >
+                  {installState === 'installing'
+                    ? 'Installing…'
+                    : installState === 'failed'
+                      ? 'Retry install'
+                      : `Install ${foundUpdate.version} now`}
+                </button>
+              )}
             </div>
             {updateCheck !== 'idle' && updateCheck !== 'checking' && (
               <span
@@ -1165,7 +1205,14 @@ export function SettingsView(): JSX.Element {
               >
                 {updateCheck === 'none' && 'You are on the latest version.'}
                 {updateCheck === 'found' &&
-                  `Version ${foundUpdate?.version ?? ''} is available — it will install shortly.`}
+                  installState === 'idle' &&
+                  `Version ${foundUpdate?.version ?? ''} is available.`}
+                {installState === 'installing' &&
+                  (installPct > 0
+                    ? `Installing ${String(installPct)}%…`
+                    : 'Installing… the app will restart when it finishes.')}
+                {installState === 'failed' &&
+                  "Couldn't install the update. The app is unchanged — try again, or download it manually."}
                 {/* Say WHY rather than "check failed": offline and a blocked
                     endpoint are the common cases and neither is the app's fault. */}
                 {updateCheck === 'error' &&

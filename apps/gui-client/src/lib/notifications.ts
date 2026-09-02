@@ -88,6 +88,15 @@ export interface SubscribeOpts {
 
 /** Open an EventSource and dispatch parsed events. Returns a
  *  close handle the caller MUST invoke on unmount. */
+/** Two errors an hour apart are not a "run". Anything older than this starts a
+ *  fresh count, so only a genuine burst can reach the give-up threshold. */
+const ERROR_RUN_RESET_MS = 60_000;
+
+/** After giving up on a source, try again on this backoff rather than staying
+ *  closed for the life of the app. Doubles per attempt, capped. */
+const REARM_BASE_MS = 15_000;
+const REARM_MAX_MS = 5 * 60_000;
+
 export function subscribeNotifications(opts: SubscribeOpts): () => void {
   const Ctor =
     opts.eventSourceFactory ?? (typeof EventSource !== 'undefined' ? EventSource : undefined);
@@ -97,8 +106,30 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
     opts.onState?.('closed');
     return () => undefined;
   }
+  // Bound after the undefined-guard above so the re-arm closure keeps the
+  // narrowing — TS widens `Ctor` again inside a nested function body.
+  const Source = Ctor;
   opts.onState?.('connecting');
-  const es = new Ctor(opts.url);
+  let es = new Source(opts.url);
+  let rearmDelay = REARM_BASE_MS;
+
+  /** Rebuild the EventSource after a give-up. The caller's close handle stays
+   *  valid across a re-arm because it closes whatever `es` currently is. */
+  function scheduleRearm(): void {
+    if (disposed || rearmTimer !== null) return;
+    rearmTimer = setTimeout(() => {
+      rearmTimer = null;
+      if (disposed) return;
+      detach();
+      es.close();
+      consecutiveErrors = 0;
+      lastErrorAt = 0;
+      rearmDelay = Math.min(rearmDelay * 2, REARM_MAX_MS);
+      opts.onState?.('connecting');
+      es = new Source(opts.url);
+      attach();
+    }, rearmDelay);
+  }
 
   // Bounded reconnect — a server that's reachable at TCP level but keeps
   // 5xx-ing / dropping (proxy, expired token) makes native EventSource retry
@@ -108,6 +139,9 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
   // gets the Settings affordance. A successful 'open' resets the counter.
   const MAX_CONSECUTIVE_ERRORS = 6;
   let consecutiveErrors = 0;
+  let lastErrorAt = 0;
+  let rearmTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
 
   const handleOpen = (): void => {
     consecutiveErrors = 0;
@@ -124,22 +158,35 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
     // undefined.
     if (es.readyState === 2) {
       opts.onState?.('closed');
+      scheduleRearm();
     } else {
+      // "Consecutive" has to mean consecutive IN TIME. Without decay, six
+      // unrelated blips hours apart accumulate and trip the give-up as if they
+      // were one bad minute, which is how a healthy connection ends up wearing
+      // a permanent "disconnected" banner.
+      const now = Date.now();
+      if (now - lastErrorAt > ERROR_RUN_RESET_MS) consecutiveErrors = 0;
+      lastErrorAt = now;
       consecutiveErrors += 1;
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        // Give up retrying — close the flapping source and surface the terminal
-        // 'closed' state so the user gets the "open Settings" affordance instead
-        // of a permanent "reconnecting…".
+        // Give up on THIS EventSource — a source that has failed six times in a
+        // row will keep failing, and native EventSource retries forever without
+        // ever reporting a terminal state.
         es.close();
         opts.onState?.('closed');
+        // ⛔ But giving up on the source is not giving up forever. Before, this
+        // was terminal for the life of the app: when connectivity came back
+        // nothing reconnected, so the banner stayed up on a machine that was
+        // perfectly online — the owner's "already auto connected, this alert
+        // doesn't clear". Re-arm on a backoff so recovery is automatic and the
+        // banner clears itself.
+        scheduleRearm();
       } else {
         opts.onState?.('reconnecting');
       }
     }
     opts.onError?.(err);
   };
-  es.addEventListener('open', handleOpen);
-  es.addEventListener('error', handleError);
 
   // Wire one listener per kind so the EventSource native event-name
   // routing fires the right handler. We re-dispatch through a single
@@ -162,15 +209,30 @@ export function subscribeNotifications(opts: SubscribeOpts): () => void {
       }
     };
     kindHandlers.push([kind, handler]);
-    es.addEventListener(kind, handler);
   }
 
-  return () => {
+  // attach/detach exist so a re-arm can move the SAME handlers onto a fresh
+  // EventSource. Registering inline would have meant the rebuilt source
+  // silently carried no listeners — connected, and delivering nothing.
+  function attach(): void {
+    es.addEventListener('open', handleOpen);
+    es.addEventListener('error', handleError);
+    for (const [kind, handler] of kindHandlers) es.addEventListener(kind, handler);
+  }
+  function detach(): void {
     es.removeEventListener('open', handleOpen);
     es.removeEventListener('error', handleError);
-    for (const [kind, handler] of kindHandlers) {
-      es.removeEventListener(kind, handler);
+    for (const [kind, handler] of kindHandlers) es.removeEventListener(kind, handler);
+  }
+  attach();
+
+  return () => {
+    disposed = true;
+    if (rearmTimer !== null) {
+      clearTimeout(rearmTimer);
+      rearmTimer = null;
     }
+    detach();
     es.close();
     opts.onState?.('closed');
   };
