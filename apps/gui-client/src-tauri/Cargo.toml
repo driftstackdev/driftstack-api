@@ -1,6 +1,6 @@
 [package]
 name = "driftstack-gui"
-version = "0.1.12"
+version = "0.1.13"
 description = "Driftstack self-hosted GUI client"
 authors = ["Driftstack"]
 edition = "2021"
