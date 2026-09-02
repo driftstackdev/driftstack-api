@@ -17,7 +17,13 @@ interface TestSettings {
   apiKey: string | null;
   baseUrl: string;
   themeMode: 'light' | 'dark';
-  themeAccent: 'violet' | 'oxblood' | 'teal';
+  // Accent collapsed to a single value 2026-09-02 (owner: keep the original red
+  // only), so it can no longer stand in for "a preference the user changed".
+  // These suites are about SAVE ordering, merging and failure recovery — not
+  // about the accent — so the mutated preference is now `startUrl`, which is
+  // still freely changeable. themeMode is already used as the OTHER preference
+  // in the FIFO test, so the two must stay distinct.
+  themeAccent: 'oxblood';
   telemetryOptIn: boolean | null;
   startUrl: string;
 }
@@ -115,7 +121,7 @@ function Probe(): JSX.Element {
       <span data-testid="current-api">{settings.apiKey ?? 'none'}</span>
       <span data-testid="current-base">{settings.baseUrl}</span>
       <span data-testid="current-theme-mode">{settings.themeMode}</span>
-      <span data-testid="current-theme-accent">{settings.themeAccent}</span>
+      <span data-testid="current-start-url">{settings.startUrl}</span>
       <button type="button" onClick={() => setActiveWorkspace('acct_team')}>
         pick-team
       </button>
@@ -193,10 +199,10 @@ function Probe(): JSX.Element {
       <button
         type="button"
         onClick={() => {
-          void update({ themeAccent: 'teal' });
+          void update({ startUrl: 'https://changed.example/' });
         }}
       >
-        theme-teal
+        change-start-url
       </button>
       <button
         type="button"
@@ -205,7 +211,7 @@ function Probe(): JSX.Element {
           void update({ themeMode: 'light' }).then(() => {
             setSettlementOrder((current) => `${current}1`);
           });
-          void update({ themeAccent: 'teal' }).then(() => {
+          void update({ startUrl: 'https://changed.example/' }).then(() => {
             setSettlementOrder((current) => `${current}2`);
           });
         }}
@@ -323,7 +329,7 @@ describe('SettingsContext — persistence outcome boundary', () => {
     // An explicit save has not published before its persistence succeeds.
     expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_a');
 
-    screen.getByRole('button', { name: 'theme-teal' }).click();
+    screen.getByRole('button', { name: 'change-start-url' }).click();
     await act(async () => Promise.resolve());
     // The later mutation is queued before its merge, not pre-merged from A.
     expect(saveCalls).toHaveLength(1);
@@ -338,13 +344,13 @@ describe('SettingsContext — persistence outcome boundary', () => {
         ...INITIAL_SETTINGS,
         apiKey: 'ds_live_b',
         baseUrl: 'https://api-b.example.test',
-        themeAccent: 'teal',
+        startUrl: 'https://changed.example/',
       },
       credentialUnchanged: true,
     });
     await waitFor(() => expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_b'));
     expect(screen.getByTestId('current-base')).toHaveTextContent('https://api-b.example.test');
-    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+    expect(screen.getByTestId('current-start-url')).toHaveTextContent('changed.example');
   });
 
   it('serializes sign-out after a held account switch and deletes the newly selected account tuple', async () => {
@@ -385,12 +391,12 @@ describe('SettingsContext — persistence outcome boundary', () => {
 
     screen.getByRole('button', { name: 'save-account-b' }).click();
     await waitFor(() => expect(saveCalls).toHaveLength(1));
-    screen.getByRole('button', { name: 'theme-teal' }).click();
+    screen.getByRole('button', { name: 'change-start-url' }).click();
     firstSave.reject(new Error('credential store locked'));
 
     await waitFor(() => expect(saveCalls).toHaveLength(2));
     expect(saveCalls[1]).toEqual({
-      settings: { ...INITIAL_SETTINGS, themeAccent: 'teal' },
+      settings: { ...INITIAL_SETTINGS, startUrl: 'https://changed.example/' },
       credentialUnchanged: true,
     });
     await waitFor(() =>
@@ -398,7 +404,7 @@ describe('SettingsContext — persistence outcome boundary', () => {
     );
     expect(screen.getByTestId('current-api')).toHaveTextContent('ds_live_a');
     expect(screen.getByTestId('current-base')).toHaveTextContent('https://api.driftstack.dev');
-    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+    expect(screen.getByTestId('current-start-url')).toHaveTextContent('changed.example');
     warn.mockRestore();
   });
 
@@ -411,7 +417,10 @@ describe('SettingsContext — persistence outcome boundary', () => {
 
     screen.getByRole('button', { name: 'queue-preferences' }).click();
     await waitFor(() => expect(saveCalls).toHaveLength(1));
-    expect(saveCalls[0]?.settings).toMatchObject({ themeMode: 'light', themeAccent: 'oxblood' });
+    expect(saveCalls[0]?.settings).toMatchObject({
+      themeMode: 'light',
+      startUrl: INITIAL_SETTINGS.startUrl,
+    });
     expect(saveCalls[0]?.credentialUnchanged).toBe(true);
 
     await act(async () => {
@@ -419,7 +428,10 @@ describe('SettingsContext — persistence outcome boundary', () => {
       await firstSave.promise;
     });
     await waitFor(() => expect(saveCalls).toHaveLength(2));
-    expect(saveCalls[1]?.settings).toMatchObject({ themeMode: 'light', themeAccent: 'teal' });
+    expect(saveCalls[1]?.settings).toMatchObject({
+      themeMode: 'light',
+      startUrl: 'https://changed.example/',
+    });
     expect(saveCalls[1]?.credentialUnchanged).toBe(true);
     await waitFor(() => expect(screen.getByTestId('settlement-order')).toHaveTextContent('1'));
 
@@ -429,7 +441,7 @@ describe('SettingsContext — persistence outcome boundary', () => {
     });
     await waitFor(() => expect(screen.getByTestId('settlement-order')).toHaveTextContent('12'));
     expect(screen.getByTestId('current-theme-mode')).toHaveTextContent('light');
-    expect(screen.getByTestId('current-theme-accent')).toHaveTextContent('teal');
+    expect(screen.getByTestId('current-start-url')).toHaveTextContent('changed.example');
   });
 
   it('settles a queued explicit save and preference safely after provider unmount', async () => {
@@ -447,7 +459,7 @@ describe('SettingsContext — persistence outcome boundary', () => {
         { apiKey: 'ds_live_b', baseUrl: 'https://api-b.example.test' },
         { reportPersistenceFailure: true },
       );
-      themeSave = capturedUpdate?.({ themeAccent: 'teal' });
+      themeSave = capturedUpdate?.({ startUrl: 'https://changed.example/' });
       await Promise.resolve();
     });
     await waitFor(() => expect(saveCalls).toHaveLength(1));
@@ -460,7 +472,7 @@ describe('SettingsContext — persistence outcome boundary', () => {
     expect(saveCalls[1]?.settings).toMatchObject({
       apiKey: 'ds_live_b',
       baseUrl: 'https://api-b.example.test',
-      themeAccent: 'teal',
+      startUrl: 'https://changed.example/',
     });
   });
 });
