@@ -89,7 +89,14 @@ export interface ConnectionStats {
   framesRenderedRecent: number | null;
 }
 
-const EMPTY: ConnectionStats = {
+/** Every field null — the shape before any poll has landed.
+ *
+ *  EXPORTED so tests build a fixture by spreading this and overriding the few
+ *  fields they care about. A hand-listed literal in a test drifts silently the
+ *  moment a field is added here: it stays valid TypeScript in a test the
+ *  typechecker does not gate, and only surfaces later as backlog. That is
+ *  exactly how the subscriber test came to be missing ten fields. */
+export const EMPTY_CONNECTION_STATS: ConnectionStats = {
   transport: null,
   relayed: null,
   rttMs: null,
@@ -134,7 +141,7 @@ export function parseConnectionStats(report: RTCStatsReport): ConnectionStats {
     if (s && typeof s.id === 'string') byId.set(s.id, s);
   });
 
-  const out: ConnectionStats = { ...EMPTY };
+  const out: ConnectionStats = { ...EMPTY_CONNECTION_STATS };
 
   // Selected candidate-pair: prefer a nominated/succeeded pair, else the one
   // actually moving bytes.
@@ -214,10 +221,10 @@ export interface UseConnectionStatsOpts {
 
 export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStats {
   const { room, enabled } = opts;
-  const [stats, setStats] = useState<ConnectionStats>(EMPTY);
+  const [stats, setStats] = useState<ConnectionStats>(EMPTY_CONNECTION_STATS);
   // Previous poll's cumulative packet counters, kept across polls so we can
   // report the loss over the LAST interval (the lifetime average dilutes a
-  // short burst to ~0). Reset to null whenever we drop to EMPTY so a stale
+  // short burst to ~0). Reset to null whenever we drop to EMPTY_CONNECTION_STATS so a stale
   // pre-resubscribe sample can't diff against a fresh, lower cumulative count.
   const prevCountersRef = useRef<{ lost: number; recv: number } | null>(null);
   // V-2168 — prior cumulative frame counters, diffed the same way so the HUD
@@ -229,7 +236,7 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
     if (room === null || !enabled) {
       prevCountersRef.current = null;
       prevFramesRef.current = null;
-      setStats(EMPTY);
+      setStats(EMPTY_CONNECTION_STATS);
       return;
     }
     let cancelled = false;
@@ -240,13 +247,13 @@ export function useConnectionStats(opts: UseConnectionStatsOpts): ConnectionStat
       // No subscribed video track right now (e.g. a freeze-recovery
       // resubscribe blip where the panel toggles setSubscribed(false) then
       // re-subscribes). The old stats no longer describe the live
-      // PeerConnection, so reset to EMPTY — the transport pill falls back to
+      // PeerConnection, so reset to EMPTY_CONNECTION_STATS — the transport pill falls back to
       // "link…" until a real report lands, instead of showing a stale
       // udp/tcp + RTT that hides a transport change during recovery.
       if (track === null || typeof track.getRTCStatsReport !== 'function') {
         prevCountersRef.current = null;
         prevFramesRef.current = null;
-        setStats(EMPTY);
+        setStats(EMPTY_CONNECTION_STATS);
         return;
       }
       void Promise.resolve(track.getRTCStatsReport())

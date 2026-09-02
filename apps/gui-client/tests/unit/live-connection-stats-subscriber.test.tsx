@@ -4,6 +4,7 @@ import {
   createLiveConnectionStatsStore,
   LiveConnectionStatsSubscriber,
 } from '../../src/components/LiveConnectionStatsSubscriber';
+import { EMPTY_CONNECTION_STATS } from '../../src/lib/livekit-connection-stats';
 
 describe('LiveConnectionStatsSubscriber', () => {
   it('updates transport diagnostics without rerendering the simulator parent', () => {
@@ -21,6 +22,9 @@ describe('LiveConnectionStatsSubscriber', () => {
     render(<SimulatorHost />);
     act(() =>
       store.set({
+        // Spread the module's own default so this fixture cannot go stale again
+        // — it was already missing ten fields added after it was written.
+        ...EMPTY_CONNECTION_STATS,
         transport: 'udp',
         relayed: false,
         rttMs: 44,

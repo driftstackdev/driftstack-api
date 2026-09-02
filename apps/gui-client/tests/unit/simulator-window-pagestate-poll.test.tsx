@@ -66,9 +66,16 @@ vi.mock('../../src/components/AgentSessionPanel', () => ({
   },
 }));
 
-const resumeChallengedSessionMock = vi.fn(() => Promise.resolve());
+// Typed to the REAL signature (id, challengeId, auth?) rather than a bare
+// zero-arg stub: an untyped `vi.fn(() => …)` has an empty call tuple, so the
+// spread below is a type error and `mock.calls[0][1]` — the challenge id this
+// suite exists to assert — is not even indexable.
+const resumeChallengedSessionMock = vi.fn<
+  (id: string, challengeId: string | null, auth?: unknown) => Promise<void>
+>(() => Promise.resolve());
 vi.mock('../../src/lib/agent-session-control', () => ({
-  resumeChallengedSession: (...args: unknown[]) => resumeChallengedSessionMock(...args),
+  resumeChallengedSession: (id: string, challengeId: string | null, auth?: unknown) =>
+    resumeChallengedSessionMock(id, challengeId, auth),
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
   fetchAgentSessionDownload: vi.fn(() => Promise.resolve({ status: 'unavailable', file: null })),

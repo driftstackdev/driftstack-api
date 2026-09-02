@@ -131,7 +131,9 @@ describe('nextPlayoutDelay — adaptive jitter-buffer control law', () => {
     // controller could only react AFTER a freeze the customer had already seen.
     // The floor makes the resting state a real (if tiny) buffer.
     const sample = { freezeDelta: 0, packetLossPct: 0.7, jitterMs: 5 };
-    let delay = ADAPTIVE_PLAYOUT.MIN_S;
+    // Annotated: MIN_S is a const-asserted literal, so an unannotated `let`
+    // narrows to the type 0.03 and rejects every value the controller returns.
+    let delay: number = ADAPTIVE_PLAYOUT.MIN_S;
     for (let i = 0; i < 40; i += 1) delay = nextPlayoutDelay(delay, sample);
     expect(delay, 'the hold band must hold, not decay below the floor').toBe(
       ADAPTIVE_PLAYOUT.MIN_S,
