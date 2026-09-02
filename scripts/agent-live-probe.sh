@@ -21,11 +21,13 @@ set -euo pipefail
 
 BASE="https://api.driftstack.dev"
 PROFILE_ID=""
+PROXY_ID=""
 PROMPTS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="$2"; shift 2 ;;
     --profile-id) PROFILE_ID="$2"; shift 2 ;;
+    --proxy-id) PROXY_ID="$2"; shift 2 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) PROMPTS+=("$1"); shift ;;
   esac
@@ -53,7 +55,9 @@ if [ -z "$KEY" ]; then
 fi
 AUTH="Authorization: Bearer $KEY"
 
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/agent-probe.XXXXXX")
+PROBE_TMP="${DRIFTSTACK_PROBE_TMP:-/private/tmp/ds-probe}"
+mkdir -p "$PROBE_TMP"
+WORK=$(mktemp -d "$PROBE_TMP/agent-probe.XXXXXX")
 SESSION=""
 cleanup() {
   # Always tear the session down, including on Ctrl-C or a failed step, so a
@@ -69,6 +73,11 @@ trap cleanup EXIT INT TERM
 
 # ── parse one SSE reply: print PLAN + RES lines, return 2 if any step failed ──
 report() {
+  if [ ! -s "$1" ]; then
+    echo "    NO RESPONSE BODY — the stream wrote nothing or the scratch file vanished."
+    echo "    Transport/environment failure, NOT a verdict about the page."
+    return 1
+  fi
   python3 - "$1" <<'PY'
 import json, sys
 raw = open(sys.argv[1], encoding="utf-8", errors="replace").read()
@@ -123,11 +132,14 @@ PY
 }
 
 # ── create ─────────────────────────────────────────────────────────────────
-if [ -n "$PROFILE_ID" ]; then
-  BODY=$(python3 -c 'import json,sys;print(json.dumps({"mode":"ai","profile_id":sys.argv[1]}))' "$PROFILE_ID")
-else
-  BODY='{"mode":"ai"}'
-fi
+# With no proxy_id the session takes the OPERATOR-DEFAULT egress, which is a
+# different proxy from anything in the account list — worth being able to pin.
+BODY=$(python3 -c '
+import json, sys
+b = {"mode": "ai"}
+if sys.argv[1]: b["profile_id"] = sys.argv[1]
+if sys.argv[2]: b["proxy_id"] = sys.argv[2]
+print(json.dumps(b))' "$PROFILE_ID" "$PROXY_ID")
 CREATE=$(curl -sS --max-time 60 -w '\n%{http_code}' -X POST "$BASE/v1/agent-sessions" \
            -H "$AUTH" -H 'content-type: application/json' -d "$BODY")
 CCODE=${CREATE##*$'\n'}
