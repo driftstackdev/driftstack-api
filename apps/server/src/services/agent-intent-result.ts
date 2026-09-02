@@ -184,6 +184,7 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_not_implemented: 'this action is not supported by the browser session',
   intent_missing_parameter: 'a required parameter was missing',
   intent_invalid_parameter: 'a parameter was invalid',
+  intent_element_not_found: 'no element on the page matched this selector',
   intent_webdriver_failed: 'the browser failed to perform this action',
   intent_script_failed: 'the browser script for this action was invalid',
   intent_dispatch_error: 'the action could not be dispatched',
@@ -252,6 +253,18 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
     case 'intent_deadline_exceeded':
     case 'intent_deadline_cleanup_unconfirmed':
       return { category: 'session_error', retryable: false };
+    case 'intent_element_not_found':
+      // RETRYABLE, and this is the whole point of splitting it out of
+      // intent_invalid_parameter. The selector parsed and the lookup ran, so the
+      // intent did NOT execute — replaying it cannot double-apply anything. And
+      // the commonest cause is timing: the page was still settling, or the
+      // element appears after an interaction. `element_not_found` already exists
+      // in the public category union, documented as "target element
+      // missing/hidden/not yet loaded"; until now nothing produced it for an
+      // interact. Bounded by the executor's own maxRetries, so a selector that
+      // genuinely matches nothing still fails after a fixed number of attempts
+      // rather than looping.
+      return { category: 'element_not_found', retryable: true };
     case 'intent_missing_parameter':
     case 'intent_invalid_parameter':
     case 'intent_not_implemented':

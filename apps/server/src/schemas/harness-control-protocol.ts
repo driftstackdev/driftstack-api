@@ -958,6 +958,21 @@ export const HARNESS_ERROR_CODES = [
   // intentResult carrying it fails IntentResultEnvelopeSchema → the correlator
   // silently drops the frame → the dispatch hangs to its timeout.
   'intent_invalid_parameter',
+  // A3 `113d99ab4` (harness) — a selector that is VALID but matches nothing.
+  // Split out of intent_invalid_parameter, which conflated two failures wanting
+  // opposite handling: an invalid selector is a planning fault and must not be
+  // replayed, while an element that is simply not there yet is page state and IS
+  // safe to replay. Merged, the executor could never recover from the
+  // recoverable half, and the word "parameter" sent two rounds of investigation
+  // at the selector when the cause was elsewhere.
+  //
+  // ⚠️ ORDERING: this decode entry ships BEFORE the harness emits the code. A3
+  // gates emission behind DRIFTSTACK_INTENT_ELEMENT_NOT_FOUND_CODE and keeps the
+  // old code with a byte-identical message prefix until then, because an unknown
+  // code fails IntentResultEnvelopeSchema → the correlator drops the frame → the
+  // dispatch hangs to its timeout (same trap as intent_invalid_parameter and
+  // result_too_large above).
+  'intent_element_not_found',
   'intent_webdriver_failed',
   'intent_script_failed',
   'intent_dispatch_error',

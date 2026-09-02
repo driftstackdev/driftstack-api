@@ -965,7 +965,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
   });
 
-  it('12 live error codes are pinned in canonical order', () => {
+  it('13 live error codes are pinned in canonical order', () => {
     // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
     // inline rationale comments now interleaved in the source array.
     expect([...HARNESS_ERROR_CODES]).toEqual([
@@ -973,6 +973,11 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       'intent_not_implemented',
       'intent_missing_parameter',
       'intent_invalid_parameter',
+      // Split out of intent_invalid_parameter (A3 harness `113d99ab4`): a valid
+      // selector that matches nothing is page state and IS safe to replay, while
+      // an invalid selector is a planning fault that is not. Sits immediately
+      // after the code it was carved from, so the pair reads together.
+      'intent_element_not_found',
       'intent_webdriver_failed',
       'intent_script_failed',
       'intent_dispatch_error',
@@ -988,7 +993,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab, strict schema maps, and error codes match canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(18);
-    expect(HARNESS_ERROR_CODES).toHaveLength(12);
+    expect(HARNESS_ERROR_CODES).toHaveLength(13);
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );
