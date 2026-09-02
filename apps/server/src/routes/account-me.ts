@@ -828,7 +828,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // a cell on a value nobody measured.
           const os = await proxyConnectivityProbe.observeOs(descriptor, result.exitIdentity?.ip);
           if (!os.observed) {
-            request.log.debug(
+            // info, not debug: production runs at info, and a miss that cannot be
+            // read there is the silent failure this field exists to avoid. One
+            // line per customer-initiated test; the launch path never reaches it.
+            request.log.info(
               { proxyId: row.id, reason: os.reason },
               'proxy test: os fingerprint not observed',
             );
