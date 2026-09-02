@@ -123,6 +123,33 @@ import { parseProxyString } from '../lib/parse-proxy';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
+/** Which proxy a freshly created profile should be auto-probed through.
+ *
+ *  ⛔ The post-create probe used to read `proxies[0]` — the FIRST saved proxy
+ *  from the parent render's closure — while the create had resolved a
+ *  different one: the proxy the customer explicitly picked, or one minted
+ *  inline that was not even in `proxies` yet. So the card got a probe result
+ *  for the wrong proxy, or none. The resolved proxy wins; `first` is only the
+ *  "first available" fallback that launch itself would use. */
+export function chooseAutoProbeTarget(
+  resolved: LocalProxyConfig | null | undefined,
+  first: LocalProxyConfig | undefined,
+): LocalProxyConfig | undefined {
+  return resolved ?? first;
+}
+
+/** Probe only when nothing is cached for this proxy and no test is already in
+ *  flight for it — handleTestProxy itself has no single-flight. */
+export function shouldAutoProbe(
+  px: LocalProxyConfig,
+  probeCache: ProbeCacheMap,
+  testingProxyId: string | null,
+): boolean {
+  if (probeCache[px.id] !== undefined) return false;
+  if (testingProxyId === px.id) return false;
+  return true;
+}
+
 // 2026-05-20 — match SessionsView: slow background poll + skip the
 // visible loading flicker on tick refreshes so the panel doesn't
 // constantly re-flash.
@@ -2406,6 +2433,14 @@ export function ProfilesView({
     }
   }
 
+  /** Auto-probe a proxy once. handleTestProxy has no single-flight of its own,
+   *  and two call sites (post-create, post-add) can now target the same proxy,
+   *  so the guard lives here. Best-effort, background. */
+  function probeIfUnprobed(px: LocalProxyConfig): Promise<void> {
+    if (!shouldAutoProbe(px, probeCache, testingProxyId)) return Promise.resolve();
+    return handleTestProxy(px);
+  }
+
   function pickProxy(profileId: string): LocalProxyConfig | null {
     const binding = bindings.find((b) => b.profileId === profileId);
     if (binding?.defaultProxyId !== undefined && binding?.defaultProxyId !== null) {
@@ -4441,13 +4476,10 @@ export function ProfilesView({
                 { confirmLabel: 'OK' },
               );
             }
-            // #3 auto-test on create: a new profile launches through the first
-            // available proxy — probe it now (if not already cached) so its
-            // card shows egress without a manual Test. Best-effort, background.
-            const firstProxy = proxies[0];
-            if (firstProxy !== undefined && probeCache[firstProxy.id] === undefined) {
-              void handleTestProxy(firstProxy);
-            }
+            // #3 auto-test on create — through the proxy the profile will ACTUALLY
+            // launch with. See chooseAutoProbeTarget for why `proxies[0]` was wrong.
+            const target = chooseAutoProbeTarget(opts?.resolvedProxy, proxies[0]);
+            if (target !== undefined) void probeIfUnprobed(target);
           }}
         />
       )}
@@ -4463,6 +4495,7 @@ export function ProfilesView({
             bindings.find((b) => b.profileId === editTarget.id)?.defaultProxyId ?? null
           }
           onClose={() => setEditTarget(null)}
+          onProxyMinted={(px) => void probeIfUnprobed(px)}
           onSaved={(updatedMeta) => {
             // Mirror the edited organization metadata into the local cache so the
             // hub reflects it immediately + offline (server already PATCHed).
@@ -4568,7 +4601,13 @@ function CreateProfileModal({
   onClose: () => void;
   /** `proxyBindFailed` — an explicit proxy choice couldn't be saved (#142); the
    *  parent surfaces a non-blocking warning so the user re-binds before launch. */
-  onCreated: (opts?: { proxyBindFailed?: boolean }) => void;
+  onCreated: (opts?: {
+    proxyBindFailed?: boolean;
+    /** The proxy the create actually RESOLVED — the explicit pick, or one
+     *  minted inline (not in the parent's `proxies` yet, so the full object
+     *  rides here). null = "first available" (no explicit binding). */
+    resolvedProxy?: LocalProxyConfig | null;
+  }) => void;
   /** Folder names for the Notes-tab picker (from the hub's organization map). */
   existingFolders: string[];
   /** Pre-selected folder — the one the user is currently viewing, so a profile
@@ -4806,6 +4845,7 @@ function CreateProfileModal({
       //    fields; OpenVPN/WireGuard take the pasted .ovpn / wg0.conf and parse
       //    the endpoint out of it (host/port are the display endpoint).
       let resolvedProxyId: string | null = null;
+      let mintedProxy: LocalProxyConfig | null = null;
       if (proxyChoice === 'create-new' && mintedProxyIdRef.current !== null) {
         // A prior attempt already minted this proxy; reuse it (don't re-create).
         resolvedProxyId = mintedProxyIdRef.current;
@@ -4890,6 +4930,7 @@ function CreateProfileModal({
         }
         const created = await addProxy(draft);
         resolvedProxyId = created.id;
+        mintedProxy = created;
         // Remember it so a retry after a later failure reuses it, not re-mints.
         mintedProxyIdRef.current = created.id;
       } else if (proxyChoice !== 'first-available') {
@@ -4951,7 +4992,14 @@ function CreateProfileModal({
         console.warn('[profiles] setDefaultProxy failed (profile created):', err);
         if (resolvedProxyId !== null) explicitProxyBindFailed = true;
       });
-      onCreated(explicitProxyBindFailed ? { proxyBindFailed: true } : undefined);
+      onCreated({
+        ...(explicitProxyBindFailed ? { proxyBindFailed: true } : {}),
+        resolvedProxy:
+          mintedProxy ??
+          (resolvedProxyId !== null
+            ? (proxies.find((p) => p.id === resolvedProxyId) ?? null)
+            : null),
+      });
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
       setSubmitting(false);
@@ -5631,6 +5679,7 @@ function EditProfileModal({
   currentProxyId,
   onClose,
   onSaved,
+  onProxyMinted,
 }: {
   profile: Profile;
   /** Local organization metadata for this profile (icon/folder/tags/note). */
@@ -5643,6 +5692,10 @@ function EditProfileModal({
   onClose: () => void;
   /** Called with the (cleaned) organization metadata after a successful PATCH. */
   onSaved: (meta: Partial<ProfileMeta>) => void;
+  /** Called when "+ Add new proxy…" minted one, so the parent can auto-probe it.
+   *  Separate from onSaved on purpose: that payload flows straight into
+   *  saveProfileMeta and a proxy is not organization metadata. */
+  onProxyMinted?: (px: LocalProxyConfig) => void;
 }): JSX.Element {
   const { client, settings } = useSettings();
   // Freeze the edit baseline when the modal opens. Profiles metadata and proxy
@@ -5878,6 +5931,7 @@ function EditProfileModal({
           });
           mintedProxyIdRef.current = created.id;
           resolvedChoice = created.id;
+          onProxyMinted?.(created);
         }
       }
       const nextProxyId = resolvedChoice === 'first-available' ? null : resolvedChoice;
