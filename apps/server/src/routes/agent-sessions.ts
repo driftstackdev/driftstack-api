@@ -116,6 +116,7 @@ import type {
   SessionCapabilityReportStore,
 } from '../services/session-capability-report-store.js';
 import { customerSafeCapabilityReport } from '../services/session-capability-report-store.js';
+import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
 import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
@@ -651,6 +652,14 @@ export interface AgentSessionsRoutesDeps {
   sessionLivenessStore?: SessionLivenessStore;
   /** Latest ownership-gated capabilityReport per agent session. */
   sessionCapabilityReportStore?: SessionCapabilityReportStore;
+  /**
+   * T-9 — per-agent-session bounded ring of network-log entries. When wired
+   * (with the registry, behind FLEET_CONTROL_PLANE_ENABLED), the registry's
+   * onNetworkRequests consumer appends to it + GET /v1/agent-sessions/:id/network
+   * serves it (the simulator's DevTools-style Network pane). Absent → the route
+   * reports status 'unavailable' with an empty list.
+   */
+  sessionNetworkLogStore?: SessionNetworkLogStore;
   /**
    * Local fleet-demo dispatch config: the archetype / behavior profile /
    * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
@@ -1856,6 +1865,7 @@ export function registerAgentSessionsRoutes(
     sessionPageStateStore,
     sessionLivenessStore,
     sessionCapabilityReportStore,
+    sessionNetworkLogStore,
     sessionDispatch,
     profilesService,
     authRepo,
@@ -2837,6 +2847,66 @@ export function registerAgentSessionsRoutes(
       // navigate"), so clearing a stale-but-technically-active entry is safe.
       const maxAgeMs = resolvePageStateMaxAgeSeconds() * 1000;
       return { page_state: sessionPageStateStore?.getFresh(req.params.id, maxAgeMs) ?? null };
+    },
+  );
+
+  // T-9 — per-request network log for the simulator's DevTools-style Network
+  // pane: which requests the session made and which wire protocol (HTTP/1.1,
+  // HTTP/2, HTTP/3) each used. The harness (the fork) emits per-request frames;
+  // the control plane rings the latest per agent session and serves them here so
+  // the pane can poll. Returns a DISCRIMINATED 200 body (mirroring the cookies/
+  // page-state style) so expected-inert states render as data, not HTTP errors:
+  //   status:'ok'          → entries is the ring slice, next_after the poll cursor
+  //   status:'unavailable' → entries is [] and reason says why (not live on a
+  //                          node / control plane not wired / no requests channel)
+  // Same owned-check + control-auth path as GET /:id/page-state: the standalone
+  // Simulator app holds only a per-session gui_control_key, not an account key.
+  app.get<{ Params: { id: string }; Querystring: { after?: string } }>(
+    '/v1/agent-sessions/:id/network',
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: the key was already
+      // decrypt-matched against THIS `:id` session in the preHandler (same as
+      // GET /:id/page-state), so it skips the account-ownership check.
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
+      // The ring only holds live-session data. When the control plane isn't
+      // wired, the session isn't running, or it isn't on a browser node yet,
+      // there is nothing legitimate to serve — report an honest empty state with
+      // a plain reason rather than a fabricated row.
+      if (sessionNetworkLogStore === undefined) {
+        return {
+          status: 'unavailable' as const,
+          entries: [],
+          next_after: null,
+          reason: 'Network logging is not available on this deployment.',
+        };
+      }
+      if (rec.status !== 'active' || rec.nodeId === null) {
+        return {
+          status: 'unavailable' as const,
+          entries: [],
+          next_after: null,
+          reason:
+            rec.status !== 'active'
+              ? 'This session is not running, so there are no live network logs.'
+              : 'This session is not connected to a browser yet.',
+        };
+      }
+      // `after` is the server cursor a client last saw; only newer rows are
+      // returned. A missing / non-numeric value reads the whole ring.
+      const parsedAfter = Number(req.query.after);
+      const after = Number.isNaN(parsedAfter) ? undefined : parsedAfter;
+      return { status: 'ok' as const, ...sessionNetworkLogStore.get(rec.id, after) };
     },
   );
 
@@ -5638,6 +5708,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // W650/A3-W1254 — the page-state read is gated too (machine-readable 503, not
   // a bare 404) so the GUI overlay's poll surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/page-state', stub);
+  // T-9 — the network-log read is gated too (machine-readable 503, not a bare
+  // 404) so the GUI Network pane's poll surfaces the documented activation state.
+  app.get('/v1/agent-sessions/:id/network', stub);
   // Founder #48 — the cookies read is gated too (machine-readable 503, not a bare
   // 404) so the GUI Cookies panel surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/cookies', stub);

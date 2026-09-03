@@ -130,6 +130,30 @@ export const HARNESS_DOWNLOAD_DATA_MAX_BYTES = 64 * 1024 * 1024;
 export const CAPABILITY_REPORT_MAX_BYTES = 64 * 1024;
 export const PAGE_STATE_URL_MAX_LENGTH = 8192;
 export const PAGE_STATE_TEXT_MAX_LENGTH = 4096;
+// T-9 network-log frames (harness → server). A single URL can be long (query
+// strings, data-ish redirects) so it gets the same 8 KiB ceiling as a pageState
+// URL; every other retained string is short metadata (method, resource type,
+// initiator, ALPN token) and shares a tight 512-char bound.
+export const NETWORK_LOG_URL_MAX_LENGTH = 8192;
+export const NETWORK_LOG_TEXT_MAX_LENGTH = 512;
+// Per-entry serialized-size ceiling the relay enforces after parse: an entry
+// that JSON-serializes larger than this is dropped (never retained), so a
+// max-length URL padded with max-length metadata cannot compose into an
+// oversized ring row.
+export const NETWORK_LOG_ENTRY_MAX_BYTES = 5 * 1024;
+// Semantic per-frame cap the relay enforces: at most this many entries from one
+// frame reach the ring (the rest are sliced off). Distinct from the SCHEMA
+// ceiling below, which is deliberately higher so an over-cap frame is TRUNCATED
+// by the relay rather than rejected wholesale at parse.
+export const NETWORK_LOG_MAX_ENTRIES_PER_FRAME = 200;
+// Schema array ceiling — above the relay's semantic cap on purpose, so a frame
+// carrying 201..1000 entries still validates (and the relay truncates it to
+// NETWORK_LOG_MAX_ENTRIES_PER_FRAME) instead of failing safeParse and being
+// dropped in silence.
+export const NETWORK_LOG_FRAME_HARD_MAX_ENTRIES = 1000;
+// Per-session ring ceiling — the store evicts the oldest entry once a session's
+// ring grows past this, so a long-lived session cannot grow it unbounded.
+export const NETWORK_LOG_RING_MAX_ENTRIES = 2000;
 export const PROFILE_SAVED_INLINE_MAX_BYTES = 256 * 1024;
 // `size_bytes` is metadata for both inline and presigned saves, not retained
 // frame content. Profiles can legitimately be multi-GiB; bound only to the
@@ -1533,6 +1557,57 @@ export const PageStateFrameSchema = z.object({
 });
 export type PageStateFrame = z.infer<typeof PageStateFrameSchema>;
 
+// ── HarnessOutbound.networkRequests (harness → server; T-9) ──
+// Per-request network-log entries for the DevTools-style "Network" pane in the
+// simulator: which requests a session made and — the point of the feature — the
+// negotiated wire protocol (HTTP/1.1 = 'h1', HTTP/2 = 'h2', HTTP/3 = 'h3') each
+// used. The fork (A3) emits these; the control plane RECEIVES them, RINGS the
+// latest per agent session, and SERVES them at GET /v1/agent-sessions/:id/
+// network. A3's emitter lands later, so the ring is legitimately EMPTY in
+// production today and the GUI shows an honest empty state — never a fabricated
+// row.
+//
+// `protocol` is a CLOSED enum: an unrecognised value fails safeParse and the
+// whole frame is dropped, rather than the pane surfacing an unknown protocol as
+// though it were a known-good one (the GUI must never present an unknown
+// protocol as verified).
+export const NetworkRequestProtocolSchema = z.enum(['h1', 'h2', 'h3']);
+export type NetworkRequestProtocol = z.infer<typeof NetworkRequestProtocolSchema>;
+
+export const NetworkRequestEntrySchema = z.object({
+  id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  url: z.string().max(NETWORK_LOG_URL_MAX_LENGTH),
+  method: z.string().min(1).max(NETWORK_LOG_TEXT_MAX_LENGTH),
+  status: z.number().int().min(0).max(599),
+  protocol: NetworkRequestProtocolSchema,
+  // Short optional metadata — the negotiated ALPN token, the resource type
+  // (document / script / xhr / …) and the initiator. Each shares the tight
+  // 512-char bound; absent keys stay absent (never normalised to a value).
+  alpn: z.string().max(NETWORK_LOG_TEXT_MAX_LENGTH).optional(),
+  type: z.string().max(NETWORK_LOG_TEXT_MAX_LENGTH).optional(),
+  initiator: z.string().max(NETWORK_LOG_TEXT_MAX_LENGTH).optional(),
+  // Transferred size in bytes; bounded to 64 GiB so a fabricated value cannot
+  // become an unbounded integer the GUI renders.
+  size_bytes: z.number().int().min(0).max(68719476736).optional(),
+  // Epoch-ms start; bounded below at 0 and above at year-2100 so a bogus
+  // timestamp cannot land far in the future.
+  started_at: z.number().min(0).max(4102444800000),
+  // Wall-clock duration in ms, bounded to one hour.
+  duration_ms: z.number().min(0).max(3600000).optional(),
+  from_cache: z.boolean().optional(),
+});
+export type NetworkRequestEntry = z.infer<typeof NetworkRequestEntrySchema>;
+
+export const NetworkRequestsFrameSchema = z.object({
+  type: z.literal('networkRequests'),
+  sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  // Bounded at the HARD ceiling (> the relay's semantic per-frame cap) so an
+  // over-cap frame is truncated by the relay, not rejected at parse.
+  entries: z.array(NetworkRequestEntrySchema).max(NETWORK_LOG_FRAME_HARD_MAX_ENTRIES),
+});
+export type NetworkRequestsFrame = z.infer<typeof NetworkRequestsFrameSchema>;
+
 // ── Cookies PULL (A2 W2816 / founder #48 "see all cookies, live") ─────
 // CP→node REQUEST (`serializeCookiesRequest`): GET /v1/agent-sessions/:id/cookies
 // issues this over the node's LIVE control WSS, keyed by `requestId`; A3's harness
@@ -1953,11 +2028,12 @@ export const SetEgressResultSchema = z.object({
 export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
 
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 13 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 18 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
-// / pageState / profileSaveFailed are accepted (typed) + routed where a
-// consumer is wired (profileSaved consumer = step (d); challengeDetected relay
-// → session.challenge_detected W393; pageState → SessionPageStateStore W650;
+// / pageState / profileSaveFailed / networkRequests are accepted (typed) +
+// routed where a consumer is wired (profileSaved consumer = step (d);
+// challengeDetected relay → session.challenge_detected W393; pageState →
+// SessionPageStateStore W650; networkRequests → SessionNetworkLogStore T-9;
 // profileSaveFailed relay → session.profile_save_failed, A3 W1364). cookiesResult
 // (founder #48) is correlated by `requestId` inside the connection's
 // CookiesRequestCorrelator — it settles a pending GET /:id/cookies request.
@@ -1990,6 +2066,7 @@ export const HarnessOutboundSchema = z.union([
   DownloadDataResultSchema,
   TrimProfileResultSchema,
   SetEgressResultSchema,
+  NetworkRequestsFrameSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

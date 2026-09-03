@@ -34,11 +34,13 @@ import { FleetControlRegistry } from '../services/fleet-control-registry.js';
 import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
+import { SessionNetworkLogStore } from '../services/session-network-log-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
 import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
 import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
+import { makeSessionNetworkLogRelay } from '../services/session-network-log-relay.js';
 import { makeSessionErrorEventRelay } from '../services/session-error-event-relay.js';
 import { makeFleetHeartbeatConsumer } from '../services/fleet-heartbeat-consumer.js';
 import { makeAgentSessionTerminalStatusRelay } from '../services/agent-session-terminal-close.js';
@@ -2544,6 +2546,11 @@ export async function createProductionDeps(
         // egress state to the installed GUI; the same relay persists the raw +
         // derived report on its linked driver session.
         const sessionCapabilityReportStore = new SessionCapabilityReportStore();
+        // T-9 — per-agent-session bounded ring of network-log entries, written
+        // by the registry's onNetworkRequests consumer (below) + read by GET
+        // /v1/agent-sessions/:id/network (the simulator's Network pane). The fork
+        // emitter lands later, so this is legitimately empty in prod today.
+        const sessionNetworkLogStore = new SessionNetworkLogStore();
         // Worker-disconnect fix (2026-06-19) — close a node's active agent
         // sessions when its control-plane connection drops and doesn't
         // reconnect within DRIFTSTACK_WORKER_DISCONNECT_GRACE_SECONDS (default
@@ -2564,6 +2571,7 @@ export async function createProductionDeps(
           sessionPageStateStore,
           sessionLivenessStore,
           sessionCapabilityReportStore,
+          sessionNetworkLogStore,
           // Profile-backed session persistence (A3 W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).
@@ -2728,6 +2736,11 @@ export async function createProductionDeps(
               accountProxiesRepo,
             ),
             makeSessionErrorEventRelay(agentSessionsRepo, notificationEventBus, logger),
+            // T-9: a networkRequests frame (per-request log on an agent-initiated
+            // browse) → append the rows to the per-session ring for GET
+            // /v1/agent-sessions/:id/network. Ownership-gated so a non-owning node
+            // can't inject fabricated rows into another session's Network pane.
+            makeSessionNetworkLogRelay(agentSessionsRepo, sessionNetworkLogStore, logger),
           )),
           // The config a dispatched session browses with when it names no
           // proxy_id.

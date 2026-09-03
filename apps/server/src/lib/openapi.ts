@@ -5477,6 +5477,62 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'get',
+    path: '/v1/agent-sessions/{id}/network',
+    summary:
+      "Poll the session's per-request network log (URL, method, status, and the HTTP protocol each request used)",
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      query: z.object({
+        after: z
+          .string()
+          .optional()
+          .describe(
+            'The `next_after` cursor from a previous response; only requests logged since then are returned. Omit to read the whole current buffer.',
+          ),
+      }),
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body: status 'ok' → `entries` is the recent request log and `next_after` is the cursor to pass back next poll; 'unavailable' (session not running / control plane not wired) → `entries` is empty, `next_after` is null, and `reason` says why. Each request reports its negotiated protocol: 'h1' (HTTP/1.1), 'h2' (HTTP/2), or 'h3' (HTTP/3).",
+        content: {
+          'application/json': {
+            schema: z.object({
+              status: z.enum(['ok', 'unavailable']),
+              entries: z.array(
+                z.object({
+                  id: z.string(),
+                  url: z.string(),
+                  method: z.string(),
+                  status: z.number().int(),
+                  protocol: z.enum(['h1', 'h2', 'h3']),
+                  alpn: z.string().optional(),
+                  type: z.string().optional(),
+                  initiator: z.string().optional(),
+                  size_bytes: z.number().int().optional(),
+                  started_at: z.number(),
+                  duration_ms: z.number().optional(),
+                  from_cache: z.boolean().optional(),
+                }),
+              ),
+              next_after: z.string().nullable(),
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
     path: '/v1/agent-sessions/{id}/cookies',
     summary: "Read the running session's live cookie jar (includes httpOnly cookies)",
     tags: ['agent-chat'],

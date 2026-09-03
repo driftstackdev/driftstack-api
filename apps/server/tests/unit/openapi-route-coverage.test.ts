@@ -254,11 +254,14 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // authority; keep this inventory aligned with that exact spec rather than
     // retaining the prior archetype-catalog-era count.
     // 234 since V-1611 #14 published `GET /v1/teams` + `PATCH /v1/teams/{id}`.
-    expect(specOperations.size).toBe(234);
+    // 235 since T-9 published `GET /v1/agent-sessions/{id}/network`.
+    expect(specOperations.size).toBe(235);
     // f66e8a02c added PUT /v1/admin/incidents/:id as the 254th unique Fastify
     // registration; this verifier-only correction does not add a route.
     // 256 since V-1611 #14 registered `GET /v1/teams` + `PATCH /v1/teams/:id`.
-    expect(routeOperations.size).toBe(256);
+    // 257 since T-9 registered `GET /v1/agent-sessions/:id/network` (the live
+    // route + its disabled twin share one normalized method+path, so +1).
+    expect(routeOperations.size).toBe(257);
   });
 
   it('documents the method-specific customer-core contract', () => {

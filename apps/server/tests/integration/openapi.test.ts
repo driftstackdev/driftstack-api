@@ -317,6 +317,8 @@ describe('OpenAPI spec generation', () => {
         // upload / downloads list+fetch), live routes previously absent
         // from the spec.
         '/v1/agent-sessions/{id}/page-state',
+        // T-9 — per-request network log (DevTools-style Network pane)
+        '/v1/agent-sessions/{id}/network',
         '/v1/agent-sessions/{id}/cookies',
         '/v1/agent-sessions/{id}/cookies/set',
         '/v1/agent-sessions/{id}/history',

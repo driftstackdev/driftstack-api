@@ -283,6 +283,8 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
       ['get', '/v1/agent-sessions'],
       ['get', '/v1/agent-sessions/:id'],
       ['get', '/v1/agent-sessions/:id/page-state'],
+      // T-9 — the network-log read's disabled twin (503, not a bare 404).
+      ['get', '/v1/agent-sessions/:id/network'],
       ['get', '/v1/agent-sessions/:id/cookies'],
       ['post', '/v1/agent-sessions/:id/cookies/set'],
       ['post', '/v1/agent-sessions/:id/history'],
@@ -614,11 +616,15 @@ describe('all-route caller-authority invariant', () => {
     // the way this pin requires: the authority arm below was confirmed EMPTY of
     // violations at this count first, so the +2 is two properly gated routes and
     // not two new holes.
-    expect(routes).toHaveLength(307);
-    // +2 alongside the +2 above, which is the part worth reading: BOTH new team
-    // routes are structurally authorized. Had one shipped ungated, this number
-    // would have moved by one while the total moved by two.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(217);
+    // T-9 — 309 since the network-log read gained a live route (structurally
+    // authorized via controlKeyOrAccountAuth) + its disabled 503 twin. The
+    // authority arm below was confirmed empty of violations at this count first,
+    // so the +2 is one properly gated live route + one reviewed disabled stub.
+    expect(routes).toHaveLength(309);
+    // +1 (not +2): only the LIVE network route is structurally authorized; the
+    // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
+    // ungated, this number would not have moved while the total moved by two.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(218);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {
@@ -636,7 +642,9 @@ describe('all-route caller-authority invariant', () => {
     // `transcript` and `gui-control-key`, the two live routes it had no twin for.
     // V-1756 — 46 since account-mfa (+6) and auth-cli (+3) gained the disabled
     // stubs their gates had always lacked.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(54);
+    // T-9 — 55 since the agent-sessions disabled registrar gained the
+    // network-log read's twin.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(55);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,

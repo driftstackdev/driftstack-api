@@ -69,6 +69,7 @@ import type { FleetControlRegistry } from '../services/fleet-control-registry.js
 import type { SessionPageStateStore } from '../services/session-page-state-store.js';
 import type { SessionLivenessStore } from '../services/session-liveness-store.js';
 import type { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
+import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
@@ -579,6 +580,12 @@ export interface AppDeps {
   /** Latest ownership-gated harness capability/stream/egress state for the
    * installed agent-session GUI. Present with the fleet control plane. */
   sessionCapabilityReportStore?: SessionCapabilityReportStore;
+  /** T-9 — per-agent-session bounded ring of network-log entries. Present
+   * alongside the registry when the fleet control plane is enabled; the
+   * registry's onNetworkRequests consumer appends to it + GET /v1/agent-sessions/
+   * :id/network serves it (the simulator's Network pane). Absent in prod (no
+   * fleet CP) → the route reports 'unavailable' with an empty list. */
+  sessionNetworkLogStore?: SessionNetworkLogStore;
   /**
    * Local fleet-demo session-dispatch config. Present only when the fleet
    * control plane is enabled (bootstrap assembles it alongside the registry);
@@ -1503,6 +1510,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         : {}),
       ...(deps.sessionCapabilityReportStore !== undefined
         ? { sessionCapabilityReportStore: deps.sessionCapabilityReportStore }
+        : {}),
+      // T-9 — agent-session network-log read (GUI Network pane). Present only
+      // when the fleet control plane wired the store; absent → 'unavailable'.
+      ...(deps.sessionNetworkLogStore !== undefined
+        ? { sessionNetworkLogStore: deps.sessionNetworkLogStore }
         : {}),
       ...(deps.byokAnthropicService !== undefined
         ? { byokService: deps.byokAnthropicService }

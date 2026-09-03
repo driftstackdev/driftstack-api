@@ -35,6 +35,7 @@ import {
   type SessionStatus,
   type CapabilityReport,
   type HarnessErrorEvent,
+  type NetworkRequestsFrame,
   type SetEgressApplyPoint,
   type SetEgressExitIdentity,
 } from '../schemas/harness-control-protocol.js';
@@ -161,6 +162,10 @@ export class FleetControlConnection {
   private readonly onSessionStatus?: (frame: SessionStatus, reportingNodeId: string) => void;
   private readonly onCapabilityReport?: (frame: CapabilityReport, reportingNodeId: string) => void;
   private readonly onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void;
+  private readonly onNetworkRequests?: (
+    frame: NetworkRequestsFrame,
+    reportingNodeId: string,
+  ) => void;
   private readonly logger: Logger | null;
   private readonly admitInbound?: (byteLength: number, largeFrameCandidate: boolean) => boolean;
   // Actively closes THIS connection's underlying socket. Called from `supersede()`
@@ -208,6 +213,9 @@ export class FleetControlConnection {
     // Production registry-owned token bucket. Appended for positional
     // compatibility with direct unit constructors.
     admitInbound?: (byteLength: number, largeFrameCandidate: boolean) => boolean,
+    // T-9 — ownership-gated networkRequests consumer (append the frame's request
+    // rows to the per-session ring). Appended for positional back-compat.
+    onNetworkRequests?: (frame: NetworkRequestsFrame, reportingNodeId: string) => void,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -219,6 +227,7 @@ export class FleetControlConnection {
     this.onSessionStatus = onSessionStatus;
     this.onCapabilityReport = onCapabilityReport;
     this.onErrorEvent = onErrorEvent;
+    this.onNetworkRequests = onNetworkRequests;
     this.admitInbound = admitInbound;
     const log = logger ?? null;
     this.logger = log;
@@ -688,6 +697,16 @@ export class FleetControlConnection {
           // node is still the persisted session owner before exposing it.
           this.onErrorEvent?.(frame, this.nodeId);
           break;
+        case 'networkRequests':
+          // T-9 — per-request network log on an agent session (URL/method/status
+          // + negotiated protocol h1/h2/h3), keyed by the AGENT session id. The
+          // ownership-gated consumer appends the frame's rows to the per-session
+          // ring so GET /v1/agent-sessions/:id/network serves the simulator's
+          // DevTools-style Network pane. Absent consumer (stateless deploy) →
+          // ignored, like the others. audit M1 — pass the authenticated nodeId so
+          // the relay drops rows spoofed for another node's session.
+          this.onNetworkRequests?.(frame, this.nodeId);
+          break;
         //
         // FORWARD-GUARD (A3 bus W1859): an `errorEvent` (summary/detail) and an
         // errored `sessionStatus.detail` can carry the Mac fleet NODE's real IP on
@@ -855,6 +874,12 @@ export class FleetControlRegistry {
     ) => void,
     // Appended for positional back-compat; durable customer/SDK error relay.
     private readonly onErrorEvent?: (frame: HarnessErrorEvent, reportingNodeId: string) => void,
+    // T-9 — appended for positional back-compat; ownership-gated networkRequests
+    // consumer, threaded into every connection this registry creates.
+    private readonly onNetworkRequests?: (
+      frame: NetworkRequestsFrame,
+      reportingNodeId: string,
+    ) => void,
   ) {}
 
   register(
@@ -886,6 +911,7 @@ export class FleetControlRegistry {
       this.onErrorEvent,
       (byteLength, largeFrameCandidate) =>
         this.inboundFrameBudget.admit(nodeId, byteLength, largeFrameCandidate),
+      this.onNetworkRequests,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for
