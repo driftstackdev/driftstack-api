@@ -34,6 +34,38 @@ export function useOnboardingDismissed(): { dismissed: boolean; dismiss: () => v
   return { dismissed, dismiss };
 }
 
+const COMPLETED_KEY = 'ds_onboarding_completed';
+
+/** Persisted "the checklist was finished once" flag, modelled on
+ *  useOnboardingDismissed and shared the same way across Home and Profiles.
+ *
+ *  The steps are re-derived from LIVE counts on every render, so without this
+ *  the card was first-time-only in name only: launch a session (3/3, hidden),
+ *  then remove it (2/3) and "Get set up" came back to a customer who had
+ *  already set up. The checklist marks this the first time it observes every
+ *  step done; both render gates then stay closed for the life of the install
+ *  even when the live counts later drop. What the steps measure is unchanged —
+ *  only whether an already-finished checklist is shown again.
+ *  localStorage failures degrade to a session-only completion. */
+export function useOnboardingCompleted(): { completed: boolean; markCompleted: () => void } {
+  const [completed, setCompleted] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(COMPLETED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const markCompleted = useCallback(() => {
+    try {
+      localStorage.setItem(COMPLETED_KEY, '1');
+    } catch {
+      /* storage unavailable — session-only completion */
+    }
+    setCompleted(true);
+  }, []);
+  return { completed, markCompleted };
+}
+
 export interface OnboardingData {
   /** An API key is stored — the account is connected. */
   apiKeyPresent: boolean;

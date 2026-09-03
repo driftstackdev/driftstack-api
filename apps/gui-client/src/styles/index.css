@@ -53,6 +53,31 @@
            transition-colors;
   }
 
+  /* Bright primary — the FIRST-ACTION variant of .btn-primary, for the one
+     button a brand-new install must find ("Create your first profile",
+     "Get started"). The owner read the oxblood-500 button as too dark, so this
+     starts one step up the ramp and hovers one further. Scoped on purpose:
+     --accent-rgb and .btn-primary are untouched — the accent still drives the
+     logo, rings and progress bars at oxblood-500. Contrast of white on
+     oxblood-400 is ~3.9:1 (see theme-token-parity test), which passes WCAG AA
+     only for large/bold text — so the face is semibold at text-sm (14px) and
+     the base must not lighten past oxblood-400. */
+  .btn-primary-bright {
+    @apply inline-flex items-center justify-center rounded
+           px-3 py-1.5 text-sm font-semibold
+           text-ink-inverted
+           focus-visible:ring-2 focus-visible:ring-accent-ring
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-colors;
+    background-color: rgb(200 96 110); /* oxblood-400 #c8606e */
+  }
+  .btn-primary-bright:hover:not(:disabled) {
+    background-color: rgb(220 139 150); /* oxblood-300 #dc8b96 */
+  }
+  .btn-primary-bright:active:not(:disabled) {
+    background-color: rgb(168 59 77); /* oxblood-500 #a83b4d */
+  }
+
   .btn-secondary {
     @apply inline-flex items-center justify-center rounded
            px-3 py-1.5 text-sm font-medium

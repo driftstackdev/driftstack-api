@@ -5,6 +5,14 @@
 // icon + heading + body + optional CTA + footnote. Cheap regression
 // coverage protects vocabulary consistency from accidental drift.
 //
+// Profiles (T-7, 2026-09-03) — owner: the "A profile is a persistent
+// identity…" empty state is too long/messy. MEASURED: the hand-rolled card
+// stacked FOUR text blocks (heading, a 40-word definition, then two footnotes
+// about ephemeral sessions and proxies). It is now the shared EmptyState with
+// one ≤120-character line and the proxy note folded into the CTA's tooltip.
+// The arms below pin the new copy AND the absence of the old blocks, so the
+// card cannot quietly grow back.
+//
 // ConnectivityView intentionally NOT covered — V-277 left it as-is
 // (already in good shape; no empty-state pattern applies).
 //
@@ -124,26 +132,56 @@ describe('V-275 ProfilesView empty state', () => {
     testStorage.clear();
   });
 
-  it('renders oxblood-tinted icon + heading + body + CTA + footnote', async () => {
+  const DESCRIPTION =
+    "A profile keeps a device's logins and identity between sessions. Create one to launch.";
+
+  it('renders the shared EmptyState: title + the one-line description + the bright CTA', async () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
 
-    // Empty-state heading is the canonical V-275 phrasing.
-    const heading = await screen.findByRole('heading', { name: /no profiles yet/i });
+    // Empty-state heading is the canonical phrasing.
+    const heading = await screen.findByRole('heading', { name: 'No profiles yet' });
     expect(heading).toBeInTheDocument();
 
-    // Body explains what a profile is + when to use one. The phrase
-    // "persistent identity" appears in both the page header and the
-    // empty-state body — getAllByText returns at least one.
-    expect(screen.getAllByText(/persistent identity/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/cookies, localStorage, IndexedDB/i).length).toBeGreaterThan(0);
+    // Exactly one line of copy, pinned verbatim.
+    expect(screen.getByText(DESCRIPTION)).toBeInTheDocument();
 
-    // Inline CTA button (gated on tier-cap; here cap=10, active=0 → enabled).
-    const cta = screen.getByRole('button', { name: /create your first profile/i });
+    // Inline CTA button (gated on tier-cap; here cap=10, active=0 → enabled),
+    // on the bright first-action variant (T-8), not the darker .btn-primary.
+    const cta = screen.getByRole('button', { name: 'Create your first profile' });
     expect(cta).toBeInTheDocument();
     expect(cta).not.toBeDisabled();
+    expect(cta).toHaveClass('btn-primary-bright');
+    expect(cta).not.toHaveClass('btn-primary');
+  });
 
-    // Footnote about ephemeral sessions.
-    expect(screen.getByText(/ephemeral/i)).toBeInTheDocument();
+  it('folds the proxy note into the CTA tooltip when there are no proxies', async () => {
+    // listProxies is mocked to [] above — zero proxies — so the note that used
+    // to be a footnote is the button's title. It does NOT disable the button:
+    // creating a profile never needed a proxy, launching one does.
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const cta = await screen.findByRole('button', { name: 'Create your first profile' });
+    expect(cta).toHaveAttribute('title', 'Add a proxy first — sessions run through one.');
+    expect(cta).not.toBeDisabled();
+  });
+
+  it('keeps the description to one line (≤120 chars) and drops the old footnotes', async () => {
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+
+    // VACUITY CONTROL — the title renders, so the empty state is on screen and
+    // the absences below are absences from a rendered card, not from nothing.
+    const heading = await screen.findByRole('heading', { name: 'No profiles yet' });
+    expect(heading).toBeInTheDocument();
+
+    // Read the length off the RENDERED description, not the constant, so a
+    // rewrite that grows the copy is caught by the DOM and not by this file.
+    const description = screen.getByText(DESCRIPTION);
+    expect((description.textContent ?? '').length).toBeLessThanOrEqual(120);
+
+    // The three dropped blocks: the 40-word definition and both footnotes.
+    expect(screen.queryByText(/persistent identity/i)).toBeNull();
+    expect(screen.queryByText(/cookies, localStorage, IndexedDB/i)).toBeNull();
+    expect(screen.queryByText(/ephemeral/i)).toBeNull();
+    expect(screen.queryByText(/Proxies tab/i)).toBeNull();
   });
 
   it('first-paints the default grid as folder rail + phone-card silhouettes', () => {

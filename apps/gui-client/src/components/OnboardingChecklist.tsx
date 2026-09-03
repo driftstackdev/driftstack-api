@@ -6,6 +6,13 @@
 // component renders progress and routes the next action. Dismissal is the
 // caller's concern (persisted however the caller likes); the component
 // just emits onDismiss.
+//
+// Completion is reported the same way: the first render that observes every
+// step done emits onCompleted (once per mount), and the caller persists it.
+// This is the ONE place doneCount is computed, so both surfaces that show the
+// card agree on what "finished" means.
+
+import { useEffect } from 'react';
 
 export interface ChecklistStep {
   id: string;
@@ -28,12 +35,22 @@ export interface ChecklistStep {
 export function OnboardingChecklist({
   steps,
   onDismiss,
+  onCompleted,
 }: {
   steps: ChecklistStep[];
   onDismiss: () => void;
+  /** Called once the first time every step is done. The caller persists it so
+   *  the card stays gone after a later render derives a step as undone again
+   *  (a launched session that was since removed). Never fires for an empty
+   *  step list or while any step is still unknown. */
+  onCompleted?: () => void;
 }): JSX.Element | null {
   const doneCount = steps.filter((s) => s.done === true).length;
-  if (steps.length === 0 || doneCount === steps.length) return null;
+  const allDone = steps.length > 0 && doneCount === steps.length;
+  useEffect(() => {
+    if (allDone) onCompleted?.();
+  }, [allDone, onCompleted]);
+  if (steps.length === 0 || allDone) return null;
   // Strictly `false` -- an unknown step must not be promoted to the call to
   // action, because we cannot say it is outstanding.
   const next = steps.find((s) => s.done === false);

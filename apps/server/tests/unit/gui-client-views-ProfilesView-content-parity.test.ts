@@ -261,11 +261,15 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/status === 'launch'/);
   });
 
-  it("Empty no-profiles framing pinned: 'A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across sessions. Bind a session to a profile to keep login state, returning-visitor signals, and stealth fingerprints stable between runs.' — pinned so customer understands what they're creating", () => {
+  it("Empty no-profiles framing pinned: 'A profile keeps a device's logins and identity between sessions. Create one to launch.' — one line via the shared EmptyState (T-7); pinned so customer understands what they're creating", () => {
     expect(body).toMatch(
-      /A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across\s*sessions\. Bind a session to a profile to keep login state, returning-visitor signals,\s*and stealth fingerprints stable between runs\./,
+      /A profile keeps a device's logins and identity between sessions\. Create one to launch\./,
     );
-    expect(body).toMatch(/Sessions without a profile start ephemeral — fresh state every run\./);
+    // T-7 replaced the four-block empty state with the shared EmptyState: one
+    // description line, no ephemeral sub-note (it described the absence of the
+    // thing the state offers). The old "persistent identity" framing must be gone.
+    expect(body).not.toMatch(/A profile is a persistent identity/);
+    expect(body).not.toMatch(/Sessions without a profile start ephemeral/);
   });
 
   it("New profile button: disabled={state.loading || atProfileCap} + aria-disabled={state.loading || atProfileCap}; title tooltip 'Profile cap reached ({cap} for {tier}). Delete a profile or upgrade to add more.' when atProfileCap else undefined — pinned so both screen readers + hover surface the cap explanation", () => {

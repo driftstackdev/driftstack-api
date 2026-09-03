@@ -55,7 +55,11 @@ import { useConfirm } from '../components/ConfirmProvider';
 import { PROFILE_ICONS } from '../lib/profile-icons';
 import { useFocusTrap } from '../lib/use-focus-trap';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
-import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
+import {
+  useOnboardingDismissed,
+  useOnboardingCompleted,
+  buildOnboardingSteps,
+} from '../lib/use-onboarding-steps';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { EmptyState } from '../components/EmptyState';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
@@ -800,6 +804,10 @@ export function ProfilesView({
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
   const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
+  // First-time-only: once every step has been seen done, the card never comes
+  // back — even after the live counts it reads drop again (session removed).
+  const { completed: onboardingCompleted, markCompleted: markOnboardingCompleted } =
+    useOnboardingCompleted();
   // Night-arc D — privacy banner (hub demo). Claims limited to wording
   // already shipped on the production dashboard trust surface; the
   // demo's stronger phrasing stays gated on founder+legal sign-off.
@@ -3506,8 +3514,10 @@ export function ProfilesView({
           done-state below would be derived from `?? 0` over absent data, and a
           returning user with profiles and sessions would be shown a first-run
           checklist telling them they have neither. The checklist reappears the
-          moment accountMe lands. */}
-      {!onboardingDismissed && accountMe !== null && (
+          moment accountMe lands. `!onboardingCompleted` keeps a finished
+          checklist finished: the steps below re-derive from live counts, so
+          without it removing the launched session brought "Get set up" back. */}
+      {!onboardingDismissed && !onboardingCompleted && accountMe !== null && (
         <OnboardingChecklist
           steps={buildOnboardingSteps(
             {
@@ -3535,6 +3545,7 @@ export function ProfilesView({
             { goConnect: onGoToSettings, goProfile: () => setCreateOpen(true) },
           )}
           onDismiss={dismissOnboarding}
+          onCompleted={markOnboardingCompleted}
         />
       )}
       {/* S5 (GUI-rework 2026-06-14) — HERO strip (console.html): greeting +
@@ -3899,52 +3910,53 @@ export function ProfilesView({
         // refreshes keep refreshedAt set, so they never re-show the skeleton. (audit)
         <ProfilesInitialSkeleton viewMode={viewMode} />
       ) : state.profiles.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded border border-dashed border-surface-divider px-8 py-16 text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-md bg-accent-subtle text-accent">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h3 className="text-base font-medium text-ink-primary">No profiles yet</h3>
-            <p className="max-w-md text-sm text-ink-secondary">
-              A profile is a persistent identity — cookies, localStorage, IndexedDB — reused across
-              sessions. Bind a session to a profile to keep login state, returning-visitor signals,
-              and stealth fingerprints stable between runs.
-            </p>
-          </div>
-          <button
-            type="button"
-            className="btn-primary"
-            onClick={() => setCreateOpen(true)}
-            disabled={atProfileCap}
-            title={
-              atProfileCap
-                ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
-                    accountMe?.tier ?? 'this tier'
-                  }). Upgrade to add more.`
-                : undefined
+        // The shared EmptyState (same atom as the filtered-out case below): one
+        // heading, ONE line of copy, one action. The old hand-rolled card stacked
+        // four text blocks here (a 40-word definition of a profile plus two
+        // footnotes) — the owner called it too long and messy. The proxy note
+        // survives as the button's tooltip while there are no proxies; the
+        // ephemeral-session note is gone (it described what NOT creating one
+        // does, on the screen whose only action is creating one).
+        <div className="flex flex-1 flex-col justify-center">
+          <EmptyState
+            icon={
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
             }
-          >
-            Create your first profile
-          </button>
-          <p className="text-xs text-ink-muted">
-            Sessions without a profile start ephemeral — fresh state every run.
-          </p>
-          <p className="text-xs text-ink-muted">
-            Sessions run through a proxy — add one in the Proxies tab first.
-          </p>
+            title="No profiles yet"
+            description="A profile keeps a device's logins and identity between sessions. Create one to launch."
+            action={
+              <button
+                type="button"
+                className="btn-primary-bright"
+                onClick={() => setCreateOpen(true)}
+                disabled={atProfileCap}
+                title={
+                  atProfileCap
+                    ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
+                        accountMe?.tier ?? 'this tier'
+                      }). Upgrade to add more.`
+                    : proxies.length === 0
+                      ? 'Add a proxy first — sessions run through one.'
+                      : undefined
+                }
+              >
+                Create your first profile
+              </button>
+            }
+          />
         </div>
       ) : (
         <div className={PROFILES_WORKSPACE_CLASS}>

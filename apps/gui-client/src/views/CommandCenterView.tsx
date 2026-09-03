@@ -21,7 +21,11 @@ import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { RelativeTime } from '../components/RelativeTime';
 import { OnboardingChecklist } from '../components/OnboardingChecklist';
-import { useOnboardingDismissed, buildOnboardingSteps } from '../lib/use-onboarding-steps';
+import {
+  useOnboardingDismissed,
+  useOnboardingCompleted,
+  buildOnboardingSteps,
+} from '../lib/use-onboarding-steps';
 import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 
@@ -271,6 +275,10 @@ export function CommandCenterView({
 }): JSX.Element {
   const { settings, accountMe, client, refreshAccountMe, activeWorkspace } = useSettings();
   const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
+  // First-time-only: once every step has been seen done, the card never comes
+  // back — even after the live counts it reads drop again (session removed).
+  const { completed: onboardingCompleted, markCompleted: markOnboardingCompleted } =
+    useOnboardingCompleted();
   // Refresh accountMe when the home view mounts. The session-health rollup below
   // independently re-fetches on every mount, but accountMe (which drives the cap
   // alerts + the profile/Live-now KPIs) is otherwise only fetched on client change
@@ -546,8 +554,11 @@ export function CommandCenterView({
           contradicted itself: one component said unknown, the other said
           incomplete. Same defect as accenting Active at 0 (V-2184) — a definite
           claim asserted from absent data. Rendering nothing until we know is the
-          honest state; the checklist reappears the moment accountMe arrives. */}
-      {!onboardingDismissed && accountMe !== null && (
+          honest state; the checklist reappears the moment accountMe arrives.
+          `!onboardingCompleted` keeps a finished checklist finished — the steps
+          re-derive from live counts, so without it a removed session brought
+          "Get set up" back (same gate as Profiles). */}
+      {!onboardingDismissed && !onboardingCompleted && accountMe !== null && (
         <OnboardingChecklist
           steps={buildOnboardingSteps(
             {
@@ -567,6 +578,7 @@ export function CommandCenterView({
             { goConnect: () => onNavigate('settings'), goProfile: () => onNavigate('profiles') },
           )}
           onDismiss={dismissOnboarding}
+          onCompleted={markOnboardingCompleted}
         />
       )}
 

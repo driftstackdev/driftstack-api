@@ -43,6 +43,8 @@ describe('the onboarding checklist must not assert from unknown data', () => {
     //
     // Same defect as accenting Active at 0 — a definite claim asserted from
     // absent data — and the third instance of that shape on this one page.
-    expect(body).toMatch(/!onboardingDismissed && accountMe !== null && \(/);
+    expect(body).toMatch(
+      /!onboardingDismissed && !onboardingCompleted && accountMe !== null && \(/,
+    );
   });
 });

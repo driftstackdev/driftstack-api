@@ -304,7 +304,7 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
         profile.
       </p>
       <div className="mt-6 flex justify-end">
-        <button type="button" className="btn-primary" onClick={onNext}>
+        <button type="button" className="btn-primary-bright" onClick={onNext}>
           Get started
         </button>
       </div>
