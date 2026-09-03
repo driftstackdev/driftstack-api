@@ -214,6 +214,22 @@ export class InMemoryAuthRepo implements AccountAuthRepo {
     return Promise.resolve({ ...updated });
   }
 
+  // T-13 — in-memory onboarding-completion store. Mirrors the Drizzle repo's
+  // write-only-when-NULL idempotence: the first timestamp stays, a later one is
+  // dropped, and nothing clears it.
+  private readonly onboardingCompletedAt = new Map<string, Date>();
+
+  setOnboardingCompleted(accountId: string, at: Date): Promise<void> {
+    if (!this.onboardingCompletedAt.has(accountId)) {
+      this.onboardingCompletedAt.set(accountId, at);
+    }
+    return Promise.resolve();
+  }
+
+  getOnboardingCompletedAt(accountId: string): Promise<Date | null> {
+    return Promise.resolve(this.onboardingCompletedAt.get(accountId) ?? null);
+  }
+
   // Per-account org-sync (0079) — in-memory taxonomy store.
   private readonly organizations = new Map<string, AccountOrganization>();
 

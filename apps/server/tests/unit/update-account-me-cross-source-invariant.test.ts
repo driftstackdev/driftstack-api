@@ -116,9 +116,22 @@ describe('W889 V-352 UpdateAccountMe cross-source invariant', () => {
   it("CRITICAL UpdateAccountMeRequestSchema has refine that requires at least 1 of 4 fields to be defined. The 'At least one field (name, timezone, slug, or region) must be provided.' message tells the client what to submit. Drift to allowing empty body would let no-op PATCHes succeed silently.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /\.refine\(\s*\n\s*\(v\) =>\s*\n\s*v\.name !== undefined \|\|\s*\n\s*v\.timezone !== undefined \|\|\s*\n\s*v\.slug !== undefined \|\|\s*\n\s*v\.region !== undefined,/,
+      /\.refine\(\s*\n\s*\(v\) =>\s*\n\s*v\.name !== undefined \|\|\s*\n\s*v\.timezone !== undefined \|\|\s*\n\s*v\.slug !== undefined \|\|\s*\n\s*v\.region !== undefined \|\|\s*\n\s*v\.onboarding_completed !== undefined,/,
     );
     expect(p).toMatch(/At least one field \(name, timezone, slug, or region\) must be provided\./);
+  });
+
+  // ─── T-13 onboarding_completed: literal-true completion latch ─────────
+  // Added to the request shape so the desktop client can mark first-time
+  // onboarding complete ON THE ACCOUNT. It is NOT a self-editable basic — the
+  // only accepted value is the literal `true` (a one-way latch, never a toggle),
+  // so it is exempt from the 4-editable-field framing above while still gated by
+  // the same schema. Pinning the literal keeps a future widening (e.g. to a bare
+  // boolean, which would let a client send `false` and imply an un-complete
+  // path) from landing silently.
+  it('CRITICAL UpdateAccountMeRequestSchema declares onboarding_completed as z.literal(true).optional() — a one-way completion latch, never a boolean toggle', () => {
+    const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
+    expect(p).toMatch(/onboarding_completed: z\.literal\(true\)\.optional\(\)/);
   });
 
   // ─── slug-clear-null vs no-op-undefined semantics ────────────

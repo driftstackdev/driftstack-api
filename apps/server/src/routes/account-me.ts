@@ -264,13 +264,16 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // Left as-is rather than quietly changed: making this number include
       // trashed rows alters what a PUBLISHED field means, which is the owner's
       // call, not a sweep's. Recorded in docs/internal/OPEN-ITEMS.md.
-      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback] =
+      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback, onboardingAt] =
         await Promise.all([
           sessionRepo.countActiveSessions(accountId),
           profilesRepo.countByAccount(accountId),
           presignAvatar(ctx.account.avatarR2Key),
           mfaService ? mfaService.getStatus(accountId) : Promise.resolve(null),
           ctx.account.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(accountId),
+          // T-13 — read fresh from the account row (not the cached AccountContext)
+          // so a completion recorded on another device is reflected immediately.
+          authRepo.getOnboardingCompletedAt(accountId),
         ]);
       // R2-uploaded avatar wins; OAuth IDP avatar is the fallback
       // (matches account_avatar_source enum priority: user > idp).
@@ -289,6 +292,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         slug: ctx.account.slug,
         // V-298b — data-residency region preference (null when unset).
         region: ctx.account.region,
+        // T-13 — ISO instant the customer first completed onboarding (null when
+        // never). The desktop client seeds its first-run gate from this so a
+        // finished customer never re-sees the "Get set up" card on a new install.
+        onboarding_completed_at: onboardingAt !== null ? onboardingAt.toISOString() : null,
         // V-352b — selected avatar URL: a short-lived (1h) presigned R2
         // customer upload, otherwise the linked-IDP fallback. Null only
         // when neither source is available.
@@ -344,6 +351,19 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         logger: request.log,
         route: 'PATCH /v1/account/me',
       });
+      // T-13 — remember first-time onboarding completion on the CALLER's own
+      // account, exactly like the identity edits below (name / timezone / slug /
+      // region). Onboarding is a per-user getting-started flag — the GET above
+      // reads the caller's OWN state — so the write marks the caller's own
+      // account, NOT the acting-as effective account. Marking an owner's
+      // onboarding because a member acted for them would be inconsistent with that
+      // read and a header-driven write to another account, which the
+      // team-scoped-write invariant forbids. The setter writes only when the
+      // column is NULL (idempotent: a second completion never moves it) and never
+      // clears it, so only the literal `true` this schema accepts can stamp it.
+      if (parsed.data.onboarding_completed === true) {
+        await authRepo.setOnboardingCompleted(ctx.account.id, new Date());
+      }
       let updated;
       try {
         updated = await authRepo.updateAccountBasics(ctx.account.id, parsed.data);
@@ -374,13 +394,16 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // / profile_* / teams[] all undefined under types claiming
       // string|null / boolean / number / array).
       const tier = updated.tier;
-      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback] =
+      const [activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback, onboardingAt] =
         await Promise.all([
           sessionRepo.countActiveSessions(updated.id),
           profilesRepo.countByAccount(updated.id),
           presignAvatar(updated.avatarR2Key),
           mfaService ? mfaService.getStatus(updated.id) : Promise.resolve(null),
           updated.avatarR2Key ? Promise.resolve(null) : oauthAvatarFallback(updated.id),
+          // T-13 — the caller's own onboarding state, read fresh so a completion
+          // just written in this request (self-scoped case) is reflected back.
+          authRepo.getOnboardingCompletedAt(updated.id),
         ]);
       const avatarUrl = r2AvatarUrl ?? oauthFallback;
       const avatarSource = updated.avatarR2Key ? 'user' : oauthFallback ? 'idp' : 'none';
@@ -393,6 +416,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         timezone: updated.timezone,
         slug: updated.slug,
         region: updated.region,
+        onboarding_completed_at: onboardingAt !== null ? onboardingAt.toISOString() : null,
         avatar_url: avatarUrl,
         avatar_source: avatarSource,
         mfa_enrolled: mfaStatus !== null && mfaStatus.enrolled,

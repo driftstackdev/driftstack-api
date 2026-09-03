@@ -153,6 +153,19 @@ export interface AccountAuthRepo {
     },
   ): Promise<AccountRow | null>;
   /**
+   * T-13 — remember, on the account, that the customer completed the "Get set
+   * up" onboarding checklist. Powers GET /v1/account/me's onboarding_completed_at
+   * and PATCH /v1/account/me {onboarding_completed:true} so the first-run card is
+   * first-time-only across every install.
+   *
+   * setOnboardingCompleted writes `at` into accounts.onboarding_completed_at
+   * ONLY when it is currently NULL — idempotent: a second completion never moves
+   * the earlier timestamp, and there is no path that clears it. getOnboarding-
+   * CompletedAt reads the column (null = never completed).
+   */
+  setOnboardingCompleted(accountId: string, at: Date): Promise<void>;
+  getOnboardingCompletedAt(accountId: string): Promise<Date | null>;
+  /**
    * Per-account org-sync (2026-06-16) — read/write the account-level
    * organization taxonomy (the empty folders + tags a customer defines in the
    * GUI rail before assigning them). Backed by accounts.organization jsonb

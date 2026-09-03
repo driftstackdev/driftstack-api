@@ -215,6 +215,11 @@ const AccountMeResponseSchema = z.object({
   timezone: z.string().nullable(),
   slug: z.string().nullable(),
   region: AccountRegionSchema.nullable(),
+  // T-13 — ISO instant the customer first completed onboarding, or null if
+  // never. The desktop client seeds its first-run gate from this so a fresh
+  // install of a finished customer skips the "Get set up" card; PATCH
+  // /v1/account/me {onboarding_completed:true} is what sets it.
+  onboarding_completed_at: z.string().nullable(),
   avatar_url: z.string().nullable(),
   avatar_source: z.enum(['user', 'idp', 'none']),
   mfa_enrolled: z.boolean(),
@@ -1894,7 +1899,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'patch',
     path: '/v1/account/me',
-    summary: 'Partial update of name / timezone / slug / region (requires `account_owner`)',
+    summary:
+      'Partial update of name / timezone / slug / region, or mark onboarding complete (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {

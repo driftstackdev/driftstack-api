@@ -111,12 +111,33 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
   });
 
-  it('GET /me parallel fan-out: Promise.all [countActiveSessions, countByAccount, presignAvatar, mfaService?.getStatus ?? null, oauthAvatarFallback] — 5-promise shape after the OAuth IDP avatar fallback landed', () => {
+  it('GET /me parallel fan-out: Promise.all [countActiveSessions, countByAccount, presignAvatar, mfaService?.getStatus ?? null, oauthAvatarFallback, getOnboardingCompletedAt] — 6-promise shape after the T-13 onboarding read landed', () => {
     expect(body).toMatch(
       /\/\/ Parallel fan-out: counts \+ tier-derived caps \+ avatar presign \+ MFA\.\s*\/\/ Tier caps come from in-memory constants so they cost nothing\./,
     );
     expect(body).toMatch(
-      /const \[activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback\] =\s*await Promise\.all\(\[\s*sessionRepo\.countActiveSessions\(accountId\),\s*profilesRepo\.countByAccount\(accountId\),\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*ctx\.account\.avatarR2Key \? Promise\.resolve\(null\) : oauthAvatarFallback\(accountId\),\s*\]\);/,
+      /const \[activeSessions, profileCount, r2AvatarUrl, mfaStatus, oauthFallback, onboardingAt\] =\s*await Promise\.all\(\[\s*sessionRepo\.countActiveSessions\(accountId\),\s*profilesRepo\.countByAccount\(accountId\),\s*presignAvatar\(ctx\.account\.avatarR2Key\),\s*mfaService \? mfaService\.getStatus\(accountId\) : Promise\.resolve\(null\),\s*ctx\.account\.avatarR2Key \? Promise\.resolve\(null\) : oauthAvatarFallback\(accountId\),[\s\S]*?authRepo\.getOnboardingCompletedAt\(accountId\),\s*\]\);/,
+    );
+  });
+
+  it('GET /me + PATCH /me emit T-13 onboarding_completed_at (ISO or null) read fresh from the account row', () => {
+    expect(body).toMatch(
+      /onboarding_completed_at: onboardingAt !== null \? onboardingAt\.toISOString\(\) : null,/,
+    );
+    // The onboarding read is owner-scoped on write but caller-scoped on read:
+    // GET reads the caller's own account id.
+    expect(body).toMatch(/authRepo\.getOnboardingCompletedAt\(accountId\),/);
+  });
+
+  it('PATCH /me marks onboarding complete CALLER-scoped (ctx.account.id, NOT the effective account), only on literal true — a per-user flag the acting-for-owner header must not redirect', () => {
+    expect(body).toMatch(
+      /if \(parsed\.data\.onboarding_completed === true\) \{\s*await authRepo\.setOnboardingCompleted\(ctx\.account\.id, new Date\(\)\);\s*\}/,
+    );
+    // Must NOT resolve an effective account for onboarding — that would be a
+    // header-driven write to another account. resolveEffectiveAccount stays only
+    // on the /me/organization routes.
+    expect(body).not.toMatch(
+      /onboarding_completed === true\) \{\s*const onboardingTarget = resolveEffectiveAccount/,
     );
   });
 

@@ -1,0 +1,31 @@
+-- 2026-09-03 (T-13) — remember, on the ACCOUNT, that a customer finished the
+-- "Get set up" checklist, so it is shown to first-time customers only.
+--
+-- The customer-visible bug: the "Get set up" card kept coming back. A customer
+-- who launched a session and then removed it — a customer who has plainly
+-- already set up — was greeted by the first-run checklist again, and so was a
+-- customer who finished on one Mac and then installed the desktop client on a
+-- second one. Completion lived only in one install's localStorage, so the
+-- account itself had no memory of ever having been set up.
+--
+-- The desktop client now records completion AGAINST THE ACCOUNT: it PATCHes
+-- /v1/account/me {onboarding_completed:true} the first time it sees every step
+-- done, and SEEDS its local first-run flag from the account's
+-- onboarding_completed_at when /me loads — so a fresh install of a finished
+-- customer never paints the card. This migration adds the one column those two
+-- calls read and write.
+--
+-- EXPAND ONLY. The column is nullable with no default and no back-fill:
+--
+--   * accounts.onboarding_completed_at — the wall-clock instant the customer
+--     first completed onboarding, or NULL for a customer who never has (every
+--     historical row, and every genuine first-time customer). NO foreign key —
+--     it is a scalar fact about the account row itself. Deliberately NOT NULL
+--     is wrong here: NULL is the meaningful "never completed" state the first-
+--     run gate keys on, distinct from any timestamp. Set once and never
+--     cleared: the application writes it only when it is currently NULL, so a
+--     later completion never moves an earlier one.
+--
+-- Reversible by dropping what it adds; it changes nothing that already exists.
+
+ALTER TABLE "accounts" ADD COLUMN "onboarding_completed_at" timestamptz;

@@ -71,9 +71,9 @@ describe('W439.C apps/server/src/lib/openapi.ts content parity', () => {
     );
   });
 
-  it('AccountMeResponseSchema shape includes avatar_url plus avatar_source user/idp/none', () => {
+  it('AccountMeResponseSchema shape includes T-13 onboarding_completed_at plus avatar_url and avatar_source user/idp/none', () => {
     expect(body).toMatch(
-      /const AccountMeResponseSchema = z\.object\(\{\s*id: z\.string\(\),\s*email: z\.string\(\)\.email\(\),\s*name: z\.string\(\)\.nullable\(\),\s*tier: AccountTierSchema,\s*status: AccountStatusSchema,\s*timezone: z\.string\(\)\.nullable\(\),\s*slug: z\.string\(\)\.nullable\(\),\s*region: AccountRegionSchema\.nullable\(\),\s*avatar_url: z\.string\(\)\.nullable\(\),\s*avatar_source: z\.enum\(\['user', 'idp', 'none'\]\),\s*mfa_enrolled: z\.boolean\(\),\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*teams: z\.array\(/,
+      /const AccountMeResponseSchema = z\.object\(\{\s*id: z\.string\(\),\s*email: z\.string\(\)\.email\(\),\s*name: z\.string\(\)\.nullable\(\),\s*tier: AccountTierSchema,\s*status: AccountStatusSchema,\s*timezone: z\.string\(\)\.nullable\(\),\s*slug: z\.string\(\)\.nullable\(\),\s*region: AccountRegionSchema\.nullable\(\),(?:\s*\/\/[^\n]*)*\s*onboarding_completed_at: z\.string\(\)\.nullable\(\),\s*avatar_url: z\.string\(\)\.nullable\(\),\s*avatar_source: z\.enum\(\['user', 'idp', 'none'\]\),\s*mfa_enrolled: z\.boolean\(\),\s*concurrent_session_cap: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*concurrent_session_active: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*profile_cap: z\.number\(\)\.int\(\)\.nonnegative\(\)\.nullable\(\),\s*profile_count: z\.number\(\)\.int\(\)\.nonnegative\(\),\s*teams: z\.array\(/,
     );
   });
 

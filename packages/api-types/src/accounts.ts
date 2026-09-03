@@ -134,13 +134,22 @@ export const UpdateAccountMeRequestSchema = z
     slug: AccountSlugSchema.nullable().optional(),
     // V-298b — data-residency region preference. Null clears.
     region: AccountRegionSchema.nullable().optional(),
+    // T-13 — mark the "Get set up" onboarding checklist complete on the
+    // account (the desktop client PATCHes this the first time it sees every
+    // step done, so the first-run card is first-time-only across installs).
+    // The ONLY accepted value is the literal `true`: this is a one-way
+    // completion latch, never a toggle, so there is no `false` to send and no
+    // way to un-complete. Absent = no change. z.literal(true) publishes a
+    // boolean const bound in the OpenAPI document.
+    onboarding_completed: z.literal(true).optional(),
   })
   .refine(
     (v) =>
       v.name !== undefined ||
       v.timezone !== undefined ||
       v.slug !== undefined ||
-      v.region !== undefined,
+      v.region !== undefined ||
+      v.onboarding_completed !== undefined,
     {
       message: 'At least one field (name, timezone, slug, or region) must be provided.',
     },

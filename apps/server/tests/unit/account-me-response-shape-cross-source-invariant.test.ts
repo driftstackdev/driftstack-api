@@ -2,9 +2,10 @@
 // Two-hundred-twenty-fifth in the drift-guard series. Pins the
 // V-386 /v1/account/me rich-response shape:
 //
-//   AccountMeResponse (16 fields):
+//   AccountMeResponse (17 fields):
 //     - 6 base: id + email + name + tier + status + (V-352 timezone).
 //     - 2 V-298: slug + region.
+//     - 1 T-13: onboarding_completed_at (ISO instant, null = never).
 //     - 2 V-352b: avatar_url + avatar_source (user|idp|none).
 //     - 1 V-353h: mfa_enrolled.
 //     - 4 derived: concurrent_session_cap + concurrent_session_active
@@ -62,6 +63,7 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
       'timezone:',
       'slug:',
       'region:',
+      'onboarding_completed_at:',
       'avatar_url:',
       'avatar_source:',
       'mfa_enrolled:',
@@ -134,14 +136,15 @@ describe('W899 V-386 AccountMeResponse cross-source invariant', () => {
 
   // ─── 16-field cardinality ────────────────────────────────────
 
-  it('CRITICAL AccountMeResponse has 16 top-level fields + 5 nested teams-object fields = 21 total matches.', () => {
+  it('CRITICAL AccountMeResponse has 17 top-level fields + 5 nested teams-object fields = 22 total matches.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
     const m = p.match(/AccountMeResponseSchema = z\.object\(\{([\s\S]+?)\}\);/);
     expect(m).not.toBeNull();
     const body = m![1] ?? '';
-    // Count top-level + nested fields together (16 top + 5 nested = 21).
+    // Count top-level + nested fields together (17 top + 5 nested = 22).
+    // 17th top-level field: T-13 onboarding_completed_at.
     const fieldCount = (body.match(/^\s*[a-z_]+:/gm) || []).length;
-    expect(fieldCount).toBe(21);
+    expect(fieldCount).toBe(22);
   });
 
   it('test file metadata — file exists at canonical path', () => {

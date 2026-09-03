@@ -335,6 +335,13 @@ export const accounts = pgTable(
     // sets via PATCH /v1/account/me; null = unset (no preference,
     // workload routes through default infra). Currently informational.
     region: accountRegion('region'),
+    // T-13 (migration 0117) — the instant the customer first completed the
+    // "Get set up" onboarding checklist, or NULL for a customer who never has.
+    // Set once by PATCH /v1/account/me {onboarding_completed:true} (write-only-
+    // when-NULL, never moved, never cleared) and read by GET /v1/account/me so
+    // a fresh install of a finished customer skips the first-run card. NULL is
+    // the meaningful "never completed" state the first-run gate keys on.
+    onboardingCompletedAt: timestamp('onboarding_completed_at', { withTimezone: true }),
     // AI-CHAT BYOK Anthropic — per-customer encrypted API key
     // (migration 0041; Tier-3 verdicts LOCKED 2026-05-17). AES-256-GCM
     // via the shared MFA_ENCRYPTION_KEY env var. Encoding:

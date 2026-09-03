@@ -123,6 +123,9 @@
             "type": ["string", "null"],
             "enum": ["us", "eu", "apac", null]
           },
+          "onboarding_completed_at": {
+            "type": ["string", "null"]
+          },
           "avatar_url": {
             "type": ["string", "null"]
           },
@@ -184,6 +187,7 @@
           "timezone",
           "slug",
           "region",
+          "onboarding_completed_at",
           "avatar_url",
           "avatar_source",
           "mfa_enrolled",
@@ -216,6 +220,10 @@
           "region": {
             "type": ["string", "null"],
             "enum": ["us", "eu", "apac", null]
+          },
+          "onboarding_completed": {
+            "type": "boolean",
+            "enum": [true]
           }
         }
       },
@@ -16416,6 +16424,9 @@
                       "type": ["string", "null"],
                       "enum": ["us", "eu", "apac", null]
                     },
+                    "onboarding_completed_at": {
+                      "type": ["string", "null"]
+                    },
                     "avatar_url": {
                       "type": ["string", "null"]
                     },
@@ -16483,6 +16494,7 @@
                     "timezone",
                     "slug",
                     "region",
+                    "onboarding_completed_at",
                     "avatar_url",
                     "avatar_source",
                     "mfa_enrolled",
@@ -16632,7 +16644,7 @@
         }
       },
       "patch": {
-        "summary": "Partial update of name / timezone / slug / region (requires `account_owner`)",
+        "summary": "Partial update of name / timezone / slug / region, or mark onboarding complete (requires `account_owner`)",
         "tags": ["account"],
         "security": [
           {
@@ -16664,6 +16676,10 @@
                   "region": {
                     "type": ["string", "null"],
                     "enum": ["us", "eu", "apac", null]
+                  },
+                  "onboarding_completed": {
+                    "type": "boolean",
+                    "enum": [true]
                   }
                 }
               }
@@ -16714,6 +16730,9 @@
                     "region": {
                       "type": ["string", "null"],
                       "enum": ["us", "eu", "apac", null]
+                    },
+                    "onboarding_completed_at": {
+                      "type": ["string", "null"]
                     },
                     "avatar_url": {
                       "type": ["string", "null"]
@@ -16782,6 +16801,7 @@
                     "timezone",
                     "slug",
                     "region",
+                    "onboarding_completed_at",
                     "avatar_url",
                     "avatar_source",
                     "mfa_enrolled",

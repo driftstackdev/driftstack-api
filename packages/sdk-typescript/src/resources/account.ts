@@ -27,6 +27,9 @@ export interface AccountSelfProfile {
   slug: string | null;
   /** V-298b — stated infrastructure-region preference; null when unset. */
   region: 'us' | 'eu' | 'apac' | null;
+  /** T-13 — ISO instant onboarding was first completed; null if never. Seeds
+   *  the desktop client's first-run gate so a finished customer skips it. */
+  onboarding_completed_at: string | null;
   /** V-352b — short-lived (~1h) presigned R2 GET URL; null when no avatar. */
   avatar_url: string | null;
   /** Whether avatar_url is a removable upload, read-only IDP fallback, or absent. */

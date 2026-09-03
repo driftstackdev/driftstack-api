@@ -181,6 +181,27 @@ export class DrizzleAccountAuthRepo implements AccountAuthRepo {
     }
   }
 
+  // T-13 — mark onboarding complete on the account, ONCE. The
+  // `isNull(onboarding_completed_at)` guard makes this idempotent at the SQL
+  // layer: a second call matches zero rows and never moves the earlier
+  // timestamp, and there is no code path that writes NULL back, so a completion
+  // can never be cleared.
+  async setOnboardingCompleted(accountId: string, at: Date): Promise<void> {
+    await this.database.db
+      .update(accounts)
+      .set({ onboardingCompletedAt: at })
+      .where(and(eq(accounts.id, accountId), isNull(accounts.onboardingCompletedAt)));
+  }
+
+  async getOnboardingCompletedAt(accountId: string): Promise<Date | null> {
+    const [row] = await this.database.db
+      .select({ onboardingCompletedAt: accounts.onboardingCompletedAt })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return row ? row.onboardingCompletedAt : null;
+  }
+
   // Per-account org-sync (0079) — the account-level folder/tag taxonomy.
   async getOrganization(id: string): Promise<AccountOrganization | null> {
     const [row] = await this.database.db

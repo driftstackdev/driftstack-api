@@ -55,6 +55,13 @@ class CountingAuthRepo implements AccountAuthRepo {
   updateAccountBasics(): Promise<null> {
     return Promise.resolve(null);
   }
+  // T-13 — onboarding completion stubbed; not exercised by coalescer tests.
+  setOnboardingCompleted(): Promise<void> {
+    return Promise.resolve();
+  }
+  getOnboardingCompletedAt(): Promise<Date | null> {
+    return Promise.resolve(null);
+  }
   // Per-account org-sync — stubbed; not exercised by coalescer tests.
   getOrganization(): Promise<{ folders: never[]; tags: never[] }> {
     return Promise.resolve({ folders: [], tags: [] });

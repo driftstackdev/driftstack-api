@@ -46,6 +46,8 @@ function baseRepo(overrides: Partial<AccountAuthRepo> = {}): AccountAuthRepo {
     touchWebSessionLastUsed: () => Promise.resolve(),
     findTeamMemberships: () => Promise.resolve([]),
     updateAccountBasics: () => Promise.resolve(null),
+    setOnboardingCompleted: () => Promise.resolve(),
+    getOnboardingCompletedAt: () => Promise.resolve(null),
     getOrganization: () => Promise.resolve(null),
     setOrganization: () => Promise.resolve(),
     ...overrides,
