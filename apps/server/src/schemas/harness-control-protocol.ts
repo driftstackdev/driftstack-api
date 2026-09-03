@@ -1274,6 +1274,19 @@ const CapabilityReportPayloadSchema = z.object({
   transportModeRequested: z.enum(['h2-only', 'h2-and-h3']),
   transportModeActive: z.enum(['h2-only', 'h2-and-h3']),
   h3InterposeLoaded: z.boolean(),
+  // T-6 — the two OBSERVED QUIC facts, distinct from h3InterposeLoaded above,
+  // which is a RESTATEMENT of the configured transport mode (activeMode ===
+  // 'h2-and-h3'), not an observation. These come from external observations on
+  // the box and are OPTIONAL: an old harness — and a new harness before the
+  // fork build that emits the markers — omits the key entirely, which the
+  // back-fill reads as "not measured" and writes nothing (self-synchronizing,
+  // no false-green window). `interposeImageLoaded` is an lsof of the
+  // NetworkProcess image list (diagnostic only; loaded is not carried).
+  // `h3ConnectionObserved` is present-and-true only once a real QUIC handshake
+  // has completed this session — the measured "a real browser carried h3
+  // through this proxy" signal — and is never present-but-false.
+  interposeImageLoaded: z.boolean().optional(),
+  h3ConnectionObserved: z.boolean().optional(),
   httpsSkipActive: z.boolean(),
   safeguardChecks: z
     .array(

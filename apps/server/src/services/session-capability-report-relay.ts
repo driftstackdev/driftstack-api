@@ -100,7 +100,17 @@ export function makeSessionCapabilityReportRelay(
     store.set(frame);
     if (session.driftstackSessionId === null) return;
 
+    // The CONFIGURED routing state: an h2-and-h3 transport whose interpose flag
+    // is set. h3InterposeLoaded is a restatement of the requested mode, not an
+    // observation, so this describes what egress was CONFIGURED, never that QUIC
+    // was measured — it feeds quic_route (a routing flag), never the customer's
+    // "measured QUIC" verdict.
     const quicViaProxy = frame.transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded;
+    // T-6 — the MEASURED signal: present-and-true only once a real QUIC handshake
+    // completed this session (fork marker). Absent on any harness that has not
+    // observed one, so absence writes nothing and only a real observation ever
+    // stamps a green verdict onto the proxy.
+    const quicReallyObserved = frame.h3ConnectionObserved === true;
     const { type: _type, ...raw } = frame;
     await sessionsService.ingestEgressCapabilityReport({
       sessionId: session.driftstackSessionId,
@@ -115,25 +125,26 @@ export function makeSessionCapabilityReportRelay(
       raw,
     });
 
-    // T-6 — back-fill the REAL, measured QUIC verdict onto the proxy this
-    // session browsed through, so the proxy test/chip can show a confirmed
-    // result instead of a guess inferred from UDP association. `quicViaProxy` is
-    // the same signal reported as quic_route above: an active h2-and-h3
-    // transport WITH the HTTP/3 interpose loaded means QUIC really carried, so
-    // we write 'h3'; a session that ran without it writes 'h2-only' (a measured
-    // absence, still not the same as never-measured/null). Only when a proxy is
-    // actually attributed (proxyId non-null) — an operator-default egress has no
-    // owned proxy to mark. The update is owner-scoped (id + accountId), so a
-    // foreign or deleted proxy_id updates no row. Best-effort: a back-fill
-    // failure is logged but never fails consuming the report (the egress
-    // persistence above already succeeded).
-    if (accountProxies !== undefined && session.proxyId !== null) {
+    // T-6 — back-fill the REAL, MEASURED QUIC verdict onto the proxy this session
+    // browsed through, so the proxy test/chip shows a confirmed result instead of
+    // a guess. We write ONLY on a real observation: `quicReallyObserved` is
+    // present-and-true only after a QUIC handshake actually completed this
+    // session, so we write 'h3'. We DELIBERATELY write NOTHING otherwise — the
+    // absence of an observed handshake is "not measured yet", NOT "this proxy
+    // can't do QUIC", so recording 'h2-only' from it would be a measured-absence
+    // claim we cannot back (the config echo in the other direction). A proxy
+    // stays null (chip: inferred) until a session genuinely carries h3 through
+    // it. Only when a proxy is actually attributed (proxyId non-null) — an
+    // operator-default egress has no owned proxy to mark. Owner-scoped (id +
+    // accountId), so a foreign or deleted proxy_id updates no row. Best-effort: a
+    // failure is logged but never fails consuming the report.
+    if (accountProxies !== undefined && session.proxyId !== null && quicReallyObserved) {
       try {
         await accountProxies.update({
           id: session.proxyId,
           accountId: session.accountId,
           updates: {
-            quicMeasured: quicViaProxy ? 'h3' : 'h2-only',
+            quicMeasured: 'h3',
             quicMeasuredAt: now(),
           },
         });

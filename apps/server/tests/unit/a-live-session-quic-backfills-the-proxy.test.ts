@@ -2,14 +2,14 @@
 // HTTP/2, but NOT QUIC, even though the proxy supports it. This test needs to be
 // more reliable!"
 //
-// MEASURED mechanism: the ONLY real QUIC observation in the system is a live
-// session's capabilityReport — transportModeActive === 'h2-and-h3' AND
-// h3InterposeLoaded (session-capability-report-relay.ts, the same `quicViaProxy`
-// that derives quic_route). Before T-6 that verdict was dropped: a session never
-// recorded which proxy it ran through, so it could not be attributed. This guard
-// pins the back-fill the relay now performs — persisting that measured verdict
-// onto the owned proxy so the test/chip can show a REAL 'h3' instead of a guess
-// inferred from UDP association.
+// MEASURED mechanism: the ONLY real QUIC observation is `h3ConnectionObserved` on
+// a live session's capabilityReport — present-and-true once a QUIC handshake has
+// actually completed this session (a fork marker), never a restatement of the
+// requested mode. (h3InterposeLoaded, by contrast, is exactly activeMode ===
+// 'h2-and-h3' — a config echo — so it drives quic_route but NEVER the measured
+// verdict.) This guard pins the back-fill: a real observation persists 'h3' onto
+// the owned proxy; the absence of one writes NOTHING (null, chip stays inferred),
+// because "not observed yet" is not "this proxy cannot do QUIC".
 //
 // One property per assertion; a VACUITY CONTROL arm (an unattributed session must
 // write NOTHING); real assertions, no fallback branches.
@@ -27,8 +27,8 @@ function logger(): Logger {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as Logger;
 }
 
-// A frame whose QUIC really carried (h2-and-h3 negotiated AND the HTTP/3
-// interpose loaded). Overrides flip the two fields that decide the verdict.
+// A frame whose QUIC really carried: a completed handshake was observed
+// (h3ConnectionObserved true). Overrides flip the field that decides the verdict.
 function report(overrides: Partial<CapabilityReport> = {}): CapabilityReport {
   return {
     type: 'capabilityReport',
@@ -42,6 +42,7 @@ function report(overrides: Partial<CapabilityReport> = {}): CapabilityReport {
     transportModeRequested: 'h2-and-h3',
     transportModeActive: 'h2-and-h3',
     h3InterposeLoaded: true,
+    h3ConnectionObserved: true,
     httpsSkipActive: true,
     safeguardChecks: [{ layer: 'dns', passed: true, detail: 'ok', timestamp: 't' }],
     archetypeId: 'iphone16pro_ios18_6_safari18_6',
@@ -79,7 +80,7 @@ function relayWith(
 }
 
 describe('a live session back-fills the measured QUIC verdict onto its proxy', () => {
-  it("CRITICAL a session whose HTTP/3 interpose really carried writes quic_measured 'h3', owner-scoped, stamped with the injected clock — the confirmed verdict the inferred chip could never show", async () => {
+  it("CRITICAL a session whose QUIC handshake was OBSERVED writes quic_measured 'h3', owner-scoped, stamped with the injected clock — the confirmed verdict the inferred chip could never show", async () => {
     const update = vi.fn(
       (_args: {
         id: string;
@@ -105,7 +106,7 @@ describe('a live session back-fills the measured QUIC verdict onto its proxy', (
     expect(arg.updates.quicMeasuredAt).toBe(MEASURED_AT);
   });
 
-  it("CRITICAL a session that ran WITHOUT the HTTP/3 interpose writes quic_measured 'h2-only', not 'h3' — a measured absence is distinct from a confirmed QUIC route", async () => {
+  it('CRITICAL a report with the CONFIGURED mode fully set (h2-and-h3 active, interpose flag true) but NO observed handshake writes NOTHING — the config echo is not a measurement, and a proxy that has not been seen to carry h3 stays null (chip: inferred), never a false green', async () => {
     const update = vi.fn(
       (_args: {
         id: string;
@@ -114,12 +115,17 @@ describe('a live session back-fills the measured QUIC verdict onto its proxy', (
         updates: { quicMeasured?: string | null; quicMeasuredAt?: Date | null };
       }) => Promise.resolve(null),
     );
-    // Interpose absent → quicViaProxy is false even though the mode negotiated.
-    relayWith('prx_owned', { update })(report({ h3InterposeLoaded: false }), 'node-1');
+    // The default report already has transportModeActive 'h2-and-h3' AND
+    // h3InterposeLoaded true — the exact config echo the OLD relay wrote 'h3'
+    // from. Here the real observation is absent (as it is on every harness that
+    // has not yet observed a handshake — the old fleet, and the new fleet before
+    // the fork build). A relay keyed on the config echo would falsely write 'h3';
+    // a relay keyed on the observation writes nothing at all.
+    relayWith('prx_owned', { update })(report({ h3ConnectionObserved: undefined }), 'node-1');
 
-    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    const updates = update.mock.calls[0]![0].updates;
-    expect(updates.quicMeasured).toBe('h2-only');
+    await Promise.resolve();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('VACUITY CONTROL a session that names no proxy (operator-default egress) back-fills NOTHING — an unattributed measurement has no proxy to mark', async () => {
