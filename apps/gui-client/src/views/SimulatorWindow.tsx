@@ -89,6 +89,11 @@ import {
 import { normalizeNavigateUrl, resolveAddressBarInput } from '../lib/address-bar';
 import { writeClipboardText } from '../lib/clipboard';
 import { pointerToViewport } from '../lib/livekit-input-capture';
+import {
+  URL_BAR_INFLIGHT_ARM_MS,
+  URL_BAR_INFLIGHT_CEILING_MS,
+  pageStateResolvesInFlight,
+} from '../lib/url-bar-inflight';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
@@ -1619,6 +1624,8 @@ function BrowserBar({
   liveUrl,
   pageLoading,
   loadProgress,
+  navInFlight,
+  loadFailed,
   downloadsStore,
   onOpenDownloads,
 }: {
@@ -1631,6 +1638,13 @@ function BrowserBar({
   liveUrl: string;
   pageLoading: boolean;
   loadProgress: number | null;
+  // T-10 — a forwarded tap MIGHT have navigated but the box hasn't confirmed a
+  // page_state yet (slow proxy). While true, the bar shows a loading treatment and DIMS
+  // the stale url — it is NEVER replaced with a fabricated destination the GUI can't know.
+  navInFlight: boolean;
+  // T-10 — the box reported the active tab's page failed to load ('errored'); the bar
+  // says so instead of silently keeping the old url.
+  loadFailed: boolean;
   // Mocked iOS download-bar indicator — GUI chrome only (like the address bar; it
   // never touches the rendered iPhone/fingerprint). Count of the session's downloads
   // (reuses the Downloads pane's shared store — no second fetch).
@@ -1900,7 +1914,32 @@ function BrowserBar({
           submit();
         }}
       >
-        {isHttps ? (
+        {/* T-10 — navigation in flight (a tap whose destination the box hasn't confirmed
+            yet). A leading spinner replaces the site icon and the url below is dimmed:
+            the WAIT is visible without ever fabricating a url the GUI cannot know. */}
+        {navInFlight ? (
+          <span
+            data-component="simulator-address-inflight"
+            role="status"
+            aria-label="Loading page"
+            title="Loading the tapped page…"
+            className="inline-flex shrink-0 items-center"
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              aria-hidden="true"
+              className="animate-spin text-white/60"
+            >
+              <path d="M12 3a9 9 0 1 0 9 9" />
+            </svg>
+          </span>
+        ) : isHttps ? (
           // Closed padlock — https origin (iOS Safari secure-site treatment).
           <svg
             viewBox="0 0 24 24"
@@ -1958,7 +1997,13 @@ function BrowserBar({
           spellCheck={false}
           autoComplete="off"
           aria-label="Address bar"
-          className="min-w-0 flex-1 bg-transparent text-[12px] leading-none text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-50"
+          // T-10 — while in flight, DIM the (stale) url without replacing it: the bar
+          // still shows where the device is, just faded, so it never lies about the
+          // destination. `data-inflight` is a stable hook for the guard.
+          data-inflight={navInFlight ? 'true' : undefined}
+          className={`min-w-0 flex-1 bg-transparent text-[12px] leading-none text-white/90 placeholder:text-white/35 focus:outline-none disabled:opacity-50 ${
+            navInFlight && !focused ? 'opacity-40' : ''
+          }`}
         />
         {/* Go — a real submit button, and the reason Enter is now dependable.
             This form had NO submit button, so it relied on implicit submission,
@@ -2136,6 +2181,31 @@ function BrowserBar({
               </button>
             </span>
           )}
+        </div>
+      )}
+      {/* T-10 — the box reported the page did not load. Say so on the bar, in plain
+          words, instead of silently keeping the old url. The copy names the likely
+          cause without inventing an error string the box didn't send. */}
+      {loadFailed && (
+        <div
+          data-component="simulator-bar-load-error"
+          className="pointer-events-auto absolute -bottom-6 left-3 z-20 flex items-center gap-1.5 rounded-b-md bg-status-error/95 px-2.5 py-1 text-2xs font-medium text-white shadow-sm"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4M12 16h.01" />
+          </svg>
+          Page didn&apos;t load — the proxy may be slow or blocking it.
         </div>
       )}
     </div>
@@ -4492,6 +4562,62 @@ export function SimulatorWindow(): JSX.Element {
   const [liveTitle, setLiveTitle] = useState('');
   const [pageLoading, setPageLoading] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
+  // T-10 — address-bar "navigation in flight". A TAPPED link / redirect is NOT
+  // optimistic: the GUI cannot know a tap's destination, so on a slow proxy the bar
+  // keeps showing the OLD url until the box's first page_state arrives seconds later.
+  // navInFlight makes that WAIT visible (a spinner + a DIMMED, never-fabricated stale
+  // url); it is ARMED by a forwarded tap (after a short grace) and CLEARED the moment a
+  // box page_state for the active tab confirms — see url-bar-inflight.ts. Address-bar
+  // navigates are optimistic (onNavigate sets liveUrl itself) and never arm it.
+  const [navInFlight, setNavInFlight] = useState(false);
+  // navInFlight mirror for the (stable-closure) ceiling/arm timers.
+  const navInFlightRef = useRef(false);
+  navInFlightRef.current = navInFlight;
+  // The post-tap grace timer (fires → admit in flight) and the hard ceiling that
+  // guarantees the indicator can never spin forever.
+  const inFlightArmTimerRef = useRef<number | null>(null);
+  const inFlightCeilingTimerRef = useRef<number | null>(null);
+  // Clear the in-flight indicator + both its timers. Stable (setState + refs only), so
+  // it can be called from the data-channel effect without re-subscribing it.
+  const clearUrlBarInFlight = useCallback((): void => {
+    if (inFlightArmTimerRef.current !== null) {
+      window.clearTimeout(inFlightArmTimerRef.current);
+      inFlightArmTimerRef.current = null;
+    }
+    if (inFlightCeilingTimerRef.current !== null) {
+      window.clearTimeout(inFlightCeilingTimerRef.current);
+      inFlightCeilingTimerRef.current = null;
+    }
+    if (navInFlightRef.current) setNavInFlight(false);
+  }, []);
+  // A forwarded tap MIGHT navigate. Arm the watch: if NO page_state confirms within the
+  // grace window, admit the wait (spinner + dimmed stale url). A fresh tap restarts the
+  // watch. NEVER fabricates a url — the GUI does not know a tap's destination.
+  const armUrlBarInFlight = useCallback((): void => {
+    if (inFlightArmTimerRef.current !== null) window.clearTimeout(inFlightArmTimerRef.current);
+    if (inFlightCeilingTimerRef.current !== null) {
+      window.clearTimeout(inFlightCeilingTimerRef.current);
+      inFlightCeilingTimerRef.current = null;
+    }
+    inFlightArmTimerRef.current = window.setTimeout(() => {
+      inFlightArmTimerRef.current = null;
+      setNavInFlight(true);
+      inFlightCeilingTimerRef.current = window.setTimeout(() => {
+        inFlightCeilingTimerRef.current = null;
+        setNavInFlight(false);
+      }, URL_BAR_INFLIGHT_CEILING_MS);
+    }, URL_BAR_INFLIGHT_ARM_MS);
+  }, []);
+  // Tear the timers down on unmount (a pending arm/ceiling must not fire into a
+  // torn-down tree).
+  useEffect(
+    () => () => {
+      if (inFlightArmTimerRef.current !== null) window.clearTimeout(inFlightArmTimerRef.current);
+      if (inFlightCeilingTimerRef.current !== null)
+        window.clearTimeout(inFlightCeilingTimerRef.current);
+    },
+    [],
+  );
   // 'stalled' (A3 W2845): the device renderer froze (hung JS / compositor
   // deadlock) — the LiveKit stream still reports `live` (the pump repeats the
   // last frame), so the GUI can't detect it from the track. The harness watchdog
@@ -5523,6 +5649,11 @@ export function SimulatorWindow(): JSX.Element {
         // suppression, re-introduced cross-tab). NOTE: this early-out requires the chrome block to remain the
         // LAST statements in this handler (it is — the try ends at the catch below).
         if (pageStateTargetId !== activeTabIdRef.current) return;
+        // T-10 — the box confirmed a page_state for the ACTIVE tab (its live/authoritative
+        // data-channel push): any pending tap-navigation is resolved, so clear the URL-bar
+        // in-flight indicator. The bar's url tracks the box's url via writeTabPageState
+        // above, so this only tears down the WAIT treatment — it never fabricates a url.
+        if (isHarnessState && pageStateResolvesInFlight(msg.state)) clearUrlBarInFlight();
         // #135 — a page_state{state:'stalled'} is OVERLOADED: A3's NAV-stall timer
         // (box 5eeaf794a) tags a slow-LOAD stall with error.kind==='timeout', while the
         // W2845 renderer-FREEZE stall carries no error. Split them: the timeout variant
@@ -5894,7 +6025,14 @@ export function SimulatorWindow(): JSX.Element {
         });
     };
     tick();
-    const handle = window.setInterval(tick, 2000);
+    // T-10 — adaptive cadence: while a tap-navigation is IN FLIGHT (the operator is
+    // waiting on a slow proxy) TIGHTEN the poll to ~500ms so the box's confirming
+    // page_state — and the new url it carries — reaches the bar sooner; return to the
+    // normal ~2s once nothing is pending. The poll's BEHAVIOUR is unchanged; only its
+    // interval is. navInFlight is in the deps below, so the effect re-arms at the new
+    // cadence whenever it flips.
+    const pollIntervalMs = navInFlight ? 500 : 2000;
+    const handle = window.setInterval(tick, pollIntervalMs);
     return () => {
       cancelled = true;
       window.clearInterval(handle);
@@ -5908,6 +6046,7 @@ export function SimulatorWindow(): JSX.Element {
     applyStalledState,
     sessionEnded,
     manualInputControl.epoch,
+    navInFlight,
   ]);
 
   // P1a — TERMINAL session-end poll. The freeze cluster's auto-reconnect/resubscribe/
@@ -6451,6 +6590,12 @@ export function SimulatorWindow(): JSX.Element {
     // falsely signal "it worked" on a silent no-op (the same confusion the off-surface
     // guard below prevents).
     if (!humanInputEnabled || !ownsRenderedManualInput()) return;
+    // T-10 — a forwarded tap MIGHT be a link/redirect whose destination the GUI cannot
+    // predict. Arm the URL-bar in-flight watch here (input is positively owned, so this
+    // tap is forwarded to the device): if the box confirms no page_state shortly, the
+    // bar shows the WAIT over the dimmed stale url. Address-bar navigates are optimistic
+    // and never reach this handler, so they never arm it (the vacuity case).
+    armUrlBarInFlight();
     const host = screenHostRef.current;
     if (host === null) return;
     const r = host.getBoundingClientRect();
@@ -7913,6 +8058,10 @@ export function SimulatorWindow(): JSX.Element {
     };
     // A fresh navigate supersedes a prior failed-send banner (incl. our own Retry).
     setNavSendFailed(null);
+    // T-10 — an address-bar navigate is OPTIMISTIC (we set liveUrl below because we
+    // typed the destination), so it supersedes any pending tap in-flight watch: clear
+    // it so the bar doesn't dim the url it is about to show.
+    clearUrlBarInFlight();
     // First successful navigate: stop auto-opening the Controls pane on launch
     // (the Address bar has been discovered + used). See the activePane lazy init.
     try {
@@ -8204,6 +8353,11 @@ export function SimulatorWindow(): JSX.Element {
               liveUrl={liveUrl}
               pageLoading={pageLoading}
               loadProgress={loadProgress}
+              navInFlight={navInFlight}
+              // T-10 — a box 'errored' for the active tab (the same gated signal that
+              // raises the center overlay) is the definitive "page didn't load", so the
+              // bar surfaces it too — near the url the operator is watching.
+              loadFailed={pageError !== null}
               downloadsStore={downloadsStore}
               onOpenDownloads={() => openPane('downloads')}
             />
