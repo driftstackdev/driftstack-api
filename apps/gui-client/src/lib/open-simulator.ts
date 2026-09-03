@@ -28,6 +28,12 @@
 import type { LiveKitInfo } from '@driftstack/sdk';
 import type { DriftstackClient } from './client';
 import { mintGuiControlKey, type GuiControlCredential } from './agent-session-control';
+import { loadSimulatorWindowSize } from './settings';
+import {
+  initialSimulatorSize,
+  simulatorScreenKey,
+  type SimulatorWindowSize,
+} from './simulator-window-fit';
 
 export interface OpenSimulatorArgs {
   sessionId: string;
@@ -87,9 +93,38 @@ export interface OpenSimulatorResult {
  *  needs in place of OS chrome. */
 const SIM_WIDTH = 330;
 const SIM_HEIGHT = 684 + 34;
+/** The smallest the window may be dragged — mirrors `.min_inner_size(280, 560)`
+ *  in the Rust builder. Also the floor below which a remembered size is not
+ *  trusted (see `initialSimulatorSize`). */
+const SIM_MIN_WIDTH = 280;
+const SIM_MIN_HEIGHT = 560;
 
 /** Gap between the main window and the simulator placed beside it. */
 const SIM_GAP = 16;
+
+/**
+ * T-12 — the size to open the in-process window at: the size the customer last
+ * left the phone at on this screen, else the phone-sized default. Read from the
+ * non-secret store only (no keychain, so opening a window never prompts). A
+ * store that cannot be read is not a reason to fail the launch — the window
+ * opens at the default and the reason is logged, the same posture as the
+ * best-effort geometry read below.
+ */
+async function rememberedSimulatorSize(): Promise<SimulatorWindowSize> {
+  const fallback = { width: SIM_WIDTH, height: SIM_HEIGHT };
+  const key = simulatorScreenKey(typeof window === 'undefined' ? null : window.screen);
+  if (key === null) return fallback;
+  try {
+    return initialSimulatorSize({
+      remembered: await loadSimulatorWindowSize(key),
+      fallback,
+      min: { width: SIM_MIN_WIDTH, height: SIM_MIN_HEIGHT },
+    });
+  } catch (err) {
+    console.warn('[simulator] could not read the remembered window size (using default):', err);
+    return fallback;
+  }
+}
 
 /**
  * Choose an on-screen position for the simulator window.
@@ -164,6 +199,10 @@ async function openInProcessSimulatorWindow(
     return { opened: true };
   }
 
+  // T-12 — open at the size the customer last left the phone at on this screen
+  // (else the default), so a manual resize sticks across opens.
+  const sim = await rememberedSimulatorSize();
+
   // Beside the main window, not centred over it. Best-effort: fall back to
   // centring only when the main window's or the monitor's geometry is
   // unreadable.
@@ -193,7 +232,7 @@ async function openInProcessSimulatorWindow(
         : placeSimulatorWindow({
             main: { x: pos.x / factor, y: pos.y / factor, width: size.width / factor },
             monitor: bounds,
-            sim: { width: SIM_WIDTH, height: SIM_HEIGHT },
+            sim,
           });
   } catch {
     position = null;
@@ -203,8 +242,8 @@ async function openInProcessSimulatorWindow(
     new WebviewWindow(label, {
       url: `index.html?${query}`,
       title: `${deviceName ?? 'iPhone'}${profileName !== undefined && profileName !== '' ? ` \u2014 ${profileName}` : ''}`,
-      width: SIM_WIDTH,
-      height: SIM_HEIGHT,
+      width: sim.width,
+      height: sim.height,
       resizable: true,
       maximizable: false,
       decorations: false,
@@ -216,8 +255,8 @@ async function openInProcessSimulatorWindow(
       // drag could collapse the window on the one platform where the grab
       // target is already hard to find. Mirrors `.min_inner_size(280, 560)` in
       // the Rust builder.
-      minWidth: 280,
-      minHeight: 560,
+      minWidth: SIM_MIN_WIDTH,
+      minHeight: SIM_MIN_HEIGHT,
       ...(position !== null ? { x: position.x, y: position.y } : { center: true }),
       // ⛔ V-1611 — was `false`, and that is why dragging to resize barely works
       // on Windows. macOS gives a borderless NSWindow a resize margin on every

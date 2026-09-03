@@ -92,7 +92,12 @@ import { pointerToViewport } from '../lib/livekit-input-capture';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
-import { persistBaseUrl } from '../lib/settings';
+import {
+  loadSimulatorWindowSize,
+  persistBaseUrl,
+  persistSimulatorWindowSize,
+} from '../lib/settings';
+import { fitSimulatorHeight, simulatorScreenKey } from '../lib/simulator-window-fit';
 import {
   clearPersistedControlKey,
   loadProtectedControlKey,
@@ -3966,6 +3971,45 @@ export function SimulatorWindow(): JSX.Element {
   // (not in overlay mode). One helper so every sizing site agrees — a site that still
   // subtracted KEYBOARD_H after an overlay clamp would re-narrow the window.
   const keyboardChromeOn = (): boolean => keyboardVisibleRef.current && !keyboardOverlayRef.current;
+  // The phone width at 1:1 — the per-archetype iPhone CSS-logical width (its long
+  // edge when rotated to landscape) plus the bezel padding. Live per-archetype width
+  // from the dispatched stream (deviceLogicalRef, seeded to the launch 402 until the
+  // frame reports) so Cmd+0 resets a 390/430 device to ITS true width, not 402. One
+  // closure so the 1:1 target resetToActualSize snaps to and the 1:1 ceiling
+  // fitWindow enforces (T-12) are the same number.
+  const actualSizePhoneWidth = (): number => {
+    const logicalW = deviceLogicalRef.current.width || DEVICE_LOGICAL_WIDTH;
+    const targetContentW = landscapeRef.current
+      ? Math.round(logicalW / deviceAspectRef.current)
+      : logicalW;
+    return targetContentW + BEZEL_PAD;
+  };
+  // T-12 — the size remembered for THIS screen (phone-only width + window height),
+  // or null. A store that cannot be read must not stop a fit: the window falls back
+  // to 1:1 and the reason is logged.
+  const rememberedWindowSize = async (): Promise<{ width: number; height: number } | null> => {
+    const key = simulatorScreenKey(typeof window === 'undefined' ? null : window.screen);
+    if (key === null) return null;
+    try {
+      return await loadSimulatorWindowSize(key);
+    } catch (err) {
+      console.warn('[simulator] could not read the remembered window size (ignored):', err);
+      return null;
+    }
+  };
+  // T-12 — remember the settled size for this screen so the next open starts there.
+  // Phone-only width (the docked rail/pane is added back at open). Never rejects: a
+  // failed store write is logged, not surfaced — in the borderless window a stray
+  // rejection paints the fatal overlay (see withCurrentWindow).
+  const rememberWindowSize = async (width: number, height: number): Promise<void> => {
+    const key = simulatorScreenKey(typeof window === 'undefined' ? null : window.screen);
+    if (key === null || width <= 0 || height <= 0) return;
+    try {
+      await persistSimulatorWindowSize(key, { width, height });
+    } catch (err) {
+      console.warn('[simulator] could not remember the window size (ignored):', err);
+    }
+  };
   // Size the window so the device video FILLS the frame width AND the whole window
   // FITS the screen height. The iPhone's tall aspect makes a width-driven height
   // overflow a laptop screen → the OS clamps the height → the device letterboxes
@@ -3999,8 +4043,20 @@ export function SimulatorWindow(): JSX.Element {
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
       let height = simulatorWindowHeight(phoneW, aspect, browserModeOn, keyboardOn);
       let width = curWidth; // = phoneW + drawerExtra, preserved
-      if (avail > 0 && height > avail - 24) {
-        height = avail - 24;
+      // T-12 — ONE clamp, shared with resetToActualSize: the screen work area (a
+      // smaller share of it on a laptop) and, on any screen, the device at 1:1.
+      const fitted = fitSimulatorHeight({
+        desired: height,
+        availHeight: avail,
+        nativeLogicalHeight: simulatorWindowHeight(
+          actualSizePhoneWidth(),
+          aspect,
+          browserModeOn,
+          keyboardOn,
+        ),
+      });
+      if (fitted < height) {
+        height = fitted;
         width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       }
       await win.setSize(new LogicalSize(width, Math.round(height)));
@@ -4023,6 +4079,12 @@ export function SimulatorWindow(): JSX.Element {
   // window has been dragged large it stays large ("the webkit browser is suddenly
   // larger than our output", founder 2026-06-22) — this is the one-gesture way back
   // to true iPhone-logical size. Mirrors fitWindow's screen-clamp + read-back.
+  //
+  // T-12 — the FIRST call of a mount is the fresh-open fit (didInitialFit below),
+  // and it starts from the size the customer last left the phone at on this screen
+  // instead of 1:1, so a manual resize sticks across opens. Every later call —
+  // Cmd+0, a session switch — snaps to 1:1 exactly as before.
+  const rememberedSizeUsedRef = useRef(false);
   const resetToActualSize = (): void => {
     void withCurrentWindow(async (win) => {
       const { LogicalSize } = await import('@tauri-apps/api/dpi');
@@ -4033,25 +4095,39 @@ export function SimulatorWindow(): JSX.Element {
       // area it overlays instead and is excluded from chrome (#75b) via keyboardChromeOn.
       const keyboardOn = keyboardChromeOn();
       const chrome = simulatorChromeHeight(browserMode, keyboardOn);
-      // Target device-content width = the per-archetype iPhone CSS-logical width (its
-      // long edge when rotated to landscape), then the window adds the bezel padding +
-      // (if open) the right drawer's fixed width. Live per-archetype width from the
-      // dispatched stream (deviceLogicalRef, seeded to the launch 402 until the frame
-      // reports) so Cmd+0 resets a 390/430 device to ITS true width, not 402.
+      // Target device-content width = the per-archetype iPhone CSS-logical width
+      // (actualSizePhoneWidth), then the window adds the bezel padding + (if open)
+      // the right drawer's fixed width.
       const drawerExtra = drawerExtraRef.current;
-      const logicalW = deviceLogicalRef.current.width || DEVICE_LOGICAL_WIDTH;
-      const targetContentW = landscapeRef.current
-        ? Math.round(logicalW / deviceAspectRef.current)
-        : logicalW;
-      const phoneW = targetContentW + BEZEL_PAD;
+      const phoneW = actualSizePhoneWidth();
       let width = phoneW + drawerExtra;
       let height = simulatorWindowHeight(phoneW, aspect, browserMode, keyboardOn);
+      // The 1:1 height: the target of every reset, and the ceiling of the fresh-open
+      // fit below (a remembered size larger than the device is brought back to 1:1).
+      const actualSizeH = height;
+      if (!rememberedSizeUsedRef.current) {
+        rememberedSizeUsedRef.current = true;
+        const remembered = await rememberedWindowSize();
+        // HEIGHT-driven like refitForDrawer: keep the remembered height, re-derive the
+        // phone width from the LIVE aspect, so a different archetype or rotation still
+        // fills the frame edge-to-edge.
+        if (remembered !== null && remembered.height - chrome > 0) {
+          height = remembered.height;
+          width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
+        }
+      }
       // An iPhone is taller than many laptop work areas; if the ideal height would
       // overflow, cap it and derive the width from the aspect so the device still
-      // fills the frame edge-to-edge (same guarantee fitWindow makes).
+      // fills the frame edge-to-edge (same guarantee fitWindow makes — the SAME
+      // helper, so the two sites cannot drift).
       const avail = typeof window !== 'undefined' ? (window.screen?.availHeight ?? 0) : 0;
-      if (avail > 0 && height > avail - 24) {
-        height = avail - 24;
+      const fitted = fitSimulatorHeight({
+        desired: height,
+        availHeight: avail,
+        nativeLogicalHeight: actualSizeH,
+      });
+      if (fitted < height) {
+        height = fitted;
         width = Math.round((height - chrome) * aspect + BEZEL_PAD) + drawerExtra;
       }
       await win.setSize(new LogicalSize(width, Math.round(height)));
@@ -4375,6 +4451,12 @@ export function SimulatorWindow(): JSX.Element {
                   Math.round((h - chrome) * aspect + BEZEL_PAD) + drawerExtraRef.current;
                 if (needW > 0 && Math.abs(w - needW) > 4) {
                   await win.setSize(new LogicalSize(needW, h));
+                } else {
+                  // T-12 — on-aspect and settled (the debounce above): remember the
+                  // phone-only size for this screen so the next open starts there. A
+                  // correction above re-fires onResized and lands here one debounce
+                  // later, so the remembered size is always the aspect-locked one.
+                  await rememberWindowSize(w - drawerExtraRef.current, h);
                 }
               } catch {
                 /* window API unavailable (non-Tauri / mock) — ignore */

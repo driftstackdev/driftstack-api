@@ -22,6 +22,9 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { invoke } from '@tauri-apps/api/core';
 import { makeWriteLock } from './store-write-lock';
+import type { SimulatorWindowSize } from './simulator-window-fit';
+
+export type { SimulatorWindowSize } from './simulator-window-fit';
 
 export type ThemeMode = 'light' | 'dark';
 /** The one accent. Was 'violet' | 'oxblood' | 'teal'; the owner asked for the
@@ -75,6 +78,18 @@ export interface DriftstackSettings {
    * destroys state the customer cannot get back.
    */
   autoUpdate: boolean;
+  /**
+   * The simulator window size the customer last left it at, per screen
+   * (keyed by `simulatorScreenKey`, the work area's logical `WxH`), in logical
+   * px of the phone alone — the docked rail/pane width is not included.
+   *
+   * Optional, and absent rather than `{}` when nothing has been remembered: an
+   * older settings.json has no such key, and a customer who never resized the
+   * phone has nothing to remember. Written by the simulator window's resize
+   * handler (merge-only, like `persistBaseUrl`) and read back on the next open,
+   * so a manual resize sticks. Non-sensitive → settings store, never keychain.
+   */
+  simulatorWindowSize?: Record<string, SimulatorWindowSize>;
 }
 
 export const DEFAULT_SETTINGS: DriftstackSettings = {
@@ -131,8 +146,35 @@ interface PersistedSettings {
   telemetryOptIn?: unknown;
   startUrl?: unknown;
   autoUpdate?: unknown;
+  simulatorWindowSize?: unknown;
   /** Legacy plaintext map; read only for one-shot keychain migration + purge. */
   apiKeys?: unknown;
+}
+
+/**
+ * Coerce the persisted per-screen window sizes into a clean map. Every entry
+ * must be a `{ width, height }` of finite positive numbers; anything else (a
+ * hand edit, a truncated write) is dropped entry by entry, never the whole map.
+ * Returns `{}` when the field is absent or not an object.
+ */
+function windowSizesFrom(raw: unknown): Record<string, SimulatorWindowSize> {
+  const out: Record<string, SimulatorWindowSize> = {};
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return out;
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (key.length === 0 || typeof value !== 'object' || value === null) continue;
+    const { width, height } = value as { width?: unknown; height?: unknown };
+    if (typeof width !== 'number' || typeof height !== 'number') continue;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) continue;
+    out[key] = { width: Math.round(width), height: Math.round(height) };
+  }
+  return out;
+}
+
+/** The optional field is carried only when it has something to say. */
+function windowSizesField(sizes: Record<string, SimulatorWindowSize>): {
+  simulatorWindowSize?: Record<string, SimulatorWindowSize>;
+} {
+  return Object.keys(sizes).length > 0 ? { simulatorWindowSize: sizes } : {};
 }
 
 /** W584 — coerce the persisted apiKeys field into a clean string→string map. */
@@ -290,6 +332,10 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       ? persisted.autoUpdate
       : DEFAULT_SETTINGS.autoUpdate;
 
+  // Remembered simulator window sizes, per screen. Validated entry by entry;
+  // absent (not `{}`) when nothing has been remembered.
+  const simulatorWindowSize = windowSizesFrom(persisted?.simulatorWindowSize);
+
   const scopedName = keychainNameFor(baseUrl);
   const legacyKeyMap = keyMapFrom(persisted);
   const activeHostId = hostIdFor(baseUrl);
@@ -346,11 +392,22 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       // so every persisted field has to be listed or it is dropped. The return
       // below carries it, which is why the loss was invisible until relaunch.
       autoUpdate,
+      // Same lesson: the remembered window sizes are persisted state too.
+      ...windowSizesField(simulatorWindowSize),
     });
     await getStore().save();
   }
 
-  return { apiKey, baseUrl, themeMode, themeAccent, telemetryOptIn, startUrl, autoUpdate };
+  return {
+    apiKey,
+    baseUrl,
+    themeMode,
+    themeAccent,
+    telemetryOptIn,
+    startUrl,
+    autoUpdate,
+    ...windowSizesField(simulatorWindowSize),
+  };
 }
 
 // Serialize settings writes so rapid theme/accent/base updates cannot overwrite
@@ -384,12 +441,58 @@ export async function persistBaseUrl(baseUrl: string): Promise<void> {
   });
 }
 
+/**
+ * T-12 — remember the simulator window size the customer left it at on one
+ * screen, so the next open on that screen starts there. Merge-only: the other
+ * screens' sizes and every other non-secret setting are preserved, the keychain
+ * is never touched, and an unchanged size is not rewritten (the resize handler
+ * calls this after every settled resize, including the ones this app makes).
+ */
+export async function persistSimulatorWindowSize(
+  screenKey: string,
+  size: SimulatorWindowSize,
+): Promise<void> {
+  const [clean] = Object.values(windowSizesFrom({ [screenKey]: size }));
+  if (screenKey.length === 0 || clean === undefined) return;
+  return settingsWriteLock(async () => {
+    const persisted = (await getStore().get<PersistedSettings>(SETTINGS_KEY)) ?? {};
+    const sizes = windowSizesFrom(persisted.simulatorWindowSize);
+    const current = sizes[screenKey];
+    if (current !== undefined && current.width === clean.width && current.height === clean.height)
+      return; // already remembered — skip the write
+    sizes[screenKey] = clean;
+    await getStore().set(SETTINGS_KEY, { ...persisted, simulatorWindowSize: sizes });
+    await getStore().save();
+  });
+}
+
+/**
+ * The remembered simulator window size for one screen, or `null` when none was
+ * remembered there. Reads only the non-secret store — like `loadBaseUrl`, it
+ * never opens the keychain, so opening a window cannot raise a credential prompt.
+ */
+export async function loadSimulatorWindowSize(
+  screenKey: string,
+): Promise<SimulatorWindowSize | null> {
+  const persisted = await getStore().get<PersistedSettings>(SETTINGS_KEY);
+  return windowSizesFrom(persisted?.simulatorWindowSize)[screenKey] ?? null;
+}
+
 async function saveSettingsUnlocked(
   s: DriftstackSettings,
   options: { credentialUnchanged?: boolean },
 ): Promise<void> {
   // settings.json is strictly non-secret for EVERY deployment. Per-host
   // switching remains supported by the scoped keychain entry name.
+  //
+  // The whole object is rewritten, so every persisted field has to be listed
+  // (V-1611). The remembered window sizes are owned by the simulator window,
+  // not by whoever holds this `s`: a Settings-view save made after the phone
+  // was resized would otherwise write the in-memory copy from launch time
+  // over the size just remembered. When `s` carries none, keep what is on disk.
+  const persisted = (await getStore().get<PersistedSettings>(SETTINGS_KEY)) ?? {};
+  const simulatorWindowSize =
+    s.simulatorWindowSize ?? windowSizesFrom(persisted.simulatorWindowSize);
   await getStore().set(SETTINGS_KEY, {
     baseUrl: s.baseUrl,
     themeMode: s.themeMode,
@@ -397,6 +500,7 @@ async function saveSettingsUnlocked(
     telemetryOptIn: s.telemetryOptIn,
     startUrl: s.startUrl,
     autoUpdate: s.autoUpdate,
+    ...windowSizesField(simulatorWindowSize),
   });
   await getStore().save();
 
