@@ -69,6 +69,12 @@ import {
   createCookiesListStore,
   type CookiesListStore,
 } from '../components/CookiesListSubscriber';
+import { NetworkListSubscriber } from '../components/NetworkListSubscriber';
+import {
+  createNetworkLogStore,
+  fetchAgentSessionNetwork,
+  type NetworkLogStore,
+} from '../lib/network-log-feed';
 import {
   createLiveLatencyStore,
   LiveLatencyBridge,
@@ -558,6 +564,7 @@ const SIM_DRAWER_PANES = [
   'controls',
   'diagnostics',
   'cookies',
+  'network',
   'files',
   'downloads',
   'recording',
@@ -1154,6 +1161,13 @@ const SIM_PANE_ICONS: Record<SimDrawerPane, JSX.Element> = {
       <circle cx="16" cy="11.5" r="0.6" />
     </>
   ),
+  // Network — a globe with latitude/longitude lines (devtools network idiom).
+  network: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3v18M5 6.5c2 1.4 12 1.4 14 0M5 17.5c2-1.4 12-1.4 14 0" />
+    </>
+  ),
   // Files — an upload tray.
   files: (
     <>
@@ -1181,6 +1195,7 @@ const SIM_PANE_TITLES: Record<SimDrawerPane, string> = {
   controls: 'Controls',
   diagnostics: 'Diagnostics',
   cookies: 'Cookies',
+  network: 'Network',
   files: 'Files',
   downloads: 'Downloads',
   recording: 'Recording',
@@ -1190,6 +1205,7 @@ const SIM_PANE_RAIL_LABELS: Record<SimDrawerPane, string> = {
   controls: 'Controls',
   diagnostics: 'Health',
   cookies: 'Cookies',
+  network: 'Network',
   files: 'Files',
   downloads: 'Downloads',
   recording: 'Record',
@@ -3949,6 +3965,7 @@ export function SimulatorWindow(): JSX.Element {
   // actually shown. Depending on the BOOLEAN (not the whole activePane string)
   // keeps the effect from re-arming when an UNRELATED pane switch happens.
   const cookiesPaneActive = activePane === 'cookies';
+  const networkPaneActive = activePane === 'network';
   const downloadsPaneActive = activePane === 'downloads';
 
   // Browser mode (founder 2026-06-21, greenlit) — a native GUI URL bar in the
@@ -6302,6 +6319,85 @@ export function SimulatorWindow(): JSX.Element {
     };
   }, [cookiesPaneActive, sessionId, controlAuth, room, sessionEnded]);
 
+  // T-9 — the Network pane: a devtools-style request list (protocol per request,
+  // HTTP/2 vs HTTP/3). Twin of the cookies poll above, but the store + fetch +
+  // closed-set protocol validation live in the ISOLATED lib/network-log-feed
+  // module (NOT agent-session-control) so the ~17 simulator-window mocks — which
+  // hand-list agent-session-control's exports — never see an undefined new export
+  // (N-1). The feed pages a bounded ring over the control plane via an `after`
+  // cursor. A3 has NOT wired the harness emission yet, so a healthy poll returns
+  // an EMPTY page today and the pane shows an honest "No requests captured yet".
+  const networkStoreRef = useRef<NetworkLogStore | null>(null);
+  if (networkStoreRef.current === null) networkStoreRef.current = createNetworkLogStore();
+  const networkStore = networkStoreRef.current;
+  const [networkNote, setNetworkNote] = useState<string | null>(null);
+  const [networkRefreshing, setNetworkRefreshing] = useState(false);
+  // Twin of hasCookiesRef — retain the last-known list through a transient/gated
+  // tick; show the calm note ONLY when genuinely nothing has been fetched yet.
+  const hasNetworkRef = useRef(false);
+  useEffect(() => {
+    // Poll ONLY while the Network pane is the active section (perf twin of cookies).
+    if (!networkPaneActive || sessionId === '' || room === null) return;
+    // Terminal session: stop polling the dead session and show an honest note
+    // (twin of the cookies terminal branch). Reset drops the list AND the cursor
+    // so a fresh session starts from the beginning of its own ring.
+    if (sessionEnded !== null) {
+      setNetworkRefreshing(false);
+      networkStore.reset();
+      hasNetworkRef.current = false;
+      setNetworkNote('Session ended — network activity is no longer available.');
+      return;
+    }
+    // Self-scheduling poll with exponential backoff — the next tick is scheduled
+    // only inside .finally, so requests never overlap (twin of the cookies poll).
+    let cancelled = false;
+    let backoff = 3000;
+    let handle: ReturnType<typeof setTimeout> | null = null;
+    const tick = (): void => {
+      setNetworkRefreshing(true);
+      void fetchAgentSessionNetwork(sessionId, networkStore.getCursor(), controlAuth)
+        .then((page) => {
+          if (cancelled) return;
+          // A 200 always carries a page. append flips a null snapshot to a real
+          // array even when the ring is empty — so an empty ok surfaces the honest
+          // "No requests captured yet" state, not the "connecting" note.
+          networkStore.append(page.entries, page.next_after);
+          hasNetworkRef.current = true;
+          setNetworkNote(null);
+          backoff = 3000; // reset cadence on a real success
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          // Branch on the HTTP status the shared transport attaches (twin of the
+          // cookies #58 catch): 401/403 = the per-session control key expired;
+          // 404 = no ring yet; 503 = the route is gated off; else transient.
+          const status = err instanceof AgentSessionControlError ? err.status : 0;
+          const credsExpired = status === 401 || status === 403;
+          const note = credsExpired
+            ? 'Session control credential expired — reopen the session to refresh.'
+            : status === 404
+              ? 'network activity will appear once the page starts loading'
+              : status === 503
+                ? "the network view isn't enabled on this deployment"
+                : "couldn't load network activity — retrying";
+          // Retain the last-known list; note only when nothing fetched yet, EXCEPT
+          // expired creds (the list can't refresh) which keeps its actionable note.
+          setNetworkNote(hasNetworkRef.current && !credsExpired ? null : note);
+          backoff = Math.min(backoff * 2, 30000);
+        })
+        .finally(() => {
+          if (cancelled) return;
+          setNetworkRefreshing(false);
+          handle = setTimeout(tick, backoff);
+        });
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      if (handle !== null) clearTimeout(handle);
+    };
+  }, [networkPaneActive, sessionId, controlAuth, room, sessionEnded]);
+
   // File-control upload (A3 W2851 / founder "control files"). Upload a file's bytes
   // (base64) into the running session's isolated 0o700 jail → get an OPAQUE handle
   // the customer can hand to a page's <input type=file>. Upload-only here; the
@@ -6843,6 +6939,9 @@ export function SimulatorWindow(): JSX.Element {
     cookiesStore.set(null);
     hasCookiesRef.current = false;
     setCookiesNote(null);
+    networkStore.reset();
+    hasNetworkRef.current = false;
+    setNetworkNote(null);
     downloadsStore.set(null);
     hasDownloadsRef.current = false;
     setDownloadsNote(null);
@@ -9520,6 +9619,21 @@ export function SimulatorWindow(): JSX.Element {
                           />
                         )}
                       </CookiesListSubscriber>
+                    )}
+
+                    {/* Network — a devtools-style request list showing per-request
+                      protocol (HTTP/2 vs HTTP/3). The store + poll + closed-set
+                      protocol validation live in lib/network-log-feed (isolated from
+                      the widely-mocked agent-session-control, N-1). A3 has not wired
+                      the harness emission yet, so the feed is honestly empty today —
+                      the pane says "No requests captured yet" rather than erroring. */}
+                    {activePane === 'network' && (
+                      <NetworkListSubscriber
+                        store={networkStore}
+                        sessionId={sessionId}
+                        note={networkNote}
+                        refreshing={networkRefreshing}
+                      />
                     )}
 
                     {/* Files — upload a file into the session's isolated 0o700 jail; the
