@@ -12184,3 +12184,73 @@ publish" is observationally identical to "activate never sent", so this mutation
 regression shape. Full file under the ROOT vitest config: rc=0, `Test Files 1 passed`, `Tests 58 passed
 (58)` — the earlier "No test files found" rc=1 was the node-config/.tsx trap (vitest.node.config.ts
 includes only .test.ts); the gui project's config owns .tsx.
+
+<!-- Backfilled 2026-09-03 by A2: the log had stopped at V-2168 on 2026-08-30; the Batch-T entries below were recorded on docs/internal/OPEN-ITEMS.md (driftstack repo) at the time and are transcribed here so V-numbers resolve. V-2169–V-2217 belong to other sessions and are NOT backfilled here. -->
+
+## V-2218 — gui: one-line profiles empty state, a brighter first-action CTA, first-time-only onboarding (2026-09-03)
+
+Commit `8574411b6` on origin/main. Owner Batch T item(s): T-7, T-8, T-13. Gate/evidence: Wave 1 full gate green locally, then pre-push full gate green; origin 4fdacbe1f. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2219 — gui: cap the simulator window on small screens and remember its size per screen (2026-09-03)
+
+Commit `5df2620ee` on origin/main. Owner Batch T item(s): T-12. Gate/evidence: Wave 1 full gate green locally, then pre-push full gate green; origin 4fdacbe1f. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2220 — gui: warn about local and IP-allowlist proxies before they are trusted (2026-09-03)
+
+Commit `7b00db2e7` on origin/main. Owner Batch T item(s): T-2. Gate/evidence: Wave 1 full gate green locally, then pre-push full gate green; origin 4fdacbe1f. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2221 — gui: lock the simulator drag to one axis so a vertical scroll can't shake sideways (2026-09-03)
+
+Commit `4fdacbe1f` on origin/main. Owner Batch T item(s): T-4. Gate/evidence: Wave 1 full gate green locally, then pre-push full gate green; origin 4fdacbe1f. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2222 — proxy: record a session's proxy and back-fill its measured QUIC from live sessions (2026-09-03)
+
+Commit `96aa72027` on origin/main. Owner Batch T item(s): T-6. Gate/evidence: Local full gate caught 2 content-parity pins (setNodeId signature; source-typechecks on 7 test fixtures) — fixed in the same commits; pre-push full gate green; origin 3d96c72d0; deployed prod 3d96c72d0 (migration 0116 applied). Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2223 — gui: show the server-measured proxy latency and a real measured-QUIC chip (2026-09-03)
+
+Commit `3d96c72d0` on origin/main. Owner Batch T item(s): T-1 interim, T-6. Gate/evidence: Local full gate caught 2 content-parity pins (setNodeId signature; source-typechecks on 7 test fixtures) — fixed in the same commits; pre-push full gate green; origin 3d96c72d0; deployed prod 3d96c72d0 (migration 0116 applied). Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2224 — gui: show a loading state in the URL bar on a slow navigation (2026-09-03)
+
+Commit `d7f0e3316` on origin/main. Owner Batch T item(s): T-10. Gate/evidence: Pre-push full gate green; origin 9bc066539; deployed prod 9bc066539 (echo now returns lat/lon). Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2225 — proxy: spoof geolocation to the exit's measured coordinates (2026-09-03)
+
+Commit `9bc066539` on origin/main. Owner Batch T item(s): T-11 A2 half. Gate/evidence: Pre-push full gate green; origin 9bc066539; deployed prod 9bc066539 (echo now returns lat/lon). Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2226 — gui: add a Network pane to the simulator showing each request's protocol (2026-09-03)
+
+Commit `f35fecbad` on origin/main. Owner Batch T item(s): T-9 GUI. Gate/evidence: First push REJECTED by the pre-push gate on 7 route-roster invariants (a new :id route must be registered in cross-account isolation, scope-refusal, published-bound, docs-declared, querystring-validation, SDK path-parity, rate-limit count) — registered in V-2228; local full gate `verify-suite: OK` 3308 files / 32892 tests; origin 584342d5e; deployed prod c8bfa4ef0. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2227 — net: receive, ring, and serve per-request network logs from the device (2026-09-03)
+
+Commit `64892eef5` on origin/main. Owner Batch T item(s): T-9 server. Gate/evidence: First push REJECTED by the pre-push gate on 7 route-roster invariants (a new :id route must be registered in cross-account isolation, scope-refusal, published-bound, docs-declared, querystring-validation, SDK path-parity, rate-limit count) — registered in V-2228; local full gate `verify-suite: OK` 3308 files / 32892 tests; origin 584342d5e; deployed prod c8bfa4ef0. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2228 — net: register the network route in the remaining route rosters (2026-09-03)
+
+Commit `584342d5e` on origin/main. Owner Batch T item(s): T-9 follow-up. Gate/evidence: First push REJECTED by the pre-push gate on 7 route-roster invariants (a new :id route must be registered in cross-account isolation, scope-refusal, published-bound, docs-declared, querystring-validation, SDK path-parity, rate-limit count) — registered in V-2228; local full gate `verify-suite: OK` 3308 files / 32892 tests; origin 584342d5e; deployed prod c8bfa4ef0. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2229 — proxy: measure QUIC from an observed handshake, not the configured mode (2026-09-03)
+
+Commit `c8bfa4ef0` on origin/main. Owner Batch T item(s): T-6. Gate/evidence: Local full gate `verify-suite: OK` 3308 / 32892; origin c8bfa4ef0; deployed prod c8bfa4ef0; verified quic_measured null on every proxy (the config-echo write removed). Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2230 — gui: remove the weaker dead stale-proxy selector (2026-09-03)
+
+Commit `c22d3faa7` on origin/main. Owner Batch T item(s): P-8r. Gate/evidence: Combined local full gate first caught 6 ripples (spec regen, 2 capability_report shape pins, correlator roster, one-encoder pin 3→4, and a fixture missing udp_associate/require_remote_dns) — all fixed; final local full gate `verify-suite: OK` 3312 files / 32982 tests; pre-push full gate green; origin 21338ef99; deployed prod 21338ef99 (19:44Z). Live-verified 19:45Z: cloudflare-quic.com h3_connection_observed=true, example.com null, owner proxy quic_measured='h3' — first measured value the field has ever held. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2231 — api: expose x-request-id on hijacked SSE streams (2026-09-03)
+
+Commit `e562dfbdc` on origin/main. Owner Batch T item(s): P-4r. Gate/evidence: Combined local full gate first caught 6 ripples (spec regen, 2 capability_report shape pins, correlator roster, one-encoder pin 3→4, and a fixture missing udp_associate/require_remote_dns) — all fixed; final local full gate `verify-suite: OK` 3312 files / 32982 tests; pre-push full gate green; origin 21338ef99; deployed prod 21338ef99 (19:44Z). Live-verified 19:45Z: cloudflare-quic.com h3_connection_observed=true, example.com null, owner proxy quic_measured='h3' — first measured value the field has ever held. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2232 — proxy: measure a proxy from the fleet Mac that runs the profile (2026-09-03)
+
+Commit `5ba2585a1` on origin/main. Owner Batch T item(s): T-1 Step 2. Gate/evidence: Combined local full gate first caught 6 ripples (spec regen, 2 capability_report shape pins, correlator roster, one-encoder pin 3→4, and a fixture missing udp_associate/require_remote_dns) — all fixed; final local full gate `verify-suite: OK` 3312 files / 32982 tests; pre-push full gate green; origin 21338ef99; deployed prod 21338ef99 (19:44Z). Live-verified 19:45Z: cloudflare-quic.com h3_connection_observed=true, example.com null, owner proxy quic_measured='h3' — first measured value the field has ever held. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2233 — gui: show where a proxy was measured, and keep the two QUIC verdicts apart (2026-09-03)
+
+Commit `0f65ae0c9` on origin/main. Owner Batch T item(s): T-1 GUI. Gate/evidence: Combined local full gate first caught 6 ripples (spec regen, 2 capability_report shape pins, correlator roster, one-encoder pin 3→4, and a fixture missing udp_associate/require_remote_dns) — all fixed; final local full gate `verify-suite: OK` 3312 files / 32982 tests; pre-push full gate green; origin 21338ef99; deployed prod 21338ef99 (19:44Z). Live-verified 19:45Z: cloudflare-quic.com h3_connection_observed=true, example.com null, owner proxy quic_measured='h3' — first measured value the field has ever held. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
+
+## V-2234 — api: report whether a session actually carried HTTP/3 (2026-09-03)
+
+Commit `21338ef99` on origin/main. Owner Batch T item(s): T-6. Gate/evidence: Combined local full gate first caught 6 ripples (spec regen, 2 capability_report shape pins, correlator roster, one-encoder pin 3→4, and a fixture missing udp_associate/require_remote_dns) — all fixed; final local full gate `verify-suite: OK` 3312 files / 32982 tests; pre-push full gate green; origin 21338ef99; deployed prod 21338ef99 (19:44Z). Live-verified 19:45Z: cloudflare-quic.com h3_connection_observed=true, example.com null, owner proxy quic_measured='h3' — first measured value the field has ever held. Full narrative, guards and mutants: the commit body and the ledger row in `driftstack/docs/internal/OPEN-ITEMS.md`.
