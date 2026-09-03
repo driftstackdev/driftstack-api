@@ -91,3 +91,56 @@ describe('QUIC is inferred, not measured', () => {
     expect(screen).toBeDefined();
   });
 });
+
+// T-6 EXTENSION — the inference above is the fallback; a QUIC verdict the control
+// plane MEASURED in a live session overrides it. This does not contradict the
+// rows above: with no measurement (the default), the chip stays exactly as
+// inferred. The measured path only adds a way OUT of the guess in either
+// direction — a real 'h3' that earns the green ✓, and a measured 'h2-only' that
+// is an honest negative rather than a hedge.
+const capQ = (r: ProxyTestResult, q: 'h3' | 'h2-only' | null | undefined, key: string) =>
+  proxyCapabilities(r, q).find((c) => c.key === key)!;
+
+describe('QUIC measured in a live session overrides the inference', () => {
+  it("a measured 'h3' is a real verdict, not a guess — ok and NOT inferred (the only green)", () => {
+    const quic = capQ(UDP_OK, 'h3', 'quic');
+    expect(quic.ok).toBe(true);
+    expect(quic.inferred ?? false, 'a measurement is not inferred').toBe(false);
+  });
+
+  it("a measured 'h2-only' is a measured NEGATIVE — not ok, and not inferred", () => {
+    const quic = capQ(UDP_OK, 'h2-only', 'quic');
+    expect(quic.ok, 'HTTP/3 was measured absent').toBe(false);
+    expect(quic.inferred ?? false, 'measured, so no hedge').toBe(false);
+  });
+
+  it('a measurement overrides the UDP inference even when they disagree', () => {
+    // The session is ground truth: a proxy that relays UDP can still block
+    // UDP/443, so a measured 'h2-only' beats the optimistic inference…
+    expect(capQ(UDP_OK, 'h2-only', 'quic').ok).toBe(false);
+    // …and a live session that carried HTTP/3 is proof it works even if the
+    // native UDP-associate probe never saw a relay.
+    const noUdp = { ...UDP_OK, udp_associate: false };
+    const quic = capQ(noUdp, 'h3', 'quic');
+    expect(quic.ok).toBe(true);
+    expect(quic.inferred ?? false).toBe(false);
+  });
+
+  it('VACUITY CONTROL — null and undefined keep the EXACT inferred behaviour the rows above assert', () => {
+    // If the measured path had leaked into the unmeasured case, this would fail:
+    // the chip must be identical to calling proxyCapabilities with no verdict.
+    for (const q of [null, undefined] as const) {
+      const quic = capQ(UDP_OK, q, 'quic');
+      expect(quic.ok, 'still the UDP inference').toBe(true);
+      expect(quic.inferred, 'still inferred — never promoted to a measurement').toBe(true);
+    }
+  });
+
+  it('WebRTC and HTTP/2 are untouched by a QUIC measurement', () => {
+    for (const q of ['h3', 'h2-only'] as const) {
+      expect(capQ(UDP_OK, q, 'webrtc').ok).toBe(true);
+      expect(capQ(UDP_OK, q, 'webrtc').inferred ?? false).toBe(false);
+      expect(capQ(UDP_OK, q, 'http2').ok).toBe(true);
+    }
+  });
+});

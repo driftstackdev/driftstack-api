@@ -19,7 +19,11 @@ import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
  *  because lib/proxies is hand-mocked by dozens of suites). */
 const PROBE_ORIGIN_TITLE =
   'Measured from your computer, not from the server that runs your profile.';
+/** T-1 — hover text on a latency measured by the control plane, closer to the
+ *  fleet that runs the profile than this Mac. */
+const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
 import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
+import type { MeasuredQuic } from '../lib/account-proxies';
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -73,8 +77,14 @@ export interface ProfilePhoneCardProps {
   latencyMs: number | null;
   latencyFillPct: number;
   latencyGood: boolean;
+  /** T-1 — true when latencyMs is the SERVER-measured value (control plane), so
+   *  the card labels it as such rather than as the native "from this Mac" probe. */
+  latencyFromServer?: boolean;
   probed: boolean;
   capabilities: ProxyTestResult | null;
+  /** T-6 — the QUIC verdict measured in a live session: 'h3' lets the QUIC chip
+   *  go green, 'h2-only' is a measured negative, null/undefined stays inferred. */
+  quicMeasured?: MeasuredQuic | null;
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
   osFingerprint?: OsFingerprint;
@@ -178,9 +188,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   }, [actionsOpen]);
   // UDP badge state + the WebRTC/QUIC detail shown on hover. proxyCapabilities
   // gates WebRTC/QUIC on reachable+auth+udp_associate (they ride UDP).
-  const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities) : null;
+  const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured) : null;
   const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
-  const quic = caps?.find((c) => c.key === 'quic')?.ok ?? false;
+  // T-6 — read the QUIC chip's ok AND inferred: a green ✓ is only for a MEASURED
+  // 'h3'. An inferred chip (UDP relays but HTTP/3 was never measured) renders a
+  // muted '~', never green — an operator must not read a guess as a pass.
+  const quicCap = caps?.find((c) => c.key === 'quic');
+  const quicOk = quicCap?.ok ?? false;
+  const quicInferred = quicCap?.inferred === true;
   const udpOk = webrtc; // WebRTC ok === UDP relay verified
   // The overall verdict, from the ONE shared definition rather than a local
   // spelling of it — a card that disagreed with the proxies page about whether
@@ -419,9 +434,21 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <span className="flex items-center gap-1 text-[9.5px] text-ink-muted">
                     {p.latencyMs !== null ? (
                       <>
-                        <span className="mono" title={PROBE_ORIGIN_TITLE}>
+                        <span
+                          className="mono"
+                          title={
+                            p.latencyFromServer === true ? SERVER_LATENCY_TITLE : PROBE_ORIGIN_TITLE
+                          }
+                        >
                           {p.latencyMs}ms
                         </span>
+                        {/* T-1 — mark a server-measured latency so it is not read
+                            as the laptop's number. */}
+                        {p.latencyFromServer === true && (
+                          <span className="text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                            server
+                          </span>
+                        )}
                         <span className="inline-block h-1 w-[26px] overflow-hidden rounded-[2px] bg-surface-divider">
                           <span
                             className="block h-full rounded-[2px]"
@@ -513,10 +540,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     >
                       WebRTC {webrtc ? '✓' : '✗'}
                     </span>
+                    {/* T-6 — inferred renders muted '~' (never green); a measured
+                        'h3' is green ✓, a measured 'h2-only' is red ✗. */}
                     <span
-                      className={`rounded px-1 text-[8.5px] ${quic ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
+                      data-quic-inferred={quicInferred ? 'true' : 'false'}
+                      className={`rounded px-1 text-[8.5px] ${
+                        quicInferred
+                          ? 'bg-surface-inset text-ink-secondary'
+                          : quicOk
+                            ? 'bg-status-ready/15 text-status-ready'
+                            : 'bg-status-error/15 text-status-error'
+                      }`}
                     >
-                      QUIC {quic ? '✓' : '✗'}
+                      QUIC {quicInferred ? '~' : quicOk ? '✓' : '✗'}
                     </span>
                   </div>
                 )}

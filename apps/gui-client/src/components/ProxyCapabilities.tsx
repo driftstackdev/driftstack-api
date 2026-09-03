@@ -32,6 +32,7 @@
 // everywhere.
 
 import { isProxyUsable, type ProxyTestResult } from '../lib/proxies';
+import type { MeasuredQuic } from '../lib/account-proxies';
 import { osFingerprintVerdict, type OsFingerprint } from '../lib/os-fingerprint-verdict';
 
 export interface ProxyCapability {
@@ -47,11 +48,24 @@ export interface ProxyCapability {
   hint: string;
 }
 
-export function proxyCapabilities(result: ProxyTestResult): ProxyCapability[] {
+/**
+ * @param quicMeasured T-6 — the QUIC verdict MEASURED in a live session, when the
+ *   control plane observed one: 'h3' → HTTP/3 verified (a real green ✓), 'h2-only'
+ *   → measured NO HTTP/3 (a measured negative, not a guess), null/undefined → never
+ *   measured, so the QUIC chip falls back to the INFERRED '~' the probe can offer
+ *   and NEVER renders green. WebRTC and HTTP/2 are unchanged.
+ */
+export function proxyCapabilities(
+  result: ProxyTestResult,
+  quicMeasured?: MeasuredQuic | null,
+): ProxyCapability[] {
   // Capability chips describe a proxy that can carry traffic. Auth alone is not
   // that: a proxy can authenticate and refuse every CONNECT.
   const live = isProxyUsable(result);
   const udp = live && result.udp_associate;
+  // A measured verdict overrides the inference entirely. 'h3' is the ONLY green;
+  // 'h2-only' is a measured negative; anything else means we never measured it.
+  const quicIsMeasured = quicMeasured === 'h3' || quicMeasured === 'h2-only';
   return [
     {
       key: 'webrtc',
@@ -64,13 +78,20 @@ export function proxyCapabilities(result: ProxyTestResult): ProxyCapability[] {
     {
       key: 'quic',
       label: 'QUIC',
-      ok: udp,
-      // Inferred whenever we are claiming it. With no UDP relay the NEGATIVE is
-      // solid — QUIC cannot work without one — so only the positive is a guess.
-      inferred: udp,
-      hint: udp
-        ? 'UDP relay verified, so HTTP/3 is LIKELY — but not tested. Some exits relay UDP yet still block UDP/443, inspect the QUIC handshake, or fragment it. Run a session to confirm.'
-        : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
+      // Measured: ok is exactly whether HTTP/3 was seen. Unmeasured: fall back to
+      // the UDP inference — LIKELY when UDP relays, impossible when it does not.
+      ok: quicIsMeasured ? quicMeasured === 'h3' : udp,
+      // Inferred ONLY when we did not measure and are claiming the positive. A
+      // measured verdict (either way) is not a guess; and with no UDP relay the
+      // negative is solid — QUIC cannot work without one.
+      inferred: quicIsMeasured ? false : udp,
+      hint: quicIsMeasured
+        ? quicMeasured === 'h3'
+          ? 'HTTP/3 verified in a live session through this exit.'
+          : 'No HTTP/3 — measured in a live session. Traffic falls back to HTTP/2 over TCP.'
+        : udp
+          ? 'UDP relay verified, so HTTP/3 is LIKELY — but not tested. Some exits relay UDP yet still block UDP/443, inspect the QUIC handshake, or fragment it. Run a session to confirm.'
+          : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
     },
     {
       key: 'http2',
@@ -90,12 +111,17 @@ export function proxyCapabilities(result: ProxyTestResult): ProxyCapability[] {
  */
 export function ProxyCapabilityChips({
   result,
+  quicMeasured,
   size = 'sm',
 }: {
   result: ProxyTestResult;
+  /** T-6 — a measured QUIC verdict promotes the QUIC chip out of the inferred
+   *  '~' state: 'h3' → green ✓, 'h2-only' → measured negative; null/undefined
+   *  keeps the inferred rendering. */
+  quicMeasured?: MeasuredQuic | null;
   size?: 'xs' | 'sm';
 }): JSX.Element {
-  const caps = proxyCapabilities(result);
+  const caps = proxyCapabilities(result, quicMeasured);
   const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
   return (
     <div className="flex flex-wrap items-center gap-1" data-component="proxy-capabilities">

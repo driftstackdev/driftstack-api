@@ -4233,7 +4233,13 @@ export function ProfilesView({
                     // anti-detect tool, a stale exit geo on a dead proxy is a real
                     // hazard. Matches the in-session/reload gate in ProxiesView.
                     const exitOk = probe !== undefined && isProxyUsable(probe.result);
-                    const lat = probe?.result.latency_ms;
+                    // T-1 — prefer the SERVER-measured latency (control plane, near
+                    // the fleet that runs the profile) over the native probe from
+                    // this Mac, and only while the proxy is usable; the card labels
+                    // whichever it shows. Falls back to the native number.
+                    const serverLat = exitOk ? probe?.serverLatencyMs : undefined;
+                    const lat = serverLat ?? probe?.result.latency_ms;
+                    const latFromServer = serverLat !== undefined;
                     // latency meter fill: 0–250ms mapped to 0–100% (clamped).
                     const latFill =
                       lat !== undefined ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
@@ -4264,8 +4270,10 @@ export function ProfilesView({
                           latencyMs={lat ?? null}
                           latencyFillPct={latFill}
                           latencyGood={latGood}
+                          latencyFromServer={latFromServer}
                           probed={probe !== undefined}
                           capabilities={probe?.result ?? null}
+                          quicMeasured={exitOk ? probe?.quicMeasured : undefined}
                           osFingerprint={exitOk ? probe?.osFingerprint : undefined}
                           checkedAtIso={
                             probe?.at !== undefined ? new Date(probe.at).toISOString() : null

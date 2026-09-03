@@ -310,6 +310,8 @@ describe('deriveProbeViewState', () => {
       exitResults: {},
       testedAt: {},
       osFingerprints: {},
+      serverLatency: {},
+      quicMeasured: {},
     });
   });
 });

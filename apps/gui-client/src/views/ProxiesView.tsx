@@ -11,7 +11,6 @@ import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import { ProxyCapabilityChips, ProxyOsChip } from '../components/ProxyCapabilities';
-import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 import {
   isProxyUsable,
   addProxy,
@@ -35,6 +34,7 @@ import {
   saveExitResult,
   saveProbeResult,
   saveOsFingerprint,
+  saveServerProbeResult,
   type CachedOsFingerprint,
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
@@ -46,6 +46,7 @@ import {
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
   type AccountProxyScheme,
+  type MeasuredQuic,
   testAccountProxy,
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
@@ -123,6 +124,14 @@ function formatTestAllSummary(results: ProxyTestResult[]): string {
 const PROBE_ORIGIN_TITLE =
   'Measured from your computer, not from the server that runs your profile.';
 
+/**
+ * Hover text on a latency that came from the control plane's own test (T-1). The
+ * native probe runs on this Mac and measures the customer's own path; the server
+ * value is measured closer to the fleet that will run the profile, so it is the
+ * honest number to lead with — labelled, so it is never mistaken for the laptop's.
+ */
+const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
+
 const EMPTY_DRAFT: ProxyDraft = {
   label: '',
   scheme: 'socks5',
@@ -169,6 +178,11 @@ export function ProxiesView(): JSX.Element {
   // without knowing whether the test ran 30s or 30 days ago (audit).
   const [testedAt, setTestedAt] = useState<Record<string, number>>({});
   const [osFingerprints, setOsFingerprints] = useState<Record<string, CachedOsFingerprint>>({});
+  // T-1 — server-measured latency per proxy (control plane /test), preferred for
+  // the grid Latency column. T-6 — the QUIC verdict measured in a live session,
+  // consumed by the capability chip so a measured 'h3' can go green.
+  const [serverLatency, setServerLatency] = useState<Record<string, number>>({});
+  const [quicMeasured, setQuicMeasured] = useState<Record<string, MeasuredQuic>>({});
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -209,6 +223,8 @@ export function ProxiesView(): JSX.Element {
       setExitResults(view.exitResults);
       setTestedAt(view.testedAt);
       setOsFingerprints(view.osFingerprints);
+      setServerLatency(view.serverLatency);
+      setQuicMeasured(view.quicMeasured);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -230,6 +246,8 @@ export function ProxiesView(): JSX.Element {
         setExitResults(view.exitResults);
         setTestedAt(view.testedAt);
         setOsFingerprints(view.osFingerprints);
+        setServerLatency(view.serverLatency);
+        setQuicMeasured(view.quicMeasured);
       }),
     [],
   );
@@ -271,6 +289,8 @@ export function ProxiesView(): JSX.Element {
           setTestResults((r) => dropKey(r, editId));
           setExitResults((r) => dropKey(r, editId));
           setOsFingerprints((m) => dropKey(m, editId));
+          setServerLatency((m) => dropKey(m, editId));
+          setQuicMeasured((m) => dropKey(m, editId));
           // Invalidating alone leaves the row with NO verdict, which reads as
           // "untested" rather than "the endpoint changed" — and the next launch
           // is where that gets discovered. Re-test instead.
@@ -359,6 +379,8 @@ export function ProxiesView(): JSX.Element {
     setTestResults((r) => dropKey(r, id));
     setExitResults((r) => dropKey(r, id));
     setOsFingerprints((m) => dropKey(m, id));
+    setServerLatency((m) => dropKey(m, id));
+    setQuicMeasured((m) => dropKey(m, id));
     // Clear any profile default-proxy bindings that referenced this proxy, so a
     // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
     // Launch would silently reroute that profile's egress to a different proxy
@@ -501,18 +523,40 @@ export function ProxiesView(): JSX.Element {
         // be tested there. Best-effort: a miss keeps the prior verdict, and
         // nothing here can change the connectivity result above.
         if (p.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
-          let fp: OsFingerprint | undefined;
-          try {
-            const t = await testAccountProxy(settings.baseUrl, settings.apiKey, p.serverId);
-            fp = t.ok ? t.os_fingerprint : undefined;
-          } catch {
-            fp = undefined;
-          }
+          // The control plane's own test is the ONLY source of the passive OS
+          // fingerprint AND the honest fleet-side latency/QUIC verdict — only a
+          // proxy stored on the account can be tested there. Best-effort: a miss
+          // keeps the prior verdicts, and nothing here changes the connectivity
+          // result measured above.
+          const serverTest = await testAccountProxy(
+            settings.baseUrl,
+            settings.apiKey,
+            p.serverId,
+          ).catch(() => null);
           if (stale()) return null;
-          if (fp !== undefined) {
-            const rec: CachedOsFingerprint = { ...fp, at: Date.now() };
-            setOsFingerprints((m) => ({ ...m, [p.id]: rec }));
-            void saveOsFingerprint(p.id, fp, rec.at).catch(() => undefined);
+          if (serverTest !== null && serverTest.ok) {
+            const now = Date.now();
+            const fp = serverTest.os_fingerprint;
+            if (fp !== undefined) {
+              const rec: CachedOsFingerprint = { ...fp, at: now };
+              setOsFingerprints((m) => ({ ...m, [p.id]: rec }));
+              void saveOsFingerprint(p.id, fp, now).catch(() => undefined);
+            }
+            // T-1 — prefer the server-measured latency (closer to the fleet
+            // vantage than this Mac). T-6 — a measured 'h3'/'h2-only' lets the
+            // chip leave the inferred state; a value outside the closed set is
+            // dropped, never rendered green.
+            const quic =
+              serverTest.quic_measured === 'h3' || serverTest.quic_measured === 'h2-only'
+                ? serverTest.quic_measured
+                : undefined;
+            setServerLatency((m) => ({ ...m, [p.id]: serverTest.latency_ms }));
+            if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [p.id]: quic }));
+            void saveServerProbeResult(
+              p.id,
+              { latencyMs: serverTest.latency_ms, quicMeasured: quic, quicMeasuredAt: now },
+              now,
+            ).catch(() => undefined);
           }
         }
       } else {
@@ -521,6 +565,8 @@ export function ProxiesView(): JSX.Element {
         // stale "exit IP · country" next to "Auth failed" / "Not reachable".
         setExitResults((r) => dropKey(r, p.id));
         setOsFingerprints((m) => dropKey(m, p.id));
+        setServerLatency((m) => dropKey(m, p.id));
+        setQuicMeasured((m) => dropKey(m, p.id));
       }
       return result;
     } catch (err) {
@@ -539,6 +585,8 @@ export function ProxiesView(): JSX.Element {
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setExitResults((r) => dropKey(r, p.id));
       setOsFingerprints((m) => dropKey(m, p.id));
+      setServerLatency((m) => dropKey(m, p.id));
+      setQuicMeasured((m) => dropKey(m, p.id));
       return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
@@ -783,6 +831,8 @@ export function ProxiesView(): JSX.Element {
           exitResults={exitResults}
           testedAt={testedAt}
           osFingerprints={osFingerprints}
+          serverLatency={serverLatency}
+          quicMeasured={quicMeasured}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -894,6 +944,8 @@ function ProxyTable({
   exitResults,
   testedAt,
   osFingerprints,
+  serverLatency,
+  quicMeasured,
   onEdit,
   onRemove,
   onTest,
@@ -908,6 +960,8 @@ function ProxyTable({
   exitResults: Record<string, ProxyExitProbeResult | null>;
   testedAt: Record<string, number>;
   osFingerprints: Record<string, CachedOsFingerprint>;
+  serverLatency: Record<string, number>;
+  quicMeasured: Record<string, MeasuredQuic>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
@@ -1100,6 +1154,8 @@ function ProxyTable({
                 exit={p.id in exitResults ? exitResults[p.id] : undefined}
                 testedAt={testedAt[p.id]}
                 osFingerprint={osFingerprints[p.id]}
+                serverLatencyMs={serverLatency[p.id]}
+                quicMeasured={quicMeasured[p.id]}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -1164,6 +1220,8 @@ function ProxyRow({
   exit,
   testedAt,
   osFingerprint,
+  serverLatencyMs,
+  quicMeasured,
   onEdit,
   onRemove,
   onTest,
@@ -1181,6 +1239,11 @@ function ProxyRow({
   testedAt: number | undefined;
   /** N-2 — the control plane's passive OS fingerprint of this proxy's stack. */
   osFingerprint: CachedOsFingerprint | undefined;
+  /** T-1 — the control plane's server-measured latency, preferred over the native
+   *  one and labelled so it is never read as the laptop's number. */
+  serverLatencyMs: number | undefined;
+  /** T-6 — the QUIC verdict measured in a live session, for the capability chip. */
+  quicMeasured: MeasuredQuic | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onTest: () => void;
@@ -1188,7 +1251,11 @@ function ProxyRow({
   const reachable = result?.reachable ?? false;
   const authOk = result?.auth_ok ?? false;
   const healthy = reachable && authOk;
-  const lat = result?.latency_ms;
+  // T-1 — prefer the SERVER-measured latency (measured near the fleet that runs
+  // the profile) over the native probe from this Mac; keep the native value as
+  // the fallback so a proxy with no server row still shows a number.
+  const fromServer = serverLatencyMs !== undefined;
+  const lat = serverLatencyMs ?? result?.latency_ms;
   const latFill = lat !== undefined && lat > 0 ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
   const latGood = lat !== undefined && lat <= 100;
   const exitIp = exit?.ip;
@@ -1255,8 +1322,18 @@ function ProxyRow({
 
       <td className="whitespace-nowrap px-3 py-2 text-right">
         {lat !== undefined && reachable ? (
-          <span className="inline-flex items-center justify-end gap-1.5">
+          <span
+            className="inline-flex items-center justify-end gap-1.5"
+            title={fromServer ? SERVER_LATENCY_TITLE : PROBE_ORIGIN_TITLE}
+          >
             <span className="mono tabular-nums text-ink-secondary">{lat}ms</span>
+            {/* T-1 — mark a server-measured number so it is never read as the
+                laptop's; the native fallback carries no marker. */}
+            {fromServer && (
+              <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                server
+              </span>
+            )}
             <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
               <span
                 className="block h-full rounded-[2px]"
@@ -1278,7 +1355,7 @@ function ProxyRow({
 
       <td className="px-3 py-2">
         {result !== undefined && reachable ? (
-          <ProxyCapabilityChips result={result} size="xs" />
+          <ProxyCapabilityChips result={result} quicMeasured={quicMeasured} size="xs" />
         ) : (
           <span
             className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"

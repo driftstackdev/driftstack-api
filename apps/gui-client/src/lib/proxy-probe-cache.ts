@@ -13,6 +13,7 @@
 import { LazyStore } from '@tauri-apps/plugin-store';
 import { makeWriteLock } from './store-write-lock';
 import { isProxyUsable, type ProxyExitProbeResult, type ProxyTestResult } from './proxies';
+import { cleanMeasuredQuic, type MeasuredQuic } from './account-proxies';
 import {
   isFingerprintConfidence,
   isFingerprintedOs,
@@ -41,6 +42,16 @@ export interface CachedProbe {
   /** N-2 — absent until the control plane observed the proxy's SYN; preserved
    *  across capability re-tests like the exit-geo. */
   osFingerprint?: CachedOsFingerprint;
+  /** T-1 — the SERVER-measured latency (ms) from the control plane's /test
+   *  route, measured closer to the fleet than this Mac. Preferred for the
+   *  displayed latency when present; preserved across native capability
+   *  re-tests like the exit-geo and the OS fingerprint. */
+  serverLatencyMs?: number;
+  /** T-6 — the QUIC verdict MEASURED in a live session (closed set), with when
+   *  it was recorded (epoch ms). Absent = never measured; the chip then stays
+   *  inferred ('~') and never renders a green ✓. Preserved across re-tests. */
+  quicMeasured?: MeasuredQuic;
+  quicMeasuredAt?: number;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -69,6 +80,11 @@ export interface ProbeViewState {
   /** N-2 — only for proxies whose last capability probe was usable (the
    *  exit-geo rule): no OS verdict beside a red "unreachable" pill. */
   osFingerprints: Record<string, CachedOsFingerprint>;
+  /** T-1 — the server-measured latency, surfaced only while the proxy is usable
+   *  (same rule as the exit-geo: no server number beside a dead proxy). */
+  serverLatency: Record<string, number>;
+  /** T-6 — the measured QUIC verdict, surfaced only while the proxy is usable. */
+  quicMeasured: Record<string, MeasuredQuic>;
 }
 
 /**
@@ -89,11 +105,16 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
   const exitResults: Record<string, ProxyExitProbeResult | null> = {};
   const testedAt: Record<string, number> = {};
   const osFingerprints: Record<string, CachedOsFingerprint> = {};
+  const serverLatency: Record<string, number> = {};
+  const quicMeasured: Record<string, MeasuredQuic> = {};
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
     if (c.osFingerprint !== undefined && isProxyUsable(c.result))
       osFingerprints[id] = c.osFingerprint;
+    if (c.serverLatencyMs !== undefined && isProxyUsable(c.result))
+      serverLatency[id] = c.serverLatencyMs;
+    if (c.quicMeasured !== undefined && isProxyUsable(c.result)) quicMeasured[id] = c.quicMeasured;
     if (c.exitIp !== undefined && isProxyUsable(c.result)) {
       exitResults[id] = {
         ip: c.exitIp,
@@ -105,7 +126,7 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
       };
     }
   }
-  return { testResults, exitResults, testedAt, osFingerprints };
+  return { testResults, exitResults, testedAt, osFingerprints, serverLatency, quicMeasured };
 }
 
 export const PROBE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -237,6 +258,14 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   const exitTimezone = optStr(r.exitTimezone);
   const exitAsnOrg = optStr(r.exitAsnOrg);
   const osFingerprint = cleanOsFingerprint(r.osFingerprint);
+  const serverLatencyMs = typeof r.serverLatencyMs === 'number' ? r.serverLatencyMs : undefined;
+  // T-6 — a stored QUIC verdict outside the closed set is dropped, never coerced
+  // (a corrupt store or a newer server must not resurrect as a green chip).
+  const quicMeasured = cleanMeasuredQuic(r.quicMeasured) ?? undefined;
+  const quicMeasuredAt =
+    quicMeasured !== undefined && typeof r.quicMeasuredAt === 'number'
+      ? r.quicMeasuredAt
+      : undefined;
   return {
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
@@ -245,6 +274,9 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(exitTimezone !== undefined ? { exitTimezone } : {}),
     ...(exitAsnOrg !== undefined ? { exitAsnOrg } : {}),
     ...(osFingerprint !== undefined ? { osFingerprint } : {}),
+    ...(serverLatencyMs !== undefined ? { serverLatencyMs } : {}),
+    ...(quicMeasured !== undefined ? { quicMeasured } : {}),
+    ...(quicMeasuredAt !== undefined ? { quicMeasuredAt } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -299,6 +331,12 @@ export function saveProbeResult(
       ...(prior?.exitTimezone !== undefined ? { exitTimezone: prior.exitTimezone } : {}),
       ...(prior?.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
       ...(prior?.osFingerprint !== undefined ? { osFingerprint: prior.osFingerprint } : {}),
+      // T-1/T-6 — the server latency and measured QUIC ride a separate call (the
+      // control plane /test), so a native capability re-test must not erase them,
+      // exactly like the exit-geo and the OS fingerprint above.
+      ...(prior?.serverLatencyMs !== undefined ? { serverLatencyMs: prior.serverLatencyMs } : {}),
+      ...(prior?.quicMeasured !== undefined ? { quicMeasured: prior.quicMeasured } : {}),
+      ...(prior?.quicMeasuredAt !== undefined ? { quicMeasuredAt: prior.quicMeasuredAt } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -357,6 +395,38 @@ export function saveOsFingerprint(
     all[proxyId] = {
       ...prior,
       osFingerprint: { os: fp.os, confidence: fp.confidence, reason: fp.reason, at },
+    };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/** T-1/T-6 — persist the control plane's server-measured latency and the QUIC
+ *  verdict it measured in the /test session onto the proxy's cache entry. Like
+ *  the exit-geo and OS fingerprint it rides on an existing capability entry (the
+ *  native probe ran first) and is preserved across re-tests; a proxy with no
+ *  entry has nothing to attach to, and none is invented. The QUIC verdict is a
+ *  closed set — a value outside it is dropped, never stored as a would-be green
+ *  chip; a fresh valid verdict updates the prior one, and an absent one keeps
+ *  the last measurement rather than erasing it. */
+export function saveServerProbeResult(
+  proxyId: string,
+  server: { latencyMs?: number; quicMeasured?: MeasuredQuic | null; quicMeasuredAt?: number },
+  at: number,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    const quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
+    all[proxyId] = {
+      ...prior,
+      ...(typeof server.latencyMs === 'number' ? { serverLatencyMs: server.latencyMs } : {}),
+      ...(quic !== undefined
+        ? { quicMeasured: quic, quicMeasuredAt: server.quicMeasuredAt ?? at }
+        : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();

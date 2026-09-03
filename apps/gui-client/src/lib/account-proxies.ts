@@ -20,6 +20,19 @@ import {
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
+/** T-6 — the CLOSED SET of measured-QUIC verdicts the chip can render. Only
+ *  these two survive the wire; a value outside them (a newer server, a proxy
+ *  MITM-ing the response) is read as "never measured", never as a green ✓. */
+export type MeasuredQuic = 'h3' | 'h2-only';
+
+/** Keep only a measured-QUIC value the chip can render; anything else — a newer
+ *  server enum, a non-string, an absent field — becomes null (the honest
+ *  unmeasured state). Same N-2 closed-set rule as the OS fingerprint: not
+ *  measured must never look like a pass. */
+export function cleanMeasuredQuic(raw: unknown): MeasuredQuic | null {
+  return raw === 'h3' || raw === 'h2-only' ? raw : null;
+}
+
 /** OVPN/WG — VPN config blocks on the create/update body. The secret-bearing
  *  parts (config_blob/password, private_key) are write-only; the server wraps
  *  them under the account TMK and never echoes them (has_secret instead). */
@@ -51,6 +64,12 @@ export interface AccountProxyMeta {
   has_secret?: boolean;
   created_at: string;
   updated_at: string;
+  /** T-6 — the QUIC verdict MEASURED in a live session: 'h3' (HTTP/3 verified),
+   *  'h2-only' (no HTTP/3, measured), or null when the proxy has never run a
+   *  session. null is the honest unmeasured state and must never render green. */
+  quic_measured?: MeasuredQuic | null;
+  /** ISO timestamp of that measurement, or null when never measured. */
+  quic_measured_at?: string | null;
 }
 
 /** Create body. `password` is write-only; omit (or null) for no password. VPN
@@ -214,7 +233,17 @@ export function buildOpenVpnProxyInput(
 // verdict, and only a proxy stored on the account can be tested for it.
 
 export type AccountProxyTestResult =
-  | { ok: true; latency_ms: number; os_fingerprint?: OsFingerprint }
+  | {
+      ok: true;
+      /** SERVER-measured latency (ms) — the control plane's own round-trip to the
+       *  proxy, closer to the fleet vantage than the customer's Mac (T-1). */
+      latency_ms: number;
+      os_fingerprint?: OsFingerprint;
+      /** T-6 — the measured QUIC verdict, present only when the server measured
+       *  one in a live session; absent = never measured (chip stays inferred). */
+      quic_measured?: MeasuredQuic | null;
+      quic_measured_at?: string | null;
+    }
   | { ok: false; reason: string };
 
 /** A wire fingerprint is kept only when every field is one the verdict can
@@ -251,10 +280,20 @@ export async function testAccountProxy(
   const body = await readBoundedApiJson<Record<string, unknown>>(res);
   if (body.ok === true && typeof body.latency_ms === 'number') {
     const fp = cleanWireFingerprint(body.os_fingerprint);
+    // T-6 — a value outside the closed set is DROPPED (the field is omitted, read
+    // downstream as "never measured"), never coerced into a would-be green chip.
+    const quic = cleanMeasuredQuic(body.quic_measured);
     return {
       ok: true,
       latency_ms: body.latency_ms,
       ...(fp !== undefined ? { os_fingerprint: fp } : {}),
+      ...(quic !== null
+        ? {
+            quic_measured: quic,
+            quic_measured_at:
+              typeof body.quic_measured_at === 'string' ? body.quic_measured_at : null,
+          }
+        : {}),
     };
   }
   if (body.ok === false && typeof body.reason === 'string')
