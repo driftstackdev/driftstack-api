@@ -268,4 +268,33 @@ describe('#128 RedisExitIdentityStore', () => {
     await store.set('acc', 'prx', sparse);
     expect((await store.get('acc', 'prx'))?.identity).toEqual(sparse);
   });
+
+  it('T-11: keeps range-valid exit coordinates across the read, and DROPS an out-of-range one (never a bogus 0,0 the box would spoof to)', async () => {
+    const redis = fakeRedis();
+    const store = new RedisExitIdentityStore(redis as never);
+    await store.set('acc', 'prx', {
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'Noord-Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+      lat: 52.37,
+      lon: 4.9,
+    });
+    expect((await store.get('acc', 'prx'))?.identity).toMatchObject({ lat: 52.37, lon: 4.9 });
+    // A read-side trust boundary: an out-of-range latitude degrades to ABSENT,
+    // not to a stored bogus value the geolocation derivation would then spoof to.
+    await store.set('acc', 'prx2', {
+      ip: '203.0.113.8',
+      country: 'NL',
+      region: null,
+      city: null,
+      timezone: null,
+      lat: 999,
+      lon: 4.9,
+    });
+    const got = (await store.get('acc', 'prx2'))?.identity;
+    expect(got).not.toHaveProperty('lat');
+    expect(got?.lon).toBe(4.9);
+  });
 });

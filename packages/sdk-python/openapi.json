@@ -48629,7 +48629,7 @@
         "tags": ["egress"],
         "responses": {
           "200": {
-            "description": "The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from.",
+            "description": "The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from. When the CF edge resolves exit coordinates, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.",
             "content": {
               "application/json": {
                 "schema": {
@@ -48649,6 +48649,19 @@
                     },
                     "timezone": {
                       "type": ["string", "null"]
+                    },
+                    "lat": {
+                      "type": "number",
+                      "minimum": -90,
+                      "maximum": 90
+                    },
+                    "lon": {
+                      "type": "number",
+                      "minimum": -180,
+                      "maximum": 180
+                    },
+                    "accuracy_hint": {
+                      "type": "string"
                     }
                   },
                   "required": ["ip", "country", "region", "city", "timezone"]

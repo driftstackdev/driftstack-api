@@ -1225,6 +1225,9 @@ export async function dispatchSessionAssignOnCreate(args: {
             probedAt: cachedExit.probedAt,
           }
         : undefined;
+    // T-11 — when the customer set no explicit override, spoof geolocation to
+    // the exit's measured coordinates so navigator.geolocation matches the IP.
+    const resolvedGeolocation = resolveDispatchGeolocation(geolocation, cachedExit?.identity);
     const assign = serializeSessionAssign({
       sessionId,
       archetype: resolveDispatchArchetype({
@@ -1247,7 +1250,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       ...(profile !== undefined ? { profile } : {}),
       ...(idleTimeoutSeconds !== undefined ? { idleTimeoutSeconds } : {}),
       ...(maxDurationSeconds !== undefined ? { maxDurationSeconds } : {}),
-      ...(geolocation !== undefined ? { geolocation } : {}),
+      ...(resolvedGeolocation !== undefined ? { geolocation: resolvedGeolocation } : {}),
       ...(exitIdentity !== undefined ? { exitIdentity } : {}),
     });
     const dispatchedNodeId = mac.nodeId ?? mac.id;
@@ -1797,6 +1800,27 @@ export function resolveDispatchArchetype(args: {
   return args.profileArchetype !== undefined
     ? { archetype: args.profileArchetype, archetypeSource: 'profile' }
     : { archetype: args.staticDefault, archetypeSource: 'static-default' };
+}
+
+/**
+ * T-11 — the geolocation the box spoofs `navigator.geolocation` to.
+ *
+ * An explicit customer override always wins. Otherwise, when the pre-launch
+ * probe measured the exit's coordinates (Cloudflare's per-IP latitude/longitude,
+ * tighter than the harness's own IP auto-derive), spoof to THOSE so the reported
+ * location matches the exit IP precisely — the owner's "matching our IP, exactly
+ * like a real location". With neither, leave it unset so the harness keeps its
+ * IP-derived fallback rather than being handed a fabricated 0,0.
+ */
+export function resolveDispatchGeolocation(
+  explicit: { latitude: number; longitude: number; accuracy?: number } | undefined,
+  exit: { lat?: number | null; lon?: number | null } | undefined,
+): { latitude: number; longitude: number; accuracy?: number } | undefined {
+  if (explicit !== undefined) return explicit;
+  if (typeof exit?.lat === 'number' && typeof exit?.lon === 'number') {
+    return { latitude: exit.lat, longitude: exit.lon };
+  }
+  return undefined;
 }
 
 export function registerAgentSessionsRoutes(

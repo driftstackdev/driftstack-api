@@ -84,6 +84,8 @@ const CREDENTIAL_HEADERS = new Set([
 const NON_CREDENTIAL_HEADERS = new Set([
   'cf-ipcity',
   'cf-ipcountry',
+  'cf-iplatitude',
+  'cf-iplongitude',
   'cf-region',
   'cf-timezone',
   'idempotency-key',

@@ -7112,7 +7112,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from.',
+          'The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from. When the CF edge resolves exit coordinates, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.',
         content: {
           'application/json': {
             schema: z.object({
@@ -7121,6 +7121,9 @@ function buildRegistry(): OpenAPIRegistry {
               region: z.string().nullable(),
               city: z.string().nullable(),
               timezone: z.string().nullable(),
+              lat: z.number().min(-90).max(90).optional(),
+              lon: z.number().min(-180).max(180).optional(),
+              accuracy_hint: z.string().optional(),
             }),
           },
         },

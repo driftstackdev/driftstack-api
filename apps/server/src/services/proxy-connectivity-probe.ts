@@ -73,6 +73,12 @@ export interface ProbeExitIdentity {
   region: string | null;
   city: string | null;
   timezone: string | null;
+  /** T-11 — the exit COORDINATES the world sees THROUGH the proxy, parsed from
+   *  the echo body and range-validated (lat -90..90, lon -180..180). ABSENT
+   *  (undefined) when the echo omitted them or they were out of range — never a
+   *  bogus 0, so a missing fix stays distinguishable from a real one (N-2/N-5). */
+  lat?: number | null;
+  lon?: number | null;
 }
 
 export interface ProxyProbeResult {
@@ -114,14 +120,24 @@ export function parseExitIdentityFromResponseTail(tail: Buffer): ProbeExitIdenti
     if (typeof o.ip !== 'string' || o.ip.length === 0 || o.ip.length > 45) return undefined;
     const str = (v: unknown, max: number): string | null =>
       typeof v === 'string' && v.length > 0 && v.length <= max ? v : null;
+    // T-11 — exit coordinates. The body rides back THROUGH the customer's
+    // (attacker-influenceable / MITM-able) proxy, so accept ONLY a real finite
+    // number inside range; a non-number, NaN/Infinity, or out-of-range value is
+    // DROPPED (the field stays absent), never coerced to a bogus 0.
+    const coord = (v: unknown, min: number, max: number): number | undefined =>
+      typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max ? v : undefined;
     const country =
       typeof o.country === 'string' && /^[A-Z]{2}$/.test(o.country) ? o.country : 'XX';
+    const lat = coord(o.lat, -90, 90);
+    const lon = coord(o.lon, -180, 180);
     return {
       ip: o.ip,
       country,
       region: str(o.region, 128),
       city: str(o.city, 128),
       timezone: str(o.timezone, 64),
+      ...(lat !== undefined ? { lat } : {}),
+      ...(lon !== undefined ? { lon } : {}),
     };
   } catch {
     return undefined;

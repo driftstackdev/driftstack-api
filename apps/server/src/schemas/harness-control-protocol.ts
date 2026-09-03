@@ -822,6 +822,10 @@ export const SessionAssignGeolocationSchema = z
 // 'XX' (unknown); region/city/timezone are best-effort (null when the geo lookup
 // can't resolve them); `quic_ok` is the CP UDP/QUIC pre-detection for the proxy
 // (drives the panel's "HTTP/3" indicator); `probed_at` is ISO8601 freshness.
+// T-11 (live-geo spoofing): `lat`/`lon` are the exit COORDINATES the fork answers
+// navigator.geolocation from. OPTIONAL and range-bounded — ABSENT (never 0,0) when
+// the CF edge could not resolve them, so a missing coordinate stays distinguishable
+// from a real one at the pole/meridian (N-2/N-5).
 export const SessionAssignExitIdentitySchema = z
   .object({
     ip: z.string().min(1),
@@ -829,6 +833,8 @@ export const SessionAssignExitIdentitySchema = z
     region: z.string().min(1).nullable(),
     city: z.string().min(1).nullable(),
     timezone: z.string().min(1).nullable(),
+    lat: z.number().min(-90).max(90).optional(),
+    lon: z.number().min(-180).max(180).optional(),
     quic_ok: z.boolean(),
     probed_at: z.string().min(1),
   })

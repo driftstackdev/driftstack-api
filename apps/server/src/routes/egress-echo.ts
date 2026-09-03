@@ -45,6 +45,26 @@ function cfLocationHeader(raw: string | string[] | undefined): string | null {
   return v.length > 0 ? v : null;
 }
 
+/** T-11 — best-effort read of a Cloudflare visitor-location COORDINATE header
+ *  (cf-iplatitude / cf-iplongitude, delivered by the same "Add visitor location
+ *  headers" managed transform as cf-region/cf-ipcity/cf-timezone). Parsed to a
+ *  FINITE number inside [min,max] (lat -90..90, lon -180..180). Absent, blank,
+ *  non-numeric, or out of range ⇒ null so the field is OMITTED entirely — a
+ *  missing measurement must stay distinguishable from a real one, so we never
+ *  ship a bogus 0 (the N-2/N-5 rule). */
+function cfCoordHeader(
+  raw: string | string[] | undefined,
+  min: number,
+  max: number,
+): number | null {
+  if (typeof raw !== 'string') return null;
+  const v = raw.trim();
+  if (v.length === 0) return null;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < min || n > max) return null;
+  return n;
+}
+
 export function registerEgressEchoRoutes(
   app: FastifyInstance,
   deps: { rateLimitStore: RateLimitStore },
@@ -66,22 +86,35 @@ export function registerEgressEchoRoutes(
     // exit_identity. Absent (transform off / edge unresolved) ⇒ null. Additive
     // to the existing {ip,country} shape — device-side probe consumers ignore
     // the new fields.
+    const region = cfLocationHeader(req.headers['cf-region']);
+    const city = cfLocationHeader(req.headers['cf-ipcity']);
+    // ⛔ timezone is NOT the raw header. `cf-timezone` arrives only with the
+    // "Add visitor location headers" Managed Transform, which is off here —
+    // measured 2026-09-02, this endpoint returned region/city/timezone ALL null
+    // while country resolved fine, because country rides `cf-ipcountry` (every
+    // plan) and the rest ride the transform. The harness falls back to the
+    // archetype when this is null, and the launch archetype is Europe/Istanbul,
+    // so every session worldwide rendered Turkey time regardless of where it
+    // egressed. Resolve to the country's zone when the edge cannot answer; still
+    // null when neither can, so "unknown" stays visible rather than a guess.
+    const timezone = resolveExitTimezone(cfLocationHeader(req.headers['cf-timezone']), country);
+    // T-11 live-geo spoofing: the exit COORDINATES the fork answers navigator.
+    // geolocation from. Same managed transform delivers cf-iplatitude/-longitude.
+    // Range-validated; ABSENT or out-of-range ⇒ the field is OMITTED (never 0,0 —
+    // a missing coordinate must stay distinguishable from a real one at the pole/
+    // meridian). accuracy_hint names the coordinate's granularity (CF resolves to
+    // city level) and rides along only when a coordinate AND a city both resolved.
+    const lat = cfCoordHeader(req.headers['cf-iplatitude'], -90, 90);
+    const lon = cfCoordHeader(req.headers['cf-iplongitude'], -180, 180);
     return {
       ip: req.ip,
       country,
-      region: cfLocationHeader(req.headers['cf-region']),
-      city: cfLocationHeader(req.headers['cf-ipcity']),
-      // ⛔ NOT the raw header. `cf-timezone` arrives only with the "Add visitor
-      // location headers" Managed Transform, which is off here — measured
-      // 2026-09-02, this endpoint returned region/city/timezone ALL null while
-      // country resolved fine, because country rides `cf-ipcountry` (every
-      // plan) and the rest ride the transform. The harness falls back to the
-      // archetype when this is null, and the launch archetype is
-      // Europe/Istanbul, so every session worldwide rendered Turkey time
-      // regardless of where it egressed. Resolve to the country's zone when the
-      // edge cannot answer; still null when neither can, so "unknown" stays
-      // visible rather than becoming a guess.
-      timezone: resolveExitTimezone(cfLocationHeader(req.headers['cf-timezone']), country),
+      region,
+      city,
+      timezone,
+      ...(lat !== null ? { lat } : {}),
+      ...(lon !== null ? { lon } : {}),
+      ...(lat !== null && lon !== null && city !== null ? { accuracy_hint: 'city' as const } : {}),
     };
   });
 }

@@ -24,6 +24,7 @@ import {
 import {
   IntentDispatchSchema,
   IntentResultEnvelopeSchema,
+  SessionAssignExitIdentitySchema,
   SessionAssignSchema,
   SessionEndSchema,
 } from '../../src/schemas/harness-control-protocol.js';
@@ -770,6 +771,42 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     });
     // absent → omitted (box keeps today's no-local-panel behaviour)
     expect(serializeSessionAssign(base).exit_identity).toBeUndefined();
+  });
+
+  // T-11 (exit lat/lon — A2 half of live geolocation spoofing): the assign's
+  // exit_identity block carries the exit COORDINATES the fork answers navigator.
+  // geolocation from. MEASURED at the wire contract: SessionAssignExitIdentitySchema
+  // is `.strict()`, so lat/lon are only carried if the schema declares them, and it
+  // range-bounds them (lat -90..90, lon -180..180) exactly as the live geolocation
+  // override does — an out-of-range coordinate is rejected at the frame, never shipped.
+  it('T-11 exit_identity schema round-trips an in-range lat/lon (vacuity control) and rejects an out-of-range one', () => {
+    const base = {
+      ip: '203.0.113.7',
+      country: 'NL',
+      region: 'North Holland',
+      city: 'Amsterdam',
+      timezone: 'Europe/Amsterdam',
+      quic_ok: true,
+      probed_at: '2026-07-06T10:00:00.000Z',
+    };
+    // VACUITY CONTROL: a valid Amsterdam pair (52.37, 4.90) survives the parse
+    // unchanged — the strict schema does NOT drop a field it declares.
+    const ok = SessionAssignExitIdentitySchema.parse({ ...base, lat: 52.37, lon: 4.9 });
+    expect(ok.lat).toBe(52.37);
+    expect(ok.lon).toBe(4.9);
+    // lat/lon are OPTIONAL — a block with neither still validates (absent ⇒ box
+    // keeps today's behaviour), and the keys stay absent rather than becoming null.
+    const without = SessionAssignExitIdentitySchema.parse(base);
+    expect('lat' in without).toBe(false);
+    expect('lon' in without).toBe(false);
+    // an out-of-range latitude (91 > 90) is refused at the wire schema.
+    expect(SessionAssignExitIdentitySchema.safeParse({ ...base, lat: 91, lon: 0 }).success).toBe(
+      false,
+    );
+    // an out-of-range longitude (181 > 180) is refused too.
+    expect(SessionAssignExitIdentitySchema.safeParse({ ...base, lat: 0, lon: 181 }).success).toBe(
+      false,
+    );
   });
 
   it('exit_identity country must be exactly ISO-3166 alpha-2 (2 chars) — wire schema bound', () => {

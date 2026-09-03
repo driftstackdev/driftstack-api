@@ -46,6 +46,48 @@ describe('parseExitIdentityFromResponseTail (#128 new-tab panel capture)', () =>
     });
   });
 
+  // T-11 (exit lat/lon — A2 half of live geolocation spoofing): the parser reads the
+  // exit COORDINATES back off the echo body so they can ride the assign to the box.
+  // MEASURED: the echo emits `lat`/`lon` as JSON numbers only when the CF transform
+  // resolved them; the body rides back THROUGH the customer's (MITM-able) proxy, so
+  // the parser accepts ONLY a finite in-range number and DROPS anything else (absent,
+  // never a bogus 0 — a missing fix must stay distinguishable from a real one).
+  it('T-11 captures a valid lat/lon pair (vacuity control) and DROPS an out-of-range or non-numeric coordinate', () => {
+    // VACUITY CONTROL: a real in-range pair must survive, or every "dropped" arm
+    // below would pass against a parser that never reads a coordinate.
+    const ok = parseExitIdentityFromResponseTail(
+      resp(JSON.stringify({ ip: '203.0.113.7', country: 'NL', lat: 52.37, lon: 4.9 })),
+    );
+    expect(ok?.lat).toBe(52.37);
+    expect(ok?.lon).toBe(4.9);
+    // absent coordinates ⇒ the KEYS are absent (not null, not 0) so the assign frame
+    // and box panel stay silent about a coordinate the edge never resolved.
+    const none = parseExitIdentityFromResponseTail(
+      resp(JSON.stringify({ ip: '1.2.3.4', country: 'US' })),
+    );
+    expect(none && 'lat' in none).toBe(false);
+    expect(none && 'lon' in none).toBe(false);
+    // an out-of-range latitude (999 > 90) is dropped; the valid longitude survives.
+    const badLat = parseExitIdentityFromResponseTail(
+      resp(JSON.stringify({ ip: '1.2.3.4', country: 'US', lat: 999, lon: 4.9 })),
+    );
+    expect(badLat && 'lat' in badLat).toBe(false);
+    expect(badLat?.lon).toBe(4.9);
+    // an out-of-range longitude (999 > 180) is dropped; the valid latitude survives.
+    const badLon = parseExitIdentityFromResponseTail(
+      resp(JSON.stringify({ ip: '1.2.3.4', country: 'US', lat: 52.37, lon: 999 })),
+    );
+    expect(badLon?.lat).toBe(52.37);
+    expect(badLon && 'lon' in badLon).toBe(false);
+    // a coordinate delivered as a STRING (untrusted proxy body) is not a number ⇒
+    // dropped, never coerced.
+    const strCoord = parseExitIdentityFromResponseTail(
+      resp(JSON.stringify({ ip: '1.2.3.4', country: 'US', lat: '52.37', lon: '4.9' })),
+    );
+    expect(strCoord && 'lat' in strCoord).toBe(false);
+    expect(strCoord && 'lon' in strCoord).toBe(false);
+  });
+
   it("normalises country null/absent → 'XX' and missing geo → null (matches the wire contract)", () => {
     expect(
       parseExitIdentityFromResponseTail(resp(JSON.stringify({ ip: '1.2.3.4', country: null }))),
