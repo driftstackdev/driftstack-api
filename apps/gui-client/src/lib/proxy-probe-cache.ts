@@ -163,16 +163,14 @@ export function isProbeStale(at: number | undefined, now: number): boolean {
   return probeFreshness(at, now) === 'stale';
 }
 
-/** The proxy ids whose verdicts a sweep should refresh, oldest FIRST so a
- *  rate-limited sweep spends its budget on the least trustworthy entries.
- *  Untested proxies are not included: this refreshes what has gone off, and a
- *  proxy that has never been tested is the customer's to test. */
-export function staleProxyIds(cache: ProbeCacheMap, now: number): string[] {
-  return Object.entries(cache)
-    .filter(([, c]) => isProbeStale(c.at, now))
-    .sort((a, b) => a[1].at - b[1].at)
-    .map(([id]) => id);
-}
+// The "which proxies should a sweep refresh" selection lives ONLY in
+// `planSweep` (proxy-probe-sweeper.ts). A simpler `staleProxyIds` used to sit
+// here with zero callers; it was NOT a duplicate but a weaker version — it lacked
+// the sweeper's three correctness exclusions (a deleted proxy's lingering entry,
+// a non-SOCKS5 proxy a SOCKS5 handshake cannot probe informatively, and the
+// failure-retry window), so any future caller reaching for it would have swept
+// a customer's VPN fleet dead or probed a removed host. One selection, one
+// definition: use `planSweep`.
 
 const STORE_FILE = 'proxy-probe-cache.json';
 const KEY = 'probes';
