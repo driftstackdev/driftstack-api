@@ -5487,6 +5487,7 @@ function buildRegistry(): OpenAPIRegistry {
       query: z.object({
         after: z
           .string()
+          .regex(/^\d+$/)
           .optional()
           .describe(
             'The `next_after` cursor from a previous response; only requests logged since then are returned. Omit to read the whole current buffer.',

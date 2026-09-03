@@ -54,6 +54,10 @@ const EXCEPTIONS = new Map<string, string>([
     'SSE transcript stream, same requireAuthEventSource preHandler as the notifications stream.',
   ],
   [
+    'agent-sessions.ts::{ Params: { id: string }; Querystring: { after?: string } }',
+    'the sole query param `after` is an opaque cursor read once via Number() with a NaN→undefined guard; no schema needed',
+  ],
+  [
     'auth-oauth-client.ts::{ Querystring: Record<string, string> }',
     "Forwards the IDP's query string verbatim to the dashboard. It iterates Object.entries and " +
       "appends only `typeof v === 'string'` values, so a repeated key is dropped rather than " +

@@ -58,6 +58,9 @@ const UNDOCUMENTED_BY_DESIGN: Record<string, string> = {
     'sign-in-with-Google/GitHub step consumed by the dashboard SPA, not by customer code. ' +
     'api/oauth.md documents Driftstack as an OAuth PROVIDER; the CLIENT flow has no page.',
   '/v1/auth/oauth-client/confirm-merge': 'same SPA-internal client flow as oauth-client/start',
+  '/v1/agent-sessions/:id/network':
+    'GUI-internal DevTools-style network feed for the simulator; consumed by the desktop app ' +
+    'over control-key auth, not a customer SDK operation',
 };
 
 function normalise(p: string): string {

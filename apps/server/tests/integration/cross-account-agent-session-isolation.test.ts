@@ -91,6 +91,7 @@ const AGENT_ROUTES: ReadonlyArray<{
   { method: 'DELETE', suffix: '' },
   { method: 'GET', suffix: '/transcript' },
   { method: 'GET', suffix: '/page-state' },
+  { method: 'GET', suffix: '/network' },
   { method: 'GET', suffix: '/cookies' },
   { method: 'GET', suffix: '/downloads' },
   { method: 'GET', suffix: '/gui-control-key' },

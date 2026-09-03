@@ -181,6 +181,10 @@ const SDK_ABSENT = new Map<string, string>([
     "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],
   [
+    '/v1/agent-sessions/:p/network',
+    "first-party console surface: the simulator's DevTools-style Network pane polls it directly from apps/gui-client over raw HTTP (network-log-feed.ts), never through the SDK. Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
+  ],
+  [
     '/v1/agent-sessions/:p/page-state',
     "first-party console surface: consumed directly by apps/gui-client over raw HTTP, never through the SDK (2 call site(s)). Explains why no method was written; does NOT by itself justify the absence for a published, documented endpoint — that is an owner's call (W-7)",
   ],

@@ -194,6 +194,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'GET /v1/agent-sessions/:id/downloads/content [read:sessions]',
   'GET /v1/agent-sessions/:id/gui-control-key [read:sessions]',
   'GET /v1/agent-sessions/:id/gui-control-key [write]',
+  'GET /v1/agent-sessions/:id/network [read:sessions]',
   'GET /v1/agent-sessions/:id/page-state [read:sessions]',
   'GET /v1/agent-sessions/:id/recipe-suggestion [read]',
   'GET /v1/billing [read:billing]',
