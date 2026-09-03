@@ -7,8 +7,12 @@
 // duplicated (and drifting) per view. Each surface still computes its own
 // done-states from the data it already has and wires its own `go` navigation.
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ChecklistStep } from '../components/OnboardingChecklist';
+import {
+  accountSaysOnboardingCompleted,
+  syncOnboardingCompletedToAccount,
+} from './onboarding-account-sync';
 
 const DISMISS_KEY = 'ds_onboarding_dismissed';
 
@@ -46,24 +50,54 @@ const COMPLETED_KEY = 'ds_onboarding_completed';
  *  step done; both render gates then stay closed for the life of the install
  *  even when the live counts later drop. What the steps measure is unchanged —
  *  only whether an already-finished checklist is shown again.
- *  localStorage failures degrade to a session-only completion. */
-export function useOnboardingCompleted(): { completed: boolean; markCompleted: () => void } {
-  const [completed, setCompleted] = useState<boolean>(() => {
+ *  localStorage failures degrade to a session-only completion.
+ *
+ *  `account` is the loaded /me profile (or null while it loads). The flag
+ *  above lives in one install's localStorage, so alone it made a customer who
+ *  finished on one Mac a first-time customer on the next one. The account's
+ *  onboarding_completed_at is folded into `completed` SYNCHRONOUSLY — the same
+ *  render that first sees /me sees the answer, so a fresh machine of a
+ *  finished customer never paints the card — and persisted locally so the
+ *  next launch hides it before /me lands. The account only ever ADDS
+ *  completion: a dismissal or completion this machine recorded stands when
+ *  the account says nothing. The first local completion is mirrored back to
+ *  the account (see onboarding-account-sync.ts). */
+export function useOnboardingCompleted(account: object | null = null): {
+  completed: boolean;
+  markCompleted: () => void;
+} {
+  const [localCompleted, setLocalCompleted] = useState<boolean>(() => {
     try {
       return localStorage.getItem(COMPLETED_KEY) === '1';
     } catch {
       return false;
     }
   });
+  const accountCompleted = accountSaysOnboardingCompleted(account);
+  // SEED: an account that already finished writes the local fast path once, so
+  // the card is hidden on the next launch before the account read returns.
+  useEffect(() => {
+    if (!accountCompleted || localCompleted) return;
+    try {
+      localStorage.setItem(COMPLETED_KEY, '1');
+    } catch {
+      /* storage unavailable — the render gate still reads the account */
+    }
+    setLocalCompleted(true);
+  }, [accountCompleted, localCompleted]);
   const markCompleted = useCallback(() => {
     try {
       localStorage.setItem(COMPLETED_KEY, '1');
     } catch {
       /* storage unavailable — session-only completion */
     }
-    setCompleted(true);
-  }, []);
-  return { completed, markCompleted };
+    setLocalCompleted(true);
+    // MIRROR: tell the account, unless it already knows. Best-effort — the card
+    // is hidden locally either way, and a failure retries on the next
+    // completion event.
+    if (!accountCompleted) syncOnboardingCompletedToAccount();
+  }, [accountCompleted]);
+  return { completed: localCompleted || accountCompleted, markCompleted };
 }
 
 export interface OnboardingData {

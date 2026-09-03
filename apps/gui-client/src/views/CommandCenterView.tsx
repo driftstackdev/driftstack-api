@@ -277,8 +277,10 @@ export function CommandCenterView({
   const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
   // First-time-only: once every step has been seen done, the card never comes
   // back — even after the live counts it reads drop again (session removed).
+  // The account's own answer is folded in, so a fresh install of a customer
+  // who finished elsewhere is closed by the same gate on its first paint.
   const { completed: onboardingCompleted, markCompleted: markOnboardingCompleted } =
-    useOnboardingCompleted();
+    useOnboardingCompleted(accountMe);
   // Refresh accountMe when the home view mounts. The session-health rollup below
   // independently re-fetches on every mount, but accountMe (which drives the cap
   // alerts + the profile/Live-now KPIs) is otherwise only fetched on client change
