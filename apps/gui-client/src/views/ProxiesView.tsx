@@ -112,6 +112,17 @@ function formatTestAllSummary(results: ProxyTestResult[]): string {
   return `Tested ${String(results.length)} — ${parts.join(', ')}`;
 }
 
+/**
+ * Hover text on every positive verdict the native probe produces here. The probe
+ * runs on this Mac; the profile runs on Driftstack's servers. A proxy on the
+ * customer's own network, or one that admits their IP and nobody else's, tests
+ * green here and is dead there — so a verdict that does not say where it was
+ * measured reads as a promise about the profile's path. Kept local rather than
+ * imported from lib/proxies: that module is hand-mocked by dozens of suites.
+ */
+const PROBE_ORIGIN_TITLE =
+  'Measured from your computer, not from the server that runs your profile.';
+
 const EMPTY_DRAFT: ProxyDraft = {
   label: '',
   scheme: 'socks5',
@@ -809,7 +820,11 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
       title="No proxies configured"
       description="Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxy credentials are protected locally and synced in encrypted form to your account when used for a session."
       action={
-        <button type="button" className="btn-primary px-4 py-2 text-sm" onClick={onAdd}>
+        <button
+          type="button"
+          className="btn-primary btn-primary-bright px-4 py-2 text-sm"
+          onClick={onAdd}
+        >
           Add a proxy
         </button>
       }
@@ -1378,8 +1393,9 @@ function HealthPill({
       className={`shrink-0 rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
         latGood ? 'bg-status-ready/12 text-status-ready' : 'bg-status-busy/14 text-status-busy'
       }`}
+      title={PROBE_ORIGIN_TITLE}
     >
-      {latGood ? 'healthy' : 'slow'}
+      {latGood ? 'healthy' : 'slow'} from this Mac
     </span>
   );
 }
@@ -1424,6 +1440,14 @@ export function ProxyForm({
 
   const scheme = draft.scheme ?? 'socks5';
   const isVpn = scheme === 'openvpn' || scheme === 'wireguard';
+  // Advice, recomputed as the customer types — unlike `validation`, which is
+  // set on submit/test. A local or allowlist-only proxy saves fine and fails
+  // when the profile runs on Driftstack's servers; the moment to say so is
+  // while the host is being entered, not after the launch that cannot use it.
+  const liveWarnings = validateDraft(draft).warnings;
+  // The credentials note is about THE proxy being described, so it waits for a
+  // host: on a blank form it would be a warning about nothing.
+  const showAuthWarning = draft.host.trim().length > 0;
 
   function setField<K extends keyof ProxyDraft>(key: K, value: ProxyDraft[K]): void {
     setDraft((d) => ({ ...d, [key]: value }));
@@ -1711,6 +1735,15 @@ export function ProxyForm({
                   onChange={(e) => setField('host', e.target.value)}
                   placeholder="proxy.example.com"
                 />
+                {liveWarnings?.host !== undefined && (
+                  <span
+                    data-component="proxy-host-warning"
+                    role="note"
+                    className="mt-1 text-2xs text-status-busy"
+                  >
+                    {liveWarnings.host}
+                  </span>
+                )}
               </Field>
             </div>
             <Field label="Port" error={validation.errors.port}>
@@ -1755,6 +1788,15 @@ export function ProxyForm({
                 }
                 autoComplete="off"
               />
+              {showAuthWarning && liveWarnings?.auth !== undefined && (
+                <span
+                  data-component="proxy-auth-warning"
+                  role="note"
+                  className="mt-1 text-2xs text-status-busy"
+                >
+                  {liveWarnings.auth}
+                </span>
+              )}
             </Field>
           </div>
         </>
@@ -1867,8 +1909,11 @@ export function ProxyForm({
               : 'border-status-error/40 bg-status-error/10 text-status-error'
           }`}
         >
-          <span className="font-semibold">
-            {testResult.reachable && testResult.auth_ok ? '✓ Connected' : '✗ Failed'}
+          <span
+            className="font-semibold"
+            title={testResult.reachable && testResult.auth_ok ? PROBE_ORIGIN_TITLE : undefined}
+          >
+            {testResult.reachable && testResult.auth_ok ? '✓ Connected from this Mac' : '✗ Failed'}
           </span>
           {testResult.reachable && (
             <span className="text-ink-secondary">
@@ -1890,8 +1935,11 @@ export function ProxyForm({
               : 'border-status-error/40 bg-status-error/10 text-status-error'
           }`}
         >
-          <span className="font-semibold">
-            {resolveResult.resolved ? '✓ Endpoint reachable' : '✗ Endpoint not found'}
+          <span
+            className="font-semibold"
+            title={resolveResult.resolved ? PROBE_ORIGIN_TITLE : undefined}
+          >
+            {resolveResult.resolved ? '✓ Endpoint reachable from this Mac' : '✗ Endpoint not found'}
           </span>
           <span className="text-ink-secondary">{resolveResult.message}</span>
         </div>
@@ -1903,7 +1951,7 @@ export function ProxyForm({
             className="btn-secondary"
             onClick={() => void handleTestConnection()}
             disabled={testing || locked}
-            title="Probe this proxy — reachability, auth, latency, UDP — before saving"
+            title="Probe this proxy from this Mac — reachability, auth, latency, UDP — before saving"
           >
             {testing ? 'Testing…' : 'Test connection'}
           </button>
@@ -1913,7 +1961,7 @@ export function ProxyForm({
             className="btn-secondary"
             onClick={() => void handleTestEndpoint()}
             disabled={resolving || locked}
-            title="Check the VPN endpoint host resolves — full tunnel verifies at launch"
+            title="Check the VPN endpoint host resolves from this Mac — full tunnel verifies at launch"
           >
             {resolving ? 'Checking…' : 'Test endpoint'}
           </button>

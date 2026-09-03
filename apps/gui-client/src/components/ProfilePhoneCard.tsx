@@ -13,6 +13,12 @@ import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
 import { ProxyOsChip, proxyCapabilities } from './ProxyCapabilities';
 import { RelativeTime } from './RelativeTime';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
+
+/** Hover text on the card's probe measurements. The probe runs on this Mac; the
+ *  profile runs on Driftstack's servers (same sentence as ProxiesView, kept local
+ *  because lib/proxies is hand-mocked by dozens of suites). */
+const PROBE_ORIGIN_TITLE =
+  'Measured from your computer, not from the server that runs your profile.';
 import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 
 export interface ProfilePhoneCardProps {
@@ -413,7 +419,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <span className="flex items-center gap-1 text-[9.5px] text-ink-muted">
                     {p.latencyMs !== null ? (
                       <>
-                        <span className="mono">{p.latencyMs}ms</span>
+                        <span className="mono" title={PROBE_ORIGIN_TITLE}>
+                          {p.latencyMs}ms
+                        </span>
                         <span className="inline-block h-1 w-[26px] overflow-hidden rounded-[2px] bg-surface-divider">
                           <span
                             className="block h-full rounded-[2px]"
@@ -649,7 +657,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               <MenuRow
                 glyph={p.testing ? '…' : '⟳'}
                 caption="Test proxy"
-                label="Test proxy — reachability, latency, exit IP"
+                label="Test proxy from this Mac — reachability, latency, exit IP"
                 onClick={() => {
                   setActionsOpen(false);
                   p.onTest();

@@ -28,6 +28,24 @@ account's key, and **never returned** in any response. Responses expose
 stored) instead. Every endpoint is scoped to the calling account — you
 can only see and use your own proxies.
 
+## What kind of proxy works
+
+Profiles run on Driftstack's servers, not on your computer. A proxy that
+works from your desk can still fail from there, and the desktop app's
+**Test** button — which runs from your own machine — cannot tell the
+difference. What you need:
+
+- **A public address.** Not `localhost`, `127.0.0.1`, or a private-network
+  address such as `10.x.x.x`, `172.16.x.x`–`172.31.x.x`, or `192.168.x.x`.
+  A proxy on your own machine or office network tests fine from the app and
+  is unreachable from Driftstack's servers.
+- **Username and password authentication.** IP-allowlist access does not
+  work: profiles run from Driftstack's servers, not from your IP, so an
+  allowlist that names your address never matches. Ask your provider for
+  user/pass credentials.
+- **SOCKS5, OpenVPN, or WireGuard.** These are the schemes that can carry a
+  session. `http` proxies can be saved but not used for a session.
+
 ## Resource shape
 
 ```json

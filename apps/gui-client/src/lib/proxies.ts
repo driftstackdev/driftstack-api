@@ -756,9 +756,42 @@ function mintId(): string {
 
 // ─── validation helpers (used by the form) ────────────────────────
 
+/**
+ * Advice about a draft that will SAVE fine and then fail the moment a profile
+ * runs through it.
+ *
+ * Profiles run on Driftstack's servers, not on this Mac. The desktop app's
+ * native probe (`proxy_test` in src-tauri — "Test a saved SOCKS5 proxy from the
+ * desktop host") runs from the customer's own machine, so two shapes of proxy
+ * test green here and are dead there: one on localhost or a private network
+ * (the server cannot reach it), and one that authenticates by IP allowlist (the
+ * server's IP is not on the list). The server refuses the first only at upload
+ * time (`assertSafeProxyHost` in account-me.ts) and cannot see the second at
+ * all. Owner: "do not confuse a customer that they could add a local proxy and
+ * later find out it doesn't work."
+ *
+ * Never a block — `ok` and `errors` ignore these, so nothing that saves today is
+ * refused. The form shows them beside the field they are about.
+ */
+export interface DraftWarnings {
+  host?: string;
+  auth?: string;
+}
+
+const PRIVATE_HOST_WARNING =
+  "This proxy is on your own machine or private network. Profiles run on Driftstack's servers, which cannot reach it. Use a proxy with a public address.";
+const NO_CREDENTIALS_WARNING =
+  "This proxy has no username or password. IP-allowlist access won't work: profiles run from Driftstack's servers, not from your IP. Ask your provider for user/pass credentials.";
+
 export interface DraftValidation {
   ok: boolean;
   errors: Partial<Record<keyof ProxyDraft, string>>;
+  /**
+   * See `DraftWarnings`. Optional in the TYPE only because the many hand-listed
+   * `validateDraft` test doubles predate it; `validateDraft` itself always
+   * returns it.
+   */
+  warnings?: DraftWarnings;
 }
 
 export function validateDraft(d: ProxyDraft): DraftValidation {
@@ -778,7 +811,133 @@ export function validateDraft(d: ProxyDraft): DraftValidation {
   }
   // username/password are optional; if one is set the other isn't required
   // (some SOCKS5 servers accept username-only auth).
-  return { ok: Object.keys(errors).length === 0, errors };
+  return { ok: Object.keys(errors).length === 0, errors, warnings: draftWarnings(d) };
+}
+
+function isBlank(v: string | null): boolean {
+  return v === null || v.trim().length === 0;
+}
+
+/** The schemes that authenticate the CLIENT with a username/password. WireGuard
+ *  is key-based and OpenVPN carries its credentials inside the config block, so
+ *  an empty pair on those is the normal shape, not an IP allowlist. */
+function usesUserPassAuth(scheme: AccountProxyScheme | undefined): boolean {
+  return scheme === undefined || scheme === 'socks5' || scheme === 'http';
+}
+
+function draftWarnings(d: ProxyDraft): DraftWarnings {
+  const warnings: DraftWarnings = {};
+  if (isPrivateOrLocalHost(d.host)) warnings.host = PRIVATE_HOST_WARNING;
+  if (usesUserPassAuth(d.scheme) && isBlank(d.username) && isBlank(d.password)) {
+    warnings.auth = NO_CREDENTIALS_WARNING;
+  }
+  return warnings;
+}
+
+/**
+ * Is `host` on this machine or a private network — unreachable from
+ * Driftstack's servers whatever the local probe says?
+ *
+ * Mirrors the host classes the server refuses at upload (`classifyUnsafeHost`,
+ * apps/server/src/lib/webhook-target-guard.ts) that mean "yours, not public":
+ * localhost / *.localhost, the mDNS `.local` zone, 0/8, 10/8, 100.64/10 (carrier
+ * NAT), 127/8, 169.254/16, 172.16/12, 192.168/16, `::`, `::1`, fc00::/7,
+ * fe80::/10, and an IPv4 embedded in IPv6 (`::ffff:a.b.c.d`, `::a.b.c.d`).
+ * Deliberately NOT mirrored: the documentation, multicast and reserved ranges
+ * the server also blocks. They are not "your machine or private network", so
+ * this warning's sentence would be wrong for them, and the upload refusal names
+ * them anyway. Pure: the WebView has no `node:net`, and the GUI must not import
+ * server code.
+ */
+export function isPrivateOrLocalHost(rawHost: string): boolean {
+  let host = rawHost.trim().toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host.endsWith('.')) host = host.slice(0, -1);
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  // RFC 6762 reserves `.local` for link-local mDNS names — always a machine on
+  // the customer's own network.
+  if (host.endsWith('.local')) return true;
+  const v4 = parseIpv4(host);
+  if (v4 !== null) return isPrivateIpv4(v4);
+  const v6 = parseIpv6(host);
+  if (v6 !== null) return isPrivateIpv6(v6);
+  return false;
+}
+
+type Ipv4 = [number, number, number, number];
+
+/** Strict dotted-quad only. Short forms and hex/octal/decimal encodings
+ *  (`127.1`, `0x7f000001`) are refused by the server as `numeric-encoding`. */
+function parseIpv4(host: string): Ipv4 | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+  if (m === null) return null;
+  const octets: Ipv4 = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+  if (octets.some((o) => o > 255)) return null;
+  return octets;
+}
+
+function isPrivateIpv4([a, b]: Ipv4): boolean {
+  return (
+    a === 0 || // "this host"
+    a === 10 ||
+    (a === 100 && b >= 64 && b <= 127) || // carrier NAT — private to the ISP
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168)
+  );
+}
+
+/** Eight hextets, or null when `raw` is not an IPv6 literal. */
+function parseIpv6(raw: string): number[] | null {
+  // `fe80::1%en0` — the zone id names an interface on THIS machine; the address
+  // classifies the same without it.
+  const zone = raw.indexOf('%');
+  const host = zone >= 0 ? raw.slice(0, zone) : raw;
+  if (!host.includes(':') || !/^[0-9a-f:.]+$/.test(host)) return null;
+  const halves = host.split('::');
+  if (halves.length > 2) return null;
+  const groupsOf = (part: string): string[] => (part.length === 0 ? [] : part.split(':'));
+  const head = groupsOf(halves[0] ?? '');
+  const tail = halves.length === 2 ? groupsOf(halves[1] ?? '') : null;
+  // A trailing dotted-quad (`::ffff:10.0.0.5`) is two hextets.
+  const expand = (groups: string[]): number[] | null => {
+    const out: number[] = [];
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i] ?? '';
+      if (g.includes('.')) {
+        if (i !== groups.length - 1) return null;
+        const v4 = parseIpv4(g);
+        if (v4 === null) return null;
+        out.push((v4[0] << 8) | v4[1], (v4[2] << 8) | v4[3]);
+        continue;
+      }
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+      out.push(parseInt(g, 16));
+    }
+    return out;
+  };
+  const h = expand(head);
+  const t = tail === null ? [] : expand(tail);
+  if (h === null || t === null) return null;
+  if (tail === null) return h.length === 8 ? h : null;
+  if (h.length + t.length > 7) return null;
+  return [...h, ...new Array<number>(8 - h.length - t.length).fill(0), ...t];
+}
+
+function isPrivateIpv6(hextets: number[]): boolean {
+  const [g0 = 0, g1 = 0, g2 = 0, g3 = 0, g4 = 0, g5 = 0, g6 = 0, g7 = 0] = hextets;
+  const leadingZero = g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0 && g4 === 0;
+  // `::` (unspecified) and `::1` (loopback).
+  if (leadingZero && g5 === 0 && g6 === 0 && (g7 === 0 || g7 === 1)) return true;
+  // IPv4 embedded in IPv6 — `::ffff:a.b.c.d` (mapped) or `::a.b.c.d`
+  // (compatible): the OS routes to the embedded IPv4, so classify that.
+  if (leadingZero && (g5 === 0xffff || g5 === 0)) {
+    return isPrivateIpv4([g6 >> 8, g6 & 0xff, g7 >> 8, g7 & 0xff]);
+  }
+  if ((g0 & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+  if ((g0 & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  return false;
 }
 
 // ─── live connectivity probe (native) ─────────────────────────────
@@ -876,6 +1035,12 @@ export function isProxyUsable(result: ProxyTestResult): boolean {
  * cannot route therefore rendered RED and read "Reachable · 12 ms", telling the
  * customer the opposite of the colour beside it. Ordered most-fundamental first,
  * so the reason named is the one to fix first.
+ *
+ * The positive label says WHERE it was measured. This probe runs on the
+ * customer's Mac; the profile runs on Driftstack's servers. A proxy on the
+ * customer's own network, or one that admits their IP and nobody else's, is
+ * "Reachable" here and dead there — so a bare "Reachable" reads as a promise
+ * the profile's path cannot keep (see `DraftWarnings`).
  */
 export function proxyVerdict(result: ProxyTestResult): { ok: boolean; label: string } {
   if (!result.reachable) return { ok: false, label: 'Not reachable' };
@@ -884,7 +1049,7 @@ export function proxyVerdict(result: ProxyTestResult): { ok: boolean; label: str
   // failure that used to pass as healthy, and the one that only shows up as a
   // dead session at launch.
   if (!result.can_route) return { ok: false, label: 'Cannot route' };
-  return { ok: true, label: `Reachable · ${result.latency_ms} ms` };
+  return { ok: true, label: `Reachable from this Mac · ${result.latency_ms} ms` };
 }
 
 export async function testProxy(input: {

@@ -171,4 +171,53 @@ describe('V-1065 the saved proxy cap is published', () => {
       /a broad `write` key is not sufficient/,
     );
   });
+
+  it(`CRITICAL the page says what kind of proxy works BEFORE the customer buys one: a public address, username/password rather than an IP allowlist, and a scheme that can carry a session. Profiles run on Driftstack's servers, so a proxy on the customer's own network, or one that admits only their IP, passes the desktop app's local test and fails every launch (owner: "do not confuse a customer that they could add a local proxy and later find out it doesn't work"). The public-address claim is read against the route that enforces it, so the sentence cannot outlive the guard.`, () => {
+    const page = doc();
+    const start = page.indexOf('## What kind of proxy works');
+    expect(
+      start,
+      'the "What kind of proxy works" section is gone from api/proxies.md',
+    ).toBeGreaterThan(0);
+    // The section is the text up to the next h2 — the claims must sit INSIDE
+    // it, not anywhere on a page that mentions localhost elsewhere.
+    const rest = page.slice(start + 1);
+    const nextHeading = rest.search(/\n## /);
+    const section = nextHeading < 0 ? rest : rest.slice(0, nextHeading);
+    const bullets = section.split('\n').filter((line) => line.startsWith('- '));
+    expect(bullets.length, 'the section no longer lists its three requirements as bullets').toBe(3);
+    // `\s+` between words: prettier reflows this page at 80 columns, so any of
+    // these spaces may be a line break tomorrow without the claim changing.
+    expect(section, 'the public-address requirement is gone').toMatch(
+      /\*\*A\s+public\s+address\.\*\*/,
+    );
+    expect(section, 'localhost is no longer named as what does not work').toMatch(/`localhost`/);
+    expect(section, 'the user/pass requirement is gone').toMatch(
+      /\*\*Username\s+and\s+password\s+authentication\.\*\*/,
+    );
+    expect(section, 'the page no longer says IP-allowlist access does not work').toMatch(
+      /IP-allowlist\s+access\s+does\s+not\s+work/,
+    );
+    expect(
+      section,
+      'the page no longer says WHY: profiles run from our servers, not the customer IP',
+    ).toMatch(/profiles\s+run\s+from\s+Driftstack's\s+servers,\s+not\s+from\s+your\s+IP/);
+    expect(section, 'the schemes that can carry a session are gone').toMatch(
+      /\*\*SOCKS5,\s+OpenVPN,\s+or\s+WireGuard\.\*\*/,
+    );
+    // VACUITY CONTROL — the slice stopped at the next h2. The create-time
+    // "Host safety" paragraph lives under Create; if it shows up here the slice
+    // ran on, and the arms above could pass on prose this section never held.
+    expect(section, 'the section slice ran past its own h2').not.toMatch(/Host safety/);
+
+    // …and the route still refuses a private host, so "a public address" is a
+    // rule the server enforces rather than advice the page gives.
+    const route = readFileSync(ROUTE, 'utf8');
+    expect(route, 'the route no longer classifies the proxy host before storing it').toMatch(
+      /classifyUnsafeHost\(host\)/,
+    );
+    expect(route, 'the route no longer refuses a private proxy host').toMatch(
+      /Proxy host must not target a private, loopback, link-local, or metadata address\./,
+    );
+  });
 });

@@ -112,7 +112,7 @@ describe('ProxiesView "Test" button result card', () => {
     await clickTestAndSettle();
 
     // Health verdict for a reachable + authed + fast (<=100ms) probe.
-    expect(await screen.findByText('healthy')).toBeTruthy();
+    expect(await screen.findByText('healthy from this Mac')).toBeTruthy();
     // Latency meter value (mono "<n>ms").
     expect(screen.getByText('42ms')).toBeTruthy();
     // Professional protocol-capability chips on a UDP-capable exit
@@ -135,8 +135,8 @@ describe('ProxiesView "Test" button result card', () => {
     render(<ProxiesView />);
     await clickTestAndSettle();
 
-    expect(await screen.findByText('slow')).toBeTruthy();
-    expect(screen.queryByText('healthy')).toBeNull();
+    expect(await screen.findByText('slow from this Mac')).toBeTruthy();
+    expect(screen.queryByText('healthy from this Mac')).toBeNull();
     expect(screen.getByText('180ms')).toBeTruthy();
   });
 
@@ -202,7 +202,7 @@ describe('ProxiesView add-form "Test connection" button', () => {
     render(<ProxiesView />);
     await openAddForm();
     fireEvent.click(screen.getByRole('button', { name: 'Test connection' }));
-    expect(await screen.findByText('✓ Connected')).toBeTruthy();
+    expect(await screen.findByText('✓ Connected from this Mac')).toBeTruthy();
     expect(screen.getByText(/42ms/)).toBeTruthy();
     await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
   });
