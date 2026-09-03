@@ -98,6 +98,16 @@ describe('W586 sseCorsHeaders', () => {
     expect(h['vary']).toBe('Origin');
   });
 
+  it('CRITICAL allowed origin → x-request-id is EXPOSED. A hijacked reply bypasses the @fastify/cors exposedHeaders onSend hook, so the request id the stream writes was unreadable cross-origin on every hijack site — a customer debugging a failed stream could not quote the id support needs. The derived-population arm below guarantees every raw.writeHead spreads these headers, so pinning the value here covers all of them.', () => {
+    const h = sseCorsHeaders('https://app.driftstack.dev', DEPS);
+    expect(h['access-control-expose-headers']).toBe('x-request-id');
+    // Property: exposure rides ONLY with an allowed origin — a disallowed one
+    // gets no headers at all, exposure included (never leak the id policy).
+    expect(sseCorsHeaders('https://evil.com', DEPS)).not.toHaveProperty(
+      'access-control-expose-headers',
+    );
+  });
+
   it('disallowed / absent origin → empty (header omitted, same as the plugin)', () => {
     expect(sseCorsHeaders('https://evil.com', DEPS)).toEqual({});
     expect(sseCorsHeaders(undefined, DEPS)).toEqual({});

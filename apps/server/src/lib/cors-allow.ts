@@ -91,6 +91,11 @@ export function sseCorsHeaders(
   return {
     'access-control-allow-origin': allow,
     'access-control-allow-credentials': 'true',
+    // A hijacked reply bypasses @fastify/cors and its `exposedHeaders` onSend
+    // hook, so without this the `x-request-id` the stream writes is unreadable
+    // cross-origin — a customer debugging a failed stream cannot quote the id
+    // support needs. Mirror the plugin's exposure here, where the plugin cannot.
+    'access-control-expose-headers': 'x-request-id',
     vary: 'Origin',
   };
 }
