@@ -53,6 +53,7 @@ import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { humanizeError } from '../lib/humanize-error';
+import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -183,6 +184,11 @@ export function ProxiesView(): JSX.Element {
   // consumed by the capability chip so a measured 'h3' can go green.
   const [serverLatency, setServerLatency] = useState<Record<string, number>>({});
   const [quicMeasured, setQuicMeasured] = useState<Record<string, MeasuredQuic>>({});
+  // T-1 — WHERE the server latency was measured (a fleet Mac, named, or the
+  // server itself when none was free) and the fleet Mac's separate QUIC-relay
+  // verdict. Both label the row; neither is ever folded into quicMeasured.
+  const [serverVantage, setServerVantage] = useState<Record<string, ServerVantage>>({});
+  const [quicProbe, setQuicProbe] = useState<Record<string, boolean>>({});
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -225,6 +231,8 @@ export function ProxiesView(): JSX.Element {
       setOsFingerprints(view.osFingerprints);
       setServerLatency(view.serverLatency);
       setQuicMeasured(view.quicMeasured);
+      setServerVantage(view.serverVantage);
+      setQuicProbe(view.quicProbe);
     } catch (err) {
       setState((s) => ({
         ...s,
@@ -248,6 +256,8 @@ export function ProxiesView(): JSX.Element {
         setOsFingerprints(view.osFingerprints);
         setServerLatency(view.serverLatency);
         setQuicMeasured(view.quicMeasured);
+        setServerVantage(view.serverVantage);
+        setQuicProbe(view.quicProbe);
       }),
     [],
   );
@@ -291,6 +301,8 @@ export function ProxiesView(): JSX.Element {
           setOsFingerprints((m) => dropKey(m, editId));
           setServerLatency((m) => dropKey(m, editId));
           setQuicMeasured((m) => dropKey(m, editId));
+          setServerVantage((m) => dropKey(m, editId));
+          setQuicProbe((m) => dropKey(m, editId));
           // Invalidating alone leaves the row with NO verdict, which reads as
           // "untested" rather than "the endpoint changed" — and the next launch
           // is where that gets discovered. Re-test instead.
@@ -381,6 +393,8 @@ export function ProxiesView(): JSX.Element {
     setOsFingerprints((m) => dropKey(m, id));
     setServerLatency((m) => dropKey(m, id));
     setQuicMeasured((m) => dropKey(m, id));
+    setServerVantage((m) => dropKey(m, id));
+    setQuicProbe((m) => dropKey(m, id));
     // Clear any profile default-proxy bindings that referenced this proxy, so a
     // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
     // Launch would silently reroute that profile's egress to a different proxy
@@ -528,11 +542,11 @@ export function ProxiesView(): JSX.Element {
           // proxy stored on the account can be tested there. Best-effort: a miss
           // keeps the prior verdicts, and nothing here changes the connectivity
           // result measured above.
-          const serverTest = await testAccountProxy(
-            settings.baseUrl,
-            settings.apiKey,
-            p.serverId,
-          ).catch(() => null);
+          // T-1 — ask for the FLEET vantage: the Mac that will run the profile
+          // measures it; the server says so (or says it fell back) in the reply.
+          const serverTest = await testAccountProxy(settings.baseUrl, settings.apiKey, p.serverId, {
+            vantage: 'fleet',
+          }).catch(() => null);
           if (stale()) return null;
           if (serverTest !== null && serverTest.ok) {
             const now = Date.now();
@@ -552,9 +566,33 @@ export function ProxiesView(): JSX.Element {
                 : undefined;
             setServerLatency((m) => ({ ...m, [p.id]: serverTest.latency_ms }));
             if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [p.id]: quic }));
+            // T-1 — where that number was measured travels WITH it: a fleet Mac
+            // (named) or, when none was free, the server — replaced on every
+            // result, so a fleet label never outlives its measurement and the
+            // fallback is visible. The fleet QUIC-relay verdict is its own chip;
+            // it never becomes a quicMeasured value.
+            const vantage: ServerVantage | undefined =
+              serverTest.measured_from !== undefined
+                ? {
+                    measuredFrom: serverTest.measured_from,
+                    ...(serverTest.node_id !== undefined ? { nodeId: serverTest.node_id } : {}),
+                  }
+                : undefined;
+            setServerVantage((m) =>
+              vantage !== undefined ? { ...m, [p.id]: vantage } : dropKey(m, p.id),
+            );
+            const relay = serverTest.quic_probe;
+            setQuicProbe((m) => (relay !== undefined ? { ...m, [p.id]: relay } : dropKey(m, p.id)));
             void saveServerProbeResult(
               p.id,
-              { latencyMs: serverTest.latency_ms, quicMeasured: quic, quicMeasuredAt: now },
+              {
+                latencyMs: serverTest.latency_ms,
+                quicMeasured: quic,
+                quicMeasuredAt: now,
+                measuredFrom: serverTest.measured_from,
+                nodeId: serverTest.node_id,
+                quicProbe: relay,
+              },
               now,
             ).catch(() => undefined);
           }
@@ -567,6 +605,8 @@ export function ProxiesView(): JSX.Element {
         setOsFingerprints((m) => dropKey(m, p.id));
         setServerLatency((m) => dropKey(m, p.id));
         setQuicMeasured((m) => dropKey(m, p.id));
+        setServerVantage((m) => dropKey(m, p.id));
+        setQuicProbe((m) => dropKey(m, p.id));
       }
       return result;
     } catch (err) {
@@ -587,6 +627,8 @@ export function ProxiesView(): JSX.Element {
       setOsFingerprints((m) => dropKey(m, p.id));
       setServerLatency((m) => dropKey(m, p.id));
       setQuicMeasured((m) => dropKey(m, p.id));
+      setServerVantage((m) => dropKey(m, p.id));
+      setQuicProbe((m) => dropKey(m, p.id));
       return result;
     } finally {
       // Always clear the spinner for the id THIS probe owns — even when a
@@ -833,6 +875,8 @@ export function ProxiesView(): JSX.Element {
           osFingerprints={osFingerprints}
           serverLatency={serverLatency}
           quicMeasured={quicMeasured}
+          serverVantage={serverVantage}
+          quicProbe={quicProbe}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -946,6 +990,8 @@ function ProxyTable({
   osFingerprints,
   serverLatency,
   quicMeasured,
+  serverVantage,
+  quicProbe,
   onEdit,
   onRemove,
   onTest,
@@ -962,6 +1008,9 @@ function ProxyTable({
   osFingerprints: Record<string, CachedOsFingerprint>;
   serverLatency: Record<string, number>;
   quicMeasured: Record<string, MeasuredQuic>;
+  /** T-1 — where each server latency was measured, and the fleet relay verdict. */
+  serverVantage: Record<string, ServerVantage>;
+  quicProbe: Record<string, boolean>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onTest: (p: ProxyConfig) => void;
@@ -1156,6 +1205,8 @@ function ProxyTable({
                 osFingerprint={osFingerprints[p.id]}
                 serverLatencyMs={serverLatency[p.id]}
                 quicMeasured={quicMeasured[p.id]}
+                serverVantage={serverVantage[p.id]}
+                quicProbe={quicProbe[p.id]}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -1222,6 +1273,8 @@ function ProxyRow({
   osFingerprint,
   serverLatencyMs,
   quicMeasured,
+  serverVantage,
+  quicProbe,
   onEdit,
   onRemove,
   onTest,
@@ -1244,6 +1297,12 @@ function ProxyRow({
   serverLatencyMs: number | undefined;
   /** T-6 — the QUIC verdict measured in a live session, for the capability chip. */
   quicMeasured: MeasuredQuic | undefined;
+  /** T-1 — where serverLatencyMs was measured (+ the fleet node), so the number
+   *  is labelled with the machine that took it; undefined = a server number
+   *  recorded before the vantage was reported (plain "server" marker). */
+  serverVantage: ServerVantage | undefined;
+  /** T-1 — the fleet Mac's QUIC-relay verdict, its own chip; never merged. */
+  quicProbe: boolean | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onTest: () => void;
@@ -1256,6 +1315,12 @@ function ProxyRow({
   // the fallback so a proxy with no server row still shows a number.
   const fromServer = serverLatencyMs !== undefined;
   const lat = serverLatencyMs ?? result?.latency_ms;
+  // T-1 — the words beside a server number name the machine that measured it.
+  // A number cached before the vantage was reported keeps the plain "server"
+  // marker rather than borrowing a label it never earned.
+  const vantage = serverVantage !== undefined ? vantageLabel(serverVantage) : undefined;
+  const vantageText = vantage?.label ?? 'server';
+  const vantageTitle = vantage?.title ?? SERVER_LATENCY_TITLE;
   const latFill = lat !== undefined && lat > 0 ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
   const latGood = lat !== undefined && lat <= 100;
   const exitIp = exit?.ip;
@@ -1324,14 +1389,19 @@ function ProxyRow({
         {lat !== undefined && reachable ? (
           <span
             className="inline-flex items-center justify-end gap-1.5"
-            title={fromServer ? SERVER_LATENCY_TITLE : PROBE_ORIGIN_TITLE}
+            title={fromServer ? vantageTitle : PROBE_ORIGIN_TITLE}
+            data-latency-vantage={
+              fromServer ? (serverVantage?.measuredFrom ?? 'server') : 'this_mac'
+            }
           >
             <span className="mono tabular-nums text-ink-secondary">{lat}ms</span>
-            {/* T-1 — mark a server-measured number so it is never read as the
-                laptop's; the native fallback carries no marker. */}
+            {/* T-1 — say WHERE a server-measured number came from: a fleet Mac
+                (the kind that runs the profile) or, when none was free, the
+                server itself — the fallback is visible, never silent. The
+                native fallback carries no marker. */}
             {fromServer && (
               <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                server
+                {vantageText}
               </span>
             )}
             <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
@@ -1355,7 +1425,12 @@ function ProxyRow({
 
       <td className="px-3 py-2">
         {result !== undefined && reachable ? (
-          <ProxyCapabilityChips result={result} quicMeasured={quicMeasured} size="xs" />
+          <ProxyCapabilityChips
+            result={result}
+            quicMeasured={quicMeasured}
+            quicProbe={quicProbe}
+            size="xs"
+          />
         ) : (
           <span
             className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"

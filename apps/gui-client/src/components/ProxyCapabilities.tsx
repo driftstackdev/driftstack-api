@@ -36,7 +36,9 @@ import type { MeasuredQuic } from '../lib/account-proxies';
 import { osFingerprintVerdict, type OsFingerprint } from '../lib/os-fingerprint-verdict';
 
 export interface ProxyCapability {
-  key: 'webrtc' | 'quic' | 'http2';
+  /** 'quic-relay' — T-1's SEPARATE probe chip: the fleet Mac's standalone QUIC
+   *  handshake through the proxy. Present only when that probe ran. */
+  key: 'webrtc' | 'quic' | 'http2' | 'quic-relay';
   label: string;
   ok: boolean;
   /**
@@ -54,10 +56,18 @@ export interface ProxyCapability {
  *   → measured NO HTTP/3 (a measured negative, not a guess), null/undefined → never
  *   measured, so the QUIC chip falls back to the INFERRED '~' the probe can offer
  *   and NEVER renders green. WebRTC and HTTP/2 are unchanged.
+ * @param quicProbe T-1 — the fleet Mac's STANDALONE QUIC handshake through the
+ *   proxy to a cold h3 origin (the server's `quic_ok`). It proves the PROXY relays
+ *   QUIC, which is a different claim from `quicMeasured` (a live browser session
+ *   saw HTTP/3). It gets its OWN chip: true → green "QUIC relayed", false → a
+ *   measured "QUIC not relayed" (not the inferred '~'), undefined → no chip at
+ *   all. ⛔ It never touches the QUIC chip above: when the two disagree, that
+ *   disagreement is the finding, and merging them would erase it.
  */
 export function proxyCapabilities(
   result: ProxyTestResult,
   quicMeasured?: MeasuredQuic | null,
+  quicProbe?: boolean,
 ): ProxyCapability[] {
   // Capability chips describe a proxy that can carry traffic. Auth alone is not
   // that: a proxy can authenticate and refuse every CONNECT.
@@ -66,6 +76,22 @@ export function proxyCapabilities(
   // A measured verdict overrides the inference entirely. 'h3' is the ONLY green;
   // 'h2-only' is a measured negative; anything else means we never measured it.
   const quicIsMeasured = quicMeasured === 'h3' || quicMeasured === 'h2-only';
+  // T-1 — the relay probe is its own measured chip, appended after the QUIC chip
+  // and reading NOTHING from it. Only a boolean is a measurement.
+  const relayChip: ProxyCapability[] =
+    typeof quicProbe === 'boolean'
+      ? [
+          {
+            key: 'quic-relay',
+            label: quicProbe ? 'QUIC relayed' : 'QUIC not relayed',
+            ok: quicProbe,
+            inferred: false,
+            hint: quicProbe
+              ? 'This proxy relays QUIC — measured from a fleet Mac, the kind that runs your profiles.'
+              : 'This proxy does not relay QUIC — measured from a fleet Mac, the kind that runs your profiles. HTTP/3 falls back to HTTP/2 over TCP there.',
+          },
+        ]
+      : [];
   return [
     {
       key: 'webrtc',
@@ -93,6 +119,7 @@ export function proxyCapabilities(
           ? 'UDP relay verified, so HTTP/3 is LIKELY — but not tested. Some exits relay UDP yet still block UDP/443, inspect the QUIC handshake, or fragment it. Run a session to confirm.'
           : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
     },
+    ...relayChip,
     {
       key: 'http2',
       label: 'HTTP/2',
@@ -112,6 +139,7 @@ export function proxyCapabilities(
 export function ProxyCapabilityChips({
   result,
   quicMeasured,
+  quicProbe,
   size = 'sm',
 }: {
   result: ProxyTestResult;
@@ -119,9 +147,12 @@ export function ProxyCapabilityChips({
    *  '~' state: 'h3' → green ✓, 'h2-only' → measured negative; null/undefined
    *  keeps the inferred rendering. */
   quicMeasured?: MeasuredQuic | null;
+  /** T-1 — the fleet Mac's QUIC-relay verdict: its OWN chip, never merged into
+   *  the QUIC chip above; undefined renders no relay chip. */
+  quicProbe?: boolean;
   size?: 'xs' | 'sm';
 }): JSX.Element {
-  const caps = proxyCapabilities(result, quicMeasured);
+  const caps = proxyCapabilities(result, quicMeasured, quicProbe);
   const text = size === 'xs' ? 'text-[9px]' : 'text-[10px]';
   return (
     <div className="flex flex-wrap items-center gap-1" data-component="proxy-capabilities">

@@ -17,6 +17,7 @@ import {
   isFingerprintedOs,
   type OsFingerprint,
 } from './os-fingerprint-verdict';
+import { cleanProxyVantage, type ProxyVantage } from './proxy-vantage';
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
@@ -243,8 +244,27 @@ export type AccountProxyTestResult =
        *  one in a live session; absent = never measured (chip stays inferred). */
       quic_measured?: MeasuredQuic | null;
       quic_measured_at?: string | null;
+      /** T-1 — WHERE the server measured this: 'fleet' = the Mac that runs your
+       *  profiles (node_id names it); 'control_plane' = no fleet Mac was free, so
+       *  Driftstack's server measured it (the honest fallback). Absent on a
+       *  vantage=cp response — today's shape, unchanged. Closed set: any other
+       *  value is dropped, so a number is never shown under the wrong label. */
+      measured_from?: ProxyVantage;
+      /** Only beside measured_from 'fleet' — the node that ran the test. */
+      node_id?: string;
+      exit_ip?: string;
+      /** T-1 — the fleet Mac's STANDALONE QUIC handshake through the proxy to a
+       *  cold h3 origin: it proves the PROXY relays QUIC. A DIFFERENT signal from
+       *  quic_measured (a live browser session's observed HTTP/3). Both ride the
+       *  row, each under its own label, and are never merged — when they
+       *  disagree, that disagreement is the finding. Only beside 'fleet'. */
+      quic_probe?: boolean;
+      quic_detail?: string;
+      reachable?: boolean;
+      udp_associate?: boolean;
+      h2_ok?: boolean;
     }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; measured_from?: ProxyVantage };
 
 /** A wire fingerprint is kept only when every field is one the verdict can
  *  render. A value outside the closed set (a newer server, a proxy MITM-ing
@@ -262,13 +282,26 @@ function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
  *  off here and reported as a failure the server never saw. */
 const PROXY_TEST_DEADLINE_MS = 30_000;
 
+/** T-1 — a fleet `ok:false` frame carries no `reason` (the node reports the
+ *  measurement, not prose), so the client says what happened in plain words. */
+const FLEET_TEST_FAILED_REASON =
+  'The Mac that runs your profiles could not connect through this proxy.';
+
+/**
+ * @param opts.vantage T-1 — 'fleet' asks the server to measure from the Mac
+ *   that will run the profile (the response then carries `measured_from`, and
+ *   'control_plane' when no node was free). Omitted/'cp' is today's request and
+ *   today's response, unchanged.
+ */
 export async function testAccountProxy(
   baseUrl: string,
   apiKey: string,
   id: string,
+  opts?: { vantage?: 'cp' | 'fleet' },
 ): Promise<AccountProxyTestResult> {
+  const query = opts?.vantage === 'fleet' ? '?vantage=fleet' : '';
   const res = await fetchWithDeadline(
-    `${base(baseUrl)}/${encodeURIComponent(id)}/test`,
+    `${base(baseUrl)}/${encodeURIComponent(id)}/test${query}`,
     { method: 'POST', headers: authHeaders(apiKey) },
     PROXY_TEST_DEADLINE_MS,
   );
@@ -278,11 +311,27 @@ export async function testAccountProxy(
     throw new Error(`proxy test failed: ${status.toString()}`);
   }
   const body = await readBoundedApiJson<Record<string, unknown>>(res);
+  // T-1 — the vantage is a CLOSED set; a value outside it is dropped (the number
+  // then renders unlabelled), never shown under a label it did not earn.
+  const vantage = cleanProxyVantage(body.measured_from);
   if (body.ok === true && typeof body.latency_ms === 'number') {
     const fp = cleanWireFingerprint(body.os_fingerprint);
     // T-6 — a value outside the closed set is DROPPED (the field is omitted, read
     // downstream as "never measured"), never coerced into a would-be green chip.
     const quic = cleanMeasuredQuic(body.quic_measured);
+    // T-1 — the fleet-only fields are kept ONLY beside a 'fleet' vantage: the
+    // QUIC-relay chip's caption names a fleet Mac, so a value that did not come
+    // from one must not reach it. Each field keeps its own type or is omitted.
+    const fleet = vantage === 'fleet';
+    const optBool = (v: unknown): boolean | undefined => (typeof v === 'boolean' ? v : undefined);
+    const optStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+    const nodeId = fleet ? optStr(body.node_id) : undefined;
+    const exitIp = fleet ? optStr(body.exit_ip) : undefined;
+    const quicDetail = fleet ? optStr(body.quic_detail) : undefined;
+    const quicProbe = fleet ? optBool(body.quic_ok) : undefined;
+    const reachable = fleet ? optBool(body.reachable) : undefined;
+    const udpAssociate = fleet ? optBool(body.udp_associate) : undefined;
+    const h2Ok = fleet ? optBool(body.h2_ok) : undefined;
     return {
       ok: true,
       latency_ms: body.latency_ms,
@@ -294,9 +343,25 @@ export async function testAccountProxy(
               typeof body.quic_measured_at === 'string' ? body.quic_measured_at : null,
           }
         : {}),
+      ...(vantage !== undefined ? { measured_from: vantage } : {}),
+      ...(nodeId !== undefined ? { node_id: nodeId } : {}),
+      ...(exitIp !== undefined ? { exit_ip: exitIp } : {}),
+      ...(quicProbe !== undefined ? { quic_probe: quicProbe } : {}),
+      ...(quicDetail !== undefined ? { quic_detail: quicDetail } : {}),
+      ...(reachable !== undefined ? { reachable } : {}),
+      ...(udpAssociate !== undefined ? { udp_associate: udpAssociate } : {}),
+      ...(h2Ok !== undefined ? { h2_ok: h2Ok } : {}),
     };
   }
   if (body.ok === false && typeof body.reason === 'string')
-    return { ok: false, reason: body.reason };
+    return {
+      ok: false,
+      reason: body.reason,
+      ...(vantage !== undefined ? { measured_from: vantage } : {}),
+    };
+  // T-1 — a fleet Mac reports a failed test as a RESULT without prose; that is a
+  // well-formed answer, not a malformed one.
+  if (body.ok === false && vantage === 'fleet')
+    return { ok: false, reason: FLEET_TEST_FAILED_REASON, measured_from: vantage };
   throw new Error('proxy test: malformed response');
 }

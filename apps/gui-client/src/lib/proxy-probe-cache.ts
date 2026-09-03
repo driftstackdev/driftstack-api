@@ -19,6 +19,7 @@ import {
   isFingerprintedOs,
   type OsFingerprint,
 } from './os-fingerprint-verdict';
+import { cleanServerVantage, type ProxyVantage, type ServerVantage } from './proxy-vantage';
 
 /** N-2 — the control plane's passive OS fingerprint of the proxy's own stack,
  *  with when it was recorded. */
@@ -52,6 +53,17 @@ export interface CachedProbe {
    *  inferred ('~') and never renders a green ✓. Preserved across re-tests. */
   quicMeasured?: MeasuredQuic;
   quicMeasuredAt?: number;
+  /** T-1 — WHERE serverLatencyMs was measured: 'fleet' (the Mac that runs the
+   *  profile; nodeId names it) or 'control_plane' (no fleet Mac was free — the
+   *  honest fallback). Absent = a server number recorded before the vantage was
+   *  reported, shown under today's plain "server" marker. Travels WITH the
+   *  number: a new server result replaces all three, so a fleet label can never
+   *  sit beside a control-plane latency. Preserved across native re-tests. */
+  measuredFrom?: ProxyVantage;
+  nodeId?: string;
+  /** T-1 — the fleet Mac's standalone QUIC-relay verdict (true/false), separate
+   *  from quicMeasured (a live session's HTTP/3) and never merged with it. */
+  quicProbe?: boolean;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -85,6 +97,10 @@ export interface ProbeViewState {
   serverLatency: Record<string, number>;
   /** T-6 — the measured QUIC verdict, surfaced only while the proxy is usable. */
   quicMeasured: Record<string, MeasuredQuic>;
+  /** T-1 — where serverLatency was measured (+ the node), same usable-only rule. */
+  serverVantage: Record<string, ServerVantage>;
+  /** T-1 — the fleet Mac's QUIC-relay verdict, same usable-only rule. */
+  quicProbe: Record<string, boolean>;
 }
 
 /**
@@ -107,6 +123,8 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
   const osFingerprints: Record<string, CachedOsFingerprint> = {};
   const serverLatency: Record<string, number> = {};
   const quicMeasured: Record<string, MeasuredQuic> = {};
+  const serverVantage: Record<string, ServerVantage> = {};
+  const quicProbe: Record<string, boolean> = {};
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
@@ -115,6 +133,14 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
     if (c.serverLatencyMs !== undefined && isProxyUsable(c.result))
       serverLatency[id] = c.serverLatencyMs;
     if (c.quicMeasured !== undefined && isProxyUsable(c.result)) quicMeasured[id] = c.quicMeasured;
+    // T-1 — the vantage only means something beside the server number it
+    // labels, so it follows the same usable-only rule; the node id rides with it.
+    if (c.measuredFrom !== undefined && isProxyUsable(c.result))
+      serverVantage[id] = {
+        measuredFrom: c.measuredFrom,
+        ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
+      };
+    if (c.quicProbe !== undefined && isProxyUsable(c.result)) quicProbe[id] = c.quicProbe;
     if (c.exitIp !== undefined && isProxyUsable(c.result)) {
       exitResults[id] = {
         ip: c.exitIp,
@@ -126,7 +152,16 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
       };
     }
   }
-  return { testResults, exitResults, testedAt, osFingerprints, serverLatency, quicMeasured };
+  return {
+    testResults,
+    exitResults,
+    testedAt,
+    osFingerprints,
+    serverLatency,
+    quicMeasured,
+    serverVantage,
+    quicProbe,
+  };
 }
 
 export const PROBE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -264,6 +299,12 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     quicMeasured !== undefined && typeof r.quicMeasuredAt === 'number'
       ? r.quicMeasuredAt
       : undefined;
+  // T-1 — a stored vantage outside the closed set is dropped (the number then
+  // renders under the plain "server" marker), never shown under a label it did
+  // not earn; the node id survives only beside 'fleet'. A stored relay verdict
+  // is kept only as a boolean — a string "true" is not a measurement.
+  const vantage = cleanServerVantage(r.measuredFrom, r.nodeId);
+  const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
   return {
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
@@ -275,6 +316,9 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(serverLatencyMs !== undefined ? { serverLatencyMs } : {}),
     ...(quicMeasured !== undefined ? { quicMeasured } : {}),
     ...(quicMeasuredAt !== undefined ? { quicMeasuredAt } : {}),
+    ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
+    ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
+    ...(quicProbe !== undefined ? { quicProbe } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -335,6 +379,11 @@ export function saveProbeResult(
       ...(prior?.serverLatencyMs !== undefined ? { serverLatencyMs: prior.serverLatencyMs } : {}),
       ...(prior?.quicMeasured !== undefined ? { quicMeasured: prior.quicMeasured } : {}),
       ...(prior?.quicMeasuredAt !== undefined ? { quicMeasuredAt: prior.quicMeasuredAt } : {}),
+      // T-1 — the vantage, its node, and the fleet QUIC-relay verdict label the
+      // server number above; they survive a native re-test with it.
+      ...(prior?.measuredFrom !== undefined ? { measuredFrom: prior.measuredFrom } : {}),
+      ...(prior?.nodeId !== undefined ? { nodeId: prior.nodeId } : {}),
+      ...(prior?.quicProbe !== undefined ? { quicProbe: prior.quicProbe } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -408,10 +457,25 @@ export function saveOsFingerprint(
  *  entry has nothing to attach to, and none is invented. The QUIC verdict is a
  *  closed set — a value outside it is dropped, never stored as a would-be green
  *  chip; a fresh valid verdict updates the prior one, and an absent one keeps
- *  the last measurement rather than erasing it. */
+ *  the last measurement rather than erasing it.
+ *
+ *  T-1 — the vantage (measuredFrom + nodeId) and the fleet QUIC-relay verdict
+ *  (quicProbe) describe THIS measurement, not the proxy's history, so unlike
+ *  quicMeasured they are REPLACED by every server result: present → stored,
+ *  absent → removed. A control-plane fallback after a fleet run must not keep
+ *  wearing the fleet label or the fleet relay chip — that is the silent fallback
+ *  the owner item forbids. The vantage itself is a closed set (see
+ *  proxy-vantage.ts); a value outside it stores as "unlabelled". */
 export function saveServerProbeResult(
   proxyId: string,
-  server: { latencyMs?: number; quicMeasured?: MeasuredQuic | null; quicMeasuredAt?: number },
+  server: {
+    latencyMs?: number;
+    quicMeasured?: MeasuredQuic | null;
+    quicMeasuredAt?: number;
+    measuredFrom?: ProxyVantage;
+    nodeId?: string;
+    quicProbe?: boolean;
+  },
   at: number,
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
@@ -419,12 +483,17 @@ export function saveServerProbeResult(
     const prior = all[proxyId];
     if (prior === undefined) return all;
     const quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
+    const vantage = cleanServerVantage(server.measuredFrom, server.nodeId);
+    const { measuredFrom: _m, nodeId: _n, quicProbe: _q, ...kept } = prior;
     all[proxyId] = {
-      ...prior,
+      ...kept,
       ...(typeof server.latencyMs === 'number' ? { serverLatencyMs: server.latencyMs } : {}),
       ...(quic !== undefined
         ? { quicMeasured: quic, quicMeasuredAt: server.quicMeasuredAt ?? at }
         : {}),
+      ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
+      ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
+      ...(typeof server.quicProbe === 'boolean' ? { quicProbe: server.quicProbe } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();

@@ -312,6 +312,8 @@ describe('deriveProbeViewState', () => {
       osFingerprints: {},
       serverLatency: {},
       quicMeasured: {},
+      serverVantage: {},
+      quicProbe: {},
     });
   });
 });

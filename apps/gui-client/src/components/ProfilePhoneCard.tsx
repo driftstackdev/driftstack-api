@@ -24,6 +24,7 @@ const PROBE_ORIGIN_TITLE =
 const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
 import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
+import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -80,6 +81,10 @@ export interface ProfilePhoneCardProps {
   /** T-1 — true when latencyMs is the SERVER-measured value (control plane), so
    *  the card labels it as such rather than as the native "from this Mac" probe. */
   latencyFromServer?: boolean;
+  /** T-1 — WHERE that server number was measured: a fleet Mac (named) or the
+   *  server when none was free. Undefined with latencyFromServer keeps the
+   *  plain "server" marker (a number recorded before the vantage existed). */
+  latencyVantage?: ServerVantage;
   probed: boolean;
   capabilities: ProxyTestResult | null;
   /** T-6 — the QUIC verdict measured in a live session: 'h3' lets the QUIC chip
@@ -188,6 +193,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   }, [actionsOpen]);
   // UDP badge state + the WebRTC/QUIC detail shown on hover. proxyCapabilities
   // gates WebRTC/QUIC on reachable+auth+udp_associate (they ride UDP).
+  // T-1 — the words beside a server-measured latency name the machine that
+  // measured it; a number without a vantage keeps the plain "server" marker.
+  const latVantage = p.latencyVantage !== undefined ? vantageLabel(p.latencyVantage) : undefined;
   const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured) : null;
   const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
   // T-6 — read the QUIC chip's ok AND inferred: a green ✓ is only for a MEASURED
@@ -437,16 +445,24 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         <span
                           className="mono"
                           title={
-                            p.latencyFromServer === true ? SERVER_LATENCY_TITLE : PROBE_ORIGIN_TITLE
+                            p.latencyFromServer === true
+                              ? (latVantage?.title ?? SERVER_LATENCY_TITLE)
+                              : PROBE_ORIGIN_TITLE
+                          }
+                          data-latency-vantage={
+                            p.latencyFromServer === true
+                              ? (p.latencyVantage?.measuredFrom ?? 'server')
+                              : 'this_mac'
                           }
                         >
                           {p.latencyMs}ms
                         </span>
-                        {/* T-1 — mark a server-measured latency so it is not read
-                            as the laptop's number. */}
+                        {/* T-1 — say WHERE a server-measured latency came from (a
+                            fleet Mac, or the server when none was free) so it is
+                            never read as the laptop's number. */}
                         {p.latencyFromServer === true && (
                           <span className="text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                            server
+                            {latVantage?.label ?? 'server'}
                           </span>
                         )}
                         <span className="inline-block h-1 w-[26px] overflow-hidden rounded-[2px] bg-surface-divider">
