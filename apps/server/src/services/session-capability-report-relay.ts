@@ -98,33 +98,12 @@ export function makeSessionCapabilityReportRelay(
     }
 
     store.set(frame);
-    if (session.driftstackSessionId === null) return;
 
-    // The CONFIGURED routing state: an h2-and-h3 transport whose interpose flag
-    // is set. h3InterposeLoaded is a restatement of the requested mode, not an
-    // observation, so this describes what egress was CONFIGURED, never that QUIC
-    // was measured — it feeds quic_route (a routing flag), never the customer's
-    // "measured QUIC" verdict.
-    const quicViaProxy = frame.transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded;
     // T-6 — the MEASURED signal: present-and-true only once a real QUIC handshake
     // completed this session (fork marker). Absent on any harness that has not
     // observed one, so absence writes nothing and only a real observation ever
     // stamps a green verdict onto the proxy.
     const quicReallyObserved = frame.h3ConnectionObserved === true;
-    const { type: _type, ...raw } = frame;
-    await sessionsService.ingestEgressCapabilityReport({
-      sessionId: session.driftstackSessionId,
-      derived: {
-        udp_associate: frame.proxyUdpSupported,
-        quic_route: quicViaProxy ? 'proxy' : 'disabled',
-        // The harness proxy chain never installs a local resolver; it forwards
-        // hostnames to the upstream proxy (ProxyChain.swift H3.exec.116).
-        dns_remote_resolve: true,
-        warnings: deriveWarnings(frame),
-      },
-      raw,
-    });
-
     // T-6 — back-fill the REAL, MEASURED QUIC verdict onto the proxy this session
     // browsed through, so the proxy test/chip shows a confirmed result instead of
     // a guess. We write ONLY on a real observation: `quicReallyObserved` is
@@ -160,6 +139,35 @@ export function makeSessionCapabilityReportRelay(
         );
       }
     }
+
+    // ⛔ THE BACK-FILL ABOVE RUNS FIRST, DELIBERATELY. This guard belongs to the
+    // egress ingest below, which passes `session.driftstackSessionId` as its
+    // subject and genuinely cannot run without one. The back-fill needs only
+    // accountId + proxyId and had inherited this return BY POSITION — so every
+    // session created without a customer-supplied driver-session link (the normal
+    // shape, including every session the desktop app creates) could never record
+    // a measured QUIC verdict, however real the observation was.
+    if (session.driftstackSessionId === null) return;
+
+    // The CONFIGURED routing state: an h2-and-h3 transport whose interpose flag
+    // is set. h3InterposeLoaded is a restatement of the requested mode, not an
+    // observation, so this describes what egress was CONFIGURED, never that QUIC
+    // was measured — it feeds quic_route (a routing flag), never the customer's
+    // "measured QUIC" verdict.
+    const quicViaProxy = frame.transportModeActive === 'h2-and-h3' && frame.h3InterposeLoaded;
+    const { type: _type, ...raw } = frame;
+    await sessionsService.ingestEgressCapabilityReport({
+      sessionId: session.driftstackSessionId,
+      derived: {
+        udp_associate: frame.proxyUdpSupported,
+        quic_route: quicViaProxy ? 'proxy' : 'disabled',
+        // The harness proxy chain never installs a local resolver; it forwards
+        // hostnames to the upstream proxy (ProxyChain.swift H3.exec.116).
+        dns_remote_resolve: true,
+        warnings: deriveWarnings(frame),
+      },
+      raw,
+    });
   };
 
   return makeBoundedNodeLatestRelay({

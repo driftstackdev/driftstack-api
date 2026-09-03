@@ -19,6 +19,25 @@ export interface SessionCapabilityReport {
   transport_mode_active: CapabilityReport['transportModeActive'];
   safeguards_passed: boolean;
   /**
+   * T-6 — did this session ACTUALLY carry an HTTP/3 connection?
+   *
+   * `true` once a real QUIC handshake completed; `null` means NOT OBSERVED and
+   * must never be read as "no HTTP/3" — the node reports the field only once it
+   * has seen a handshake, so an older build, or a session that simply has not
+   * negotiated one yet, both report null. This is the only honest QUIC signal:
+   * `transport_mode_active` above is the CONFIGURED mode, and a node's
+   * interpose flag merely restates it, so neither can answer "did it carry".
+   *
+   * Without this field the fact was unobservable from the control plane at all,
+   * which made a live verification read ABSENT for a reason that had nothing to
+   * do with the device.
+   */
+  h3_connection_observed: boolean | null;
+  /** T-6 — the interpose image was seen loaded in the node's network process.
+   *  INTERNAL diagnostic only (it names an implementation detail, and loaded is
+   *  not carried), so it is deliberately NOT in the customer subset below. */
+  interpose_image_loaded: boolean | null;
+  /**
    * Per-session streaming degradation counters, when the node reported them.
    *
    * ⛔ `null` means UNKNOWN — the node never sent them (older build, or the
@@ -46,7 +65,10 @@ export interface SessionCapabilityReport {
  * only a shape test caught it. Adding a field to this function is now a
  * deliberate act with a reviewer.
  */
-export type CustomerSafeCapabilityReport = Omit<SessionCapabilityReport, 'streaming_health'>;
+export type CustomerSafeCapabilityReport = Omit<
+  SessionCapabilityReport,
+  'streaming_health' | 'interpose_image_loaded'
+>;
 
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
@@ -61,6 +83,11 @@ export function customerSafeCapabilityReport(
     transport_mode_requested: report.transport_mode_requested,
     transport_mode_active: report.transport_mode_active,
     safeguards_passed: report.safeguards_passed,
+    // Deliberate addition to the allowlist: this is the customer's honest answer
+    // to "does my proxy actually carry HTTP/3", the same class of fact as
+    // transport_mode_active beside it. The internal interpose diagnostic is NOT
+    // included.
+    h3_connection_observed: report.h3_connection_observed,
   };
 }
 
@@ -80,6 +107,11 @@ export class SessionCapabilityReportStore {
       proxy_udp_supported: frame.proxyUdpSupported,
       transport_mode_requested: frame.transportModeRequested,
       transport_mode_active: frame.transportModeActive,
+      // `?? null` preserves the node's absent-until-observed semantics exactly:
+      // the field is reported only once a handshake has completed, so absent
+      // stays NOT-OBSERVED and never collapses into a false "no HTTP/3".
+      h3_connection_observed: frame.h3ConnectionObserved ?? null,
+      interpose_image_loaded: frame.interposeImageLoaded ?? null,
       // `every` on an EMPTY array is true, so a frame carrying no safeguard
       // checks previously reported `safeguards_passed: true` — a positive
       // safety claim asserted from no evidence, indistinguishable to a customer

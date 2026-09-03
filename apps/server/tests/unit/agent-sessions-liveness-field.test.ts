@@ -165,6 +165,10 @@ describe('agent-sessions read shape — capability_report', () => {
       transport_mode_requested: 'h2-and-h3',
       transport_mode_active: 'h2-only',
       safeguards_passed: true,
+      // T-6 — null, not false: the node reports this only once it has OBSERVED a
+      // completed QUIC handshake, so absent stays NOT-OBSERVED. The internal
+      // interpose diagnostic is deliberately not here.
+      h3_connection_observed: null,
     });
     await app.close();
   });

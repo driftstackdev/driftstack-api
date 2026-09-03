@@ -39,6 +39,12 @@ describe('SessionCapabilityReportStore', () => {
       transport_mode_requested: 'h2-and-h3',
       transport_mode_active: 'h2-and-h3',
       safeguards_passed: true,
+      // T-6 — ⛔ null, not false: the node reports these only once it has
+      // OBSERVED the fact, so absent means NOT OBSERVED. Reading either as a
+      // negative would assert "this session carried no HTTP/3" from no evidence,
+      // the same defect shape as the streaming_health zeroes below.
+      h3_connection_observed: null,
+      interpose_image_loaded: null,
       // ⛔ null, not an object of zeroes: absent means the node never reported,
       // which must never render as a healthy stream (V-2188).
       streaming_health: null,

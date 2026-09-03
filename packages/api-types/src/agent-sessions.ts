@@ -68,6 +68,11 @@ export const AgentSessionSchema = z.object({
       transport_mode_requested: z.enum(['h2-only', 'h2-and-h3']),
       transport_mode_active: z.enum(['h2-only', 'h2-and-h3']),
       safeguards_passed: z.boolean(),
+      /** Whether this session ACTUALLY carried an HTTP/3 connection. `true`
+       *  once a real QUIC handshake completed; `null` means NOT OBSERVED and
+       *  must not be read as "no HTTP/3" — the two modes above describe the
+       *  transport that was CONFIGURED, not what carried. */
+      h3_connection_observed: z.boolean().nullable(),
     })
     .optional(),
   /** Latest ownership-validated harness launch/runtime failure. */

@@ -58,13 +58,14 @@ function report(overrides: Partial<CapabilityReport> = {}): CapabilityReport {
 function relayWith(
   proxyId: string | null,
   accountProxies: Parameters<typeof makeSessionCapabilityReportRelay>[4],
+  driftstackSessionId: string | null = 'ses_driver_1',
 ): ReturnType<typeof makeSessionCapabilityReportRelay> {
   return makeSessionCapabilityReportRelay(
     {
       get: vi.fn(() =>
         Promise.resolve({
           nodeId: 'node-1',
-          driftstackSessionId: 'ses_driver_1',
+          driftstackSessionId,
           accountId: 'acc_owner',
           proxyId,
           status: 'active',
@@ -126,6 +127,24 @@ describe('a live session back-fills the measured QUIC verdict onto its proxy', (
     await Promise.resolve();
     await new Promise((r) => setTimeout(r, 10));
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('CRITICAL a session with NO driver-session link still back-fills — the verdict is about the PROXY, and the guard below it belongs to the egress ingest, not here. Every session created without a customer-supplied driftstack_session_id (the normal shape, including every one the desktop app creates) was silently unable to record a measured verdict while this ran under that return.', async () => {
+    const update = vi.fn(
+      (_args: {
+        id: string;
+        accountId: string;
+        expectedScheme?: string;
+        updates: { quicMeasured?: string | null; quicMeasuredAt?: Date | null };
+      }) => Promise.resolve(null),
+    );
+    // driftstackSessionId null — no driver session was ever linked, which is not
+    // a statement about the proxy and must not suppress the observation.
+    relayWith('prx_owned', { update }, null)(report(), 'node-1');
+
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0]![0].updates.quicMeasured).toBe('h3');
+    expect(update.mock.calls[0]![0].id).toBe('prx_owned');
   });
 
   it('VACUITY CONTROL a session that names no proxy (operator-default egress) back-fills NOTHING — an unattributed measurement has no proxy to mark', async () => {
