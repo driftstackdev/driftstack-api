@@ -365,7 +365,11 @@ describe('mutation-route rate-limit coverage invariant', () => {
     expect(routes).toHaveLength(173);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(76);
+    // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
+    // `Querystring: { vantage?: 'cp' | 'fleet' }` generic (the route already
+    // existed and was already a mutation, so the total above is unchanged; only the
+    // type-argument count moves). Refreshed with violations() proven empty first.
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(77);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

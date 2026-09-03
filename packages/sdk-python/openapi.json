@@ -524,6 +524,9 @@
               },
               "safeguards_passed": {
                 "type": "boolean"
+              },
+              "h3_connection_observed": {
+                "type": ["boolean", "null"]
               }
             },
             "required": [
@@ -535,7 +538,8 @@
               "proxy_udp_supported",
               "transport_mode_requested",
               "transport_mode_active",
-              "safeguards_passed"
+              "safeguards_passed",
+              "h3_connection_observed"
             ]
           },
           "error_event": {
@@ -3396,6 +3400,10 @@
                   }
                 },
                 "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
+              },
+              "measured_from": {
+                "type": "string",
+                "enum": ["fleet", "control_plane"]
               }
             },
             "required": ["ok", "latency_ms"]
@@ -3409,9 +3417,76 @@
               },
               "reason": {
                 "type": "string"
+              },
+              "measured_from": {
+                "type": "string",
+                "enum": ["fleet", "control_plane"]
               }
             },
             "required": ["ok", "reason"]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "ok": {
+                "type": "boolean"
+              },
+              "measured_from": {
+                "type": "string",
+                "enum": ["fleet"]
+              },
+              "node_id": {
+                "type": "string"
+              },
+              "reachable": {
+                "type": "boolean"
+              },
+              "auth_ok": {
+                "type": "boolean"
+              },
+              "udp_associate": {
+                "type": "boolean"
+              },
+              "can_route": {
+                "type": "boolean"
+              },
+              "latency_ms": {
+                "type": ["integer", "null"]
+              },
+              "h2_ok": {
+                "type": "boolean"
+              },
+              "quic_ok": {
+                "type": "boolean"
+              },
+              "quic_detail": {
+                "type": ["string", "null"]
+              },
+              "exit_ip": {
+                "type": ["string", "null"]
+              },
+              "quic_measured": {
+                "type": ["string", "null"],
+                "enum": ["h3", "h2-only", null]
+              },
+              "quic_measured_at": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": [
+              "ok",
+              "measured_from",
+              "node_id",
+              "reachable",
+              "auth_ok",
+              "udp_associate",
+              "can_route",
+              "latency_ms",
+              "h2_ok",
+              "quic_ok",
+              "quic_detail",
+              "exit_ip"
+            ]
           }
         ]
       },
@@ -3852,6 +3927,9 @@
                       },
                       "safeguards_passed": {
                         "type": "boolean"
+                      },
+                      "h3_connection_observed": {
+                        "type": ["boolean", "null"]
                       }
                     },
                     "required": [
@@ -3863,7 +3941,8 @@
                       "proxy_udp_supported",
                       "transport_mode_requested",
                       "transport_mode_active",
-                      "safeguards_passed"
+                      "safeguards_passed",
+                      "h3_connection_observed"
                     ]
                   },
                   "error_event": {
@@ -4602,6 +4681,9 @@
                       },
                       "safeguards_passed": {
                         "type": "boolean"
+                      },
+                      "h3_connection_observed": {
+                        "type": ["boolean", "null"]
                       }
                     },
                     "required": [
@@ -4613,7 +4695,8 @@
                       "proxy_udp_supported",
                       "transport_mode_requested",
                       "transport_mode_active",
-                      "safeguards_passed"
+                      "safeguards_passed",
+                      "h3_connection_observed"
                     ]
                   },
                   "error_event": {
@@ -4828,6 +4911,9 @@
                       },
                       "safeguards_passed": {
                         "type": "boolean"
+                      },
+                      "h3_connection_observed": {
+                        "type": ["boolean", "null"]
                       }
                     },
                     "required": [
@@ -4839,7 +4925,8 @@
                       "proxy_udp_supported",
                       "transport_mode_requested",
                       "transport_mode_active",
-                      "safeguards_passed"
+                      "safeguards_passed",
+                      "h3_connection_observed"
                     ]
                   },
                   "error_event": {
@@ -5054,6 +5141,9 @@
                       },
                       "safeguards_passed": {
                         "type": "boolean"
+                      },
+                      "h3_connection_observed": {
+                        "type": ["boolean", "null"]
                       }
                     },
                     "required": [
@@ -5065,7 +5155,8 @@
                       "proxy_udp_supported",
                       "transport_mode_requested",
                       "transport_mode_active",
-                      "safeguards_passed"
+                      "safeguards_passed",
+                      "h3_connection_observed"
                     ]
                   },
                   "error_event": {
@@ -19479,11 +19570,20 @@
             "description": "Account proxy id (UUID)",
             "name": "id",
             "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": ["cp", "fleet"]
+            },
+            "required": false,
+            "name": "vantage",
+            "in": "query"
           }
         ],
         "responses": {
           "200": {
-            "description": "Reachability result (ok=true + latency_ms, or ok=false + reason).",
+            "description": "Reachability result. vantage=cp (default): ok=true + latency_ms, or ok=false + reason. vantage=fleet: the node-measured result with measured_from=fleet, or the control-plane probe with measured_from=control_plane when no fleet node is free.",
             "content": {
               "application/json": {
                 "schema": {
@@ -35018,6 +35118,9 @@
                         },
                         "safeguards_passed": {
                           "type": "boolean"
+                        },
+                        "h3_connection_observed": {
+                          "type": ["boolean", "null"]
                         }
                       },
                       "required": [
@@ -35029,7 +35132,8 @@
                         "proxy_udp_supported",
                         "transport_mode_requested",
                         "transport_mode_active",
-                        "safeguards_passed"
+                        "safeguards_passed",
+                        "h3_connection_observed"
                       ]
                     },
                     "error_event": {
@@ -35430,6 +35534,9 @@
                               },
                               "safeguards_passed": {
                                 "type": "boolean"
+                              },
+                              "h3_connection_observed": {
+                                "type": ["boolean", "null"]
                               }
                             },
                             "required": [
@@ -35441,7 +35548,8 @@
                               "proxy_udp_supported",
                               "transport_mode_requested",
                               "transport_mode_active",
-                              "safeguards_passed"
+                              "safeguards_passed",
+                              "h3_connection_observed"
                             ]
                           },
                           "error_event": {
@@ -35825,6 +35933,9 @@
                         },
                         "safeguards_passed": {
                           "type": "boolean"
+                        },
+                        "h3_connection_observed": {
+                          "type": ["boolean", "null"]
                         }
                       },
                       "required": [
@@ -35836,7 +35947,8 @@
                         "proxy_udp_supported",
                         "transport_mode_requested",
                         "transport_mode_active",
-                        "safeguards_passed"
+                        "safeguards_passed",
+                        "h3_connection_observed"
                       ]
                     },
                     "error_event": {

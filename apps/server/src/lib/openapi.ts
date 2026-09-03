@@ -2415,8 +2415,36 @@ function buildRegistry(): OpenAPIRegistry {
             observed_via: z.enum(['proxy_host', 'exit_ip']),
           })
           .optional(),
+        // T-1 — present only when a fleet-vantage request FELL BACK to the control
+        // plane (no node free). Absent on a plain control-plane test.
+        measured_from: z.enum(['fleet', 'control_plane']).optional(),
       }),
-      z.object({ ok: z.literal(false), reason: z.string() }),
+      z.object({
+        ok: z.literal(false),
+        reason: z.string(),
+        // T-1 — set to 'control_plane' when a fleet request fell back to the cp probe.
+        measured_from: z.enum(['fleet', 'control_plane']).optional(),
+      }),
+      // T-1 — the FLEET-vantage measurement: the proxy measured FROM the Mac that
+      // will run the profile, not the control plane. `ok` is the node's overall
+      // verdict; the granular fields say what worked. `latency_ms` / `quic_detail`
+      // / `exit_ip` are null when not measured. `node_id` names the measuring node.
+      z.object({
+        ok: z.boolean(),
+        measured_from: z.literal('fleet'),
+        node_id: z.string(),
+        reachable: z.boolean(),
+        auth_ok: z.boolean(),
+        udp_associate: z.boolean(),
+        can_route: z.boolean(),
+        latency_ms: z.number().int().nullable(),
+        h2_ok: z.boolean(),
+        quic_ok: z.boolean(),
+        quic_detail: z.string().nullable(),
+        exit_ip: z.string().nullable(),
+        quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
+        quic_measured_at: z.string().nullable().optional(),
+      }),
     ])
     .openapi('AccountProxyTestResult');
   registerRoute(r, {
@@ -2429,11 +2457,20 @@ function buildRegistry(): OpenAPIRegistry {
       // V-1483 — the route enforces this; the document published the
       // path-validity backstop's generic 1..2048 bound instead.
       params: z.object({ id: uuidPathParam('Account proxy') }),
+      // T-1 — WHERE the proxy is measured from. `cp` (default) keeps the
+      // control-plane probe; `fleet` measures from the Mac that will run the
+      // profile. Published as an enum so the value is a BOUND, not free text.
+      query: z.object({
+        vantage: z.enum(['cp', 'fleet']).optional(),
+      }),
     },
     responses: {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
-        description: 'Reachability result (ok=true + latency_ms, or ok=false + reason).',
+        description:
+          'Reachability result. vantage=cp (default): ok=true + latency_ms, or ok=false + reason. ' +
+          'vantage=fleet: the node-measured result with measured_from=fleet, or the control-plane ' +
+          'probe with measured_from=control_plane when no fleet node is free.',
         content: { 'application/json': { schema: AccountProxyTestResultOpenApi } },
       },
       ...errors4xx,

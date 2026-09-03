@@ -2040,8 +2040,71 @@ export const SetEgressResultSchema = z.object({
 });
 export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
 
+// ── Node-scoped egress PROBE (T-1) ────────────────────────────────────
+// CP→node REQUEST (`serializeProbeEgress`): measures a proxy's reachability /
+// latency / QUIC FROM a fleet Mac — the machine that will run the profile — not
+// from the customer's laptop or the control plane, over ANY connected node's LIVE
+// control WSS, keyed by `requestId`. A3's harness dials the proxy carried in
+// `inlineProxyConfig`, routes to `target`, measures the egress, and replies with
+// the `probeEgressResult` below. NOT in HarnessOutbound (that's node→CP); this is
+// CP→node like setEgress / cookiesRequest.
+//
+// `inlineProxyConfig` is the SAME base64 UTF-8 JSON config SessionAssign carries
+// (built by encodeInlineProxyConfig): the node resolves no saved-proxy ids, so
+// the probe must carry the whole config or there is nothing to dial. `target` is
+// the neutral egress endpoint the node routes to through the proxy (the same
+// endpoint the control-plane probe uses), so both vantages measure the same exit.
+//
+// ⛔ NODE-SCOPED, and `.strict()` is what keeps it that way. This op measures an
+// exit WITHOUT a live session, so it must never be turned into a session op that
+// touches live egress. An object carrying a `sessionId` key therefore FAILS to
+// parse (A3 binding constraint #2): the extra key is REJECTED rather than
+// stripped, so a mis-built frame is refused at the boundary instead of silently
+// becoming a session-scoped mutation.
+export const ProbeEgressFrameSchema = z
+  .object({
+    type: z.literal('probeEgress'),
+    requestId: z.string().uuid(),
+    inlineProxyConfig: z.string().min(1),
+    target: z
+      .object({
+        host: z.string().min(1).max(253),
+        port: z.number().int().min(1).max(65535),
+      })
+      .strict(),
+  })
+  .strict();
+export type ProbeEgressFrame = z.infer<typeof ProbeEgressFrameSchema>;
+
+// node→CP RESULT: echoes `requestId`. Carries `node_id` (REQUIRED provenance —
+// the registry asserts it equals the node it dispatched to; a mismatch is an
+// error outcome, never silently trusted) plus the measurement: reachable /
+// auth_ok / udp_associate / can_route / latency_ms / h2_ok / quic_ok (+
+// quic_detail) / exit_ip. `ok` is the overall verdict; `error` is set ONLY when
+// the node could not run the probe at all. An UNREACHABLE proxy is a RESULT
+// (ok:false, reachable:false), not an `error` — the same way the control-plane
+// probe returns a 200 verdict for a dead proxy. Plain object (lenient
+// forward-compat), like the sibling result frames.
+export const ProbeEgressResultSchema = z.object({
+  type: z.literal('probeEgressResult'),
+  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+  ok: z.boolean(),
+  reachable: z.boolean(),
+  auth_ok: z.boolean(),
+  udp_associate: z.boolean(),
+  can_route: z.boolean(),
+  latency_ms: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+  h2_ok: z.boolean(),
+  quic_ok: z.boolean(),
+  quic_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
+  exit_ip: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable(),
+  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
+});
+export type ProbeEgressResult = z.infer<typeof ProbeEgressResultSchema>;
+
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
-// All 18 variants pinned. intentResult + sessionStatus are consumed precisely;
+// All 19 variants pinned. intentResult + sessionStatus are consumed precisely;
 // heartbeat / capabilityReport / errorEvent / profileSaved / challengeDetected
 // / pageState / profileSaveFailed / networkRequests are accepted (typed) +
 // routed where a consumer is wired (profileSaved consumer = step (d);
@@ -2061,6 +2124,10 @@ export type SetEgressResult = z.infer<typeof SetEgressResultSchema>;
 // trimResult (doc-150 §8.3, profile storage eviction) is the OUT-OF-SESSION sibling
 // — correlated by `requestId` inside the connection's TrimProfileRequestCorrelator
 // (keyed by `profileId`, not sessionId), settling a pending POST /:id/trim.
+// probeEgressResult (T-1, node-scoped egress probe) is the OUT-OF-SESSION sibling of
+// trimResult — correlated by `requestId` inside the connection's
+// ProbeEgressRequestCorrelator (keyed by `requestId` alone; no session), settling a
+// pending fleet-vantage proxy test dispatched by the registry's probeEgress().
 export const HarnessOutboundSchema = z.union([
   IntentResultEnvelopeSchema,
   SessionStatusSchema,
@@ -2080,6 +2147,7 @@ export const HarnessOutboundSchema = z.union([
   TrimProfileResultSchema,
   SetEgressResultSchema,
   NetworkRequestsFrameSchema,
+  ProbeEgressResultSchema,
 ]);
 export type HarnessOutbound = z.infer<typeof HarnessOutboundSchema>;
 export type ProfileSaved = z.infer<typeof ProfileSavedSchema>;

@@ -1232,6 +1232,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         : {}),
       // Audit egress-config changes (proxy.created / proxy.deleted).
       ...(deps.accountAuditService !== undefined ? { accountAudit: deps.accountAuditService } : {}),
+      // T-1 — fleet-vantage proxy test: `…/proxies/:id/test?vantage=fleet` measures
+      // from the Mac that runs the profile. Omitted → the route only serves the
+      // control-plane vantage (fleet requests fall back, labelled control_plane).
+      ...(deps.fleetControlRegistry !== undefined
+        ? { fleetControlRegistry: deps.fleetControlRegistry }
+        : {}),
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
       // response field. When the account has no R2-uploaded avatar
       // BUT has an OAuth link with a provider_avatar_url, return that

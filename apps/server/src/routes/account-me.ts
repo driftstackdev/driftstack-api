@@ -56,7 +56,12 @@ import {
   NotFoundError,
 } from '../lib/errors.js';
 import { requireTierFeature } from '../lib/errors-helpers.js';
-import type { ProxyConnectivityProbe } from '../services/proxy-connectivity-probe.js';
+import {
+  DEFAULT_PROBE_TARGET_URL,
+  type ProxyConnectivityProbe,
+} from '../services/proxy-connectivity-probe.js';
+import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { z } from 'zod';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
  *  dashboard render doesn't churn signed URLs but short enough that
@@ -127,7 +132,27 @@ export interface AccountMeRoutesOptions {
    *  changes are security-relevant + already have dashboard labels/filters).
    *  Omitted → no audit (the customer op still succeeds). */
   accountAudit?: AccountAuditService;
+  /** T-1 — fleet control-plane registry. When wired, `…/proxies/:id/test?vantage=fleet`
+   *  measures the proxy FROM a fleet Mac (the machine that runs profiles) instead of
+   *  the control plane. Omitted, or no uncordoned node free → the route falls back to
+   *  the control-plane probe and labels the result `control_plane` (never a 500). */
+  fleetControlRegistry?: FleetControlRegistry;
 }
+
+/** T-1 — the vantage a proxy test is measured from. `cp` (default) keeps the
+ *  control-plane probe; `fleet` measures from the Mac that will run the profile.
+ *  Published as an enum so the value is a BOUND, not free text. */
+const ProxyTestQuerySchema = z.object({
+  vantage: z.enum(['cp', 'fleet']).default('cp'),
+});
+
+/** T-1 — the neutral egress endpoint a fleet node routes to THROUGH the proxy,
+ *  derived from the SAME target the control-plane probe uses so both vantages
+ *  measure the identical exit. */
+const FLEET_PROBE_TARGET: { host: string; port: number } = (() => {
+  const u = new URL(DEFAULT_PROBE_TARGET_URL);
+  return { host: u.hostname, port: u.port !== '' ? Number(u.port) : 443 };
+})();
 
 /**
  * Resolve the profile cap for a tier. `PROFILES_PER_TIER` returns
@@ -152,6 +177,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const proxyConnectivityProbe = opts.proxyConnectivityProbe;
   const accountProxiesService = opts.accountProxiesService;
   const accountAudit = opts.accountAudit ?? null;
+  const fleetControlRegistry = opts.fleetControlRegistry;
 
   // Best-effort audit emit for proxy lifecycle (egress-config changes). Carries
   // only non-secret metadata (id / label / scheme) — NEVER the credential.
@@ -771,14 +797,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // owned proxy's host:port (SSRF host-guard runs first, fail-closed). Returns a
   // discriminated result (ok=true+latency_ms | ok=false+reason), 200 either way —
   // an unreachable proxy is a result, not an error. 404 for an unknown/foreign id.
-  app.post(
+  app.post<{ Params: { id: string }; Querystring: { vantage?: 'cp' | 'fleet' } }>(
     '/v1/account/me/proxies/:id/test',
     { preHandler: [app.requireAuth, app.requireScope('account_owner'), app.rateLimit('global')] },
     async (request) => {
       const ctx = request.account;
       if (!ctx) throw new Error('account context missing after requireAuth');
       if (!accountProxiesRepo) throw new FeatureUnavailableError('Proxies are not configured.');
-      const id = parseProxyId((request.params as { id: string }).id);
+      const id = parseProxyId(request.params.id);
       const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
       if (row === null) throw new NotFoundError('Proxy not found.');
       // T-6 — surface the QUIC verdict a real session measured through this
@@ -797,102 +823,179 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           reason: 'Proxy host is not allowed (private/reserved address).',
         };
       }
-      const startedAt = Date.now();
-      // Prefer the LAUNCH probe. A reachability check answers a question nobody
-      // asked: a proxy can accept TCP and authenticate perfectly and still refuse
-      // to route, which is what "SOCKS5 reply 0x02 not allowed by ruleset" means
-      // and what blocked every launch on 2026-08-18 while every reachability
-      // check reported healthy. Falling back to TCP only when the probe or the
-      // resolver is absent (fixtures, and deployments with no master key).
-      if (
-        proxyConnectivityProbe !== undefined &&
-        accountProxiesService !== undefined &&
-        row.scheme === 'socks5'
-      ) {
-        const resolved = await accountProxiesService.resolveForDispatch({
-          proxyId: row.id,
-          accountId: ctx.account.id,
-          tier: ctx.account.tier,
-        });
-        if (resolved === null) {
+      // T-1 — which machine measures the proxy. Validated with the zod enum at the
+      // read site (an unknown value is a 400, not a silent default), so the union
+      // the handler branches on can only be `cp` or `fleet`.
+      const parsedQuery = ProxyTestQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        throw new BadRequestError('The `vantage` query parameter must be one of: cp, fleet.');
+      }
+      const vantage = parsedQuery.data.vantage;
+
+      // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
+      // answer for vantage=cp and the fallback for vantage=fleet, so it lives in one
+      // place rather than being duplicated and drifting.
+      const runControlPlaneProbe = async () => {
+        const startedAt = Date.now();
+        // Prefer the LAUNCH probe. A reachability check answers a question nobody
+        // asked: a proxy can accept TCP and authenticate perfectly and still refuse
+        // to route, which is what "SOCKS5 reply 0x02 not allowed by ruleset" means
+        // and what blocked every launch on 2026-08-18 while every reachability
+        // check reported healthy. Falling back to TCP only when the probe or the
+        // resolver is absent (fixtures, and deployments with no master key).
+        if (
+          proxyConnectivityProbe !== undefined &&
+          accountProxiesService !== undefined &&
+          row.scheme === 'socks5'
+        ) {
+          const resolved = await accountProxiesService.resolveForDispatch({
+            proxyId: row.id,
+            accountId: ctx.account.id,
+            tier: ctx.account.tier,
+          });
+          if (resolved === null) {
+            return {
+              ok: false as const,
+              reason:
+                'This proxy’s stored configuration could not be read. Re-add it and try again.',
+            };
+          }
+          // A VPN wire carries `type`, not host/port — nothing to dial with a
+          // SOCKS5 probe. Unreachable for a scheme-socks5 row, but the union says
+          // it is possible, so fall through to the reachability check rather than
+          // asserting it away.
+          if (!('host' in resolved)) {
+            await proxyTcpProbe(row.host, row.port, 8_000);
+            return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
+          }
+          const descriptor = {
+            protocol: 'socks5' as const,
+            host: resolved.host,
+            port: resolved.port,
+            ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+            ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+          };
+          const result = await proxyConnectivityProbe.probe(descriptor);
+          if (result.ok) {
+            const latency_ms = Date.now() - startedAt;
+            // N-2 — passive OS fingerprint of the proxy's own TCP stack. Attached
+            // ONLY when a SYN was actually observed; a miss is logged with its
+            // reason and the field stays absent, so the client can never colour
+            // a cell on a value nobody measured.
+            const os = await proxyConnectivityProbe.observeOs(descriptor, result.exitIdentity?.ip);
+            if (!os.observed) {
+              // info, not debug: production runs at info, and a miss that cannot be
+              // read there is the silent failure this field exists to avoid. One
+              // line per customer-initiated test; the launch path never reaches it.
+              request.log.info(
+                { proxyId: row.id, reason: os.reason },
+                'proxy test: os fingerprint not observed',
+              );
+              return { ok: true as const, latency_ms, ...quicFields };
+            }
+            return {
+              ok: true as const,
+              latency_ms,
+              ...quicFields,
+              os_fingerprint: {
+                os: os.os,
+                confidence: os.confidence,
+                reason: os.reason,
+                observed_ip: os.observedIp,
+                observed_via: os.via,
+              },
+            };
+          }
+          // The same four sentences the desktop client renders, so a customer who
+          // reads one and then the other is not told two different stories.
+          const copy: Record<string, string> = {
+            unreachable:
+              'The proxy did not answer. Check the host and port, and that it is online.',
+            auth_failed:
+              'The proxy rejected the username and password. Re-enter them and try again.',
+            timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
+            egress_blocked:
+              'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+          };
           return {
             ok: false as const,
-            reason: 'This proxy’s stored configuration could not be read. Re-add it and try again.',
+            reason:
+              copy[result.reason ?? ''] ?? 'The proxy could not be verified. Check its details.',
           };
         }
-        // A VPN wire carries `type`, not host/port — nothing to dial with a
-        // SOCKS5 probe. Unreachable for a scheme-socks5 row, but the union says
-        // it is possible, so fall through to the reachability check rather than
-        // asserting it away.
-        if (!('host' in resolved)) {
+        try {
           await proxyTcpProbe(row.host, row.port, 8_000);
           return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
-        }
-        const descriptor = {
-          protocol: 'socks5' as const,
-          host: resolved.host,
-          port: resolved.port,
-          ...(resolved.username !== undefined ? { username: resolved.username } : {}),
-          ...(resolved.password !== undefined ? { password: resolved.password } : {}),
-        };
-        const result = await proxyConnectivityProbe.probe(descriptor);
-        if (result.ok) {
-          const latency_ms = Date.now() - startedAt;
-          // N-2 — passive OS fingerprint of the proxy's own TCP stack. Attached
-          // ONLY when a SYN was actually observed; a miss is logged with its
-          // reason and the field stays absent, so the client can never colour
-          // a cell on a value nobody measured.
-          const os = await proxyConnectivityProbe.observeOs(descriptor, result.exitIdentity?.ip);
-          if (!os.observed) {
-            // info, not debug: production runs at info, and a miss that cannot be
-            // read there is the silent failure this field exists to avoid. One
-            // line per customer-initiated test; the launch path never reaches it.
-            request.log.info(
-              { proxyId: row.id, reason: os.reason },
-              'proxy test: os fingerprint not observed',
-            );
-            return { ok: true as const, latency_ms, ...quicFields };
-          }
+        } catch {
+          // The probe can surface Node socket/TLS details (and a remote endpoint
+          // can influence some protocol text). Keep the public discriminated
+          // result stable; raw transport diagnostics never belong in an API body.
           return {
-            ok: true as const,
-            latency_ms,
-            ...quicFields,
-            os_fingerprint: {
-              os: os.os,
-              confidence: os.confidence,
-              reason: os.reason,
-              observed_ip: os.observedIp,
-              observed_via: os.via,
-            },
+            ok: false as const,
+            reason: 'Proxy unreachable. Check the host, port, and firewall.',
           };
         }
-        // The same four sentences the desktop client renders, so a customer who
-        // reads one and then the other is not told two different stories.
-        const copy: Record<string, string> = {
-          unreachable: 'The proxy did not answer. Check the host and port, and that it is online.',
-          auth_failed: 'The proxy rejected the username and password. Re-enter them and try again.',
-          timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
-          egress_blocked:
-            'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
-        };
-        return {
-          ok: false as const,
-          reason:
-            copy[result.reason ?? ''] ?? 'The proxy could not be verified. Check its details.',
-        };
+      };
+
+      // T-1 — the FLEET vantage: dispatch the measurement to the Mac that will run
+      // the profile. Returns the node-measured shape on success, or null to signal
+      // "fall back to the control plane" — no free node, an unresolvable config, a
+      // node error/timeout, or any throw. Never lets an exception reach the client,
+      // so vantage=fleet can never 500: it degrades to the cp probe instead.
+      const runFleetProbe = async () => {
+        if (
+          fleetControlRegistry === undefined ||
+          accountProxiesService === undefined ||
+          row.scheme !== 'socks5'
+        ) {
+          return null;
+        }
+        try {
+          const resolved = await accountProxiesService.resolveForDispatch({
+            proxyId: row.id,
+            accountId: ctx.account.id,
+            tier: ctx.account.tier,
+          });
+          if (resolved === null) return null;
+          const dispatch = await fleetControlRegistry.probeEgress({
+            inlineProxyConfig: resolved,
+            target: FLEET_PROBE_TARGET,
+          });
+          if (dispatch.status !== 'ok') return null;
+          const r = dispatch.result;
+          return {
+            ok: r.ok,
+            latency_ms: r.latency_ms,
+            ...quicFields,
+            reachable: r.reachable,
+            auth_ok: r.auth_ok,
+            udp_associate: r.udp_associate,
+            can_route: r.can_route,
+            h2_ok: r.h2_ok,
+            quic_ok: r.quic_ok,
+            quic_detail: r.quic_detail,
+            exit_ip: r.exit_ip,
+            node_id: r.node_id,
+            measured_from: 'fleet' as const,
+          };
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: fleet-vantage probe failed, falling back to the control plane',
+          );
+          return null;
+        }
+      };
+
+      if (vantage === 'fleet') {
+        const fleet = await runFleetProbe();
+        if (fleet !== null) return fleet;
+        // No node measured it — return the control-plane result, HONESTLY labelled
+        // so a fleet request is never shown a cp measurement as if a node produced it.
+        return { ...(await runControlPlaneProbe()), measured_from: 'control_plane' as const };
       }
-      try {
-        await proxyTcpProbe(row.host, row.port, 8_000);
-        return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
-      } catch {
-        // The probe can surface Node socket/TLS details (and a remote endpoint
-        // can influence some protocol text). Keep the public discriminated
-        // result stable; raw transport diagnostics never belong in an API body.
-        return {
-          ok: false as const,
-          reason: 'Proxy unreachable. Check the host, port, and firewall.',
-        };
-      }
+      // vantage=cp — today's response, unchanged (no measured_from field).
+      return runControlPlaneProbe();
     },
   );
 

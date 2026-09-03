@@ -27,6 +27,7 @@ import {
   CookiesRequestSchema,
   SetCookiesRequestSchema,
   SetEgressRequestSchema,
+  ProbeEgressFrameSchema,
   NavigateHistoryRequestSchema,
   UploadFileRequestSchema,
   ListDownloadsRequestSchema,
@@ -47,6 +48,7 @@ import {
   type SetEgressApplyPoint,
   type SetEgressRequest,
   type SetEgressExitIdentity,
+  type ProbeEgressFrame,
   type NavigateHistoryRequest,
   type Cookie,
   type UploadFileRequest,
@@ -422,6 +424,31 @@ export function serializeSetEgress(args: {
     inlineProxyConfig: encodeInlineProxyConfig(args.inlineProxyConfig, 'egress swap'),
     exitIdentity: args.exitIdentity,
     applyPoint: args.applyPoint,
+  });
+}
+
+/**
+ * Node-scoped egress probe (T-1) — build a wire-ready `probeEgress` so a fleet
+ * Mac (the machine that will run the profile) measures a proxy's reachability /
+ * latency / QUIC, instead of the customer's laptop or the control plane. Base64
+ * encodes the SAME `inlineProxyConfig` a sessionAssign carries — through the
+ * SHARED `encodeInlineProxyConfig`, so a config the harness would refuse on assign
+ * is refused here too (`where` = 'probe' names the op in the error). Re-validated
+ * against ProbeEgressFrameSchema so a malformed envelope never leaves the server.
+ *
+ * ⛔ NODE-SCOPED: there is no `sessionId`, and the frame schema is `.strict()`, so
+ * one added by accident fails the parse rather than turning this into a session op.
+ */
+export function serializeProbeEgress(args: {
+  requestId: string;
+  inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
+  target: { host: string; port: number };
+}): ProbeEgressFrame {
+  return ProbeEgressFrameSchema.parse({
+    type: 'probeEgress',
+    requestId: args.requestId,
+    inlineProxyConfig: encodeInlineProxyConfig(args.inlineProxyConfig, 'probe'),
+    target: { host: args.target.host, port: args.target.port },
   });
 }
 

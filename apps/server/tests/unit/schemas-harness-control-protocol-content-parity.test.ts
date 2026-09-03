@@ -72,6 +72,8 @@ import {
   SetCookiesRequestSchema,
   NavigateHistoryRequestSchema,
   TrimProfileRequestSchema,
+  ProbeEgressFrameSchema,
+  ProbeEgressResultSchema,
   HarnessErrorCodeSchema,
   HarnessOutboundSchema,
   CookieSchema,
@@ -285,7 +287,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       /export const TERMINAL_SESSION_STATUSES = new Set<string>\(\['ended', 'errored'\]\);/,
     );
     expect(body).toMatch(
-      /export const HarnessOutboundSchema = z\.union\(\[\s*IntentResultEnvelopeSchema,\s*SessionStatusSchema,\s*HeartbeatSchema,\s*CapabilityReportSchema,\s*ErrorEventSchema,\s*ProfileSavedSchema,\s*ChallengeDetectedSchema,\s*PageStateFrameSchema,\s*ProfileSaveFailedSchema,\s*CookiesResultSchema,\s*SetCookiesResultSchema,\s*NavigateHistoryResultSchema,\s*UploadResultSchema,\s*DownloadsListResultSchema,\s*DownloadDataResultSchema,\s*TrimProfileResultSchema,\s*SetEgressResultSchema,\s*NetworkRequestsFrameSchema,\s*\]\);/,
+      /export const HarnessOutboundSchema = z\.union\(\[\s*IntentResultEnvelopeSchema,\s*SessionStatusSchema,\s*HeartbeatSchema,\s*CapabilityReportSchema,\s*ErrorEventSchema,\s*ProfileSavedSchema,\s*ChallengeDetectedSchema,\s*PageStateFrameSchema,\s*ProfileSaveFailedSchema,\s*CookiesResultSchema,\s*SetCookiesResultSchema,\s*NavigateHistoryResultSchema,\s*UploadResultSchema,\s*DownloadsListResultSchema,\s*DownloadDataResultSchema,\s*TrimProfileResultSchema,\s*SetEgressResultSchema,\s*NetworkRequestsFrameSchema,\s*ProbeEgressResultSchema,\s*\]\);/,
     );
     // ControlInbound.sessionEnd — the trivial W122 teardown envelope (source-pinned).
     expect(body).toMatch(
@@ -323,6 +325,85 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain("type: z.literal('navigateHistoryResult'),");
     expect(body).toContain('requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain('error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).optional(),');
+  });
+
+  it('T-1 node-scoped egress-probe frames pinned: probeEgress (CP→node, strict, uuid requestId, target) + probeEgressResult (node→CP, in union, node_id required)', () => {
+    // CP→node REQUEST — strict, carries the base64 inlineProxyConfig + a target,
+    // NO sessionId (node-scoped). toContain fragments so the rationale comments
+    // between fields don't break the pin.
+    expect(body).toContain('export const ProbeEgressFrameSchema = z');
+    expect(body).toContain("type: z.literal('probeEgress'),");
+    expect(body).toContain('requestId: z.string().uuid(),');
+    expect(body).toContain('inlineProxyConfig: z.string().min(1),');
+    // node→CP RESULT — node_id REQUIRED (provenance), lenient forward-compat.
+    expect(body).toContain('export const ProbeEgressResultSchema = z.object({');
+    expect(body).toContain("type: z.literal('probeEgressResult'),");
+    expect(body).toContain('node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+  });
+
+  it('behavioral: a valid probeEgress frame round-trips (the vacuity control for the strict-reject below)', () => {
+    const validProbe = {
+      type: 'probeEgress',
+      requestId: '11111111-1111-4111-8111-111111111111',
+      inlineProxyConfig: 'eyJ4IjogMX0=',
+      target: { host: 'api.driftstack.dev', port: 443 },
+    };
+    expect(ProbeEgressFrameSchema.safeParse(validProbe).success).toBe(true);
+  });
+
+  it("behavioral: an object carrying a sessionId key FAILS ProbeEgressFrameSchema.parse — A3's binding constraint #2, the .strict reject that keeps this node-scoped", () => {
+    // The frame above minus nothing, PLUS a sessionId: the only difference from the
+    // passing frame is the extra key, so the failure is attributable to it (the
+    // round-trip test above is the vacuity control). A node-scoped op must never be
+    // turnable into a session op that touches live egress.
+    const withSessionId = {
+      type: 'probeEgress',
+      requestId: '11111111-1111-4111-8111-111111111111',
+      inlineProxyConfig: 'eyJ4IjogMX0=',
+      target: { host: 'api.driftstack.dev', port: 443 },
+      sessionId: 'agt_1',
+    };
+    expect(ProbeEgressFrameSchema.safeParse(withSessionId).success).toBe(false);
+  });
+
+  it('behavioral: probeEgressResult with node_id parses through the union; without node_id it fails (provenance is required)', () => {
+    const withNode = {
+      type: 'probeEgressResult',
+      requestId: 'rq_1',
+      node_id: 'mac-us-001',
+      ok: true,
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      latency_ms: 42,
+      h2_ok: true,
+      quic_ok: true,
+      quic_detail: null,
+      exit_ip: '203.0.113.7',
+      error: null,
+    };
+    // WITH node_id — parses (and via the union, so membership is proven too).
+    expect(HarnessOutboundSchema.safeParse(withNode).success).toBe(true);
+    expect(ProbeEgressResultSchema.safeParse(withNode).success).toBe(true);
+    // WITHOUT node_id — fails (required provenance field). The vacuity control is
+    // the WITH-node_id assertion above: the ONLY change is the removed key.
+    const withoutNode = {
+      type: 'probeEgressResult',
+      requestId: 'rq_1',
+      ok: true,
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      latency_ms: 42,
+      h2_ok: true,
+      quic_ok: true,
+      quic_detail: null,
+      exit_ip: '203.0.113.7',
+      error: null,
+    };
+    expect(ProbeEgressResultSchema.safeParse(withoutNode).success).toBe(false);
   });
 
   it('profile-trim frames pinned: trimProfile (CP→node, strict, JIT crypto envelope) + trimResult (node→CP, in union)', () => {
@@ -2370,6 +2451,10 @@ describe('harness→server frame strictness is pinned per frame', () => {
       // owns the entry field set and may add to it, so a frame carrying a field
       // this server does not model yet must be retained, not dropped whole.
       networkRequests: 'strip',
+      // T-1 node-scoped egress probe result. `strip` like every sibling result:
+      // the node owns the measurement field set and may add to it, so a frame
+      // carrying a field this server does not model yet is retained, not dropped.
+      probeEgressResult: 'strip',
     };
     const actual = outboundLeaves().map((leaf, i) => ({
       name: frameName(leaf, i),
@@ -2423,6 +2508,7 @@ describe('harness→server frame strictness is pinned per frame', () => {
       ['SetCookiesRequestSchema', SetCookiesRequestSchema],
       ['NavigateHistoryRequestSchema', NavigateHistoryRequestSchema],
       ['TrimProfileRequestSchema', TrimProfileRequestSchema],
+      ['ProbeEgressFrameSchema', ProbeEgressFrameSchema],
     ];
     const lenient = serverBuilt
       .filter(([, schema]) => leaves(schema).some((l) => l._def?.unknownKeys !== 'strict'))

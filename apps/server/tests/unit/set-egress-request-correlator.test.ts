@@ -206,7 +206,7 @@ describe('SetEgressRequestCorrelator', () => {
     expect(decoded).toMatchObject({ host: '127.0.0.1', port: 1080 });
   });
 
-  it('CRITICAL ONE encoder, not two. sessionAssign and setEgress put the SAME field on the wire, and two encoders is the shape that drifts — the moment one gains a contract the other lacks, a config refused on assign is accepted on a swap. Pinned structurally because the divergence would be invisible to any test that exercised only one caller.', () => {
+  it('CRITICAL ONE encoder, not three. sessionAssign, setEgress and probeEgress put the SAME field on the wire, and a second encoder is the shape that drifts — the moment one gains a contract the others lack, a config refused on assign is accepted on a swap or on a pre-launch probe. Pinned structurally because the divergence would be invisible to any test that exercised only one caller.', () => {
     const src = readFileSync(CODEC_SRC, 'utf8');
     expect(
       src.match(/SocksProxyConfigWireSchema\.safeParse/g)?.length ?? 0,
@@ -218,8 +218,8 @@ describe('SetEgressRequestCorrelator', () => {
     ).toBe(1);
     expect(
       src.match(/encodeInlineProxyConfig\(/g)?.length ?? 0,
-      'the shared encoder should be defined once and called by both serializers',
-    ).toBe(3);
+      'the shared encoder should be defined once and called by all three serializers',
+    ).toBe(4);
   });
 
   it('failAll resolves every in-flight request with error and settle is idempotent', async () => {

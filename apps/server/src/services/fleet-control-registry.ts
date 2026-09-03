@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 // Increment-2 — fleet control-plane connection registry + inbound-frame router.
 //
@@ -38,6 +39,7 @@ import {
   type NetworkRequestsFrame,
   type SetEgressApplyPoint,
   type SetEgressExitIdentity,
+  type ProbeEgressResult,
 } from '../schemas/harness-control-protocol.js';
 import { IntentDispatchCorrelator, type DispatchTransport } from './harness-dispatch-correlator.js';
 import {
@@ -77,9 +79,15 @@ import {
   type TrimProfileOutcome,
 } from './trim-profile-request-correlator.js';
 import {
+  ProbeEgressRequestCorrelator,
+  type ProbeEgressTransport,
+  type ProbeEgressOutcome,
+} from './probe-egress-request-correlator.js';
+import {
   serializeCookiesRequest,
   serializeSetCookies,
   serializeSetEgress,
+  serializeProbeEgress,
   serializeNavigateHistory,
   serializeUploadFile,
   serializeListDownloads,
@@ -107,6 +115,19 @@ export type FleetInboundAdmission =
   | 'accepted'
   | 'uncorrelated-large-frame'
   | 'parse-budget-exhausted';
+
+/**
+ * T-1 — registry-level outcome of a node-scoped egress probe. `ok` carries the
+ * node-measured result (already provenance-checked: `node_id` equals the picked
+ * node). `unavailable` means no connected, uncordoned node was free to run it;
+ * `error` / `timeout` come from the node/correlator. The route treats anything
+ * but `ok` as "fall back to the control-plane probe".
+ */
+export type ProbeEgressDispatch =
+  | { status: 'ok'; result: ProbeEgressResult }
+  | { status: 'error'; message: string }
+  | { status: 'timeout' }
+  | { status: 'unavailable' };
 
 /**
  * One authenticated fleet-node connection. Owns the node's dispatch correlator
@@ -144,6 +165,19 @@ export class FleetControlConnection {
    *  (trimProfile → trimResult) over this node's socket, keyed by requestId. The
    *  OUT-OF-SESSION sibling of the others; owned here like above. */
   readonly trimProfileCorrelator: TrimProfileRequestCorrelator;
+  /** Node-scoped egress probe (T-1) — correlates a fleet-vantage proxy test
+   *  (probeEgress → probeEgressResult) over this node's socket, keyed by requestId.
+   *  The OUT-OF-SESSION sibling of trimProfileCorrelator; owned here like above. */
+  readonly probeEgressCorrelator: ProbeEgressRequestCorrelator;
+  // T-1 — node scheduling gate. A probe (new, out-of-session work) must not be
+  // dispatched to a node the operator has cordoned/drained/restarted, nor to one
+  // self-reporting `drainState:'draining'` in its heartbeat (shedding for a
+  // SIGUSR1 / scheduled restart). `cordonedByCommand` tracks the CP-issued
+  // controlCommand; `draining` tracks the node's own signal; `isCordoned()` is
+  // true if either holds. In-memory only: a reconnect starts a fresh connection,
+  // and the node re-reports `draining` on its next beat.
+  private cordonedByCommand = false;
+  private draining = false;
   private readonly send: FleetNodeSocketSend;
   private readonly onProfileSaved?: (frame: ProfileSaved, reportingNodeId: string) => void;
   // audit M1 — the cross-node frames now carry the connection's authenticated
@@ -256,6 +290,8 @@ export class FleetControlConnection {
     this.downloadCorrelator = new DownloadRequestCorrelator(downloadTransport, log);
     const trimProfileTransport: TrimProfileTransport = { send: (r) => send(JSON.stringify(r)) };
     this.trimProfileCorrelator = new TrimProfileRequestCorrelator(trimProfileTransport, log);
+    const probeEgressTransport: ProbeEgressTransport = { send: (r) => send(JSON.stringify(r)) };
+    this.probeEgressCorrelator = new ProbeEgressRequestCorrelator(probeEgressTransport, log);
   }
 
   /**
@@ -404,6 +440,33 @@ export class FleetControlConnection {
   }
 
   /**
+   * Node-scoped egress probe (T-1) — measure a proxy's reachability / latency /
+   * QUIC FROM this fleet Mac (the machine that runs profiles), not the customer's
+   * laptop or the control plane. Sends a `probeEgress` (correlated by `requestId`)
+   * and awaits the matching `probeEgressResult`; resolves a uniform
+   * ProbeEgressOutcome (ok+result / error / timeout) and NEVER rejects. OUT-OF-SESSION
+   * (no sessionId); `requestId` is caller-minted so the correlation key stays testable.
+   */
+  probeEgress(
+    args: {
+      requestId: string;
+      inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
+      target: { host: string; port: number };
+    },
+    timeoutMs?: number,
+  ): Promise<ProbeEgressOutcome> {
+    const req = serializeProbeEgress(args);
+    return this.probeEgressCorrelator.request(req, timeoutMs);
+  }
+
+  /** T-1 scheduling gate — true when this node must not receive new out-of-session
+   *  work: the operator cordoned/drained/restarted it (controlCommand), or it is
+   *  self-reporting `drainState:'draining'` in its heartbeat. */
+  isCordoned(): boolean {
+    return this.cordonedByCommand || this.draining;
+  }
+
+  /**
    * Sim back/forward (A3 W2870) — step the running session's WebKit back-forward
    * list one entry in `direction` over the node's live WSS. The sibling of
    * setCookies: sends a `navigateHistory` (correlated by `requestId`) and awaits the
@@ -475,6 +538,15 @@ export class FleetControlConnection {
    * beginDrain/cordon/restart (A2-A3-BUS W2203; harness receiver per W2197).
    */
   sendControlCommand(command: ControlCommand): void {
+    // T-1 — track the scheduling gate locally so out-of-session dispatch (the
+    // probe picker) skips a node the operator just took out of rotation. `cordon`
+    // refuses new assigns; `drain` = cordon + shed; `restart` is about to bounce —
+    // none should receive a fresh probe. `uncordon` puts it back in rotation.
+    if (command.command === 'uncordon') {
+      this.cordonedByCommand = false;
+    } else {
+      this.cordonedByCommand = true;
+    }
     this.send(JSON.stringify(command));
   }
 
@@ -664,6 +736,14 @@ export class FleetControlConnection {
           // id → no-op (already settled).
           this.downloadCorrelator.onResultFrame(frame);
           break;
+        case 'probeEgressResult':
+          // T-1 — node-scoped egress-probe reply. A fleet-vantage proxy test
+          // dispatched by the registry's probeEgress() holds the promise via this
+          // connection's probe correlator, keyed by requestId. An unknown/stale
+          // requestId is a no-op (already settled). Provenance (node_id === the
+          // dispatched node) is asserted by the registry on the ok path, not here.
+          this.probeEgressCorrelator.onResultFrame(frame);
+          break;
         case 'trimResult':
           // Profile-trim (doc-150 §8.3) — settles the pending POST /v1/profiles/:id/trim
           // eviction keyed by requestId (the harness echoes it). Self-contained
@@ -681,6 +761,10 @@ export class FleetControlConnection {
           // bootstrap → repo.touchLastSeen + telemetry upsert). Absent consumer
           // (stateless deploy) → accepted + ignored, like the frames above.
           if (frame.macNodeId === this.nodeId) {
+            // T-1 — track the node's self-reported shedding state so the probe
+            // picker skips a node draining for a SIGUSR1 / scheduled restart, the
+            // same way it skips an operator-cordoned one. Absent drainState = serving.
+            this.draining = frame.drainState === 'draining';
             this.onHeartbeat?.(frame);
           }
           break;
@@ -775,6 +859,7 @@ export class FleetControlConnection {
     this.uploadCorrelator.failAll(reason);
     this.downloadCorrelator.failAll(reason);
     this.trimProfileCorrelator.failAll(reason);
+    this.probeEgressCorrelator.failAll(reason);
   }
 
   /** Superseded by a newer connection for this node (a reconnect): fail in-flight
@@ -990,6 +1075,68 @@ export class FleetControlRegistry {
   pickAnyConnected(): FleetControlConnection | undefined {
     const first = this.connections.values().next();
     return first.done ? undefined : first.value;
+  }
+
+  /**
+   * T-1 — pick ANY connected node the operator has NOT taken out of rotation.
+   * Like `pickAnyConnected` (out-of-session: the probe has no assigned node and any
+   * healthy node can dial the exit), but SKIPS a node that is cordoned / draining /
+   * restarting (`isCordoned()`), because a probe is new work and a node shedding for
+   * a restart would either refuse it or answer just before it goes away. Returns the
+   * FIRST schedulable connection (insertion order — deterministic for tests), or
+   * undefined when none is free (the route maps that to the control-plane fallback).
+   */
+  pickAnyUncordoned(): FleetControlConnection | undefined {
+    for (const conn of this.connections.values()) {
+      if (!conn.isCordoned()) return conn;
+    }
+    return undefined;
+  }
+
+  /**
+   * T-1 — dispatch a node-scoped egress probe: measure a proxy from a fleet Mac.
+   * Picks an uncordoned connected node, mints the correlation id, sends the
+   * `probeEgress`, and awaits the correlated `probeEgressResult`. NEVER rejects —
+   * maps to a ProbeEgressDispatch the route reads:
+   *   - no schedulable node        → `unavailable`
+   *   - node error / no reply      → `error` / `timeout`
+   *   - a result from ANOTHER node → `error` (provenance: `node_id` must equal the
+   *                                  node we dispatched to; a mismatch is never
+   *                                  silently trusted as this exit's measurement)
+   *   - a result from THE node     → `ok` + result
+   * NODE-SCOPED: no sessionId anywhere on this path.
+   */
+  async probeEgress(args: {
+    inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
+    target: { host: string; port: number };
+  }): Promise<ProbeEgressDispatch> {
+    const conn = this.pickAnyUncordoned();
+    if (conn === undefined) return { status: 'unavailable' };
+    const requestId = randomUUID();
+    const outcome: ProbeEgressOutcome = await conn.probeEgress({
+      requestId,
+      inlineProxyConfig: args.inlineProxyConfig,
+      target: args.target,
+    });
+    if (outcome.status !== 'ok') return outcome;
+    // Provenance — the measurement must come from the node we dispatched to. A
+    // result whose node_id differs is a misrouted/echoed frame; report it as an
+    // error rather than labelling another node's exit as this proxy's.
+    if (outcome.result.node_id !== conn.nodeId) {
+      this.logger?.warn(
+        {
+          component: 'fleet-control-registry',
+          dispatchedNodeId: conn.nodeId,
+          resultNodeId: outcome.result.node_id,
+        },
+        'probeEgressResult node_id did not match the dispatched node — dropping as unprovable',
+      );
+      return {
+        status: 'error',
+        message: 'probe result node_id did not match the dispatched node',
+      };
+    }
+    return { status: 'ok', result: outcome.result };
   }
 
   /**

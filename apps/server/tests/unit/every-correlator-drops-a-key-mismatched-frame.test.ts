@@ -49,6 +49,10 @@ const CORRELATORS: Record<string, { key: string | null; why?: string }> = {
     key: null,
     why: 'connection-local: one instance per FleetControlConnection, so ownership is structural and there is no cross-request correlation to spoof',
   },
+  'probe-egress-request-correlator.ts': {
+    key: null,
+    why: 'node-scoped by contract: a pre-launch egress probe has no session, and the request schema REJECTS a sessionId outright so one can never be attached. There is therefore no session key to compare — the guard this roster checks for would have nothing to compare against. Ownership is instead proven at the layer above: the registry asserts the result frame carries the node_id it dispatched to, and a mismatch is an error outcome rather than a trusted measurement.',
+  },
 };
 
 function correlatorFilesOnDisk(): string[] {
