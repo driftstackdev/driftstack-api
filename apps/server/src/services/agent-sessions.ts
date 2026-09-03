@@ -119,6 +119,14 @@ export interface AgentSessionRecord {
    */
   profileId: string | null;
   /**
+   * T-6 (migration 0116) — which proxy this session was dispatched through. Set
+   * at dispatch from the create's proxy_id; NULL for an operator-default egress,
+   * a session that named no proxy, and every pre-column row. The live
+   * capabilityReport relay reads it to attribute a measured QUIC verdict back to
+   * the owned proxy. NOT a FK (the proxy may have no account_proxies row).
+   */
+  proxyId: string | null;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -359,8 +367,17 @@ export interface AgentSessionsRepo {
    * the disconnect reaper later matches on. This is also the atomic active-only
    * ownership claim: returns null when the session is missing OR a close won
    * during dispatch preparation, so terminal rows can never be assigned.
+   *
+   * T-6 — `proxyId` rides the SAME atomic claim so the session records which
+   * proxy it browses through (NULL for an operator-default egress). Passing it
+   * here rather than as a second write keeps node + proxy attribution on one
+   * active-only UPDATE; omit the argument to leave proxy_id untouched.
    */
-  setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null>;
+  setNodeId(
+    id: string,
+    nodeId: string,
+    proxyId?: string | null,
+  ): Promise<AgentSessionRecord | null>;
 
   /**
    * Worker-disconnect fix (2026-06-19, migration 0086) — bulk-close every
@@ -517,6 +534,8 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       nodeId: null,
       // 0089 — the profile this session runs (NULL for ephemeral sessions).
       profileId: args.profileId ?? null,
+      // 0116 — set later by setNodeId at dispatch (NULL until then).
+      proxyId: null,
       pairModeState: null,
       lastErrorEvent: null,
       guiControlKeyExpiresAt: null,
@@ -949,13 +968,24 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     return Promise.resolve(closed);
   }
 
-  setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
+  setNodeId(
+    id: string,
+    nodeId: string,
+    proxyId?: string | null,
+  ): Promise<AgentSessionRecord | null> {
     const rec = this.records.get(id);
     // A dispatch can race any terminal closer. Missing or already-closed rows
     // fail the ownership claim as a no-op, so the caller never sends an assign
     // for a terminal API session.
     if (!rec || rec.status !== 'active') return Promise.resolve(null);
-    const updated: AgentSessionRecord = { ...rec, nodeId, updatedAt: this.clock() };
+    const updated: AgentSessionRecord = {
+      ...rec,
+      nodeId,
+      // T-6 — record the proxy alongside the node when the caller supplies one;
+      // an omitted argument leaves the prior value untouched.
+      ...(proxyId !== undefined ? { proxyId } : {}),
+      updatedAt: this.clock(),
+    };
     this.records.set(id, updated);
     return Promise.resolve(updated);
   }

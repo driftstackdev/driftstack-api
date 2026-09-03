@@ -453,6 +453,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       username: r.username,
       has_password: r.wrappedPassword !== null,
       has_secret: r.wrappedSecret !== null,
+      // T-6 — the QUIC verdict a real session measured through this proxy, or
+      // null when never measured. The client keeps the QUIC mark inferred (never
+      // green) until a real 'h3' lands here, so null must stay null, never a
+      // default.
+      quic_measured: r.quicMeasured as AccountProxyMetadata['quic_measured'],
+      quic_measured_at: r.quicMeasuredAt !== null ? r.quicMeasuredAt.toISOString() : null,
       created_at: r.createdAt.toISOString(),
       updated_at: r.updatedAt.toISOString(),
     };
@@ -775,6 +781,16 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       const id = parseProxyId((request.params as { id: string }).id);
       const row = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
       if (row === null) throw new NotFoundError('Proxy not found.');
+      // T-6 — surface the QUIC verdict a real session measured through this
+      // proxy on every ok:true result, so the desktop client can show a
+      // confirmed QUIC mark instead of one inferred from UDP association. Read
+      // from the row already fetched; null stays null (never measured).
+      const quicMeasured: AccountProxyMetadata['quic_measured'] =
+        row.quicMeasured as AccountProxyMetadata['quic_measured'];
+      const quicFields = {
+        quic_measured: quicMeasured,
+        quic_measured_at: row.quicMeasuredAt !== null ? row.quicMeasuredAt.toISOString() : null,
+      };
       if (classifyUnsafeHost(row.host) !== null) {
         return {
           ok: false as const,
@@ -810,7 +826,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         // asserting it away.
         if (!('host' in resolved)) {
           await proxyTcpProbe(row.host, row.port, 8_000);
-          return { ok: true as const, latency_ms: Date.now() - startedAt };
+          return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
         }
         const descriptor = {
           protocol: 'socks5' as const,
@@ -835,11 +851,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               { proxyId: row.id, reason: os.reason },
               'proxy test: os fingerprint not observed',
             );
-            return { ok: true as const, latency_ms };
+            return { ok: true as const, latency_ms, ...quicFields };
           }
           return {
             ok: true as const,
             latency_ms,
+            ...quicFields,
             os_fingerprint: {
               os: os.os,
               confidence: os.confidence,
@@ -866,7 +883,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       try {
         await proxyTcpProbe(row.host, row.port, 8_000);
-        return { ok: true as const, latency_ms: Date.now() - startedAt };
+        return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
       } catch {
         // The probe can surface Node socket/TLS details (and a remote endpoint
         // can influence some protocol text). Keep the public discriminated

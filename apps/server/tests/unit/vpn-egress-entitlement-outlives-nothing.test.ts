@@ -44,6 +44,8 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     wrappedPassword: null,
     wrappedSecret: null,
     config: {},
+    quicMeasured: null,
+    quicMeasuredAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

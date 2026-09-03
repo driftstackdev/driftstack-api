@@ -66,6 +66,11 @@ type AccountProxyMetadata struct {
 	HasSecret   bool    `json:"has_secret"`
 	CreatedAt   string  `json:"created_at"`
 	UpdatedAt   string  `json:"updated_at"`
+	// QuicMeasured is 'h3' or 'h2-only' once a live session through this proxy
+	// reported its transport, or null when never measured. QuicMeasuredAt is
+	// when that measurement was taken (RFC 3339), or null.
+	QuicMeasured   *string `json:"quic_measured"`
+	QuicMeasuredAt *string `json:"quic_measured_at"`
 }
 
 // AccountProxyList is the GET /v1/account/me/proxies envelope.

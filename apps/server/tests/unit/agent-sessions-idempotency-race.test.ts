@@ -21,6 +21,7 @@ function makeWinner(): AgentSessionRecord {
     id: 'agt_winner',
     accountId: ACC,
     driftstackSessionId: null,
+    proxyId: null,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

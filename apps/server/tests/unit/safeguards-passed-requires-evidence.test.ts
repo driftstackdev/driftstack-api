@@ -70,7 +70,13 @@ async function warningsFor(frame: CapabilityReport): Promise<string[]> {
   const relay = makeSessionCapabilityReportRelay(
     {
       get: vi.fn(() =>
-        Promise.resolve({ nodeId: 'node-1', driftstackSessionId: 'ses_1', status: 'active' }),
+        Promise.resolve({
+          nodeId: 'node-1',
+          driftstackSessionId: 'ses_1',
+          status: 'active',
+          accountId: 'acc_1',
+          proxyId: null,
+        }),
       ),
     },
     { ingestEgressCapabilityReport: ingest },

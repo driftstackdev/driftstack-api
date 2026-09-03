@@ -813,6 +813,13 @@
       "when": 1786665600003,
       "tag": "0115_agent_sessions_model_claude_5",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1786665600004,
+      "tag": "0116_add_agent_session_proxy_and_proxy_quic",
+      "breakpoints": true
     }
   ]
 }

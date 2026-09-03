@@ -1269,7 +1269,12 @@ export async function dispatchSessionAssignOnCreate(args: {
     if (agentSessions !== undefined) {
       let persisted: Awaited<ReturnType<typeof agentSessions.setNodeId>>;
       try {
-        persisted = await agentSessions.setNodeId(sessionId, dispatchedNodeId);
+        // T-6 — record the proxy this session browses through on the SAME atomic
+        // node-ownership claim, so the live capabilityReport relay can attribute
+        // a measured QUIC verdict back to the owned proxy. `proxyId` is the
+        // validated per-session customer proxy (undefined → operator-default
+        // egress, persisted as NULL).
+        persisted = await agentSessions.setNodeId(sessionId, dispatchedNodeId, proxyId ?? null);
       } catch (err) {
         logger?.warn(
           {

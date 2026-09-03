@@ -58,6 +58,8 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     wrappedPassword: null,
     wrappedSecret: null,
     config: {},
+    quicMeasured: null,
+    quicMeasuredAt: null,
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     updatedAt: new Date('2026-06-01T00:00:00.000Z'),
     ...rest,

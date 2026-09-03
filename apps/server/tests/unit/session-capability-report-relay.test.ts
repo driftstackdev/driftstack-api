@@ -45,6 +45,8 @@ describe('makeSessionCapabilityReportRelay', () => {
           Promise.resolve({
             nodeId: 'node-1',
             driftstackSessionId: 'ses_driver_1',
+            accountId: 'acc_1',
+            proxyId: null,
             status: 'active',
           }),
         ),
@@ -83,9 +85,27 @@ describe('makeSessionCapabilityReportRelay', () => {
   it('drops unknown, unowned, and cross-node reports before either store or persistence', async () => {
     for (const owned of [
       null,
-      { nodeId: null, driftstackSessionId: null, status: 'active' },
-      { nodeId: 'node-2', driftstackSessionId: 'ses_2', status: 'active' },
-      { nodeId: 'node-1', driftstackSessionId: 'ses_1', status: 'closed' },
+      {
+        nodeId: null,
+        driftstackSessionId: null,
+        accountId: 'acc_1',
+        proxyId: null,
+        status: 'active',
+      },
+      {
+        nodeId: 'node-2',
+        driftstackSessionId: 'ses_2',
+        accountId: 'acc_1',
+        proxyId: null,
+        status: 'active',
+      },
+      {
+        nodeId: 'node-1',
+        driftstackSessionId: 'ses_1',
+        accountId: 'acc_1',
+        proxyId: null,
+        status: 'closed',
+      },
     ]) {
       const store = new SessionCapabilityReportStore();
       const ingest = vi.fn((_args: unknown) => Promise.resolve());
@@ -119,6 +139,8 @@ describe('makeSessionCapabilityReportRelay', () => {
           return {
             nodeId: 'node-1',
             driftstackSessionId: 'ses_driver_1',
+            accountId: 'acc_1',
+            proxyId: null,
             status: 'active',
           };
         }),
@@ -144,7 +166,13 @@ describe('makeSessionCapabilityReportRelay', () => {
     const relay = makeSessionCapabilityReportRelay(
       {
         get: vi.fn(() =>
-          Promise.resolve({ nodeId: 'node-1', driftstackSessionId: null, status: 'active' }),
+          Promise.resolve({
+            nodeId: 'node-1',
+            driftstackSessionId: null,
+            accountId: 'acc_1',
+            proxyId: null,
+            status: 'active',
+          }),
         ),
       },
       { ingestEgressCapabilityReport: ingest },
@@ -171,6 +199,8 @@ describe('makeSessionCapabilityReportRelay', () => {
           Promise.resolve({
             nodeId: 'node-1',
             driftstackSessionId: 'ses_driver_1',
+            accountId: 'acc_1',
+            proxyId: null,
             status: 'active',
           }),
         ),

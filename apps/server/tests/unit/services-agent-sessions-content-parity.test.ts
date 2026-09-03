@@ -124,7 +124,7 @@ describe('services/agent-sessions content parity', () => {
     // Worker-disconnect fix (2026-06-19, migration 0086) — session→node
     // pointer + node-scoped bulk-close that the disconnect reaper drives.
     expect(body).toMatch(
-      /setNodeId\(id: string, nodeId: string\): Promise<AgentSessionRecord \| null>;/,
+      /setNodeId\(\s*id: string,\s*nodeId: string,\s*proxyId\?: string \| null,\s*\): Promise<AgentSessionRecord \| null>;/,
     );
     expect(body).toMatch(
       /if \(!rec \|\| rec\.status !== 'active'\) return Promise\.resolve\(null\);/,

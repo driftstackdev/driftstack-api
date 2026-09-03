@@ -30,6 +30,8 @@ interface ProxyMeta {
   username: string | null;
   has_password: boolean;
   has_secret?: boolean;
+  quic_measured?: 'h3' | 'h2-only' | null;
+  quic_measured_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -76,6 +78,41 @@ describe('POST/GET /v1/account/me/proxies', () => {
     expect(create.statusCode).toBe(201);
     expect(create.json<ProxyMeta>().has_password).toBe(false);
     expect(create.json<ProxyMeta>().scheme).toBe('http');
+  });
+
+  it('T-6 GET /proxies surfaces the measured QUIC verdict: null until a session measures it, then the confirmed value', async () => {
+    fx = await buildTestApp();
+    const created = (
+      await fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: { ...auth(fx), 'content-type': 'application/json' },
+        payload: { label: 'q', host: 'q.example', port: 1080 },
+      })
+    ).json<ProxyMeta>();
+
+    // Property: a proxy no session has run through is UNMEASURED — null, present,
+    // never a default. This is what keeps the client's QUIC chip inferred (~).
+    const before = (
+      await fx.app.inject({ method: 'GET', url: '/v1/account/me/proxies', headers: auth(fx) })
+    ).json<{ data: ProxyMeta[] }>();
+    expect(before.data[0]?.quic_measured).toBeNull();
+    expect(before.data[0]?.quic_measured_at).toBeNull();
+
+    // A live session measured real HTTP/3 through it (the relay's back-fill).
+    const measuredAt = new Date('2026-09-03T12:00:00.000Z');
+    await fx.accountProxiesRepo.update({
+      id: created.id,
+      accountId: fx.accountId,
+      updates: { quicMeasured: 'h3', quicMeasuredAt: measuredAt },
+    });
+
+    // Property: the list now surfaces the CONFIRMED verdict + when it was seen.
+    const after = (
+      await fx.app.inject({ method: 'GET', url: '/v1/account/me/proxies', headers: auth(fx) })
+    ).json<{ data: ProxyMeta[] }>();
+    expect(after.data[0]?.quic_measured).toBe('h3');
+    expect(after.data[0]?.quic_measured_at).toBe(measuredAt.toISOString());
   });
 
   it('enforces the calling account tier cap atomically', async () => {
@@ -289,6 +326,46 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
     const body = res.json<{ ok: boolean; latency_ms?: number }>();
     expect(body.ok).toBe(true);
     expect(typeof body.latency_ms).toBe('number');
+  });
+
+  it('T-6 ok:true carries the measured QUIC verdict alongside latency: null until measured, then the confirmed value', async () => {
+    fx = await buildTestApp();
+    const id = await makeProxy('reachable-proxy.example.com');
+
+    // Property: before any session measures it, the ok:true result reports the
+    // QUIC verdict as unmeasured (present, null) — not omitted, not a guess.
+    const before = (
+      await fx.app.inject({
+        method: 'POST',
+        url: `/v1/account/me/proxies/${id}/test`,
+        headers: auth(fx),
+      })
+    ).json<{ ok: boolean; quic_measured?: 'h3' | 'h2-only' | null }>();
+    expect(before.ok).toBe(true);
+    expect(before.quic_measured).toBeNull();
+
+    // A live session measured real HTTP/3 through it.
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: { quicMeasured: 'h3', quicMeasuredAt: new Date('2026-09-03T12:00:00.000Z') },
+    });
+
+    // Property: the test result now carries the CONFIRMED verdict.
+    const after = (
+      await fx.app.inject({
+        method: 'POST',
+        url: `/v1/account/me/proxies/${id}/test`,
+        headers: auth(fx),
+      })
+    ).json<{
+      ok: boolean;
+      quic_measured?: 'h3' | 'h2-only' | null;
+      quic_measured_at?: string | null;
+    }>();
+    expect(after.ok).toBe(true);
+    expect(after.quic_measured).toBe('h3');
+    expect(after.quic_measured_at).toBe('2026-09-03T12:00:00.000Z');
   });
 
   it('ok:false + reason for an unreachable proxy (200, not an error)', async () => {

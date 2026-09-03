@@ -108,6 +108,8 @@ beforeAll(async () => {
       wrapped_password text,
       wrapped_secret text,
       config jsonb NOT NULL DEFAULT '{}'::jsonb,
+      quic_measured text,
+      quic_measured_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )

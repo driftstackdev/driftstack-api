@@ -210,6 +210,14 @@ export const AccountProxyMetadataSchema = z.object({
   // True when a VPN secret (openvpn config_blob / wireguard private_key) is
   // stored. Write-only like the password — the secret itself is never returned.
   has_secret: z.boolean(),
+  // T-6 — the QUIC verdict a real browsing session measured through this proxy:
+  // 'h3' (HTTP/3 really carried), 'h2-only' (a session ran but HTTP/3 did not),
+  // or null (never measured). null is NOT a default and NOT the same as
+  // 'h2-only': the client keeps the QUIC mark inferred (never green) until a
+  // real 'h3' lands here.
+  quic_measured: z.enum(['h3', 'h2-only']).nullable(),
+  // When quic_measured was recorded (ISO 8601), or null when never measured.
+  quic_measured_at: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -225,7 +233,16 @@ export type AccountProxyList = z.infer<typeof AccountProxyListSchema>;
 // handshake latency, `ok:false` a human-readable reason. (SOCKS5 auth-level
 // verification is a future enhancement — this confirms the port is reachable.)
 export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
-  z.object({ ok: z.literal(true), latency_ms: z.number().int().nonnegative() }),
+  z.object({
+    ok: z.literal(true),
+    latency_ms: z.number().int().nonnegative(),
+    // T-6 — the QUIC verdict a real session measured through this proxy (see
+    // AccountProxyMetadata). Carried on every ok:true result so the client can
+    // render a confirmed QUIC mark instead of one inferred from UDP support;
+    // null when never measured.
+    quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
+    quic_measured_at: z.string().nullable().optional(),
+  }),
   z.object({ ok: z.literal(false), reason: z.string() }),
 ]);
 export type AccountProxyTestResult = z.infer<typeof AccountProxyTestResultSchema>;

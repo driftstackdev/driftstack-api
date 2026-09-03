@@ -15,7 +15,23 @@ interface CapabilityReportAgentSessions {
     nodeId: string | null;
     driftstackSessionId: string | null;
     status: string;
+    // T-6 — carried so a measured QUIC verdict can be attributed, owner-scoped,
+    // to the proxy this session browsed through. accountId scopes the update;
+    // proxyId is NULL when the session used an operator-default egress.
+    accountId: string;
+    proxyId: string | null;
   } | null>;
+}
+
+// T-6 — the owner-scoped account_proxies update the back-fill needs. The real
+// AccountProxiesRepo.update matches this: a foreign or absent (id, accountId)
+// pair updates no row, so a stray proxy_id is a safe no-op.
+interface CapabilityReportAccountProxies {
+  update(args: {
+    id: string;
+    accountId: string;
+    updates: { quicMeasured: string; quicMeasuredAt: Date };
+  }): Promise<unknown>;
 }
 
 interface CapabilityReportSessionsService {
@@ -59,6 +75,11 @@ export function makeSessionCapabilityReportRelay(
   sessionsService: CapabilityReportSessionsService,
   store: SessionCapabilityReportStore,
   logger: Logger,
+  // T-6 — the account_proxies repo the QUIC back-fill writes through, and the
+  // clock that stamps quic_measured_at. Optional so an unwired construction
+  // keeps today's behaviour (store + egress persistence) with no back-fill.
+  accountProxies?: CapabilityReportAccountProxies,
+  now: () => Date = () => new Date(),
 ): (frame: CapabilityReport, reportingNodeId: string) => void {
   const process = async (frame: CapabilityReport, reportingNodeId: string): Promise<void> => {
     const session = await agentSessions.get(frame.sessionId);
@@ -93,6 +114,41 @@ export function makeSessionCapabilityReportRelay(
       },
       raw,
     });
+
+    // T-6 — back-fill the REAL, measured QUIC verdict onto the proxy this
+    // session browsed through, so the proxy test/chip can show a confirmed
+    // result instead of a guess inferred from UDP association. `quicViaProxy` is
+    // the same signal reported as quic_route above: an active h2-and-h3
+    // transport WITH the HTTP/3 interpose loaded means QUIC really carried, so
+    // we write 'h3'; a session that ran without it writes 'h2-only' (a measured
+    // absence, still not the same as never-measured/null). Only when a proxy is
+    // actually attributed (proxyId non-null) — an operator-default egress has no
+    // owned proxy to mark. The update is owner-scoped (id + accountId), so a
+    // foreign or deleted proxy_id updates no row. Best-effort: a back-fill
+    // failure is logged but never fails consuming the report (the egress
+    // persistence above already succeeded).
+    if (accountProxies !== undefined && session.proxyId !== null) {
+      try {
+        await accountProxies.update({
+          id: session.proxyId,
+          accountId: session.accountId,
+          updates: {
+            quicMeasured: quicViaProxy ? 'h3' : 'h2-only',
+            quicMeasuredAt: now(),
+          },
+        });
+      } catch (error) {
+        logger.error(
+          {
+            component: 'session-capability-report-relay',
+            sessionId: frame.sessionId,
+            proxyId: session.proxyId,
+            err: error,
+          },
+          'failed to back-fill measured QUIC verdict onto the proxy',
+        );
+      }
+    }
   };
 
   return makeBoundedNodeLatestRelay({

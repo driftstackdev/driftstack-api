@@ -723,6 +723,14 @@ export const accountProxies = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default(sql`'{}'::jsonb`),
+    // T-6 (migration 0116) — the last QUIC verdict a real browsing session
+    // measured through THIS proxy, and when. NULL = never measured, which is
+    // NOT the same as a measured "no HTTP/3": the client keeps the QUIC mark
+    // inferred (never green) until a real 'h3' lands here. Only ever 'h3' or
+    // 'h2-only' at the application layer. Written best-effort by the live
+    // capabilityReport relay; read by the /proxies list + the /:id/test result.
+    quicMeasured: text('quic_measured'),
+    quicMeasuredAt: timestamp('quic_measured_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),
@@ -2344,6 +2352,13 @@ export const agentSessions = pgTable(
     // out-of-session profile trim consults this to refuse a trim against a profile
     // bound to a still-active session (avoids a two-writer R2 lost-update race).
     profileId: uuid('profile_id').references(() => profiles.id, { onDelete: 'set null' }),
+    // T-6 (migration 0116) — which proxy this session was dispatched through,
+    // set at dispatch from the create's proxy_id (NULL for an operator-default
+    // egress or a session that named no proxy). Deliberately NOT a FK: the proxy
+    // may be a device/operator proxy with no account_proxies row, so a stray
+    // uuid is allowed and simply matches no row. The capabilityReport relay
+    // reads it to attribute a measured QUIC verdict back to the owned proxy.
+    proxyId: uuid('proxy_id'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

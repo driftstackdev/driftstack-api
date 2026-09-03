@@ -3225,6 +3225,13 @@
           "has_secret": {
             "type": "boolean"
           },
+          "quic_measured": {
+            "type": ["string", "null"],
+            "enum": ["h3", "h2-only", null]
+          },
+          "quic_measured_at": {
+            "type": ["string", "null"]
+          },
           "created_at": {
             "type": "string"
           },
@@ -3241,6 +3248,8 @@
           "username",
           "has_password",
           "has_secret",
+          "quic_measured",
+          "quic_measured_at",
           "created_at",
           "updated_at"
         ]
@@ -3356,6 +3365,13 @@
               },
               "latency_ms": {
                 "type": "integer"
+              },
+              "quic_measured": {
+                "type": ["string", "null"],
+                "enum": ["h3", "h2-only", null]
+              },
+              "quic_measured_at": {
+                "type": ["string", "null"]
               },
               "os_fingerprint": {
                 "type": "object",

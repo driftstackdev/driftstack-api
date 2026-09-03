@@ -21,6 +21,7 @@ function makeRecord(id: string, overrides: Partial<AgentSessionRecord> = {}): Ag
     id,
     accountId: ACC,
     driftstackSessionId: null,
+    proxyId: null,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

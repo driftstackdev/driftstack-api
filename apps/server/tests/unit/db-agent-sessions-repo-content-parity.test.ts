@@ -174,7 +174,15 @@ describe('db/agent-sessions-repo content parity', () => {
   });
 
   it('setNodeId is an atomic active-only ownership claim, so a terminal row can never receive a late fleet assignment', () => {
-    expect(body).toMatch(/async setNodeId\(id: string, nodeId: string\)/);
+    // T-6 — proxyId is an optional third param persisted on the SAME atomic
+    // active-only UPDATE as node_id (no second write), so node + proxy
+    // attribution land together or not at all.
+    expect(body).toMatch(
+      /async setNodeId\(\s*id: string,\s*nodeId: string,\s*proxyId\?: string \| null,\s*\)/,
+    );
+    expect(body).toMatch(
+      /\.set\(\{ nodeId, \.\.\.\(proxyId !== undefined \? \{ proxyId \} : \{\}\), updatedAt: now \}\)/,
+    );
     expect(body).toMatch(
       /\.where\(and\(eq\(agentSessions\.id, id\), eq\(agentSessions\.status, 'active'\)\)\)/,
     );

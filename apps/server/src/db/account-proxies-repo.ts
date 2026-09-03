@@ -35,6 +35,15 @@ export interface AccountProxyRow {
   wrappedSecret: string | null;
   /** OVPN/WG: non-secret structured fields. `{}` for socks5/http rows. */
   config: Record<string, unknown>;
+  /**
+   * T-6 (migration 0116) — the last QUIC verdict a real browsing session
+   * measured through this proxy: 'h3' (HTTP/3 carried), 'h2-only' (session ran
+   * but HTTP/3 did not), or null (never measured). Null is distinct from
+   * 'h2-only': the client keeps the QUIC mark inferred until a real 'h3' lands.
+   */
+  quicMeasured: string | null;
+  /** When {@link quicMeasured} was recorded, or null when never measured. */
+  quicMeasuredAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +72,11 @@ export interface AccountProxyRowUpdates {
   wrappedPassword?: string | null;
   wrappedSecret?: string | null;
   config?: Record<string, unknown>;
+  /** T-6 — the measured QUIC verdict ('h3' | 'h2-only'), back-filled by the
+   *  live capabilityReport relay. */
+  quicMeasured?: string | null;
+  /** T-6 — timestamp the QUIC verdict was measured. */
+  quicMeasuredAt?: Date | null;
 }
 
 export interface AccountProxiesRepo {
@@ -141,6 +155,8 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     wrappedPassword: r.wrappedPassword,
     wrappedSecret: r.wrappedSecret,
     config: r.config,
+    quicMeasured: r.quicMeasured,
+    quicMeasuredAt: r.quicMeasuredAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -453,6 +469,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       wrappedPassword: input.wrappedPassword,
       wrappedSecret: input.wrappedSecret ?? null,
       config: input.config ?? {},
+      quicMeasured: null,
+      quicMeasuredAt: null,
       createdAt: now,
       updatedAt: now,
     };

@@ -2719,6 +2719,13 @@ export async function createProductionDeps(
               sessionsService,
               sessionCapabilityReportStore,
               logger,
+              // T-6 — activate the measured-QUIC back-fill: a live session's
+              // capabilityReport (h2-and-h3 + interpose loaded) writes a real
+              // quic_measured verdict onto the account_proxies row it ran
+              // through, so the proxy test shows measured QUIC instead of an
+              // inference. Owner-scoped; a session on the operator default
+              // egress (no proxy row) no-ops.
+              accountProxiesRepo,
             ),
             makeSessionErrorEventRelay(agentSessionsRepo, notificationEventBus, logger),
           )),

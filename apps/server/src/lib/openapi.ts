@@ -2300,6 +2300,11 @@ function buildRegistry(): OpenAPIRegistry {
       username: z.string().nullable(),
       has_password: z.boolean(),
       has_secret: z.boolean(),
+      // T-6 — the QUIC verdict a real session measured through this proxy, or
+      // null when never measured (the client keeps the QUIC mark inferred until
+      // a real 'h3' lands here).
+      quic_measured: z.enum(['h3', 'h2-only']).nullable(),
+      quic_measured_at: z.string().nullable(),
       created_at: z.string(),
       updated_at: z.string(),
     })
@@ -2396,6 +2401,10 @@ function buildRegistry(): OpenAPIRegistry {
       z.object({
         ok: z.literal(true),
         latency_ms: z.number().int(),
+        // T-6 — the QUIC verdict a real session measured through this proxy, or
+        // null when never measured. Carried on every ok:true test result.
+        quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
+        quic_measured_at: z.string().nullable().optional(),
         // N-2 — present ONLY when the passive observer recorded the proxy's SYN.
         os_fingerprint: z
           .object({

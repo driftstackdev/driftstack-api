@@ -113,6 +113,10 @@ function rowToRecord(
     // 0089 — the profile this session runs (NULL for ephemeral sessions / pre-
     // column rows). The out-of-session trim reads it via countActiveForProfile.
     profileId: row.profileId,
+    // 0116 — proxy the session was dispatched through (NULL until dispatch / on
+    // operator-default egress). The capabilityReport relay attributes a measured
+    // QUIC verdict to this proxy.
+    proxyId: row.proxyId,
     pairModeState: row.pairModeState,
     lastErrorEvent: readLastErrorEvent(row.lastErrorEvent),
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
@@ -845,15 +849,22 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return updated.length;
   }
 
-  async setNodeId(id: string, nodeId: string): Promise<AgentSessionRecord | null> {
+  async setNodeId(
+    id: string,
+    nodeId: string,
+    proxyId?: string | null,
+  ): Promise<AgentSessionRecord | null> {
     // Worker-disconnect fix (2026-06-19) — persist which node a session was
     // dispatched to. This UPDATE is the atomic active-only ownership claim:
     // a dispatch can race DELETE, a reaper, or worker close, so missing and
     // terminal rows both return null and can never receive a later assignment.
+    // T-6 — when the caller supplies proxyId, record which proxy the session
+    // browses through on the SAME atomic claim; an omitted argument leaves
+    // proxy_id untouched.
     const now = this.clock();
     const updated = await this.database.db
       .update(agentSessions)
-      .set({ nodeId, updatedAt: now })
+      .set({ nodeId, ...(proxyId !== undefined ? { proxyId } : {}), updatedAt: now })
       .where(and(eq(agentSessions.id, id), eq(agentSessions.status, 'active')))
       .returning();
     const row = updated[0];
