@@ -25,7 +25,7 @@
     "dev:docs": "npm run dev --workspace @driftstack/docs",
     "dev:status": "npm run dev --workspace @driftstack/status-site",
     "start": "npm run start --workspace apps/server",
-    "pretest": "node scripts/clear-stale-vite-cache.mjs && PUBLIC_API_BASE_URL=\"${PUBLIC_API_BASE_URL:-http://localhost:3000}\" npm run build --workspaces --if-present",
+    "pretest": "node scripts/clear-stale-vite-cache.mjs && PUBLIC_API_BASE_URL=\"${PUBLIC_API_BASE_URL:-http://localhost:3000}\" npm run build",
     "test": "vitest run",
     "verify": "node scripts/verify-suite.mjs",
     "test:watch": "vitest",

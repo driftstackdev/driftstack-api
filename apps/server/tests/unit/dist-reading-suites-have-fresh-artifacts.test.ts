@@ -71,7 +71,7 @@
 // session red, three times, with nothing wrong.
 //
 // Second, the thing that actually protects the package layer is `pretest`, which
-// runs `npm run build --workspaces` before `vitest run` — so the canonical `npm test`
+// runs the ordered `npm run build` (build:packages then build:apps) before `vitest run` — so the canonical `npm test`
 // path cannot read a stale package at all. That is a real invariant, so it is pinned
 // below: if `pretest` stops building the workspaces, this scope decision stops being
 // safe and the guard says so instead of silently continuing to skip packages.
@@ -224,7 +224,7 @@ describe('every suite that executes a built page has a fresh artifact to execute
       pretest ?? '',
       'pretest no longer builds the workspaces, so `npm test` can now read a stale packages/*/dist — ' +
         'either restore the build or extend this guard to cover packages',
-    ).toContain('npm run build --workspaces');
+    ).toContain('npm run build');
   });
 
   it('CRITICAL every app with page-executing suites has a built artifact. Without one those suites do not fail with a reason — they emit a wall of raw ENOENTs naming a missing file rather than a missing build.', () => {

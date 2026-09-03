@@ -215,9 +215,16 @@ def test_agent_session_capability_report_preserves_degraded_states() -> None:
             "transport_mode_requested": "h2-and-h3",
             "transport_mode_active": "h2-only",
             "safeguards_passed": True,
+            # T-6 — the response always carries this key; null = NOT OBSERVED (the
+            # box reports it only after a real QUIC handshake). A required-nullable
+            # field, so the fixture must include it.
+            "h3_connection_observed": None,
         }
     )
     assert report.manual_input_available is False
+    # Regression: the measured-QUIC verdict round-trips as None when unobserved,
+    # never dropped and never coerced to False.
+    assert report.h3_connection_observed is None
     assert report.streaming_state == "blank"
     assert report.egress_state == "dead_proxy"
 

@@ -10,7 +10,7 @@
 //   • workspaces: apps/* + packages/*.
 //   • dev:all 6-app concurrently (server + dashboard + admin + marketing
 //     + docs + status).
-//   • pretest hook: npm run build --workspaces (ensures fresh builds
+//   • pretest hook: npm run build (ordered: build:packages then build:apps; ensures fresh builds
 //     before vitest).
 //   • db:* scripts wire to drizzle-kit + apps/server.
 //   • sdk:python:* 4-script ladder: dump-spec + generate + test + lint.
@@ -69,7 +69,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['dev:status']).toBe('npm run dev --workspace @driftstack/status-site');
   });
 
-  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build --workspaces --if-present' (fresh-build hook before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
+  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build' (ordered fresh-build hook, build:packages then build:apps, before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
     // 2026-05-20 — pretest wraps the workspace build in a
     // PUBLIC_API_BASE_URL default so astro builds don't crash when
     // the env var is unset (pre-push gate guarantee per task #45);
@@ -83,7 +83,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     // after it, start from a cache that is not pointing at a dead path.
     expect(pkg.scripts.pretest).toBe(
       'node scripts/clear-stale-vite-cache.mjs && ' +
-        'PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-http://localhost:3000}" npm run build --workspaces --if-present',
+        'PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-http://localhost:3000}" npm run build',
     );
     expect(pkg.scripts.test).toBe('vitest run');
     expect(pkg.scripts['test:watch']).toBe('vitest');

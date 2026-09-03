@@ -84,7 +84,19 @@ function walkCode(dir: string, acc: string[]): string[] {
   for (const e of entries) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
-      if (['node_modules', 'dist', 'migrations', 'tests', '__pycache__'].includes(e.name)) continue;
+      if (
+        [
+          'node_modules',
+          'dist',
+          'migrations',
+          'tests',
+          '__pycache__',
+          '.venv',
+          'venv',
+          '.tox',
+        ].includes(e.name)
+      )
+        continue;
       walkCode(full, acc);
     } else if (/\.(ts|py|go)$/.test(e.name) && !/\.test\.ts$|_test\.go$/.test(e.name)) {
       acc.push(full);
@@ -116,7 +128,15 @@ describe('V-814 the documented profile-cap status is derived from its class', ()
     // plus every package). At 100 this walk could have lost 97% of its corpus
     // and still reported a green, which makes the arm's own non-vacuity claim
     // the least reliable thing in the file.
-    expect(codeFiles().length, 'emitted-code files scanned').toBeGreaterThan(2800);
+    // Floor set from the TRACKED population (~676 .ts/.py/.go under these roots at
+    // HEAD), never an environment: a clean-box probe counted 2507 here, 1972 of
+    // which were packages/sdk-python/.venv site-packages — library code inflating a
+    // completeness floor. .venv/venv/.tox are skipped now, so this counts only
+    // shipped code and holds on any checkout.
+    expect(
+      codeFiles().length,
+      'emitted-code files scanned (tracked, .venv excluded)',
+    ).toBeGreaterThan(500);
   });
 
   it('CRITICAL the two caps ADR-004 distinguished return the SAME status, so any prose drawing a status contrast between them is wrong by construction. The ADR reasoned that payment-required was right for the profile cap and rate-limit semantics right for the concurrency cap; both classes pass 429 to super, and have since before the ADR was written.', () => {
