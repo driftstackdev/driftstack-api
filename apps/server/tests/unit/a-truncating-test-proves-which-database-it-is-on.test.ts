@@ -31,7 +31,17 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// A whole-tree walker: this reads every file in the test tree in the repo, so its
+// elapsed time tracks machine load, not the code under test. On the shared
+// production box the gate now targets, baseline contention is irreducible, and
+// the default 10s wall clock turns a scheduler-starved run into a false red —
+// measured 1.6s alone, 35s under `nice` + peer load. The census assertions in
+// this file (the discovery floor and the non-vacuity checks) are what detect a
+// walk that stopped finding things; giving the clock room to absorb contention
+// costs no coverage. Same rule as V-1975 / route-auth-coverage-invariant.
+vi.setConfig({ testTimeout: 60_000 });
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const TESTS = resolve(HERE, '..');
