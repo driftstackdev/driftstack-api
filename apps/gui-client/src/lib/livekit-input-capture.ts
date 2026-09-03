@@ -10,7 +10,8 @@
 //
 // Gesture → touch mapping (A3 W207/W1249):
 //   - press (mousedown, left button)   → touchStart{x,y,touchId}
-//   - drag  (mousemove while pressed)  → touchMove{x,y,touchId}  (lossy ok)
+//   - drag  (mousemove while pressed)  → touchMove{x,y,touchId}  (lossy ok; locked
+//     to the gesture's dominant axis like a real iPhone scroll — see projectDrag)
 //   - release (mouseup)                → touchEnd{x,y,touchId}
 //     (a press+release with no move = a genuine tap/click)
 //   - wheel / trackpad scroll          → swipe{x1,y1,x2,y2,durationMs}
@@ -299,6 +300,126 @@ function distSq(ax: number, ay: number, bx: number, by: number): number {
   return dx * dx + dy * dy;
 }
 
+/** Dominant-axis direction lock — the ONE lock both scroll paths use (T-4, owner:
+ *  "Browser in the simulator sometimes moves left and right like shaking, which is
+ *  not like a real iPhone where you usually only scroll up and down"). A real iPhone
+ *  locks a scroll to its dominant axis. The wheel/trackpad path did (tryLockWheelDir)
+ *  but the click-drag path streamed BOTH raw coordinates, so a slightly diagonal
+ *  drag forwarded every horizontal wobble and a page with no horizontal extent
+ *  rubber-banded sideways in the fork — the shake. Both paths now lock through this
+ *  helper so they cannot drift apart.
+ *
+ *  `accDx/accDy` = the SIGNED net displacement since the gesture origin (net, not a
+ *  sum of |deltas| — sign-alternating jitter must cancel, not accumulate into a
+ *  wrong-axis lock). Returns null while that intent is still inside DIR_LOCK_PX
+ *  (first-sample jitter must not pick the axis), else the locked unit direction —
+ *  one axis ±1, the other 0. Ties go to X (the wheel path's historical choice).
+ *
+ *  DIR_REVERSAL_PX = how far a gesture must travel AGAINST its lock before that is
+ *  believed as a genuine change of direction rather than a transient nudge that
+ *  HOLDS: the wheel path's give-back band from its travel peak, the click-drag
+ *  path's off-axis excursion band (projectDrag). Exported for the unit pins. */
+const DIR_LOCK_PX = 8;
+const DIR_REVERSAL_PX = 96;
+export function lockDominantAxis(
+  accDx: number,
+  accDy: number,
+): { dirX: number; dirY: number } | null {
+  if (Math.hypot(accDx, accDy) < DIR_LOCK_PX) return null;
+  if (Math.abs(accDx) >= Math.abs(accDy)) return { dirX: Math.sign(accDx) || 1, dirY: 0 };
+  return { dirX: 0, dirY: Math.sign(accDy) || 1 };
+}
+
+/** The in-flight click-drag gesture (`active` in useInputCapture): a press holds a
+ *  touchId until release so the matching move/end reuse it. */
+type ActiveGesture = {
+  authorityEpoch: number;
+  touchId: number;
+  startX: number;
+  startY: number;
+  // Press timestamp + whether the gesture has COMMITTED to a drag. Until it
+  // commits the touchStart is buffered (a tap emits no touchMove → never scrolls).
+  startT: number;
+  committed: boolean;
+  // Release-velocity tracking for the inertial slide: the last WIRE point (the
+  // axis-projected, clamped point actually sent — also where the release/lift paths
+  // lift the finger) + timestamp and an EMA-smoothed velocity (px/ms). Undefined
+  // until the first committed move, so a tap (no drag) never carries velocity → no glide.
+  lastX?: number;
+  lastY?: number;
+  lastT?: number;
+  vx?: number;
+  vy?: number;
+  // T-4 dominant-axis lock (the click-drag mirror of the wheel path's lock, via the
+  // shared lockDominantAxis; applied by projectDrag). dirX/dirY: the locked direction —
+  // one axis ±1, the other 0; 0/0 = not yet locked. That state lasts only until the
+  // first COMMITTED move: the commit displacement is ≥ MOVE_DEADZONE (14) > DIR_LOCK_PX
+  // (8), so the lock resolves on that very sample and no committed move is ever
+  // forwarded with an off-axis delta. While locked the OFF-axis coordinate is pinned
+  // and the ON-axis coordinate flows raw.
+  //   anchorX/anchorY: the RAW pointer value of each axis at the moment it was pinned
+  //     (the press point for the first lock) — the off-axis excursion is measured from
+  //     here, and the pinned wire value is anchor + carry.
+  //   carryX/carryY: continuity offsets added to a FLOWING axis — 0 until a mid-drag
+  //     axis change re-locks; they keep the wire point continuous across the change so
+  //     the fork never sees a jump.
+  dirX: number;
+  dirY: number;
+  anchorX: number;
+  anchorY: number;
+  carryX: number;
+  carryY: number;
+};
+
+/** Apply the T-4 dominant-axis lock to one COMMITTED click-drag sample and return the
+ *  (unclamped) point for the wire. Mutates the gesture's lock state:
+ *   - unlocked: lock on the net displacement from the press (lockDominantAxis). Inside
+ *     the deadband the raw point is forwarded unchanged (unreachable with today's commit
+ *     threshold — see ActiveGesture — but the honest expression of the rule).
+ *   - locked: pin the off-axis coordinate (the press x for a vertical drag, so the fork
+ *     sees a ZERO horizontal delta on every move) and let the on-axis coordinate flow
+ *     raw in BOTH signs — reversing along the locked axis needs no re-lock.
+ *   - genuine axis change (the wheel path's sustained-reversal rule, same band): the raw
+ *     off-axis excursion from its anchor exceeds DIR_REVERSAL_PX → re-lock to that axis
+ *     with the new sign, so a user who changes direction mid-drag is not stuck. Unlike
+ *     the wheel path this does NOT end + restart the touch: the same finger continues,
+ *     the newly-flowing axis carries an offset so its wire value is continuous, and the
+ *     newly-pinned axis is pinned at its current wire value. (An end+restart would jump
+ *     the fork's finger by the whole excursion in one move, and a restart followed by an
+ *     immediate release would read as a tap.) The excursion itself is not replayed —
+ *     the user keeps moving and the drag follows. A sub-band excursion HOLDS the pin (a
+ *     transient nudge — exactly the wheel path's HOLD). A deliberate horizontal drag (a
+ *     carousel) locks horizontal from its first sample: this is a dominant-axis lock,
+ *     not a horizontal disable. */
+function projectDrag(g: ActiveGesture, p: { x: number; y: number }): { x: number; y: number } {
+  if (g.dirX === 0 && g.dirY === 0) {
+    const lock = lockDominantAxis(p.x - g.anchorX, p.y - g.anchorY);
+    if (lock === null) return { x: p.x, y: p.y };
+    g.dirX = lock.dirX;
+    g.dirY = lock.dirY;
+  } else if (g.dirY !== 0) {
+    const excursion = p.x - g.anchorX;
+    if (Math.abs(excursion) > DIR_REVERSAL_PX) {
+      g.carryX += g.anchorX - p.x; // x starts flowing from its pinned wire value
+      g.anchorY = p.y; // y is pinned at its current wire value (p.y + carryY)
+      g.dirX = Math.sign(excursion) || 1;
+      g.dirY = 0;
+    }
+  } else {
+    const excursion = p.y - g.anchorY;
+    if (Math.abs(excursion) > DIR_REVERSAL_PX) {
+      g.carryY += g.anchorY - p.y;
+      g.anchorX = p.x;
+      g.dirY = Math.sign(excursion) || 1;
+      g.dirX = 0;
+    }
+  }
+  return {
+    x: (g.dirY !== 0 ? g.anchorX : p.x) + g.carryX,
+    y: (g.dirX !== 0 ? g.anchorY : p.y) + g.carryY,
+  };
+}
+
 /** Decelerating point path for an inertial "slide" (momentum) gesture. Given the
  *  release point + velocity (px/ms), returns the touch positions as the glide eases
  *  to a stop under friction — replayed as touchMove events so a fast flick keeps
@@ -388,29 +509,12 @@ export function computeFlingPath(
  *  (input capture is best-effort and shouldn't throw out of an event handler). */
 export function useInputCapture(opts: UseInputCaptureOpts): void {
   const lastSend = useRef<Promise<void>>(Promise.resolve());
-  // The in-flight touch gesture: a press holds a touchId until release so the
-  // matching move/end reuse it. null = no finger down → no move is sent (a real
+  // The in-flight touch gesture (ActiveGesture): a press holds a touchId until release
+  // so the matching move/end reuse it. null = no finger down → no move is sent (a real
   // iPhone has no hover/pointer-move without a touch). `startX/startY` (the press
   // point in video-px) + `moved` drive the MOVE_DEADZONE scroll-vs-tap gate: no
   // touchMove is emitted until the cursor leaves the deadzone (A3 W2668).
-  const active = useRef<{
-    authorityEpoch: number;
-    touchId: number;
-    startX: number;
-    startY: number;
-    // Press timestamp + whether the gesture has COMMITTED to a drag. Until it
-    // commits the touchStart is buffered (a tap emits no touchMove → never scrolls).
-    startT: number;
-    committed: boolean;
-    // Release-velocity tracking for the inertial slide: the last move's position +
-    // timestamp and an EMA-smoothed velocity (px/ms). Undefined until the first
-    // post-deadzone move, so a tap (no drag) never carries velocity → no glide.
-    lastX?: number;
-    lastY?: number;
-    lastT?: number;
-    vx?: number;
-    vy?: number;
-  } | null>(null);
+  const active = useRef<ActiveGesture | null>(null);
   // The in-flight inertial glide (null = none). Holds the held touchId + current
   // glide position + the step timer so a new press / teardown can halt it cleanly.
   const fling = useRef<{
@@ -616,6 +720,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // finger lifted, so this keeps us from sending a wild off-surface touch.
     const clampX = (v: number): number => Math.max(0, Math.min(logical.width, v));
     const clampY = (v: number): number => Math.max(0, Math.min(logical.height, v));
+    // T-4: one committed click-drag sample → its wire point. projectDrag applies the
+    // dominant-axis lock; the clamp keeps a carried re-lock offset inside the frame the
+    // same way an off-surface drag is clamped, so the fork never receives an off-frame
+    // touch. Used by the streamed move AND the in-bounds release (the last sample of the
+    // same stream), so no path can leak the suppressed off-axis delta onto the wire.
+    const dragWirePoint = (
+      g: ActiveGesture,
+      p: { x: number; y: number },
+    ): { x: number; y: number } => {
+      const s = projectDrag(g, p);
+      return { x: clampX(s.x), y: clampY(s.y) };
+    };
     // Halt an in-flight inertial glide. endTouch=true lifts the gliding finger (a
     // new press mid-glide, like tapping to stop iOS momentum); teardown passes
     // false (just clear the timer — the room is going away).
@@ -704,6 +820,13 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         startY: p.y,
         startT: e.timeStamp,
         committed: false,
+        // Axis lock not yet decided; anchored at the press (see ActiveGesture).
+        dirX: 0,
+        dirY: 0,
+        anchorX: p.x,
+        anchorY: p.y,
+        carryX: 0,
+        carryY: 0,
       };
     };
     // Move only while a finger is down (no iPhone hover). Until the gesture COMMITS
@@ -753,14 +876,18 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         g.committed = true;
         lifecycleAnchor = true;
         // Emit the buffered touchStart at the press point so the scroll originates
-        // there, then seed velocity tracking from the COMMIT point (the current move),
-        // NOT the press — otherwise the initial dwell (up to DRAG_HOLD_MS) folds into
-        // the first velocity sample and distorts the release speed (used by the fling).
+        // there. Velocity tracking starts from the COMMIT point (this move: lastT is
+        // still undefined here, so the EMA below skips it and the next move measures
+        // against it), NOT the press — otherwise the initial dwell (up to DRAG_HOLD_MS)
+        // folds into the first velocity sample and distorts the release speed (fling).
         send({ type: 'touchStart', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
-        g.lastX = p.x;
-        g.lastY = p.y;
-        g.lastT = e.timeStamp;
       }
+      // T-4 dominant-axis lock: from here on `p` is the WIRE point — the raw pointer
+      // PROJECTED onto the gesture's locked axis (off-axis coordinate pinned, see
+      // projectDrag) and clamped to the frame — exactly as the off-surface clamp above
+      // already rebinds it. Everything downstream (the velocity EMA, the last point the
+      // release/lift paths reuse, the send) sees ONLY this projected point.
+      p = dragWirePoint(g, p);
       // Track release velocity (EMA, px/ms) for the inertial slide: weight recent
       // motion so a fast flick at the very end produces a strong glide.
       const t = e.timeStamp;
@@ -800,8 +927,8 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
         send({ type: 'touchEnd', x: g.startX, y: devY(g.startY), touchId: g.touchId }, true);
         return;
       }
-      const p = pointerToViewport(e, video, logical);
-      if (p === null) {
+      const raw = pointerToViewport(e, video, logical);
+      if (raw === null) {
         // Committed drag released OFF the surface → lift at the last in-bounds point
         // (NOT 0,0 — the Mac injector honors the end coord, so 0,0 reads as a flick).
         endCommittedTouch(
@@ -814,6 +941,11 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Committed drag released in-bounds. The inertial fling is DISABLED
       // (FLING_ENABLED=false) — it over-drove the scroll ("much scrolling after i'm
       // done", founder 2026-06-21); a click-drag scroll now stops dead on release.
+      // The lift point is the release sample PROJECTED through the drag's axis lock
+      // (T-4): it is the last sample of the same stream, and lifting at the raw point
+      // would forward the whole suppressed off-axis delta (up to DIR_REVERSAL_PX) in one
+      // final reliable move — the shake, concentrated at release.
+      const p = dragWirePoint(g, raw);
       const fresh = g.lastT !== undefined && e.timeStamp - g.lastT <= FLING_STALE_MS;
       const speed = g.vx !== undefined && g.vy !== undefined ? Math.hypot(g.vx, g.vy) : 0;
       if (FLING_ENABLED && fresh && speed >= FLING_MIN_SPEED) {
@@ -865,7 +997,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     //   3. RATCHET: the finger position is a strictly-monotonic projection of the
     //      cumulative displacement onto the locked direction — a single opposite-sign
     //      frame nudges the accumulator back but moves the finger by 0 (HOLD), so the page
-    //      can never bounce. Only a SUSTAINED give-back (> WHEEL_REVERSAL_PX from the
+    //      can never bounce. Only a SUSTAINED give-back (> DIR_REVERSAL_PX from the
     //      travel peak) is a genuine reversal: it cleanly touchEnds + seeds a fresh
     //      gesture in the new direction.
     //   4. Re-centre at a true edge CARRYING the locked direction (never a fresh-sign
@@ -892,8 +1024,10 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     // Per-frame applied-delta cap ≤ the virtual finger's travel from centre (≈389px), so a
     // single frame never needs an intra-frame re-centre; the remainder carries.
     const WHEEL_MAX_FRAME_DELTA = 320;
-    const WHEEL_DIR_LOCK_PX = 8; // cumulative magnitude before the axis/sign locks (ignore first-sample jitter)
-    const WHEEL_REVERSAL_PX = 96; // give-back from the travel peak that = a GENUINE reversal (else HOLD)
+    // The axis-lock deadband (DIR_LOCK_PX, inside lockDominantAxis: cumulative magnitude
+    // before the axis/sign locks, ignoring first-sample jitter) and the reversal band
+    // (DIR_REVERSAL_PX: give-back from the travel peak that = a GENUINE reversal, else
+    // HOLD) are the module-level constants shared with the click-drag path (T-4).
     const WHEEL_IDLE_MS = 320; // no wheel for this long = the scroll (incl OS momentum) is over
     const resetWheelAccum = (): void => {
       wheelAccDx = 0;
@@ -934,17 +1068,15 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
     };
     // Lock the dominant-axis direction once the cumulative intent clears the deadband, so
     // the gesture is axis-locked (a near-vertical scroll stays vertical) and the sign is
-    // the TRUE scroll sign — not a jittery first sample. Returns true once locked.
+    // the TRUE scroll sign — not a jittery first sample. Returns true once locked. The
+    // decision is the shared lockDominantAxis — the click-drag path locks through the
+    // very same function (T-4), so the two scroll paths cannot diverge.
     const tryLockWheelDir = (): boolean => {
       if (wheelDirX !== 0 || wheelDirY !== 0) return true;
-      if (Math.hypot(wheelAccDx, wheelAccDy) < WHEEL_DIR_LOCK_PX) return false;
-      if (Math.abs(wheelAccDx) >= Math.abs(wheelAccDy)) {
-        wheelDirX = Math.sign(wheelAccDx) || 1;
-        wheelDirY = 0;
-      } else {
-        wheelDirX = 0;
-        wheelDirY = Math.sign(wheelAccDy) || 1;
-      }
+      const lock = lockDominantAxis(wheelAccDx, wheelAccDy);
+      if (lock === null) return false;
+      wheelDirX = lock.dirX;
+      wheelDirY = lock.dirY;
       return true;
     };
     // Re-arm: keep draining a big flick this frame, else end the gesture after the idle
@@ -1019,12 +1151,12 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Signed travel along the locked direction.
       let proj = wheelAccDx * wheelDirX + wheelAccDy * wheelDirY;
 
-      // GENUINE sustained reversal (gave back > WHEEL_REVERSAL_PX from the ratchet peak):
+      // GENUINE sustained reversal (gave back > DIR_REVERSAL_PX from the ratchet peak):
       // cleanly END this gesture and seed a fresh one in the NEW direction with the
       // residual reverse displacement, so distance is not lost and the new lock takes the
       // new sign. A single/transient opposite frame instead just HOLDS (ratchet below).
-      if (proj < wheelTravel - WHEEL_REVERSAL_PX) {
-        // Signed reverse travel ALONG the locked axis (≤ -WHEEL_REVERSAL_PX). Seed the fresh
+      if (proj < wheelTravel - DIR_REVERSAL_PX) {
+        // Signed reverse travel ALONG the locked axis (≤ -DIR_REVERSAL_PX). Seed the fresh
         // gesture with ONLY this along-axis residual — dropping the off-axis accumulator — so
         // the new direction-lock can't grab the wrong (off-axis) direction on a near-pure
         // vertical/horizontal reversal. (Capturing dir before endWheelDrag, which resets it.)
@@ -1119,7 +1251,7 @@ export function useInputCapture(opts: UseInputCaptureOpts): void {
       // Normalize deltaMode (line/page → px), mirroring LiveSessionView's wheel path. A
       // classic mouse wheel (or any input) that reports LINE (1) or PAGE (2) mode emits a
       // tiny raw count per notch (e.g. ±1/±3) instead of pixels; without this the cumulative
-      // intent barely clears WHEEL_DIR_LOCK_PX and the page crawls (scrolling feels dead).
+      // intent barely clears DIR_LOCK_PX and the page crawls (scrolling feels dead).
       // Page mode = one device viewport-height of scroll in the per-archetype logical
       // wire space.
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? logical.height : 1;

@@ -398,7 +398,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     const video = mountCapture();
     fireWheel(video, 0, 150); // scroll down
     flushRaf();
-    fireWheel(video, 0, -40); // a transient opposite frame (< WHEEL_REVERSAL_PX=96)
+    fireWheel(video, 0, -40); // a transient opposite frame (< DIR_REVERSAL_PX=96)
     flushRaf();
     fireWheel(video, 0, 120); // resume down
     flushRaf();
@@ -418,7 +418,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
     const video = mountCapture();
     fireWheel(video, 0, 200); // scroll down
     flushRaf();
-    fireWheel(video, 0, -200); // reverse hard (give-back > WHEEL_REVERSAL_PX) → scroll up
+    fireWheel(video, 0, -200); // reverse hard (give-back > DIR_REVERSAL_PX) → scroll up
     flushRaf();
     // The reversal SPLITS into two gestures (not an intra-gesture bounce).
     expect(eventsOfType('touchStart').length).toBe(2);
@@ -431,7 +431,7 @@ describe('useInputCapture — scroll-vs-tap (TIME + DISTANCE gesture)', () => {
 
   it('SUB-DEADBAND jiggle emits NOTHING (no moveless touchStart/End spam)', () => {
     const video = mountCapture();
-    fireWheel(video, 0, 4); // < WHEEL_DIR_LOCK_PX=8 → no direction lock, lazy start
+    fireWheel(video, 0, 4); // < DIR_LOCK_PX=8 → no direction lock, lazy start
     flushRaf();
     expect(eventsOfType('touchStart')).toHaveLength(0);
     expect(eventsOfType('touchMove')).toHaveLength(0);

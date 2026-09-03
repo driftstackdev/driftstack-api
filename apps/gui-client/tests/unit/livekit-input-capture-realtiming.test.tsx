@@ -216,7 +216,7 @@ describe('useInputCapture — FAITHFUL real-timing macOS trackpad scroll', () =>
       vi.advanceTimersByTime(12);
     }
     sendInputEvent.mockClear(); // focus on the post-reversal emissions
-    // Hard reversal UP (> WHEEL_REVERSAL_PX give-back), purely vertical.
+    // Hard reversal UP (> DIR_REVERSAL_PX give-back), purely vertical.
     for (let i = 0; i < 4; i++) {
       fireWheel(video, 0, -50);
       vi.advanceTimersByTime(12);
