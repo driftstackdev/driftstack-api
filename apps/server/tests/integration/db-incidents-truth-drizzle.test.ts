@@ -208,6 +208,14 @@ describe.skipIf(!RUN_DB_TESTS)('Drizzle incident list/create truth (real Postgre
         $$;
         CREATE POLICY incident_truth_select ON "${TEST_SCHEMA}".incidents
           FOR SELECT USING ("${TEST_SCHEMA}".hold_incident_truth_reader());
+        -- The owner is under FORCE ROW LEVEL SECURITY too, and the policy above is
+        -- FOR SELECT only: without this one, a NON-superuser owner's UPDATE below has
+        -- no policy that admits the row and updates ZERO rows without error. A
+        -- superuser bypasses RLS entirely, which is why this only ever showed on a
+        -- box whose role is not one (reproduced locally under a non-superuser member
+        -- of the owning role: identical failure at the fresh-read assertion).
+        CREATE POLICY incident_truth_owner ON "${TEST_SCHEMA}".incidents
+          FOR ALL TO CURRENT_USER USING (true) WITH CHECK (true);
       `);
       await blocker`SELECT pg_advisory_lock(${lockKey})`;
       const pending = readerRepo.listPage({
@@ -232,11 +240,15 @@ describe.skipIf(!RUN_DB_TESTS)('Drizzle incident list/create truth (real Postgre
         await new Promise((resolve) => setTimeout(resolve, 10));
       }
       expect(waiting).toBe(true);
-      await admin.unsafe(`
+      // A zero-row UPDATE returns success. Assert the row was actually written so
+      // a policy or WHERE miss fails HERE, not two reads later dressed up as a
+      // snapshot-visibility problem (which is exactly how it first presented).
+      const resolved = await admin.unsafe(`
         UPDATE "${TEST_SCHEMA}".incidents
         SET status = 'resolved', resolved_at = now(), updated_at = now()
         WHERE id = '${targetId}'
       `);
+      expect(resolved.count).toBe(1);
       await blocker`SELECT pg_advisory_unlock(${lockKey})`;
       const heldPage = await pending;
       expect(heldPage.rows.map((row) => row.id)).toContain(targetId);
