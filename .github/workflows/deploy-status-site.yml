@@ -75,12 +75,18 @@ jobs:
           # deploy succeeded, and the pages were "correct" — they just pointed at a
           # host that did not exist. Publishing is the step that can tell.
           if grep -rqE "https://[a-z.]*driftstack\.io" "apps/status-site/dist" 2>/dev/null; then
-            if ! getent hosts driftstack.io >/dev/null 2>&1 && ! nslookup driftstack.io >/dev/null 2>&1; then
-              echo "REFUSING TO DEPLOY: this build links to driftstack.io, which does not resolve."
+            # ⛔ The first version of this check used `getent || nslookup` and PASSED
+            # on a host that serves nothing: nslookup exits 0 when the ZONE exists
+            # with NS records but has no address, which is exactly the broken state
+            # it was written to catch. An exit code is not the property. Ask for the
+            # thing that actually has to work — an HTTP response.
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://driftstack.io/ || echo 000)
+            if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
+              echo "REFUSING TO DEPLOY: this build links to driftstack.io, which answered $code."
               echo "Create the Pages CNAMEs for the .io hosts before publishing."
               exit 1
             fi
-            echo "build links to driftstack.io and it resolves — safe to publish"
+            echo "build links to driftstack.io and it answered $code — safe to publish"
           else
             echo "build does not link to driftstack.io — nothing to check"
           fi
