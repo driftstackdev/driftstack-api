@@ -18,6 +18,7 @@ on:
         options:
           - verify
           - dns-probe
+          - pages-domain-probe
 
 permissions:
   contents: read
@@ -52,6 +53,30 @@ jobs:
           r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/driftstack-marketing/domains")
           echo "pages domains: success=$(jq -r .success <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
           jq -r '.result[]? | "domain: \(.name) status=\(.status)"' <<<"$r"
+
+      - name: Pages custom-domain probe (attach one throwaway .io host to a Pages project, then remove it)
+        if: ${{ inputs.action == 'pages-domain-probe' }}
+        run: |
+          set -euo pipefail
+          # The zone-scoped DNS API is closed to this token, but attaching a custom
+          # domain to a Pages project is an ACCOUNT-level call, and when the zone
+          # lives in the same account Cloudflare provisions the DNS record itself.
+          # If that works, the website move needs no new credential at all. The
+          # host is a throwaway subdomain and is removed again in the same job.
+          HOST=_a2probe.driftstack.io
+          PROJ=driftstack-marketing
+          r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$PROJ/domains" --data "{\"name\":\"$HOST\"}")
+          ok=$(jq -r '.success' <<<"$r")
+          echo "attach: success=$ok errors=$(jq -c '[.errors[]|{code,message}]' <<<"$r")"
+          if [ "$ok" = "true" ]; then
+            echo "PAGES DOMAIN ON .IO: YES — this token can attach driftstack.io hosts to Pages projects."
+            echo "That is the whole mechanism the website move needs; no zone-scoped token required."
+          else
+            echo "PAGES DOMAIN ON .IO: NO — the error above says what the token is missing."
+          fi
+          d=$(curl -sS -X DELETE -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$PROJ/domains/$HOST" || true)
+          echo "cleanup delete: success=$(jq -r '.success // "n/a"' <<<"$d")"
 
       - name: DNS probe (create + delete one TXT record on driftstack.io)
         if: ${{ inputs.action == 'dns-probe' }}
