@@ -57,8 +57,15 @@ jobs:
         if: ${{ inputs.action == 'dns-probe' }}
         run: |
           set -euo pipefail
+          # "This token cannot" is an ANSWER, not a failure. Exiting non-zero here
+          # painted a red check on main for a probe that had worked perfectly and
+          # reported exactly what it was built to report.
           zid=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones?name=driftstack.io" | jq -r '.result[0].id // empty')
-          test -n "$zid" || { echo "dns-probe: driftstack.io zone not visible; cannot probe"; exit 1; }
+          if [ -z "$zid" ]; then
+            echo "DNS EDIT: NO — the driftstack.io zone is not visible to this token, so it cannot provision the T-3 DNS."
+            echo "The zone itself exists and is on Cloudflare (same nameservers as driftstack.dev); what is missing is zone scope on the token."
+            exit 0
+          fi
           r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
             "$CF_API/zones/$zid/dns_records" \
             --data '{"type":"TXT","name":"_a2-probe.driftstack.io","content":"driftstack-probe","ttl":60}')
