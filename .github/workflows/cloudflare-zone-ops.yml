@@ -1,0 +1,72 @@
+# Cloudflare zone operations, run by hand (workflow_dispatch) with the repo's
+# CLOUDFLARE_API_TOKEN — the same secret the Pages deploys use. It exists because
+# that token's SCOPE is the open question: the deploys prove Pages Edit; whether
+# it can also edit DNS on the driftstack.io zone decides who can do the website
+# move (ledger T-3) without a new credential. Prints only booleans, names and
+# Cloudflare error codes — never the token, never record contents.
+#
+name: Cloudflare zone ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: verify (token status, zones, Pages read) or dns-probe (create+delete one TXT record on driftstack.io)
+        required: true
+        default: verify
+        type: choice
+        options:
+          - verify
+          - dns-probe
+
+permissions:
+  contents: read
+
+jobs:
+  ops:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CF_API: https://api.cloudflare.com/client/v4
+      CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Token status
+        run: |
+          set -euo pipefail
+          test -n "$CF_TOKEN" || { echo "CLOUDFLARE_API_TOKEN secret unset"; exit 1; }
+          r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/user/tokens/verify")
+          echo "verify: success=$(jq -r .success <<<"$r") status=$(jq -r '.result.status // "n/a"' <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
+
+      - name: Zones visible to the token
+        run: |
+          set -euo pipefail
+          r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones?per_page=50")
+          echo "zones: success=$(jq -r .success <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
+          jq -r '.result[]? | "zone: \(.name) status=\(.status)"' <<<"$r"
+          if jq -r '.result[]? | .name' <<<"$r" | grep -qx driftstack.io; then echo "driftstack.io: VISIBLE"; else echo "driftstack.io: NOT visible to this token"; fi
+
+      - name: Pages read (custom domains on the marketing project)
+        run: |
+          set -euo pipefail
+          r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/driftstack-marketing/domains")
+          echo "pages domains: success=$(jq -r .success <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
+          jq -r '.result[]? | "domain: \(.name) status=\(.status)"' <<<"$r"
+
+      - name: DNS probe (create + delete one TXT record on driftstack.io)
+        if: ${{ inputs.action == 'dns-probe' }}
+        run: |
+          set -euo pipefail
+          zid=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones?name=driftstack.io" | jq -r '.result[0].id // empty')
+          test -n "$zid" || { echo "dns-probe: driftstack.io zone not visible; cannot probe"; exit 1; }
+          r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+            "$CF_API/zones/$zid/dns_records" \
+            --data '{"type":"TXT","name":"_a2-probe.driftstack.io","content":"driftstack-probe","ttl":60}')
+          ok=$(jq -r .success <<<"$r")
+          echo "dns create: success=$ok errors=$(jq -c '[.errors[].code]' <<<"$r")"
+          rid=$(jq -r '.result.id // empty' <<<"$r")
+          if [ -n "$rid" ]; then
+            d=$(curl -sS -X DELETE -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones/$zid/dns_records/$rid")
+            echo "dns delete: success=$(jq -r .success <<<"$d")"
+          fi
+          if [ "$ok" = "true" ]; then echo "DNS EDIT: YES — this token can do the T-3 DNS step"; else echo "DNS EDIT: NO — the token is Pages-only"; fi
