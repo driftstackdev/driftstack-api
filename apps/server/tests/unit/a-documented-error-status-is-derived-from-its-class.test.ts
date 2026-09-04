@@ -26,6 +26,7 @@
 // actually drifted, derives the status rather than restating it, and does not
 // pretend to cover the class of defect in general.
 
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,6 +50,20 @@ const PROFILE_CAP_SURFACES = [
 
 /** Roots that contain EMITTED code, as opposed to prose about it. */
 const CODE_ROOTS = ['apps/server/src', 'packages'] as const;
+// ONE filter for the walk below and for the git-derived population it is measured
+// against — defined once so the two cannot drift apart.
+const SKIP_DIRS = [
+  'node_modules',
+  'dist',
+  'migrations',
+  'tests',
+  '__pycache__',
+  '.venv',
+  'venv',
+  '.tox',
+];
+const CODE_FILE = /\.(ts|py|go)$/;
+const NOT_CODE = /\.test\.ts$|_test\.go$/;
 
 /** `class XError extends ApiError { … status: NNN … }` → status. */
 function statusByErrorClass(): Map<string, number> {
@@ -84,21 +99,9 @@ function walkCode(dir: string, acc: string[]): string[] {
   for (const e of entries) {
     const full = join(dir, e.name);
     if (e.isDirectory()) {
-      if (
-        [
-          'node_modules',
-          'dist',
-          'migrations',
-          'tests',
-          '__pycache__',
-          '.venv',
-          'venv',
-          '.tox',
-        ].includes(e.name)
-      )
-        continue;
+      if (SKIP_DIRS.includes(e.name)) continue;
       walkCode(full, acc);
-    } else if (/\.(ts|py|go)$/.test(e.name) && !/\.test\.ts$|_test\.go$/.test(e.name)) {
+    } else if (CODE_FILE.test(e.name) && !NOT_CODE.test(e.name)) {
       acc.push(full);
     }
   }
@@ -118,25 +121,52 @@ function codeFiles(): string[] {
   return acc;
 }
 
+// The TRACKED population under the same roots with the same filter, from git, at
+// run time. A floor calibrated against a number is the defect one size down: the
+// constant this replaces sat 7% under the 537 files scanned at fe41f2f76 while its
+// comment cited a repo-wide 676. Derived, it cannot drift, and it is two-sided.
+function trackedCodeFiles(): number {
+  const out = execFileSync('git', ['ls-files', '-z', '--', ...CODE_ROOTS], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+  });
+  return out
+    .split('\0')
+    .filter(
+      (rel) =>
+        rel.length > 0 &&
+        CODE_FILE.test(rel) &&
+        !NOT_CODE.test(rel) &&
+        !rel.split('/').some((seg) => SKIP_DIRS.includes(seg)),
+    ).length;
+}
+
 describe('V-814 the documented profile-cap status is derived from its class', () => {
   it('CRITICAL the class map is really parsed out of lib/errors.ts. Every arm below compares against it, so an empty map would make them agree with each other over nothing — the failure mode this family of guards keeps producing.', () => {
     const statuses = statusByErrorClass();
     expect(statuses.size, 'ApiError subclasses carrying a literal status').toBeGreaterThan(15);
     expect(statuses.get('TierLimitError'), 'the class the profile cap actually throws').toBe(429);
     expect(statuses.get('ConcurrencyLimitError'), 'the cap ADR-004 contrasted it with').toBe(429);
-    // V-938 — raised from 100 to just under the measured 3134 (apps/server/src
-    // plus every package). At 100 this walk could have lost 97% of its corpus
-    // and still reported a green, which makes the arm's own non-vacuity claim
-    // the least reliable thing in the file.
-    // Floor set from the TRACKED population (~676 .ts/.py/.go under these roots at
-    // HEAD), never an environment: a clean-box probe counted 2507 here, 1972 of
-    // which were packages/sdk-python/.venv site-packages — library code inflating a
-    // completeness floor. .venv/venv/.tox are skipped now, so this counts only
-    // shipped code and holds on any checkout.
+    // V-938 raised the floor from 100 to a constant; a clean-box probe then
+    // counted 2507 here (1972 of them packages/sdk-python/.venv site-packages),
+    // and the constant that replaced it sat 7% under the real scan. The bound is
+    // now derived from git under the SAME filter, in BOTH directions: a walk that
+    // lost part of the corpus is red, and so is a walk that started counting
+    // something git does not track (a vendored tree, a build output).
+    const tracked = trackedCodeFiles();
     expect(
-      codeFiles().length,
-      'emitted-code files scanned (tracked, .venv excluded)',
-    ).toBeGreaterThan(500);
+      tracked,
+      'git ls-files sees the corpus (0 means git failed, not the walk)',
+    ).toBeGreaterThan(100);
+    const scanned = codeFiles().length;
+    expect(
+      scanned,
+      `scanned ${scanned} of ${tracked} tracked: the walk lost part of the corpus`,
+    ).toBeGreaterThanOrEqual(Math.floor(tracked * 0.95));
+    expect(
+      scanned,
+      `scanned ${scanned} vs ${tracked} tracked: the walk counts something git does not track`,
+    ).toBeLessThanOrEqual(Math.ceil(tracked * 1.1) + 25);
   });
 
   it('CRITICAL the two caps ADR-004 distinguished return the SAME status, so any prose drawing a status contrast between them is wrong by construction. The ADR reasoned that payment-required was right for the profile cap and rate-limit semantics right for the concurrency cap; both classes pass 429 to super, and have since before the ADR was written.', () => {
