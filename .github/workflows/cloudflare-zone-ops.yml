@@ -63,7 +63,10 @@ jobs:
           # lives in the same account Cloudflare provisions the DNS record itself.
           # If that works, the website move needs no new credential at all. The
           # host is a throwaway subdomain and is removed again in the same job.
-          HOST=_a2probe.driftstack.io
+          # NOT an underscore prefix: Pages rejects that with 8000015 "Domain is
+          # invalid", which reads exactly like a permission refusal and is not one.
+          # The first run of this probe answered NO for that reason alone.
+          HOST=a2probe.driftstack.io
           PROJ=driftstack-marketing
           r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
             "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$PROJ/domains" --data "{\"name\":\"$HOST\"}")
