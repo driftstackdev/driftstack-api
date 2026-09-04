@@ -122,6 +122,31 @@ async function settlePromises(times = 12): Promise<void> {
   for (let i = 0; i < times; i++) await Promise.resolve();
 }
 
+// A control the first page's response has not yet enabled swallows a click in
+// silence: jsdom dispatches nothing for a disabled button, so the test proceeds
+// having made NO request and fails later at an assertion that reads like a render
+// bug. Measured at this click: Node 22 finds `disabled=true class="hidden …"`
+// where Node 25 finds it enabled, same checkout and fixtures — so polling the
+// ASSERTION could never work, the click had already no-op'd before the poll began.
+// Wait for the control to be actionable instead.
+async function clickWhenEnabled(
+  window: JSDOM['window'],
+  selector: string,
+  label: string,
+  rounds = 100,
+): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) {
+    const el = window.document.querySelector(selector) as HTMLButtonElement | null;
+    if (el !== null && !el.disabled && !el.classList.contains('hidden')) {
+      el.click();
+      return;
+    }
+    if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+    await settlePromises();
+  }
+  throw new Error(`clickWhenEnabled: "${label}" (${selector}) never became clickable`);
+}
+
 let entrySequence = 100;
 function testDeliveryId(sequence = ++entrySequence): string {
   return 'wdl_00000000-0000-4000-8000-' + String(sequence).padStart(12, '0');
@@ -561,16 +586,11 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
     win = window;
     await settlePromises();
 
-    (window.document.querySelector('[data-action="load-more"]') as HTMLButtonElement).click();
+    await clickWhenEnabled(window, '[data-action="load-more"]', 'load more');
     await settlePromises();
-    // Node 22 settles this DOM update one macrotask later than 24+, so a fixed
-    // settle depth reads the stale text there (measured: fails on 22, passes on 26).
-    // Poll for the state instead of assuming when it lands.
-    await vi.waitFor(() =>
-      expect(
-        window.document.querySelector('[data-id="wdl_00000000-0000-4000-8000-000000000013"]'),
-      ).not.toBeNull(),
-    );
+    expect(
+      window.document.querySelector('[data-id="wdl_00000000-0000-4000-8000-000000000013"]'),
+    ).not.toBeNull();
 
     const fetchCountWhileExpanded = fetchCalls.length;
     await vi.advanceTimersByTimeAsync(30_000);
@@ -579,7 +599,7 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
       'Live refresh paused while viewing older entries',
     );
 
-    (window.document.querySelector('[data-action="back-to-newest"]') as HTMLButtonElement).click();
+    await clickWhenEnabled(window, '[data-action="back-to-newest"]', 'back to newest');
     await settlePromises();
     await vi.advanceTimersByTimeAsync(0);
     await settlePromises();
