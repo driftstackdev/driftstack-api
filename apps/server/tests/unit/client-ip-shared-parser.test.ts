@@ -20,6 +20,7 @@ import type { FastifyRequest } from 'fastify';
 import Fastify from 'fastify';
 
 import { readClientIp } from '../../src/lib/client-ip.js';
+import { fastifyTrustProxy } from '../../src/lib/app.js';
 
 import { codeOnly } from './_helpers/code-only.js';
 
@@ -80,10 +81,7 @@ describe('readClientIp — request.ip is the only authority', () => {
 });
 
 describe('readClientIp — Fastify trustProxy integration', () => {
-  async function resolvedIp(
-    trustProxy: boolean | number | string,
-    xff: string,
-  ): Promise<string | null> {
+  async function resolvedIp(trustProxy: boolean | string, xff: string): Promise<string | null> {
     const app = Fastify({ trustProxy });
     app.get('/ip', (request) => ({ ip: readClientIp(request) }));
     try {
@@ -99,7 +97,9 @@ describe('readClientIp — Fastify trustProxy integration', () => {
   }
 
   it('trustProxy=1 selects nginx-appended rightmost peer, not spoofed leftmost input', async () => {
-    await expect(resolvedIp(1, '66.66.66.66, 203.0.113.7')).resolves.toBe('203.0.113.7');
+    await expect(resolvedIp(fastifyTrustProxy(1), '66.66.66.66, 203.0.113.7')).resolves.toBe(
+      '203.0.113.7',
+    );
   });
 
   it('trustProxy=false ignores the forwarding header', async () => {

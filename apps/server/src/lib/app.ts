@@ -803,6 +803,36 @@ export interface AppDeps {
   oauthLinksRepo?: OAuthLinksRepo;
 }
 
+/**
+ * Translate a configured `trustProxy` into a value fastify 5.12 still accepts.
+ *
+ * 5.12 REMOVED the hop-count (number) form — that was the fix for
+ * GHSA-3m5p-2c4r-xxw2, X-Forwarded-* spoofing under a hop count. This deployment
+ * is Cloudflare -> nginx(127.0.0.1) -> Fastify, and nginx appends the client it
+ * observed (already resolved from CF-Connecting-IP by real_ip) to
+ * X-Forwarded-For. Walking rightwards while the address is loopback therefore
+ * lands on exactly the address the hop count named; config-trust-proxy.test.ts
+ * pins that equivalence AND pins that a spoofed leftmost entry is still ignored.
+ *
+ * A numeric TRUST_PROXY is TRANSLATED rather than rejected: refusing it would
+ * turn an env value with a correct meaning into a boot failure in every
+ * environment still carrying it, and a control plane that will not start is a
+ * worse outcome than one that starts and says so. It warns on every boot so the
+ * value gets corrected in the environment instead of living on as a translation
+ * nobody remembers making.
+ */
+export function fastifyTrustProxy(
+  configured: boolean | number | string,
+  logger?: { warn: (obj: Record<string, unknown>, msg: string) => void },
+): boolean | string {
+  if (typeof configured !== 'number') return configured;
+  logger?.warn(
+    { trustProxy: configured },
+    'TRUST_PROXY is a hop count, which fastify 5.12 removed. Using "loopback", which resolves req.ip identically behind nginx-on-loopback. Set TRUST_PROXY=loopback to make it explicit.',
+  );
+  return 'loopback';
+}
+
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app: FastifyInstance = Fastify({
     loggerInstance: deps.logger as unknown as FastifyBaseLogger,
@@ -815,7 +845,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // req.ip / X-Forwarded-For resolution. Default false (dev/test = socket
     // peer); prod injects deps.trustProxy=1 so req.ip is the real client behind
     // Cloudflare→nginx (per-IP rate-limit + audit-IP correctness).
-    trustProxy: deps.trustProxy ?? false,
+    trustProxy: fastifyTrustProxy(deps.trustProxy ?? false, deps.logger),
     genReqId: (req) => {
       const inbound = req.headers['x-request-id'];
       if (typeof inbound === 'string' && inbound.length > 0 && inbound.length <= 128) {
