@@ -19,6 +19,7 @@ on:
           - verify
           - dns-probe
           - pages-domain-probe
+          - attach-io-sites
 
 permissions:
   contents: read
@@ -53,6 +54,39 @@ jobs:
           r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/driftstack-marketing/domains")
           echo "pages domains: success=$(jq -r .success <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
           jq -r '.result[]? | "domain: \(.name) status=\(.status)"' <<<"$r"
+
+      - name: Attach the driftstack.io hosts to their Pages projects
+        if: ${{ inputs.action == 'attach-io-sites' }}
+        run: |
+          set -euo pipefail
+          # Step 1 of the website move (ledger T-3): make .io SERVE before any code
+          # points at it. Purely ADDITIVE — every .dev custom domain stays attached
+          # and keeps serving, so nothing customer-facing changes here. Idempotent:
+          # an already-attached host is reported and left alone.
+          fail=0
+          attach() {
+            proj="$1"; host="$2"
+            cur=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" \
+              "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$proj/domains" \
+              | jq -r --arg h "$host" '[.result[]?|select(.name==$h)]|length')
+            if [ "$cur" != "0" ]; then echo "  $host -> $proj : already attached"; return; fi
+            r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$proj/domains" --data "{\"name\":\"$host\"}")
+            if [ "$(jq -r .success <<<"$r")" = "true" ]; then
+              echo "  $host -> $proj : ATTACHED (status $(jq -r '.result.status // "pending"' <<<"$r"))"
+            else
+              echo "  $host -> $proj : FAILED $(jq -c '[.errors[]|{code,message}]' <<<"$r")"
+              fail=1
+            fi
+          }
+          attach driftstack-marketing          driftstack.io
+          attach driftstack-marketing          www.driftstack.io
+          attach driftstack-customer-dashboard app.driftstack.io
+          attach driftstack-docs               docs.driftstack.io
+          attach driftstack-status             status.driftstack.io
+          attach driftstack-admin-panel        admin.driftstack.io
+          echo "done — every .dev custom domain left attached and serving"
+          exit $fail
 
       - name: Pages custom-domain probe (attach one throwaway .io host to a Pages project, then remove it)
         if: ${{ inputs.action == 'pages-domain-probe' }}
