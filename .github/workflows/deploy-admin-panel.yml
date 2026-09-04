@@ -89,6 +89,27 @@ jobs:
           GIT_SHA: ${{ github.sha }}
         run: npm run build --workspace apps/admin-panel
 
+      - name: Refuse to publish content that links to a domain with no DNS
+        run: |
+          set -euo pipefail
+          # 2026-09-04 incident. The .io Pages custom domains were attached but the
+          # zone had no CNAMEs, so driftstack.io did not resolve. The site content
+          # had already been migrated to link at .io, the deploy went out, and every
+          # navigation link on the live .dev sites failed at the DNS layer for ~20
+          # minutes. Nothing in the pipeline objected: the build was valid, the
+          # deploy succeeded, and the pages were "correct" — they just pointed at a
+          # host that did not exist. Publishing is the step that can tell.
+          if grep -rqE "https://[a-z.]*driftstack\.io" "apps/admin-panel/dist" 2>/dev/null; then
+            if ! getent hosts driftstack.io >/dev/null 2>&1 && ! nslookup driftstack.io >/dev/null 2>&1; then
+              echo "REFUSING TO DEPLOY: this build links to driftstack.io, which does not resolve."
+              echo "Create the Pages CNAMEs for the .io hosts before publishing."
+              exit 1
+            fi
+            echo "build links to driftstack.io and it resolves — safe to publish"
+          else
+            echo "build does not link to driftstack.io — nothing to check"
+          fi
+
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
