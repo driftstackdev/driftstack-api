@@ -77,6 +77,18 @@ jobs:
       - name: Install dependencies (workspace-aware)
         run: npm ci --no-audit
 
+      - name: Build api-types (marketing depends on @driftstack/api-types)
+
+        # Without this the scoped `npm run build --workspace apps/marketing-site`
+
+        # below starts before packages/api-types/dist exists, and rolldown fails
+
+        # 'failed to resolve @driftstack/api-types' on the clean CI runner — the
+
+        # same order the admin-panel and customer-dashboard deploys already have.
+
+        run: npm run build --workspace @driftstack/api-types
+
       - name: Build marketing site
         env:
           # V-469 — per-service Sentry. DSN is build-time-baked into
