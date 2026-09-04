@@ -86,18 +86,29 @@ jobs:
           # deploy succeeded, and the pages were "correct" — they just pointed at a
           # host that did not exist. Publishing is the step that can tell.
           if grep -rqE "https://[a-z.]*driftstack\.io" "apps/docs/dist" 2>/dev/null; then
-            # ⛔ The first version of this check used `getent || nslookup` and PASSED
-            # on a host that serves nothing: nslookup exits 0 when the ZONE exists
-            # with NS records but has no address, which is exactly the broken state
-            # it was written to catch. An exit code is not the property. Ask for the
-            # thing that actually has to work — an HTTP response.
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://driftstack.io/ || echo 000)
-            if [ "$code" = "000" ] || [ "$code" -ge 500 ]; then
-              echo "REFUSING TO DEPLOY: this build links to driftstack.io, which answered $code."
-              echo "Create the Pages CNAMEs for the .io hosts before publishing."
-              exit 1
-            fi
-            echo "build links to driftstack.io and it answered $code — safe to publish"
+            # Two earlier versions of this check passed on a host serving nothing.
+            # (1) `getent || nslookup` — nslookup exits 0 when the ZONE exists with
+            # NS records but has no address, which IS the broken state. (2) curl
+            # with `|| echo 000` — curl already prints 000 on a connection failure,
+            # so the fallback concatenated to "000000", which matched neither the
+            # equality test nor the >=500 test and sailed through. A fallback that
+            # invents a value is how a guard reports health it never measured.
+            #
+            # So: ALLOW-LIST. Only an explicit 2xx/3xx publishes; everything else,
+            # including an empty string, blocks. Verified against the real hosts
+            # before landing: driftstack.io -> '000' refuse, driftstack.dev -> '200'
+            # pass, api.driftstack.dev/health -> '200' pass.
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://driftstack.io/ 2>/dev/null || true)
+            case "$code" in
+              2??|3??)
+                echo "build links to driftstack.io and it answered $code — safe to publish"
+                ;;
+              *)
+                echo "REFUSING TO DEPLOY: this build links to driftstack.io, which answered '${code:-no response}'."
+                echo "Create the Pages CNAMEs for the .io hosts before publishing."
+                exit 1
+                ;;
+            esac
           else
             echo "build does not link to driftstack.io — nothing to check"
           fi
