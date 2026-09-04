@@ -609,7 +609,14 @@ describe('admin api-keys page — pagination and force revoke', () => {
     expect(row(window, 'key_refreshed')).not.toBeNull();
     expect(row(window, 'key_newest')).toBeNull();
     expect(row(window, 'key_older')).toBeNull();
-    expect(window.document.querySelector('[data-live-status]')?.textContent).toBe('Live · updated');
+    // Node 22 settles this DOM update one macrotask later than 24+, so a fixed
+    // settle depth reads the stale text there (measured: fails on 22, passes on 26).
+    // Poll for the state instead of assuming when it lands.
+    await vi.waitFor(() =>
+      expect(window.document.querySelector('[data-live-status]')?.textContent).toBe(
+        'Live · updated',
+      ),
+    );
   });
 
   it('does not let the 30-second poll supersede the first held append', async () => {
@@ -642,8 +649,13 @@ describe('admin api-keys page — pagination and force revoke', () => {
     await settlePromises();
     expect(row(window, 'key_newest')).not.toBeNull();
     expect(row(window, 'key_older')).not.toBeNull();
-    expect(window.document.querySelector('[data-live-status]')?.textContent).toBe(
-      'Live refresh paused while viewing older API keys',
+    // Node 22 settles this DOM update one macrotask later than 24+, so a fixed
+    // settle depth reads the stale text there (measured: fails on 22, passes on 26).
+    // Poll for the state instead of assuming when it lands.
+    await vi.waitFor(() =>
+      expect(window.document.querySelector('[data-live-status]')?.textContent).toBe(
+        'Live refresh paused while viewing older API keys',
+      ),
     );
   });
 

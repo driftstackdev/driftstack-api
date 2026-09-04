@@ -563,9 +563,14 @@ describe('admin webhook-dlq page — discard / requeue (operator)', () => {
 
     (window.document.querySelector('[data-action="load-more"]') as HTMLButtonElement).click();
     await settlePromises();
-    expect(
-      window.document.querySelector('[data-id="wdl_00000000-0000-4000-8000-000000000013"]'),
-    ).not.toBeNull();
+    // Node 22 settles this DOM update one macrotask later than 24+, so a fixed
+    // settle depth reads the stale text there (measured: fails on 22, passes on 26).
+    // Poll for the state instead of assuming when it lands.
+    await vi.waitFor(() =>
+      expect(
+        window.document.querySelector('[data-id="wdl_00000000-0000-4000-8000-000000000013"]'),
+      ).not.toBeNull(),
+    );
 
     const fetchCountWhileExpanded = fetchCalls.length;
     await vi.advanceTimersByTimeAsync(30_000);
