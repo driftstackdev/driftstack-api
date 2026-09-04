@@ -39,9 +39,9 @@ describe('docs/api/email-preferences content parity', () => {
 
   it("DPA-affirmative-choice legal posture framing pinned: 'The endpoint surface is intentionally narrow: list current preferences, set one preference. Per-event opt-in is the unit; there's no \"opt out of everything optional\" shorthand because the legal posture (per the DPA) requires that we deliver each opt-out as an affirmative customer choice.' — pinned so the per-event-unit + no-bulk-opt-out + DPA-affirmative-choice-rationale contract all stay documented (drift to a bulk opt-out would weaken the GDPR-compliant affirmative-choice posture)", () => {
     expect(body).toMatch(
-      /Per-event opt-in is the unit;\s*there's no "opt out of everything optional" shorthand because\s*the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.dev\/legal\/dpa\/\)\) requires that we\s*deliver each opt-out as an affirmative customer choice\./,
+      /Per-event opt-in is the unit;\s*there's no "opt out of everything optional" shorthand because\s*the legal posture \(per the \[DPA\]\(https:\/\/driftstack\.io\/legal\/dpa\/\)\) requires that we\s*deliver each opt-out as an affirmative customer choice\./,
     );
-    expect(body).not.toContain('https://driftstack.dev/legal/dpa)');
+    expect(body).not.toContain('https://driftstack.io/legal/dpa)');
   });
 
   it("2-endpoint surface pinned: GET /v1/account/email-preferences (list) + PUT /v1/account/email-preferences (set one) + 204 No Content on PUT. Drift to a different verb / response code would mismatch the dashboard's toggle-immediately-no-save-button UX expectation", () => {

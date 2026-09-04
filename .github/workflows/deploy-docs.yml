@@ -27,8 +27,8 @@
 #                                       before the first deploy.
 #
 # Custom domains + DNS configured in the Cloudflare Pages dashboard:
-#   - docs.driftstack.dev → CNAME to the Pages project
-# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+#   - docs.driftstack.io → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.io zone.
 #
 # Founder runbook for first-time setup:
 # `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`.
@@ -58,7 +58,7 @@ jobs:
       deployments: write
     environment:
       name: docs-production
-      url: https://docs.driftstack.dev
+      url: https://docs.driftstack.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6

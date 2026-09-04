@@ -299,7 +299,7 @@ export function registerRecipesDisabledRoutes(app: FastifyInstance): void {
   const detail =
     'Recipes are unavailable on this deployment. ' +
     'Contact the deployment operator if recipe access is expected. See ' +
-    'https://docs.driftstack.dev/api/recipes/ for the supported API flow.';
+    'https://docs.driftstack.io/api/recipes/ for the supported API flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

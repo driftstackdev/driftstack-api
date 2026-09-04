@@ -17,7 +17,7 @@ const BUILT_PAGE = resolve(
   'index.html',
 );
 const PAGE_URL =
-  'https://app.driftstack.dev/auth/oauth-client/confirm-merge/?token=merge_tok_123&next=%2Fsecurity';
+  'https://app.driftstack.io/auth/oauth-client/confirm-merge/?token=merge_tok_123&next=%2Fsecurity';
 
 interface MockFetchCall {
   url: string;

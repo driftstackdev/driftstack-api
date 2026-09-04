@@ -1,6 +1,6 @@
 # @driftstack/sdk
 
-Official TypeScript SDK for the [Driftstack](https://driftstack.dev) API.
+Official TypeScript SDK for the [Driftstack](https://driftstack.io) API.
 
 > **Status:** pre-1.0. Stable surface for the API contract; the SDK API may shift before 1.0. Don't pin against an exact version yet.
 

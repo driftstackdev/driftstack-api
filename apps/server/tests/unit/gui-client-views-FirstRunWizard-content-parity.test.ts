@@ -197,13 +197,13 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("W566: friendlyError gives mode-aware 401 guidance — self-hosted mode tells the customer the key must come from their own server's dashboard (a cloud key won't authenticate), cloud mode points at app.driftstack.dev/api-keys. Pinned so the most common onboarding 401 stumble keeps a deployment-correct fix instead of a bare 'unauthorized'", () => {
+  it("W566: friendlyError gives mode-aware 401 guidance — self-hosted mode tells the customer the key must come from their own server's dashboard (a cloud key won't authenticate), cloud mode points at app.driftstack.io/api-keys. Pinned so the most common onboarding 401 stumble keeps a deployment-correct fix instead of a bare 'unauthorized'", () => {
     expect(body).toMatch(/err instanceof DriftstackError && err\.status === 401/);
     expect(body).toMatch(
-      /In self-hosted mode the API key must be created on \$\{where\} — a key from\s*app\.driftstack\.dev won't authenticate against your own server\./,
+      /In self-hosted mode the API key must be created on \$\{where\} — a key from\s*app\.driftstack\.io won't authenticate against your own server\./,
     );
     expect(body).toMatch(
-      /Authentication failed \(401\)\. Double-check the key, or create a new one at\s*app\.driftstack\.dev\/api-keys\./,
+      /Authentication failed \(401\)\. Double-check the key, or create a new one at\s*app\.driftstack\.io\/api-keys\./,
     );
     // DriftstackError must be imported for the instanceof check to be real
     // (the SDK import also carries ARCHETYPE_REGISTRY since the 2026-06-19

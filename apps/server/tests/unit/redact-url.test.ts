@@ -437,7 +437,7 @@ describe('incident-notifications.ts call site never logs a raw customer email', 
       sendStatusIncidentNotification: () => Promise.reject(new Error('postmark down')),
     };
     const svc = new IncidentNotificationsService(subscribers, failingEmail, logger, {
-      statusPageBaseUrl: 'https://status.driftstack.dev',
+      statusPageBaseUrl: 'https://status.driftstack.io',
     });
     await svc.notifyCreated(
       {

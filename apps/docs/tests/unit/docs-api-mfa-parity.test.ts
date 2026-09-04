@@ -1,4 +1,4 @@
-// W255.C — drift-guard for docs.driftstack.dev/api/mfa. Pins every
+// W255.C — drift-guard for docs.driftstack.io/api/mfa. Pins every
 // /v1/account/mfa/* + /v1/auth/mfa/* endpoint the doc names to live
 // route registrations, plus the 15-minute step-up window.
 

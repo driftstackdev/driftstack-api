@@ -123,8 +123,8 @@ describe('StripeApiClient.createSubscriptionCheckoutSession', () => {
     const result = await client.createSubscriptionCheckoutSession({
       customerId: 'cus_x',
       priceId: 'price_y',
-      successUrl: 'https://app.driftstack.dev/success',
-      cancelUrl: 'https://app.driftstack.dev/cancel',
+      successUrl: 'https://app.driftstack.io/success',
+      cancelUrl: 'https://app.driftstack.io/cancel',
       clientReferenceId: 'acc_uuid',
       metadata: { plan: 'api_builder' },
       idempotencyKey: 'checkout-attempt-123',
@@ -156,7 +156,7 @@ describe('StripeApiClient.createBillingPortalSession', () => {
 
     const result = await client.createBillingPortalSession({
       customerId: 'cus_z',
-      returnUrl: 'https://app.driftstack.dev/billing',
+      returnUrl: 'https://app.driftstack.io/billing',
     });
     expect(result.url).toContain('billing.stripe.com');
     expect(calls[0]!.url).toBe('https://api.stripe.com/v1/billing_portal/sessions');

@@ -55,7 +55,7 @@ describe('W379.B cross-app 404 pages content parity', () => {
       expect(body).toMatch(/<a href="\/pricing\/" class="btn-secondary">See pricing<\/a>/);
       expect(body).toMatch(/<a href="\/docs\/" class="btn-secondary">Read the docs<\/a>/);
       expect(body).toMatch(
-        /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary" rel="noopener noreferrer"/,
+        /<a href="https:\/\/status\.driftstack\.io" class="btn-secondary" rel="noopener noreferrer"/,
       );
     });
   });

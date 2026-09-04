@@ -103,7 +103,7 @@ describe('W569.A /docs/internal/v528-repo-privatization-runbook.md content parit
     expect(body).toMatch(/### Step 3 — create 3 new GitHub repos \+ push branches/);
     expect(body).toMatch(/gh repo create driftstackdev\/driftstack-typescript-sdk --public/);
     expect(body).toMatch(/--description "Official TypeScript SDK for the Driftstack API"/);
-    expect(body).toMatch(/--homepage "https:\/\/driftstack\.dev"/);
+    expect(body).toMatch(/--homepage "https:\/\/driftstack\.io"/);
     expect(body).toMatch(/gh repo create driftstackdev\/driftstack-python-sdk --public/);
     expect(body).toMatch(/--description "Official Python SDK for the Driftstack API"/);
     expect(body).toMatch(/gh repo create driftstackdev\/driftstack-go-sdk --public/);
@@ -137,7 +137,7 @@ describe('W569.A /docs/internal/v528-repo-privatization-runbook.md content parit
       /- npm package badges in marketing site \(if any\) — point at SDK repos\./,
     );
     expect(body).toMatch(
-      /- "View source" links in docs\.driftstack\.dev → SDK repos for SDK source,/,
+      /- "View source" links in docs\.driftstack\.io → SDK repos for SDK source,/,
     );
     expect(body).toMatch(/no link for control-plane source \(now private\)\./);
     expect(body).toMatch(/- Status page references — none expected\./);

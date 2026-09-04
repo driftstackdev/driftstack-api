@@ -75,7 +75,7 @@ describe('W624 app tsconfigs + READMEs + tailwind content parity', () => {
   it('apps/customer-dashboard/README.md pins the current Astro 7 static Pages, auth, and deployment contract', () => {
     const body = read('apps/customer-dashboard/README.md');
     expect(body).toMatch(/^# @driftstack\/customer-dashboard$/m);
-    expect(body).toMatch(/The pre-launch customer account portal served at `app\.driftstack\.dev`/);
+    expect(body).toMatch(/The pre-launch customer account portal served at `app\.driftstack\.io`/);
     expect(body).toMatch(/^## Stack$/m);
     expect(body).toMatch(/Astro 7 static output on Cloudflare Pages/);
     expect(body).toMatch(/Tailwind CSS 3 through PostCSS/);

@@ -98,7 +98,7 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(/contractually binding availability or/);
     expect(body).toMatch(/Form or published SLA\./);
     expect(body).toMatch(/3\. \*\*Health monitoring\.\*\* Structured Pino logs/);
-    expect(body).toMatch(/public status page at `status\.driftstack\.dev`/);
+    expect(body).toMatch(/public status page at `status\.driftstack\.io`/);
     expect(body).not.toMatch(/status page \(planned|launch tiers/i);
     expect(body).toMatch(/4\. \*\*Incident response\.\*\* Documented runbook;/);
     expect(body).toMatch(/### D\. Restoration \(Article 32\(1\)\(c\)\)/);
@@ -176,7 +176,7 @@ describe('W575.C /docs/legal/dpa.md (part 3) content parity', () => {
     expect(body).toMatch(/does not change current data\s+residency/);
     expect(body).toMatch(/R2's default jurisdiction, which replicates storage/);
     expect(body).toMatch(/Section 3\.4 notice and objection rights/);
-    expect(body).toMatch(/https:\/\/driftstack\.dev\/trust\/sub-processors\//);
+    expect(body).toMatch(/https:\/\/driftstack\.io\/trust\/sub-processors\//);
     expect(body).not.toMatch(/Section 9 notice and objection rights/);
   });
 

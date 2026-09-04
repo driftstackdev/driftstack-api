@@ -79,7 +79,7 @@ describe('useKeychainForBaseUrl — all deployments use protected storage', () =
       'http://localhost:3000',
       'http://127.0.0.1:7780',
       'https://driftstack.internal.acme.com',
-      'https://driftstack.dev.evil.com',
+      'https://driftstack.io.evil.com',
       '',
     ]) {
       expect(useKeychainForBaseUrl(url)).toBe(true);

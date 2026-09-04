@@ -1,4 +1,4 @@
-// W257.B — drift-guard for docs.driftstack.dev/api/legal. Pins:
+// W257.B — drift-guard for docs.driftstack.io/api/legal. Pins:
 // 1. /v1/legal/* endpoints documented = endpoints registered.
 // 2. document_key values match the live catalog ('tos' not 'terms').
 // 3. Returned acceptance id uses `lacc_` prefix (route serialiser).

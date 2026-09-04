@@ -251,7 +251,7 @@ If it's a sustained pattern, two options:
   · Stick with this tier and queue-batch your workload —
     {{docs_url}}/patterns/concurrent
 
-Tier comparison side-by-side: https://driftstack.dev/pricing/comparison
+Tier comparison side-by-side: https://driftstack.io/pricing/comparison
 
 — Driftstack
 

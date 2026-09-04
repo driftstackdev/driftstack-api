@@ -125,7 +125,7 @@ jobs:
           zid=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones?name=driftstack.io" | jq -r '.result[0].id // empty')
           if [ -z "$zid" ]; then
             echo "DNS EDIT: NO — the driftstack.io zone is not visible to this token, so it cannot provision the T-3 DNS."
-            echo "The zone itself exists and is on Cloudflare (same nameservers as driftstack.dev); what is missing is zone scope on the token."
+            echo "The zone itself exists and is on Cloudflare (same nameservers as driftstack.io); what is missing is zone scope on the token."
             exit 0
           fi
           r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \

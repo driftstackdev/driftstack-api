@@ -13,7 +13,7 @@ import {
   type SubProcessorChangeLogEntry,
 } from '../../../data/sub-processors.ts';
 
-const SITE = 'https://driftstack.dev';
+const SITE = 'https://driftstack.io';
 const FEED_URL = `${SITE}/trust/sub-processors/feed.xml`;
 const PAGE_URL = `${SITE}/trust/sub-processors`;
 

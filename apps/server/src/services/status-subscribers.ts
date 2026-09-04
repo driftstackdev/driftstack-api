@@ -77,7 +77,7 @@ export const CONFIRM_TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 export interface StatusSubscribersConfig {
   /** Public origin of the status site, used to build the confirm +
-   *  unsubscribe URLs. E.g. `https://status.driftstack.dev`. */
+   *  unsubscribe URLs. E.g. `https://status.driftstack.io`. */
   statusPageBaseUrl: string;
 }
 

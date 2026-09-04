@@ -198,22 +198,22 @@ describe('loadConfig', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io',
     });
-    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
-    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.dev/auth/magic-link');
-    expect(cfg.authFlowUrls.passwordReset).toBe('https://app.driftstack.dev/reset-password');
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.io/verify-email');
+    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.io/auth/magic-link');
+    expect(cfg.authFlowUrls.passwordReset).toBe('https://app.driftstack.io/reset-password');
   });
 
   it('V-079.B per-URL env var wins over DASHBOARD_ORIGIN derivation', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io',
       AUTH_VERIFY_EMAIL_URL: 'https://custom.example/verify',
     });
     expect(cfg.authFlowUrls.verifyEmail).toBe('https://custom.example/verify');
-    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.dev/auth/magic-link');
+    expect(cfg.authFlowUrls.magicLink).toBe('https://app.driftstack.io/auth/magic-link');
   });
 
   it('V-079.B fails fast in production when an auth URL still points at localhost', () => {
@@ -244,9 +244,9 @@ describe('loadConfig', () => {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
       NODE_ENV: 'production',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io',
     });
-    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.io/verify-email');
   });
 
   it('refuses to expose plaintext auth-flow tokens in production', () => {
@@ -255,7 +255,7 @@ describe('loadConfig', () => {
         DATABASE_URL: 'postgres://u:p@localhost:5432/db',
         REDIS_URL: 'redis://localhost:6379',
         NODE_ENV: 'production',
-        DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+        DASHBOARD_ORIGIN: 'https://app.driftstack.io',
         AUTH_EXPOSE_DEBUG_TOKEN: 'true',
       }),
     ).toThrow(
@@ -268,7 +268,7 @@ describe('loadConfig', () => {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
       NODE_ENV: 'production',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io',
       AUTH_EXPOSE_DEBUG_TOKEN: raw,
     });
     expect(cfg.authFlowUrls.exposeDebugToken).toBe(false);
@@ -293,7 +293,7 @@ describe('loadConfig', () => {
           REDIS_URL: 'redis://localhost:6379',
           NODE_ENV: 'production',
           ...(deployEnv === undefined ? {} : { DRIFTSTACK_DEPLOY_ENV: deployEnv }),
-          DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+          DASHBOARD_ORIGIN: 'https://app.driftstack.io',
           DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK: 'true',
         }),
       ).toThrow(
@@ -319,7 +319,7 @@ describe('loadConfig', () => {
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
       NODE_ENV: 'production',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io',
       DRIFTSTACK_AGENT_DECOMPOSER_USE_FALLBACK: raw,
     });
     expect(cfg.agentDecomposer?.useFallbackForUnconfiguredCustomers).toBe(false);
@@ -334,21 +334,21 @@ describe('loadConfig', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev/',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io/',
     });
-    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.dev');
+    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.io');
     // Auth-flow derivation already handled the strip — sanity check
     // that both layers agree.
-    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.dev/verify-email');
+    expect(cfg.authFlowUrls.verifyEmail).toBe('https://app.driftstack.io/verify-email');
   });
 
   it('W190 collapses multiple trailing slashes on DASHBOARD_ORIGIN', () => {
     const cfg = loadConfig({
       DATABASE_URL: 'postgres://u:p@localhost:5432/db',
       REDIS_URL: 'redis://localhost:6379',
-      DASHBOARD_ORIGIN: 'https://app.driftstack.dev///',
+      DASHBOARD_ORIGIN: 'https://app.driftstack.io///',
     });
-    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.dev');
+    expect(cfg.dashboardOrigin).toBe('https://app.driftstack.io');
   });
 
   it('Arc 4 Wave 2.B sub-slice 8.18 METRICS_SCRAPE_TOKEN passes through to config', () => {

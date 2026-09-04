@@ -198,23 +198,23 @@ describe('V-664.B CORS — every customer-facing header is allowlisted', () => {
 
 describe('V-278.C CORS — strict posture (permissiveCors=false) auto-allows the dashboard origin', () => {
   it('the canonical dashboardOrigin is allowed even when CORS_ALLOWED_ORIGINS omits it', async () => {
-    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.dev' } });
+    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.io' } });
     const res = await fx.app.inject({
       method: 'OPTIONS',
       url: '/v1/whoami',
       headers: {
-        origin: 'https://app.driftstack.dev',
+        origin: 'https://app.driftstack.io',
         'access-control-request-method': 'GET',
         'access-control-request-headers': 'authorization',
       },
     });
     expect(res.statusCode).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('https://app.driftstack.dev');
+    expect(res.headers['access-control-allow-origin']).toBe('https://app.driftstack.io');
     expect(res.headers['access-control-allow-credentials']).toBe('true');
   });
 
   it('an unlisted cross-origin is NOT echoed under the strict posture (the security win)', async () => {
-    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.dev' } });
+    fx = await buildTestApp({ corsStrict: { dashboardOrigin: 'https://app.driftstack.io' } });
     const res = await fx.app.inject({
       method: 'OPTIONS',
       url: '/v1/whoami',
@@ -230,19 +230,19 @@ describe('V-278.C CORS — strict posture (permissiveCors=false) auto-allows the
   it('explicit CORS_ALLOWED_ORIGINS entries are still honored alongside the dashboard origin', async () => {
     fx = await buildTestApp({
       corsStrict: {
-        dashboardOrigin: 'https://app.driftstack.dev',
-        allowedOrigins: ['https://admin.driftstack.dev'],
+        dashboardOrigin: 'https://app.driftstack.io',
+        allowedOrigins: ['https://admin.driftstack.io'],
       },
     });
     const res = await fx.app.inject({
       method: 'OPTIONS',
       url: '/v1/whoami',
       headers: {
-        origin: 'https://admin.driftstack.dev',
+        origin: 'https://admin.driftstack.io',
         'access-control-request-method': 'GET',
       },
     });
     expect(res.statusCode).toBe(204);
-    expect(res.headers['access-control-allow-origin']).toBe('https://admin.driftstack.dev');
+    expect(res.headers['access-control-allow-origin']).toBe('https://admin.driftstack.io');
   });
 });

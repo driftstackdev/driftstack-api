@@ -11,7 +11,7 @@
 //   • 4-project inventory table (marketing + docs + customer-
 //     dashboard + admin-panel) with workflow + status.
 //   • Shared prereqs: CF API token (Pages-Edit only) + 32-hex
-//     account ID + driftstack.dev zone in same CF account.
+//     account ID + driftstack.io zone in same CF account.
 //   • Per-project 5-step shape: create project → set repo variable →
 //     trigger first deploy → wire custom domains → verify.
 //   • V-135 admin-panel Cloudflare Access SSO gate (separate
@@ -47,21 +47,21 @@ describe('W545.A /docs/founder-actions/v259-cloudflare-pages-all-projects-setup.
 
   it('pins all four Pages project slugs, custom domains, deploy workflows, and wired statuses', () => {
     expect(body).toMatch(/`driftstack-marketing`/);
-    expect(body).toMatch(/`driftstack\.dev` \+ `www\.…`/);
+    expect(body).toMatch(/`driftstack\.io` \+ `www\.…`/);
     expect(body).toMatch(/`\.github\/workflows\/deploy-marketing\.yml`/);
     expect(body).toMatch(/`\.github\/workflows\/deploy-admin-panel\.yml`/);
     expect(body).toMatch(/`driftstack-docs`/);
-    expect(body).toMatch(/`docs\.driftstack\.dev`/);
+    expect(body).toMatch(/`docs\.driftstack\.io`/);
     expect(body).toMatch(/`\.github\/workflows\/deploy-docs\.yml`/);
     expect(body).toMatch(/`driftstack-customer-dashboard`/);
-    expect(body).toMatch(/`app\.driftstack\.dev`/);
+    expect(body).toMatch(/`app\.driftstack\.io`/);
     expect(body).toMatch(/`\.github\/workflows\/deploy-customer-dashboard\.yml`/);
     expect(body).toMatch(/`driftstack-admin-panel`/);
-    expect(body).toMatch(/`admin\.driftstack\.dev`/);
+    expect(body).toMatch(/`admin\.driftstack\.io`/);
     expect((body.match(/\| Wired\s+\|/g) ?? []).length).toBe(4);
   });
 
-  it("Shared-prereq + Pages-Edit-only token + 32-hex account-ID + zone-in-same-account framing pinned: '## Shared prerequisites (do once)' + '### 1. Cloudflare API token' + '`CLOUDFLARE_API_TOKEN` — single repo-wide secret used by both `deploy-marketing.yml` and `deploy-docs.yml` (and any future deploy workflow).' + 'CF dashboard → top-right profile menu → **My Profile** → **API Tokens** → **Create Token** → use the **Edit Cloudflare Pages** template, OR custom token with these permissions:' + '`Account` → `Cloudflare Pages` → `Edit`.' + 'Account resources: include the Driftstack Cloudflare account.' + '### 2. Cloudflare account ID' + '`CLOUDFLARE_ACCOUNT_ID` — same repo-wide secret.' + '### 3. DNS zone' + '`driftstack.dev` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click. If the zone lives elsewhere, custom-domain setup falls back to a manual CNAME record per project (still works; just not one-click).' — pinned so the single-token-shared-across-workflows + Edit-Cloudflare-Pages-template + 32-hex-account-ID + driftstack.dev-zone-in-same-CF-account-for-one-click-domain-wiring commitment survives", () => {
+  it("Shared-prereq + Pages-Edit-only token + 32-hex account-ID + zone-in-same-account framing pinned: '## Shared prerequisites (do once)' + '### 1. Cloudflare API token' + '`CLOUDFLARE_API_TOKEN` — single repo-wide secret used by both `deploy-marketing.yml` and `deploy-docs.yml` (and any future deploy workflow).' + 'CF dashboard → top-right profile menu → **My Profile** → **API Tokens** → **Create Token** → use the **Edit Cloudflare Pages** template, OR custom token with these permissions:' + '`Account` → `Cloudflare Pages` → `Edit`.' + 'Account resources: include the Driftstack Cloudflare account.' + '### 2. Cloudflare account ID' + '`CLOUDFLARE_ACCOUNT_ID` — same repo-wide secret.' + '### 3. DNS zone' + '`driftstack.io` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click. If the zone lives elsewhere, custom-domain setup falls back to a manual CNAME record per project (still works; just not one-click).' — pinned so the single-token-shared-across-workflows + Edit-Cloudflare-Pages-template + 32-hex-account-ID + driftstack.io-zone-in-same-CF-account-for-one-click-domain-wiring commitment survives", () => {
     expect(body).toMatch(/## Shared prerequisites \(do once\)/);
     expect(body).toMatch(/### 1\. Cloudflare API token/);
     expect(body).toMatch(
@@ -76,22 +76,22 @@ describe('W545.A /docs/founder-actions/v259-cloudflare-pages-all-projects-setup.
     expect(body).toMatch(/`CLOUDFLARE_ACCOUNT_ID` — same repo-wide secret\./);
     expect(body).toMatch(/### 3\. DNS zone/);
     expect(body).toMatch(
-      /`driftstack\.dev` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click\./,
+      /`driftstack\.io` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click\./,
     );
     expect(body).toMatch(
       /If the zone lives elsewhere, custom-domain setup falls back to a manual CNAME record per project \(still works; just not one-click\)\./,
     );
   });
 
-  it("Per-project A/B/C/D shape + V-219-oxblood-D-badge + V-135 admin-pre-staging framing pinned: '### A. `driftstack-marketing`' + 'Trigger first deploy: GitHub repo → **Actions** → **Deploy marketing site** → **Run workflow** → from `main`.' + 'Wire custom domains: CF Pages project → **Custom domains** → add `driftstack.dev` AND `www.driftstack.dev`. CF auto-creates DNS records if the zone is in this account.' + 'Verify <https://driftstack.dev>: `index.astro` should render with the V-219 brand identity (oxblood D-badge + Geist Sans + slate palette).' + '### B. `driftstack-docs`' + '### C. `driftstack-customer-dashboard`' + 'Pre-create the project so the future deploy workflow lands cleanly:' + 'The repo variable name will be `CLOUDFLARE_DASHBOARD_PROJECT_NAME` when the workflow ships; create the variable with that name + value `driftstack-customer-dashboard` to pre-stage.' + '### D. `driftstack-admin-panel`' + 'V-135 lands the admin-panel deploy + Cloudflare Access SSO gate.' + 'The custom domain (`admin.driftstack.dev`) wiring waits for V-135 because the Access policy attaches at the origin level and needs to be configured against the live Pages project.' + 'Repo variable name will be `CLOUDFLARE_ADMIN_PROJECT_NAME` when the workflow ships.' — pinned so the 4-section-A-B-C-D per-project shape + V-219 oxblood-D-badge + Geist-Sans + slate-palette + V-135 admin-panel-deploy + Cloudflare-Access-origin-level-policy + 3-future-repo-var-name (CLOUDFLARE_DASHBOARD_PROJECT_NAME + CLOUDFLARE_ADMIN_PROJECT_NAME) commitment survives", () => {
+  it("Per-project A/B/C/D shape + V-219-oxblood-D-badge + V-135 admin-pre-staging framing pinned: '### A. `driftstack-marketing`' + 'Trigger first deploy: GitHub repo → **Actions** → **Deploy marketing site** → **Run workflow** → from `main`.' + 'Wire custom domains: CF Pages project → **Custom domains** → add `driftstack.io` AND `www.driftstack.io`. CF auto-creates DNS records if the zone is in this account.' + 'Verify <https://driftstack.io>: `index.astro` should render with the V-219 brand identity (oxblood D-badge + Geist Sans + slate palette).' + '### B. `driftstack-docs`' + '### C. `driftstack-customer-dashboard`' + 'Pre-create the project so the future deploy workflow lands cleanly:' + 'The repo variable name will be `CLOUDFLARE_DASHBOARD_PROJECT_NAME` when the workflow ships; create the variable with that name + value `driftstack-customer-dashboard` to pre-stage.' + '### D. `driftstack-admin-panel`' + 'V-135 lands the admin-panel deploy + Cloudflare Access SSO gate.' + 'The custom domain (`admin.driftstack.io`) wiring waits for V-135 because the Access policy attaches at the origin level and needs to be configured against the live Pages project.' + 'Repo variable name will be `CLOUDFLARE_ADMIN_PROJECT_NAME` when the workflow ships.' — pinned so the 4-section-A-B-C-D per-project shape + V-219 oxblood-D-badge + Geist-Sans + slate-palette + V-135 admin-panel-deploy + Cloudflare-Access-origin-level-policy + 3-future-repo-var-name (CLOUDFLARE_DASHBOARD_PROJECT_NAME + CLOUDFLARE_ADMIN_PROJECT_NAME) commitment survives", () => {
     expect(body).toMatch(
       /### A\. `driftstack-marketing` \(workflow: `\.github\/workflows\/deploy-marketing\.yml`\)/,
     );
     expect(body).toMatch(
-      /Wire custom domains: CF Pages project → \*\*Custom domains\*\* → add `driftstack\.dev` AND `www\.driftstack\.dev`\. CF auto-creates DNS records if the zone is in this account\./,
+      /Wire custom domains: CF Pages project → \*\*Custom domains\*\* → add `driftstack\.io` AND `www\.driftstack\.io`\. CF auto-creates DNS records if the zone is in this account\./,
     );
     expect(body).toMatch(
-      /Verify <https:\/\/driftstack\.dev>: `index\.astro` should render with the V-219 brand identity \(oxblood D-badge \+ Geist Sans \+ slate palette\)\./,
+      /Verify <https:\/\/driftstack\.io>: `index\.astro` should render with the V-219 brand identity \(oxblood D-badge \+ Geist Sans \+ slate palette\)\./,
     );
     expect(body).toMatch(
       /### B\. `driftstack-docs` \(workflow: `\.github\/workflows\/deploy-docs\.yml`\)/,
@@ -131,7 +131,7 @@ describe('W545.A /docs/founder-actions/v259-cloudflare-pages-all-projects-setup.
     );
   });
 
-  it("Troubleshooting + What's-NOT-in framing pinned: 'Two workflows running on the same push — likely a path-filter regression. Verify each workflow's `paths:` block only includes its own app directory (no `apps/**` blanket).' + 'TLS stuck on \"pending\" — DNS hasn't propagated. Wait 5 minutes; check the CNAME record points at the Pages project's `<slug>.pages.dev` URL.' + 'Deploy succeeds but the wrong content shows — `<slug>.pages.dev` URL pointing at the wrong project. Verify the `--project-name` flag in the workflow command matches the CF project slug.' + '## What's NOT in this runbook' + '**Cloudflare Access SSO** for `admin.driftstack.dev` — separate V-135 / V-246-P1-003 ops action; lands when the admin-panel deploy ships.' + '**Cloudflare R2 bucket setup** for session recordings + screenshots — separate ops action under the storage track; not Pages-related.' + '**Cloudflare Workers / Pages Functions** — not used by Driftstack today (all four projects are static-only or SSR-via-Astro-adapter).' — pinned so the path-filter-regression-troubleshooting + Cloudflare-Access-V-135/V-246-P1-003 + R2-not-in-this-runbook + Workers-not-used commitment survives", () => {
+  it("Troubleshooting + What's-NOT-in framing pinned: 'Two workflows running on the same push — likely a path-filter regression. Verify each workflow's `paths:` block only includes its own app directory (no `apps/**` blanket).' + 'TLS stuck on \"pending\" — DNS hasn't propagated. Wait 5 minutes; check the CNAME record points at the Pages project's `<slug>.pages.dev` URL.' + 'Deploy succeeds but the wrong content shows — `<slug>.pages.dev` URL pointing at the wrong project. Verify the `--project-name` flag in the workflow command matches the CF project slug.' + '## What's NOT in this runbook' + '**Cloudflare Access SSO** for `admin.driftstack.io` — separate V-135 / V-246-P1-003 ops action; lands when the admin-panel deploy ships.' + '**Cloudflare R2 bucket setup** for session recordings + screenshots — separate ops action under the storage track; not Pages-related.' + '**Cloudflare Workers / Pages Functions** — not used by Driftstack today (all four projects are static-only or SSR-via-Astro-adapter).' — pinned so the path-filter-regression-troubleshooting + Cloudflare-Access-V-135/V-246-P1-003 + R2-not-in-this-runbook + Workers-not-used commitment survives", () => {
     expect(body).toMatch(
       /\*\*Two workflows running on the same push\*\* — likely a path-filter regression\. Verify each workflow's `paths:` block only includes its own app directory \(no `apps\/\*\*` blanket\)\./,
     );
@@ -143,7 +143,7 @@ describe('W545.A /docs/founder-actions/v259-cloudflare-pages-all-projects-setup.
     );
     expect(body).toMatch(/## What's NOT in this runbook/);
     expect(body).toMatch(
-      /- \*\*Cloudflare Access policy administration\*\* for `admin\.driftstack\.dev` — separate V-135 \/ V-246-P1-003 ops responsibility; this runbook only verifies the policy remains effective after deploys\./,
+      /- \*\*Cloudflare Access policy administration\*\* for `admin\.driftstack\.io` — separate V-135 \/ V-246-P1-003 ops responsibility; this runbook only verifies the policy remains effective after deploys\./,
     );
     expect(body).toMatch(
       /- \*\*Cloudflare R2 bucket setup\*\* for session recordings \+ screenshots — separate ops action under the storage track; not Pages-related\./,

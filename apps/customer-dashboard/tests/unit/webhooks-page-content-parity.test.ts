@@ -186,8 +186,8 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
   });
 
   it('header Docs exit targets the live endpoint-management guide, not the dead webhooks root', () => {
-    expect(body).toContain('href="https://docs.driftstack.dev/webhooks/endpoints/"');
-    expect(body).not.toContain('href="https://docs.driftstack.dev/webhooks/"');
+    expect(body).toContain('href="https://docs.driftstack.io/webhooks/endpoints/"');
+    expect(body).not.toContain('href="https://docs.driftstack.io/webhooks/"');
   });
 
   // Re-anchored on the claim. The original required the literal "V-296" inside

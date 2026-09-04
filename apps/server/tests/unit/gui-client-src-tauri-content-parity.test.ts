@@ -523,6 +523,9 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
       identifier: 'shell:allow-open',
       allow: [
         { url: 'http://localhost:5173/cli/authorize**' },
+        { url: 'https://app.driftstack.io/cli/authorize**' },
+        // .dev kept alongside .io for the redirect window: the desktop app must
+        // still be able to open an authorize URL a .dev session handed it.
         { url: 'https://app.driftstack.dev/cli/authorize**' },
         {
           url: 'https://staging.driftstack-customer-dashboard.pages.dev/cli/authorize**',

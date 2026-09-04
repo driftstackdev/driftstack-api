@@ -8,7 +8,7 @@
 //   • "The error has been captured; we'll look at it" implicit
 //     Sentry-capture claim.
 //   • support@driftstack.dev escape-hatch CTA inline.
-//   • status.driftstack.dev cross-link (status-page CTA).
+//   • status.driftstack.io cross-link (status-page CTA).
 //   • R6 "Live status:" footer link (the status page is live; the
 //     old Twitter/X pre-launch fallback framing is long gone).
 
@@ -56,14 +56,14 @@ describe('W379.C marketing-site /500.astro content parity', () => {
     expect(body).toMatch(/If this is blocking something time-sensitive, email/);
   });
 
-  it('2 CTAs: Back home (primary) + See status (secondary linking to status.driftstack.dev)', () => {
+  it('2 CTAs: Back home (primary) + See status (secondary linking to status.driftstack.io)', () => {
     expect(body).toMatch(/<a href="\/" class="btn-primary">Back home<\/a>/);
     expect(body).toMatch(
-      /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary">See status<\/a>/,
+      /<a href="https:\/\/status\.driftstack\.io" class="btn-secondary">See status<\/a>/,
     );
   });
 
   it('R6 status-page link footer pinned', () => {
-    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.dev"/);
+    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.io"/);
   });
 });

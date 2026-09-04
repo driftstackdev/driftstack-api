@@ -56,7 +56,7 @@ function dashboardUrlFor(baseUrl: string): string {
   if (baseUrl.includes('localhost') || baseUrl.includes('driftstack.local')) {
     return 'http://localhost:5173';
   }
-  return 'https://app.driftstack.dev';
+  return 'https://app.driftstack.io';
 }
 
 /**

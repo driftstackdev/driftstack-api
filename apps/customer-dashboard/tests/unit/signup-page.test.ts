@@ -20,7 +20,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'signup', 'index.html');
-const DEFAULT_URL = 'https://app.driftstack.dev/signup/';
+const DEFAULT_URL = 'https://app.driftstack.io/signup/';
 
 interface MockFetchCall {
   url: string;
@@ -319,7 +319,7 @@ describe('signup page — local integration', () => {
 
   it('preserves a safe next target in signup-timeout verification recovery', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      url: 'https://app.driftstack.dev/signup/?next=' + encodeURIComponent('/cli/authorize'),
+      url: 'https://app.driftstack.io/signup/?next=' + encodeURIComponent('/cli/authorize'),
       requestTimeoutImmediately: true,
       fetchPlan: [
         (call) =>
@@ -424,7 +424,7 @@ describe('signup page — local integration', () => {
 
   it('V-269 ?next= round-trip: the "sign in" login link carries the next target', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      url: 'https://app.driftstack.dev/signup/?next=' + encodeURIComponent('/cli/authorize'),
+      url: 'https://app.driftstack.io/signup/?next=' + encodeURIComponent('/cli/authorize'),
     });
     win = window;
     await flush();

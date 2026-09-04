@@ -24,7 +24,7 @@ Constraints driving the choice:
 - **Stripe Checkout / Customer Portal redirect.** Most billing happens off-site (Stripe-hosted UI). The dashboard mainly displays state + initiates redirects. NOT a complex client-rich UI.
 - **Rest of stack is TypeScript.** SDK + control plane + marketing site all TS. JS-adjacent stacks (Vue, Svelte) require team-context switching.
 - **EU residency.** Whatever runtime hosts the dashboard runs on EU infrastructure. Cloudflare Pages (Workers in EU regions), Hetzner (Helsinki/Falkenstein), or similar. Vercel's EU-region setup is also viable.
-- **Keep the marketing-site framing intact.** The marketing site stays Astro (it's working; rebuilding it is a distraction). The dashboard is a separate sub-domain (`app.driftstack.dev`).
+- **Keep the marketing-site framing intact.** The marketing site stays Astro (it's working; rebuilding it is a distraction). The dashboard is a separate sub-domain (`app.driftstack.io`).
 
 ## Options
 
@@ -35,7 +35,7 @@ Same repo, separate Astro project at `apps/customer-dashboard/` with React-islan
 **Pros:**
 
 - Same toolchain as the marketing site — solo team's existing Astro mental model carries over.
-- Cloudflare Pages already wired (V-067); two-project deploy is `apps/marketing-site/` → `driftstack.dev`, `apps/customer-dashboard/` → `app.driftstack.dev`. No new vendor.
+- Cloudflare Pages already wired (V-067); two-project deploy is `apps/marketing-site/` → `driftstack.io`, `apps/customer-dashboard/` → `app.driftstack.io`. No new vendor.
 - Astro's island-architecture maps well to "mostly static dashboard pages with a few interactive widgets" (subscription state, API key creation). Most pages are read-mostly: `GET /v1/billing`, `GET /v1/api-keys`, `GET /v1/profiles`. Interactivity is for create/delete/refresh.
 - Tailwind already wired; Geist Sans + Berkeley Mono + oxblood accent reusable directly. Brand consistency by sharing the design tokens.
 - React 19's server components + use-server actions land in 2026; for the dashboard's mostly-server-driven model that's a future-proof choice.
@@ -110,7 +110,7 @@ The Fastify control plane serves dashboard pages directly. htmx handles dynamic 
 1. **Same toolchain as the marketing site.** Solo engineering team's biggest cost is context-switching. Two stacks rather than three.
 2. **The dashboard's actual interactivity surface is shallow.** Most pages are read-mostly with one or two write actions (create API key, rename profile, revoke session). Astro islands are designed for exactly this shape.
 3. **The onboarding flow's multi-step form** is the one place where Next.js would shine. Mitigation: build the onboarding flow as a single Astro page with a React form component that owns the state machine. We don't need Next.js's full Suspense + use-server stack; we need a stateful form component, which is a single React island.
-4. **Cloudflare Pages already wired** for the marketing site. The dashboard at `app.driftstack.dev` is a second Pages project pointing at `apps/customer-dashboard/`. No new vendor in the DPA.
+4. **Cloudflare Pages already wired** for the marketing site. The dashboard at `app.driftstack.io` is a second Pages project pointing at `apps/customer-dashboard/`. No new vendor in the DPA.
 5. **Brand surface continuity.** Same Tailwind tokens, same fonts, same oxblood accent. Marketing → signup → dashboard → admin reads as one product, not as a marketing site stitched to a third-party admin tool.
 
 The decision is reversible: if the dashboard hits Astro's complexity ceiling (real-time updates, complex client routing, etc.), the migration to Next.js is a matter of moving page components — the API contracts (v1 endpoints, web-session cookie) are unchanged.
@@ -119,7 +119,7 @@ The decision is reversible: if the dashboard hits Astro's complexity ceiling (re
 
 - Real-time event streaming (live session telemetry on the dashboard) — not needed at launch; polling `GET /v1/sessions` every 5 seconds is fine for the dashboard's "what's running right now" widget.
 - Offline support — dashboard requires connectivity; no offline mode planned.
-- Mobile-app-shell experience — `app.driftstack.dev` is responsive HTML, not a native app. PWA install prompt is a potential follow-on, not a launch requirement.
+- Mobile-app-shell experience — `app.driftstack.io` is responsive HTML, not a native app. PWA install prompt is a potential follow-on, not a launch requirement.
 - Internationalisation — English only at launch; Dutch + German follow when there's customer demand. The Astro stack supports i18n if/when this changes; not a stack-decision driver.
 
 ## Open questions for founder review
@@ -127,7 +127,7 @@ The decision is reversible: if the dashboard hits Astro's complexity ceiling (re
 1. **Are the brand-design-system reuse benefits load-bearing for the choice?** If the dashboard MUST share the marketing site's tokens / fonts / accent, Option A is the path of least resistance. If a different visual identity for "the app" is acceptable (different background, different accent colour), Option B opens up.
 2. **Onboarding flow shape — single page with a state-machine React island, or multi-page MPA with one URL per step?** Single-page is friendlier (no full-page reloads between "enter email" → "verify email" → "accept ToS" → "select tier" → "pay"), but multi-page is dead simple in Astro. If you have a strong preference, that affects the dashboard's React-island scope.
 3. **Cloudflare Pages vs Vercel for the dashboard runtime.** Cloudflare is already on the sub-processor list (V-052 lock); Vercel would require a DPA Annex 3 amendment + customer notice. Default recommendation: Cloudflare unless Vercel offers something specific (e.g. better Stripe-integration tooling) that's worth the sub-processor cost.
-4. **Admin panel co-locates or splits?** Two reasonable shapes: (a) admin panel is a separate Cloudflare Pages project at `admin.driftstack.dev` with its own deploy + DNS + auth gate; (b) admin panel lives at `/admin/*` inside the customer dashboard project, gated on an admin-scope check. Option (b) is fewer moving parts but the admin surface lives next to customer-facing code; option (a) keeps blast radius separated.
+4. **Admin panel co-locates or splits?** Two reasonable shapes: (a) admin panel is a separate Cloudflare Pages project at `admin.driftstack.io` with its own deploy + DNS + auth gate; (b) admin panel lives at `/admin/*` inside the customer dashboard project, gated on an admin-scope check. Option (b) is fewer moving parts but the admin surface lives next to customer-facing code; option (a) keeps blast radius separated.
 
 ## Decision authority
 
@@ -139,4 +139,4 @@ This is **architectural / structural** — surfaces for founder review per the D
 - `docs/architecture/webhook-system-design.md` — webhook subscription + event-type model; the `/webhooks` page in the dashboard is the customer surface for this.
 - `docs/architecture/api-versioning.md` (V-220) — deprecation cycle for any UI-exposed breaking change (e.g. scope rename surfacing in the API-keys page).
 - `docs/api/webhook-events.md` (V-203) — canonical event-type catalog displayed in the webhook subscription UI.
-- `apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing and the static dashboard build at `app.driftstack.dev` use Cloudflare Pages and follow the same authenticated-data discipline (no customer data in generated HTML or publicly cacheable responses).
+- `apps/marketing-site/public/_headers` + `docs/deployment/cdn-strategy.md` (V-221) — marketing and the static dashboard build at `app.driftstack.io` use Cloudflare Pages and follow the same authenticated-data discipline (no customer data in generated HTML or publicly cacheable responses).

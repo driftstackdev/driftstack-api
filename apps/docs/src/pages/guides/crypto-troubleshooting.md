@@ -57,7 +57,7 @@ that doesn't match the quote. Common causes:
 Partial orders need a human. Email
 [support@driftstack.dev](mailto:support@driftstack.dev) with the
 `order_id` and the TX hash. Crypto payments are non-refundable
-([policy](https://driftstack.dev/legal/refunds/)), so the resolution
+([policy](https://driftstack.io/legal/refunds/)), so the resolution
 path is completing the order — support arranges a top-up for the
 difference — not sending the partial payment back. No tier is
 activated while an order sits in `partial`.

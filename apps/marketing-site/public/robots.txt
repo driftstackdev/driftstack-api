@@ -1,6 +1,6 @@
-# https://driftstack.dev/robots.txt
-# All public pages crawlable. Subdomains (app.driftstack.dev for the
-# customer dashboard, admin.driftstack.dev for the admin panel) carry
+# https://driftstack.io/robots.txt
+# All public pages crawlable. Subdomains (app.driftstack.io for the
+# customer dashboard, admin.driftstack.io for the admin panel) carry
 # their own robots — both noindex.
 
 User-agent: *
@@ -10,4 +10,4 @@ Allow: /
 # crawlers re-fetch it on every visit; it's stable content.
 Crawl-delay: 5
 
-Sitemap: https://driftstack.dev/sitemap-index.xml
+Sitemap: https://driftstack.io/sitemap-index.xml

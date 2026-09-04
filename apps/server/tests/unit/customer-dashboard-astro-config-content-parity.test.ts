@@ -3,7 +3,7 @@
 // control-plane wiring. Drift here could restore an unnecessary SSR
 // runtime or break the Sentry build-time opt-in.
 //
-//   • site: https://app.driftstack.dev (customer dashboard subdomain).
+//   • site: https://app.driftstack.io (customer dashboard subdomain).
 //   • output: static (Cloudflare Pages serves dist/).
 //   • No SSR adapter: every current route is static.
 //   • V-469 @sentry/astro with PUBLIC_SENTRY_DSN_DASHBOARD build-time
@@ -28,11 +28,11 @@ function read(p: string): string {
 describe('W526.A apps/customer-dashboard/astro.config.mjs content parity', () => {
   const body = read(LIB);
 
-  it("Customer-dashboard framing + dashboard-stack proposal framing pinned: 'Customer dashboard for app.driftstack.dev. Static-build per the dashboard-stack proposal in docs/architecture/customer-dashboard-stack.md (pending founder review of Option A — Astro + React islands shared with marketing site). When founder approves, React islands land alongside; for now the scaffolding is pure-Astro static.' + 'site: https://app.driftstack.dev' + 'output: \"static\"' — pinned so the app.driftstack.dev subdomain + static-build + Option-A-Astro+React-islands-pending-review + pure-Astro-scaffolding-for-now commitment survives", () => {
+  it("Customer-dashboard framing + dashboard-stack proposal framing pinned: 'Customer dashboard for app.driftstack.io. Static-build per the dashboard-stack proposal in docs/architecture/customer-dashboard-stack.md (pending founder review of Option A — Astro + React islands shared with marketing site). When founder approves, React islands land alongside; for now the scaffolding is pure-Astro static.' + 'site: https://app.driftstack.io' + 'output: \"static\"' — pinned so the app.driftstack.io subdomain + static-build + Option-A-Astro+React-islands-pending-review + pure-Astro-scaffolding-for-now commitment survives", () => {
     expect(body).toMatch(
-      /\/\/ Customer dashboard for app\.driftstack\.dev\. Static-build per the\s*\/\/ dashboard-stack proposal in docs\/architecture\/customer-dashboard-stack\.md\s*\/\/ \(pending founder review of Option A — Astro \+ React islands shared with\s*\/\/ marketing site\)\. When founder approves, React islands land alongside;\s*\/\/ for now the scaffolding is pure-Astro static\./,
+      /\/\/ Customer dashboard for app\.driftstack\.io\. Static-build per the\s*\/\/ dashboard-stack proposal in docs\/architecture\/customer-dashboard-stack\.md\s*\/\/ \(pending founder review of Option A — Astro \+ React islands shared with\s*\/\/ marketing site\)\. When founder approves, React islands land alongside;\s*\/\/ for now the scaffolding is pure-Astro static\./,
     );
-    expect(body).toMatch(/site: 'https:\/\/app\.driftstack\.dev',/);
+    expect(body).toMatch(/site: 'https:\/\/app\.driftstack\.io',/);
     expect(body).toMatch(/output: 'static',/);
   });
 

@@ -349,7 +349,7 @@ deprecated` → build/check fail. To LAND: ONE PR bumping `astro ^6` + `@astrojs
     an identifier so the API is functionally fine) — a DX gap (developers following the link get NXDOMAIN).
     **Founder/infra (NOT autopilot — DNS + outward-facing; agent wrangler is zone:read-only):** provision
     `errors.driftstack.dev` (DNS + a static error-docs site, one page per slug, OR a redirect to
-    `docs.driftstack.dev/errors/<slug>`). Mirrors the [[project_status_site_cloudflare_setup]] "done except
+    `docs.driftstack.io/errors/<slug>`). Mirrors the [[project_status_site_cloudflare_setup]] "done except
     the DNS CNAME (founder)" pattern. Do NOT repoint the type URIs — that's a 52-file contract break + the
     namespace is the right one; just make it resolve. Detail: [[project_errors_domain_nxdomain]].
 22. **Metrics/observability layer is INERT in prod — enable before launch (founder/ops).** Prod
@@ -890,7 +890,7 @@ cli-authorize/initiate` is unauth and has NO `ipRateLimit` gate (creates a pendi
     `project_security_txt_and_robots_gaps`. (Same wave also: shipped the security.txt + a frontend
     `_headers` clickjacking drift-guard `39111921`; verified the rest of the legal-link integrity +
     the dashboard/admin XSS-escaping posture clean — all recorded in memory.)
-20. **No DMARC record for driftstack.dev — email-spoofing / phishing-enablement; MEDIUM; surfaced
+20. **No DMARC record for driftstack.io — email-spoofing / phishing-enablement; MEDIUM; surfaced
     2026-06-03 by a fresh email-auth DNS audit (FOUNDER/DNS — not fixable from the repo).** The
     platform emails customers account-security messages (verification, password-reset, billing,
     lifecycle) from `@driftstack.dev` via Postmark. DNS check: **`_dmarc.driftstack.dev` TXT = empty
@@ -962,13 +962,13 @@ founder actions that close real surfaced gaps — no code, no big decisions, jus
 3. **Fix the honour-roll dead link** (§4.19, LOW — a 404 in the LIVE vulnerability-disclosure policy):
    create a stub `apps/marketing-site/src/pages/legal/security-research-honour-roll.md` (recommended —
    fulfills the policy's promise) or drop the link from `vulnerability-disclosure.md`. ~5 min (content).
-4. **Confirm Postmark DKIM** for driftstack.dev (Postmark dashboard → Sender Signatures); the
+4. **Confirm Postmark DKIM** for driftstack.io (Postmark dashboard → Sender Signatures); the
    `pm-bounces` CNAME is set so it's likely already done — verify (needed before DMARC `p=reject`).
 5. **Submit the apex to hstspreload.org** — _NEW 2026-06-03: the HSTS arc is COMPLETE._ All 5 CF-Pages
    apps (dashboard `9332e9e9`, admin, apex marketing `e358094f`, docs+status `1684a703`) + the API now
    serve a single clean `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload`
    (verified live; the apex's earlier doubled/comma-joined header was de-duped in `8099f767` so it
-   passes strict validation). The remaining step is the one-time submission of `driftstack.dev` at
+   passes strict validation). The remaining step is the one-time submission of `driftstack.io` at
    https://hstspreload.org. **Mildly irreversible** (commits the whole `*.driftstack.dev` tree to
    HTTPS-forever; de-listing takes weeks–months) → founder call, but every prerequisite header is now
    in place. Detail: auto-memory `project_cfpages_hsts_gap`. ~5 min.
@@ -998,7 +998,7 @@ items (agent_sessions FK, iphone17 archetype cutover, gui `csp:null`).
 - **§2 item 6 — `PERMISSIVE_CORS` DE-RISKED (`e6ce53f5`).** The strict CORS allow-list now always
   includes `config.dashboardOrigin`, so flipping `PERMISSIVE_CORS=false` can no longer lock out the
   primary dashboard. **The flip is now a LOW-RISK ops step**: set `PERMISSIVE_CORS=false` on
-  staging→prod (staging-verify the dashboard first) + add `CORS_ALLOWED_ORIGINS=https://admin.driftstack.dev`
+  staging→prod (staging-verify the dashboard first) + add `CORS_ALLOWED_ORIGINS=https://admin.driftstack.io`
   (admin/extra credentialed browser origins aren't auto-derived). Zero current-prod change (still
   permissive until flipped). Detail: auto-memory `project_permissive_cors_in_prod`.
 
@@ -1022,8 +1022,8 @@ wiring), hstspreload submission. Audit surface remains saturated — fresh probe
 
 Smoke-tested prod (`8c4fc19`): `PERMISSIVE_CORS=false` is now active — the strict
 CORS allow-list is enforced. OPTIONS-preflight probes against api.driftstack.dev:
-`app.driftstack.dev` (allowed — via the V-278.C enabler `e6ce53f5` auto-adding
-`config.dashboardOrigin`), `admin.driftstack.dev` + `driftstack.dev` (allowed —
+`app.driftstack.io` (allowed — via the V-278.C enabler `e6ce53f5` auto-adding
+`config.dashboardOrigin`), `admin.driftstack.io` + `driftstack.io` (allowed —
 `CORS_ALLOWED_ORIGINS`), `evil.example.com` + `staging.driftstack.dev` (BLOCKED — no
 `access-control-allow-origin`). The arbitrary-origin-echo MEDIUM is **closed in prod**.
 Full auth-boundary smoke set still PASS (protected→401, bogus→401, public→200,

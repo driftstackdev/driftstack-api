@@ -72,7 +72,7 @@ describe('AI-B1 DeterministicAgentDecomposer', () => {
       expect(res.kind).toBe('refuse');
       if (res.kind !== 'refuse') throw new Error('type narrow');
       expect(res.refuseReason).toMatch(/captcha bypass/);
-      expect(res.refuseReason).toMatch(/driftstack\.dev\/legal\/aup/);
+      expect(res.refuseReason).toMatch(/driftstack\.io\/legal\/aup/);
     });
 
     it('refuses swatting / physical-harm tasks', async () => {

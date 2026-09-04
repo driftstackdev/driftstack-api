@@ -1,4 +1,4 @@
-// W255.D — drift-guard for docs.driftstack.dev/sdk/error-handling.
+// W255.D — drift-guard for docs.driftstack.io/sdk/error-handling.
 // The previous revision asserted problem-type URIs under a fictional
 // `/problems/auth/invalid`-style namespace; the live URIs live under
 // `https://errors.driftstack.dev/<slug>` per PROBLEM_TYPES. This

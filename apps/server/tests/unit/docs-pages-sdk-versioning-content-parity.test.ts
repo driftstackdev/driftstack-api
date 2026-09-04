@@ -36,7 +36,7 @@ describe('W777 docs /sdk/versioning content parity', () => {
     );
   });
 
-  it('CRITICAL Status + effective-date header pinned: "**Status:** Active" + "**Effective date:** 2026-05-05" — pinned so the canonical policy anchor survives. The previous skip pinned `(V-177)` inline anchor that was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('CRITICAL Status + effective-date header pinned: "**Status:** Active" + "**Effective date:** 2026-05-05" — pinned so the canonical policy anchor survives. The previous skip pinned `(V-177)` inline anchor that was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*Status:\*\* Active/);

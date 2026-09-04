@@ -1,6 +1,6 @@
 # @driftstack/api-types
 
-Zod schemas + TypeScript types for the public [Driftstack](https://driftstack.dev) API. The single source of truth for the API contract — the OpenAPI 3.1 spec is generated from these schemas, the official TypeScript SDK ([@driftstack/sdk](https://www.npmjs.com/package/@driftstack/sdk)) re-exports the inferred types, and other-language SDKs (Python, Go) generate types from the OpenAPI spec.
+Zod schemas + TypeScript types for the public [Driftstack](https://driftstack.io) API. The single source of truth for the API contract — the OpenAPI 3.1 spec is generated from these schemas, the official TypeScript SDK ([@driftstack/sdk](https://www.npmjs.com/package/@driftstack/sdk)) re-exports the inferred types, and other-language SDKs (Python, Go) generate types from the OpenAPI spec.
 
 > **Status:** pre-1.0. Pin an exact package version in production; all supported schemas and compatibility rules are documented below.
 

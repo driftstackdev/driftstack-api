@@ -55,8 +55,8 @@ const ROOTS = ['docs', 'apps/marketing-site/src/pages', 'apps/docs/src/pages'] a
 
 /** Public origin → the pages directory that builds it, so cross-surface links are checkable. */
 const ORIGINS: ReadonlyArray<readonly [string, string]> = [
-  ['https://driftstack.dev', 'apps/marketing-site/src/pages'],
-  ['https://docs.driftstack.dev', 'apps/docs/src/pages'],
+  ['https://driftstack.io', 'apps/marketing-site/src/pages'],
+  ['https://docs.driftstack.io', 'apps/docs/src/pages'],
 ];
 
 const LINK = /\]\(([^)\s]*)#([^)\s]+)\)/g;
@@ -200,7 +200,7 @@ describe('V-1172 every anchor link lands on a heading', () => {
       '#annex-2--technical-and-organisational-measures-toms',
     );
     expect(keys.join('\n'), 'the cross-surface docs→marketing case is gone').toContain(
-      'https://driftstack.dev/legal/privacy/#31-account-data',
+      'https://driftstack.io/legal/privacy/#31-account-data',
     );
   });
 

@@ -2,8 +2,8 @@
 import { defineConfig } from 'astro/config';
 
 // Admin panel — Driftstack-staff-only surface.
-// Lives at admin.driftstack.dev (separate subdomain from the customer
-// dashboard at app.driftstack.dev) so security boundary is at the DNS
+// Lives at admin.driftstack.io (separate subdomain from the customer
+// dashboard at app.driftstack.io) so security boundary is at the DNS
 // + TLS layer, not application logic.
 //
 // Auth: Driftstack-staff API key with `driftstack_internal_admin`
@@ -33,7 +33,7 @@ if (
 }
 
 export default defineConfig({
-  site: 'https://admin.driftstack.dev',
+  site: 'https://admin.driftstack.io',
   output: 'static',
   // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
   compressHTML: true,

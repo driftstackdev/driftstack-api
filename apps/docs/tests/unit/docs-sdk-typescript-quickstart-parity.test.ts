@@ -1,4 +1,4 @@
-// W259.C — drift-guard for docs.driftstack.dev/sdk/typescript-quickstart.
+// W259.C — drift-guard for docs.driftstack.io/sdk/typescript-quickstart.
 // Previous revision:
 //   - claimed `err.problem.type` / `err.problem.detail` / `err.requestId`
 //     but the live DriftstackError exposes `type` / `detail` / no requestId.

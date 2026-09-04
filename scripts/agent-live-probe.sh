@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Drive a LIVE agent session against the API and print the plan + per-step results.
 #
-#   scripts/agent-live-probe.sh "Go to https://driftstack.dev/ and stop there."
+#   scripts/agent-live-probe.sh "Go to https://driftstack.io/ and stop there."
 #   scripts/agent-live-probe.sh --base https://staging.driftstack.dev "prompt 1" "prompt 2"
 #
 # Why this exists as a named script: an ad-hoc command that reads a secret and

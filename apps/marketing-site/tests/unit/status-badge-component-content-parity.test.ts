@@ -12,7 +12,7 @@
 //   • Failure-mode honesty: fetch failure → "Status unavailable"
 //     label + slate-300 dot; explicit "nothing is implied about
 //     uptime from a fetch error alone" framing.
-//   • Anchor href=https://status.driftstack.dev + target="_blank"
+//   • Anchor href=https://status.driftstack.io + target="_blank"
 //     + rel="noopener noreferrer".
 //   • Dot-only accessible names track the resolved live state.
 //   • Props: className (override) + withLabel (default true,
@@ -95,7 +95,7 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
 
   it('anchor is safe and the dot-only accessible name starts in checking state', () => {
     expect(body).toMatch(
-      /<a\s*href="https:\/\/status\.driftstack\.dev"\s*target="_blank"\s*rel="noopener noreferrer"/,
+      /<a\s*href="https:\/\/status\.driftstack\.io"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
     expect(body).toMatch(/aria-label=\{withLabel \? undefined : 'Platform status: checking'\}/);
   });
@@ -164,7 +164,7 @@ describe('W383.A marketing-site StatusBadge.astro content parity', () => {
     expect(scripts).toHaveLength(2);
 
     const dom = new JSDOM(html, {
-      url: 'https://driftstack.dev/trust/',
+      url: 'https://driftstack.io/trust/',
       runScripts: 'outside-only',
     });
     const dotOnly = dom.window.document.createElement('a');

@@ -24,7 +24,7 @@
 //     (NOT 'admin' — closes cross-account admin exposure).
 //   • Web session known-gap framing: pre-V-168 admin-customer-key
 //     cross-account risk acknowledged + operationally mitigated by
-//     V-135 admin.driftstack.dev Cloudflare-Access gate.
+//     V-135 admin.driftstack.io Cloudflare-Access gate.
 //   • requireScope: V-174 admin compat alias (admin satisfies
 //     account_owner + driftstack_internal_admin) + V-481 broad-
 //     satisfies-granular (read:X from read|account_owner;
@@ -231,7 +231,7 @@ describe('W404.B apps/server/src/services/auth.ts content parity', () => {
       /`\/v1\/admin\/\*` now requires\s*\*\s*`driftstack_internal_admin`, granted only to staff-allowlisted/,
     );
     expect(body).toMatch(
-      /`admin\.driftstack\.dev` remains a separate Cloudflare-Access-\s*\*\s*gated origin \(V-135\) as defense-in-depth\./,
+      /`admin\.driftstack\.io` remains a separate Cloudflare-Access-\s*\*\s*gated origin \(V-135\) as defense-in-depth\./,
     );
   });
 

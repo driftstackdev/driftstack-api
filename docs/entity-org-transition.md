@@ -72,7 +72,7 @@ contact email (BV's support address, not founder's personal email):
 "author": {
   "name": "<Entity B.V.>",
   "email": "support@driftstack.dev",
-  "url": "https://driftstack.dev"
+  "url": "https://driftstack.io"
 }
 ```
 

@@ -78,7 +78,7 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/<option value="eu">eu — Europe<\/option>/);
     expect(body).toMatch(/<option value="apac">apac — Asia-Pacific<\/option>/);
     expect(body).toMatch(
-      /sub-processor list \(see <a href="https:\/\/driftstack\.dev\/trust\/sub-processors\/"/,
+      /sub-processor list \(see <a href="https:\/\/driftstack\.io\/trust\/sub-processors\/"/,
     );
   });
 

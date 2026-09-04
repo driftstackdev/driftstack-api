@@ -393,7 +393,7 @@ describe('account notification SSE captured lifecycle', () => {
     const { handler, bus, authCheck, scopeCheck } = captureNotificationsHandler({
       heartbeatMs: 10,
     });
-    const connection = makeConnection({ origin: 'https://app.driftstack.dev' });
+    const connection = makeConnection({ origin: 'https://app.driftstack.io' });
     handler(connection.request, connection.reply);
     bus.publish({
       kind: 'session.errored',
@@ -408,7 +408,7 @@ describe('account notification SSE captured lifecycle', () => {
     expect(connection.headers?.['content-type']).toBe('text/event-stream; charset=utf-8');
     expect(connection.headers?.['cache-control']).toBe('no-cache, no-store, private, no-transform');
     expect(connection.headers).toMatchObject({
-      'access-control-allow-origin': 'https://app.driftstack.dev',
+      'access-control-allow-origin': 'https://app.driftstack.io',
       'access-control-allow-credentials': 'true',
       vary: 'Origin',
     });

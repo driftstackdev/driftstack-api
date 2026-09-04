@@ -106,7 +106,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
   });
 
   it("public status-page entry pinned (independent surface: control-plane outage doesn't take it down)", () => {
-    expect(body).toMatch(/Public status page at status\.driftstack\.dev/);
+    expect(body).toMatch(/Public status page at status\.driftstack\.io/);
     expect(body).toMatch(
       /independent of api\.driftstack\.dev so a control-plane outage does not take the status page down/,
     );

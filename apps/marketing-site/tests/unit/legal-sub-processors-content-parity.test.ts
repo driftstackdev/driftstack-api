@@ -186,7 +186,7 @@ describe('W379.A marketing-site /legal/sub-processors.md content parity', () => 
     expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/\)/);
     expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\/\)/);
     expect(body).toMatch(
-      /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\)/,
+      /\[docs\.driftstack\.io\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.io\/reference\/data-residency\/\)/,
     );
     const dir = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal');
     expect(existsSync(resolve(dir, 'dpa.md'))).toBe(true);

@@ -169,10 +169,10 @@ describe('W930 V-295c3 status-subscribers cross-source invariant', () => {
 
   // ─── statusPageBaseUrl trailing-slash stripping ──────────────
 
-  it("CRITICAL statusPageBaseUrl framing — 'Public origin of the status site, used to build the confirm + unsubscribe URLs. E.g. https://status.driftstack.dev'. The status-page-base-url is the customer-facing URL root.", () => {
+  it("CRITICAL statusPageBaseUrl framing — 'Public origin of the status site, used to build the confirm + unsubscribe URLs. E.g. https://status.driftstack.io'. The status-page-base-url is the customer-facing URL root.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/status-subscribers.ts'));
     expect(p).toMatch(/Public origin of the status site, used to build the confirm \+/);
-    expect(p).toMatch(/unsubscribe URLs\. E\.g\. `https:\/\/status\.driftstack\.dev`/);
+    expect(p).toMatch(/unsubscribe URLs\. E\.g\. `https:\/\/status\.driftstack\.io`/);
     expect(p).toMatch(/statusPageBaseUrl: string;/);
   });
 

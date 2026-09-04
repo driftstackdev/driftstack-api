@@ -131,7 +131,7 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
     );
     expect(body).toMatch(/interest\), the no-PII-shown promise of the status page itself, the/);
     expect(body).toMatch(/probe-history retention \(30 days\), and the no-cookies posture for/);
-    expect(body).toMatch(/status\.driftstack\.dev\./);
+    expect(body).toMatch(/status\.driftstack\.io\./);
     expect(body).toMatch(/## 2026-05-07 — V-295c2 \(R2 fallback\)/);
     expect(body).toMatch(/- \*\*No legal-document text changes\*\*\./);
     expect(body).toMatch(/V-295c2 introduces a separate/);
@@ -150,9 +150,9 @@ describe('W574.A /docs/legal/changes-log.md content parity', () => {
   it('2026-05-08 V-313 + V-306a LiveKit + V-308a NowPayments + V-297 + V-327 entries framing pinned', () => {
     expect(body).toMatch(/## 2026-05-08 — V-313 \(legal placeholder cleanup post-V-295 launch\)/);
     expect(body).toMatch(
-      /- \*\*ToS §9\.3 \(Maintenance\)\*\*: replaced `\(placeholder: status\.driftstack\.dev\)`/,
+      /- \*\*ToS §9\.3 \(Maintenance\)\*\*: replaced `\(placeholder: status\.driftstack\.io\)`/,
     );
-    expect(body).toMatch(/with the live URL `<https:\/\/status\.driftstack\.dev>` plus a sentence/);
+    expect(body).toMatch(/with the live URL `<https:\/\/status\.driftstack\.io>` plus a sentence/);
     expect(body).toMatch(
       /- \*\*AUP §4 \(Reporting \+ abuse mechanism\)\*\*: removed the parenthetical/,
     );

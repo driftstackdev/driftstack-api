@@ -26,7 +26,7 @@ function mockFetch(
 const EXCHANGE_OPTS_BASE = {
   clientId: 'client-id',
   clientSecret: 'client-secret',
-  callbackUrl: 'https://app.driftstack.dev/auth/oauth-client/callback',
+  callbackUrl: 'https://app.driftstack.io/auth/oauth-client/callback',
   code: 'idp-code-12345',
   codeVerifier: 'verifier-43-chars-min-aaaaaaaaaaaaaaaaaaaaa',
 };

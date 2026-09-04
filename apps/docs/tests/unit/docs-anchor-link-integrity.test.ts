@@ -26,7 +26,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_PAGES = resolve(REPO_ROOT, 'apps/docs/src/pages');
 
-// Off-site (marketing) prefixes — rendered on driftstack.dev, not the
+// Off-site (marketing) prefixes — rendered on driftstack.io, not the
 // docs site, so their headings aren't in this tree.
 const MARKETING_PREFIXES = ['/legal/', '/security', '/pricing', '/about', '/trust'];
 

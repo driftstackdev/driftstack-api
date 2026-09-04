@@ -3,13 +3,13 @@
 **Date:** 2026-05-11
 **Wave:** 23
 **Status:** DESIGN — V-295c shipped the basic status site at
-status.driftstack.dev. V-545 designs the next-layer features (incident
+status.driftstack.io. V-545 designs the next-layer features (incident
 posting workflow, subscriber notification, history view).
 
 ## Current state
 
 `apps/status-site/` ships a Cloudflare Pages static site at
-status.driftstack.dev. It currently shows:
+status.driftstack.io. It currently shows:
 
 - Overall platform status (operational / degraded / outage), driven by
   the `/v1/status` endpoint (V-295c).

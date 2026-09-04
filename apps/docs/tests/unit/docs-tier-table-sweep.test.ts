@@ -1,4 +1,4 @@
-// W253.D — workspace-wide sweep guard for docs.driftstack.dev tier
+// W253.D — workspace-wide sweep guard for docs.driftstack.io tier
 // table drift. Mirrors W248.D for marketing-site. Walks every .md/.astro
 // under apps/docs/src/pages and flags any page that asserts a
 // concurrent count above the live cap or a profile cap above the
@@ -64,7 +64,7 @@ const MAX_PROFILES = Math.max(
   ...Object.values(PROFILES_PER_TIER).filter((v): v is number => typeof v === 'number'),
 );
 
-describe('W253.D docs.driftstack.dev tier-table drift sweep', () => {
+describe('W253.D docs.driftstack.io tier-table drift sweep', () => {
   const pages = walk(PAGES);
 
   it('no docs page asserts the old over-cap concurrent claims (Agency 10 / API Builder 5 / API Scale 20)', () => {

@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/migration-from-browserless is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/guides/migrate-from-browserless/
+//   https://docs.driftstack.io/guides/migrate-from-browserless/
 //   (source: apps/docs/src/pages/guides/migrate-from-browserless.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -34,7 +34,7 @@ const DOCS_SUCCESSOR_SRC = resolve(
   'apps/docs/src/pages/guides/migrate-from-browserless.md',
 );
 
-describe('S47 redirect tombstone — /docs/migration-from-browserless → https://docs.driftstack.dev/guides/migrate-from-browserless/', () => {
+describe('S47 redirect tombstone — /docs/migration-from-browserless → https://docs.driftstack.io/guides/migrate-from-browserless/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -50,7 +50,7 @@ describe('S47 redirect tombstone — /docs/migration-from-browserless → https:
 
     expect(rule('/docs/migration-from-browserless'), 'bare-path rule missing').toEqual([
       '/docs/migration-from-browserless',
-      'https://docs.driftstack.dev/guides/migrate-from-browserless/',
+      'https://docs.driftstack.io/guides/migrate-from-browserless/',
       '301',
     ]);
     expect(
@@ -58,7 +58,7 @@ describe('S47 redirect tombstone — /docs/migration-from-browserless → https:
       'trailing-slash rule missing (matching is exact-path)',
     ).toEqual([
       '/docs/migration-from-browserless/',
-      'https://docs.driftstack.dev/guides/migrate-from-browserless/',
+      'https://docs.driftstack.io/guides/migrate-from-browserless/',
       '301',
     ]);
   });

@@ -7,7 +7,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'auth', 'magic-link', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/auth/magic-link/?token=magic_tok_123';
+const PAGE_URL = 'https://app.driftstack.io/auth/magic-link/?token=magic_tok_123';
 
 interface MockFetchCall {
   url: string;

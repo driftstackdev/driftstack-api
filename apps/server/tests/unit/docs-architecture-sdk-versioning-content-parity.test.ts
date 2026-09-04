@@ -151,7 +151,7 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/autonomous; MAJOR publishes always require explicit founder approval\./);
   });
 
-  it("Migration paths + cross-references + out-of-scope-3 framing pinned: '## Migration paths' + 'a **migration guide** in the GitHub release notes covering:' + 'What the old code looked like.' + 'What the new code looks like.' + 'Sed/regex replacement when feasible.' + 'Behavioral differences (if any) that aren't a pure rename.' + 'a migration script ships in' + '`packages/sdk-<lang>/scripts/migrate-<from>-to-<to>.<ext>`' + '## Cross-references' + '`docs/decisions.md` D-021 for the original SDK package decision' + '(TypeScript-first, expanded to Python + Go in V-035 + V-038).' + '`packages/api-types/` for the Zod schemas that drive' + '## Out of scope (today)' + '**LTS branches**.' + '**Public deprecation timeline doc**.' + '`docs.driftstack.dev/sdk/deprecations`' + '**Telemetry on deprecated-call usage**' — pinned so the 4-migration-guide-component + migration-script-naming + D-021-V-035-V-038 + 3-out-of-scope (LTS + public-deprecation-doc + telemetry) commitment survives", () => {
+  it("Migration paths + cross-references + out-of-scope-3 framing pinned: '## Migration paths' + 'a **migration guide** in the GitHub release notes covering:' + 'What the old code looked like.' + 'What the new code looks like.' + 'Sed/regex replacement when feasible.' + 'Behavioral differences (if any) that aren't a pure rename.' + 'a migration script ships in' + '`packages/sdk-<lang>/scripts/migrate-<from>-to-<to>.<ext>`' + '## Cross-references' + '`docs/decisions.md` D-021 for the original SDK package decision' + '(TypeScript-first, expanded to Python + Go in V-035 + V-038).' + '`packages/api-types/` for the Zod schemas that drive' + '## Out of scope (today)' + '**LTS branches**.' + '**Public deprecation timeline doc**.' + '`docs.driftstack.io/sdk/deprecations`' + '**Telemetry on deprecated-call usage**' — pinned so the 4-migration-guide-component + migration-script-naming + D-021-V-035-V-038 + 3-out-of-scope (LTS + public-deprecation-doc + telemetry) commitment survives", () => {
     expect(body).toMatch(/## Migration paths/);
     expect(body).toMatch(/the SDK release post includes a/);
     expect(body).toMatch(/\*\*migration guide\*\* in the GitHub release notes covering:/);
@@ -168,7 +168,7 @@ describe('W558.B /docs/architecture/sdk-versioning.md content parity', () => {
     expect(body).toMatch(/## Out of scope \(today\)/);
     expect(body).toMatch(/- \*\*LTS branches\*\*\./);
     expect(body).toMatch(/- \*\*Public deprecation timeline doc\*\*\./);
-    expect(body).toMatch(/`docs\.driftstack\.dev\/sdk\/deprecations`/);
+    expect(body).toMatch(/`docs\.driftstack\.io\/sdk\/deprecations`/);
     expect(body).toMatch(/- \*\*Telemetry on deprecated-call usage\*\*/);
   });
 

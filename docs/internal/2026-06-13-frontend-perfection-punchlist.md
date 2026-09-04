@@ -28,7 +28,7 @@ linear-gradient(135deg,#722F37,#e23847)` is a HARDCODED oxblood→red gradient (
    exit IP shown as current). FIX: invalidate/clear the probe-cache entry for a proxy on edit.
 5. **[honest-claims] Marketing Identity-Wardrobe mockup invents "coherence 96"** — a fabricated
    numeric score the product refuses to fake. FIX: remove/replace the number with an honest state.
-6. **[docs] apps/docs (docs.driftstack.dev) still on the OLD dark/oxblood theme** — separate
+6. **[docs] apps/docs (docs.driftstack.io) still on the OLD dark/oxblood theme** — separate
    Tailwind-v4 app, `<html lang=en>` no token axes, base.css @theme = dark slate + oxblood,
    color-scheme:dark. Semantic token classes in markup (bg-surface-base/text-ink-primary) →
    port = flip @theme token VALUES to light+violet + data axes + BaseLayout html attrs; ~207

@@ -316,7 +316,7 @@ export function dataUrlByteSize(dataUrl: string): number {
 // 308-redirects /newtab → /newtab/, which the box reports back as an extra navigation
 // (and a url the no-slash blank-tab check no longer matched). Seed the served path so
 // there's no redirect hop and the tab reads as blank.
-const NEW_TAB_URL = 'https://driftstack.dev/newtab/';
+const NEW_TAB_URL = 'https://driftstack.io/newtab/';
 const NEW_TAB_TITLE = 'New Tab';
 /** A "home"/blank tab whose url should read as an empty new tab in the UI (no
  *  address shown, label falls back to "New Tab", window title to the device
@@ -326,7 +326,7 @@ const NEW_TAB_TITLE = 'New Tab';
 function isBlankTabUrl(url: string): boolean {
   if (url === '' || url === 'about:blank') return true;
   const normalized = url.replace(/\/$/, '');
-  return normalized === 'https://driftstack.dev/newtab';
+  return normalized === 'https://driftstack.io/newtab';
 }
 /** #135 — normalize a URL for nav-target comparison (drop trailing slash + fragment,
  *  lowercase), so a box page_state 'errored'/'loaded' frame can be matched to the
@@ -346,7 +346,7 @@ function normalizeNavUrl(url: unknown): string {
     return raw.replace(/[/#]+$/, '').toLowerCase();
   }
 }
-/** The branded new-tab page hard-depends on driftstack.dev being reachable THROUGH the
+/** The branded new-tab page hard-depends on driftstack.io being reachable THROUGH the
  *  customer proxy — a geo-block / CF challenge / marketing outage makes the box report
  *  it 'errored'. A blank new tab must never read as a navigation FAILURE (about:blank
  *  always rendered), so a load error on the new-tab url is treated as graceful (no
@@ -8096,7 +8096,7 @@ export function SimulatorWindow(): JSX.Element {
     // A blank/new tab reads as a CLEAN empty address bar — the branded new-tab url
     // (the served /newtab/ page) is chrome, not a destination the operator typed, so
     // don't surface it in the bar (founder 2026-06-25: a fresh tab should look blank,
-    // not show driftstack.dev/newtab/). Any real page url flows through verbatim.
+    // not show driftstack.io/newtab/). Any real page url flows through verbatim.
     setLiveUrl(isBlankTabUrl(activeTabUrl) ? '' : activeTabUrl);
     // A blank/new tab's title is chrome, not a real page title — don't surface it as
     // the window title; leave liveTitle empty so the title falls back to the device

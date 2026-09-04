@@ -1,4 +1,4 @@
-// W353.B — drift guard for status.driftstack.dev /subscribe. The
+// W353.B — drift guard for status.driftstack.io /subscribe. The
 // page posts to the V-540.B-11 double-opt-in subscribe endpoint.
 // Pins:
 //

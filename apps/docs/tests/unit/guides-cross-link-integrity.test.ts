@@ -18,8 +18,8 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const DOCS_PAGES = resolve(REPO_ROOT, 'apps/docs/src/pages');
 const GUIDES = resolve(DOCS_PAGES, 'guides');
 
-// Marketing-site prefixes — these resolve on driftstack.dev, not on
-// docs.driftstack.dev. The docs site links to them directly.
+// Marketing-site prefixes — these resolve on driftstack.io, not on
+// docs.driftstack.io. The docs site links to them directly.
 const MARKETING_PREFIXES = ['/legal/', '/security', '/pricing', '/about'];
 
 function walk(dir: string, out: string[] = []): string[] {

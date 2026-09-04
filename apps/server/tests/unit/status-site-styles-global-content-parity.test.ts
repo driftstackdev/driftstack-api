@@ -25,11 +25,11 @@ describe('status-site styles/global content parity', () => {
     expect(body).toMatch(/@import 'tailwindcss';/);
   });
 
-  it("Fleet two-axis framing pinned: status synced with the light-first product — 'Customers checking status during an incident see the same brand surface as driftstack.dev.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
+  it("Fleet two-axis framing pinned: status synced with the light-first product — 'Customers checking status during an incident see the same brand surface as driftstack.io.' Drift to a different theme would create a brand-jarring mid-incident UX", () => {
     expect(body).toMatch(/Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+/);
     expect(body).toMatch(/customer-dashboard: light\+violet default/);
     expect(body).toMatch(
-      /Customers\s*checking status during an incident see the same brand surface as\s*driftstack\.dev\./,
+      /Customers\s*checking status during an incident see the same brand surface as\s*driftstack\.io\./,
     );
     expect(body).toMatch(/color-scheme: light;/);
     expect(body).toMatch(/\[data-mode='dark'\] \{\s*\n\s*color-scheme: dark;/);

@@ -129,11 +129,11 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
     );
     expect(body).toMatch(
       // S47 2026-07-07 (founder-approved: mirror deprecation): deleted-mirror hrefs re-pinned to the docs successors.
-      /<li><a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a><\/li>/,
+      /<li><a href="https:\/\/docs\.driftstack\.io\/guides\/paying-with-crypto\/">Integration guide<\/a><\/li>/,
     );
     expect(body).toMatch(/<li><a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a><\/li>/);
     expect(body).toMatch(
-      /<li><a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook events<\/a><\/li>/,
+      /<li><a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/">Crypto webhook events<\/a><\/li>/,
     );
     expect(body).not.toMatch(
       /href="\/(?:legal\/refunds|docs\/sdk-typescript|docs\/sdk-python-crypto-orders|docs\/sdk-go-crypto-orders|docs\/idempotency-keys)"/,

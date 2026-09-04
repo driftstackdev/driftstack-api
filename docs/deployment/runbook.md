@@ -81,7 +81,7 @@ Symptoms: customers paying but subscription state not updating.
 Symptoms: admin /webhook-dlq page shows growing queue, customer
 reports missing notifications.
 
-1. Open admin /webhook-dlq (admin.driftstack.dev/webhook-dlq).
+1. Open admin /webhook-dlq (admin.driftstack.io/webhook-dlq).
 2. Inspect last_error column — usually `connect ECONNREFUSED` or
    `HTTP 5xx`.
 3. If transient (5xx burst from a customer's endpoint that's now

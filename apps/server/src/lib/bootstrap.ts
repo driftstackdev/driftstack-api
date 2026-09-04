@@ -780,7 +780,7 @@ export async function createProductionDeps(
       // production all get the right host without per-env literals
       // here. Same single-source-of-truth as the auth-flow URLs
       // (V-079.B): set DASHBOARD_ORIGIN once per env.
-      docsBaseUrl: 'https://driftstack.dev/docs',
+      docsBaseUrl: 'https://driftstack.io/docs',
       billingPortalUrl: config.stripe?.portalReturnUrl ?? `${config.dashboardOrigin}/billing`,
       dashboardUrl: config.dashboardOrigin,
     },
@@ -885,8 +885,8 @@ export async function createProductionDeps(
   // active; emails no-op when Postmark is unconfigured (createEmailService
   // returns a stub that swallows sends). The status-page base URL is the
   // origin the subscribe-confirmation + unsubscribe emails embed; falls
-  // back to https://status.driftstack.dev when env-unset.
-  const statusPageBaseUrl = process.env.PUBLIC_STATUS_PAGE_URL ?? 'https://status.driftstack.dev';
+  // back to https://status.driftstack.io when env-unset.
+  const statusPageBaseUrl = process.env.PUBLIC_STATUS_PAGE_URL ?? 'https://status.driftstack.io';
   const statusSubscribersRepo = new DrizzleStatusSubscribersRepo(dbHandle);
   const statusSubscribersService = new StatusSubscribersService(statusSubscribersRepo, email, {
     statusPageBaseUrl,
@@ -2196,7 +2196,7 @@ export async function createProductionDeps(
   }
   // IPN callback URL derives from the OAuth callback base when
   // available (same API origin); otherwise hard-codes prod. Both
-  // app.driftstack.dev (dashboard) and api.driftstack.dev (this
+  // app.driftstack.io (dashboard) and api.driftstack.dev (this
   // server) are deployed; NowPayments posts to the API origin.
   const nowpaymentsIpnCallbackUrl: string =
     process.env.NOWPAYMENTS_IPN_CALLBACK_URL ??
@@ -2768,7 +2768,7 @@ export async function createProductionDeps(
           sessionDispatch: {
             archetype: 'iphone16pro_ios18_6_safari18_6',
             behaviorProfile: 'default',
-            initialUrl: 'https://driftstack.dev',
+            initialUrl: 'https://driftstack.io',
             // From env, or ABSENT. The literal that used to sit here
             // (127.0.0.1:1080) was a local fleet-demo value that became the
             // live production default; unset now means "no default egress",

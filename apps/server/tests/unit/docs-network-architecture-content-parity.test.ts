@@ -16,8 +16,8 @@
 //     VM serves :7780 loopback-only.
 //   • Cloudflare WAF: per-IP rate-limit on unauth + bad-ASN block
 //     on auth surface only.
-//   • §2 marketing: driftstack.dev + docs.driftstack.dev edge-
-//     cacheable; app.driftstack.dev is its own Pages project too
+//   • §2 marketing: driftstack.io + docs.driftstack.io edge-
+//     cacheable; app.driftstack.io is its own Pages project too
 //     (V-1119 — this line read "tunneled for dynamic").
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -57,7 +57,7 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     );
   });
 
-  it("Overview 3-surface inventory framing pinned: '## Overview' + 'Driftstack at launch is a single-region deployment with three network surfaces:' + '1. **Customer ↔ control plane** — public HTTPS API on `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to the Hetzner VM over a Cloudflare Tunnel.' + '2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`, `docs.driftstack.dev`, and (future) `app.driftstack.dev`. Static on Cloudflare Pages; signup flow lives and app.driftstack.dev is its own Cloudflare Pages project, not a reverse proxy (V-809).' + '3. **Control plane ↔ Mac Mini fleet** — the load-bearing internal surface. v1 plan: signed JWT over mTLS, fleet pulls work from the control plane; v2: WireGuard mesh.' + 'This doc focuses on (3) because (1) and (2) are standard public-internet patterns. (3) involves cross-provider trust between the Hetzner VM and the MacStadium-hosted fleet.' — pinned so the 3-surface-inventory + single-region-launch + (3)-load-bearing-cross-provider-trust + v1-signed-JWT-mTLS-fleet-pulls + v2-WireGuard-mesh commitment survives", () => {
+  it("Overview 3-surface inventory framing pinned: '## Overview' + 'Driftstack at launch is a single-region deployment with three network surfaces:' + '1. **Customer ↔ control plane** — public HTTPS API on `api.driftstack.dev`. TLS terminated at Cloudflare, plain HTTP to the Hetzner VM over a Cloudflare Tunnel.' + '2. **Customer ↔ marketing site** — public HTTPS on `driftstack.io`, `docs.driftstack.io`, and (future) `app.driftstack.io`. Static on Cloudflare Pages; signup flow lives and app.driftstack.io is its own Cloudflare Pages project, not a reverse proxy (V-809).' + '3. **Control plane ↔ Mac Mini fleet** — the load-bearing internal surface. v1 plan: signed JWT over mTLS, fleet pulls work from the control plane; v2: WireGuard mesh.' + 'This doc focuses on (3) because (1) and (2) are standard public-internet patterns. (3) involves cross-provider trust between the Hetzner VM and the MacStadium-hosted fleet.' — pinned so the 3-surface-inventory + single-region-launch + (3)-load-bearing-cross-provider-trust + v1-signed-JWT-mTLS-fleet-pulls + v2-WireGuard-mesh commitment survives", () => {
     expect(body).toMatch(/## Overview/);
     expect(body).toMatch(/Driftstack at launch is a single-region deployment with three/);
     expect(body).toMatch(/network surfaces:/);
@@ -69,13 +69,13 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /the Hetzner VM over a Cloudflare Tunnel/,
     );
     expect(body).toMatch(
-      /2\. \*\*Customer ↔ marketing site\*\* — public HTTPS on `driftstack\.dev`,/,
+      /2\. \*\*Customer ↔ marketing site\*\* — public HTTPS on `driftstack\.io`,/,
     );
     expect(body).toMatch(
-      /`docs\.driftstack\.dev`, and `app\.driftstack\.dev`, all static on\s*Cloudflare Pages\./,
+      /`docs\.driftstack\.io`, and `app\.driftstack\.io`, all static on\s*Cloudflare Pages\./,
     );
     expect(body, 'the (future) qualifier is retired — the dashboard is deployed').not.toMatch(
-      /\(future\) `app\.driftstack\.dev`/,
+      /\(future\) `app\.driftstack\.io`/,
     );
     // V-809 — the dashboard is a static Pages SPA calling the API cross-origin;
     // the signup flow is not served by a control-plane reverse proxy.
@@ -83,9 +83,9 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
       /The dashboard is a\s*static SPA that calls the control-plane API cross-origin/,
     );
     expect(body).not.toMatch(/signup flow lives on the control plane/);
-    // V-809 — app.driftstack.dev is its own Cloudflare Pages project, deployed by
+    // V-809 — app.driftstack.io is its own Cloudflare Pages project, deployed by
     // deploy-customer-dashboard.yml. It is neither "(future)" nor reverse-proxied.
-    expect(body).toMatch(/`app\.driftstack\.dev` is its own Cloudflare\s*Pages project/);
+    expect(body).toMatch(/`app\.driftstack\.io` is its own Cloudflare\s*Pages project/);
     expect(body).toMatch(
       /it is neither a future\s*surface nor served through the Hetzner VM at all\./,
     );
@@ -166,24 +166,24 @@ describe('W548.C /docs/network-architecture.md content parity', () => {
     expect(body).toMatch(/triggers the alert path\./);
   });
 
-  it("§2 marketing-site edge-cacheable split framing pinned (V-1119: was 'app-tunneled', and it is not): '## §2. Customer ↔ marketing site' + '`driftstack.dev` and `docs.driftstack.dev` deploy via Cloudflare Pages (Astro static-first build per Workstream B). No backend on the marketing site itself; the signup flow + customer dashboard surface live on the control plane.' + 'driftstack.dev' + 'docs.driftstack.dev' + 'app.driftstack.dev' + '(signup + acceptance + first-key)' + 'The split between `driftstack.dev` (static marketing) and `app.driftstack.dev` (dynamic onboarding + dashboard) keeps the marketing site cacheable at the edge while the dynamic surface goes through the Tunnel.' — pinned so the §2 marketing+docs CF Pages static-first + Workstream-B + signup-on-control-plane + app.driftstack.dev (signup+acceptance+first-key) + edge-cacheable-vs-tunneled split commitment survives", () => {
+  it("§2 marketing-site edge-cacheable split framing pinned (V-1119: was 'app-tunneled', and it is not): '## §2. Customer ↔ marketing site' + '`driftstack.io` and `docs.driftstack.io` deploy via Cloudflare Pages (Astro static-first build per Workstream B). No backend on the marketing site itself; the signup flow + customer dashboard surface live on the control plane.' + 'driftstack.io' + 'docs.driftstack.io' + 'app.driftstack.io' + '(signup + acceptance + first-key)' + 'The split between `driftstack.io` (static marketing) and `app.driftstack.io` (dynamic onboarding + dashboard) keeps the marketing site cacheable at the edge while the dynamic surface goes through the Tunnel.' — pinned so the §2 marketing+docs CF Pages static-first + Workstream-B + signup-on-control-plane + app.driftstack.io (signup+acceptance+first-key) + edge-cacheable-vs-tunneled split commitment survives", () => {
     expect(body).toMatch(/## §2\. Customer ↔ marketing site/);
-    expect(body).toMatch(/`driftstack\.dev` and `docs\.driftstack\.dev` deploy via Cloudflare/);
+    expect(body).toMatch(/`driftstack\.io` and `docs\.driftstack\.io` deploy via Cloudflare/);
     expect(body).toMatch(/Pages \(Astro static-first build per Workstream B\)\./);
     expect(body).toMatch(/No backend on the/);
     expect(body).toMatch(/marketing site itself; the signup flow \+ customer dashboard surface/);
     expect(body).toMatch(/live on the control plane\./);
-    expect(body).toMatch(/driftstack\.dev/);
-    expect(body).toMatch(/docs\.driftstack\.dev/);
-    expect(body).toMatch(/app\.driftstack\.dev/);
+    expect(body).toMatch(/driftstack\.io/);
+    expect(body).toMatch(/docs\.driftstack\.io/);
+    expect(body).toMatch(/app\.driftstack\.io/);
     expect(body).toMatch(/\(signup \+ acceptance \+ first-key\)/);
-    expect(body).toMatch(/The split between `driftstack\.dev` \(static marketing\) and/);
-    // V-1119 — §2 drew app.driftstack.dev as a Tunnel hop into the Hetzner
+    expect(body).toMatch(/The split between `driftstack\.io` \(static marketing\) and/);
+    // V-1119 — §2 drew app.driftstack.io as a Tunnel hop into the Hetzner
     // VM column while the Overview had said since V-809 that it is its own
     // Cloudflare Pages project, and §1 had said since V-1087 that no Tunnel
     // exists at all. The document asserted a Tunnel twice and denied it once.
     expect(body).toMatch(
-      /`app\.driftstack\.dev` \(onboarding \+ dashboard\) keeps the marketing site/,
+      /`app\.driftstack\.io` \(onboarding \+ dashboard\) keeps the marketing site/,
     );
     expect(body, 'the dashboard is a Pages SPA calling the API cross-origin').toMatch(
       /Both are Cloudflare Pages projects; the dashboard\s*is a static SPA that calls `api\.driftstack\.dev` cross-origin/,

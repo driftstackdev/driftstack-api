@@ -107,6 +107,6 @@ describe('W353.C admin /incidents list page parity', () => {
     // Pin the customer-facing latency claim so a future server-side
     // window-change forces a doc edit.
     expect(body).toMatch(/within ~60 seconds/);
-    expect(body).toContain('status.driftstack.dev');
+    expect(body).toContain('status.driftstack.io');
   });
 });

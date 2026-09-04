@@ -130,8 +130,8 @@ describe('POST /v1/billing/checkout-session', () => {
       payload: {
         tier: 'api_builder',
         billing_period: 'monthly',
-        success_url: 'https://app.driftstack.dev/billing/success',
-        cancel_url: 'https://app.driftstack.dev/billing/cancel',
+        success_url: 'https://app.driftstack.io/billing/success',
+        cancel_url: 'https://app.driftstack.io/billing/cancel',
       },
     });
     expect(res.statusCode).toBe(200);
@@ -177,25 +177,25 @@ describe('POST /v1/billing/checkout-session', () => {
   }> = [
     {
       label: 'userinfo before an attacker host',
-      url: 'https://app.driftstack.dev@attacker.example.com/phishing',
+      url: 'https://app.driftstack.io@attacker.example.com/phishing',
       expect: 400,
       why: 'the allowlisted host appears in the string but `origin` is the attacker — a startsWith or includes check would pass this, an origin comparison cannot',
     },
     {
       label: 'allowlisted host as a SUBDOMAIN of an attacker domain',
-      url: 'https://app.driftstack.dev.attacker.example.com/phishing',
+      url: 'https://app.driftstack.io.attacker.example.com/phishing',
       expect: 400,
       why: 'the classic suffix trick: everything the eye reads first is allowlisted',
     },
     {
       label: 'http downgrade of an allowlisted host',
-      url: 'http://app.driftstack.dev/billing/success',
+      url: 'http://app.driftstack.io/billing/success',
       expect: 400,
       why: 'origin carries the SCHEME, and only the https form is listed — a customer landing on http after paying is a downgrade the allowlist is entitled to refuse',
     },
     {
       label: 'allowlisted host on a non-default port',
-      url: 'https://app.driftstack.dev:8443/billing/success',
+      url: 'https://app.driftstack.io:8443/billing/success',
       expect: 400,
       why: 'origin carries the PORT, so a host-only comparison would admit any port on the real domain',
     },
@@ -207,7 +207,7 @@ describe('POST /v1/billing/checkout-session', () => {
     },
     {
       label: 'uppercase allowlisted host',
-      url: 'https://APP.DRIFTSTACK.DEV/billing/success',
+      url: 'https://APP.DRIFTSTACK.IO/billing/success',
       expect: 200,
       why: 'DNS is case-insensitive and new URL() lowercases the host, so this is the same origin — the accept case that keeps this matrix from being all-refusals',
     },

@@ -461,7 +461,7 @@ of security appropriate to the risk. Measures are layered.
    redundancy commitment is stated in Customer's applicable Order
    Form or published SLA.
 3. **Health monitoring.** Structured Pino logs; alerting on error
-   rates and latency anomalies; public status page at `status.driftstack.dev`.
+   rates and latency anomalies; public status page at `status.driftstack.io`.
 4. **Incident response.** Documented runbook; on-call rotation
    capability scaled to Subscription tier.
 
@@ -527,7 +527,7 @@ snapshots) use R2's default jurisdiction, which replicates storage
 between the EU and the US under the transfer mechanism listed above.
 Any change to a Sub-processor or processing location remains subject
 to Section 3.4 notice and objection rights. The public Sub-processor
-register at <https://driftstack.dev/trust/sub-processors/> carries the
+register at <https://driftstack.io/trust/sub-processors/> carries the
 same explanation in plain language.
 
 ---

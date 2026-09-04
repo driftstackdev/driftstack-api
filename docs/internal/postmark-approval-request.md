@@ -3,7 +3,7 @@
 **Submitted:** 2026-05-09
 **Expected response:** by 2026-05-11 (Postmark typical: same-day to ~2 business days)
 **Server:** driftstack-transactional (ID 19089808)
-**Sender domain:** driftstack.dev (DKIM + Return-Path verified)
+**Sender domain:** driftstack.io (DKIM + Return-Path verified)
 
 > **⚠ V-1140 — these are the answers submitted on 2026-05-09, and they do not
 > describe one category of mail the server sends.** Annotated rather than
@@ -41,7 +41,7 @@ account is approved, sends to non-`@driftstack.dev` recipients fail
 silently (the API call returns success but the message is not
 delivered, with error: _"While your account is pending approval, all
 recipient addresses must share the same domain as the 'From' address.
-The domain of the 'From' address is 'driftstack.dev', but you are
+The domain of the 'From' address is 'driftstack.io', but you are
 attempting to send email to the following domain(s): '<other>'."_).
 
 This blocks the customer signup-verification email for any external
@@ -101,7 +101,7 @@ bulk/promotional/broadcast usage planned.
 ### Q3: How are new subscribers/recipients acquired? How do you segment, handle bounces, or suppress addresses?
 
 **Acquisition:** 100% application sign-ups at
-https://app.driftstack.dev/signup. The customer enters their email +
+https://app.driftstack.io/signup. The customer enters their email +
 password; we email them a verification link. No lead-generation
 services, no list purchases, no scraped contacts, no co-registration.
 
@@ -118,7 +118,7 @@ in our database, halting further sends to that address until the
 customer corrects it through their account settings.
 
 **Suppression / opt-out:** customers can opt out of non-critical
-email events at app.driftstack.dev/settings → Email Preferences (six
+email events at app.driftstack.io/settings → Email Preferences (six
 per-event toggles: signup welcome, first session failure, first
 session success, subscription tier changed, billing receipt, billing
 renewal reminder). Critical emails (signup verification, password
@@ -127,11 +127,11 @@ required for the customer to use their account. Support replies are
 answered by a person at info@driftstack.dev and are likewise not
 preference-gated.
 
-**Domain verification status:** `driftstack.dev` DKIM + Return-Path
+**Domain verification status:** `driftstack.io` DKIM + Return-Path
 DNS records are verified at the Postmark sender-signatures dashboard.
 Sender addresses: `noreply@driftstack.dev` (transactional default) +
 `info@driftstack.dev` (support/reply). DPA is in place per
-https://driftstack.dev/legal/dpa with Postmark listed as a
+https://driftstack.io/legal/dpa with Postmark listed as a
 sub-processor in Annex 3.
 
 ### Optional addendum
@@ -144,7 +144,7 @@ to Outbound Starter (~10k/month) before the first paying customer.
 ## Follow-up TODOs once Postmark approves
 
 1. Smoke-test signup with a real external email (e.g. founder's
-   personal mailbox) at app.driftstack.dev/signup → verify the
+   personal mailbox) at app.driftstack.io/signup → verify the
    verification email arrives.
 2. Wire the Postmark bounce webhook
    (`POST /v1/internal/postmark-webhook`) so hard-bounces auto-mark

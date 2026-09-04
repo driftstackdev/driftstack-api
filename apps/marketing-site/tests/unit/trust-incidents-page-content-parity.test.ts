@@ -74,7 +74,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
   it('72-hour-advance maintenance window notice claim pinned', () => {
     expect(body).toMatch(/Notice at least 72 hours in advance/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/settings\/"\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/settings\/"\s*class="text-tk-accent-text underline">\/settings → email preferences<\/a>/,
     );
   });
 
@@ -108,14 +108,14 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('live status CTA opens the public status page', () => {
     expect(body).toMatch(
-      /primaryHref="https:\/\/status\.driftstack\.dev"\s*primaryLabel="Open status page"/,
+      /primaryHref="https:\/\/status\.driftstack\.io"\s*primaryLabel="Open status page"/,
     );
   });
 
   it("'Get notified' CTA + Manage notifications link to dashboard /settings", () => {
     expect(body).toMatch(/title="Get notified when status changes\."/);
     expect(body).toMatch(
-      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*secondaryLabel="Manage notifications"/,
+      /secondaryHref="https:\/\/app\.driftstack\.io\/settings\/"\s*secondaryLabel="Manage notifications"/,
     );
   });
 

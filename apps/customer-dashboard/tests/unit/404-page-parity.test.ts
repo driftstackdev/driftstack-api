@@ -26,9 +26,9 @@ describe('W273.B /404 page navigation parity', () => {
     expect(page).not.toMatch(/['"]\/signin['"]/);
   });
 
-  it('does not embed a hard-coded https://app.driftstack.dev host', () => {
+  it('does not embed a hard-coded https://app.driftstack.io host', () => {
     // Internal hrefs should be path-relative; absolute customer-facing
     // URLs are derived from PUBLIC_DASHBOARD_ORIGIN at runtime.
-    expect(page).not.toMatch(/https?:\/\/app\.driftstack\.dev/);
+    expect(page).not.toMatch(/https?:\/\/app\.driftstack\.io/);
   });
 });

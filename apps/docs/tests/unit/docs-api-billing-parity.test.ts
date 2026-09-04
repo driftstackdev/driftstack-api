@@ -1,4 +1,4 @@
-// W254.C — drift-guard for docs.driftstack.dev/api/billing. Pins
+// W254.C — drift-guard for docs.driftstack.io/api/billing. Pins
 // the GET /v1/billing state shape + the POST /v1/billing/checkout-session
 // + POST /v1/billing/trial-pack endpoints to live route registrations.
 

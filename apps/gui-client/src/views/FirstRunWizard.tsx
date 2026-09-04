@@ -411,7 +411,7 @@ function ModeStep({
                 updates yourself.
               </li>
               <li>
-                • Pricing details: <span className="mono">driftstack.dev/pricing</span>
+                • Pricing details: <span className="mono">driftstack.io/pricing</span>
               </li>
             </ul>
             {mode === 'self-hosted' && (
@@ -678,7 +678,7 @@ export function ApiKeyStep({
               <span className="text-2xs text-ink-muted">
                 {mode === 'cloud' ? (
                   <>
-                    Find your API key at <span className="mono">app.driftstack.dev/api-keys</span>.
+                    Find your API key at <span className="mono">app.driftstack.io/api-keys</span>.
                   </>
                 ) : (
                   <>Mint a key against your self-hosted server.</>
@@ -1162,9 +1162,9 @@ function friendlyError(err: unknown, mode?: 'cloud' | 'self-hosted', baseUrl?: s
       const where = baseUrl
         ? `your own server's dashboard (${baseUrl})`
         : "your own server's dashboard";
-      return `Authentication failed (401). In self-hosted mode the API key must be created on ${where} — a key from app.driftstack.dev won't authenticate against your own server.`;
+      return `Authentication failed (401). In self-hosted mode the API key must be created on ${where} — a key from app.driftstack.io won't authenticate against your own server.`;
     }
-    return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.dev/api-keys.';
+    return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.io/api-keys.';
   }
   return humanizeError(err, "Couldn't complete setup. Check the details and try again.");
 }

@@ -43,6 +43,6 @@ describe('W245.B trust/incidents doc parity', () => {
 
   it('cross-links to the live status badge + sub-processors list', () => {
     expect(doc).toMatch(/StatusBadge/);
-    expect(doc).toMatch(/\/trust|\/legal\/sub-processors|status\.driftstack\.dev/);
+    expect(doc).toMatch(/\/trust|\/legal\/sub-processors|status\.driftstack\.io/);
   });
 });

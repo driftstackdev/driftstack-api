@@ -45,8 +45,8 @@ describe('W620 sdk-python/examples content parity', () => {
     expect(body).toMatch(/co = client\.billing\.create_checkout_session\(/);
     expect(body).toMatch(/"tier": "api_builder",/);
     expect(body).toMatch(/"billing_period": "monthly",/);
-    expect(body).toMatch(/"success_url": "https:\/\/app\.driftstack\.dev\/billing\?ok=1",/);
-    expect(body).toMatch(/"cancel_url": "https:\/\/app\.driftstack\.dev\/billing\?cancelled=1",/);
+    expect(body).toMatch(/"success_url": "https:\/\/app\.driftstack\.io\/billing\?ok=1",/);
+    expect(body).toMatch(/"cancel_url": "https:\/\/app\.driftstack\.io\/billing\?cancelled=1",/);
     expect(body).toMatch(/portal = client\.billing\.create_portal_session\(\)/);
     expect(existsSync(E('billing_flow.py'))).toBe(true);
   });

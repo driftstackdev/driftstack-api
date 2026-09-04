@@ -27,7 +27,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toMatch(/V-295c3 \+\s*\/\/\s*V-295c3-tombstone/);
     expect(body).toMatch(/V-281 pattern/);
     expect(body).toMatch(
-      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s+subscribers receive emails when public incidents are posted or resolved\. A forced\s+unsubscribe is also written to the admin audit log\./,
+      /Email addresses subscribed to status\.driftstack\.io incident notifications\. Confirmed\s+subscribers receive emails when public incidents are posted or resolved\. A forced\s+unsubscribe is also written to the admin audit log\./,
     );
   });
 
@@ -217,7 +217,7 @@ describe('W380.B admin-panel /status-subscribers.astro page content parity', () 
     expect(body).toContain('Sign in with a staff admin account to load subscribers.');
     expect(body).toContain('No subscribers yet');
     expect(body).toContain(
-      'When visitors subscribe to incident notifications on status.driftstack.dev, they appear here',
+      'When visitors subscribe to incident notifications on status.driftstack.io, they appear here',
     );
     expect(body).toMatch(/data-banner/);
     expect(body).toMatch(/role="status"/);

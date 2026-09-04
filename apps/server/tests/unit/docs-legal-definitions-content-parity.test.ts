@@ -82,7 +82,7 @@ describe('W574.B /docs/legal/definitions.md content parity', () => {
     );
     expect(body).toMatch(/under the `\/v1\/` path at/);
     expect(body).toContain('[https://api.driftstack.dev](https://api.driftstack.dev)');
-    expect(body).toContain('[https://docs.driftstack.dev/api/](https://docs.driftstack.dev/api/)');
+    expect(body).toContain('[https://docs.driftstack.io/api/](https://docs.driftstack.io/api/)');
     expect(body).not.toMatch(/placeholder|pending production deployment/i);
     expect(body).toMatch(
       /\*\*"API Key"\*\* means an authentication credential issued to Customer by/,

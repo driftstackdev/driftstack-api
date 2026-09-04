@@ -154,9 +154,9 @@ widen before believing it.
 
 - **Prod**: Hetzner CPX32 at `https://api.driftstack.dev` (root@128.140.37.74)
 - **Staging**: Hetzner CPX22 at `https://staging.driftstack.dev` (root@116.203.22.197)
-- **Marketing**: `https://driftstack.dev` (Cloudflare Pages)
-- **Customer dashboard**: `https://app.driftstack.dev` (Cloudflare Pages)
-- **Docs**: `https://docs.driftstack.dev`
+- **Marketing**: `https://driftstack.io` (Cloudflare Pages)
+- **Customer dashboard**: `https://app.driftstack.io` (Cloudflare Pages)
+- **Docs**: `https://docs.driftstack.io`
 - **Test suite**: 1800+ files passing (latest verify via `npm test`)
 - **Production deploy**: SHA in `/version` endpoint; auto-revert wired; 4 activation flags (sentry/email/livekit/oauthClient)
 

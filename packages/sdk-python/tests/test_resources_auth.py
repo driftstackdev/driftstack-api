@@ -23,7 +23,7 @@ BASE = "https://api.test"
 def test_sync_cli_authorize_initiate() -> None:
     response = {
         "code": "cliauth_abc",
-        "browser_url": "https://app.driftstack.dev/cli/authorize?code=cliauth_abc",
+        "browser_url": "https://app.driftstack.io/cli/authorize?code=cliauth_abc",
         "expires_at": "2026-05-09T18:05:00Z",
     }
     with respx.mock(base_url=BASE) as mock:
@@ -98,7 +98,7 @@ def test_sync_cli_authorize_bind() -> None:
 async def test_async_cli_authorize_initiate() -> None:
     response = {
         "code": "cliauth_xyz",
-        "browser_url": "https://app.driftstack.dev/cli/authorize?code=cliauth_xyz",
+        "browser_url": "https://app.driftstack.io/cli/authorize?code=cliauth_xyz",
         "expires_at": "2026-05-09T18:10:00Z",
     }
     with respx.mock(base_url=BASE) as mock:

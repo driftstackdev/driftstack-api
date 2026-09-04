@@ -126,16 +126,14 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it('W577: post-save key validation — non-blocking persist, then GET /v1/account/me with the saved key; 401 message is mode-aware (self-hosted says the key must come from that server, cloud points at app.driftstack.dev/api-keys); unreachable falls to diagnosticFetchError', () => {
+  it('W577: post-save key validation — non-blocking persist, then GET /v1/account/me with the saved key; 401 message is mode-aware (self-hosted says the key must come from that server, cloud points at app.driftstack.io/api-keys); unreachable falls to diagnosticFetchError', () => {
     expect(body).toMatch(/fetch\(`\$\{url\}\/v1\/account\/me`,/);
     expect(body).toMatch(/authorization: `Bearer \$\{draftKey\}`/);
     expect(body).toMatch(/res\.status === 401/);
     expect(body).toMatch(
-      /In self-hosted mode the key must be created on that server's own dashboard — a key from app\.driftstack\.dev won't authenticate here\./,
+      /In self-hosted mode the key must be created on that server's own dashboard — a key from app\.driftstack\.io won't authenticate here\./,
     );
-    expect(body).toMatch(
-      /Double-check it, or create a new one at app\.driftstack\.dev\/api-keys\./,
-    );
+    expect(body).toMatch(/Double-check it, or create a new one at app\.driftstack\.io\/api-keys\./);
     expect(body).toMatch(/Saved\. Key authenticated ✓/);
   });
 
@@ -167,7 +165,7 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Connected card: 'Pointing at <mono>{baseUrl}</mono> with key <mono>{maskApiKey(settings.apiKey)}</mono>' — the inline slice(0,12)+slice(-4) mask was replaced by the shared, prefix-aware maskApiKey helper (imported from ../components/ApiKeyMaskedSpan; strips the known ds_live_ prefix + shows only 4+4 of the body) because the old inline slice leaked 16 contiguous real chars (audit); first-run instruction 'Sign in with your browser to mint a fresh API key bound to your account, or paste an existing key from app.driftstack.dev/api-keys below.'", () => {
+  it("Connected card: 'Pointing at <mono>{baseUrl}</mono> with key <mono>{maskApiKey(settings.apiKey)}</mono>' — the inline slice(0,12)+slice(-4) mask was replaced by the shared, prefix-aware maskApiKey helper (imported from ../components/ApiKeyMaskedSpan; strips the known ds_live_ prefix + shows only 4+4 of the body) because the old inline slice leaked 16 contiguous real chars (audit); first-run instruction 'Sign in with your browser to mint a fresh API key bound to your account, or paste an existing key from app.driftstack.io/api-keys below.'", () => {
     expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
     expect(body).toMatch(
       /Pointing at <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}[\s\S]{0,400}?<span className="mono">\{maskApiKey\(settings\.apiKey\)\}<\/span>\./,
@@ -176,13 +174,13 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
       /\{settings\.apiKey\?\.slice\(0, 12\) \?\? ''\}…\{settings\.apiKey\?\.slice\(-4\) \?\? ''\}/,
     );
     // W577 — the first-run hint is now mode-aware: cloud keeps the
-    // app.driftstack.dev/api-keys pointer; self-hosted explains the key
+    // app.driftstack.io/api-keys pointer; self-hosted explains the key
     // must come from the customer's own server (deployment-bound keys).
     expect(body).toMatch(
-      /Sign in with your browser to mint a fresh API key bound to your account, or paste an\s*existing key from <span className="mono">app\.driftstack\.dev\/api-keys<\/span> below\./,
+      /Sign in with your browser to mint a fresh API key bound to your account, or paste an\s*existing key from <span className="mono">app\.driftstack\.io\/api-keys<\/span> below\./,
     );
     expect(body).toMatch(
-      /Paste a key created on your own server's dashboard\. A key from\{' '\}\s*<span className="mono">app\.driftstack\.dev<\/span> won't authenticate against a\s*self-hosted server — keys are bound to the deployment that minted them\./,
+      /Paste a key created on your own server's dashboard\. A key from\{' '\}\s*<span className="mono">app\.driftstack\.io<\/span> won't authenticate against a\s*self-hosted server — keys are bound to the deployment that minted them\./,
     );
   });
 
@@ -214,12 +212,12 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("V-324 help links pinned: 'Status (uptime + incidents)' status.driftstack.dev + 'Docs (quickstart + reference)' docs.driftstack.dev + 'support@driftstack.dev' mailto — pinned so customers don't dig through marketing site for support context; framing comment 'help links so customers don't have to dig through the marketing site to find status / docs / support contact from inside the app.'", () => {
+  it("V-324 help links pinned: 'Status (uptime + incidents)' status.driftstack.io + 'Docs (quickstart + reference)' docs.driftstack.io + 'support@driftstack.dev' mailto — pinned so customers don't dig through marketing site for support context; framing comment 'help links so customers don't have to dig through the marketing site to find status / docs / support contact from inside the app.'", () => {
     expect(body).toMatch(
       /\{\/\* V-324 — help links so customers don't have to dig through\s+the marketing site to find status \/ docs \/ support contact\s+from inside the app\. \*\/\}/,
     );
-    expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"/);
-    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"/);
+    expect(body).toMatch(/href="https:\/\/status\.driftstack\.io"/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.io"/);
     expect(body).toMatch(/<a href="mailto:support@driftstack\.dev"/);
   });
 

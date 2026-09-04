@@ -181,7 +181,7 @@ autonomous; MAJOR publishes always require explicit founder approval.
   branches; only the latest MINOR gets patches. Post-1.0 will
   introduce LTS for major versions in active customer use.
 - **Public deprecation timeline doc**. Customer-facing
-  deprecation-window doc (e.g., `docs.driftstack.dev/sdk/deprecations`)
+  deprecation-window doc (e.g., `docs.driftstack.io/sdk/deprecations`)
   is a future surface; today the SDK CHANGELOGs are the source of
   truth.
 - **Telemetry on deprecated-call usage**. Customer-side telemetry

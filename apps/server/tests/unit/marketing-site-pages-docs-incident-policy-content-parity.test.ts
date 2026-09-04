@@ -7,7 +7,7 @@
 //   • V-701 doc-comment framing + companion fix-log (no incident_subscriptions
 //     field; incident.* events NOT subscribable; sla camelCase + data: envelope;
 //     no ?window_days param).
-//   • status.driftstack.dev + 3-endpoint surface: GET /v1/status, GET
+//   • status.driftstack.io + 3-endpoint surface: GET /v1/status, GET
 //     /v1/status/incidents, POST /v1/status/subscribe.
 //   • 3-severity ladder matching the incident_severity enum: Outage (≤15min,
 //     every 30min) / Major (≤30min,
@@ -44,10 +44,8 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it('status.driftstack.dev + 3-endpoint surface pinned: GET /v1/status (overall + per-component) + GET /v1/status/incidents (recent/live) + POST /v1/status/subscribe + /docs/status-subscriptions cross-link — pinned so the 3-endpoint surface + status-subscriptions companion doc survives (drift to a different status-endpoint shape would create marketing↔status-route divergence)', () => {
-    expect(body).toMatch(
-      /<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>/,
-    );
+  it('status.driftstack.io + 3-endpoint surface pinned: GET /v1/status (overall + per-component) + GET /v1/status/incidents (recent/live) + POST /v1/status/subscribe + /docs/status-subscriptions cross-link — pinned so the 3-endpoint surface + status-subscriptions companion doc survives (drift to a different status-endpoint shape would create marketing↔status-route divergence)', () => {
+    expect(body).toMatch(/<a href="https:\/\/status\.driftstack\.io">status\.driftstack\.io<\/a>/);
     expect(body).toMatch(
       /<code>GET \/v1\/status<\/code> \(overall \+ per-component status\)\s*and <code>GET \/v1\/status\/incidents<\/code> \(recent \/ live\s*incidents\)/,
     );
@@ -147,7 +145,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     );
   });
 
-  it('4-related-doc cluster: /docs/sla-policy + /docs/status-subscriptions + /docs/webhooks (subscribable today) + status.driftstack.dev — pinned so the 4-related navigation surface stays complete (drift to dropping /docs/sla-policy would orphan the authoritative-credit-bands reference)', () => {
+  it('4-related-doc cluster: /docs/sla-policy + /docs/status-subscriptions + /docs/webhooks (subscribable today) + status.driftstack.io — pinned so the 4-related navigation surface stays complete (drift to dropping /docs/sla-policy would orphan the authoritative-credit-bands reference)', () => {
     expect(body).toMatch(
       /<a href="\/docs\/sla-policy\/">SLA policy \(authoritative tier targets \+ credit bands\)<\/a>/,
     );

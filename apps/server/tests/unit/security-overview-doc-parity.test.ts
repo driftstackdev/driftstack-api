@@ -27,7 +27,7 @@ const DOC_PATH = join(
 );
 // S47 2026-07-07 (founder-approved: mirror deprecation): the
 // /docs/data-residency mirror is deleted (301 →
-// docs.driftstack.dev/reference/data-residency/); the cross-check
+// docs.driftstack.io/reference/data-residency/); the cross-check
 // reads the docs successor source.
 const RESIDENCY_DOC = join(REPO, 'apps', 'docs', 'src', 'pages', 'reference', 'data-residency.md');
 

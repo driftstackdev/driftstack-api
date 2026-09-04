@@ -9,7 +9,7 @@
 // data-channel InputEvents from ANY participant), publishes navigate + tap
 // InputEvents EXACTLY like the GUI (apps/gui-client/src/lib/livekit.ts), then
 // reads back where each tap landed by polling the server's page-state for the
-// session (the test page at driftstack.dev/sim-probe.html encodes the hit cell
+// session (the test page at driftstack.io/sim-probe.html encodes the hit cell
 // into title/url#hash). Always deletes the session.
 //
 // Run (key via env — NEVER hardcode/log it):
@@ -53,7 +53,7 @@ const KEEP = getFlag('--keep');
 // instead of a {type:'tap'} — verifies the box treats a no-move touch as a tap, not
 // a scroll (A3 W2736/W2737 clean-gesture confirmation).
 const CLEANTAP = getFlag('--cleantap');
-const PROBE_URL = getOpt('--url', 'https://driftstack.dev/sim-probe.html');
+const PROBE_URL = getOpt('--url', 'https://driftstack.io/sim-probe.html');
 // Title-band compensation to mimic the GUI's devY (set --ycomp 32 to verify the
 // shipped tap fix): inject y-YCOMP but score error against the original aim.
 const YCOMP = parseInt(getOpt('--ycomp', '0'), 10) || 0;

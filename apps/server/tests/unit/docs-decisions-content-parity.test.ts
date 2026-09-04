@@ -117,7 +117,7 @@ describe('W549.A /docs/decisions.md content parity', () => {
   });
 
   it('pins the hosted OAuth human-consent boundary and safe registered callbacks', () => {
-    expect(body).toMatch(/https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
+    expect(body).toMatch(/https:\/\/app\.driftstack\.io\/oauth\/authorize\//);
     expect(body).toMatch(/never directly to the provider-internal staging API/);
     expect(body).toMatch(/intermediate `authorization_id` remains provider-internal/);
     expect(body).toMatch(/bounded to 2,048 characters, reject userinfo and fragments/);

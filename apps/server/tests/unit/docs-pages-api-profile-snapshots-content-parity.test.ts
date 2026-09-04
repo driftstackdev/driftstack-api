@@ -65,11 +65,11 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     expect(p).not.toMatch(/populated from\s*\n?the snapshot's frozen state/);
   });
 
-  it('CRITICAL snapshots-surface cross-reference pinned: captured/restored in the Driftstack desktop app (2026-07-02 account-portal IA — the web /snapshots dashboard page was retired; drift back to an app.driftstack.dev/snapshots link would resurrect a 404).', () => {
+  it('CRITICAL snapshots-surface cross-reference pinned: captured/restored in the Driftstack desktop app (2026-07-02 account-portal IA — the web /snapshots dashboard page was retired; drift back to an app.driftstack.io/snapshots link would resurrect a 404).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Snapshots are captured and restored in the Driftstack desktop app/);
-    expect(p).not.toMatch(/app\.driftstack\.dev\/snapshots/);
+    expect(p).not.toMatch(/app\.driftstack\.io\/snapshots/);
   });
 
   it('CRITICAL psnap_ id prefix pinned. Matches W756 dashboard /snapshots + W763 /api/profiles snapshots reference + V-312 server-side prefix.', () => {

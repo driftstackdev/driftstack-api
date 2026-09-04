@@ -39,7 +39,7 @@ const INITIAL_SETTINGS: TestSettings = {
   themeMode: 'dark',
   themeAccent: 'oxblood',
   telemetryOptIn: null,
-  startUrl: 'https://driftstack.dev',
+  startUrl: 'https://driftstack.io',
 };
 
 let seededSettings: TestSettings = { ...INITIAL_SETTINGS };
@@ -54,7 +54,7 @@ vi.mock('../../src/lib/settings', () => ({
     themeMode: 'dark',
     themeAccent: 'oxblood',
     telemetryOptIn: null,
-    startUrl: 'https://driftstack.dev',
+    startUrl: 'https://driftstack.io',
   },
   loadSettings: () => Promise.resolve(seededSettings),
   saveSettings: (settings: TestSettings, options?: { credentialUnchanged?: boolean }) => {

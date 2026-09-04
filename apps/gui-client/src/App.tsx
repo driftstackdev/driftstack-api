@@ -1133,12 +1133,12 @@ export function sidebarSectionFor(view: View): SidebarViewKind {
 // URL. Cloud customers see "cloud"; self-hosted customers see
 // "self-hosted". The label is informational (titlebar mode indicator),
 // not a feature gate. Hostname-match logic: anything ending in
-// `driftstack.dev` is cloud; everything else (localhost, customer's
+// `driftstack.io` is cloud; everything else (localhost, customer's
 // own domain, IP, etc.) is self-hosted.
 function deploymentLabel(baseUrl: string): 'cloud' | 'self-hosted' {
   try {
     const host = new URL(baseUrl).hostname;
-    if (host === 'driftstack.dev' || host.endsWith('.driftstack.dev')) {
+    if (host === 'driftstack.io' || host.endsWith('.driftstack.dev')) {
       return 'cloud';
     }
     return 'self-hosted';

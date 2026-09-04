@@ -1,4 +1,4 @@
-// W255.B — drift-guard for docs.driftstack.dev/api/team. Pins the
+// W255.B — drift-guard for docs.driftstack.io/api/team. Pins the
 // 5 team endpoints + the role enum + the X-Driftstack-Account
 // pattern to the live server source.
 

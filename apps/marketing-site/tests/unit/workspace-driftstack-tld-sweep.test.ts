@@ -1,8 +1,16 @@
-// W273.C — workspace-wide sweep guard. Only the canonical TLDs may
-// appear in marketing-site + docs copy: driftstack.dev (api, errors,
-// status, www) and a small set of subdomains. Fail loudly if a
-// legacy/fictional TLD slips back in (e.g. driftstack.com,
-// driftstack.io, driftstack.app, driftstack.co).
+// W273.C — workspace-wide sweep guard for the WEBSITE host split.
+//
+// After the 2026-09-04 move the website lives on driftstack.io (apex, www,
+// app, docs, status, admin) while these stay on driftstack.io FOREVER:
+// api. (the SDK base URL), errors. (RFC-9457 problem-type URIs the SDKs
+// string-match), fleet., staging., and every @driftstack.dev address. So
+// this guard cannot simply forbid the string "driftstack.io" — that
+// substring is present inside `api.driftstack.dev` and inside every support
+// address, and a naive pattern would report the hosts that are CORRECT.
+//
+// Each website pattern therefore carries a left boundary rejecting
+// [A-Za-z0-9.@-], which is what separates a bare `driftstack.io` from the
+// tail of `api.driftstack.dev` and from `support@driftstack.dev`.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -27,17 +35,41 @@ function read(p: string): string {
   return readFileSync(p, 'utf8');
 }
 
+// Roots WIDENED 2026-09-04. This previously walked `src/pages` in two apps,
+// so it could not see a host in a component, a layout, the dashboard, the
+// admin panel or the status site — i.e. it could not catch a partially
+// applied migration, which is the failure it exists to catch.
 const targets = [
-  resolve(REPO_ROOT, 'apps/marketing-site/src/pages'),
-  resolve(REPO_ROOT, 'apps/docs/src/pages'),
+  resolve(REPO_ROOT, 'apps/marketing-site/src'),
+  resolve(REPO_ROOT, 'apps/docs/src'),
+  resolve(REPO_ROOT, 'apps/customer-dashboard/src'),
+  resolve(REPO_ROOT, 'apps/admin-panel/src'),
+  resolve(REPO_ROOT, 'apps/status-site/src'),
 ];
-const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md)$/.test(f));
+const allFiles = targets.flatMap((d) => walk(d)).filter((f) => /\.(astro|md|mdx|ts|tsx)$/.test(f));
 
+// ⛔ These two patterns name the OLD host on purpose. A host-migration script
+// that rewrites `driftstack\.dev` -> `driftstack\.io` in escaped-regex form will
+// silently rewrite THEM too, at which point this guard forbids the TLD it exists
+// to enforce and reports every correct page as an offender. That happened on
+// 2026-09-04: 35 files flagged, and the reported "matches" were `driftstack.io`.
+// Any such script must exclude this file.
 const FORBIDDEN_TLDS: { pattern: RegExp; reason: string }[] = [
-  { pattern: /driftstack\.com\b/g, reason: 'Legacy TLD — canonical is driftstack.dev' },
-  { pattern: /driftstack\.io\b/g, reason: 'Fictional TLD — canonical is driftstack.dev' },
-  { pattern: /driftstack\.app\b/g, reason: 'Fictional TLD — canonical is driftstack.dev' },
-  { pattern: /driftstack\.co\b/g, reason: 'Fictional TLD — canonical is driftstack.dev' },
+  { pattern: /driftstack\.com\b/g, reason: 'Legacy TLD — canonical is driftstack.io' },
+  { pattern: /driftstack\.app\b/g, reason: 'Fictional TLD — canonical is driftstack.io' },
+  // `.co` is a prefix of `.com`, so this double-reports a .com hit. Kept
+  // because a genuine driftstack.co would otherwise pass, and a duplicate
+  // report is cheaper than a miss.
+  { pattern: /driftstack\.co\b/g, reason: 'Fictional TLD — canonical is driftstack.io' },
+  {
+    pattern: /(?<![A-Za-z0-9.@-])driftstack\.dev\b/g,
+    reason:
+      'the website apex moved to driftstack.io (api./errors./fleet./staging./@email stay on .dev)',
+  },
+  {
+    pattern: /(?<![A-Za-z0-9.@-])(?:www|app|docs|status|admin)\.driftstack\.dev\b/g,
+    reason: 'this website subdomain moved to driftstack.io',
+  },
 ];
 
 describe('W273.C workspace-wide driftstack TLD sweep', () => {

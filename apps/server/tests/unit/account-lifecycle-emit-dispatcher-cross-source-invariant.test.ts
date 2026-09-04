@@ -181,7 +181,7 @@ describe('W916 V-202b/c AccountLifecycle emit dispatcher cross-source invariant'
     expect(p).toMatch(/dashboardUrl: string;/);
   });
 
-  it("CRITICAL docsBaseUrl trailing-slash stripping — 'Trailing slashes are stripped at construction time. e.g. https://driftstack.dev/docs'. The strip is what makes ${docsBaseUrl}/section template-literal joins safe.", () => {
+  it("CRITICAL docsBaseUrl trailing-slash stripping — 'Trailing slashes are stripped at construction time. e.g. https://driftstack.io/docs'. The strip is what makes ${docsBaseUrl}/section template-literal joins safe.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/account-lifecycle.ts'));
     expect(p).toMatch(/Trailing\s*\n\s*\*\s*slashes are stripped at construction time/);
     expect(p).toMatch(/this\.docsBaseUrl = config\.docsBaseUrl\.replace\(\/\\\/\+\$\/, ''\);/);

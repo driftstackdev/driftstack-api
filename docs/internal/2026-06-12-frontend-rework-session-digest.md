@@ -4,7 +4,7 @@ One-page review surface for everything shipped under the full-auto greenlight.
 Deep history: `2026-06-12-frontend-visual-rework-plan.md` + the design contract
 `2026-06-12-design-system-spec.md` + auto-memory.
 
-## What's LIVE on driftstack.dev (verify with your own eyes)
+## What's LIVE on driftstack.io (verify with your own eyes)
 
 - **The Fleet design, site-wide** — white + violet, every page (60+), your
   locked picks end to end.
@@ -20,7 +20,7 @@ Deep history: `2026-06-12-frontend-visual-rework-plan.md` + the design contract
 
 ## Code-complete, awaiting YOUR two decisions
 
-1. **Customer dashboard** (app.driftstack.dev) — fully ported + tested
+1. **Customer dashboard** (app.driftstack.io) — fully ported + tested
    (212 files / 1,769 tests) + login screenshot-verified. DEPLOY?
    → `bash scripts/deploy-frontend.sh customer-dashboard`
 2. **GUI desktop client** — fully re-themed (light+violet default; your old

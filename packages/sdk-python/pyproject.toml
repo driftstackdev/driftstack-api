@@ -50,7 +50,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://driftstack.dev"
+Homepage = "https://driftstack.io"
 Repository = "https://github.com/driftstackdev/driftstack-api"
 Issues = "https://github.com/driftstackdev/driftstack-api/issues"
 

@@ -27,7 +27,7 @@ process.env.PUBLIC_SENTRY_ENVIRONMENT ??= process.env.SENTRY_ENVIRONMENT ?? 'pro
 process.env.SENTRY_RELEASE ??= process.env.GIT_SHA ?? 'unknown';
 
 export default defineConfig({
-  site: 'https://driftstack.dev',
+  site: 'https://driftstack.io',
   output: 'static',
   // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
   compressHTML: true,

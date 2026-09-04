@@ -24,7 +24,7 @@
 //     telemetryEnabled: SENTRY_DSN empty → false short-circuit
 //     + optIn===true → true + optIn===false → false + null →
 //     isCloud platform default.
-//   • isCloudBaseUrl: hostname === 'driftstack.dev' OR endsWith
+//   • isCloudBaseUrl: hostname === 'driftstack.io' OR endsWith
 //     '.driftstack.dev'; try/catch → false on malformed URL.
 //   • initTelemetry: opt-out close+reset; opt-in idempotent;
 //     Sentry.init with release `driftstack-gui@${APP_VERSION}` +
@@ -62,9 +62,9 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     );
   });
 
-  it("Posture 3-bullet framing pinned: '**Cloud customers** (baseUrl ends in driftstack.dev) — telemetry defaults ON; can opt out via Settings toggle. Helps Driftstack diagnose crashes affecting paying customers.' + '**Self-hosted customers** — telemetry defaults OFF; can opt IN explicitly. The whole point of self-hosted is keeping data on premise; telemetry would defeat that pitch unless explicitly chosen.' + '**Privacy contract** — crash-only. Errors + stack traces + anonymous version metadata (app version, OS, platform). NEVER captures: API keys, profile data, customer email/name, request bodies, or anything else PII-shaped. Sentry's `beforeSend` hook scrubs known-sensitive fields as a defense-in-depth.'", () => {
+  it("Posture 3-bullet framing pinned: '**Cloud customers** (baseUrl ends in driftstack.io) — telemetry defaults ON; can opt out via Settings toggle. Helps Driftstack diagnose crashes affecting paying customers.' + '**Self-hosted customers** — telemetry defaults OFF; can opt IN explicitly. The whole point of self-hosted is keeping data on premise; telemetry would defeat that pitch unless explicitly chosen.' + '**Privacy contract** — crash-only. Errors + stack traces + anonymous version metadata (app version, OS, platform). NEVER captures: API keys, profile data, customer email/name, request bodies, or anything else PII-shaped. Sentry's `beforeSend` hook scrubs known-sensitive fields as a defense-in-depth.'", () => {
     expect(body).toMatch(
-      /\/\/\s+\* \*\*Cloud customers\*\* \(baseUrl ends in driftstack\.dev\) — telemetry\s*\/\/\s+defaults ON; can opt out via Settings toggle\. Helps Driftstack\s*\/\/\s+diagnose crashes affecting paying customers\./,
+      /\/\/\s+\* \*\*Cloud customers\*\* \(baseUrl ends in driftstack\.io\) — telemetry\s*\/\/\s+defaults ON; can opt out via Settings toggle\. Helps Driftstack\s*\/\/\s+diagnose crashes affecting paying customers\./,
     );
     expect(body).toMatch(
       /\/\/\s+\* \*\*Self-hosted customers\*\* — telemetry defaults OFF; can opt IN\s*\/\/\s+explicitly\. The whole point of self-hosted is keeping data on\s*\/\/\s+premise; telemetry would defeat that pitch unless explicitly\s*\/\/\s+chosen\./,
@@ -104,12 +104,12 @@ describe('W469.C apps/gui-client/src/lib/telemetry.ts content parity', () => {
     );
   });
 
-  it("isCloudBaseUrl: hostname === 'driftstack.dev' OR endsWith('.driftstack.dev'); try/catch → false on malformed URL + framing 'Mirrors App.tsx::deploymentLabel logic; not cross-imported to avoid a circular boot path between App + telemetry init.'", () => {
+  it("isCloudBaseUrl: hostname === 'driftstack.io' OR endsWith('.driftstack.dev'); try/catch → false on malformed URL + framing 'Mirrors App.tsx::deploymentLabel logic; not cross-imported to avoid a circular boot path between App + telemetry init.'", () => {
     expect(body).toMatch(
       /\*\s*Extract whether a baseUrl points at the Driftstack cloud surface\.\s*\*\s*Mirrors `App\.tsx::deploymentLabel` logic; not cross-imported to\s*\*\s*avoid a circular boot path between App \+ telemetry init\./,
     );
     expect(body).toMatch(
-      /export function isCloudBaseUrl\(baseUrl: string\): boolean \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*return host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\);\s*\} catch \{\s*return false;\s*\}\s*\}/,
+      /export function isCloudBaseUrl\(baseUrl: string\): boolean \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*return host === 'driftstack\.io' \|\| host\.endsWith\('\.driftstack\.dev'\);\s*\} catch \{\s*return false;\s*\}\s*\}/,
     );
   });
 

@@ -73,7 +73,7 @@ describe('admin account detail mutation reconciliation', () => {
          <div data-account-cost-body></div>
        </main>`,
       {
-        url: 'https://admin.driftstack.dev/accounts/1234',
+        url: 'https://admin.driftstack.io/accounts/1234',
         runScripts: 'dangerously',
       },
     );
@@ -144,7 +144,7 @@ describe('admin account detail mutation reconciliation', () => {
          <div data-account-cost-body></div>
        </main>`,
       {
-        url: 'https://admin.driftstack.dev/accounts/1234',
+        url: 'https://admin.driftstack.io/accounts/1234',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -261,7 +261,7 @@ describe('admin account detail mutation reconciliation', () => {
          <div data-account-cost-body></div>
        </main>`,
       {
-        url: 'https://admin.driftstack.dev/accounts/1234',
+        url: 'https://admin.driftstack.io/accounts/1234',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -404,7 +404,7 @@ describe('admin account detail mutation reconciliation', () => {
          <ul data-list="account-audit"></ul><div data-account-cost-body></div>
        </main>`,
       {
-        url: 'https://admin.driftstack.dev/accounts/1234',
+        url: 'https://admin.driftstack.io/accounts/1234',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -485,7 +485,7 @@ describe('admin account detail mutation reconciliation', () => {
          <div data-account-cost-body></div>
        </main>`,
       {
-        url: 'https://admin.driftstack.dev/accounts/1234',
+        url: 'https://admin.driftstack.io/accounts/1234',
         runScripts: 'dangerously',
         virtualConsole,
       },

@@ -627,7 +627,7 @@ describe('W439.B apps/server/src/lib/bootstrap.ts content parity', () => {
     expect(body).toMatch(/sessionDispatch: \{/);
     expect(body).toMatch(/archetype: 'iphone16pro_ios18_6_safari18_6',/);
     expect(body).toMatch(/behaviorProfile: 'default',/);
-    expect(body).toMatch(/initialUrl: 'https:\/\/driftstack\.dev',/);
+    expect(body).toMatch(/initialUrl: 'https:\/\/driftstack\.io',/);
     // ⛔ THIS PIN USED TO LOCK `host: '127.0.0.1', port: 1080` AS THE DEFAULT
     // EGRESS, and in doing so it froze the outage in place: that literal was a
     // local fleet-demo value, the flag guarding it turned load-bearing, and

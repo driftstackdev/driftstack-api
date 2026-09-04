@@ -65,7 +65,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
     settings: {
       apiKey: 'ds_test_x',
       baseUrl: 'http://localhost:3000',
-      startUrl: 'https://driftstack.dev',
+      startUrl: 'https://driftstack.io',
     },
     accountMe: {
       // ⭐ One membership, so the workspace strip actually renders. The strip is now

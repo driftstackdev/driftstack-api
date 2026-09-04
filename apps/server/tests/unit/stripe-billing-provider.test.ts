@@ -92,10 +92,10 @@ describe('StripeBillingProvider.createPortalSession', () => {
 
     const result = await provider.createPortalSession({
       customerId: 'cus_x',
-      returnUrl: 'https://app.driftstack.dev/billing',
+      returnUrl: 'https://app.driftstack.io/billing',
     });
     expect(result.url).toContain('billing.stripe.com');
-    expect(calls[0]!.body).toContain('return_url=https%3A%2F%2Fapp.driftstack.dev%2Fbilling');
+    expect(calls[0]!.body).toContain('return_url=https%3A%2F%2Fapp.driftstack.io%2Fbilling');
   });
 });
 
@@ -108,8 +108,8 @@ describe('StripeBillingProvider.createSubscriptionCheckout idempotency scoping (
       accountId,
       customerId: 'cus_x',
       priceId: 'price_x',
-      successUrl: 'https://app.driftstack.dev/ok',
-      cancelUrl: 'https://app.driftstack.dev/no',
+      successUrl: 'https://app.driftstack.io/ok',
+      cancelUrl: 'https://app.driftstack.io/no',
       idempotencyKey: customerKey,
     });
     return calls[0]!.headers['Idempotency-Key'] ?? calls[0]!.headers['idempotency-key'] ?? '';

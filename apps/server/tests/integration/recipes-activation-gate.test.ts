@@ -42,7 +42,7 @@ describe('AI-B4 POST /v1/recipes activation gate (disabled-stub variant)', () =>
     });
     const body = res.json<{ detail?: string }>();
     expect(body.detail ?? '').toMatch(
-      /See https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\./,
+      /See https:\/\/docs\.driftstack\.io\/api\/recipes\/ for the supported API flow\./,
     );
     // No internal jargon
     expect(body.detail ?? '').not.toMatch(/V-\d{3}|planning file|handoff/);

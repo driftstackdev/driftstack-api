@@ -99,7 +99,7 @@ describe('W354.A /docs/security-overview parity', () => {
       // docs successor.
       [
         'apps/docs/src/pages/reference/data-residency.md',
-        'https://docs.driftstack.dev/reference/data-residency/',
+        'https://docs.driftstack.io/reference/data-residency/',
       ],
       ['apps/marketing-site/src/pages/docs/audit-log.astro', '/docs/audit-log'],
       ['apps/marketing-site/src/pages/docs/admin-api.astro', '/docs/admin-api'],

@@ -13,7 +13,7 @@ Google Console registration is the divergent variable.
 ### Diagnostic captured (prod, 2026-05-16)
 
 `POST https://api.driftstack.dev/v1/auth/oauth-client/start` with
-`{"provider":"google","redirect_to":"https://app.driftstack.dev/"}`
+`{"provider":"google","redirect_to":"https://app.driftstack.io/"}`
 returns an authorize URL with these parameters:
 
 ```
@@ -43,7 +43,7 @@ RESPONSE_TYPE: code
   `…/callback`).
 - HTTP vs HTTPS mismatch (Console has `http://…`).
 - Subdomain mismatch (Console has `www.api.driftstack.dev` or
-  `app.driftstack.dev` instead of `api.driftstack.dev`).
+  `app.driftstack.io` instead of `api.driftstack.dev`).
 - Wrong Client ID in Google Console — the one with the correct
   redirect URI is a DIFFERENT OAuth client than the one currently
   env-wired. In that case either (a) update the prod env's
@@ -141,7 +141,7 @@ Will surface in next batch per founder direction.
    SSH-write + restart.
 3. **You greenlight AI chat agent layer v1.0 inclusion** so I can
    start Slice AI-1.
-4. **You browser-test signup** at https://app.driftstack.dev/signup
+4. **You browser-test signup** at https://app.driftstack.io/signup
    with a deliberately-invalid input (e.g. password "short") to
    confirm Issue 2 fix surfaces per-field message instead of
    "One or more fields failed validation."

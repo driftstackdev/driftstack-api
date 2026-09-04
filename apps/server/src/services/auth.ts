@@ -641,7 +641,7 @@ async function slowPathApiKey(
  * (any 'admin'-scoped dashboard user could otherwise act on OTHER
  * customers' accounts). `/v1/admin/*` now requires
  * `driftstack_internal_admin`, granted only to staff-allowlisted
- * logins; `admin.driftstack.dev` remains a separate Cloudflare-Access-
+ * logins; `admin.driftstack.io` remains a separate Cloudflare-Access-
  * gated origin (V-135) as defense-in-depth.
  */
 async function slowPathWebSession(

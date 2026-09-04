@@ -231,7 +231,7 @@ selected at signup. Driftstack offers a perpetual Free tier, a
 Manual ladder (Personal, Team, Agency), and an API ladder (API
 Starter, API Builder, API Scale), with a custom-priced Enterprise
 tier. The current tiers and prices are published at
-<https://driftstack.dev/pricing/>. Fees are exclusive of VAT unless
+<https://driftstack.io/pricing/>. Fees are exclusive of VAT unless
 explicitly stated; VAT is added at the rate applicable to Customer's
 location at invoice issuance.
 
@@ -326,7 +326,7 @@ this Section 9.
 
 9.3 **Maintenance.** Driftstack performs scheduled maintenance during
 windows announced at least 48 hours in advance through the Service's
-status page at <https://status.driftstack.dev>. Customers may also
+status page at <https://status.driftstack.io>. Customers may also
 subscribe to email notifications via the form on the status page.
 Emergency maintenance may be performed without notice when required
 to address a security or integrity issue.

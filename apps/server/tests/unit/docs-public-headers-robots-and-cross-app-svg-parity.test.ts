@@ -127,11 +127,11 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
 
   // ─── docs/public/robots.txt ───────────────────────────────────
 
-  it('CRITICAL robots.txt allow-all + sitemap pointer pinned. User-agent: * + Allow: / + Sitemap: https://docs.driftstack.dev/sitemap-index.xml. Drift to disallow would hide docs from search engines.', () => {
+  it('CRITICAL robots.txt allow-all + sitemap pointer pinned. User-agent: * + Allow: / + Sitemap: https://docs.driftstack.io/sitemap-index.xml. Drift to disallow would hide docs from search engines.', () => {
     const p = read(DOCS_ROBOTS);
 
     expect(p).toMatch(/User-agent: \*\nAllow: \//);
-    expect(p).toMatch(/Sitemap: https:\/\/docs\.driftstack\.dev\/sitemap-index\.xml/);
+    expect(p).toMatch(/Sitemap: https:\/\/docs\.driftstack\.io\/sitemap-index\.xml/);
   });
 
   // ─── Cross-app brand-SVG byte-identity ────────────────────────
@@ -164,7 +164,7 @@ describe('W792 docs/public configs + cross-app brand-SVG parity', () => {
     }
   });
 
-  it('CRITICAL all 5 apps reference the brand mark at the SAME ?v cache-bust version (lockstep edge-invalidation). The query version is the only signal the Cloudflare Pages edge has to refetch an updated asset; a per-app version skew is exactly what let app.driftstack.dev serve a STALE red mark from ?v=2 while the asset on disk was already violet (and left status-site a version behind on ?v=2 until 2026-06-13). Bump all 5 in lockstep when the mark changes.', () => {
+  it('CRITICAL all 5 apps reference the brand mark at the SAME ?v cache-bust version (lockstep edge-invalidation). The query version is the only signal the Cloudflare Pages edge has to refetch an updated asset; a per-app version skew is exactly what let app.driftstack.io serve a STALE red mark from ?v=2 while the asset on disk was already violet (and left status-site a version behind on ?v=2 until 2026-06-13). Bump all 5 in lockstep when the mark changes.', () => {
     const VERSION_RE = /driftstack-mark\.svg\?v=(\d+)/g;
     const allVersions = new Set<string>();
     for (const app of APPS_WITH_SVG) {

@@ -78,7 +78,7 @@ describe('V-534.L SettingsAccountCard — fetch happy path', () => {
     );
     render(<SettingsAccountCard />);
     const link = screen.getByRole('link', { name: /manage billing/i });
-    expect(link.getAttribute('href')).toBe('https://app.driftstack.dev/billing/');
+    expect(link.getAttribute('href')).toBe('https://app.driftstack.io/billing/');
   });
 
   it('points "Manage billing" at localhost for local dev baseUrls', () => {

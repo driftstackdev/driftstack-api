@@ -20,7 +20,7 @@
 //   • CardState 3-variant (loading | error{message} |
 //     ready{account}); AccountMeResponse {account:{id+email+tier}}.
 //   • dashboardUrlFor: localhost / driftstack.local →
-//     http://localhost:5173, otherwise https://app.driftstack.dev.
+//     http://localhost:5173, otherwise https://app.driftstack.io.
 //   • effect-owned abort + unread-response disposal in useEffect.
 //   • Render: <section aria-label='Account info'> + 'Manage
 //     billing →' anchor + dt/dd dl on ready state.
@@ -65,12 +65,12 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     );
   });
 
-  it("dashboardUrlFor mapping: localhost OR driftstack.local → http://localhost:5173 (dev dashboard); otherwise https://app.driftstack.dev — pinned so the 'Manage billing' link doesn't redirect prod users to a localhost dev port or vice-versa; JSDoc framing 'mapping lives here (and not in SettingsContext) so the card is the single place that has to change when the dashboard moves'", () => {
+  it("dashboardUrlFor mapping: localhost OR driftstack.local → http://localhost:5173 (dev dashboard); otherwise https://app.driftstack.io — pinned so the 'Manage billing' link doesn't redirect prod users to a localhost dev port or vice-versa; JSDoc framing 'mapping lives here (and not in SettingsContext) so the card is the single place that has to change when the dashboard moves'", () => {
     expect(body).toMatch(
       /\* Resolve the dashboard URL for the configured baseUrl\. The mapping\s*\*\s+lives here \(and not in SettingsContext\) so the card is the single\s*\*\s+place that has to change when the dashboard moves\./,
     );
     expect(body).toMatch(
-      /function dashboardUrlFor\(baseUrl: string\): string \{\s*\/\/ localhost \/ app\.driftstack\.local → use the dev dashboard\.\s*if \(baseUrl\.includes\('localhost'\) \|\| baseUrl\.includes\('driftstack\.local'\)\) \{\s*return 'http:\/\/localhost:5173';\s*\}\s*return 'https:\/\/app\.driftstack\.dev';\s*\}/,
+      /function dashboardUrlFor\(baseUrl: string\): string \{\s*\/\/ localhost \/ app\.driftstack\.local → use the dev dashboard\.\s*if \(baseUrl\.includes\('localhost'\) \|\| baseUrl\.includes\('driftstack\.local'\)\) \{\s*return 'http:\/\/localhost:5173';\s*\}\s*return 'https:\/\/app\.driftstack\.io';\s*\}/,
     );
   });
 

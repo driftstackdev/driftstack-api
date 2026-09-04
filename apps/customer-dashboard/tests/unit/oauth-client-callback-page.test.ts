@@ -16,7 +16,7 @@ const BUILT_PAGE = resolve(
   'index.html',
 );
 const PAGE_URL =
-  'https://app.driftstack.dev/auth/oauth-client/callback/?code=oauth_code_123&state=state_123&provider=github';
+  'https://app.driftstack.io/auth/oauth-client/callback/?code=oauth_code_123&state=state_123&provider=github';
 
 interface MockFetchCall {
   url: string;

@@ -255,7 +255,7 @@ describe('AgentChatView Save-as-recipe', () => {
       new DriftstackError({
         kind: 'conflict',
         status: 409,
-        type: 'https://driftstack.dev/problems/conflict',
+        type: 'https://driftstack.io/problems/conflict',
         title: 'Conflict',
         detail: 'quota exceeded',
       }),

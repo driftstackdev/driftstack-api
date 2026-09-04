@@ -76,8 +76,8 @@ E2E tests are slower (~30-60s) and run with `workers: 1` because the test databa
 
 ```
 apps/server/             — Fastify API + control plane (the main app)
-apps/marketing-site/     — Astro static site → driftstack.dev
-apps/customer-dashboard/ — Astro static site → app.driftstack.dev (V-099 scaffolding)
+apps/marketing-site/     — Astro static site → driftstack.io
+apps/customer-dashboard/ — Astro static site → app.driftstack.io (V-099 scaffolding)
 apps/gui-client/         — Tauri desktop client for end-users
 packages/api-types/      — Public Zod schemas + inferred TS types (single source of truth)
 packages/sdk-typescript/ — @driftstack/sdk (TypeScript)

@@ -2,7 +2,7 @@
 // Pins the three endpoints the page consumes
 // (/v1/status/incidents + /v1/status/stream + R2 fallback) to the
 // live server registration. A rename on the server side without
-// updating the page would silently leave status.driftstack.dev
+// updating the page would silently leave status.driftstack.io
 // stuck on "Status currently unavailable".
 
 import { readFileSync, readdirSync } from 'node:fs';

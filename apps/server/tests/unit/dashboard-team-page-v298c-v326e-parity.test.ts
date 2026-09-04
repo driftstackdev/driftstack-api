@@ -206,13 +206,13 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     expect(p).toMatch(/return '&#39;'/);
   });
 
-  it('CRITICAL docs.driftstack.dev/api/team cross-reference link pinned. Drift to dropping would force customers to search for the role-gating reference.', () => {
+  it('CRITICAL docs.driftstack.io/api/team cross-reference link pinned. Drift to dropping would force customers to search for the role-gating reference.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/api\/team\/" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.dev\/api\/team<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/api\/team\/" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs\.driftstack\.io\/api\/team<\/a>/,
     );
-    expect(p).not.toMatch(/href="https:\/\/docs\.driftstack\.dev\/api\/team"/);
+    expect(p).not.toMatch(/href="https:\/\/docs\.driftstack\.io\/api\/team"/);
   });
 
   it('CRITICAL resolveApiBaseUrl + DashboardLayout used.', () => {

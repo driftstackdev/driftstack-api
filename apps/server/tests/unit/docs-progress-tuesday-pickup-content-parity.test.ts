@@ -126,7 +126,7 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
     expect(body).toMatch(/Source from/);
     expect(body).toMatch(/V-294 catalog selectively \(don't expose internal V-NNN tags\)\./);
     expect(body).toMatch(/- \*\*Status page indicator\*\* — small badge on marketing showing/);
-    expect(body).toMatch(/current platform status \(driftstack\.dev fetches/);
+    expect(body).toMatch(/current platform status \(driftstack\.io fetches/);
     expect(body).toMatch(/api\.driftstack\.dev\/v1\/status\)\./);
     expect(body).toMatch(/- \*\*Onboarding flow polish\*\* — welcome → trial-pack → first-key →/);
     expect(body).toMatch(/first-session ergonomics review\./);
@@ -200,7 +200,7 @@ describe('W571.C /docs/progress/tuesday-pickup.md content parity', () => {
       /curl -sS -o \/dev\/null -w "%\{http_code\}\\n" https:\/\/api\.driftstack\.dev\/health/,
     );
     expect(body).toMatch(
-      /curl -sS -o \/dev\/null -w "%\{http_code\}\\n" https:\/\/app\.driftstack\.dev\//,
+      /curl -sS -o \/dev\/null -w "%\{http_code\}\\n" https:\/\/app\.driftstack\.io\//,
     );
     expect(body).toMatch(/Expect: 1169\+\/1169\+ tests pass, both systemd services `active`, both/);
     expect(body).toMatch(/URLs `200`\. If anything regresses overnight, surface to founder before/);

@@ -3,7 +3,7 @@
 // brand mark (driftstack-mark.svg).
 //
 // Why a PNG: iOS apple-touch-icons MUST be raster (PNG) — an SVG favicon
-// alone means adding driftstack.dev to an iPhone home screen shows a
+// alone means adding driftstack.io to an iPhone home screen shows a
 // generic/blank icon. The mark SVG is a transparent gradient "D" (with an
 // iPhone silhouette as the counter), so it is composited onto the brand
 // dark background (#0b0f14 = the declared <meta name="theme-color">) at

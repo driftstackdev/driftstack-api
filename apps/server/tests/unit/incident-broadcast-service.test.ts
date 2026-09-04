@@ -76,7 +76,7 @@ function makeUpdate(overrides: Partial<IncidentUpdateRow> = {}): IncidentUpdateR
 
 function makeBaseConfig(overrides: Partial<BroadcastChannelsConfig> = {}): BroadcastChannelsConfig {
   return {
-    statusPageBaseUrl: 'https://status.driftstack.dev/',
+    statusPageBaseUrl: 'https://status.driftstack.io/',
     timeoutMs: 5_000,
     ...overrides,
   };
@@ -148,7 +148,7 @@ describe('V-553.B-30 IncidentBroadcastService.notifyCreated/Resolved', () => {
     expect(body.incident.affected_components).toEqual(['api']);
     expect(body.update.message).toBe('We are investigating elevated p95 latency.');
     // Trailing slash should be stripped from the base URL.
-    expect(body.incident.status_page_url).toBe('https://status.driftstack.dev');
+    expect(body.incident.status_page_url).toBe('https://status.driftstack.io');
   });
 
   it('fires both channels in parallel when both are configured', async () => {

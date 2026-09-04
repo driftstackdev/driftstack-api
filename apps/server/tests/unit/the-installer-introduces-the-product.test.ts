@@ -47,7 +47,7 @@ const b = conf.bundle;
 describe('the installer introduces the product', () => {
   it('CRITICAL names its publisher and itself. These are the strings Programs-and-Features and the package managers read; blank is how the app installs as an unnamed thing from nobody.', () => {
     expect(b.publisher).toBe('Driftstack');
-    expect(b.homepage).toBe('https://driftstack.dev');
+    expect(b.homepage).toBe('https://driftstack.io');
     expect(b.copyright).toMatch(/Driftstack/);
     // A description long enough to actually say what it is — a one-word
     // placeholder would satisfy a mere presence check.

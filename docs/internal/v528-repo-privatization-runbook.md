@@ -129,21 +129,21 @@ them.
 # TypeScript
 gh repo create driftstackdev/driftstack-typescript-sdk --public \
   --description "Official TypeScript SDK for the Driftstack API" \
-  --homepage "https://driftstack.dev"
+  --homepage "https://driftstack.io"
 git push git@github.com:driftstackdev/driftstack-typescript-sdk.git \
   sdk-extract/typescript:main
 
 # Python
 gh repo create driftstackdev/driftstack-python-sdk --public \
   --description "Official Python SDK for the Driftstack API" \
-  --homepage "https://driftstack.dev"
+  --homepage "https://driftstack.io"
 git push git@github.com:driftstackdev/driftstack-python-sdk.git \
   sdk-extract/python:main
 
 # Go
 gh repo create driftstackdev/driftstack-go-sdk --public \
   --description "Official Go SDK for the Driftstack API" \
-  --homepage "https://driftstack.dev"
+  --homepage "https://driftstack.io"
 git push git@github.com:driftstackdev/driftstack-go-sdk.git \
   sdk-extract/go:main
 ```
@@ -229,7 +229,7 @@ before Step 3 pushes.
 Update any external references that pointed at driftstack-api source:
 
 - npm package badges in marketing site (if any) — point at SDK repos.
-- "View source" links in docs.driftstack.dev → SDK repos for SDK source,
+- "View source" links in docs.driftstack.io → SDK repos for SDK source,
   no link for control-plane source (now private).
 - Status page references — none expected.
 

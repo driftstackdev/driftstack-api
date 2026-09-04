@@ -2,7 +2,7 @@
  * Reject a locator the AI emitted that is not a valid W3C `css selector`.
  *
  * ⛔ WHY THIS EXISTS — measured live against production on 2026-09-02. The owner's
- * own prompt ("go to driftstack.dev, create an account…") produced a plan whose
+ * own prompt ("go to driftstack.io, create an account…") produced a plan whose
  * tap step carried:
  *
  *     a[href*='signup'], a[href*='sign-up'], button:has-text('Sign up')

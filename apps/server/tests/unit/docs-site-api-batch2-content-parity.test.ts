@@ -54,7 +54,7 @@ describe('W606 apps/docs/api batch 2 close-out (8 modules) content parity', () =
     expect(existsSync(P('billing.md'))).toBe(true);
   });
 
-  it('legal.md: records customer acceptance + versioned legal documents (ToS + Privacy + DPA + AUP) + content-hash binding pinned. The previous skip pinned inline `V-523 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('legal.md: records customer acceptance + versioned legal documents (ToS + Privacy + DPA + AUP) + content-hash binding pinned. The previous skip pinned inline `V-523 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const body = read(P('legal.md'));
     expect(body).toMatch(/^title: Legal documents \+ acceptance$/m);
     expect(body).toMatch(/^# Legal documents \+ acceptance$/m);
@@ -74,7 +74,7 @@ describe('W606 apps/docs/api batch 2 close-out (8 modules) content parity', () =
     expect(existsSync(P('team.md'))).toBe(true);
   });
 
-  it('email-preferences.md: 2 email categories (transactional opt-outable vs operational never-opt-outable) pinned. The previous skip pinned inline `V-520 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('email-preferences.md: 2 email categories (transactional opt-outable vs operational never-opt-outable) pinned. The previous skip pinned inline `V-520 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const body = read(P('email-preferences.md'));
     expect(body).toMatch(/^title: Email preferences$/m);
     expect(body).toMatch(/^# Email preferences$/m);
@@ -84,7 +84,7 @@ describe('W606 apps/docs/api batch 2 close-out (8 modules) content parity', () =
     expect(body).not.toMatch(/V-520 reference\./);
   });
 
-  it('account-rate-limits.md: per-tier token-bucket on every authenticated /v1/* + admin overrides + reads effective config pinned. The previous skip pinned inline `V-517 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('account-rate-limits.md: per-tier token-bucket on every authenticated /v1/* + admin overrides + reads effective config pinned. The previous skip pinned inline `V-517 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const body = read(P('account-rate-limits.md'));
     expect(body).toMatch(/^title: Account rate limits$/m);
     expect(body).toMatch(/^# Account rate limits$/m);

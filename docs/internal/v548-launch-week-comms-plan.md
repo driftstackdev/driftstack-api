@@ -95,7 +95,7 @@ Hour 6-24: monitored, less intensively.
 - Pricing — 3 visible tiers + "contact us" for enterprise. Annual /
   monthly toggle.
 - Security — links to DPA + sub-processor list + privacy policy.
-- Customer-facing docs at https://docs.driftstack.dev.
+- Customer-facing docs at https://docs.driftstack.io.
 
 ### Email
 
@@ -118,7 +118,7 @@ Hour 6-24: monitored, less intensively.
 
 - Launch post: who we are + what we built + the 3 use cases we
   support today. ~800 words.
-- Lives at driftstack.dev/blog/launch (NEW URL; needs marketing-
+- Lives at driftstack.io/blog/launch (NEW URL; needs marketing-
   site blog scaffolding which is currently a stub).
 
 ## Anti-actions

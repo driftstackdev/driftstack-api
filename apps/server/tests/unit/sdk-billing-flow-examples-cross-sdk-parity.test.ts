@@ -83,20 +83,18 @@ describe('W800 cross-SDK billing-flow examples parity', () => {
 
   // ─── success_url + cancel_url ─────────────────────────────────
 
-  it("CRITICAL success_url + cancel_url pinned to https://app.driftstack.dev/billing?ok=1 / ?cancelled=1 cross-SDK. The app.driftstack.dev host is the canonical customer-dashboard origin; drift to a different host would dead-link Checkout's redirect.", () => {
-    const successUrl = "'https://app.driftstack.dev/billing?ok=1'";
-    const cancelUrl = "'https://app.driftstack.dev/billing?cancelled=1'";
+  it("CRITICAL success_url + cancel_url pinned to https://app.driftstack.io/billing?ok=1 / ?cancelled=1 cross-SDK. The app.driftstack.io host is the canonical customer-dashboard origin; drift to a different host would dead-link Checkout's redirect.", () => {
+    const successUrl = "'https://app.driftstack.io/billing?ok=1'";
+    const cancelUrl = "'https://app.driftstack.io/billing?cancelled=1'";
 
-    expect(read(TS)).toMatch(/success_url: 'https:\/\/app\.driftstack\.dev\/billing\?ok=1'/);
-    expect(read(TS)).toMatch(/cancel_url: 'https:\/\/app\.driftstack\.dev\/billing\?cancelled=1'/);
+    expect(read(TS)).toMatch(/success_url: 'https:\/\/app\.driftstack\.io\/billing\?ok=1'/);
+    expect(read(TS)).toMatch(/cancel_url: 'https:\/\/app\.driftstack\.io\/billing\?cancelled=1'/);
 
-    expect(read(PY)).toMatch(/"success_url": "https:\/\/app\.driftstack\.dev\/billing\?ok=1"/);
-    expect(read(PY)).toMatch(
-      /"cancel_url": "https:\/\/app\.driftstack\.dev\/billing\?cancelled=1"/,
-    );
+    expect(read(PY)).toMatch(/"success_url": "https:\/\/app\.driftstack\.io\/billing\?ok=1"/);
+    expect(read(PY)).toMatch(/"cancel_url": "https:\/\/app\.driftstack\.io\/billing\?cancelled=1"/);
 
-    expect(read(GO)).toMatch(/SuccessURL: "https:\/\/app\.driftstack\.dev\/billing\?ok=1"/);
-    expect(read(GO)).toMatch(/CancelURL: +"https:\/\/app\.driftstack\.dev\/billing\?cancelled=1"/);
+    expect(read(GO)).toMatch(/SuccessURL: "https:\/\/app\.driftstack\.io\/billing\?ok=1"/);
+    expect(read(GO)).toMatch(/CancelURL: +"https:\/\/app\.driftstack\.io\/billing\?cancelled=1"/);
 
     // Lint-trip mention so unused-var warnings don't flag the local strings above.
     void successUrl;

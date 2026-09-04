@@ -58,7 +58,7 @@ function incidentService(fetcher: (input: string, init: RequestInit) => Promise<
   return new IncidentBroadcastService(
     {
       slackWebhookUrl: 'https://hooks.slack.test/services/redacted',
-      statusPageBaseUrl: 'https://status.driftstack.dev',
+      statusPageBaseUrl: 'https://status.driftstack.io',
       timeoutMs: 100,
     },
     createTestLogger(),
@@ -139,7 +139,7 @@ describe('outbound response lifecycle', () => {
       const service = new IncidentBroadcastService(
         {
           genericWebhookUrl: `${sourceOrigin}/redirect`,
-          statusPageBaseUrl: 'https://status.driftstack.dev',
+          statusPageBaseUrl: 'https://status.driftstack.io',
           timeoutMs: 1_000,
         },
         createTestLogger(),

@@ -96,7 +96,7 @@ describe('services/agent-decomposer-claude content parity', () => {
 
   it('⛔ V-2169: the AUP link is marked NEVER a destination, and an unseeded task must pick real sites', () => {
     // Owner 2026-08-30: "it just goes to drifstack.dev and finishes up."
-    // Mechanism, not a guess: https://driftstack.dev/legal/aup/ is the ONLY URL
+    // Mechanism, not a guess: https://driftstack.io/legal/aup/ is the ONLY URL
     // anywhere in the system prompt, and the warm-up presets name no site
     // ("visit a handful of popular, reputable websites"). Given a task with no
     // target and exactly one URL in context, the model navigates to that URL,
@@ -106,12 +106,12 @@ describe('services/agent-decomposer-claude content parity', () => {
     // Pinned as two properties rather than one sentence: the URL must be
     // disclaimed, AND the model must be told that choosing destinations is part
     // of an open-ended task (otherwise disclaiming it just leaves a vacuum).
-    expect(body).toMatch(/driftstack\.dev IS OUR OWN SITE AND IS NEVER A DESTINATION/);
-    expect(body).toMatch(/NEVER emit a navigate to driftstack\.dev/);
+    expect(body).toMatch(/driftstack\.io IS OUR OWN SITE AND IS NEVER A DESTINATION/);
+    expect(body).toMatch(/NEVER emit a navigate to driftstack\.io/);
     expect(body).toMatch(/WHEN THE TASK NAMES NO SITE, YOU CHOOSE REAL ONES/);
     // Non-vacuity: the AUP URL is still present, because a refusal must be able
     // to cite it — the fix is a disclaimer, not a deletion.
-    expect(body).toContain('https://driftstack.dev/legal/aup/');
+    expect(body).toContain('https://driftstack.io/legal/aup/');
   });
 
   it('runtime-enforces downstream field limits and keeps the Anthropic body below the transcript turn reserve', () => {
@@ -196,9 +196,9 @@ describe('services/agent-decomposer-claude content parity', () => {
     );
   });
 
-  it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://driftstack.dev/legal/aup/. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented (URL updated 2026-05-20 — broken `docs.driftstack.dev/aup` retargeted to the live marketing-site `driftstack.dev/legal/aup/` path)", () => {
+  it("SYSTEM_PROMPT WHEN-TO-REFUSE AUP-cite framing pinned: 'bypass captchas, brute-force credentials, stalk a specific person, generate CSAM, create non-consensual deepfakes, swat / make false emergency calls, or do anything else categorically prohibited by the AUP at https://driftstack.io/legal/aup/. Refuse politely; cite the AUP.' — pinned so the 6-abuse-category catalog + AUP-URL + refuse-politely-cite-AUP contract all stay documented (URL updated 2026-05-20 — broken `docs.driftstack.io/aup` retargeted to the live marketing-site `driftstack.io/legal/aup/` path)", () => {
     expect(body).toMatch(
-      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*'credentials, stalk a specific person, generate CSAM, create',\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*'anything else categorically prohibited by the AUP at',\s*'https:\/\/driftstack\.dev\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
+      /'WHEN TO REFUSE: the task asks you to bypass captchas, brute-force',\s*'credentials, stalk a specific person, generate CSAM, create',\s*'non-consensual deepfakes, swat \/ make false emergency calls, or do',\s*'anything else categorically prohibited by the AUP at',\s*'https:\/\/driftstack\.io\/legal\/aup\/\. Refuse politely; cite the AUP\.',/,
     );
   });
 

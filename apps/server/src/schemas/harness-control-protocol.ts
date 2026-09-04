@@ -837,7 +837,7 @@ export const SessionAssignGeolocationSchema = z
 
 // #128 new-tab IP panel (A2↔A3 bus 2026-07-06). The box serves the new-tab page
 // LOCALLY (no proxy hop → instant, reliable even when the proxy can't reach
-// driftstack.dev/newtab) and renders the IP/geo/tz/QUIC panel from THIS block —
+// driftstack.io/newtab) and renders the IP/geo/tz/QUIC panel from THIS block —
 // the CP-probed exit identity, authoritative because it's what the world sees
 // through the customer's proxy — instead of a proxied /cdn-cgi/trace fetch that
 // Cloudflare challenges. snake_case wire keys mirror the livekit/profile block

@@ -118,7 +118,7 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
     expect(body).toMatch(/Any error \| >0 events in 5min \| Page founder/);
   });
 
-  it("Synthetic checks V-289 + load-test V-495 framing pinned: '## Synthetic checks (V-289)' + '`https://api.driftstack.dev/health`    | 60s      | 5s      | 2 consecutive → page' + '`https://api.driftstack.dev/ready`     | 60s      | 10s     | 2 consecutive → page' + '`https://api.driftstack.dev/v1/status` | 60s      | 5s      | 2 consecutive → page' + '`https://app.driftstack.dev`           | 5min     | 10s     | 1 failure → Slack' + '`https://status.driftstack.dev`        | 60s      | 5s      | 2 consecutive → page' + 'Synthetic check fails route through the same P-0 channels as Sentry fatals (per `docs/runbooks/incidents.md` §5.2).' + '## Load-test cadence (V-495)' + 'Pre-deploy of new version     | staging — `/v1/status`   | Compare to last' + 'Weekly                        | production — read-only   | Append to baselines' + 'Quarterly                     | production — write paths | Append + compare to Q-1' + 'After any architecture change | both                     | Mandatory' + 'The harness refuses to mutate production without explicit `--i-know-what-im-doing=true`' — pinned so the V-289-7-target-synthetic-table + 60s-api-status + 5min-others + P-0-route-via-incidents-§5.2 + V-495-4-cadence-row + --i-know-what-im-doing safety rail commitment survives", () => {
+  it("Synthetic checks V-289 + load-test V-495 framing pinned: '## Synthetic checks (V-289)' + '`https://api.driftstack.dev/health`    | 60s      | 5s      | 2 consecutive → page' + '`https://api.driftstack.dev/ready`     | 60s      | 10s     | 2 consecutive → page' + '`https://api.driftstack.dev/v1/status` | 60s      | 5s      | 2 consecutive → page' + '`https://app.driftstack.io`           | 5min     | 10s     | 1 failure → Slack' + '`https://status.driftstack.io`        | 60s      | 5s      | 2 consecutive → page' + 'Synthetic check fails route through the same P-0 channels as Sentry fatals (per `docs/runbooks/incidents.md` §5.2).' + '## Load-test cadence (V-495)' + 'Pre-deploy of new version     | staging — `/v1/status`   | Compare to last' + 'Weekly                        | production — read-only   | Append to baselines' + 'Quarterly                     | production — write paths | Append + compare to Q-1' + 'After any architecture change | both                     | Mandatory' + 'The harness refuses to mutate production without explicit `--i-know-what-im-doing=true`' — pinned so the V-289-7-target-synthetic-table + 60s-api-status + 5min-others + P-0-route-via-incidents-§5.2 + V-495-4-cadence-row + --i-know-what-im-doing safety rail commitment survives", () => {
     expect(body).toMatch(/## Synthetic checks \(V-289\)/);
     expect(body).toMatch(
       /`https:\/\/api\.driftstack\.dev\/health`\s+\|\s+60s\s+\|\s+5s\s+\|\s+2 consecutive → page/,
@@ -130,10 +130,10 @@ describe('W556.C /docs/runbooks/observability.md content parity', () => {
       /`https:\/\/api\.driftstack\.dev\/v1\/status` \| 60s\s+\|\s+5s\s+\|\s+2 consecutive → page/,
     );
     expect(body).toMatch(
-      /`https:\/\/app\.driftstack\.dev`\s+\|\s+5min\s+\|\s+10s\s+\|\s+1 failure → Slack/,
+      /`https:\/\/app\.driftstack\.io`\s+\|\s+5min\s+\|\s+10s\s+\|\s+1 failure → Slack/,
     );
     expect(body).toMatch(
-      /`https:\/\/status\.driftstack\.dev`\s+\|\s+60s\s+\|\s+5s\s+\|\s+2 consecutive → page/,
+      /`https:\/\/status\.driftstack\.io`\s+\|\s+60s\s+\|\s+5s\s+\|\s+2 consecutive → page/,
     );
     expect(body).toMatch(/Synthetic check fails route through the same P-0 channels as/);
     expect(body).toMatch(/Sentry fatals \(per `docs\/runbooks\/incidents\.md` §5\.2\)\./);

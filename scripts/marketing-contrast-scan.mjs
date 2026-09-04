@@ -26,7 +26,7 @@
 //   (cd apps/marketing-site && npx astro preview --port 4321 &)
 //   node scripts/marketing-contrast-scan.mjs
 //   MODE=light node scripts/marketing-contrast-scan.mjs
-//   # optional: BASE_URL=https://driftstack.dev node scripts/marketing-contrast-scan.mjs
+//   # optional: BASE_URL=https://driftstack.io node scripts/marketing-contrast-scan.mjs
 // Exit code is 1 if any failure is found, 0 if clean — so it can gate a
 // pre-deploy check.
 import { chromium } from 'playwright';

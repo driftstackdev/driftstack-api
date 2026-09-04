@@ -73,7 +73,7 @@ Security advisories — never opt-outable.
 
 ## Status-page notifications
 
-These go to [status.driftstack.dev](https://status.driftstack.dev)
+These go to [status.driftstack.io](https://status.driftstack.io)
 subscribers — a separate opt-in list, not tied to your account's
 email preferences. Every status email carries an unsubscribe link.
 
@@ -121,7 +121,7 @@ Work through these in order before contacting support:
    verification emails are safe to re-request — the old token is
    invalidated, and the 3/minute per-IP cap tolerates a retry.
 4. **On a work address?** Some workspaces quarantine mail from new
-   senders until an admin releases it. `driftstack.dev` is the
+   senders until an admin releases it. `driftstack.io` is the
    domain to allowlist.
 5. **Repeated silence on the same address** usually means a typo'd
    domain or a hard bounce: bounced addresses land on a suppression
@@ -138,4 +138,4 @@ timezone — that's what we match against the delivery log.
 
 - [Email preferences API](/api/email-preferences/) — the toggle endpoints in full
 - [Account notifications (SSE)](/api/account-notifications/) — the in-dashboard notification stream
-- [Privacy policy](https://driftstack.dev/legal/privacy/) — how long we keep what
+- [Privacy policy](https://driftstack.io/legal/privacy/) — how long we keep what

@@ -120,7 +120,7 @@ describe('routes/account-byok-anthropic content parity', () => {
       /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\/\/ body — point at the customer-facing docs URL, NOT the internal\s*\/\/ design doc\. Same fix shape as agent-sessions disabled-stub\s*\/\/ \(slice 87 \/ 6efc0a34\)\./,
     );
     expect(body).toMatch(
-      /'BYOK Anthropic key management is unavailable on this deployment\. ' \+\s*"Use the deployment's configured AI provider, or contact its operator if customer-managed keys are required\. See " \+\s*'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the supported key-management flow\.';/,
+      /'BYOK Anthropic key management is unavailable on this deployment\. ' \+\s*"Use the deployment's configured AI provider, or contact its operator if customer-managed keys are required\. See " \+\s*'https:\/\/docs\.driftstack\.io\/api\/byok-anthropic\/ for the supported key-management flow\.';/,
     );
     expect(body).toMatch(/app\.get\('\/v1\/account\/me\/byok-anthropic-key', stub\);/);
     expect(body).toMatch(/app\.put\('\/v1\/account\/me\/byok-anthropic-key', stub\);/);

@@ -10,7 +10,7 @@ Path A (per-provider redirect_uri matching Google + GitHub Console
 registrations). Both servers boot with `oauthClient:true`;
 `smoke-oauth-client.mjs` returns OK for both providers against both
 origins. Real-IDP browser click-through from
-https://app.driftstack.dev/login is the remaining founder-side
+https://app.driftstack.io/login is the remaining founder-side
 validation step.
 
 The sections below document the activation procedure for the next
@@ -134,7 +134,7 @@ redeploy will catch a misconfigured env automatically.
 
 From a workstation:
 
-1. Visit `https://app.driftstack.dev/login`. Confirm the
+1. Visit `https://app.driftstack.io/login`. Confirm the
    "Sign in with Google" + "Sign in with GitHub" buttons appear.
 2. Click "Sign in with Google". Browser should redirect to
    `https://accounts.google.com/o/oauth2/v2/auth?...`. The
@@ -144,7 +144,7 @@ From a workstation:
 3. Complete consent. Browser briefly hits
    `https://api.driftstack.dev/v1/auth/oauth/google/callback?...`
    (302 from IDP), which 302s to
-   `https://app.driftstack.dev/auth/oauth-client/callback?...`
+   `https://app.driftstack.io/auth/oauth-client/callback?...`
    (final landing).
 4. The callback page POSTs to the server. Three possible outcomes:
    - **New account** (your email isn't in our DB): page redirects to

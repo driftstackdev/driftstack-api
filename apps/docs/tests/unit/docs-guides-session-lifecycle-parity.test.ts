@@ -1,4 +1,4 @@
-// W259.D — drift-guard for docs.driftstack.dev/guides/session-lifecycle.
+// W259.D — drift-guard for docs.driftstack.io/guides/session-lifecycle.
 // Pins:
 // 1. Concurrent-cap table matches TIER_CONCURRENT_SESSION_LIMITS.
 // 2. Session webhook events match SubscribableWebhookEventTypeSchema

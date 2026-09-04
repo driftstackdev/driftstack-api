@@ -345,7 +345,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       if (filters.customer.value) params.set('customer_id', filters.customer.value);
       params.set('limit', '200');
       // 2026-05-21 — switch to the admin-scope mirror at /v1/admin/...
-      // and call the API origin (admin.driftstack.dev itself is a
+      // and call the API origin (admin.driftstack.io itself is a
       // static Cloudflare Pages project — relative paths 404'd). The
       // staff bearer token lives in ds_web_session_token (set by the
       // SSO bridge); the legacy `ds_admin_session_token` key was never

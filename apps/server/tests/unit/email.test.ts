@@ -66,7 +66,7 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendSignupVerification({
       to: 'user@example.com',
-      link: 'https://app.driftstack.dev/verify/abc',
+      link: 'https://app.driftstack.io/verify/abc',
       expiresAt: new Date('2026-05-03T12:30:00Z'),
     });
     expect(client.calls).toHaveLength(1);
@@ -75,9 +75,9 @@ describe('createEmailService — configured', () => {
     expect(c.ReplyTo).toBe('support@driftstack.dev');
     expect(c.To).toBe('user@example.com');
     expect(c.Subject).toContain('Verify');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/verify/abc');
+    expect(c.TextBody).toContain('https://app.driftstack.io/verify/abc');
     expect(c.TextBody).toContain('2026-05-03T12:30:00');
-    expect(c.HtmlBody).toContain('<a href="https://app.driftstack.dev/verify/abc"');
+    expect(c.HtmlBody).toContain('<a href="https://app.driftstack.io/verify/abc"');
     expect(c.MessageStream).toBe('outbound');
   });
 
@@ -115,7 +115,7 @@ describe('createEmailService — configured', () => {
       to: 'user@example.com',
       sessionId: 'ses_x',
       errorMessage: 'boom <img src=x onerror="alert(1)"> & done',
-      docsUrl: 'https://docs.driftstack.dev/errors',
+      docsUrl: 'https://docs.driftstack.io/errors',
     });
     const c = client.calls[0] as Record<string, string>;
     // HTML body: dangerous characters are entity-escaped, no live markup.
@@ -131,7 +131,7 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendPasswordReset({
       to: 'user@example.com',
-      link: 'https://app.driftstack.dev/reset/xyz',
+      link: 'https://app.driftstack.io/reset/xyz',
       expiresAt: new Date('2026-05-03T12:30:00Z'),
     });
     const c = client.calls[0] as Record<string, string>;
@@ -268,11 +268,11 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendSignupWelcome({
       to: 'user@example.com',
-      dashboardUrl: 'https://app.driftstack.dev/select-tier',
+      dashboardUrl: 'https://app.driftstack.io/select-tier',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Welcome');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/select-tier');
+    expect(c.TextBody).toContain('https://app.driftstack.io/select-tier');
     expect(c.TextBody).toContain('Start free or pick a paid tier');
   });
 
@@ -284,7 +284,7 @@ describe('createEmailService — configured', () => {
       to: 'user@example.com',
       sessionId: 'ses_00000000-0000-4000-8000-000000000001',
       errorMessage: 'driver_timeout',
-      docsUrl: 'https://docs.driftstack.dev/troubleshooting',
+      docsUrl: 'https://docs.driftstack.io/troubleshooting',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('first session failure');
@@ -340,14 +340,14 @@ describe('createEmailService — configured', () => {
     await svc.sendSessionSuccessFirst({
       to: 'user@example.com',
       sessionId: 'sess_first_001',
-      dashboardUrl: 'https://app.driftstack.dev/dashboard',
-      docsUrl: 'https://docs.driftstack.dev/quickstart',
+      dashboardUrl: 'https://app.driftstack.io/dashboard',
+      docsUrl: 'https://docs.driftstack.io/quickstart',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('first session');
     expect(c.TextBody).toContain('sess_first_001');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/dashboard');
-    expect(c.TextBody).toContain('https://docs.driftstack.dev/quickstart');
+    expect(c.TextBody).toContain('https://app.driftstack.io/dashboard');
+    expect(c.TextBody).toContain('https://docs.driftstack.io/quickstart');
     expect(c.HtmlBody).toContain('<code>sess_first_001</code>');
   });
 
@@ -357,12 +357,12 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendStatusSubscriptionConfirmation({
       to: 'subscriber@example.com',
-      confirmLink: 'https://status.driftstack.dev/confirm/tok_xyz',
+      confirmLink: 'https://status.driftstack.io/confirm/tok_xyz',
       expiresAt: new Date('2026-05-13T00:00:00Z'),
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Confirm');
-    expect(c.TextBody).toContain('https://status.driftstack.dev/confirm/tok_xyz');
+    expect(c.TextBody).toContain('https://status.driftstack.io/confirm/tok_xyz');
     expect(c.TextBody).toContain('2026-05-13');
   });
 
@@ -372,13 +372,13 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendStatusSubscriptionWelcome({
       to: 'subscriber@example.com',
-      statusPageUrl: 'https://status.driftstack.dev/',
-      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+      statusPageUrl: 'https://status.driftstack.io/',
+      unsubscribeLink: 'https://status.driftstack.io/unsubscribe/tok_unsub',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('subscribed');
-    expect(c.TextBody).toContain('https://status.driftstack.dev/');
-    expect(c.TextBody).toContain('https://status.driftstack.dev/unsubscribe/tok_unsub');
+    expect(c.TextBody).toContain('https://status.driftstack.io/');
+    expect(c.TextBody).toContain('https://status.driftstack.io/unsubscribe/tok_unsub');
     // No incident-specific copy in the welcome — keep it lean.
     expect(c.TextBody).not.toContain('Incident:');
   });
@@ -395,8 +395,8 @@ describe('createEmailService — configured', () => {
       status: 'investigating',
       message: 'We are investigating elevated errors.',
       incidentTime: new Date('2026-05-11T15:30:00Z'),
-      statusPageUrl: 'https://status.driftstack.dev/',
-      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+      statusPageUrl: 'https://status.driftstack.io/',
+      unsubscribeLink: 'https://status.driftstack.io/unsubscribe/tok_unsub',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Incident posted');
@@ -418,8 +418,8 @@ describe('createEmailService — configured', () => {
       status: 'resolved',
       message: 'Root cause: upstream DNS resolver flap.',
       incidentTime: new Date('2026-05-11T16:00:00Z'),
-      statusPageUrl: 'https://status.driftstack.dev/',
-      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+      statusPageUrl: 'https://status.driftstack.io/',
+      unsubscribeLink: 'https://status.driftstack.io/unsubscribe/tok_unsub',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Incident resolved');
@@ -456,8 +456,8 @@ describe('createEmailService — configured', () => {
       status: 'identified',
       message: 'Cause identified; mitigation rolling out.',
       incidentTime: new Date('2026-05-11T15:45:00Z'),
-      statusPageUrl: 'https://status.driftstack.dev/',
-      unsubscribeLink: 'https://status.driftstack.dev/unsubscribe/tok_unsub',
+      statusPageUrl: 'https://status.driftstack.io/',
+      unsubscribeLink: 'https://status.driftstack.io/unsubscribe/tok_unsub',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.TextBody).toContain('Cause identified; mitigation rolling out.');
@@ -482,14 +482,14 @@ describe('createEmailService — configured', () => {
     const svc = createEmailService({ config, logger, client });
     await svc.sendTeamInvite({
       to: 'invitee@example.com',
-      acceptLink: 'https://app.driftstack.dev/team/invite/tok_inv',
+      acceptLink: 'https://app.driftstack.io/team/invite/tok_inv',
       expiresAt: new Date('2026-05-18T12:00:00Z'),
       role: 'admin',
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('Driftstack team');
     expect(c.TextBody).toContain('admin');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/team/invite/tok_inv');
+    expect(c.TextBody).toContain('https://app.driftstack.io/team/invite/tok_inv');
     expect(c.TextBody).toContain('2026-05-18');
   });
 
@@ -504,13 +504,13 @@ describe('createEmailService — configured', () => {
     await svc.sendOauthPendingLinkVerification({
       to: 'user@example.com',
       provider: 'google',
-      confirmLink: 'https://app.driftstack.dev/oauth/confirm/tok_pending_abc',
+      confirmLink: 'https://app.driftstack.io/oauth/confirm/tok_pending_abc',
       expiresAt: new Date('2026-05-18T12:00:00Z'),
     });
     const c = client.calls[0] as Record<string, string>;
     expect(c.Subject).toContain('confirm a new sign-in method');
     expect(c.TextBody).toContain('Google');
-    expect(c.TextBody).toContain('https://app.driftstack.dev/oauth/confirm/tok_pending_abc');
+    expect(c.TextBody).toContain('https://app.driftstack.io/oauth/confirm/tok_pending_abc');
     expect(c.TextBody).toContain('2026-05-18');
     // "wasn't me" affordance is the whole reason this template exists
     // — the customer must be able to ignore a phishing-trigger attempt.

@@ -20,7 +20,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'webhooks', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/webhooks/';
+const PAGE_URL = 'https://app.driftstack.io/webhooks/';
 
 interface MockFetchCall {
   url: string;

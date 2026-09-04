@@ -42,7 +42,7 @@ function newestSourceMtimeMs(dir: string): number {
   }
   return newest;
 }
-const PAGE_URL = 'https://admin.driftstack.dev/cost/';
+const PAGE_URL = 'https://admin.driftstack.io/cost/';
 
 interface MockFetchCall {
   url: string;

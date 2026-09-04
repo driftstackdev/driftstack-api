@@ -4,7 +4,7 @@
 // the incident_updates schema, or unsets the V-545.A/B/C sub-slice
 // sequencing.
 //
-//   • V-545. DESIGN. status.driftstack.dev next-layer features.
+//   • V-545. DESIGN. status.driftstack.io next-layer features.
 //   • V-295c shipped basic; V-516 admin endpoints already exist.
 //   • V-545.A incident-posting-workflow-timeline.
 //   • V-545.B subscriber notification (Postmark 3-template +
@@ -29,12 +29,12 @@ function read(p: string): string {
 describe('W562.A /docs/internal/v545-status-page-enhancements.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-295c-shipped + V-516-admin-endpoints framing pinned: '# V-545 — status-page enhancements' + '**Date:** 2026-05-11' + '**Wave:** 23' + '**Status:** DESIGN — V-295c shipped the basic status site at' + 'status.driftstack.dev. V-545 designs the next-layer features' + 'Overall platform status (operational / degraded / outage), driven by' + 'the `/v1/status` endpoint (V-295c).' + 'Per-component status (API / dashboard / docs / marketing).' + 'Most recent incidents (last 5).' + 'Existing admin endpoints (V-516):' + 'POST /v1/admin/incidents — open an incident.' + 'PATCH /v1/admin/incidents/:id — update / close.' + 'GET /v1/admin/status-subscribers — list email subscribers.' — pinned so the V-545-DESIGN-Wave-23-2026-05-11 + V-295c-shipped-status.driftstack.dev + /v1/status-endpoint + 4-component (API/dashboard/docs/marketing) + last-5-incidents + V-516-3-admin-endpoint commitment survives", () => {
+  it("Header + V-295c-shipped + V-516-admin-endpoints framing pinned: '# V-545 — status-page enhancements' + '**Date:** 2026-05-11' + '**Wave:** 23' + '**Status:** DESIGN — V-295c shipped the basic status site at' + 'status.driftstack.io. V-545 designs the next-layer features' + 'Overall platform status (operational / degraded / outage), driven by' + 'the `/v1/status` endpoint (V-295c).' + 'Per-component status (API / dashboard / docs / marketing).' + 'Most recent incidents (last 5).' + 'Existing admin endpoints (V-516):' + 'POST /v1/admin/incidents — open an incident.' + 'PATCH /v1/admin/incidents/:id — update / close.' + 'GET /v1/admin/status-subscribers — list email subscribers.' — pinned so the V-545-DESIGN-Wave-23-2026-05-11 + V-295c-shipped-status.driftstack.dev + /v1/status-endpoint + 4-component (API/dashboard/docs/marketing) + last-5-incidents + V-516-3-admin-endpoint commitment survives", () => {
     expect(body).toMatch(/^# V-545 — status-page enhancements$/m);
     expect(body).toMatch(/\*\*Date:\*\* 2026-05-11/);
     expect(body).toMatch(/\*\*Wave:\*\* 23/);
     expect(body).toMatch(/\*\*Status:\*\* DESIGN — V-295c shipped the basic status site at/);
-    expect(body).toMatch(/status\.driftstack\.dev\. V-545 designs the next-layer features/);
+    expect(body).toMatch(/status\.driftstack\.io\. V-545 designs the next-layer features/);
     expect(body).toMatch(
       /- Overall platform status \(operational \/ degraded \/ outage\), driven by/,
     );

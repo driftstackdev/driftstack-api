@@ -132,7 +132,7 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(body).toMatch(/credential-management events that were recorded/);
     expect(body).toMatch(/routine runtime use is not logged as a credential-read event/i);
     expect(body).toMatch(/href="\/audit-log\/"/);
-    expect(body).toMatch(/driftstack\.dev\/trust\/security-overview\//);
+    expect(body).toMatch(/driftstack\.io\/trust\/security-overview\//);
     expect(body).not.toMatch(/Profiles are client-encrypted/);
     expect(body).not.toMatch(/Every credential read lands/);
     expect(body).not.toMatch(/Always audited/);

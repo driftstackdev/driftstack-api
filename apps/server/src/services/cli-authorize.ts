@@ -11,7 +11,7 @@
 // Redis evicted it.
 //
 // Public-facing browser URL: built from the configured
-// `dashboardOrigin` (e.g. `https://app.driftstack.dev`) so dev /
+// `dashboardOrigin` (e.g. `https://app.driftstack.io`) so dev /
 // staging / production all wire correctly.
 
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';

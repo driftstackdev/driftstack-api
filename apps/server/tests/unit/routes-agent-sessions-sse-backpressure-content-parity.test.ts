@@ -251,12 +251,12 @@ describe('W383 agent-session transcript SSE backpressure guard content parity', 
 describe('agent transcript SSE captured lifecycle', () => {
   it('reflects an allowed origin with Vary and omits CORS for a disallowed origin', async () => {
     const { handler } = captureTranscriptHandler();
-    const allowed = makeConnection({ origin: 'https://app.driftstack.dev' });
+    const allowed = makeConnection({ origin: 'https://app.driftstack.io' });
     await handler(allowed.request, allowed.reply);
     expect(allowed.status).toBe(200);
     expect(allowed.headers).toMatchObject({
       'cache-control': 'no-cache, no-store, private, no-transform',
-      'access-control-allow-origin': 'https://app.driftstack.dev',
+      'access-control-allow-origin': 'https://app.driftstack.io',
       'access-control-allow-credentials': 'true',
       vary: 'Origin',
     });

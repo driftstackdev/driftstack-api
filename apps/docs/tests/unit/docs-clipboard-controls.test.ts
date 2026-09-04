@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 
 const BUILT_PAGE = resolve(process.cwd(), 'apps/docs/dist/quickstart/index.html');
-const PAGE_URL = 'https://docs.driftstack.dev/quickstart/';
+const PAGE_URL = 'https://docs.driftstack.io/quickstart/';
 
 type ClipboardStep = (text: string) => Promise<void>;
 

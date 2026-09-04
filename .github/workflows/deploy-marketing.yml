@@ -34,9 +34,9 @@
 #
 # Custom domains + DNS are configured in the Cloudflare Pages
 # dashboard, not by this workflow:
-#   - driftstack.dev → apex of the Pages project
-#   - www.driftstack.dev → CNAME to the Pages project
-# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+#   - driftstack.io → apex of the Pages project
+#   - www.driftstack.io → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.io zone.
 
 name: Deploy marketing site
 
@@ -63,7 +63,7 @@ jobs:
       deployments: write
     environment:
       name: marketing-production
-      url: https://driftstack.dev
+      url: https://driftstack.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6

@@ -133,7 +133,7 @@ function makeRepo(initial: StatusSubscriberRow[] = []): {
 }
 
 const NOW = new Date('2026-05-11T12:00:00Z');
-const CONFIG = { statusPageBaseUrl: 'https://status.driftstack.dev/' };
+const CONFIG = { statusPageBaseUrl: 'https://status.driftstack.io/' };
 
 describe('V-553.B-10 StatusSubscribersService.subscribe', () => {
   it('rejects invalid emails before touching the repo', async () => {
@@ -159,9 +159,9 @@ describe('V-553.B-10 StatusSubscribersService.subscribe', () => {
     expect(sent?.template).toBe('confirmation');
     expect(sent?.to).toBe('user@example.com');
     const link = String(sent?.payload.confirmLink);
-    expect(link).toMatch(/^https:\/\/status\.driftstack\.dev\/subscribe\/confirm\/\?token=/);
+    expect(link).toMatch(/^https:\/\/status\.driftstack\.io\/subscribe\/confirm\/\?token=/);
     // Confirm URL strips any trailing slash from the configured base url.
-    expect(link).not.toContain('driftstack.dev//');
+    expect(link).not.toContain('driftstack.io//');
   });
 
   it('keeps an active subscription and its unsubscribe credential live until re-confirmation', async () => {

@@ -90,7 +90,7 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
     );
   });
 
-  it("P1-001 open-redirect Stripe URL allowlist framing pinned: '### V-246-P1-001 — Open redirect in Stripe checkout return URLs' + '**File:** `apps/server/src/routes/billing.ts` lines 56–57, 76–77.' + '`POST /v1/billing/checkout-session` and `POST /v1/billing/trial-pack` accept `success_url` + `cancel_url` from the request body and pass them straight to Stripe's Checkout API. A malicious customer (or someone with a stolen API key) could craft a checkout link with `success_url: https://attacker.com/phishing`' + '**Fix shape:** validate `success_url` + `cancel_url` against a configured allowlist of origins (default: `https://app.driftstack.dev`). Customer needing custom URLs gets a clear error pointing at \"contact support\" for enterprise allowlisting.' + '**Targeted at V-248.**' — pinned so the P1-001 + billing.ts-lines-56-57+76-77 + Stripe-Checkout-success_url-cancel_url-pass-through + attacker.com/phishing-example + allowlist-default-app.driftstack.dev + enterprise-allowlist-support-path + V-248-targeting commitment survives", () => {
+  it("P1-001 open-redirect Stripe URL allowlist framing pinned: '### V-246-P1-001 — Open redirect in Stripe checkout return URLs' + '**File:** `apps/server/src/routes/billing.ts` lines 56–57, 76–77.' + '`POST /v1/billing/checkout-session` and `POST /v1/billing/trial-pack` accept `success_url` + `cancel_url` from the request body and pass them straight to Stripe's Checkout API. A malicious customer (or someone with a stolen API key) could craft a checkout link with `success_url: https://attacker.com/phishing`' + '**Fix shape:** validate `success_url` + `cancel_url` against a configured allowlist of origins (default: `https://app.driftstack.io`). Customer needing custom URLs gets a clear error pointing at \"contact support\" for enterprise allowlisting.' + '**Targeted at V-248.**' — pinned so the P1-001 + billing.ts-lines-56-57+76-77 + Stripe-Checkout-success_url-cancel_url-pass-through + attacker.com/phishing-example + allowlist-default-app.driftstack.dev + enterprise-allowlist-support-path + V-248-targeting commitment survives", () => {
     expect(body).toMatch(/### V-246-P1-001 — Open redirect in Stripe checkout return URLs/);
     expect(body).toMatch(
       /\*\*File:\*\* `apps\/server\/src\/routes\/billing\.ts` lines 56–57, 76–77\./,
@@ -101,7 +101,7 @@ describe('W547.B /docs/security-audit-2026-05-06.md content parity', () => {
     expect(body).toMatch(/from the request body and pass them straight to Stripe's Checkout API\./);
     expect(body).toMatch(/`success_url: https:\/\/attacker\.com\/phishing`/);
     expect(body).toMatch(
-      /\*\*Fix shape:\*\* validate `success_url` \+ `cancel_url` against a configured allowlist of origins \(default: `https:\/\/app\.driftstack\.dev`\)\./,
+      /\*\*Fix shape:\*\* validate `success_url` \+ `cancel_url` against a configured allowlist of origins \(default: `https:\/\/app\.driftstack\.io`\)\./,
     );
     expect(body).toMatch(/\*\*Targeted at V-248\.\*\*/);
 

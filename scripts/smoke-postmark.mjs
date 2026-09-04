@@ -40,19 +40,19 @@ const FIXTURES = {
   'signup-verification': {
     subject: '[smoke] Verify your Driftstack account',
     textBody:
-      'This is a smoke test of the signup-verification template.\nLink: https://app.driftstack.dev/verify-email?token=SMOKE\nExpires: ' +
+      'This is a smoke test of the signup-verification template.\nLink: https://app.driftstack.io/verify-email?token=SMOKE\nExpires: ' +
       new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
   },
   'password-reset': {
     subject: '[smoke] Reset your Driftstack password',
     textBody:
-      'This is a smoke test of the password-reset template.\nLink: https://app.driftstack.dev/reset-password?token=SMOKE\nExpires: ' +
+      'This is a smoke test of the password-reset template.\nLink: https://app.driftstack.io/reset-password?token=SMOKE\nExpires: ' +
       new Date(Date.now() + 60 * 60 * 1000).toISOString(),
   },
   'signup-welcome': {
     subject: '[smoke] Welcome to Driftstack',
     textBody:
-      'This is a smoke test of the signup-welcome template.\nDashboard: https://app.driftstack.dev/',
+      'This is a smoke test of the signup-welcome template.\nDashboard: https://app.driftstack.io/',
   },
 };
 

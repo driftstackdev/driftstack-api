@@ -40,7 +40,7 @@ sub-processors.ts` + renders on `/security`. V-550.A adds:
 
 1. **Versioning** — each sub-processor entry gains an `added_at` date
    - an optional `removed_at` date.
-2. **Public RSS feed** — `https://driftstack.dev/trust/sub-processors/
+2. **Public RSS feed** — `https://driftstack.io/trust/sub-processors/
 feed.xml` lists every change (additions / removals / status
    changes) in reverse-chronological order.
 3. **Email-on-change** — customers can opt into Postmark notifications

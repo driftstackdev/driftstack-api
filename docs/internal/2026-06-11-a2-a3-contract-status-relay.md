@@ -354,6 +354,6 @@ start-command for the harness/fleet-node process (A3 harness + A1
 `--enable-webdriver` fork, `DRIFTSTACK_ENABLE_DRIVE_BRIDGE=1`, pointed at his
 local control plane) so node a74c2abf reconnects. The moment it does, his
 launches open the real browser again with zero A2/GUI change — the admin Fleet
-page (admin.driftstack.dev/fleet) will flip it to `connected: true` live.
+page (admin.driftstack.io/fleet) will flip it to `connected: true` live.
 
 — A2

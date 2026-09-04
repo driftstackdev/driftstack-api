@@ -69,19 +69,19 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     );
   });
 
-  it("What's-covered 3-surface: api.driftstack.dev + app.driftstack.dev + live-view streaming — pinned so the 3-surface SLA coverage scope stays explicit (drift to dropping the dashboard would make customers question whether the dashboard is in scope; drift to dropping the live-view stream would orphan the most-customer-facing surface)", () => {
+  it("What's-covered 3-surface: api.driftstack.dev + app.driftstack.io + live-view streaming — pinned so the 3-surface SLA coverage scope stays explicit (drift to dropping the dashboard would make customers question whether the dashboard is in scope; drift to dropping the live-view stream would orphan the most-customer-facing surface)", () => {
     expect(body).toMatch(
       /<li><code>https:\/\/api\.driftstack\.dev\/\*<\/code> — every documented endpoint\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li><code>https:\/\/app\.driftstack\.dev\/\*<\/code> — the customer dashboard\.<\/li>/,
+      /<li><code>https:\/\/app\.driftstack\.io\/\*<\/code> — the customer dashboard\.<\/li>/,
     );
     expect(body).toMatch(/<li>The live-view streaming endpoints for an active session\.<\/li>/);
   });
 
   it("What's-NOT-covered 4-exclusion: scheduled maintenance (>72h notice + 4h/month cap) + customer-supplied target_url/profile/script + sub-processor outages (NowPayments/Stripe/Postmark) + force majeure — pinned so the 4-exclusion list + the 4h/month maintenance-window cap + the explicit sub-processor list (NowPayments + Stripe + Postmark) survive (drift to dropping the 72h-notice or 4h cap would let maintenance be invoked-without-bound; drift to dropping the sub-processor list would invite blame for upstream issues)", () => {
     expect(body).toMatch(
-      /Scheduled maintenance windows announced &gt;72h in advance\s*on <a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\./,
+      /Scheduled maintenance windows announced &gt;72h in advance\s*on <a href="https:\/\/status\.driftstack\.io">status\.driftstack\.io<\/a>\./,
     );
     expect(body).toMatch(/Maintenance windows are capped at 4h\/month and rarely\s*triggered/);
     expect(body).toMatch(
@@ -131,7 +131,7 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
       /Email <a href="mailto:billing@driftstack\.dev">billing@driftstack\.dev<\/a>\s*within 30 days of the calendar month closing\./,
     );
     expect(body).toMatch(
-      /We reconcile against the probe data \+ the audit trail on\s*status\.driftstack\.dev within 5 business days\. Approved credits\s*appear on the next invoice as a line-item\./,
+      /We reconcile against the probe data \+ the audit trail on\s*status\.driftstack\.io within 5 business days\. Approved credits\s*appear on the next invoice as a line-item\./,
     );
   });
 

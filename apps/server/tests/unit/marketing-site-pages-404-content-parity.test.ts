@@ -10,7 +10,7 @@
 //   • 404 monogram + 'This page drifted off.' heading.
 //   • Body framing: 'has moved, doesn't exist, or never did.'
 //   • Useful-links row: Back home (/) + See pricing (/pricing/) +
-//     Read the docs (/docs/) + System status (status.driftstack.dev).
+//     Read the docs (/docs/) + System status (status.driftstack.io).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -42,13 +42,13 @@ describe('W498.A apps/marketing-site/src/pages/404.astro content parity', () => 
     expect(body).toMatch(/The page you were looking for has moved, doesn't exist, or never did\./);
   });
 
-  it("useful-links row: 'Back home' → '/' (primary) + canonical 'See pricing' → '/pricing/' + 'Read the docs' → '/docs/' + 'System status' → status.driftstack.dev (secondary, rel=noopener) — pinned so every deflection path survives without an avoidable redirect", () => {
+  it("useful-links row: 'Back home' → '/' (primary) + canonical 'See pricing' → '/pricing/' + 'Read the docs' → '/docs/' + 'System status' → status.driftstack.io (secondary, rel=noopener) — pinned so every deflection path survives without an avoidable redirect", () => {
     expect(body).toMatch(/<a href="\/" class="btn-primary">Back home<\/a>/);
     expect(body).toMatch(/<a href="\/pricing\/" class="btn-secondary">See pricing<\/a>/);
     expect(body).toMatch(/<a href="\/docs\/" class="btn-secondary">Read the docs<\/a>/);
     expect(body).not.toMatch(/href="\/(?:pricing|docs)"/);
     expect(body).toMatch(
-      /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary" rel="noopener noreferrer"/,
+      /<a href="https:\/\/status\.driftstack\.io" class="btn-secondary" rel="noopener noreferrer"/,
     );
   });
 

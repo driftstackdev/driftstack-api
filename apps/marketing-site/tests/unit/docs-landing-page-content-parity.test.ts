@@ -5,7 +5,7 @@
 //   • Hero: "Everything you need to drive a session." + 4-line
 //     orientation copy.
 //   • 5 doc-category cards in canonical order: Quickstart →
-//     docs.driftstack.dev/quickstart-curl/ (S47 2026-07-07 mirror
+//     docs.driftstack.io/quickstart-curl/ (S47 2026-07-07 mirror
 //     deprecation — was /docs/api-quickstart, now deleted + 301) /
 //     API reference → /api-reference / SDKs → /docs/sdk-typescript /
 //     Webhooks → /docs/webhooks / Self-hosted → /self-hosted.
@@ -52,7 +52,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
       // S47 2026-07-07 (founder-approved: mirror deprecation): the
       // Quickstart card points at the docs successor of the deleted
       // /docs/api-quickstart mirror.
-      { href: 'https://docs.driftstack.dev/quickstart-curl/', label: 'Quickstart' },
+      { href: 'https://docs.driftstack.io/quickstart-curl/', label: 'Quickstart' },
       { href: '/api-reference/', label: 'API reference' },
       { href: '/docs/sdk-typescript/', label: 'SDKs' },
       { href: '/docs/webhooks/', label: 'Webhooks' },
@@ -84,7 +84,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
   it('API reference card distinguishes curated route map from complete live OpenAPI reference', () => {
     expect(body).toMatch(/Curated route map \+ live reference →/);
     expect(body).toMatch(/Browse common routes and runnable patterns here/);
-    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.dev/);
+    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.io/);
     expect(body).toMatch(/same contract the SDK codegen reads/);
     expect(body).not.toMatch(/Every endpoint, every shape/);
   });
@@ -122,7 +122,7 @@ describe('W380.C marketing-site /docs.astro (docs landing) content parity', () =
   });
 
   it('points recipe readers at the live docs host without a dead marketing mirror', () => {
-    expect(body).toContain('docs.driftstack.dev/api/recipes/');
+    expect(body).toContain('docs.driftstack.io/api/recipes/');
     expect(body).not.toMatch(/href="\/docs\/recipes/);
   });
 

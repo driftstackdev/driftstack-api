@@ -34,13 +34,13 @@ function read(p: string): string {
 describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-295c + auto-deploy framing pinned: '# V-295c — status.driftstack.dev Cloudflare Pages runbook' + 'Founder-facing one-time setup for the status page CF Pages project + DNS. Once these steps are done the GitHub-Pages-style auto-deploy takes over; future commits to `main` redeploy the static bundle from `apps/status-site/dist/`.' + 'Cloudflare account with `driftstack.dev` zone already managed' + 'GitHub access to `driftstackdev/driftstack-api`.' — pinned so the V-295c-founder-one-time + auto-deploy-after-setup + apps/status-site/dist-static-bundle + Cloudflare-driftstack.dev-zone + GitHub-driftstackdev-access commitment survives", () => {
-    expect(body).toMatch(/^# V-295c — status\.driftstack\.dev Cloudflare Pages runbook$/m);
+  it("Header + V-295c + auto-deploy framing pinned: '# V-295c — status.driftstack.io Cloudflare Pages runbook' + 'Founder-facing one-time setup for the status page CF Pages project + DNS. Once these steps are done the GitHub-Pages-style auto-deploy takes over; future commits to `main` redeploy the static bundle from `apps/status-site/dist/`.' + 'Cloudflare account with `driftstack.io` zone already managed' + 'GitHub access to `driftstackdev/driftstack-api`.' — pinned so the V-295c-founder-one-time + auto-deploy-after-setup + apps/status-site/dist-static-bundle + Cloudflare-driftstack.dev-zone + GitHub-driftstackdev-access commitment survives", () => {
+    expect(body).toMatch(/^# V-295c — status\.driftstack\.io Cloudflare Pages runbook$/m);
     expect(body).toMatch(/Founder-facing one-time setup for the status page CF Pages project \+/);
     expect(body).toMatch(/DNS\. Once these steps are done the GitHub-Pages-style auto-deploy/);
     expect(body).toMatch(/takes over; future commits to `main` redeploy the static bundle from/);
     expect(body).toMatch(/`apps\/status-site\/dist\/`\./);
-    expect(body).toMatch(/- Cloudflare account with `driftstack\.dev` zone already managed/);
+    expect(body).toMatch(/- Cloudflare account with `driftstack\.io` zone already managed/);
     expect(body).toMatch(/- GitHub access to `driftstackdev\/driftstack-api`\./);
   });
 
@@ -88,8 +88,8 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     expect(body).toMatch(/the snapshot writer is disabled;/);
   });
 
-  it("DNS CNAME + verification + re-deploy semantics framing pinned: '## DNS — point status.driftstack.dev at the Pages project' + 'Name: `status`' + 'Target: `driftstack-status.pages.dev`' + 'Proxy status: **Proxied** (orange cloud — keeps Cloudflare's TLS, HTTP/3, and caching layer in front).' + '## Verification (post-deploy, founder runs once)' + 'Visit `https://status.driftstack.dev/`.' + '\"All systems operational\" (green dot)' + '`https://api.driftstack.dev/v1/status/incidents` returns 200 with `{ data: [...] }`.' + 'Post a test incident from the admin panel (`/incidents` → \"Post new incident\") with `public=true`.' + '## Re-deploy semantics' + 'Every push to `main` that touches `apps/status-site/**` triggers a Pages build automatically.' + 'Pages keeps the previous deployment available for instant rollback' + 'The build is hermetic — it does NOT call the API at build time.' — pinned so the CNAME-Proxied-orange-cloud + 4-step-verification + green-dot-All-systems-operational + auto-build-on-apps/status-site-push + previous-deployment-rollback + hermetic-no-API-at-build commitment survives", () => {
-    expect(body).toMatch(/## DNS — point status\.driftstack\.dev at the Pages project/);
+  it("DNS CNAME + verification + re-deploy semantics framing pinned: '## DNS — point status.driftstack.io at the Pages project' + 'Name: `status`' + 'Target: `driftstack-status.pages.dev`' + 'Proxy status: **Proxied** (orange cloud — keeps Cloudflare's TLS, HTTP/3, and caching layer in front).' + '## Verification (post-deploy, founder runs once)' + 'Visit `https://status.driftstack.io/`.' + '\"All systems operational\" (green dot)' + '`https://api.driftstack.dev/v1/status/incidents` returns 200 with `{ data: [...] }`.' + 'Post a test incident from the admin panel (`/incidents` → \"Post new incident\") with `public=true`.' + '## Re-deploy semantics' + 'Every push to `main` that touches `apps/status-site/**` triggers a Pages build automatically.' + 'Pages keeps the previous deployment available for instant rollback' + 'The build is hermetic — it does NOT call the API at build time.' — pinned so the CNAME-Proxied-orange-cloud + 4-step-verification + green-dot-All-systems-operational + auto-build-on-apps/status-site-push + previous-deployment-rollback + hermetic-no-API-at-build commitment survives", () => {
+    expect(body).toMatch(/## DNS — point status\.driftstack\.io at the Pages project/);
     expect(body).toMatch(/- Name: `status`/);
     expect(body).toMatch(/- Target: `driftstack-status\.pages\.dev`/);
     expect(body).toMatch(
@@ -97,7 +97,7 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     );
     expect(body).toMatch(/HTTP\/3, and caching layer in front\)\./);
     expect(body).toMatch(/## Verification \(post-deploy, founder runs once\)/);
-    expect(body).toMatch(/1\. Visit `https:\/\/status\.driftstack\.dev\/`\./);
+    expect(body).toMatch(/1\. Visit `https:\/\/status\.driftstack\.io\/`\./);
     expect(body).toMatch(/"All systems operational" \(green dot\)/);
     expect(body).toMatch(
       /`https:\/\/api\.driftstack\.dev\/v1\/status\/incidents` returns 200 with/,
@@ -114,7 +114,7 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     expect(body).toMatch(/- The build is hermetic — it does NOT call the API at build time\./);
   });
 
-  it("Failure modes framing pinned: '## Failure modes' + '**API down**: the page shows \"Status currently unavailable\"; the page itself stays up because it's static HTML on Cloudflare's CDN. V-295c2 will add an R2-mirrored snapshot fallback' + '**CF Pages outage**: extremely rare; the only mitigation is multi-CDN, which is out of scope until traffic justifies it.' + 'CF Pages shares the same SLA as Cloudflare's edge, which is the same edge that fronts api.driftstack.dev.' + '**DNS misconfiguration**: covered by step-2 verification above.' + 'If `status.driftstack.dev` returns a CF \"page not found\" error, the CNAME is wrong; if TLS fails, the custom-domain hookup in CF Pages is incomplete.' — pinned so the 3-failure-mode (API-down + CF-Pages-outage + DNS-misconfig) + Status-currently-unavailable + V-295c2-R2-fallback + multi-CDN-out-of-scope + CF-edge-same-SLA + CNAME-wrong-vs-custom-domain-incomplete commitment survives", () => {
+  it("Failure modes framing pinned: '## Failure modes' + '**API down**: the page shows \"Status currently unavailable\"; the page itself stays up because it's static HTML on Cloudflare's CDN. V-295c2 will add an R2-mirrored snapshot fallback' + '**CF Pages outage**: extremely rare; the only mitigation is multi-CDN, which is out of scope until traffic justifies it.' + 'CF Pages shares the same SLA as Cloudflare's edge, which is the same edge that fronts api.driftstack.dev.' + '**DNS misconfiguration**: covered by step-2 verification above.' + 'If `status.driftstack.io` returns a CF \"page not found\" error, the CNAME is wrong; if TLS fails, the custom-domain hookup in CF Pages is incomplete.' — pinned so the 3-failure-mode (API-down + CF-Pages-outage + DNS-misconfig) + Status-currently-unavailable + V-295c2-R2-fallback + multi-CDN-out-of-scope + CF-edge-same-SLA + CNAME-wrong-vs-custom-domain-incomplete commitment survives", () => {
     expect(body).toMatch(/## Failure modes/);
     expect(body).toMatch(/- \*\*API down\*\*: the page shows "Status currently unavailable"; the/);
     expect(body).toMatch(/page itself stays up because it's static HTML on Cloudflare's CDN\./);
@@ -127,7 +127,7 @@ describe('W557.C /docs/runbooks/v295c-status-site-cf-pages.md content parity', (
     expect(body).toMatch(/shares the same SLA as Cloudflare's edge, which is the same edge/);
     expect(body).toMatch(/that fronts api\.driftstack\.dev\./);
     expect(body).toMatch(/- \*\*DNS misconfiguration\*\*: covered by step-2 verification above\./);
-    expect(body).toMatch(/If\s*`status\.driftstack\.dev` returns a CF "page not found" error, the/);
+    expect(body).toMatch(/If\s*`status\.driftstack\.io` returns a CF "page not found" error, the/);
     expect(body).toMatch(/CNAME is wrong; if TLS fails, the custom-domain hookup in CF Pages/);
     expect(body).toMatch(/is incomplete\./);
   });

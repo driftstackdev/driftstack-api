@@ -142,7 +142,7 @@ describe('W577.A /docs/legal/privacy-policy.md (part 1) content parity', () => {
     expect(body).toMatch(/necessary cookies do not require consent under Article 5\(3\) of/);
     expect(body).toMatch(/Directive 2002\/58\/EC \(the ePrivacy Directive\)\./);
     expect(body).toMatch(/### 3\.9 Status-page data/);
-    expect(body).toMatch(/`status\.driftstack\.dev`/);
+    expect(body).toMatch(/`status\.driftstack\.io`/);
     expect(body).toMatch(/\*\*Probe history:\*\*/);
     expect(body).toMatch(/is retained for 30 days for diagnostic purposes\./);
     expect(body).toMatch(/### 3\.10 Status-page email subscriptions/);

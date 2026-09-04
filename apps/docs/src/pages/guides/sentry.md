@@ -22,7 +22,7 @@ pass redacts sensitive values (authorization headers, cookies,
 passwords, API keys, signing and TOTP secrets, OAuth tokens, and
 token-carrying URL parameters), so your credentials don't ride along
 in our error reports. Sentry appears on Driftstack's
-[sub-processor list](https://driftstack.dev/legal/sub-processors/),
+[sub-processor list](https://driftstack.io/legal/sub-processors/),
 using Sentry's EU ingest region.
 
 Two things follow from that:

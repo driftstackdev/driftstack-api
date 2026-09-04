@@ -55,7 +55,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     expect(body).toMatch(/The decision: \*\*what stack do we use for surfaces 2 \+ 3 \+ 4\?\*\*/);
   });
 
-  it("6-constraint framing pinned: '**Solo engineering team.** Two stacks (one for marketing, one for dashboard) is already a maintenance cost' + '**Server-side auth.** The V-079 web-session model uses opaque token cookies' + '**Stripe Checkout / Customer Portal redirect.**' + '**Rest of stack is TypeScript.** SDK + control plane + marketing site all TS.' + '**EU residency.** Whatever runtime hosts the dashboard runs on EU infrastructure.' + 'Cloudflare Pages (Workers in EU regions), Hetzner (Helsinki/Falkenstein)' + '**Keep the marketing-site framing intact.** The marketing site stays Astro' + 'The dashboard is a separate sub-domain (`app.driftstack.dev`).' — pinned so the 6-constraint (solo-team + V-079-server-auth + Stripe-redirect + TS-stack + EU-residency-CF-Hetzner + marketing-untouched-app.driftstack.dev) commitment survives", () => {
+  it("6-constraint framing pinned: '**Solo engineering team.** Two stacks (one for marketing, one for dashboard) is already a maintenance cost' + '**Server-side auth.** The V-079 web-session model uses opaque token cookies' + '**Stripe Checkout / Customer Portal redirect.**' + '**Rest of stack is TypeScript.** SDK + control plane + marketing site all TS.' + '**EU residency.** Whatever runtime hosts the dashboard runs on EU infrastructure.' + 'Cloudflare Pages (Workers in EU regions), Hetzner (Helsinki/Falkenstein)' + '**Keep the marketing-site framing intact.** The marketing site stays Astro' + 'The dashboard is a separate sub-domain (`app.driftstack.io`).' — pinned so the 6-constraint (solo-team + V-079-server-auth + Stripe-redirect + TS-stack + EU-residency-CF-Hetzner + marketing-untouched-app.driftstack.dev) commitment survives", () => {
     expect(body).toMatch(
       /- \*\*Solo engineering team\.\*\* Two stacks \(one for marketing, one for dashboard\) is already a maintenance cost/,
     );
@@ -75,7 +75,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     expect(body).toMatch(
       /- \*\*Keep the marketing-site framing intact\.\*\* The marketing site stays Astro/,
     );
-    expect(body).toMatch(/The dashboard is a separate sub-domain \(`app\.driftstack\.dev`\)\./);
+    expect(body).toMatch(/The dashboard is a separate sub-domain \(`app\.driftstack\.io`\)\./);
   });
 
   it("4-option taxonomy framing pinned: '### Option A — Astro + React islands (shared with marketing site)' + 'Same repo, separate Astro project at `apps/customer-dashboard/` with React-island interactivity' + '### Option B — Next.js (App Router) on Vercel or Cloudflare' + 'New `apps/customer-dashboard/` as a Next.js project. Server components + use-server for the read paths' + '### Option C — SvelteKit' + 'Drop-in alternative to Next.js with a smaller mental model + smaller bundle.' + '### Option D — Server-rendered HTML + htmx (no SPA framework)' + 'The Fastify control plane serves dashboard pages directly. htmx handles dynamic interactions' + 'Brand surface mismatch: marketing site is a polished Astro+Tailwind product' — pinned so the 4-option-taxonomy (A-Astro-shared + B-Next.js-Vercel/CF + C-SvelteKit + D-Fastify+htmx) commitment survives", () => {
@@ -100,7 +100,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     );
   });
 
-  it("Recommendation 5-reason framing pinned: '## Recommendation' + '**Lean Option A (Astro + React islands)** for these reasons:' + '**Same toolchain as the marketing site.** Solo engineering team's biggest cost is context-switching.' + '**The dashboard's actual interactivity surface is shallow.** Most pages are read-mostly' + '**The onboarding flow's multi-step form** is the one place where Next.js would shine.' + 'Mitigation: build the onboarding flow as a single Astro page with a React form component that owns the state machine.' + '**Cloudflare Pages already wired** for the marketing site.' + 'The dashboard at `app.driftstack.dev` is a second Pages project pointing at `apps/customer-dashboard/`' + '**Brand surface continuity.** Same Tailwind tokens, same fonts, same oxblood accent.' + 'The decision is reversible: if the dashboard hits Astro's complexity ceiling' + 'the migration to Next.js is a matter of moving page components' — pinned so the Lean-Option-A + 5-reason (same-toolchain + shallow-interactivity + onboarding-form-mitigation + CF-Pages-wired + brand-continuity) + decision-reversible commitment survives", () => {
+  it("Recommendation 5-reason framing pinned: '## Recommendation' + '**Lean Option A (Astro + React islands)** for these reasons:' + '**Same toolchain as the marketing site.** Solo engineering team's biggest cost is context-switching.' + '**The dashboard's actual interactivity surface is shallow.** Most pages are read-mostly' + '**The onboarding flow's multi-step form** is the one place where Next.js would shine.' + 'Mitigation: build the onboarding flow as a single Astro page with a React form component that owns the state machine.' + '**Cloudflare Pages already wired** for the marketing site.' + 'The dashboard at `app.driftstack.io` is a second Pages project pointing at `apps/customer-dashboard/`' + '**Brand surface continuity.** Same Tailwind tokens, same fonts, same oxblood accent.' + 'The decision is reversible: if the dashboard hits Astro's complexity ceiling' + 'the migration to Next.js is a matter of moving page components' — pinned so the Lean-Option-A + 5-reason (same-toolchain + shallow-interactivity + onboarding-form-mitigation + CF-Pages-wired + brand-continuity) + decision-reversible commitment survives", () => {
     expect(body).toMatch(/## Recommendation/);
     expect(body).toMatch(/\*\*Lean Option A \(Astro \+ React islands\)\*\* for these reasons:/);
     expect(body).toMatch(
@@ -117,7 +117,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     );
     expect(body).toMatch(/4\. \*\*Cloudflare Pages already wired\*\* for the marketing site\./);
     expect(body).toMatch(
-      /The dashboard at `app\.driftstack\.dev` is a second Pages project pointing at `apps\/customer-dashboard\/`/,
+      /The dashboard at `app\.driftstack\.io` is a second Pages project pointing at `apps\/customer-dashboard\/`/,
     );
     expect(body).toMatch(
       /5\. \*\*Brand surface continuity\.\*\* Same Tailwind tokens, same fonts, same oxblood accent\./,
@@ -128,14 +128,14 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
     expect(body).toMatch(/the migration to Next\.js is a matter of moving page components/);
   });
 
-  it("4-out-of-scope + 4-open-question + decision-authority framing pinned: '## Out of scope for this proposal' + 'Real-time event streaming' + 'Offline support — dashboard requires connectivity; no offline mode planned.' + 'Mobile-app-shell experience — `app.driftstack.dev` is responsive HTML' + 'Internationalisation — English only at launch; Dutch + German follow' + '## Open questions for founder review' + '**Are the brand-design-system reuse benefits load-bearing for the choice?**' + '**Onboarding flow shape — single page with a state-machine React island, or multi-page MPA with one URL per step?**' + '**Cloudflare Pages vs Vercel for the dashboard runtime.** Cloudflare is already on the sub-processor list (V-052 lock)' + '**Admin panel co-locates or splits?**' + '## Decision authority' + 'This is **architectural / structural** — surfaces for founder review per the Decision authority section in AGENTS.md.' + 'No commit until founder confirms the recommendation (or redirects to one of B / C / D).' — pinned so the 4-out-of-scope (realtime + offline + PWA + i18n) + 4-open-question (brand-reuse + onboarding-shape + CF-vs-Vercel-V-052 + admin-co-locate) + architectural-no-commit-until-founder commitment survives", () => {
+  it("4-out-of-scope + 4-open-question + decision-authority framing pinned: '## Out of scope for this proposal' + 'Real-time event streaming' + 'Offline support — dashboard requires connectivity; no offline mode planned.' + 'Mobile-app-shell experience — `app.driftstack.io` is responsive HTML' + 'Internationalisation — English only at launch; Dutch + German follow' + '## Open questions for founder review' + '**Are the brand-design-system reuse benefits load-bearing for the choice?**' + '**Onboarding flow shape — single page with a state-machine React island, or multi-page MPA with one URL per step?**' + '**Cloudflare Pages vs Vercel for the dashboard runtime.** Cloudflare is already on the sub-processor list (V-052 lock)' + '**Admin panel co-locates or splits?**' + '## Decision authority' + 'This is **architectural / structural** — surfaces for founder review per the Decision authority section in AGENTS.md.' + 'No commit until founder confirms the recommendation (or redirects to one of B / C / D).' — pinned so the 4-out-of-scope (realtime + offline + PWA + i18n) + 4-open-question (brand-reuse + onboarding-shape + CF-vs-Vercel-V-052 + admin-co-locate) + architectural-no-commit-until-founder commitment survives", () => {
     expect(body).toMatch(/## Out of scope for this proposal/);
     expect(body).toMatch(/- Real-time event streaming/);
     expect(body).toMatch(
       /- Offline support — dashboard requires connectivity; no offline mode planned\./,
     );
     expect(body).toMatch(
-      /- Mobile-app-shell experience — `app\.driftstack\.dev` is responsive HTML/,
+      /- Mobile-app-shell experience — `app\.driftstack\.io` is responsive HTML/,
     );
     expect(body).toMatch(/- Internationalisation — English only at launch; Dutch \+ German follow/);
     expect(body).toMatch(/## Open questions for founder review/);
@@ -176,7 +176,7 @@ describe('W559.B /docs/architecture/customer-dashboard-stack.md content parity',
       /- `apps\/marketing-site\/public\/_headers` \+ `docs\/deployment\/cdn-strategy\.md` \(V-221\) — marketing and the static dashboard build/,
     );
     expect(body).toMatch(
-      /the static dashboard build at `app\.driftstack\.dev` use Cloudflare Pages/,
+      /the static dashboard build at `app\.driftstack\.io` use Cloudflare Pages/,
     );
     expect(body).toMatch(/no customer data in generated HTML or publicly cacheable responses/);
   });

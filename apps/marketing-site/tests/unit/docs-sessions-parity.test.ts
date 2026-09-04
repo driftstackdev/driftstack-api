@@ -113,9 +113,9 @@ describe('W345.A /docs/sessions parity', () => {
 
   it('cross-links to the curl quickstart (docs successor), /docs/rate-limits, and the concurrency guide (docs successor) all resolve (S47 2026-07-07)', () => {
     for (const [href, file] of [
-      ['https://docs.driftstack.dev/quickstart-curl/', QUICKSTART],
+      ['https://docs.driftstack.io/quickstart-curl/', QUICKSTART],
       ['/docs/rate-limits', RATE_LIMITS],
-      ['https://docs.driftstack.dev/guides/concurrency/', CONCURRENCY],
+      ['https://docs.driftstack.io/guides/concurrency/', CONCURRENCY],
     ] as const) {
       expect(body).toContain(href);
       expect(existsSync(file)).toBe(true);

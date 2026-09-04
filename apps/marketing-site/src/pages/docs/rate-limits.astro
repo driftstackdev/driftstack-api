@@ -2,7 +2,7 @@
 import BaseLayout from '../../layouts/BaseLayout.astro';
 
 // V-685 — rate-limits developer docs. Companion to /docs/webhooks +
-// https://docs.driftstack.dev/quickstart-curl/; describes the bucket model, the headers
+// https://docs.driftstack.io/quickstart-curl/; describes the bucket model, the headers
 // returned on every response, what to do when 429ed, and how to
 // request an override.
 
@@ -191,7 +191,7 @@ Content-Type: application/problem+json
       Separate from per-bucket request rate, your tier caps the
       number of <em>concurrently running</em> sessions. The caps
       mirror <code>TIER_CONCURRENT_SESSION_LIMITS</code> exactly;
-      see <a href="https://docs.driftstack.dev/guides/concurrency/">/docs/concurrency</a> for the
+      see <a href="https://docs.driftstack.io/guides/concurrency/">/docs/concurrency</a> for the
       authoritative table + backoff guidance.
     </p>
     <p>

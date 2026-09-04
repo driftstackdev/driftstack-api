@@ -195,7 +195,7 @@ describe('W769 docs /api/usage content parity', () => {
     expect(p).not.toMatch(/the source of truth \(per the \+/);
   });
 
-  it('CRITICAL SDK series anchor pinned: "**SDK usage:**" precedes the 3-language code block. The previous skip pinned `(V-452)` with the inline internal version anchor; the V-452 anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('CRITICAL SDK series anchor pinned: "**SDK usage:**" precedes the 3-language code block. The previous skip pinned `(V-452)` with the inline internal version anchor; the V-452 anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*SDK usage:\*\*/);

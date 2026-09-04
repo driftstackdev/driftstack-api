@@ -1,10 +1,10 @@
 // V-293 — signup/login link parity test.
 //
 // Catches the V-293-class regression: relative `/signup` links on the
-// marketing site (driftstack.dev) resolve to driftstack.dev/signup
-// (404 — signup lives at app.driftstack.dev/signup). Source-grep
+// marketing site (driftstack.io) resolve to driftstack.io/signup
+// (404 — signup lives at app.driftstack.io/signup). Source-grep
 // asserts every signup/login href on the marketing surface points at
-// the absolute `https://app.driftstack.dev/...` URL, OR to an in-page
+// the absolute `https://app.driftstack.io/...` URL, OR to an in-page
 // anchor (`#trial-pack` etc.) that doesn't reach the dashboard.
 //
 // Pattern matches V-292 — brittle-by-design source-grep. Drift surfaces
@@ -38,7 +38,7 @@ const marketingFiles = walkFiles(MARKETING_SRC, ['.astro', '.md', '.mdx']);
 const docsFiles = walkFiles(DOCS_SRC, ['.astro', '.md', '.mdx']);
 
 // Bare `/signup`, `/login`, `/forgot-password`, `/reset-password` hrefs
-// resolve to driftstack.dev/X or docs.driftstack.dev/X in production —
+// resolve to driftstack.io/X or docs.driftstack.io/X in production —
 // both are 404. Match `href=` followed by these paths (string + template).
 const RELATIVE_DASHBOARD_LINK_RE =
   /href=(?:"|'|\{`?)\/(?:signup|login|forgot-password|reset-password)(?:["'`?#]|$)/;
@@ -56,20 +56,20 @@ describe('V-293 — signup/login link parity (marketing-site + docs)', () => {
 
   it('marketing Header.astro surfaces both Sign in (returning) + Start free (new) CTAs', () => {
     const src = readFileSync(resolve(MARKETING_SRC, 'components/Header.astro'), 'utf8');
-    expect(src).toMatch(/https:\/\/app\.driftstack\.dev\/login/);
+    expect(src).toMatch(/https:\/\/app\.driftstack\.io\/login/);
     expect(src).toContain('Sign in');
     expect(src).toContain('Start free'); // existing trial-pack CTA
   });
 
   it('marketing Footer.astro lists Sign up + Sign in under Product', () => {
     const src = readFileSync(resolve(MARKETING_SRC, 'components/Footer.astro'), 'utf8');
-    expect(src).toMatch(/https:\/\/app\.driftstack\.dev\/signup/);
-    expect(src).toMatch(/https:\/\/app\.driftstack\.dev\/login/);
+    expect(src).toMatch(/https:\/\/app\.driftstack\.io\/signup/);
+    expect(src).toMatch(/https:\/\/app\.driftstack\.io\/login/);
   });
 
   it('docs/quickstart.md has clickable signup + signin links (not bare text)', () => {
     const src = readFileSync(resolve(DOCS_SRC, 'pages/quickstart.md'), 'utf8');
-    expect(src).toMatch(/\[sign up\]\(https:\/\/app\.driftstack\.dev\/signup\/\)/);
-    expect(src).toMatch(/\[sign in\]\(https:\/\/app\.driftstack\.dev\/login\/\)/);
+    expect(src).toMatch(/\[sign up\]\(https:\/\/app\.driftstack\.io\/signup\/\)/);
+    expect(src).toMatch(/\[sign in\]\(https:\/\/app\.driftstack\.io\/login\/\)/);
   });
 });

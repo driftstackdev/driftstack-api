@@ -12,6 +12,6 @@
 
 Contact: mailto:security@driftstack.dev
 Expires: 2027-06-03T00:00:00.000Z
-Policy: https://driftstack.dev/legal/vulnerability-disclosure/
-Canonical: https://driftstack.dev/.well-known/security.txt
+Policy: https://driftstack.io/legal/vulnerability-disclosure/
+Canonical: https://driftstack.io/.well-known/security.txt
 Preferred-Languages: en

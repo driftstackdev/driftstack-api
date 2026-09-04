@@ -52,7 +52,7 @@ function setUpDom(
     },
   );
   const dom = new JSDOM(html, {
-    url: 'https://app.driftstack.dev/',
+    url: 'https://app.driftstack.io/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
   });

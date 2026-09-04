@@ -1,4 +1,4 @@
-// W254.A — drift-guard for docs.driftstack.dev/reference/rate-limits.
+// W254.A — drift-guard for docs.driftstack.io/reference/rate-limits.
 // Previous revision asserted a fictional problem-type URI
 // (`api.driftstack.dev/errors/rate-limit-exceeded`); live URI is
 // `https://errors.driftstack.dev/rate-limited` per PROBLEM_TYPES.

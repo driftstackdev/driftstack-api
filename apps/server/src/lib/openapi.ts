@@ -2031,7 +2031,7 @@ function buildRegistry(): OpenAPIRegistry {
 
   // Arc 7 docs.openapi — BYOK Anthropic + Bundled LLM endpoints.
   // The full reference for both surfaces lives at
-  // docs.driftstack.dev/api/byok-anthropic + /api/bundled-llm. These
+  // docs.driftstack.io/api/byok-anthropic + /api/bundled-llm. These
   // OpenAPI route registrations expose the surface to SDK
   // generators + the Scalar UI rendered at /docs/.
   const ByokAnthropicMetadataOpenApi = z
@@ -2598,7 +2598,7 @@ function buildRegistry(): OpenAPIRegistry {
   // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667). The 4
   // standard-spec endpoints third-party clients use to obtain access
   // tokens on a customer's behalf. Full prose at
-  // docs.driftstack.dev/api/oauth.
+  // docs.driftstack.io/api/oauth.
   //
   // V-862 — this comment used to say the admin OAuth endpoints
   // (/v1/admin/oauth/*) are NOT registered because they are internal-only.
@@ -8530,7 +8530,7 @@ export function generateOpenApiSpec(): OpenAPIObject {
         'Endpoints that do NOT honor the header: /v1/team/*, /v1/account/me (always',
         "returns the caller's own profile + their team list), /v1/auth/*.",
         '',
-        'See `docs.driftstack.dev/api/team` for full details.',
+        'See `docs.driftstack.io/api/team` for full details.',
       ].join('\n'),
       license: { name: 'MIT' },
       contact: { name: 'Driftstack', url: 'https://github.com/driftstackdev/driftstack-api' },

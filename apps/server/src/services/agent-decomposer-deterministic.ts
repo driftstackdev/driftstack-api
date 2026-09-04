@@ -62,7 +62,7 @@ export const AUP_REFUSAL_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: stri
     pattern: /\b(bypass|circumvent|evade).{0,30}(captcha|rate limit|account ban|moderation)\b/i,
     reason:
       'Driftstack does not orchestrate captcha bypass or evasion of platform safety controls. ' +
-      'See https://driftstack.dev/legal/aup/',
+      'See https://driftstack.io/legal/aup/',
   },
   {
     pattern: /\b(brute.?force|credential.?stuff|password spray)\b/i,

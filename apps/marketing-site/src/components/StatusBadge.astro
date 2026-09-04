@@ -5,7 +5,7 @@
 //
 // Failure mode: if the fetch fails (CORS, timeout, network), the
 // badge falls back to "status unavailable" and links to the future
-// status.driftstack.dev page; nothing is implied about uptime from
+// status.driftstack.io page; nothing is implied about uptime from
 // a fetch error alone.
 //
 // Cached server-side for 30s by /v1/status itself; cf-edge cache
@@ -27,7 +27,7 @@ const apiBaseUrl = 'https://api.driftstack.dev';
 ---
 
 <a
-  href="https://status.driftstack.dev"
+  href="https://status.driftstack.io"
   target="_blank"
   rel="noopener noreferrer"
   class:list={[

@@ -52,7 +52,7 @@ Smoke checks:
 1. **OAUTH_CLIENT activation** (~5 min).
    - SSH-write to `/opt/driftstack/api/.env` on prod + staging:
      - `OAUTH_CLIENT_SIGNING_SECRET=<32+ char base64url>`
-     - `OAUTH_CLIENT_CALLBACK_URL=https://app.driftstack.dev/auth/oauth-client/callback`
+     - `OAUTH_CLIENT_CALLBACK_URL=https://app.driftstack.io/auth/oauth-client/callback`
      - `GOOGLE_OAUTH_CLIENT_ID=...` + `GOOGLE_OAUTH_CLIENT_SECRET=...`
      - `GITHUB_OAUTH_CLIENT_ID=...` + `GITHUB_OAUTH_CLIENT_SECRET=...`
    - `chmod 600 /opt/driftstack/api/.env`

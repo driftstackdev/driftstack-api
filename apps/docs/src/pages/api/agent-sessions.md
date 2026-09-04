@@ -118,7 +118,7 @@ Request body (all fields optional):
   "token_budget": 100000,
   "profile_id": "prof_<uuid>",
   "proxy_id": "a1b2c3d4-...",
-  "initial_url": "https://driftstack.dev",
+  "initial_url": "https://driftstack.io",
   "geolocation": { "latitude": 48.8566, "longitude": 2.3522, "accuracy": 20 }
 }
 ```

@@ -27,8 +27,8 @@
 #                                       dashboard before the first deploy.
 #
 # Custom domain configured in the Cloudflare Pages dashboard:
-#   - app.driftstack.dev → CNAME to the Pages project
-# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+#   - app.driftstack.io → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.io zone.
 #
 # Founder runbook: section C of
 # `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`.
@@ -58,7 +58,7 @@ jobs:
       deployments: write
     environment:
       name: customer-dashboard-production
-      url: https://app.driftstack.dev
+      url: https://app.driftstack.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6

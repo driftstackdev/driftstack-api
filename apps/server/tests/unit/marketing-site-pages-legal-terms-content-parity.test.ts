@@ -10,7 +10,7 @@
 //   • Section 8.1 fee tiers: perpetual Free + Manual ladder
 //     (Personal/Team/Agency) + API ladder (API Starter/Builder/Scale)
 //     + custom-priced Enterprise; current prices published at
-//     driftstack.dev/pricing (NOT hardcoded in the contract).
+//     driftstack.io/pricing (NOT hardcoded in the contract).
 //   • Section 8.4 VAT 4-rule: NL 21% BTW + EU reverse-charge + non-EU
 //     no-BTW + place-of-supply 2006/112/EC.
 //   • Section 8.5 late-payment AWB 6:119a wettelijke handelsrente.
@@ -82,11 +82,11 @@ describe('W506.C apps/marketing-site/src/pages/legal/terms.md content parity', (
     expect(body).not.toMatch(/cannot decrypt/i);
   });
 
-  it("Section 8.1 fee-tier ladder: perpetual Free tier + Manual ladder (Personal, Team, Agency) + API ladder (API Starter, API Builder, API Scale) + custom-priced Enterprise, with current prices published at driftstack.dev/pricing — pinned so the two-ladder ToS framing stays consistent (drift to dropping the published-at-pricing-page reference would re-introduce hardcoded marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'custom-priced Enterprise' would lose the Enterprise commitment)", () => {
+  it("Section 8.1 fee-tier ladder: perpetual Free tier + Manual ladder (Personal, Team, Agency) + API ladder (API Starter, API Builder, API Scale) + custom-priced Enterprise, with current prices published at driftstack.io/pricing — pinned so the two-ladder ToS framing stays consistent (drift to dropping the published-at-pricing-page reference would re-introduce hardcoded marketing↔Stripe-invoice divergence at the contractual level; drift to dropping 'custom-priced Enterprise' would lose the Enterprise commitment)", () => {
     expect(body).toMatch(
-      /Customer pays the Fees for the Subscription tier\s*selected at signup\. Driftstack offers a perpetual Free tier, a\s*Manual ladder \(Personal, Team, Agency\), and an API ladder \(API\s*Starter, API Builder, API Scale\), with a custom-priced Enterprise\s*tier\. The current tiers and prices are published at\s*<https:\/\/driftstack\.dev\/pricing\/>\./,
+      /Customer pays the Fees for the Subscription tier\s*selected at signup\. Driftstack offers a perpetual Free tier, a\s*Manual ladder \(Personal, Team, Agency\), and an API ladder \(API\s*Starter, API Builder, API Scale\), with a custom-priced Enterprise\s*tier\. The current tiers and prices are published at\s*<https:\/\/driftstack\.io\/pricing\/>\./,
     );
-    expect(body).not.toMatch(/<https:\/\/driftstack\.dev\/pricing>/);
+    expect(body).not.toMatch(/<https:\/\/driftstack\.io\/pricing>/);
     // The contract must NOT hardcode tier prices — those live on the
     // pricing page (single source of truth). Drift back to baked-in
     // dollar figures would desync from Stripe at the contractual level.

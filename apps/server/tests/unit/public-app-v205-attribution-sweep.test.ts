@@ -95,7 +95,7 @@ describe('W844 public-app V-205 attribution sweep', () => {
 
   // ─── public-facing docs scan ─────────────────────────────────
 
-  it('CRITICAL ZERO V-205 attribution-leak tokens in docs/* (excluding internal/ private workflow notes). Public docs are intended for customer reading — drift would publish to docs.driftstack.dev.', () => {
+  it('CRITICAL ZERO V-205 attribution-leak tokens in docs/* (excluding internal/ private workflow notes). Public docs are intended for customer reading — drift would publish to docs.driftstack.io.', () => {
     const docsDirs = [
       'docs/api',
       'docs/architecture',

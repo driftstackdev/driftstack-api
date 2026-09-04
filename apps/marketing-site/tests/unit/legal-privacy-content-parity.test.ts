@@ -123,7 +123,7 @@ describe('W377.B marketing-site /legal/privacy.md content parity', () => {
     expect(body).toMatch(/opt out of this email at any time/);
     // S49 2026-07-07 — the mirror page 301s; link goes straight to docs.
     expect(body).toMatch(
-      /\[Emails reference page\]\(https:\/\/docs\.driftstack\.dev\/reference\/emails\/\)/,
+      /\[Emails reference page\]\(https:\/\/docs\.driftstack\.io\/reference\/emails\/\)/,
     );
   });
 

@@ -53,7 +53,7 @@ async function main(): Promise<void> {
 
   // 4) Fetch the full order envelope. In production, don't poll —
   //    subscribe to the `crypto.order.paid` webhook (see
-  //    https://docs.driftstack.dev/webhooks/crypto-events/). The GET envelope
+  //    https://docs.driftstack.io/webhooks/crypto-events/). The GET envelope
   //    includes the pay-window `expires_at` deadline which the
   //    create-checkout response intentionally omits.
   const latest = await client.cryptoOrders.get(order.order_id);

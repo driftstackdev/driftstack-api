@@ -2694,9 +2694,9 @@ export function ProfilesView({
       // drive, so it should start under their control (not AI). They can switch
       // via the mode toggle. (The agent-chat path creates with mode:'ai'.)
       // Start URL the remote browser opens on launch (Settings → Sessions → Start
-      // URL; default https://driftstack.dev). normalizeNavigateUrl prepends
+      // URL; default https://driftstack.io). normalizeNavigateUrl prepends
       // https:// + rejects non-http(s); fall back to the default if it returns null.
-      const startUrl = normalizeNavigateUrl(settings.startUrl) ?? 'https://driftstack.dev';
+      const startUrl = normalizeNavigateUrl(settings.startUrl) ?? 'https://driftstack.io';
       // `skip_proxy_probe` is an additive create field the server honors to bypass its
       // pre-launch proxy probe (set only when the operator overrode a failed local
       // probe via "Launch anyway"). It rides on the request body even though the SDK's

@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'index.html');
-const PAGE_URL = 'https://admin.driftstack.dev/';
+const PAGE_URL = 'https://admin.driftstack.io/';
 
 interface MockFetchCall {
   url: string;

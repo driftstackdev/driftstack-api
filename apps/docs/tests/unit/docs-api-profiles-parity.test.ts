@@ -1,4 +1,4 @@
-// W253.B — drift-guard for docs.driftstack.dev/api/profiles. The
+// W253.B — drift-guard for docs.driftstack.io/api/profiles. The
 // previous revision asserted profile caps (Solo 5, API Starter 10,
 // API Builder 25, API Scale 100) that didn't match
 // PROFILES_PER_TIER. Pin them to the live constants.

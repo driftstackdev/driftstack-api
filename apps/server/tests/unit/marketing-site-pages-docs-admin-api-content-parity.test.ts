@@ -4,7 +4,7 @@
 // marketing↔server-scope divergence) or invents staff access,
 // customer impersonation, route, or archive behavior.
 //
-//   • V-710 doc-comment framing + docs.driftstack.dev/quickstart-curl/ (S47) + /docs/audit-log
+//   • V-710 doc-comment framing + docs.driftstack.io/quickstart-curl/ (S47) + /docs/audit-log
 //     companion cross-refs.
 //   • driftstack_internal_admin scope + preHandler gate + boot-time
 //     staff/owner web-session authority + no self-service promotion.
@@ -40,7 +40,7 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
 
   it("V-710 framing pinned: 'overview of the admin API surface. Pitched at the founder + support ops; the page is publicly indexed so customers running audit reviews see what admin keys are capable of. Companion to /docs/api-quickstart (customer-facing surface) and /docs/audit-log (where admin actions land).' — pinned so the V-710 anchor + publicly-indexed-for-audit-reviewers + 2-companion-doc cross-refs survive (drift to making this internal-only would orphan customers from security-review evidence). Re-enabled by slice 169 after verifying the V-710 comment exists at admin-api.astro:4-8 with the matching shape", () => {
     expect(body).toMatch(
-      /\/\/ V-710 — overview of the admin API surface\. Pitched at the founder\s*\/\/ \+ support ops; the page is publicly indexed so customers running\s*\/\/ audit reviews see what admin keys are capable of\. Companion to\s*\/\/ https:\/\/docs\.driftstack\.dev\/quickstart-curl\/ \(customer-facing surface\) and \/docs\/audit-log\s*\/\/ \(where admin actions land\)\./,
+      /\/\/ V-710 — overview of the admin API surface\. Pitched at the founder\s*\/\/ \+ support ops; the page is publicly indexed so customers running\s*\/\/ audit reviews see what admin keys are capable of\. Companion to\s*\/\/ https:\/\/docs\.driftstack\.io\/quickstart-curl\/ \(customer-facing surface\) and \/docs\/audit-log\s*\/\/ \(where admin actions land\)\./,
     );
   });
 
@@ -153,7 +153,7 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
     );
     // S47 2026-07-07 (founder-approved: mirror deprecation): the api-quickstart mirror is deleted; href re-pinned to the docs successor.
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/">Customer-facing API quickstart<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/quickstart-curl\/">Customer-facing API quickstart<\/a>/,
     );
     expect(body).not.toMatch(
       /href="\/(?:legal\/refunds|docs\/(?:audit-log|billing-crypto-overview))"/,

@@ -9,8 +9,8 @@ statistics**. Run full-autopilot; Agent-2 chooses order; one validated + deploye
 ## Current state (2026-06-02 orientation)
 
 - **Stack:** Astro 5 + Tailwind (`tailwind.config.mjs`) + vanilla-JS progressive-enhancement (no
-  React). Bearer auth via the app.driftstack.dev SSO bridge (`localStorage ds_web_session_token`),
-  `PUBLIC_API_BASE_URL`. Deployed at admin.driftstack.dev (CF Pages).
+  React). Bearer auth via the app.driftstack.io SSO bridge (`localStorage ds_web_session_token`),
+  `PUBLIC_API_BASE_URL`. Deployed at admin.driftstack.io (CF Pages).
 - **~13 pages:** index (dashboard), accounts + accounts/[id], api-keys, audit-log, cost, incidents
   (+[id]), rate-limit-overrides, sessions, status-subscribers, webhook-dlq, atlas-priority-queue, leads.
 - **Pattern:** pages SSR a **mock placeholder** (`data/mocks.ts`, 166 LOC) then client-fetch real data

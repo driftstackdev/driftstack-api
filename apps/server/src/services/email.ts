@@ -180,7 +180,7 @@ export interface EmailService {
      * v2-#36 — customer-facing dashboard origin (DASHBOARD_ORIGIN env).
      * Threaded from bootstrap so the rotation link in the email points
      * at the right host across dev / staging / prod. Pre-v2-#36 the
-     * template hardcoded https://app.driftstack.dev — staging emails
+     * template hardcoded https://app.driftstack.io — staging emails
      * mis-directed customers to prod.
      */
     dashboardUrl: string;
@@ -518,9 +518,9 @@ const TEMPLATES = {
   'byok-anthropic-key-rotation-reminder': {
     subject: 'Driftstack — rotate your Anthropic API key',
     text: (v) =>
-      `Your stored Anthropic API key on Driftstack is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nRotate by: ${v.rotateBy} (UTC)\n\nGenerate a fresh key in your Anthropic console (https://console.anthropic.com/), then rotate it via the Driftstack API — the PUT flow is documented at:\nhttps://docs.driftstack.dev/api/byok-anthropic\n\nCheck your key's age and status anytime on the dashboard: ${v.dashboardUrl}/settings\n\n— Driftstack`,
+      `Your stored Anthropic API key on Driftstack is ${v.ageDays} days old. We recommend rotating every 90 days; we've reached the nag threshold.\n\nRotate by: ${v.rotateBy} (UTC)\n\nGenerate a fresh key in your Anthropic console (https://console.anthropic.com/), then rotate it via the Driftstack API — the PUT flow is documented at:\nhttps://docs.driftstack.io/api/byok-anthropic\n\nCheck your key's age and status anytime on the dashboard: ${v.dashboardUrl}/settings\n\n— Driftstack`,
     html: (v) =>
-      `<p>Your stored Anthropic API key on Driftstack is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Generate a fresh key in your <a href="https://console.anthropic.com/">Anthropic console</a>, then rotate it via the Driftstack API — the <a href="https://docs.driftstack.dev/api/byok-anthropic">PUT flow is documented here</a>.</p><p>Check your key's age and status anytime on the <a href="${v.dashboardUrl}/settings">dashboard</a>.</p><p>— Driftstack</p>`,
+      `<p>Your stored Anthropic API key on Driftstack is <strong>${v.ageDays} days old</strong>. We recommend rotating every 90 days; we've reached the nag threshold.</p><table cellpadding="4" style="border-collapse:collapse"><tr><td><strong>Rotate by:</strong></td><td>${v.rotateBy} (UTC)</td></tr></table><p>Generate a fresh key in your <a href="https://console.anthropic.com/">Anthropic console</a>, then rotate it via the Driftstack API — the <a href="https://docs.driftstack.io/api/byok-anthropic">PUT flow is documented here</a>.</p><p>Check your key's age and status anytime on the <a href="${v.dashboardUrl}/settings">dashboard</a>.</p><p>— Driftstack</p>`,
   },
   // v2-#10.5 — 90d rotation cadence nag. Endpoint URL + secret prefix
   // is enough for the customer to identify the endpoint without

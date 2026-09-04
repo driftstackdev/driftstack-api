@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/email-troubleshooting is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/reference/emails/
+//   https://docs.driftstack.io/reference/emails/
 //   (source: apps/docs/src/pages/reference/emails.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -28,7 +28,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/email-troubl
 const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
 const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md');
 
-describe('S47 redirect tombstone — /docs/email-troubleshooting → https://docs.driftstack.dev/reference/emails/', () => {
+describe('S47 redirect tombstone — /docs/email-troubleshooting → https://docs.driftstack.io/reference/emails/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -44,7 +44,7 @@ describe('S47 redirect tombstone — /docs/email-troubleshooting → https://doc
 
     expect(rule('/docs/email-troubleshooting'), 'bare-path rule missing').toEqual([
       '/docs/email-troubleshooting',
-      'https://docs.driftstack.dev/reference/emails/',
+      'https://docs.driftstack.io/reference/emails/',
       '301',
     ]);
     expect(
@@ -52,7 +52,7 @@ describe('S47 redirect tombstone — /docs/email-troubleshooting → https://doc
       'trailing-slash rule missing (matching is exact-path)',
     ).toEqual([
       '/docs/email-troubleshooting/',
-      'https://docs.driftstack.dev/reference/emails/',
+      'https://docs.driftstack.io/reference/emails/',
       '301',
     ]);
   });

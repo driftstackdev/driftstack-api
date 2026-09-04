@@ -2,7 +2,7 @@
 # Pages redirects for the marketing site.
 #
 # The legacy /docs/* mirror pages below are superseded by verified
-# equivalents on docs.driftstack.dev (S29/S37 content batches, every
+# equivalents on docs.driftstack.io (S29/S37 content batches, every
 # claim re-verified against source before carry-over). The .astro
 # pages are DELETED in the same change — CF Pages serves static
 # assets BEFORE evaluating _redirects, so a surviving page file would
@@ -22,25 +22,25 @@
 # Format reference:
 #   https://developers.cloudflare.com/pages/configuration/redirects/
 
-/docs/concurrency                        https://docs.driftstack.dev/guides/concurrency/            301
-/docs/concurrency/                       https://docs.driftstack.dev/guides/concurrency/            301
-/docs/migration-from-puppeteer           https://docs.driftstack.dev/guides/migrate-from-puppeteer/ 301
-/docs/migration-from-puppeteer/          https://docs.driftstack.dev/guides/migrate-from-puppeteer/ 301
-/docs/migration-from-browserless         https://docs.driftstack.dev/guides/migrate-from-browserless/ 301
-/docs/migration-from-browserless/        https://docs.driftstack.dev/guides/migrate-from-browserless/ 301
-/docs/sentry-integration                 https://docs.driftstack.dev/guides/sentry/                 301
-/docs/sentry-integration/                https://docs.driftstack.dev/guides/sentry/                 301
-/docs/api-quickstart                     https://docs.driftstack.dev/quickstart-curl/               301
-/docs/api-quickstart/                    https://docs.driftstack.dev/quickstart-curl/               301
-/docs/billing-crypto-integration-guide   https://docs.driftstack.dev/guides/paying-with-crypto/     301
-/docs/billing-crypto-integration-guide/  https://docs.driftstack.dev/guides/paying-with-crypto/     301
-/docs/webhooks-crypto-events             https://docs.driftstack.dev/webhooks/crypto-events/        301
-/docs/webhooks-crypto-events/            https://docs.driftstack.dev/webhooks/crypto-events/        301
-/docs/crypto-orders-polling-vs-webhooks  https://docs.driftstack.dev/webhooks/crypto-events/        301
-/docs/crypto-orders-polling-vs-webhooks/ https://docs.driftstack.dev/webhooks/crypto-events/        301
-/docs/emails-reference                   https://docs.driftstack.dev/reference/emails/              301
-/docs/emails-reference/                  https://docs.driftstack.dev/reference/emails/              301
-/docs/email-troubleshooting              https://docs.driftstack.dev/reference/emails/              301
-/docs/email-troubleshooting/             https://docs.driftstack.dev/reference/emails/              301
-/docs/data-residency                     https://docs.driftstack.dev/reference/data-residency/      301
-/docs/data-residency/                    https://docs.driftstack.dev/reference/data-residency/      301
+/docs/concurrency                        https://docs.driftstack.io/guides/concurrency/            301
+/docs/concurrency/                       https://docs.driftstack.io/guides/concurrency/            301
+/docs/migration-from-puppeteer           https://docs.driftstack.io/guides/migrate-from-puppeteer/ 301
+/docs/migration-from-puppeteer/          https://docs.driftstack.io/guides/migrate-from-puppeteer/ 301
+/docs/migration-from-browserless         https://docs.driftstack.io/guides/migrate-from-browserless/ 301
+/docs/migration-from-browserless/        https://docs.driftstack.io/guides/migrate-from-browserless/ 301
+/docs/sentry-integration                 https://docs.driftstack.io/guides/sentry/                 301
+/docs/sentry-integration/                https://docs.driftstack.io/guides/sentry/                 301
+/docs/api-quickstart                     https://docs.driftstack.io/quickstart-curl/               301
+/docs/api-quickstart/                    https://docs.driftstack.io/quickstart-curl/               301
+/docs/billing-crypto-integration-guide   https://docs.driftstack.io/guides/paying-with-crypto/     301
+/docs/billing-crypto-integration-guide/  https://docs.driftstack.io/guides/paying-with-crypto/     301
+/docs/webhooks-crypto-events             https://docs.driftstack.io/webhooks/crypto-events/        301
+/docs/webhooks-crypto-events/            https://docs.driftstack.io/webhooks/crypto-events/        301
+/docs/crypto-orders-polling-vs-webhooks  https://docs.driftstack.io/webhooks/crypto-events/        301
+/docs/crypto-orders-polling-vs-webhooks/ https://docs.driftstack.io/webhooks/crypto-events/        301
+/docs/emails-reference                   https://docs.driftstack.io/reference/emails/              301
+/docs/emails-reference/                  https://docs.driftstack.io/reference/emails/              301
+/docs/email-troubleshooting              https://docs.driftstack.io/reference/emails/              301
+/docs/email-troubleshooting/             https://docs.driftstack.io/reference/emails/              301
+/docs/data-residency                     https://docs.driftstack.io/reference/data-residency/      301
+/docs/data-residency/                    https://docs.driftstack.io/reference/data-residency/      301

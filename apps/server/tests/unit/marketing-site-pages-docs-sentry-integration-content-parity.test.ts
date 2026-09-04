@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/sentry-integration is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/guides/sentry/
+//   https://docs.driftstack.io/guides/sentry/
 //   (source: apps/docs/src/pages/guides/sentry.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -28,7 +28,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/sentry-integ
 const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
 const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/sentry.md');
 
-describe('S47 redirect tombstone — /docs/sentry-integration → https://docs.driftstack.dev/guides/sentry/', () => {
+describe('S47 redirect tombstone — /docs/sentry-integration → https://docs.driftstack.io/guides/sentry/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -44,13 +44,13 @@ describe('S47 redirect tombstone — /docs/sentry-integration → https://docs.d
 
     expect(rule('/docs/sentry-integration'), 'bare-path rule missing').toEqual([
       '/docs/sentry-integration',
-      'https://docs.driftstack.dev/guides/sentry/',
+      'https://docs.driftstack.io/guides/sentry/',
       '301',
     ]);
     expect(
       rule('/docs/sentry-integration/'),
       'trailing-slash rule missing (matching is exact-path)',
-    ).toEqual(['/docs/sentry-integration/', 'https://docs.driftstack.dev/guides/sentry/', '301']);
+    ).toEqual(['/docs/sentry-integration/', 'https://docs.driftstack.io/guides/sentry/', '301']);
   });
 
   it('the docs successor source page still exists (a docs-side rename/move must update the redirect target)', () => {

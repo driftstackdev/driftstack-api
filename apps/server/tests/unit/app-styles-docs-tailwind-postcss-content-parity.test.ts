@@ -110,7 +110,7 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     );
   });
 
-  it('S22.1 docs/src/styles/base.css (2026-07-06 brand-parity port — supersedes the R11 light+violet pins): Tailwind v4 @import + mode-axis color-scheme + tk token bg + Geist/JetBrains-Mono self-hosted fonts + 3 utility atoms (btn-primary flat accent + btn-secondary solid + nav-link accent-text hover) so the docs read as one product with driftstack.dev (dark+oxblood default, light toggle)', () => {
+  it('S22.1 docs/src/styles/base.css (2026-07-06 brand-parity port — supersedes the R11 light+violet pins): Tailwind v4 @import + mode-axis color-scheme + tk token bg + Geist/JetBrains-Mono self-hosted fonts + 3 utility atoms (btn-primary flat accent + btn-secondary solid + nav-link accent-text hover) so the docs read as one product with driftstack.io (dark+oxblood default, light toggle)', () => {
     const body = read('apps/docs/src/styles/base.css');
     // W368 — Tailwind v4: @import + typography @plugin (was the 3-directive header);
     // component atoms are @utility (was @layer components).

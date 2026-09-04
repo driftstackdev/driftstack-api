@@ -344,7 +344,7 @@
 }
 [data-mode='dark'] {
   color-scheme: dark;
-  /* 2026-06-17 — founder "too dark; adapt to the status-page look (status.driftstack.dev)".
+  /* 2026-06-17 — founder "too dark; adapt to the status-page look (status.driftstack.io)".
      Matched the GUI dark surfaces to the status site's SLATE scale (slate-900/800/
      700/950/600) — a lighter blue-grey that reads far less oppressive than the old
      near-black, while keeping inset < base < raised < elevated for card separation. */

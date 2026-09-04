@@ -131,10 +131,10 @@ Tests: **1565/1565 green across 139 test files** at HEAD `cdfa176`
 All 6 customer-facing URLs HTTP 200 with TLS 1.3 end-to-end (Cloudflare
 Full strict mode):
 
-- https://driftstack.dev/ — marketing site (Cloudflare Pages)
-- https://www.driftstack.dev/ — marketing site (Cloudflare Pages)
-- https://docs.driftstack.dev/ — docs site (Cloudflare Pages)
-- https://app.driftstack.dev/ — customer dashboard (Cloudflare Pages)
+- https://driftstack.io/ — marketing site (Cloudflare Pages)
+- https://www.driftstack.io/ — marketing site (Cloudflare Pages)
+- https://docs.driftstack.io/ — docs site (Cloudflare Pages)
+- https://app.driftstack.io/ — customer dashboard (Cloudflare Pages)
 - https://api.driftstack.dev/health — Fastify control plane (Hetzner production)
 - https://staging.driftstack.dev/health — staging mirror (Hetzner staging)
 

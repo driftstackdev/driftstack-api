@@ -85,8 +85,8 @@
 
 ### Workspaces beyond `apps/server/`
 
-- `apps/marketing-site/` — Astro static-build for `driftstack.dev` (V-064+). SEO basics in `public/robots.txt` + `@astrojs/sitemap` integration (V-106).
-- `apps/customer-dashboard/` — Astro static-build scaffolding for `app.driftstack.dev` (V-099). Sidebar + DashboardLayout + mock-data layer; sub-pages pending Tier 3 review per the customer-dashboard-stack proposal in `docs/architecture/customer-dashboard-stack.md` (PROPOSED).
+- `apps/marketing-site/` — Astro static-build for `driftstack.io` (V-064+). SEO basics in `public/robots.txt` + `@astrojs/sitemap` integration (V-106).
+- `apps/customer-dashboard/` — Astro static-build scaffolding for `app.driftstack.io` (V-099). Sidebar + DashboardLayout + mock-data layer; sub-pages pending Tier 3 review per the customer-dashboard-stack proposal in `docs/architecture/customer-dashboard-stack.md` (PROPOSED).
 - `apps/gui-client/` — Tauri desktop client. Separate workstream.
 - `packages/sdk-typescript/` — `@driftstack/sdk`; 19 resource accessors (V-1130 count; this
   read "7 as of V-101" long after the surface had grown, and the dated qualifier made a

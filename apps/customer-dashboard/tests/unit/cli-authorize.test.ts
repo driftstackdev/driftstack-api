@@ -18,7 +18,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'cli', 'authorize', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/cli/authorize/?code=ABCDEF&state=XYZ123';
+const PAGE_URL = 'https://app.driftstack.io/cli/authorize/?code=ABCDEF&state=XYZ123';
 
 interface MockFetchCall {
   url: string;
@@ -425,11 +425,11 @@ describe('cli-authorize page — local integration', () => {
     expect(items.length).toBe(4);
     // tos → /legal/terms/ slug mapping + friendly label.
     const tosLink = items[0].querySelector('a') as HTMLAnchorElement;
-    expect(tosLink.href).toBe('https://driftstack.dev/legal/terms/');
+    expect(tosLink.href).toBe('https://driftstack.io/legal/terms/');
     expect(tosLink.textContent).toBe('Terms of Service');
     // Pass-through slugs work too.
     const privacyLink = items[1].querySelector('a') as HTMLAnchorElement;
-    expect(privacyLink.href).toBe('https://driftstack.dev/legal/privacy/');
+    expect(privacyLink.href).toBe('https://driftstack.io/legal/privacy/');
     expect(privacyLink.textContent).toBe('Privacy Policy');
   });
 

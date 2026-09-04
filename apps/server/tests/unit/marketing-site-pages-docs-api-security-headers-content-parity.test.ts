@@ -148,7 +148,7 @@ describe('W511.A apps/marketing-site/src/pages/docs/api-security-headers.astro c
       /Send disclosures to\s*<a href="mailto:security@driftstack\.dev">security@driftstack\.dev<\/a>\./,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/\.well-known\/security\.txt">security\.txt<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/\.well-known\/security\.txt">security\.txt<\/a>/,
     );
     expect(body).toMatch(
       /<a href="\/legal\/vulnerability-disclosure\/">vulnerability-disclosure policy<\/a>/,

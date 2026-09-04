@@ -11,7 +11,7 @@
 //      (Sentry EU ingest, Postmark EU sending) — previously these
 //      were mislabelled US. S47 2026-07-07 (founder-approved: mirror
 //      deprecation): the /docs/data-residency mirror is deleted
-//      (301 → docs.driftstack.dev/reference/data-residency/), so
+//      (301 → docs.driftstack.io/reference/data-residency/), so
 //      this clause now reads the docs successor source.
 
 import { readFileSync } from 'node:fs';

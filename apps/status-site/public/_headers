@@ -1,5 +1,5 @@
 # Cloudflare Pages security + cache headers for the public status site
-# (status.driftstack.dev).
+# (status.driftstack.io).
 #
 # Audit context: docs/internal/2026-05-20-csp-header-audit.md closed the
 # security-header gap on customer-dashboard / admin-panel and confirmed

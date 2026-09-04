@@ -50,10 +50,10 @@ describe('W623 root tsconfig.json + status.md content parity', () => {
       /All 6 customer-facing URLs HTTP 200 with TLS 1\.3 end-to-end \(Cloudflare/,
     );
     expect(body).toMatch(/Full strict mode\):/);
-    expect(body).toMatch(/^- https:\/\/driftstack\.dev\/ — marketing site \(Cloudflare Pages\)$/m);
-    expect(body).toMatch(/^- https:\/\/docs\.driftstack\.dev\/ — docs site \(Cloudflare Pages\)$/m);
+    expect(body).toMatch(/^- https:\/\/driftstack\.io\/ — marketing site \(Cloudflare Pages\)$/m);
+    expect(body).toMatch(/^- https:\/\/docs\.driftstack\.io\/ — docs site \(Cloudflare Pages\)$/m);
     expect(body).toMatch(
-      /^- https:\/\/app\.driftstack\.dev\/ — customer dashboard \(Cloudflare Pages\)$/m,
+      /^- https:\/\/app\.driftstack\.io\/ — customer dashboard \(Cloudflare Pages\)$/m,
     );
     expect(body).toMatch(
       /^- https:\/\/api\.driftstack\.dev\/health — Fastify control plane \(Hetzner production\)$/m,

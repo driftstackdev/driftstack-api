@@ -1,4 +1,4 @@
-// W258.A — drift-guard for docs.driftstack.dev/webhooks/replay. Pins
+// W258.A — drift-guard for docs.driftstack.io/webhooks/replay. Pins
 // the replay endpoint, the retry-count claim, and the SDK methods
 // cited in code samples.
 

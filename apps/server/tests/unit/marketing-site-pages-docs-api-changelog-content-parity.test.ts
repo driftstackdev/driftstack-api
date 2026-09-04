@@ -14,8 +14,8 @@
 //   • Versioning policy 3-rule: new-endpoints+optional-fields-no-version-
 //     bump + remove-field-or-change-type-90-day-deprecation-window-with-
 //     RFC-5988-Deprecation-header + major-version-bump-12-months-of-v1.
-//   • Subscribe: status.driftstack.dev announcement + api-changes@
-//     mailing list + app.driftstack.dev/settings. (S26 2026-07-06
+//   • Subscribe: status.driftstack.io announcement + api-changes@
+//     mailing list + app.driftstack.io/settings. (S26 2026-07-06
 //     (#132): was /settings/notifications, which 404s — no such
 //     dashboard route; the V-204 email toggles live on /settings.)
 //   • 3-related-doc: /docs/api-versioning + /api-reference + /docs/error-codes.
@@ -88,11 +88,11 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
   // /settings/notifications, a dashboard route that does not exist
   // (404). The V-204 email-notification toggles live on bare
   // /settings (apps/customer-dashboard/src/pages/settings.astro).
-  it("Subscribe 3-channel framing pinned: 'We post a summary of each month's changes to status.driftstack.dev as a non-incident announcement, and email the api-changes@ mailing list. Subscribe at app.driftstack.dev/settings.' — pinned so the 3-channel subscribe surface (status-page non-incident + api-changes@ mailing list + dashboard /settings) survives and the dead /settings/notifications link cannot return", () => {
+  it("Subscribe 3-channel framing pinned: 'We post a summary of each month's changes to status.driftstack.io as a non-incident announcement, and email the api-changes@ mailing list. Subscribe at app.driftstack.io/settings.' — pinned so the 3-channel subscribe surface (status-page non-incident + api-changes@ mailing list + dashboard /settings) survives and the dead /settings/notifications link cannot return", () => {
     expect(body).toMatch(
-      /We post a summary of each month's changes to\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*as a non-incident announcement, and email the\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.dev\/settings\/">app\.driftstack\.dev\/settings<\/a>\./,
+      /We post a summary of each month's changes to\s*<a href="https:\/\/status\.driftstack\.io">status\.driftstack\.io<\/a>\s*as a non-incident announcement, and email the\s*<code>api-changes@<\/code> mailing list\. Subscribe at\s*(?:<!--[\s\S]*?-->\s*)?<a href="https:\/\/app\.driftstack\.io\/settings\/">app\.driftstack\.io\/settings<\/a>\./,
     );
-    expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.dev\/settings\/notifications"/);
+    expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.io\/settings\/notifications"/);
   });
 
   it('3-related-doc cluster: /docs/api-versioning + /api-reference + /docs/error-codes — pinned so the 3-related-doc navigation surface stays complete (drift to dropping /docs/error-codes would orphan the typed-error reference from the changelog)', () => {

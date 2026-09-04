@@ -53,10 +53,10 @@ describe('docs components/Footer content parity', () => {
   });
 
   it('4-link cross-nav pinned: Marketing site + Pricing + Security + mailto:support. Drift to dropping any would break a real customer-navigation path back to the marketing surface', () => {
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev"[\s\S]{0,200}Marketing site/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"[\s\S]{0,200}Pricing/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"[\s\S]{0,200}Security/);
-    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security)"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io"[\s\S]{0,200}Marketing site/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/pricing\/"[\s\S]{0,200}Pricing/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/security\/"[\s\S]{0,200}Security/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.io\/(?:pricing|security)"/);
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev"[\s\S]{0,200}support@driftstack\.dev/,
     );
@@ -64,7 +64,7 @@ describe('docs components/Footer content parity', () => {
 
   it('External links use target=_blank + rel=noopener-noreferrer pinned: drift to dropping rel on external nav-links would re-introduce tabnabbing security flag', () => {
     expect(body).toMatch(
-      /href="https:\/\/driftstack\.dev"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/,
+      /href="https:\/\/driftstack\.io"[^>]*target="_blank"[^>]*rel="noopener noreferrer"/,
     );
   });
 

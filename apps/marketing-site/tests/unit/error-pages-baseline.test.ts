@@ -46,8 +46,8 @@ describe('W336.B /404 + /500 error pages baseline', () => {
     expect(p500).toContain('mailto:support@driftstack.dev');
   });
 
-  it('/500 cross-links to status.driftstack.dev', () => {
-    expect(p500).toContain('status.driftstack.dev');
+  it('/500 cross-links to status.driftstack.io', () => {
+    expect(p500).toContain('status.driftstack.io');
   });
 
   it('both pages render via BaseLayout', () => {

@@ -60,7 +60,7 @@ const navItems = [
           location.search.indexOf('bounced=1') === -1
         ) {
           location.replace(
-            'https://app.driftstack.dev/?next-admin=' +
+            'https://app.driftstack.io/?next-admin=' +
               encodeURIComponent(location.pathname + location.search),
           );
           return;
@@ -556,7 +556,7 @@ const navItems = [
             // Bounce out of the admin origin entirely — admin has no
             // login page; the dashboard's /login is the canonical sign-
             // in surface.
-            window.location.href = 'https://app.driftstack.dev/login';
+            window.location.href = 'https://app.driftstack.io/login';
           });
         }
 

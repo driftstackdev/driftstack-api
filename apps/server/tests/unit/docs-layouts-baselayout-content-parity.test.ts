@@ -61,12 +61,12 @@ describe('docs layouts/BaseLayout content parity', () => {
 
   it('og:image + twitter:image point at the marketing-site PNG card (per the V-250 "OG images point at the marketing site default" comment). A summary_large_image twitter:card with NO image renders no preview, so these must be present + must be the PNG (SVG og:images are not rendered by Twitter/X, Facebook, LinkedIn, Slack)', () => {
     expect(body).toMatch(
-      /<meta property="og:image" content="https:\/\/driftstack\.dev\/og-default\.png" \/>/,
+      /<meta property="og:image" content="https:\/\/driftstack\.io\/og-default\.png" \/>/,
     );
     expect(body).toMatch(/<meta property="og:image:width" content="1200" \/>/);
     expect(body).toMatch(/<meta property="og:image:height" content="630" \/>/);
     expect(body).toMatch(
-      /<meta name="twitter:image" content="https:\/\/driftstack\.dev\/og-default\.png" \/>/,
+      /<meta name="twitter:image" content="https:\/\/driftstack\.io\/og-default\.png" \/>/,
     );
   });
 

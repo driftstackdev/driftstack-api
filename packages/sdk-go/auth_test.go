@@ -219,7 +219,7 @@ func TestAuth_CliAuthorizeInitiate(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(CliAuthorizeInitiateResponse{
 			Code:       "cliauth_abc",
 			UserCode:   "ABCD-EFGH",
-			BrowserURL: "https://app.driftstack.dev/cli/authorize?code=cliauth_abc",
+			BrowserURL: "https://app.driftstack.io/cli/authorize?code=cliauth_abc",
 			ExpiresAt:  expiresAt,
 		})
 	})

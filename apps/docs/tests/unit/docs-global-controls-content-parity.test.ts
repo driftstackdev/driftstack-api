@@ -38,7 +38,7 @@ describe('docs global control accessibility', () => {
     expect(script).toBeDefined();
 
     const dom = new JSDOM(html, {
-      url: 'https://docs.driftstack.dev/',
+      url: 'https://docs.driftstack.io/',
       runScripts: 'outside-only',
     });
     dom.window.eval(script!);

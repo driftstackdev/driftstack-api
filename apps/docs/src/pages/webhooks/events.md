@@ -425,7 +425,7 @@ delivery scheduler picks it up at the next retry slot.
 After 6 failed attempts (the initial delivery plus 5 retries) the
 delivery lands in DLQ. DLQ deliveries
 are visible in the admin panel
-(`admin.driftstack.dev/webhook-dlq`) — staff can manually requeue
+(`admin.driftstack.io/webhook-dlq`) — staff can manually requeue
 them after investigating the failure.
 
 The endpoint **is** auto-disabled after 50 consecutive failed

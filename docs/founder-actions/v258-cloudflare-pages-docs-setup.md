@@ -1,4 +1,4 @@
-# V-258 — Cloudflare Pages setup for `docs.driftstack.dev` (founder ops action)
+# V-258 — Cloudflare Pages setup for `docs.driftstack.io` (founder ops action)
 
 Per V-258: the doc-site CI workflow (`.github/workflows/deploy-docs.yml`) needs a Cloudflare Pages project + DNS record + the same `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets that the marketing-site deploy already uses.
 
@@ -50,23 +50,23 @@ Two options:
 
 After the first successful deploy, the project will have a `<project-name>.pages.dev` URL. Add the custom domain:
 
-- CF dashboard → Pages project → **Custom domains** → **Set up a custom domain** → `docs.driftstack.dev`.
-- CF will prompt to add a DNS record. If the `driftstack.dev` zone is already in this Cloudflare account, accept the prompt (CF adds the CNAME automatically). If the zone lives elsewhere, add the CNAME manually pointing to the Pages project URL.
+- CF dashboard → Pages project → **Custom domains** → **Set up a custom domain** → `docs.driftstack.io`.
+- CF will prompt to add a DNS record. If the `driftstack.io` zone is already in this Cloudflare account, accept the prompt (CF adds the CNAME automatically). If the zone lives elsewhere, add the CNAME manually pointing to the Pages project URL.
 - TLS provisions automatically (CF universal SSL).
 
 DNS propagation: usually under a minute when the zone is in CF; up to a few minutes elsewhere.
 
 ### 6. Verify
 
-- Visit <https://docs.driftstack.dev>.
+- Visit <https://docs.driftstack.io>.
 - Confirm `https` works (CF's universal SSL).
 - Confirm sidebar nav renders (Get started → Quickstart, Concept guides → Profile management / Session lifecycle, etc.).
 - Confirm the V-256 pages render with sidebar + brand identity:
-  - <https://docs.driftstack.dev/quickstart/>
-  - <https://docs.driftstack.dev/sdk/installation/>
-  - <https://docs.driftstack.dev/license-activation/>
-  - <https://docs.driftstack.dev/guides/profile-management/>
-  - <https://docs.driftstack.dev/guides/session-lifecycle/>
+  - <https://docs.driftstack.io/quickstart/>
+  - <https://docs.driftstack.io/sdk/installation/>
+  - <https://docs.driftstack.io/license-activation/>
+  - <https://docs.driftstack.io/guides/profile-management/>
+  - <https://docs.driftstack.io/guides/session-lifecycle/>
 
 ## Rollback
 

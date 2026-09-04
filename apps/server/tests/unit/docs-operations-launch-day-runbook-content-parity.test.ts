@@ -58,7 +58,7 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
     );
     expect(body).toMatch(/### Marketing site \/ dashboard \/ docs/);
     expect(body).toMatch(
-      /- \[ \] `https:\/\/app\.driftstack\.dev\/signup` form posts; verification-email send works/,
+      /- \[ \] `https:\/\/app\.driftstack\.io\/signup` form posts; verification-email send works/,
     );
     expect(body).toMatch(/### Stripe/);
     expect(body).toMatch(
@@ -105,7 +105,7 @@ describe('W552.B /docs/operations/launch-day-runbook.md content parity', () => {
 
   it('Smoke test 10-step recurring-subscription happy path remains pinned', () => {
     expect(body).toMatch(
-      /1\. Visit `app\.driftstack\.dev\/signup` → create account with a real email you control\./,
+      /1\. Visit `app\.driftstack\.io\/signup` → create account with a real email you control\./,
     );
     expect(body).toMatch(/2\. Verify email via the link Postmark delivers\./);
     expect(body).toMatch(

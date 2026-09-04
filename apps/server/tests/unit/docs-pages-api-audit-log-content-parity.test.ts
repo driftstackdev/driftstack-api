@@ -93,7 +93,7 @@ describe('W768 docs /api/audit-log content parity', () => {
     );
   });
 
-  it('CRITICAL caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception, with the scrub now IMPLEMENTED (corrected 2026-07-01 from a "TD-audit-payload-scrub queued" framing — the scrub runs at read/export serialization time, no backfill needed). The previous skip pinned `Caveat (V-413)` with the inline V-anchor; the V-413 internal anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive caveat framing survives without it.', () => {
+  it('CRITICAL caveat pinned — auth-flow events store issued_from_ip+user_agent in payload as a deliberate exception, with the scrub now IMPLEMENTED (corrected 2026-07-01 from a "TD-audit-payload-scrub queued" framing — the scrub runs at read/export serialization time, no backfill needed). The previous skip pinned `Caveat (V-413)` with the inline V-anchor; the V-413 internal anchor was removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the substantive caveat framing survives without it.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*Caveat:\*\* the auth-flow audit events/);

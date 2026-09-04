@@ -22,7 +22,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'security', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/security/';
+const PAGE_URL = 'https://app.driftstack.io/security/';
 
 interface MockFetchCall {
   url: string;

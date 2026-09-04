@@ -25,7 +25,7 @@ const RATE_LIMIT = resolve(REPO_ROOT, 'apps/server/src/middleware/ip-rate-limit.
 const VERIFY_PAGE = resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/verify-email.astro');
 // S47 2026-07-07 (founder-approved: mirror deprecation): the legacy
 // /docs/email-troubleshooting mirror is deleted (301 →
-// docs.driftstack.dev/reference/emails/); the self-service-resend
+// docs.driftstack.io/reference/emails/); the self-service-resend
 // claim now lives on the docs successor, so the guard reads that
 // source.
 const TROUBLESHOOTING = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md');

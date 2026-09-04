@@ -53,7 +53,7 @@ describe('W282.A Header.astro internal href integrity', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('top-bar dashboard link points at the canonical app.driftstack.dev/login URL', () => {
-    expect(body).toMatch(/href=["']https:\/\/app\.driftstack\.dev\/login\/["']/);
+  it('top-bar dashboard link points at the canonical app.driftstack.io/login URL', () => {
+    expect(body).toMatch(/href=["']https:\/\/app\.driftstack\.io\/login\/["']/);
   });
 });

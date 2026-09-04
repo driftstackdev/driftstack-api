@@ -9,7 +9,7 @@ description: Public status surface — overall health, component breakdown, inci
 The `/v1/status/*` surface backs the public Driftstack status site. It
 is intentionally **unauthenticated** — visitors don't have accounts —
 and IP-rate-limited at the edge. Cache-Control headers are set so a
-CDN (Cloudflare Pages in front of `status.driftstack.dev`) can coalesce
+CDN (Cloudflare Pages in front of `status.driftstack.io`) can coalesce
 concurrent viewers onto one origin call.
 
 Distinct from `/health`, `/healthz`, and `/ready`, which are

@@ -3,7 +3,7 @@
 // dashboard deploys derive their shape from this one). Drift here
 // either weakens the V-469 per-service Sentry framing (would lose
 // marketing-site error telemetry), drops the apex+www DNS framing
-// (would break the driftstack.dev front door), or renames
+// (would break the driftstack.io front door), or renames
 // CLOUDFLARE_PAGES_PROJECT_NAME (would diverge from the historical
 // var name that the docs + dashboard explicitly distinguish from).
 //
@@ -12,11 +12,11 @@
 //     suffixes to distinguish from this baseline).
 //   • V-469 per-service Sentry (PUBLIC_SENTRY_DSN_MARKETING +
 //     SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_RELEASE + GIT_SHA).
-//   • Custom domains: driftstack.dev (apex) + www.driftstack.dev
+//   • Custom domains: driftstack.io (apex) + www.driftstack.io
 //     (CNAME).
 //   • Path-filter trigger (apps/marketing-site/** + workflow + 2
 //     root manifests).
-//   • marketing-production env-binding + driftstack.dev URL.
+//   • marketing-production env-binding + driftstack.io URL.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -47,7 +47,7 @@ describe('W543.C /.github/workflows/deploy-marketing.yml content parity', () => 
     expect(body).toMatch(/Skipped if `CLOUDFLARE_API_TOKEN` is unset \(e\.g\. fresh repo/);
   });
 
-  it("Secret framing + historical-naming + apex/www DNS framing pinned: 'Required GitHub secrets (repository-wide; not per-environment):' + 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission. Generated at dash.cloudflare.com → My Profile → API Tokens.' + 'CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID (32 hex chars). Visible in any zone overview page.' + 'Required repository variable:' + 'CLOUDFLARE_PAGES_PROJECT_NAME — Cloudflare Pages project slug (e.g. `driftstack-marketing`)' + 'Set as a repo variable (not a secret) since it's not sensitive.' + 'driftstack.dev → apex of the Pages project' + 'www.driftstack.dev → CNAME to the Pages project' — pinned so the original-template historical CLOUDFLARE_PAGES_PROJECT_NAME-no-suffix (the baseline that docs + customer-dashboard explicitly distinguish from) + 32-hex-account-ID + apex+www-DNS commitment survives", () => {
+  it("Secret framing + historical-naming + apex/www DNS framing pinned: 'Required GitHub secrets (repository-wide; not per-environment):' + 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission. Generated at dash.cloudflare.com → My Profile → API Tokens.' + 'CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID (32 hex chars). Visible in any zone overview page.' + 'Required repository variable:' + 'CLOUDFLARE_PAGES_PROJECT_NAME — Cloudflare Pages project slug (e.g. `driftstack-marketing`)' + 'Set as a repo variable (not a secret) since it's not sensitive.' + 'driftstack.io → apex of the Pages project' + 'www.driftstack.io → CNAME to the Pages project' — pinned so the original-template historical CLOUDFLARE_PAGES_PROJECT_NAME-no-suffix (the baseline that docs + customer-dashboard explicitly distinguish from) + 32-hex-account-ID + apex+www-DNS commitment survives", () => {
     expect(body).toMatch(/# Required GitHub secrets \(repository-wide; not per-environment\):/);
     expect(body).toMatch(/#\s+- CLOUDFLARE_API_TOKEN\s+— token with `Cloudflare Pages/);
     expect(body).toMatch(/#\s+— Edit` permission\. Generated/);
@@ -62,11 +62,11 @@ describe('W543.C /.github/workflows/deploy-marketing.yml content parity', () => 
     expect(body).toMatch(/Set as a repo variable/);
     expect(body).toMatch(/\(not a secret\) since it's not/);
     expect(body).toMatch(/sensitive\./);
-    expect(body).toMatch(/#\s+- driftstack\.dev → apex of the Pages project/);
-    expect(body).toMatch(/#\s+- www\.driftstack\.dev → CNAME to the Pages project/);
+    expect(body).toMatch(/#\s+- driftstack\.io → apex of the Pages project/);
+    expect(body).toMatch(/#\s+- www\.driftstack\.io → CNAME to the Pages project/);
   });
 
-  it("Trigger + path-filter + env-binding framing pinned: 'name: Deploy marketing site' + 'paths: apps/marketing-site/** + .github/workflows/deploy-marketing.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-marketing-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: marketing-production + url: https://driftstack.dev' — pinned so the 4-path-filter + marketing-production-env-binding + driftstack.dev-apex URL + cancel-in-progress: FALSE commitment survives", () => {
+  it("Trigger + path-filter + env-binding framing pinned: 'name: Deploy marketing site' + 'paths: apps/marketing-site/** + .github/workflows/deploy-marketing.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-marketing-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: marketing-production + url: https://driftstack.io' — pinned so the 4-path-filter + marketing-production-env-binding + driftstack.io-apex URL + cancel-in-progress: FALSE commitment survives", () => {
     expect(body).toMatch(/^name: Deploy marketing site$/m);
     expect(body).toMatch(/- 'apps\/marketing-site\/\*\*'/);
     expect(body).toMatch(/- '\.github\/workflows\/deploy-marketing\.yml'/);
@@ -78,7 +78,7 @@ describe('W543.C /.github/workflows/deploy-marketing.yml content parity', () => 
     );
     expect(body).toMatch(/permissions:\s*\n\s*contents: read\s*\n\s*deployments: write/);
     expect(body).toMatch(
-      /environment:\s*\n\s*name: marketing-production\s*\n\s*url: https:\/\/driftstack\.dev/,
+      /environment:\s*\n\s*name: marketing-production\s*\n\s*url: https:\/\/driftstack\.io/,
     );
   });
 

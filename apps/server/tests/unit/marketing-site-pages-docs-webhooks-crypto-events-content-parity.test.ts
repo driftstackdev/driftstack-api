@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/webhooks-crypto-events is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/webhooks/crypto-events/
+//   https://docs.driftstack.io/webhooks/crypto-events/
 //   (source: apps/docs/src/pages/webhooks/crypto-events.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -28,7 +28,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/webhooks-cry
 const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
 const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/webhooks/crypto-events.md');
 
-describe('S47 redirect tombstone — /docs/webhooks-crypto-events → https://docs.driftstack.dev/webhooks/crypto-events/', () => {
+describe('S47 redirect tombstone — /docs/webhooks-crypto-events → https://docs.driftstack.io/webhooks/crypto-events/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -44,7 +44,7 @@ describe('S47 redirect tombstone — /docs/webhooks-crypto-events → https://do
 
     expect(rule('/docs/webhooks-crypto-events'), 'bare-path rule missing').toEqual([
       '/docs/webhooks-crypto-events',
-      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      'https://docs.driftstack.io/webhooks/crypto-events/',
       '301',
     ]);
     expect(
@@ -52,7 +52,7 @@ describe('S47 redirect tombstone — /docs/webhooks-crypto-events → https://do
       'trailing-slash rule missing (matching is exact-path)',
     ).toEqual([
       '/docs/webhooks-crypto-events/',
-      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      'https://docs.driftstack.io/webhooks/crypto-events/',
       '301',
     ]);
   });

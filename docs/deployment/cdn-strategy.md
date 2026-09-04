@@ -8,7 +8,7 @@ break customer page loads or starve crawlers.
 ## Where this applies
 
 - **`apps/marketing-site/`** — static Astro build deployed to Cloudflare
-  Pages at driftstack.dev. Output is `dist/`; `public/_headers` is copied
+  Pages at driftstack.io. Output is `dist/`; `public/_headers` is copied
   verbatim during deploy and applied per-path at the edge.
 - Not applicable to `apps/customer-dashboard/` (SSR, behind auth, no
   public caching) or `apps/server/` (Fastify on Hetzner; cache-control
@@ -131,7 +131,7 @@ fields merge. The `/*` catch-all MUST stay last and security-only.
   downside.
 - **`Referrer-Policy: strict-origin-when-cross-origin`** — when the
   browser follows an outbound link, the destination sees only our
-  origin (`https://driftstack.dev`), not the full path. Avoids leaking
+  origin (`https://driftstack.io`), not the full path. Avoids leaking
   which marketing page a customer came from to third-party analytics
   or partner pages.
 
@@ -166,13 +166,13 @@ After a deploy:
 
 ```sh
 # Hashed asset — should be max-age=31536000, immutable
-curl -sI https://driftstack.dev/_astro/<hashed-bundle>.js | grep -i cache
+curl -sI https://driftstack.io/_astro/<hashed-bundle>.js | grep -i cache
 
 # HTML page — should be max-age=300, s-maxage=86400, plus security headers
-curl -sI https://driftstack.dev/pricing | grep -iE 'cache|frame|content-type-options|referrer'
+curl -sI https://driftstack.io/pricing | grep -iE 'cache|frame|content-type-options|referrer'
 
 # Crawler artefact — should be max-age=3600
-curl -sI https://driftstack.dev/robots.txt | grep -i cache
+curl -sI https://driftstack.io/robots.txt | grep -i cache
 ```
 
 If a header is missing, the most likely cause is rule-order regression

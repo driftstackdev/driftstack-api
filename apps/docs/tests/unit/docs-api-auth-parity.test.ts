@@ -1,4 +1,4 @@
-// W256.A — drift-guard for docs.driftstack.dev/api/auth. Pins every
+// W256.A — drift-guard for docs.driftstack.io/api/auth. Pins every
 // /v1/auth/* endpoint named in the doc to a live registration on
 // auth.ts. The doc is the customer-facing reference for the
 // dashboard auth flow; a stale path here breaks GUI activation and

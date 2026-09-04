@@ -38,7 +38,7 @@ describe('W264.C /docs/sla-policy ↔ AccountTierSchema parity', () => {
 
   it('SLA endpoints covered match the live customer-facing surface', () => {
     expect(page).toMatch(/https:\/\/api\.driftstack\.dev\/\*/);
-    expect(page).toMatch(/https:\/\/app\.driftstack\.dev\/\*/);
+    expect(page).toMatch(/https:\/\/app\.driftstack\.io\/\*/);
   });
 
   it('cites /health as the probe target (alias /healthz; no /v1 prefix)', () => {

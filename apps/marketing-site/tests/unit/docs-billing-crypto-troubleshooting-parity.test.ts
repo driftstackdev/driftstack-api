@@ -99,7 +99,7 @@ describe('W355.B /docs/billing-crypto-troubleshooting parity', () => {
         // S47 2026-07-07 (founder-approved: mirror deprecation): the
         // webhooks-crypto-events mirror is deleted; the page
         // cross-links its docs successor.
-        'https://docs.driftstack.dev/webhooks/crypto-events/',
+        'https://docs.driftstack.io/webhooks/crypto-events/',
         'apps/docs/src/pages/webhooks/crypto-events.md',
       ],
     ] as const) {

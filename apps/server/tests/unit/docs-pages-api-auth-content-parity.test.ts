@@ -152,7 +152,7 @@ describe('W764 docs /api/auth content parity', () => {
     );
   });
 
-  it("CRITICAL SDK type-narrowing anchor pinned: '**SDK usage** (type narrowing + MFA exchange):' — threads the TS discriminated-union typing + the SDK exchange method. The previous skip pinned `(V-423/V-441/V-445 ...)` with the inline internal version anchors; the V-NNN anchors were removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the substantive framing survives without them.", () => {
+  it("CRITICAL SDK type-narrowing anchor pinned: '**SDK usage** (type narrowing + MFA exchange):' — threads the TS discriminated-union typing + the SDK exchange method. The previous skip pinned `(V-423/V-441/V-445 ...)` with the inline internal version anchors; the V-NNN anchors were removed from the customer-rendered copy as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the substantive framing survives without them.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*SDK usage\*\* \(type narrowing \+ MFA exchange\):/);

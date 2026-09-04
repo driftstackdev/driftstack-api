@@ -249,8 +249,8 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/Authorization: Bearer ds_live_&lt;your-key&gt;/);
     expect(body).toMatch(/npm i @driftstack\/sdk/);
     // Contextual docs deep-links (absolute cross-origin; rel guarded by the sweep).
-    expect(body).toContain('https://docs.driftstack.dev/api/api-keys/');
-    expect(body).toContain('https://docs.driftstack.dev/api/auth/');
+    expect(body).toContain('https://docs.driftstack.io/api/api-keys/');
+    expect(body).toContain('https://docs.driftstack.io/api/auth/');
     // Safety: no created/rotate plaintext data-attr value is ever baked into
     // the static snippet region — the real key lives only in the reveal
     // panes (which wipe on dismiss), never in server-rendered HTML.

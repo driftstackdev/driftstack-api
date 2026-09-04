@@ -89,6 +89,6 @@ describe('W343.A /docs/error-codes ↔ PROBLEM_TYPES parity', () => {
 
   it('cross-links to /docs/rate-limits + the docs concurrency guide (S47 2026-07-07 mirror-deprecation successor) for the two 429 types', () => {
     expect(body).toContain('/docs/rate-limits');
-    expect(body).toContain('https://docs.driftstack.dev/guides/concurrency/');
+    expect(body).toContain('https://docs.driftstack.io/guides/concurrency/');
   });
 });

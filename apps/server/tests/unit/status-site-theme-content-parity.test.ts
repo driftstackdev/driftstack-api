@@ -136,7 +136,7 @@ describe('W794 status-site theme content parity', () => {
       /\/\* Fleet rework \(2026-06-12\) — status-site synced with marketing-site \+\s*\n\s+customer-dashboard: light\+violet default/,
     );
     expect(p).toMatch(
-      /Customers\s*\n\s+checking status during an incident see the same brand surface as\s*\n\s+driftstack\.dev\./,
+      /Customers\s*\n\s+checking status during an incident see the same brand surface as\s*\n\s+driftstack\.io\./,
     );
   });
 

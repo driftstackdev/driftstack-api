@@ -3,7 +3,7 @@
 // SVG source-of-truth (og-default.svg).
 //
 // Why a PNG at all: Twitter/X, Facebook, LinkedIn, Slack, and Discord do
-// NOT render SVG `og:image` assets, so link previews of driftstack.dev
+// NOT render SVG `og:image` assets, so link previews of driftstack.io
 // would show no image if the OG image were an SVG. BaseLayout therefore
 // points `og:image` at /og-default.png; this script rasterizes the SVG
 // design into that 1200x630 PNG. Edit og-default.svg, then re-run:

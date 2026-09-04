@@ -10,7 +10,7 @@
 // touched in months.
 //
 // This test asserts bootstrap.ts contains no hardcoded customer-facing
-// origin literals. If a future edit re-adds `https://app.driftstack.dev`
+// origin literals. If a future edit re-adds `https://app.driftstack.io`
 // or `localhost:5173`, this test fails and the fix is to thread
 // through `config.dashboardOrigin` instead. The grep is intentionally
 // blunt — a few false positives (in comments) are caught by the
@@ -39,8 +39,8 @@ const COMMENT_ALLOWLIST_PATTERNS = [
 ];
 
 const SUBSTRING_ALLOWLIST = [
-  'driftstack.dev/docs', // docsBaseUrl literal — marketing site, not dashboard
-  'status.driftstack.dev', // statusPageBaseUrl fallback — separate origin
+  'driftstack.io/docs', // docsBaseUrl literal — marketing site, not dashboard
+  'status.driftstack.io', // statusPageBaseUrl fallback — separate origin
 ];
 
 function isAllowedLine(line: string): boolean {
@@ -49,10 +49,10 @@ function isAllowedLine(line: string): boolean {
 }
 
 describe('W188 bootstrap.ts URL-literal drift guard', () => {
-  it('contains no `https://app.driftstack.dev` literals', () => {
+  it('contains no `https://app.driftstack.io` literals', () => {
     const offenders = SOURCE.split('\n')
       .map((line, idx) => ({ line, lineNumber: idx + 1 }))
-      .filter(({ line }) => line.includes('app.driftstack.dev'))
+      .filter(({ line }) => line.includes('app.driftstack.io'))
       .filter(({ line }) => !isAllowedLine(line));
     expect(
       offenders,

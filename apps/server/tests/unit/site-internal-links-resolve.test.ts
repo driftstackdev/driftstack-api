@@ -17,7 +17,7 @@
 // FIRST-PARTY CROSS-SITE links are checked too, and that is the customer
 // journey: marketing sends people to docs, docs sends them to the dashboard.
 // The sites deploy to separate hosts, but all five apps live in this repo, so
-// `https://docs.driftstack.dev/api/sessions` resolves against `apps/docs`.
+// `https://docs.driftstack.io/api/sessions` resolves against `apps/docs`.
 // A dead link there is a dead end at the exact moment someone is trying to
 // adopt the product. Third-party hosts (github, sentry, the payment providers)
 // are not this check's subject and are skipped.
@@ -59,10 +59,10 @@ const CROSS_SITE_LINK = /href="https?:\/\/([^/"]+)([^"]*)"|\]\(https?:\/\/([^)/\
  * invariants. Staging is absent for the same reason plus impermanence.
  */
 const FIRST_PARTY_HOSTS: Record<string, string> = {
-  'driftstack.dev': 'marketing-site',
-  'docs.driftstack.dev': 'docs',
-  'app.driftstack.dev': 'customer-dashboard',
-  'status.driftstack.dev': 'status-site',
+  'driftstack.io': 'marketing-site',
+  'docs.driftstack.io': 'docs',
+  'app.driftstack.io': 'customer-dashboard',
+  'status.driftstack.io': 'status-site',
 };
 
 function walk(dir: string): string[] {

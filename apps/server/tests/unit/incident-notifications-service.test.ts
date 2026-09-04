@@ -126,7 +126,7 @@ function makeStubs(subscribers: StatusSubscriberRow[]): {
   };
 }
 
-const CONFIG = { statusPageBaseUrl: 'https://status.driftstack.dev/' };
+const CONFIG = { statusPageBaseUrl: 'https://status.driftstack.io/' };
 
 describe('V-553.B-18 IncidentNotificationsService.notifyCreated', () => {
   it('no-ops when the confirmed-subscriber list is empty', async () => {
@@ -182,13 +182,13 @@ describe('V-553.B-18 IncidentNotificationsService.notifyCreated', () => {
   it('strips trailing base slashes and emits the canonical status unsubscribe route', async () => {
     const stubs = makeStubs([makeSubscriber({ email: 'a@e.test' })]);
     const svc = new IncidentNotificationsService(stubs.subs, stubs.email, stubs.logger, {
-      statusPageBaseUrl: 'https://status.driftstack.dev///',
+      statusPageBaseUrl: 'https://status.driftstack.io///',
     });
     await svc.notifyCreated(makeIncident(), makeUpdate('first'));
     expect(stubs.sends[0]?.unsubscribeLink).toMatch(
-      /^https:\/\/status\.driftstack\.dev\/subscribe\/unsubscribe\/\?token=/,
+      /^https:\/\/status\.driftstack\.io\/subscribe\/unsubscribe\/\?token=/,
     );
-    expect(stubs.sends[0]?.unsubscribeLink).not.toContain('driftstack.dev//');
+    expect(stubs.sends[0]?.unsubscribeLink).not.toContain('driftstack.io//');
   });
 });
 

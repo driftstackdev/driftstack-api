@@ -164,9 +164,9 @@ describe('W599.A /use-cases/qa-testing (QA + engineering teams)', () => {
     expect(body).toMatch(/The free tier is manual-only/);
   });
 
-  it('CtaBand: primary /pricing#free + secondary docs.driftstack.dev', () => {
+  it('CtaBand: primary /pricing#free + secondary docs.driftstack.io', () => {
     expect(body).toMatch(/primaryHref="\/pricing\/#free"/);
-    expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.dev"/);
+    expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.io"/);
   });
 });
 

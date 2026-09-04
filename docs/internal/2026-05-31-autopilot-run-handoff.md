@@ -95,7 +95,7 @@ verified-clean, and the prioritized open queue. Companion:
    `https://attacker.test`). MEDIUM today (API auth is bearer, not cookie → no authed
    cross-origin data theft); becomes CRITICAL if a data route ever accepts the
    session cookie. A blind `PERMISSIVE_CORS=false` flip BREAKS prod: `status.` +
-   `admin.driftstack.dev` browser-call the API but are missing from the allow-list
+   `admin.driftstack.io` browser-call the API but are missing from the allow-list
    (the flag masked the gap). **Fix is outward-facing** (complete the allow-list →
    disable the flag → restart → verify). Shipped a safe non-breaking boot-time warn
    guard (`lib/cors-posture.ts`) this wave so it can't silently recur.
@@ -1216,7 +1216,7 @@ insecure-randomness → SSE-scoping.)
 2026-06-01 wave — SHIPPED a real fix (first non-test-only ship in several waves): security headers on the
 status site. The 2026-05-20 CSP-header audit closed the gap on dashboard/admin and confirmed marketing/docs
 had headers — but OMITTED status-site (same Astro/Pages stack; separate Pages projects don't cross-inherit
-\_headers), so status.driftstack.dev (public incident page + email-subscribe form) shipped with ZERO security
+\_headers), so status.driftstack.io (public incident page + email-subscribe form) shipped with ZERO security
 headers. Added `apps/status-site/public/_headers` (commit 871beb2c) mirroring the dashboard posture:
 X-Frame-Options: DENY + X-Content-Type-Options: nosniff + Referrer-Policy: strict-origin-when-cross-origin +
 Permissions-Policy + immutable /\_astro/_ caching; no Cache-Control on /_ (incident HTML stays fresh); CSP
@@ -1244,7 +1244,7 @@ SSE-scoping → status-site-headers[shipped fix] → CWE-113.)
 2026-06-01 wave — Rule-M-v2 track PIVOT off the security-dimension run (6 consecutive); did a non-security
 operational/customer-facing verification + the last security-adjacent dimension, BOTH clean → NO code/test
 artifact this wave (manufacturing one would be churn per rule 5; the continuity record IS the slice).
-(1) Operational: all customer surfaces resolve 200 (driftstack.dev / app / docs / status / api openapi.json),
+(1) Operational: all customer surfaces resolve 200 (driftstack.io / app / docs / status / api openapi.json),
 all 7 legal slugs (aup/dpa/privacy/refunds/sub-processors/terms/vulnerability-disclosure) resolve 200 and
 each is existence-guarded by its own legal-\*-content-parity test (deletion → CI fail) — so the
 compliance-doc roster is fully covered; status-site headers re-confirmed LIVE. (2) Insecure-deserialization:

@@ -47,7 +47,7 @@ test('checkout-session 400 on malformed success_url', async ({ request }) => {
       tier: 'api_builder',
       billing_period: 'monthly',
       success_url: 'not a url',
-      cancel_url: 'https://app.driftstack.dev/cancel',
+      cancel_url: 'https://app.driftstack.io/cancel',
     },
   });
   expect(res.status()).toBe(400);
@@ -61,7 +61,7 @@ test('checkout-session 400 on off-allowlist success_url origin', async ({ reques
       tier: 'api_builder',
       billing_period: 'monthly',
       success_url: 'https://attacker.example.com/success',
-      cancel_url: 'https://app.driftstack.dev/cancel',
+      cancel_url: 'https://app.driftstack.io/cancel',
     },
   });
   expect(res.status()).toBe(400);
@@ -76,7 +76,7 @@ test('checkout-session 400 on off-allowlist cancel_url origin', async ({ request
     data: {
       tier: 'api_builder',
       billing_period: 'monthly',
-      success_url: 'https://app.driftstack.dev/success',
+      success_url: 'https://app.driftstack.io/success',
       cancel_url: 'https://phish.example.com/cancel',
     },
   });
@@ -125,7 +125,7 @@ test('portal-session 401 without auth', async ({ request }) => {
 // Allowlist positive — accepted origins
 // ────────────────────────────────────────────────────────────────────────
 
-test('checkout-session accepts https://app.driftstack.dev URL (allowlist hit)', async ({
+test('checkout-session accepts https://app.driftstack.io URL (allowlist hit)', async ({
   request,
 }) => {
   const seed = await seedAccount(server.client);
@@ -139,8 +139,8 @@ test('checkout-session accepts https://app.driftstack.dev URL (allowlist hit)', 
     data: {
       tier: 'api_builder',
       billing_period: 'monthly',
-      success_url: 'https://app.driftstack.dev/billing/success',
-      cancel_url: 'https://app.driftstack.dev/billing/cancel',
+      success_url: 'https://app.driftstack.io/billing/success',
+      cancel_url: 'https://app.driftstack.io/billing/cancel',
     },
   });
   expect(res.status()).not.toBe(400);

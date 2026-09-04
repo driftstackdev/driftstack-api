@@ -156,7 +156,7 @@ describe('W773 docs /api/legal content parity', () => {
 
     expect(p).toMatch(/The acceptance row is append-only — there is no `DELETE` or\s*\n?`PATCH`\./);
     expect(p).toMatch(/Article 17 right to erasure set out in the/);
-    expect(p).toMatch(/\[privacy policy\]\(https:\/\/driftstack\.dev\/legal\/privacy\/\)/);
+    expect(p).toMatch(/\[privacy policy\]\(https:\/\/driftstack\.io\/legal\/privacy\/\)/);
 
     // V-1144 negative — the retired pointer, quoted so it cannot return. The DPA has no
     // Article 17 procedure to follow.

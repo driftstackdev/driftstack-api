@@ -1,5 +1,5 @@
 // W-NNN — drift guard for apps/docs/src/pages/index.astro (docs
-// homepage at docs.driftstack.dev/). Sibling to docs-pages-api-index-
+// homepage at docs.driftstack.io/). Sibling to docs-pages-api-index-
 // content-parity.test.ts which covers the /api sub-TOC; this one
 // covers the top-level reference reachability that's the first thing
 // a new SDK consumer sees.

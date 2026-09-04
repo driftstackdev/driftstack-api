@@ -21,8 +21,8 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'verify-email', 'index.html');
-const TOKEN_URL = 'https://app.driftstack.dev/verify-email/?token=link_tok_123';
-const NO_TOKEN_URL = 'https://app.driftstack.dev/verify-email/';
+const TOKEN_URL = 'https://app.driftstack.io/verify-email/?token=link_tok_123';
+const NO_TOKEN_URL = 'https://app.driftstack.io/verify-email/';
 
 interface MockFetchCall {
   url: string;

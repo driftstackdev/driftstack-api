@@ -55,7 +55,7 @@ describe('W548.B /docs/founder-action-queue.md content parity', () => {
     expect(body).toMatch(/the founder needs to do\./);
   });
 
-  it("Infrastructure 4-item PENDING framing pinned: '## Infrastructure (Hetzner + Cloudflare + Neon + Upstash)' + '### Hetzner two-VM provisioning' + 'Provision two CCX23 VMs in Falkenstein (FSN1).' + '**Reference:** ADR-001 `docs/adr/ADR-001-control-plane-hosting-hetzner.md`.' + '### Cloudflare Pages projects' + 'driftstack-marketing` → custom domains `driftstack.dev` + `www.driftstack.dev`' + 'driftstack-customer-dashboard` → custom domain `app.driftstack.dev`' + 'driftstack-admin-panel` → custom domain `admin.driftstack.dev` (Cloudflare Access SSO gate planned at the origin level)' + 'driftstack-docs` → custom domain `docs.driftstack.dev` (V-258)' + '`docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`' + '### Neon EU database' + 'Create two separate Neon projects in EU region (or two branches of one project): `driftstack-staging` + `driftstack-production`.' + '### Upstash EU Redis' + 'Create two Upstash databases (EU region, TLS enabled).' — pinned so the 4-infra-item PENDING + CCX23×2 Falkenstein FSN1 + 4-CF-Pages-project mapping + Neon-EU-staging+production + Upstash-EU-TLS commitment survives", () => {
+  it("Infrastructure 4-item PENDING framing pinned: '## Infrastructure (Hetzner + Cloudflare + Neon + Upstash)' + '### Hetzner two-VM provisioning' + 'Provision two CCX23 VMs in Falkenstein (FSN1).' + '**Reference:** ADR-001 `docs/adr/ADR-001-control-plane-hosting-hetzner.md`.' + '### Cloudflare Pages projects' + 'driftstack-marketing` → custom domains `driftstack.io` + `www.driftstack.io`' + 'driftstack-customer-dashboard` → custom domain `app.driftstack.io`' + 'driftstack-admin-panel` → custom domain `admin.driftstack.io` (Cloudflare Access SSO gate planned at the origin level)' + 'driftstack-docs` → custom domain `docs.driftstack.io` (V-258)' + '`docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`' + '### Neon EU database' + 'Create two separate Neon projects in EU region (or two branches of one project): `driftstack-staging` + `driftstack-production`.' + '### Upstash EU Redis' + 'Create two Upstash databases (EU region, TLS enabled).' — pinned so the 4-infra-item PENDING + CCX23×2 Falkenstein FSN1 + 4-CF-Pages-project mapping + Neon-EU-staging+production + Upstash-EU-TLS commitment survives", () => {
     expect(body).toMatch(/## Infrastructure \(Hetzner \+ Cloudflare \+ Neon \+ Upstash\)/);
     expect(body).toMatch(/### Hetzner two-VM provisioning/);
     expect(body).toMatch(/Provision two CCX23 VMs in Falkenstein \(FSN1\)\./);
@@ -64,13 +64,13 @@ describe('W548.B /docs/founder-action-queue.md content parity', () => {
     );
     expect(body).toMatch(/### Cloudflare Pages projects/);
     expect(body).toMatch(
-      /`driftstack-marketing` → custom domains `driftstack\.dev` \+ `www\.driftstack\.dev`/,
+      /`driftstack-marketing` → custom domains `driftstack\.io` \+ `www\.driftstack\.io`/,
     );
-    expect(body).toMatch(/`driftstack-customer-dashboard` → custom domain `app\.driftstack\.dev`/);
+    expect(body).toMatch(/`driftstack-customer-dashboard` → custom domain `app\.driftstack\.io`/);
     expect(body).toMatch(
-      /`driftstack-admin-panel` → custom domain `admin\.driftstack\.dev` \(Cloudflare Access SSO gate planned at the origin level\)/,
+      /`driftstack-admin-panel` → custom domain `admin\.driftstack\.io` \(Cloudflare Access SSO gate planned at the origin level\)/,
     );
-    expect(body).toMatch(/`driftstack-docs` → custom domain `docs\.driftstack\.dev` \(V-258\)/);
+    expect(body).toMatch(/`driftstack-docs` → custom domain `docs\.driftstack\.io` \(V-258\)/);
     expect(body).toMatch(/`docs\/founder-actions\/v259-cloudflare-pages-all-projects-setup\.md`/);
     expect(body).toMatch(/### Neon EU database/);
     expect(body).toMatch(/Create two separate Neon projects in EU region \(or two/);

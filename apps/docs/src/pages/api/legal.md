@@ -167,7 +167,7 @@ Errors:
 The acceptance row is append-only — there is no `DELETE` or
 `PATCH`. Customers wishing to "withdraw consent" exercise the
 Article 17 right to erasure set out in the
-[privacy policy](https://driftstack.dev/legal/privacy/) rather
+[privacy policy](https://driftstack.io/legal/privacy/) rather
 than this endpoint.
 
 Required scope: `account_owner` (the route gates acceptance on

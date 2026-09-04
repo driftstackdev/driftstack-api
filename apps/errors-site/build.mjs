@@ -310,7 +310,7 @@ const page = (title, body, { description, canonicalPath, noindex = false }) => `
     ? `<link rel="canonical" href="https://errors.driftstack.dev${canonicalPath}">`
     : ''
 }<title>${title} · Driftstack errors</title><style>${css}</style></head>
-<body><main>${body}<footer>Driftstack API error reference · <a href="https://docs.driftstack.dev">docs</a> · <a href="https://driftstack.dev">driftstack.dev</a></footer></main></body></html>`;
+<body><main>${body}<footer>Driftstack API error reference · <a href="https://docs.driftstack.io">docs</a> · <a href="https://driftstack.io">driftstack.io</a></footer></main></body></html>`;
 
 rmSync(DIST, { recursive: true, force: true });
 mkdirSync(DIST, { recursive: true });

@@ -27,9 +27,9 @@ network surfaces:
 1. **Customer ↔ control plane** — public HTTPS API on
    `api.driftstack.dev`. TLS terminated at Cloudflare and again at the
    origin's nginx, which is publicly reachable on 443 — see §1.
-2. **Customer ↔ marketing site** — public HTTPS on `driftstack.dev`,
-   `docs.driftstack.dev`, and `app.driftstack.dev`, all static on
-   Cloudflare Pages. V-809 — `app.driftstack.dev` is its own Cloudflare
+2. **Customer ↔ marketing site** — public HTTPS on `driftstack.io`,
+   `docs.driftstack.io`, and `app.driftstack.io`, all static on
+   Cloudflare Pages. V-809 — `app.driftstack.io` is its own Cloudflare
    Pages project, deployed by
    `.github/workflows/deploy-customer-dashboard.yml`; it is neither a future
    surface nor served through the Hetzner VM at all. The dashboard is a
@@ -102,7 +102,7 @@ SDK / GUI               (proxy + WAF)        (Docker container)
 
 ## §2. Customer ↔ marketing site
 
-`driftstack.dev` and `docs.driftstack.dev` deploy via Cloudflare
+`driftstack.io` and `docs.driftstack.io` deploy via Cloudflare
 Pages (Astro static-first build per Workstream B). No backend on the
 marketing site itself; the signup flow + customer dashboard surface
 live on the control plane.
@@ -111,19 +111,19 @@ live on the control plane.
 Customer Browser    Cloudflare Pages    Hetzner VM
        │                  │                  │
        │  HTTPS           │                  │
-       ├─────────────────►│                  │  driftstack.dev
-       │                  │                  │  docs.driftstack.dev
+       ├─────────────────►│                  │  driftstack.io
+       │                  │                  │  docs.driftstack.io
        │                                     │
        │  HTTPS           │                  │
-       ├─────────────────►│                  │  app.driftstack.dev
+       ├─────────────────►│                  │  app.driftstack.io
                                                 (signup + acceptance + first-key)
 ```
 
-The split between `driftstack.dev` (static marketing) and
-`app.driftstack.dev` (onboarding + dashboard) keeps the marketing site
+The split between `driftstack.io` (static marketing) and
+`app.driftstack.io` (onboarding + dashboard) keeps the marketing site
 cacheable at the edge. Both are Cloudflare Pages projects; the dashboard
 is a static SPA that calls `api.driftstack.dev` cross-origin from the
-browser. V-1119 — this section drew `app.driftstack.dev` as a Tunnel hop
+browser. V-1119 — this section drew `app.driftstack.io` as a Tunnel hop
 into the Hetzner VM column. It is neither tunneled nor served from the
 VM, and the Overview above has said so since V-809 — the diagram and this
 paragraph were left behind by that correction and by V-1087's, so the

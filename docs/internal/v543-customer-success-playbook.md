@@ -92,7 +92,7 @@ Manual review:
 
 The customer support flow has 3 levels:
 
-1. **Self-serve docs** — the docs site at https://docs.driftstack.dev
+1. **Self-serve docs** — the docs site at https://docs.driftstack.io
    answers the top 80% of questions. SDK READMEs + the OpenAPI
    reference + the runbooks index cover common flows.
 2. **Email** (`support@driftstack.dev`) — 24h response SLA pre-launch,

@@ -91,7 +91,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     expect(existsSync(P('profiles.md'))).toBe(true);
   });
 
-  it('profile-snapshots.md: immutable point-in-time copy of saved profile + frozen-while-source-evolves + capture/list/restore/delete verbs pinned. The previous skip pinned inline `V-511 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.dev pages); the framing itself survives without it.', () => {
+  it('profile-snapshots.md: immutable point-in-time copy of saved profile + frozen-while-source-evolves + capture/list/restore/delete verbs pinned. The previous skip pinned inline `V-511 reference.` prefix that was removed from the customer-facing docs as a UX cleanup (internal V-anchors should not bleed into docs.driftstack.io pages); the framing itself survives without it.', () => {
     const body = read(P('profile-snapshots.md'));
     expect(body).toMatch(/^title: Profile snapshots$/m);
     expect(body).toMatch(/^# Profile snapshots$/m);

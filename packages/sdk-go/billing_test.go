@@ -55,8 +55,8 @@ func TestBilling_CreateCheckoutSession(t *testing.T) {
 	})
 	got, err := client.Billing.CreateCheckoutSession(context.Background(), &CreateCheckoutSessionRequest{
 		Tier:       TierAPIBuilder,
-		SuccessURL: "https://app.driftstack.dev/billing?ok=1",
-		CancelURL:  "https://app.driftstack.dev/billing?cancelled=1",
+		SuccessURL: "https://app.driftstack.io/billing?ok=1",
+		CancelURL:  "https://app.driftstack.io/billing?cancelled=1",
 	})
 	if err != nil {
 		t.Fatal(err)

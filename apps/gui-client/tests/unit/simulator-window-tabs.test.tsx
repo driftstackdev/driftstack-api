@@ -242,7 +242,7 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(sendActivateTab).toHaveBeenCalledTimes(1);
     const activateArg = sendActivateTab.mock.calls[0][1] as { tabId: string; url: string };
     expect(activateArg.tabId).toBe((payload.tabs[1] as { id: string }).id);
-    expect(activateArg.url).toBe('https://driftstack.dev/newtab/');
+    expect(activateArg.url).toBe('https://driftstack.io/newtab/');
   });
 
   it('clicking an inactive tab activates it + sends activateTab (correlation) and a fresh list', () => {
@@ -454,7 +454,7 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(arg.tabId).toBe(seedTabId);
     // Empty '' would be rejected by the box's navigate allowlist → "Could not
     // switch tab"; instead we send the branded new-tab url (which reads as blank).
-    expect(arg.url).toBe('https://driftstack.dev/newtab/');
+    expect(arg.url).toBe('https://driftstack.io/newtab/');
   });
 
   it('switching to a tab with a real url sends that url unchanged', () => {
@@ -841,7 +841,7 @@ describe('SimulatorWindow — page tab strip', () => {
     const fresh = payload.tabs[1] as { url: string; title: string };
     // Founder 2026-06-25: the "+" opens our branded /newtab page, never about:blank.
     // The url carries the trailing slash (the served path) to skip the 308 redirect.
-    expect(fresh.url).toBe('https://driftstack.dev/newtab/');
+    expect(fresh.url).toBe('https://driftstack.io/newtab/');
     expect(fresh.url).not.toBe('about:blank');
     expect(fresh.title).toBe('New Tab');
     // And the prior page's url/title must NOT have been stamped onto the new tab by
@@ -852,7 +852,7 @@ describe('SimulatorWindow — page tab strip', () => {
     // home tab in the label fallback), not the host.
     const tabs = tabEls(container);
     expect(tabs[1].textContent).toContain('New Tab');
-    expect(tabs[1].textContent).not.toContain('driftstack.dev');
+    expect(tabs[1].textContent).not.toContain('driftstack.io');
   });
 
   it('switching tabs seeds BOTH url and title from the target tab (no prior-title flicker onto the new tab)', () => {
@@ -1179,7 +1179,7 @@ describe('SimulatorWindow — page tab strip', () => {
     try {
       const { container } = renderSim();
       expect(dataHandler).not.toBeNull();
-      const NEWTAB = 'https://driftstack.dev/newtab/';
+      const NEWTAB = 'https://driftstack.io/newtab/';
 
       // Tab 1 is a real page; "+" opens tab 2, which sits on the new-tab url.
       pushPageState({ state: 'loaded', url: 'https://bing.com/', title: 'Bing' });
@@ -1581,12 +1581,12 @@ describe('SimulatorWindow — page tab strip', () => {
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     // The new tab seeds the SLASHED served path (no 308 redirect hop).
     const tabs = lastTabListCall().tabs as Array<{ url: string }>;
-    expect(tabs[1]?.url).toBe('https://driftstack.dev/newtab/');
+    expect(tabs[1]?.url).toBe('https://driftstack.io/newtab/');
     // The box reports the branded page's own title + url (slashed) — both are chrome
     // for a blank tab. The label must still read "New Tab", and the address bar blank.
     pushPageState({
       state: 'loaded',
-      url: 'https://driftstack.dev/newtab/',
+      url: 'https://driftstack.io/newtab/',
       title: 'New Tab · Driftstack',
     });
     expect(tabEls(container)[1].textContent).toContain('New Tab');
@@ -1599,11 +1599,11 @@ describe('SimulatorWindow — page tab strip', () => {
     const { container } = renderSim();
     expect(dataHandler).not.toBeNull();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
-    // The proxy can't reach driftstack.dev → the box reports the new-tab url 'errored'.
+    // The proxy can't reach driftstack.io → the box reports the new-tab url 'errored'.
     // It must stay graceful (a blank tab), NOT a "Page failed to load" overlay.
     pushPageState({
       state: 'errored',
-      url: 'https://driftstack.dev/newtab/',
+      url: 'https://driftstack.io/newtab/',
       error: { kind: 'net' },
     });
     expect(container.querySelector('[data-component="page-error-overlay"]')).toBeNull();
@@ -2062,7 +2062,7 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(dataHandler).not.toBeNull();
     fireEvent.click(container.querySelector('[aria-label="New tab"]') as Element);
     // The box reports the new-tab page loaded → the open completes.
-    pushPageState({ state: 'loaded', url: 'https://driftstack.dev/newtab/' });
+    pushPageState({ state: 'loaded', url: 'https://driftstack.io/newtab/' });
     const ready = getLogEntries().filter((e) => e.text.startsWith('[tab] new tab ready in'));
     expect(ready).toHaveLength(1);
     expect(ready[0]!.level).toBe('info');

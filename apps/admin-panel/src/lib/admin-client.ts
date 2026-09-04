@@ -8,8 +8,8 @@
 // renders consistently — no more per-page drift, no mock placeholders.
 //
 // Client-side only: uses localStorage + fetch, imported from page <script>s.
-// The bearer is the web-session token the app.driftstack.dev SSO bridge writes
-// to admin.driftstack.dev's localStorage (see AdminLayout).
+// The bearer is the web-session token the app.driftstack.io SSO bridge writes
+// to admin.driftstack.io's localStorage (see AdminLayout).
 
 import { resolveApiBaseUrl } from './api-base-url.js';
 

@@ -14,7 +14,7 @@
 //   • Sentry release fallback chain: SENTRY_RELEASE → GIT_SHA → 'unknown'.
 //   • Sentry org fallback: SENTRY_ORG → 'driftstack'.
 //   • Sentry project: 'driftstack-marketing'.
-//   • site: https://driftstack.dev.
+//   • site: https://driftstack.io.
 //   • applyBaseStyles: false (Tailwind base styles applied via base.css).
 //   • inlineStylesheets: 'auto'.
 
@@ -34,11 +34,11 @@ function read(p: string): string {
 describe('W525.A apps/marketing-site/astro.config.mjs content parity', () => {
   const body = read(LIB);
 
-  it("Static-output framing pinned: 'Static site (Astro's default output) — Cloudflare Pages serves the `dist/` directory directly. No SSR, no Workers, no edge functions. Forms post to a separate API endpoint when forms land (Workstream C admin panel handles inbound form submissions).' + 'site: https://driftstack.dev' + 'output: \"static\"' — pinned so the pure-static + no-SSR + no-Workers + no-edge-functions + driftstack.dev-canonical-site commitment survives (drift to SSR/output:'server' would invite client-side JS bundle into a pure-static marketing site)", () => {
+  it("Static-output framing pinned: 'Static site (Astro's default output) — Cloudflare Pages serves the `dist/` directory directly. No SSR, no Workers, no edge functions. Forms post to a separate API endpoint when forms land (Workstream C admin panel handles inbound form submissions).' + 'site: https://driftstack.io' + 'output: \"static\"' — pinned so the pure-static + no-SSR + no-Workers + no-edge-functions + driftstack.io-canonical-site commitment survives (drift to SSR/output:'server' would invite client-side JS bundle into a pure-static marketing site)", () => {
     expect(body).toMatch(
       /\/\/ Static site \(Astro's default output\) — Cloudflare Pages serves the\s*\/\/ `dist\/` directory directly\. No SSR, no Workers, no edge functions\.\s*\/\/ Forms post to a separate API endpoint when forms land \(Workstream C\s*\/\/ admin panel handles inbound form submissions\)\./,
     );
-    expect(body).toMatch(/site: 'https:\/\/driftstack\.dev',/);
+    expect(body).toMatch(/site: 'https:\/\/driftstack\.io',/);
     expect(body).toMatch(/output: 'static',/);
   });
 

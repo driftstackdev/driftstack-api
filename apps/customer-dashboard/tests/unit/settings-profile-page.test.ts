@@ -75,7 +75,7 @@ function setUpDom(route: (call: FetchCall) => Response | Promise<Response>): {
     return '';
   });
   const dom = new JSDOM(htmlNoScripts, {
-    url: 'https://app.driftstack.dev/settings/',
+    url: 'https://app.driftstack.io/settings/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
   });

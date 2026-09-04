@@ -24,7 +24,7 @@ function setup(clipboardPlan: ClipboardStep[]): {
     },
   );
   const dom = new JSDOM(withoutScripts, {
-    url: 'https://driftstack.dev/',
+    url: 'https://driftstack.io/',
     runScripts: 'outside-only',
     pretendToBeVisual: true,
   });

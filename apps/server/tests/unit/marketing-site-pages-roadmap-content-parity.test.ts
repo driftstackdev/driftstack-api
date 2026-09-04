@@ -20,7 +20,7 @@ describe('legacy /roadmap route current-state parity', () => {
 
   it('points to released changes and the live API contract', () => {
     expect(page).toContain('href="/changelog/"');
-    expect(page).toContain('href="https://docs.driftstack.dev/api/"');
+    expect(page).toContain('href="https://docs.driftstack.io/api/"');
     expect(page).toContain('Read the changelog');
     expect(page).toContain('Browse the API');
   });

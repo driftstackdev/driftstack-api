@@ -17,7 +17,7 @@ This guide takes you from a fresh signup to your first iPhone Safari session fro
 
 You will need:
 
-- A Driftstack account ([sign up](https://app.driftstack.dev/signup/) or [sign in](https://app.driftstack.dev/login/))
+- A Driftstack account ([sign up](https://app.driftstack.io/signup/) or [sign in](https://app.driftstack.io/login/))
 - Any paid Driftstack tier (Manual, API, or Enterprise)
 - A `ds_live_…` customer API key (created in the dashboard under **API keys**)
 - Node.js 18+, Python 3.10+, or Go 1.22+
@@ -26,7 +26,7 @@ You will need:
 
 After signing up and verifying your email:
 
-1. Open [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
+1. Open [app.driftstack.io/api-keys](https://app.driftstack.io/api-keys/).
 2. Click **Create key**, give it a name (e.g. `quickstart`), and copy the value. The key is shown once.
 3. Export it in your shell:
 
@@ -136,7 +136,7 @@ func main() {
 
 ## 4. What happened
 
-- `client.sessions.create()` reserved one of your account's concurrent session slots. Each tier has a concurrent cap (Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see [pricing](https://driftstack.dev/pricing/)). Exceeding the cap returns 429.
+- `client.sessions.create()` reserved one of your account's concurrent session slots. Each tier has a concurrent cap (Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see [pricing](https://driftstack.io/pricing/)). Exceeding the cap returns 429.
 - `client.sessions.navigate()` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari.
 - `client.sessions.capture()` returned a `{ kind, data, encoding, byte_size, duration_ms }` object. For a screenshot, `data` is the PNG **base64-encoded** (`encoding: "base64"`), so decode it to bytes before saving — e.g. `fs.writeFileSync('shot.png', Buffer.from(shot.data, 'base64'))`. A `dom_snapshot` capture instead returns the raw HTML as UTF-8 text (`encoding: "utf8"`).
 - `client.sessions.destroy()` released the concurrent slot. Only free-tier sessions stop on their own (at the 20-minute cap) — on paid tiers a forgotten session holds its slot until you destroy it.

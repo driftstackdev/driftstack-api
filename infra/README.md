@@ -29,9 +29,9 @@ infra/
 | ------- | ------------------------------------------------------------------------------------ |
 | V-278.A | Bootstrap both servers via `bootstrap/bootstrap.sh production` (or `staging`).       |
 | V-278.B | Deploy api.driftstack.dev → production (systemd-managed Node service + nginx vhost). |
-| V-278.C | Deploy app.driftstack.dev → production (customer dashboard built with Astro).        |
-| V-278.D | Deploy docs.driftstack.dev (production server OR Cloudflare Pages).                  |
-| V-278.E | Deploy driftstack.dev root (production server OR Cloudflare Pages).                  |
+| V-278.C | Deploy app.driftstack.io → production (customer dashboard built with Astro).         |
+| V-278.D | Deploy docs.driftstack.io (production server OR Cloudflare Pages).                   |
+| V-278.E | Deploy driftstack.io root (production server OR Cloudflare Pages).                   |
 | V-278.F | Deploy staging.driftstack.dev → staging server.                                      |
 | V-278.G | Run migrations on Neon Postgres (`drizzle-kit migrate`).                             |
 | V-278.H | DNS records via Cloudflare API.                                                      |

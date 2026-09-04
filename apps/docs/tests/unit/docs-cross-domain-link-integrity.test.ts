@@ -1,9 +1,9 @@
 // Cross-domain link integrity for docs pages.
 //
-// The docs ship on the `docs.driftstack.dev` SUBDOMAIN; the marketing
+// The docs ship on the `docs.driftstack.io` SUBDOMAIN; the marketing
 // site (legal / security / pricing / about / trust) ships on the apex
-// `driftstack.dev`. A RELATIVE link like `[DPA](/legal/dpa)` from a docs
-// page therefore resolves to `docs.driftstack.dev/legal/dpa` — which
+// `driftstack.io`. A RELATIVE link like `[DPA](/legal/dpa)` from a docs
+// page therefore resolves to `docs.driftstack.io/legal/dpa` — which
 // does not exist (no docs route, no redirect) → 404. Three such links
 // shipped + were fixed (8684e959); this guard stops them recurring.
 //
@@ -11,7 +11,7 @@
 // prefixes as "valid marketing links", which is the gap that let the
 // relative form through. Here we assert the opposite for docs pages:
 // any link to a marketing-domain path MUST be an absolute
-// `https://driftstack.dev/...` URL, never a relative `/path`.
+// `https://driftstack.io/...` URL, never a relative `/path`.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -51,10 +51,10 @@ function findRelativeMarketingLinks(text: string): string[] {
 describe('docs cross-domain link integrity', () => {
   it('detector flags a relative marketing link (non-vacuous self-check)', () => {
     expect(findRelativeMarketingLinks('see [DPA](/legal/dpa) here')).toEqual(['/legal/dpa']);
-    expect(findRelativeMarketingLinks('see [DPA](https://driftstack.dev/legal/dpa)')).toEqual([]);
+    expect(findRelativeMarketingLinks('see [DPA](https://driftstack.io/legal/dpa)')).toEqual([]);
   });
 
-  it('no docs page links to a marketing path relatively (must be absolute https://driftstack.dev/...)', () => {
+  it('no docs page links to a marketing path relatively (must be absolute https://driftstack.io/...)', () => {
     const offenders: { file: string; link: string }[] = [];
     for (const f of walk(DOCS_PAGES).filter((p) => /\.(md|astro)$/.test(p))) {
       for (const link of findRelativeMarketingLinks(read(f))) {

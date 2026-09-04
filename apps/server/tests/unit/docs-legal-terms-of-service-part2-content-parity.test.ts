@@ -34,7 +34,7 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/Driftstack offers a perpetual Free tier, a/);
     expect(body).toMatch(/Manual ladder \(Personal, Team, Agency\), and an API ladder \(API/);
     expect(body).toMatch(/Starter, API Builder, API Scale\), with a custom-priced Enterprise/);
-    expect(body).toMatch(/<https:\/\/driftstack\.dev\/pricing\/>/);
+    expect(body).toMatch(/<https:\/\/driftstack\.io\/pricing\/>/);
     expect(body).toMatch(/8\.2 \*\*Billing cycles\.\*\*/);
     expect(body).toMatch(/Enterprise tier bills annually in advance by default\./);
     expect(body).toMatch(/8\.3 \*\*Payment methods\.\*\*/);
@@ -87,7 +87,7 @@ describe('W576.B /docs/legal/terms-of-service.md (part 2) content parity', () =>
     expect(body).toMatch(/currently:\s+99\.9%\s+monthly availability/);
     expect(body).toMatch(/four \(4\) hours on API Scale and one \(1\) hour on Enterprise/);
     expect(body).toMatch(/9\.3 \*\*Maintenance\.\*\*/);
-    expect(body).toMatch(/status page at <https:\/\/status\.driftstack\.dev>/);
+    expect(body).toMatch(/status page at <https:\/\/status\.driftstack\.io>/);
     expect(body).toMatch(/9\.4 \*\*Force majeure events\*\* \(Section 19\)/);
     expect(body).toMatch(/## 10\. Data \+ privacy/);
     expect(body).toMatch(/10\.1 \*\*Privacy Policy\.\*\*/);

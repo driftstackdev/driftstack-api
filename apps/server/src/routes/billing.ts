@@ -33,7 +33,7 @@ import { readIdempotencyKey } from '../lib/idempotency-key.js';
 // re-introduce the open-redirect. Founder edits this list when a
 // legitimate origin needs to be added (paired with PR review).
 const ALLOWED_RETURN_ORIGINS: readonly string[] = [
-  'https://app.driftstack.dev',
+  'https://app.driftstack.io',
   'http://localhost:5173', // dashboard dev server
   'http://app.driftstack.local', // e2e fixture
 ];

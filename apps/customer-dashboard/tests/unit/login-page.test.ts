@@ -22,7 +22,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'login', 'index.html');
-const DEFAULT_URL = 'https://app.driftstack.dev/login/';
+const DEFAULT_URL = 'https://app.driftstack.io/login/';
 
 interface MockFetchCall {
   url: string;
@@ -633,7 +633,7 @@ describe('login page — local integration', () => {
 
   it('V-269 ?next= round-trip: the "create one" signup link carries the next target', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
-      url: 'https://app.driftstack.dev/login/?next=' + encodeURIComponent('/profiles'),
+      url: 'https://app.driftstack.io/login/?next=' + encodeURIComponent('/profiles'),
     });
     win = window;
     await flush();

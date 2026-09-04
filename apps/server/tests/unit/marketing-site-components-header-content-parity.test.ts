@@ -8,12 +8,12 @@
 //     overflow fix + CSS-only <details> hamburger + no client-side JS bundle.
 //   • 6-item navItems array (S14 nav rework 2026-07-03, D8): /how-it-works
 //     + /use-cases + /pricing + /comparison + /faq +
-//     https://docs.driftstack.dev (external). /self-hosted left the desktop
+//     https://docs.driftstack.io (external). /self-hosted left the desktop
 //     roster (footer Product column carries it).
 //   • Mobile-extra items: /self-hosted + /glossary (no top-level desktop
 //     slot). Never /roadmap (F-3 / Issue 5 — no aspirational pages in nav).
 //   • Active-link styling on normalized exact-or-nested pathname match.
-//   • Sign in → https://app.driftstack.dev/login/.
+//   • Sign in → https://app.driftstack.io/login/.
 //   • CTA → /pricing/#free.
 //   • External docs link opens with noopener noreferrer.
 //   • Mobile hamburger uses <details> with custom-summary + 3-line SVG icon.
@@ -40,7 +40,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
     );
   });
 
-  it("6-item navItems array pinned (S14 nav rework 2026-07-03, D8): /how-it-works How it works + /use-cases Use cases + /pricing Pricing + /comparison Compare + /faq FAQ + https://docs.driftstack.dev Docs (external), in that order (funnel pages lead). /self-hosted left the desktop roster (footer Product column carries it; mobile keeps a slot). mobileExtraItems: /self-hosted + /glossary + the external Download (the desktop Download sits in the CTA row, which is hidden below md, so it must repeat here or be unreachable on a phone). F-3 (Issue 5) stays binding: no /roadmap anywhere in nav — aspirational pages don't belong in nav at launch.", () => {
+  it("6-item navItems array pinned (S14 nav rework 2026-07-03, D8): /how-it-works How it works + /use-cases Use cases + /pricing Pricing + /comparison Compare + /faq FAQ + https://docs.driftstack.io Docs (external), in that order (funnel pages lead). /self-hosted left the desktop roster (footer Product column carries it; mobile keeps a slot). mobileExtraItems: /self-hosted + /glossary + the external Download (the desktop Download sits in the CTA row, which is hidden below md, so it must repeat here or be unreachable on a phone). F-3 (Issue 5) stays binding: no /roadmap anywhere in nav — aspirational pages don't belong in nav at launch.", () => {
     const navBlock = body.match(/const navItems = \[([\s\S]+?)\];/)?.[1] ?? '';
     const order = [
       "{ href: '/how-it-works', label: 'How it works' },",
@@ -48,7 +48,7 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
       "{ href: '/pricing', label: 'Pricing' },",
       "{ href: '/comparison', label: 'Compare' },",
       "{ href: '/faq', label: 'FAQ' },",
-      "{ href: 'https://docs.driftstack.dev', label: 'Docs', external: true },",
+      "{ href: 'https://docs.driftstack.io', label: 'Docs', external: true },",
     ];
     let lastIdx = -1;
     for (const item of order) {
@@ -100,10 +100,10 @@ describe('W522.A apps/marketing-site/src/components/Header.astro content parity'
 
   it("Desktop nav 2-CTA framing pinned: canonical sign-in + '/pricing/#free' Start free", () => {
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/login\/" class="nav-link">Sign in<\/a>/,
     );
     expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
-    expect(body).not.toMatch(/href="(?:https:\/\/app\.driftstack\.dev\/login|\/pricing#free)"/);
+    expect(body).not.toMatch(/href="(?:https:\/\/app\.driftstack\.io\/login|\/pricing#free)"/);
   });
 
   it('External-docs noopener-noreferrer framing pinned: \'target={item.external ? "_blank" : undefined}\' + \'rel={item.external ? "noopener noreferrer" : undefined}\' — pinned so the external-link safety pattern (noopener + noreferrer + target=_blank) survives', () => {

@@ -1568,7 +1568,7 @@ export const SelectableArchetypeIdSchema = z
  *   change tier, force-actions, audit-log read, webhook DLQ
  *   management). Only the founder + Driftstack-internal accounts
  *   carry this scope. The exact scope check is the application authority
- *   boundary; Cloudflare Access SSO on admin.driftstack.dev (V-135) is a
+ *   boundary; Cloudflare Access SSO on admin.driftstack.io (V-135) is a
  *   separate defense-in-depth identity perimeter.
  *
  * - `admin` — pre-V-174 customer compatibility alias. It satisfies

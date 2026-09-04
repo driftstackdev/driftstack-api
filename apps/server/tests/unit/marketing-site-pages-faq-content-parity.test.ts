@@ -114,7 +114,7 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     );
     expect(body).not.toMatch(/There is no formal SLA with credits/);
     expect(body).not.toMatch(/Best-effort 99\.5% across all tiers/);
-    expect(body).toMatch(/status\.driftstack\.dev/);
+    expect(body).toMatch(/status\.driftstack\.io/);
   });
 
   it("Annual contract framing: 'billed up front for 12 months at 20% off the monthly equivalent' + 'Annual contracts auto-renew unless cancelled at least 30 days before renewal' — pinned so the 20% discount + 30-day-notice cancellation policy stay consistent with the Stripe customer portal behavior (drift to a different notice period would create a Stripe↔marketing-page mismatch)", () => {

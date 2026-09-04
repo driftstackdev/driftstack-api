@@ -185,10 +185,10 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/See what iPhone users see/);
   });
 
-  it('final-CTA pinned (v2 CtaBand component): "See it for yourself. Free." + "Read the docs" secondary CTA → docs.driftstack.dev', () => {
+  it('final-CTA pinned (v2 CtaBand component): "See it for yourself. Free." + "Read the docs" secondary CTA → docs.driftstack.io', () => {
     expect(body).toMatch(/See it for yourself\. Free\./);
     expect(body).toMatch(/secondaryLabel="Read the docs"/);
-    expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.dev"/);
+    expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.io"/);
   });
 
   it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the fan-of-open-iPhones telemetry footer (S4.5 2026-07-03: the hero is now a fan of open iPhone windows matching the current GUI — '4 iPhones in your fleet / each with its own identity / all healthy'; the pre-v2 fingerprint-coherence mono line stays gone). S24 2026-07-06: the caption strip is real copy in the AA-safe tk-ready-text tone (raw ready is a fill tone, ~3.3:1 as light-mode text), and the fan itself carries data-contrast-decorative (illustration-of-a-UI, WCAG 1.4.3 incidental — the caption strip stays OUTSIDE the exempt wrapper so it is still contrast-scanned)", () => {

@@ -72,7 +72,7 @@ wave alongside the callback-page fix.
 - On successful password login: `window.location.href = next ? next : '/'`
   (line 240) — navigates to the **raw** `next`.
 
-So `https://app.driftstack.dev/login?next=https://evil.com` → victim signs in to
+So `https://app.driftstack.io/login?next=https://evil.com` → victim signs in to
 the real dashboard → is bounced to `https://evil.com`. Classic phishing aid: the
 victim trusts the real login domain, then lands on an attacker page (e.g. a fake
 "session expired, re-enter password"). MEDIUM (open-redirect; not auth-bypass — the

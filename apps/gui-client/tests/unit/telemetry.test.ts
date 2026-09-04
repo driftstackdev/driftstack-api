@@ -16,18 +16,18 @@ import {
 } from '../../src/lib/telemetry.js';
 
 describe('isCloudBaseUrl', () => {
-  it('matches the canonical driftstack.dev hostname', () => {
-    expect(isCloudBaseUrl('https://driftstack.dev')).toBe(true);
+  it('matches the canonical driftstack.io hostname', () => {
+    expect(isCloudBaseUrl('https://driftstack.io')).toBe(true);
   });
 
-  it('matches subdomains of driftstack.dev', () => {
+  it('matches subdomains of driftstack.io', () => {
     expect(isCloudBaseUrl('https://api.driftstack.dev')).toBe(true);
     expect(isCloudBaseUrl('https://api.driftstack.dev/v1')).toBe(true);
     expect(isCloudBaseUrl('https://staging.driftstack.dev')).toBe(true);
   });
 
   it('rejects look-alike hostnames', () => {
-    expect(isCloudBaseUrl('https://driftstack.dev.evil.com')).toBe(false);
+    expect(isCloudBaseUrl('https://driftstack.io.evil.com')).toBe(false);
     expect(isCloudBaseUrl('https://notdriftstack.dev')).toBe(false);
   });
 

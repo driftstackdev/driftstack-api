@@ -1,4 +1,4 @@
-// W253.A — drift-guard for docs.driftstack.dev/api/sessions. The
+// W253.A — drift-guard for docs.driftstack.io/api/sessions. The
 // previous revision asserted concurrency caps (Agency 10, API
 // Builder 5, API Scale 20) that didn't match
 // TIER_CONCURRENT_SESSION_LIMITS. This guard pins the table to the

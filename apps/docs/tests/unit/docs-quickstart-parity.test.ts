@@ -1,4 +1,4 @@
-// W254.D — drift-guard for docs.driftstack.dev/quickstart. Pins
+// W254.D — drift-guard for docs.driftstack.io/quickstart. Pins
 // the SDK install commands + the create/navigate/capture/destroy
 // path to actually-exported methods. Catches the case where the
 // quickstart references a method the SDK no longer has.

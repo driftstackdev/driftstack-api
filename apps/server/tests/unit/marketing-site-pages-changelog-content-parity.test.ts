@@ -72,18 +72,18 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
     );
   });
 
-  it("2026-05-09 'Profile snapshots: immutable point-in-time copies' launch entry — pinned so the snapshot launch announcement + the canonical 'frozen / restore counts against tier cap' framing + the docs.driftstack.dev/api/profiles reference all survive (drift to dropping would orphan customers reading the changelog for the V-375 snapshot feature)", () => {
+  it("2026-05-09 'Profile snapshots: immutable point-in-time copies' launch entry — pinned so the snapshot launch announcement + the canonical 'frozen / restore counts against tier cap' framing + the docs.driftstack.io/api/profiles reference all survive (drift to dropping would orphan customers reading the changelog for the V-375 snapshot feature)", () => {
     expect(body).toMatch(/title: 'Profile snapshots: immutable point-in-time copies',/);
     expect(body).toMatch(
       /Snapshots are frozen — the source profile keeps evolving but the snapshot does not\./,
     );
   });
 
-  it("2026-05-09 'Two-factor authentication (TOTP) is live' security entry: 10 single-use recovery codes + 6-digit code + 15-minute step-up window + docs.driftstack.dev/api/mfa — pinned so the MFA launch surfaces the canonical numbers (10 codes / 6 digits / 15-min step-up) that customers reading from the changelog will compare against the live settings UI", () => {
+  it("2026-05-09 'Two-factor authentication (TOTP) is live' security entry: 10 single-use recovery codes + 6-digit code + 15-minute step-up window + docs.driftstack.io/api/mfa — pinned so the MFA launch surfaces the canonical numbers (10 codes / 6 digits / 15-min step-up) that customers reading from the changelog will compare against the live settings UI", () => {
     expect(body).toMatch(/Two-factor authentication \(TOTP\) is live/);
     expect(body).toMatch(/store your 10 single-use recovery codes/);
     expect(body).toMatch(/15-minute step-up window/);
-    expect(body).toMatch(/docs\.driftstack\.dev\/api\/mfa/);
+    expect(body).toMatch(/docs\.driftstack\.io\/api\/mfa/);
   });
 
   it("2026-05-09 'Webhook signing-secret rotation with 24-hour grace' security entry: dual-signing during grace folded into the single x-driftstack-signature header as two v1= entries + TypeScript/Python/Go SDK verifiers check every v1= — pinned so the 24h grace + compound-single-header rotation contract + the 3-language SDK verifier reference all survive (drift to claiming a separate prev header would let customers read a never-sent header during rotation)", () => {

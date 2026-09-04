@@ -1,6 +1,6 @@
 // Every endpoint the docs promise is actually registered.
 //
-// A customer reading docs.driftstack.dev and getting a 404 has no way to tell
+// A customer reading docs.driftstack.io and getting a 404 has no way to tell
 // whether they mistyped, lack a scope, or are looking at a page that describes
 // something we never shipped. Nothing checked the last case.
 //

@@ -2,7 +2,7 @@
 // the cross-SDK drift-guard series. First parity guard on the apps/
 // docs surface (35+ pages without one to date).
 //
-// /api on docs.driftstack.dev is the customer-facing TOC for the
+// /api on docs.driftstack.io is the customer-facing TOC for the
 // HTTP API. Drift to dropping a sub-section link would silently
 // hide that capability from new SDK consumers.
 

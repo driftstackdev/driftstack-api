@@ -176,7 +176,7 @@ entry.
   describing the access-log scope, legal basis (Art 6(1)(f) legitimate
   interest), the no-PII-shown promise of the status page itself, the
   probe-history retention (30 days), and the no-cookies posture for
-  status.driftstack.dev. Driven by V-295b probe history + V-295c CF
+  status.driftstack.io. Driven by V-295b probe history + V-295c CF
   Pages mirror.
 - **No new sub-processor**: the status page is served from Cloudflare
   Pages, which is already enumerated in DPA Annex 3 (CDN +
@@ -216,7 +216,7 @@ entry.
   are operational status messages, not marketing. Consent is
   obtained per-purpose (the subscribe form text is the only thing
   the visitor signs up for); no overlap with marketing/sales scope
-  on driftstack.dev.
+  on driftstack.io.
 - **No tombstone-purge job yet**: the 90-day post-unsubscribe purge
   promised in Privacy §3.10 is not yet implemented as a scheduled
   job. To be wired in V-295c3-followup before public launch (the
@@ -225,8 +225,8 @@ entry.
 
 ## 2026-05-08 — V-313 (legal placeholder cleanup post-V-295 launch)
 
-- **ToS §9.3 (Maintenance)**: replaced `(placeholder: status.driftstack.dev)`
-  with the live URL `<https://status.driftstack.dev>` plus a sentence
+- **ToS §9.3 (Maintenance)**: replaced `(placeholder: status.driftstack.io)`
+  with the live URL `<https://status.driftstack.io>` plus a sentence
   noting subscription is available via the form on the status page.
   V-295c1 status site is live; the placeholder language is no longer
   accurate.

@@ -3,11 +3,11 @@ import { defineConfig } from 'astro/config';
 import sitemap from '@astrojs/sitemap';
 import tailwindcss from '@tailwindcss/vite';
 
-// V-250 — Driftstack docs site (docs.driftstack.dev). Static Astro
+// V-250 — Driftstack docs site (docs.driftstack.io). Static Astro
 // build deployed to Cloudflare Pages, mirroring apps/marketing-site
 // pattern. No SSR; pages are pre-rendered at build time.
 export default defineConfig({
-  site: 'https://docs.driftstack.dev',
+  site: 'https://docs.driftstack.io',
   output: 'static',
   // Preserve Astro 6's HTML-aware whitespace semantics under Astro 7.
   compressHTML: true,

@@ -62,7 +62,7 @@ Per founder direction "founder-facing trust first; admin tooling second; SDK fea
 
 ### Tier 1 — Customer-facing trust + completeness (~85h, ~22 slices)
 
-1. **V-295** Status page (3-4d / 24h) — `status.driftstack.dev` with manual + auto-poll + email subscriptions + privacy/DPA updates. (Founder-locked.)
+1. **V-295** Status page (3-4d / 24h) — `status.driftstack.io` with manual + auto-poll + email subscriptions + privacy/DPA updates. (Founder-locked.)
 2. **V-296** API key rotation flow — current is one-shot generation; rotation needs grace period + cutover.
 3. **V-297** Session export / audit log download (compliance-relevant; GDPR DSAR adjacent).
 4. **V-298** Customer self-service: account settings page (already PARTIAL; close to READY).

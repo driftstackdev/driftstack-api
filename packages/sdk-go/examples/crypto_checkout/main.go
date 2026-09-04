@@ -87,7 +87,7 @@ func main() {
 
 	// 4) Fetch the order back. In production, don't poll — subscribe
 	//    to the `crypto.order.paid` webhook (see
-	//    https://docs.driftstack.dev/webhooks/crypto-events/).
+	//    https://docs.driftstack.io/webhooks/crypto-events/).
 	latest, err := client.CryptoOrders.Get(ctx, orderID)
 	if err != nil {
 		log.Fatalf("get: %v", err)

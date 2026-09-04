@@ -60,7 +60,7 @@ describe('W402.B apps/server/src/services/cli-authorize.ts content parity', () =
 
   it('Browser URL framing pinned: built from dashboardOrigin (dev/staging/production all wire correctly)', () => {
     expect(body).toMatch(
-      /Public-facing browser URL: built from the configured\s*\/\/\s*`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.dev`\) so dev \/\s*\/\/\s*staging \/ production all wire correctly\./,
+      /Public-facing browser URL: built from the configured\s*\/\/\s*`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.io`\) so dev \/\s*\/\/\s*staging \/ production all wire correctly\./,
     );
   });
 

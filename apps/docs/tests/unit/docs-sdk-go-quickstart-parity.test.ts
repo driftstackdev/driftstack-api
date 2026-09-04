@@ -1,4 +1,4 @@
-// W260.B — drift-guard for docs.driftstack.dev/sdk/go-quickstart. Pins:
+// W260.B — drift-guard for docs.driftstack.io/sdk/go-quickstart. Pins:
 // 1. Module path matches go.mod (`.../packages/sdk-go`, not a stale
 //    `driftstack-go` repo path).
 // 2. Error-handling sample switches on real typed errors (no fictional

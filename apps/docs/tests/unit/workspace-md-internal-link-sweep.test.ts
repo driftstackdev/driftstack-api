@@ -43,7 +43,7 @@ for (const f of allDocsPages) {
   pageUrls.add(url + '/'); // tolerate trailing-slash form
 }
 
-// Cross-site marketing-site paths (driftstack.dev) — legitimate absolute
+// Cross-site marketing-site paths (driftstack.io) — legitimate absolute
 // links from docs to the marketing site that we don't resolve here.
 const MARKETING_PREFIXES = [
   '/legal/',

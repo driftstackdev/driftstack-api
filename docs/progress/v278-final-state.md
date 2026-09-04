@@ -30,10 +30,10 @@
 
 | URL                                   | HTTP | Served by                                                      |
 | ------------------------------------- | ---- | -------------------------------------------------------------- |
-| https://driftstack.dev/               | 200  | Cloudflare Pages → driftstack-marketing                        |
-| https://www.driftstack.dev/           | 200  | Cloudflare Pages → driftstack-marketing                        |
-| https://docs.driftstack.dev/          | 200  | Cloudflare Pages → driftstack-docs                             |
-| https://app.driftstack.dev/           | 200  | Cloudflare Pages → driftstack-customer-dashboard               |
+| https://driftstack.io/                | 200  | Cloudflare Pages → driftstack-marketing                        |
+| https://www.driftstack.io/            | 200  | Cloudflare Pages → driftstack-marketing                        |
+| https://docs.driftstack.io/           | 200  | Cloudflare Pages → driftstack-docs                             |
+| https://app.driftstack.io/            | 200  | Cloudflare Pages → driftstack-customer-dashboard               |
 | https://api.driftstack.dev/health     | 200  | Hetzner production (128.140.37.74) — Fastify + nginx + Node 22 |
 | https://staging.driftstack.dev/health | 200  | Hetzner staging (116.203.22.197) — Fastify + nginx + Node 22   |
 
@@ -90,7 +90,7 @@ founder shares their Origin CA Key + agent re-runs cert generation.
   under a heading that calls this map live and says it matches DPA
   Annex 3 — and Annex 3 has listed Cloudflare R2 all along.
 - **Postmark** (US) — transactional email; sender domain
-  `driftstack.dev` DKIM-verified. Server "driftstack-transactional",
+  `driftstack.io` DKIM-verified. Server "driftstack-transactional",
   DeliveryType=Live.
 - **Sentry** (DE / EU region) — error tracking. DSN wired into
   production driftstack-api; per-service projects deferred.
@@ -136,9 +136,9 @@ See [`tuesday-pickup.md`](./tuesday-pickup.md) for the full queue. Top
 | V-278.A      | bootstrap.sh + nginx vhosts + systemd unit + .env templates committed.                                                 |
 | V-278.A-2    | Bootstrap executed via SSH on both Hetzner servers; Node 22 + nginx + UFW + fail2ban active.                           |
 | V-278.B      | Production API deployed; listening 127.0.0.1:7780; /health 200.                                                        |
-| V-278.C      | app.driftstack.dev → Cloudflare Pages (driftstack-customer-dashboard).                                                 |
-| V-278.D      | docs.driftstack.dev → Cloudflare Pages (driftstack-docs).                                                              |
-| V-278.E      | driftstack.dev + www → Cloudflare Pages (driftstack-marketing).                                                        |
+| V-278.C      | app.driftstack.io → Cloudflare Pages (driftstack-customer-dashboard).                                                  |
+| V-278.D      | docs.driftstack.io → Cloudflare Pages (driftstack-docs).                                                               |
+| V-278.E      | driftstack.io + www → Cloudflare Pages (driftstack-marketing).                                                         |
 | V-278.F      | Staging API deployed; same boot sequence + green /health on origin.                                                    |
 | V-278.G      | 38 Drizzle migrations applied to Neon (33 public-schema tables); fixed in-place migration 0028 broken table reference. |
 | V-278.H      | 6 DNS records live (api/app/docs/staging/www/apex CNAME-flattened).                                                    |

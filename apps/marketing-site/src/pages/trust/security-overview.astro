@@ -133,7 +133,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Cloudflare, our edge network, enforces strict TLS 1.3
               encryption all the way to our own servers behind
               <code class="font-mono">api.driftstack.dev</code> +
-              <code class="font-mono">app.driftstack.dev</code> (the
+              <code class="font-mono">app.driftstack.io</code> (the
               origins). No unencrypted page (plaintext HTTP) exists on
               any path — every release is automatically checked for
               this before it ships; the deploy pipeline's TLS
@@ -229,7 +229,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
             {/* S30 2026-07-07 (founder decision: soften) — R2 is the
                 default jurisdiction (EU + US replication), not the
                 .eu-jurisdiction endpoint; wording aligned with
-                https://docs.driftstack.dev/reference/data-residency/. */}
+                https://docs.driftstack.io/reference/data-residency/. */}
             <p class="mt-1 text-sm text-tk-ink-2">
               Compute (Hetzner Nuremberg), database (Neon Frankfurt),
               object storage (Cloudflare R2, EU + US replication). The
@@ -237,7 +237,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               hardware (US) under SCCs (the EU's Standard Contractual
               Clauses for lawful data transfer abroad) + the EU-US
               Data Privacy Framework — see
-              <a href="https://docs.driftstack.dev/reference/data-residency/" class="text-tk-accent-text underline"
+              <a href="https://docs.driftstack.io/reference/data-residency/" class="text-tk-accent-text underline"
                 >data residency</a
               >. Full sub-processor list at
               <a href="/trust/sub-processors/" class="text-tk-accent-text underline"
@@ -292,7 +292,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
             <p class="mt-1 text-sm text-tk-ink-2">
               Customer-impacting outages are posted publicly within
               the incident-response SLA window. Live status at
-              <a href="https://status.driftstack.dev" class="text-tk-accent-text underline">status.driftstack.dev</a>;
+              <a href="https://status.driftstack.io" class="text-tk-accent-text underline">status.driftstack.io</a>;
               historical archive at
               <a href="/trust/incidents/" class="text-tk-accent-text underline">/trust/incidents</a>.
             </p>

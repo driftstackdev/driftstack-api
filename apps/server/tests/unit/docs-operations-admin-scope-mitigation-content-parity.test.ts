@@ -34,7 +34,7 @@ describe('W553.A /docs/operations/admin-scope-mitigation.md content parity', () 
     expect(body).toMatch(/satisfies `account_owner` plus customer `admin:\*` checks/);
     expect(body).toMatch(/It never satisfies\s*`driftstack_internal_admin`\./);
     expect(body).toMatch(
-      /Cloudflare Access on `admin\.driftstack\.dev` remains required defense in/,
+      /Cloudflare Access on `admin\.driftstack\.io` remains required defense in/,
     );
     expect(body).toMatch(/it is no longer the authorization boundary protecting the API\./);
   });
@@ -56,7 +56,7 @@ describe('W553.A /docs/operations/admin-scope-mitigation.md content parity', () 
 
   it('keeps Cloudflare Access as a separate identity perimeter', () => {
     expect(body).toMatch(/^## Cloudflare Access checklist$/m);
-    expect(body).toMatch(/Cloudflare Access policy covers `admin\.driftstack\.dev`/);
+    expect(body).toMatch(/Cloudflare Access policy covers `admin\.driftstack\.io`/);
     expect(body).toMatch(/Bypass is never allowed without identity/);
     expect(body).toMatch(/named Driftstack staff identities/);
     expect(body).toMatch(/Do not use `Allow: any authenticated user`/);

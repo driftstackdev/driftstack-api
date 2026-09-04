@@ -6,12 +6,12 @@ All four projects now have path-filtered GitHub Actions deploy workflows and pro
 
 ## What this runbook covers
 
-| Project slug                    | Custom domain              | Workflow                                          | Status |
-| ------------------------------- | -------------------------- | ------------------------------------------------- | ------ |
-| `driftstack-marketing`          | `driftstack.dev` + `www.…` | `.github/workflows/deploy-marketing.yml`          | Wired  |
-| `driftstack-docs`               | `docs.driftstack.dev`      | `.github/workflows/deploy-docs.yml`               | Wired  |
-| `driftstack-customer-dashboard` | `app.driftstack.dev`       | `.github/workflows/deploy-customer-dashboard.yml` | Wired  |
-| `driftstack-admin-panel`        | `admin.driftstack.dev`     | `.github/workflows/deploy-admin-panel.yml`        | Wired  |
+| Project slug                    | Custom domain             | Workflow                                          | Status |
+| ------------------------------- | ------------------------- | ------------------------------------------------- | ------ |
+| `driftstack-marketing`          | `driftstack.io` + `www.…` | `.github/workflows/deploy-marketing.yml`          | Wired  |
+| `driftstack-docs`               | `docs.driftstack.io`      | `.github/workflows/deploy-docs.yml`               | Wired  |
+| `driftstack-customer-dashboard` | `app.driftstack.io`       | `.github/workflows/deploy-customer-dashboard.yml` | Wired  |
+| `driftstack-admin-panel`        | `admin.driftstack.io`     | `.github/workflows/deploy-admin-panel.yml`        | Wired  |
 
 ## Shared prerequisites (do once)
 
@@ -34,7 +34,7 @@ All four projects now have path-filtered GitHub Actions deploy workflows and pro
 
 ### 3. DNS zone
 
-`driftstack.dev` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click. If the zone lives elsewhere, custom-domain setup falls back to a manual CNAME record per project (still works; just not one-click).
+`driftstack.io` zone must be in the same Cloudflare account as the Pages projects so custom-domain wiring is one-click. If the zone lives elsewhere, custom-domain setup falls back to a manual CNAME record per project (still works; just not one-click).
 
 ## Per-project setup
 
@@ -50,8 +50,8 @@ Each project follows the same five-step shape. Repeat for each slug.
    - Name: `CLOUDFLARE_PAGES_PROJECT_NAME`
    - Value: `driftstack-marketing`
 3. Trigger first deploy: GitHub repo → **Actions** → **Deploy marketing site** → **Run workflow** → from `main`.
-4. Wire custom domains: CF Pages project → **Custom domains** → add `driftstack.dev` AND `www.driftstack.dev`. CF auto-creates DNS records if the zone is in this account.
-5. Verify <https://driftstack.dev>: `index.astro` should render with the V-219 brand identity (oxblood D-badge + Geist Sans + slate palette).
+4. Wire custom domains: CF Pages project → **Custom domains** → add `driftstack.io` AND `www.driftstack.io`. CF auto-creates DNS records if the zone is in this account.
+5. Verify <https://driftstack.io>: `index.astro` should render with the V-219 brand identity (oxblood D-badge + Geist Sans + slate palette).
 
 ### B. `driftstack-docs` (workflow: `.github/workflows/deploy-docs.yml`)
 
@@ -60,7 +60,7 @@ Detailed runbook: `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`. Su
 1. CF: create Pages project `driftstack-docs` via direct upload.
 2. GitHub: set repo variable `CLOUDFLARE_DOCS_PROJECT_NAME` = `driftstack-docs`.
 3. Trigger first deploy via Actions → **Deploy doc site** → Run workflow.
-4. Wire custom domain `docs.driftstack.dev`.
+4. Wire custom domain `docs.driftstack.io`.
 5. Verify quickstart, sdk/installation, license-activation, guides/profile-management, guides/session-lifecycle pages.
 
 ### C. `driftstack-customer-dashboard` (workflow: `.github/workflows/deploy-customer-dashboard.yml`)
@@ -68,14 +68,14 @@ Detailed runbook: `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`. Su
 1. CF: create Pages project `driftstack-customer-dashboard` via direct upload.
 2. Set repo variable `CLOUDFLARE_DASHBOARD_PROJECT_NAME` = `driftstack-customer-dashboard`.
 3. Trigger **Deploy customer dashboard** from `main`.
-4. Wire `app.driftstack.dev` and verify login plus one authenticated account page.
+4. Wire `app.driftstack.io` and verify login plus one authenticated account page.
 
 ### D. `driftstack-admin-panel` (workflow: `.github/workflows/deploy-admin-panel.yml`)
 
 1. CF: create Pages project `driftstack-admin-panel` via direct upload.
 2. Set repo variable `CLOUDFLARE_ADMIN_PANEL_PROJECT_NAME` = `driftstack-admin-panel`.
 3. Trigger **Deploy admin panel** from `main`.
-4. Wire `admin.driftstack.dev`, retain the Cloudflare Access policy, and verify a staff-scoped account can open the panel while a non-staff account cannot.
+4. Wire `admin.driftstack.io`, retain the Cloudflare Access policy, and verify a staff-scoped account can open the panel while a non-staff account cannot.
 
 ## Verifying the workflows are wired correctly
 
@@ -125,6 +125,6 @@ Same pattern across all projects:
 
 ## What's NOT in this runbook
 
-- **Cloudflare Access policy administration** for `admin.driftstack.dev` — separate V-135 / V-246-P1-003 ops responsibility; this runbook only verifies the policy remains effective after deploys.
+- **Cloudflare Access policy administration** for `admin.driftstack.io` — separate V-135 / V-246-P1-003 ops responsibility; this runbook only verifies the policy remains effective after deploys.
 - **Cloudflare R2 bucket setup** for session recordings + screenshots — separate ops action under the storage track; not Pages-related.
 - **Cloudflare Workers / Pages Functions** — not used by the frontend projects today; all current pages build as static assets, and admin arbitrary-id routes use Pages 200 rewrites to static client-fetched shells.

@@ -149,9 +149,7 @@ describe('W573.A /docs/marketing/dashboard-admin-visual-audit.md content parity'
     expect(body).toMatch(/expectation\)\./);
     expect(body).toMatch(/\*\*PHASE 2 redline\*\*: add a minimal footer to `DashboardLayout` —/);
     expect(body).toMatch(/slate-500 small text, links to `\/legal\/privacy` `\/legal\/terms`/);
-    expect(body).toMatch(
-      /`\/legal\/dpa` `\/legal\/aup` \(existing pages on `app\.driftstack\.dev`/,
-    );
+    expect(body).toMatch(/`\/legal\/dpa` `\/legal\/aup` \(existing pages on `app\.driftstack\.io`/);
     expect(body).toMatch(/## PHASE 2 working-tree drafts — proposed surface/);
     expect(body).toMatch(
       /1\. \*\*`apps\/customer-dashboard\/src\/layouts\/DashboardLayout\.astro`\*\*/,

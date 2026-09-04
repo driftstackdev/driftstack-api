@@ -115,7 +115,7 @@ the `stg:` key prefix in favour of physical isolation.
 - **Public roadmap** — `/roadmap.astro` doesn't exist. Source from
   V-294 catalog selectively (don't expose internal V-NNN tags).
 - **Status page indicator** — small badge on marketing showing
-  current platform status (driftstack.dev fetches
+  current platform status (driftstack.io fetches
   api.driftstack.dev/v1/status).
 - **Onboarding flow polish** — welcome → trial-pack → first-key →
   first-session ergonomics review.
@@ -171,7 +171,7 @@ npm run typecheck && npm run lint && npm run format:check && npm test
 ssh -o BatchMode=yes root@128.140.37.74 'systemctl is-active driftstack-api'
 ssh -o BatchMode=yes root@116.203.22.197 'systemctl is-active driftstack-api'
 curl -sS -o /dev/null -w "%{http_code}\n" https://api.driftstack.dev/health
-curl -sS -o /dev/null -w "%{http_code}\n" https://app.driftstack.dev/
+curl -sS -o /dev/null -w "%{http_code}\n" https://app.driftstack.io/
 ```
 
 Expect: 1169+/1169+ tests pass, both systemd services `active`, both

@@ -24,7 +24,7 @@ describe('W487.B apps/admin-panel/src/pages/status-subscribers.astro content par
       /\/\/ V-312 — admin view of status-page email subscribers \(V-295c3 \+\s*\/\/ V-295c3-tombstone\)\. Read \/v1\/admin\/status-subscribers; expose a\s*\/\/ force-unsubscribe button per row\. Audit log dual-write happens\s*\/\/ server-side \(V-281 pattern\)\./,
     );
     expect(body).toMatch(
-      /Email addresses subscribed to status\.driftstack\.dev incident notifications\. Confirmed\s*subscribers receive emails when public incidents are posted or resolved\. A forced\s*unsubscribe is also written to the admin audit log\./,
+      /Email addresses subscribed to status\.driftstack\.io incident notifications\. Confirmed\s*subscribers receive emails when public incidents are posted or resolved\. A forced\s*unsubscribe is also written to the admin audit log\./,
     );
   });
 

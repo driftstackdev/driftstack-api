@@ -236,7 +236,7 @@ const navSections: NavSection[] = [
               try {
                 var t = localStorage.getItem('ds_web_session_token');
                 // 2026-05-21 — handle the admin bounce: if a staff member
-                // landed on admin.driftstack.dev with no token, the admin
+                // landed on admin.driftstack.io with no token, the admin
                 // layout redirects here with ?next-admin=<path>. If we
                 // already have a session token, bounce them back with
                 // the token in the URL hash. Falls through to the normal
@@ -251,19 +251,19 @@ const navSections: NavSection[] = [
                   // like "/accounts/abc?filter=x" doesn't end up with the
                   // broken "?filter=x?bounced=1" double-question.
                   var u = new URL(
-                    'https://admin.driftstack.dev' + nextAdmin,
+                    'https://admin.driftstack.io' + nextAdmin,
                   );
                   // 2026-06-03 — origin guard. nextAdmin is an attacker-
                   // controllable query param (?next-admin=); a value like
                   // ".evil.com/" or "@evil.com/" parses to a NON-admin host
-                  // (admin.driftstack.dev.evil.com / evil.com), which would
+                  // (admin.driftstack.io.evil.com / evil.com), which would
                   // exfiltrate the session token via the #token= hash below
                   // → account takeover. Only ever hand the token to the real
                   // admin origin; on any host escape, fall back to admin root
                   // (drops the attacker-controlled path). Same intent as
                   // lib/safe-next.ts (which this is:inline block can't import).
-                  if (u.origin !== 'https://admin.driftstack.dev') {
-                    u = new URL('https://admin.driftstack.dev/');
+                  if (u.origin !== 'https://admin.driftstack.io') {
+                    u = new URL('https://admin.driftstack.io/');
                   }
                   u.searchParams.set('bounced', '1');
                   u.hash = '#token=' + encodeURIComponent(t);
@@ -1566,7 +1566,7 @@ const navSections: NavSection[] = [
                     /* swallow */
                   }
                   const target =
-                    'https://admin.driftstack.dev/' +
+                    'https://admin.driftstack.io/' +
                     (t.length > 0 ? '#token=' + encodeURIComponent(t) : '');
                   window.location.href = target;
                 });
@@ -1882,7 +1882,7 @@ const navSections: NavSection[] = [
               dot.className = 'inline-block size-1.5 rounded-full bg-tk-accent';
               const a = document.createElement('a');
               const slug = DOC_URL_SLUG[doc.document_key] || doc.document_key;
-              a.href = 'https://driftstack.dev/legal/' + slug + '/';
+              a.href = 'https://driftstack.io/legal/' + slug + '/';
               a.target = '_blank';
               a.rel = 'noopener noreferrer';
               a.className =
@@ -2032,16 +2032,16 @@ const navSections: NavSection[] = [
         >
           <span>Driftstack</span>
           {/* W211 — these pages live on the marketing-site at
-              driftstack.dev, not on the dashboard's own
-              app.driftstack.dev origin. Absolute URLs are required;
+              driftstack.io, not on the dashboard's own
+              app.driftstack.io origin. Absolute URLs are required;
               relative paths would 404 against the Cloudflare Pages
               project that serves the dashboard. */}
           <nav class="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <a href="https://driftstack.dev/legal/privacy/" class="hover:text-tk-accent-text">Privacy</a>
-            <a href="https://driftstack.dev/legal/terms/" class="hover:text-tk-accent-text">Terms</a>
-            <a href="https://driftstack.dev/legal/dpa/" class="hover:text-tk-accent-text">DPA</a>
-            <a href="https://driftstack.dev/legal/aup/" class="hover:text-tk-accent-text">AUP</a>
-            <a href="https://driftstack.dev/trust/sub-processors/" class="hover:text-tk-accent-text"
+            <a href="https://driftstack.io/legal/privacy/" class="hover:text-tk-accent-text">Privacy</a>
+            <a href="https://driftstack.io/legal/terms/" class="hover:text-tk-accent-text">Terms</a>
+            <a href="https://driftstack.io/legal/dpa/" class="hover:text-tk-accent-text">DPA</a>
+            <a href="https://driftstack.io/legal/aup/" class="hover:text-tk-accent-text">AUP</a>
+            <a href="https://driftstack.io/trust/sub-processors/" class="hover:text-tk-accent-text"
               >Sub-processors</a
             >
           </nav>

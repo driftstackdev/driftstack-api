@@ -170,7 +170,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
     expect(body).toMatch(/<a href="\/docs\/billing-faq\/">Billing FAQ<\/a>/);
     expect(body).toMatch(
       // S47 2026-07-07 (founder-approved: mirror deprecation): the webhooks-crypto-events mirror is deleted; href re-pinned to the docs successor.
-      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/"><code>crypto\.order\.paid<\/code> webhook events<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/"><code>crypto\.order\.paid<\/code> webhook events<\/a>/,
     );
     for (const path of [
       '/legal/refunds',

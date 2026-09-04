@@ -200,12 +200,12 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     );
   });
 
-  it("CRITICAL W211 footer-legal-URL absolute-host framing pinned. The marketing-site pages live on driftstack.dev, NOT the dashboard's app.driftstack.dev origin — absolute URLs are required (relative paths would 404 against Cloudflare Pages).", () => {
+  it("CRITICAL W211 footer-legal-URL absolute-host framing pinned. The marketing-site pages live on driftstack.io, NOT the dashboard's app.driftstack.io origin — absolute URLs are required (relative paths would 404 against Cloudflare Pages).", () => {
     const l = read(LAYOUT);
 
     expect(l).toMatch(/W211 — these pages live on the marketing-site at/);
-    expect(l).toMatch(/driftstack\.dev, not on the dashboard's own/);
-    expect(l).toMatch(/app\.driftstack\.dev origin\. Absolute URLs are required;/);
+    expect(l).toMatch(/driftstack\.io, not on the dashboard's own/);
+    expect(l).toMatch(/app\.driftstack\.io origin\. Absolute URLs are required;/);
     expect(l).toMatch(
       /relative paths would 404 against the Cloudflare Pages\s*\n\s+project that serves the dashboard/,
     );
@@ -215,11 +215,11 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
     const l = read(LAYOUT);
 
     const links: Array<[string, string]> = [
-      ['Privacy', 'https://driftstack.dev/legal/privacy/'],
-      ['Terms', 'https://driftstack.dev/legal/terms/'],
-      ['DPA', 'https://driftstack.dev/legal/dpa/'],
-      ['AUP', 'https://driftstack.dev/legal/aup/'],
-      ['Sub-processors', 'https://driftstack.dev/trust/sub-processors/'],
+      ['Privacy', 'https://driftstack.io/legal/privacy/'],
+      ['Terms', 'https://driftstack.io/legal/terms/'],
+      ['DPA', 'https://driftstack.io/legal/dpa/'],
+      ['AUP', 'https://driftstack.io/legal/aup/'],
+      ['Sub-processors', 'https://driftstack.io/trust/sub-processors/'],
     ];
 
     for (const [label, href] of links) {
@@ -231,7 +231,7 @@ describe('W743 dashboard DashboardLayout V-219* + V-331 + W211 parity', () => {
       expect(l, `footer link ${label} → ${href}`).toMatch(re);
     }
     expect(l).not.toMatch(
-      /href="https:\/\/driftstack\.dev\/(?:legal\/(?:privacy|terms|dpa|aup)|trust\/sub-processors)"/,
+      /href="https:\/\/driftstack\.io\/(?:legal\/(?:privacy|terms|dpa|aup)|trust\/sub-processors)"/,
     );
   });
 

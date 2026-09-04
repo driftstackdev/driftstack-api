@@ -8,7 +8,7 @@ description: Driftstack API versioning policy — additive vs breaking changes, 
 
 Versioning policy for the HTTP API surface (`/v1/*` and any later
 major prefix). Distinct from the SDK versioning policy at
-[`docs.driftstack.dev/sdk/versioning`](/sdk/versioning/): SDKs version
+[`docs.driftstack.io/sdk/versioning`](/sdk/versioning/): SDKs version
 independently of the API; this doc covers the API endpoint contract.
 
 ## TL;DR
@@ -170,7 +170,7 @@ When more than one major is active:
   consumers. We mitigate via the SDK passthrough pattern +
   documented "we may send unknown event types; ignore + continue"
   (the catalog of all event types lives at
-  `docs.driftstack.dev/webhooks/events`). Customers are
+  `docs.driftstack.io/webhooks/events`). Customers are
   encouraged to subscribe with explicit `events: [...]` arrays so the
   server only ever sends event types the customer already opted into.
   New event types are then additive at the wire level; subscription is
@@ -215,9 +215,9 @@ When more than one major is active:
 
 ## Related
 
-- Webhook event catalog: [`docs.driftstack.dev/webhooks/events`](/webhooks/events/).
-- Rate-limit policy: [`docs.driftstack.dev/reference/rate-limits`](/reference/rate-limits/).
-- Error handling: [`docs.driftstack.dev/sdk/error-handling`](/sdk/error-handling/).
+- Webhook event catalog: [`docs.driftstack.io/webhooks/events`](/webhooks/events/).
+- Rate-limit policy: [`docs.driftstack.io/reference/rate-limits`](/reference/rate-limits/).
+- Error handling: [`docs.driftstack.io/sdk/error-handling`](/sdk/error-handling/).
 - OpenAPI spec is served at `/openapi.json` on the live API host
   (`api.driftstack.dev/openapi.json`) and rendered as a browsable
   reference by Scalar UI at `api.driftstack.dev/docs`.

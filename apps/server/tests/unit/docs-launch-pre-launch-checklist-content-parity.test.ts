@@ -130,7 +130,7 @@ describe('W552.A /docs/launch/pre-launch-checklist.md content parity', () => {
     expect(body).toMatch(/ADR-003/);
     // The corrected rows must not revert to their stale form.
     expect(body).not.toMatch(/1086 \/ 109 files server/);
-    expect(body).not.toMatch(/^- Public status page \(status\.driftstack\.dev\)\.$/m);
+    expect(body).not.toMatch(/^- Public status page \(status\.driftstack\.io\)\.$/m);
     expect(body).not.toMatch(
       /^- Crypto rail re-evaluation \(deferred per ADR-002 supersedure to fiat-only\)\.$/m,
     );

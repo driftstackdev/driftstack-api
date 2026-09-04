@@ -19,7 +19,7 @@ import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'status-subscribers', 'index.html');
-const PAGE_URL = 'https://admin.driftstack.dev/status-subscribers/';
+const PAGE_URL = 'https://admin.driftstack.io/status-subscribers/';
 
 interface MockFetchCall {
   url: string;
@@ -874,7 +874,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
             {
               id: 'sub_00000000-0000-4000-8000-000000001013',
               email: 'new@example.com',
-              unsubscribe_link: 'https://status.driftstack.dev/unsubscribe/token',
+              unsubscribe_link: 'https://status.driftstack.io/unsubscribe/token',
             },
             201,
           );
@@ -914,7 +914,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
             {
               id: added.id,
               email: added.email,
-              unsubscribe_link: 'https://status.driftstack.dev/unsubscribe/new-first',
+              unsubscribe_link: 'https://status.driftstack.io/unsubscribe/new-first',
             },
             201,
           );
@@ -1148,7 +1148,7 @@ describe('admin status-subscribers page — force-unsubscribe (operator)', () =>
             {
               id: active.id,
               email: active.email,
-              unsubscribe_link: 'https://status.driftstack.dev/unsubscribe/restored',
+              unsubscribe_link: 'https://status.driftstack.io/unsubscribe/restored',
             },
             201,
           );

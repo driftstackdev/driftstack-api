@@ -1,4 +1,4 @@
-// W257.D — drift-guard for docs.driftstack.dev/webhooks/endpoints.
+// W257.D — drift-guard for docs.driftstack.io/webhooks/endpoints.
 // Pins every /v1/webhooks/* path documented to a live route, and
 // pins the documented JSON resource shape to WebhookEndpointSchema.
 

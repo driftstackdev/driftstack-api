@@ -18,7 +18,7 @@ import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'webhook-dlq', 'index.html');
-const PAGE_URL = 'https://admin.driftstack.dev/webhook-dlq/';
+const PAGE_URL = 'https://admin.driftstack.io/webhook-dlq/';
 
 interface MockFetchCall {
   url: string;

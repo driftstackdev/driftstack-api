@@ -6,7 +6,7 @@
 // marketing↔server divergence).
 //
 //   • V-723 doc-comment framing + V-295c3 / V-459 anchors.
-//   • status.driftstack.dev as the canonical status page.
+//   • status.driftstack.io as the canonical status page.
 //   • POST /v1/status/subscribe + GET confirm + GET unsubscribe API.
 //   • 202 generic-response leak-prevention commitment.
 //   • Confirmation token 24h TTL + single-use.
@@ -37,9 +37,9 @@ describe('W507.B apps/marketing-site/src/pages/docs/status-subscriptions.astro c
     );
   });
 
-  it("status.driftstack.dev canonical-page + 'real time' announcement framing pinned — pinned so the status-page URL + the real-time positioning survive (drift to a different domain would create marketing↔ops divergence; drift to dropping 'real time' would weaken the immediacy promise)", () => {
+  it("status.driftstack.io canonical-page + 'real time' announcement framing pinned — pinned so the status-page URL + the real-time positioning survive (drift to a different domain would create marketing↔ops divergence; drift to dropping 'real time' would weaken the immediacy promise)", () => {
     expect(body).toMatch(
-      /Driftstack's public status page at\s*<a href="https:\/\/status\.driftstack\.dev">status\.driftstack\.dev<\/a>\s*announces incidents in real time\./,
+      /Driftstack's public status page at\s*<a href="https:\/\/status\.driftstack\.io">status\.driftstack\.io<\/a>\s*announces incidents in real time\./,
     );
   });
 

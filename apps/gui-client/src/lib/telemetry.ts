@@ -2,7 +2,7 @@
 // gated to cloud customers.
 //
 // Posture:
-//   * **Cloud customers** (baseUrl ends in driftstack.dev) — telemetry
+//   * **Cloud customers** (baseUrl ends in driftstack.io) — telemetry
 //     defaults ON; can opt out via Settings toggle. Helps Driftstack
 //     diagnose crashes affecting paying customers.
 //   * **Self-hosted customers** — telemetry defaults OFF; can opt IN
@@ -66,7 +66,7 @@ export function telemetryEnabled(cfg: TelemetryConfig): boolean {
 export function isCloudBaseUrl(baseUrl: string): boolean {
   try {
     const host = new URL(baseUrl).hostname;
-    return host === 'driftstack.dev' || host.endsWith('.driftstack.dev');
+    return host === 'driftstack.io' || host.endsWith('.driftstack.dev');
   } catch {
     return false;
   }

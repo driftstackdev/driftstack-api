@@ -28,11 +28,11 @@ driftstack-api/
 │   ├── server/             # Fastify API + control plane
 │   │   ├── src/{routes,services,drivers,schemas,db,middleware,lib}
 │   │   └── tests/{unit,integration,e2e}/
-│   ├── marketing-site/     # Astro static-build (driftstack.dev)
-│   ├── customer-dashboard/ # Astro customer portal (app.driftstack.dev)
+│   ├── marketing-site/     # Astro static-build (driftstack.io)
+│   ├── customer-dashboard/ # Astro customer portal (app.driftstack.io)
 │   ├── admin-panel/        # Astro admin UI (internal)
-│   ├── docs/               # Astro docs site (docs.driftstack.dev)
-│   ├── status-site/        # Status page (status.driftstack.dev)
+│   ├── docs/               # Astro docs site (docs.driftstack.io)
+│   ├── status-site/        # Status page (status.driftstack.io)
 │   └── gui-client/         # Tauri desktop client (macOS / Windows / Linux)
 ├── packages/
 │   ├── api-types/             # Public Zod schemas + inferred TS types

@@ -12,7 +12,7 @@ import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'rate-limit-overrides', 'index.html');
-const PAGE_URL = 'https://admin.driftstack.dev/rate-limit-overrides/';
+const PAGE_URL = 'https://admin.driftstack.io/rate-limit-overrides/';
 
 const ACCOUNT_A = 'acc_aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const ACCOUNT_B = 'acc_bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';

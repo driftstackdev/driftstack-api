@@ -1,4 +1,4 @@
-// W259.A — drift-guard for docs.driftstack.dev/guides/team-rbac. Pins:
+// W259.A — drift-guard for docs.driftstack.io/guides/team-rbac. Pins:
 // 1. Every /v1/team/* endpoint cited is registered.
 // 2. /v1/account/me + /v1/account/audit-log paths cited exist.
 // 3. The X-Driftstack-Account header name + acc_<uuid> prefix match the live convention.

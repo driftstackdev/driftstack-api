@@ -57,7 +57,12 @@ describe('the proxy probe verdict rests on one destination', () => {
     const url = new URL(DEFAULT_PROBE_TARGET_URL);
     expect(url.protocol, 'the probe target must be https').toBe('https:');
     expect(
-      url.hostname.endsWith('driftstack.dev'),
+      // BOTH TLDs are Driftstack-operated and both are correct here. The website
+      // moved to driftstack.io on 2026-09-04, but `api.` deliberately stayed on
+      // driftstack.dev (it is the SDKs' base URL), and the probe target IS the api
+      // host. A migration that left this checking only .io would have had the guard
+      // reporting our own API as 'not a Driftstack host' — failing on a correct value.
+      url.hostname.endsWith('driftstack.io') || url.hostname.endsWith('driftstack.dev'),
       `probe target ${url.hostname} is not a Driftstack host — customer exit IPs would reach it`,
     ).toBe(true);
   });

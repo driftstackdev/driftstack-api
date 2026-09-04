@@ -14,8 +14,8 @@ documented streaming transports. If you'd rather start in TypeScript,
 Python, or Go, use the [SDK quickstart](/quickstart/) instead.
 
 You will need a Driftstack account on any paid tier (including a Manual tier)
-([sign up](https://app.driftstack.dev/signup/) or
-[sign in](https://app.driftstack.dev/login/)) and `curl`.
+([sign up](https://app.driftstack.io/signup/) or
+[sign in](https://app.driftstack.io/login/)) and `curl`.
 
 > Free is an interactive desktop tier, so this HTTP quickstart is paid-only.
 > The desktop's browser sign-in automatically stores a restricted
@@ -24,7 +24,7 @@ You will need a Driftstack account on any paid tier (including a Manual tier)
 
 ## 1. Get an API key
 
-1. Open [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
+1. Open [app.driftstack.io/api-keys](https://app.driftstack.io/api-keys/).
 2. Click **Create key**, give it a name, and copy the value. The full
    key is shown once — Driftstack stores only a hash, so if you lose
    it you revoke it and mint a new one.

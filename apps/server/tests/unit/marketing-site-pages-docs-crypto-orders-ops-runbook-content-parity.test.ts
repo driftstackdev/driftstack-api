@@ -117,7 +117,7 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
     expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     expect(body).toMatch(
       // S47 2026-07-07 (founder-approved: mirror deprecation): the integration-guide mirror is deleted; href re-pinned to the docs successor.
-      /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
     );
     expect(body).toMatch(/<a href="\/legal\/refunds\/">Non-refundable policy<\/a>/);
     expect(body).not.toMatch(

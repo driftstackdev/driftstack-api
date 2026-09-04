@@ -57,10 +57,10 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/tree\/main\/docs"/,
     );
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/self-hosted\/"/);
-    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security|self-hosted)"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/pricing\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/security\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/self-hosted\/"/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.io\/(?:pricing|security|self-hosted)"/);
     expect(body).toMatch(/href="mailto:support@driftstack\.dev"/);
     expect(existsSync(INDEX)).toBe(true);
   });
@@ -166,7 +166,7 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/^## Troubleshooting$/m);
     expect(body).toMatch(/\*\*"Authentication failed"\*\*/);
     expect(body).toMatch(/\*\*"Couldn't reach control plane"\*\*/);
-    expect(body).toMatch(/check \[status\.driftstack\.dev\]\(https:\/\/status\.driftstack\.dev\)/);
+    expect(body).toMatch(/check \[status\.driftstack\.io\]\(https:\/\/status\.driftstack\.io\)/);
     expect(body).toMatch(/\*\*Wizard re-fires on every launch\*\*/);
     expect(body).toMatch(/\*\*"You do not have permission" on activation\*\*/);
     expect(body).toMatch(/^## Next steps$/m);

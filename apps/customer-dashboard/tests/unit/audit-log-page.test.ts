@@ -14,7 +14,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'audit-log', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/audit-log/';
+const PAGE_URL = 'https://app.driftstack.io/audit-log/';
 
 function loadBuiltPage(): string {
   return readFileSync(BUILT_PAGE, 'utf8');

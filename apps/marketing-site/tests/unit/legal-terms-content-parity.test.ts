@@ -11,7 +11,7 @@
 //     + Mac mini fleet infrastructure.
 //   • Tier structure (§8.1): Free + Manual ladder (Personal/Team/
 //     Agency) + API ladder (Starter/Builder/Scale) + custom
-//     Enterprise; prices live at driftstack.dev/pricing (the
+//     Enterprise; prices live at driftstack.io/pricing (the
 //     source of truth is src/data/pricing.ts, so §8.1 references
 //     the pricing page rather than hardcoding figures).
 //   • Crypto non-refundable in ALL cases (§8.7.1) — load-bearing
@@ -93,12 +93,12 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     }
   });
 
-  it('§8.1 tier structure pinned (Free + Manual + API ladders) + references driftstack.dev/pricing; no fictional figures', () => {
+  it('§8.1 tier structure pinned (Free + Manual + API ladders) + references driftstack.io/pricing; no fictional figures', () => {
     expect(body).toMatch(/perpetual Free tier/);
     expect(body).toMatch(/Manual ladder \(Personal, Team, Agency\)/);
     expect(body).toMatch(/API ladder \(API\s+Starter, API Builder, API Scale\)/);
     expect(body).toMatch(/custom-priced Enterprise/);
-    expect(body).toMatch(/published at\s+<https:\/\/driftstack\.dev\/pricing\/>/);
+    expect(body).toMatch(/published at\s+<https:\/\/driftstack\.io\/pricing\/>/);
     // Fictional figures must never reappear in §8.1.
     expect(body).not.toMatch(/\$39\/mo|\$99\/mo|\$299\/mo|\$999\/mo|\$3,000\/mo/);
   });
@@ -145,11 +145,11 @@ describe('W377.A marketing-site /legal/terms.md content parity', () => {
     expect(body).not.toMatch(/notification\s+mechanism in Section 5 of the DPA/);
   });
 
-  it('§9.3 maintenance: 48-hour advance notice via status.driftstack.dev', () => {
+  it('§9.3 maintenance: 48-hour advance notice via status.driftstack.io', () => {
     expect(body).toMatch(
       /scheduled maintenance during\s+windows announced at least 48 hours in advance/,
     );
-    expect(body).toMatch(/<https:\/\/status\.driftstack\.dev>/);
+    expect(body).toMatch(/<https:\/\/status\.driftstack\.io>/);
   });
 
   it('§13.1 12-month-Fees liability cap pinned', () => {

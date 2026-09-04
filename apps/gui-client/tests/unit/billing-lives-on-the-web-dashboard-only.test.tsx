@@ -44,7 +44,7 @@ describe('billing lives on the web dashboard only', () => {
   it('names the web dashboard as the one place that owns billing', () => {
     render(<BillingMovedView />);
     const link = screen.getByRole('link', { name: /open billing in the browser/i });
-    expect(link).toHaveAttribute('href', 'https://app.driftstack.dev/billing/');
+    expect(link).toHaveAttribute('href', 'https://app.driftstack.io/billing/');
     // External navigation out of a Tauri webview must not hand the opened page
     // a live `window.opener` back into the app shell.
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));

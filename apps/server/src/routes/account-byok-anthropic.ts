@@ -270,7 +270,7 @@ export function registerAccountByokAnthropicDisabledRoutes(app: FastifyInstance)
   const detail =
     'BYOK Anthropic key management is unavailable on this deployment. ' +
     "Use the deployment's configured AI provider, or contact its operator if customer-managed keys are required. See " +
-    'https://docs.driftstack.dev/api/byok-anthropic/ for the supported key-management flow.';
+    'https://docs.driftstack.io/api/byok-anthropic/ for the supported key-management flow.';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

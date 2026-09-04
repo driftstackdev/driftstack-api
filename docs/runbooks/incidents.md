@@ -197,7 +197,7 @@ Customer pastes a working API key into an email or GitHub issue.
 
 1. Reply same-thread: "I noticed this thread contains an active
    API key (`key_<prefix>...`). I'm rotating it now — please
-   issue a new one at https://app.driftstack.dev/api-keys."
+   issue a new one at https://app.driftstack.io/api-keys."
 2. Use admin scope (V-330d) to revoke the leaked key on the
    customer's behalf.
 3. Search the public web for the key prefix (GitHub code search

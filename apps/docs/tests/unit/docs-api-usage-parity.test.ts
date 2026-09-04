@@ -1,4 +1,4 @@
-// W253.C — drift-guard for docs.driftstack.dev/api/usage. The
+// W253.C — drift-guard for docs.driftstack.io/api/usage. The
 // previous revision had a tier table with Agency 10 / API Builder 5
 // / API Scale 20 concurrent + Solo 5 / Builder 25 / Scale 100
 // profile caps that didn't match the canonical constants. Pin both

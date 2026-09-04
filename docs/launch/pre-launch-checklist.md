@@ -169,7 +169,7 @@ SDK + audit cleanup absorbed).
 | Sentry projects (EU ingest)                | PENDING FOUNDER | founder | yes            | staging + production environments                                                                                                                                                                                                                                                                                                                     |
 | GitHub Environments (staging + production) | READY           | eng     | yes (READY)    | workflow-side wiring done; founder populates secrets per V-278                                                                                                                                                                                                                                                                                        |
 | Deploy workflows (server + 4 frontends)    | READY           | eng     | yes (READY)    | all skip-on-missing-secret; mirror the same shape across V-258/259/260/278                                                                                                                                                                                                                                                                            |
-| DNS records (driftstack.dev zone)          | PARTIAL         | founder | yes            | apex + www handled by CF Pages; api / app / docs / admin subdomains land per per-project runbook                                                                                                                                                                                                                                                      |
+| DNS records (driftstack.io zone)           | PARTIAL         | founder | yes            | apex + www handled by CF Pages; api / app / docs / admin subdomains land per per-project runbook                                                                                                                                                                                                                                                      |
 
 ## 8. Legal + corporate
 
@@ -182,17 +182,17 @@ SDK + audit cleanup absorbed).
 
 ## 9. Customer support readiness
 
-| Item                           | Status          | Owner   | Blocks launch? | Notes                                                                                           |
-| ------------------------------ | --------------- | ------- | -------------- | ----------------------------------------------------------------------------------------------- |
-| `support@driftstack.dev` email | PENDING FOUNDER | founder | yes            | Postmark or Google Workspace inbox. Surfaced in legal pages + GUI Settings + dashboard          |
-| `privacy@driftstack.dev`       | PENDING FOUNDER | founder | yes            | dedicated address per Privacy Policy + DPA contact section                                      |
-| `legal@driftstack.dev`         | PENDING FOUNDER | founder | yes            | dedicated address per ToS notice clause                                                         |
-| `abuse@driftstack.dev`         | PENDING FOUNDER | founder | yes            | per AUP                                                                                         |
-| `security@driftstack.dev`      | PENDING FOUNDER | founder | yes            | per DPA TOM section F                                                                           |
-| Status page                    | PARTIAL         | eng     | softens UX     | `/v1/status` JSON exists; public status.driftstack.dev surface deferred. Acceptable for launch. |
-| Admin panel                    | PARTIAL         | eng     | yes            | core admin endpoints exist (V-100, V-216 etc); admin UI scaffolding only — needs V-281 polish   |
-| Refund procedure documented    | PENDING ENG     | eng     | softens UX     | V-280 launch-day runbook covers manual refund flow                                              |
-| Day-1 known-issue list         | PENDING ENG     | eng     | softens UX     | V-280 launch-day runbook                                                                        |
+| Item                           | Status          | Owner   | Blocks launch? | Notes                                                                                          |
+| ------------------------------ | --------------- | ------- | -------------- | ---------------------------------------------------------------------------------------------- |
+| `support@driftstack.dev` email | PENDING FOUNDER | founder | yes            | Postmark or Google Workspace inbox. Surfaced in legal pages + GUI Settings + dashboard         |
+| `privacy@driftstack.dev`       | PENDING FOUNDER | founder | yes            | dedicated address per Privacy Policy + DPA contact section                                     |
+| `legal@driftstack.dev`         | PENDING FOUNDER | founder | yes            | dedicated address per ToS notice clause                                                        |
+| `abuse@driftstack.dev`         | PENDING FOUNDER | founder | yes            | per AUP                                                                                        |
+| `security@driftstack.dev`      | PENDING FOUNDER | founder | yes            | per DPA TOM section F                                                                          |
+| Status page                    | PARTIAL         | eng     | softens UX     | `/v1/status` JSON exists; public status.driftstack.io surface deferred. Acceptable for launch. |
+| Admin panel                    | PARTIAL         | eng     | yes            | core admin endpoints exist (V-100, V-216 etc); admin UI scaffolding only — needs V-281 polish  |
+| Refund procedure documented    | PENDING ENG     | eng     | softens UX     | V-280 launch-day runbook covers manual refund flow                                             |
+| Day-1 known-issue list         | PENDING ENG     | eng     | softens UX     | V-280 launch-day runbook                                                                       |
 
 ## 10. Observability + operations
 
@@ -255,7 +255,7 @@ Remaining, in priority order:
 
 - ~~Tauri custom URL scheme (deep-link replacement for V-268 polling)~~ — **BUILT, validation outstanding** (V-866 check): `tauri-plugin-deep-link = "2.0"` with `"schemes": ["driftstack"]`, plus `lib/deep-link.ts` and an always-on listener in `App.tsx`. What remains is a per-OS native-bundle run, which is a validation task rather than a deferred feature.
 - Python + Go SDK first-tag-on-PyPI / first-tag-on-modules.
-- ~~Public status page (status.driftstack.dev)~~ — **BUILT** (2026-08-10 check): `apps/status-site` ships index/history/incident/404 pages and `.github/workflows/deploy-status-site.yml`. Whether the Cloudflare Pages project + DNS exist is founder-side and unverified here.
+- ~~Public status page (status.driftstack.io)~~ — **BUILT** (2026-08-10 check): `apps/status-site` ships index/history/incident/404 pages and `.github/workflows/deploy-status-site.yml`. Whether the Cloudflare Pages project + DNS exist is founder-side and unverified here.
 - V-184b copy redline.
 - V-256 explicit deferrals (SDK matrix Streaming/Recording rows, etc.).
 - ~~Crypto rail re-evaluation (deferred per ADR-002 supersedure to fiat-only)~~ — **SHIPPED, not deferred** (2026-08-10 check): eight customer-facing `/v1/billing/crypto-*` routes, a signature-verified NowPayments IPN ingress, `crypto_orders` + `crypto_entitlements`, tier activation with refund clawback, and receipts (json/txt/pdf). ADR-002 still reads Stripe-only and now carries a reality note; the superseding ADR is unwritten.

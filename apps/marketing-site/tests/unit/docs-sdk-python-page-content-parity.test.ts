@@ -127,7 +127,7 @@ describe('W362.A /docs/sdk-python parity', () => {
       // S47 2026-07-07 (founder-approved: mirror deprecation): the
       // api-quickstart mirror is deleted; the page cross-links the
       // docs curl quickstart successor.
-      ['https://docs.driftstack.dev/quickstart-curl/', 'apps/docs/src/pages/quickstart-curl.md'],
+      ['https://docs.driftstack.io/quickstart-curl/', 'apps/docs/src/pages/quickstart-curl.md'],
       [
         '/docs/sdk-python-crypto-orders',
         'apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.astro',

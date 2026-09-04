@@ -1,4 +1,4 @@
-// W256.B — drift-guard for docs.driftstack.dev/api/audit-log. Pins
+// W256.B — drift-guard for docs.driftstack.io/api/audit-log. Pins
 // list + export endpoints, cursor-paginated `data` + `next_cursor`
 // envelope, and the actor_type enum.
 

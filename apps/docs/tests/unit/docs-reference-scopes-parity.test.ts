@@ -1,4 +1,4 @@
-// W258.C — drift-guard for docs.driftstack.dev/reference/scopes. Pins:
+// W258.C — drift-guard for docs.driftstack.io/reference/scopes. Pins:
 // 1. Every `scope` row in the table is a real ApiKeyScopeSchema enum value.
 // 2. The forbidden problem-type URI is errors.driftstack.dev/forbidden.
 // 3. Source-of-truth file paths cited in the doc exist on disk.

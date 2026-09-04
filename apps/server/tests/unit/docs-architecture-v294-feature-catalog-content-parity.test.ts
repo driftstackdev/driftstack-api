@@ -89,13 +89,13 @@ describe('W561 /docs/architecture/v294-feature-catalog.md content parity', () =>
     );
   });
 
-  it("4-tier priority order framing pinned: '## Recommended priority order (V-295+ slice sequencing)' + 'founder-facing trust first; admin tooling second; SDK feature parity third; ops maturity fourth' + '### Tier 1 — Customer-facing trust + completeness (~85h, ~22 slices)' + '**V-295** Status page (3-4d / 24h) — `status.driftstack.dev`' + '**V-296** API key rotation flow' + '**V-301** MFA / TOTP setup + recovery codes (security gate per planning file 47).' + '**V-305** Tauri custom URL scheme `driftstack://auth/callback` (replaces V-268 polling per V-262 deferral).' + '**V-306** GUI client: live session WebRTC stream (LiveKit integration; planning file 36).' + '### Tier 2 — Admin / ops tooling (~75h, ~18 slices)' + '**V-317** Browser-driving admin-panel Playwright tests' + '**V-333** Admin: separate auth from customer dashboard (email + password + mandatory TOTP per planning file 48).' — pinned so the customer-trust→admin→SDK→ops-priority + Tier-1-22-slice-85h + Tier-2-18-slice-75h + V-295-status.driftstack.dev + V-301-MFA-planning-47 + V-305-Tauri-driftstack:// + V-306-LiveKit + V-333-admin-mandatory-TOTP commitment survives", () => {
+  it("4-tier priority order framing pinned: '## Recommended priority order (V-295+ slice sequencing)' + 'founder-facing trust first; admin tooling second; SDK feature parity third; ops maturity fourth' + '### Tier 1 — Customer-facing trust + completeness (~85h, ~22 slices)' + '**V-295** Status page (3-4d / 24h) — `status.driftstack.io`' + '**V-296** API key rotation flow' + '**V-301** MFA / TOTP setup + recovery codes (security gate per planning file 47).' + '**V-305** Tauri custom URL scheme `driftstack://auth/callback` (replaces V-268 polling per V-262 deferral).' + '**V-306** GUI client: live session WebRTC stream (LiveKit integration; planning file 36).' + '### Tier 2 — Admin / ops tooling (~75h, ~18 slices)' + '**V-317** Browser-driving admin-panel Playwright tests' + '**V-333** Admin: separate auth from customer dashboard (email + password + mandatory TOTP per planning file 48).' — pinned so the customer-trust→admin→SDK→ops-priority + Tier-1-22-slice-85h + Tier-2-18-slice-75h + V-295-status.driftstack.dev + V-301-MFA-planning-47 + V-305-Tauri-driftstack:// + V-306-LiveKit + V-333-admin-mandatory-TOTP commitment survives", () => {
     expect(body).toMatch(/## Recommended priority order \(V-295\+ slice sequencing\)/);
     expect(body).toMatch(
       /founder-facing trust first; admin tooling second; SDK feature parity third; ops maturity fourth/,
     );
     expect(body).toMatch(/### Tier 1 — Customer-facing trust \+ completeness \(~85h, ~22 slices\)/);
-    expect(body).toMatch(/\*\*V-295\*\* Status page \(3-4d \/ 24h\) — `status\.driftstack\.dev`/);
+    expect(body).toMatch(/\*\*V-295\*\* Status page \(3-4d \/ 24h\) — `status\.driftstack\.io`/);
     expect(body).toMatch(/\*\*V-296\*\* API key rotation flow/);
     expect(body).toMatch(
       /\*\*V-301\*\* MFA \/ TOTP setup \+ recovery codes \(security gate per planning file 47\)\./,

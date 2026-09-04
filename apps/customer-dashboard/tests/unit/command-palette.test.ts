@@ -39,7 +39,7 @@ function setUp(): SetUp {
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', () => {});
   const dom = new JSDOM(htmlNoScripts, {
-    url: 'https://app.driftstack.dev/',
+    url: 'https://app.driftstack.io/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
     virtualConsole,

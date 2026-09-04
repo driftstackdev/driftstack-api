@@ -53,13 +53,13 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(QS);
 
     expect(p).toMatch(
-      /A Driftstack account \(\[sign up\]\(https:\/\/app\.driftstack\.dev\/signup\/\) or \[sign in\]\(https:\/\/app\.driftstack\.dev\/login\/\)\)/,
+      /A Driftstack account \(\[sign up\]\(https:\/\/app\.driftstack\.io\/signup\/\) or \[sign in\]\(https:\/\/app\.driftstack\.io\/login\/\)\)/,
     );
     expect(p).toMatch(
-      /Open \[app\.driftstack\.dev\/api-keys\]\(https:\/\/app\.driftstack\.dev\/api-keys\/\)\./,
+      /Open \[app\.driftstack\.io\/api-keys\]\(https:\/\/app\.driftstack\.io\/api-keys\/\)\./,
     );
     expect(p).not.toMatch(
-      /\(https:\/\/(?:app\.driftstack\.dev\/(?:signup|login|api-keys)|driftstack\.dev\/pricing)\)/,
+      /\(https:\/\/(?:app\.driftstack\.io\/(?:signup|login|api-keys)|driftstack\.io\/pricing)\)/,
     );
     expect(p).toMatch(/Any paid Driftstack tier \(Manual, API, or Enterprise\)/);
     expect(p).toMatch(
@@ -116,7 +116,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
       /`client\.sessions\.create\(\)` reserved one of your account's concurrent session slots\./,
     );
     expect(p).toMatch(
-      /Each tier has a concurrent cap \(Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see \[pricing\]\(https:\/\/driftstack\.dev\/pricing\/\)\)\. Exceeding the cap returns 429\./,
+      /Each tier has a concurrent cap \(Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see \[pricing\]\(https:\/\/driftstack\.io\/pricing\/\)\)\. Exceeding the cap returns 429\./,
     );
     expect(p).toMatch(
       /`client\.sessions\.navigate\(\)` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build\. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari\./,

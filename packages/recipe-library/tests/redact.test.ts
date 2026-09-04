@@ -54,7 +54,7 @@ describe('redactStepForResult', () => {
     ]) {
       const step: RecipeStep = {
         kind: 'navigate',
-        url: `https://app.driftstack.dev/stream?${name}=SUPERSECRETVALUE123&page=2`,
+        url: `https://app.driftstack.io/stream?${name}=SUPERSECRETVALUE123&page=2`,
       };
       const out = redactStepForResult(step) as { url: string };
       expect(out.url, `${name} was left in clear`).not.toContain('SUPERSECRETVALUE123');

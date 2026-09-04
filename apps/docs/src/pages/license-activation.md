@@ -38,7 +38,7 @@ On first launch, the GUI client opens a five-step wizard:
    - ✅ valid — wizard advances.
    - ❌ wrong fallback key — the message is deployment-aware. Cloud mode:
      "Authentication failed (401). Double-check the key, or create a new one
-     at app.driftstack.dev/api-keys." Self-hosted mode explains that the key
+     at app.driftstack.io/api-keys." Self-hosted mode explains that the key
      must be created on your own server's dashboard — a cloud key will not
      authenticate against a self-hosted server.
    - ❌ unreachable — the message starts with "Couldn't reach `<url>`." and
@@ -110,7 +110,7 @@ and relaunches the app. See [the gui-client packaging notes](https://github.com/
   the fallback, verify that the paid key belongs to the selected deployment.
   In self-hosted mode, a cloud key never works against your own server (and
   vice-versa). Settings re-validates credentials and shows the same guidance.
-- **"Couldn't reach control plane"** — for cloud, check [status.driftstack.dev](https://status.driftstack.dev). For self-hosted, check your control plane's `/v1/status` endpoint directly.
+- **"Couldn't reach control plane"** — for cloud, check [status.driftstack.io](https://status.driftstack.io). For self-hosted, check your control plane's `/v1/status` endpoint directly.
 - **Wizard re-fires on every launch** — macOS Keychain may be unavailable to the app. Confirm the app is signed correctly and reinstall the supplied build if it was modified or quarantined.
 - **"You do not have permission" on activation** — sign in to the dashboard
   and check the account status and selected team. If the account is active and

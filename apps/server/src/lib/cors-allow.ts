@@ -38,7 +38,20 @@ const TAURI_HTTPS_RE = /^https?:\/\/tauri\.localhost$/;
 // control, so allowing them is least-privilege vs the permissive `origin:true`.
 // NOTE: no effect while PERMISSIVE_CORS=true (app.ts uses `origin:true` then,
 // bypassing these matchers); this purely de-risks the eventual security flip.
+// 2026-09-04 — the website moved to driftstack.io. BOTH TLDs are listed on
+// purpose and this is not redundancy: the .dev hosts stay attached and serving
+// (later a 301) through the redirect window, and a browser that follows a
+// bookmark to a .dev page must still be allowed to call the API from it. Dropping
+// the .dev half before the redirect is retired turns every old bookmark into a
+// CORS failure with no server-side error to find. Retire the .dev six only when
+// the .dev custom domains come off Pages.
 const DRIFTSTACK_PROD_ORIGINS: readonly string[] = [
+  'https://driftstack.io',
+  'https://www.driftstack.io',
+  'https://app.driftstack.io',
+  'https://admin.driftstack.io',
+  'https://status.driftstack.io',
+  'https://docs.driftstack.io',
   'https://driftstack.dev',
   'https://www.driftstack.dev',
   'https://app.driftstack.dev',

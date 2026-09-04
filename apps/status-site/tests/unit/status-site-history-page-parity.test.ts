@@ -1,5 +1,5 @@
 // W354.B — drift guard for status-site /history. The 90-day
-// incident archive at status.driftstack.dev/history.
+// incident archive at status.driftstack.io/history.
 //
 // Pinned:
 //   • 90-day window claim ↔ ?window=90d query param in the fetch

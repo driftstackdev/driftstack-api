@@ -8,7 +8,7 @@
 //   • BaseLayout import + page title + SEO description.
 //   • 5-card category grid: Quickstart / API reference / SDKs /
 //     Webhooks / Self-hosted.
-//   • Card hrefs: https://docs.driftstack.dev/quickstart-curl/
+//   • Card hrefs: https://docs.driftstack.io/quickstart-curl/
 //     (S47 2026-07-07 mirror deprecation — was /docs/api-quickstart,
 //     now deleted + 301) + /api-reference + /docs/sdk-typescript +
 //     /docs/webhooks + /self-hosted.
@@ -50,8 +50,8 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
     );
   });
 
-  it('5-card category grid: Quickstart (https://docs.driftstack.dev/quickstart-curl/ — S47 2026-07-07 mirror deprecation successor of the deleted /docs/api-quickstart) + API reference (/api-reference) + SDKs (/docs/sdk-typescript) + Webhooks (/docs/webhooks) + Self-hosted (/self-hosted) — pinned so the 5 main doc entry points + their canonical hrefs stay correct (drift to dropping any card would orphan customers from that documentation category; drift to a different href would break the click-through; drift BACK to /docs/api-quickstart would re-point customers at a 301 stub)', () => {
-    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev\/quickstart-curl\/"/);
+  it('5-card category grid: Quickstart (https://docs.driftstack.io/quickstart-curl/ — S47 2026-07-07 mirror deprecation successor of the deleted /docs/api-quickstart) + API reference (/api-reference) + SDKs (/docs/sdk-typescript) + Webhooks (/docs/webhooks) + Self-hosted (/self-hosted) — pinned so the 5 main doc entry points + their canonical hrefs stay correct (drift to dropping any card would orphan customers from that documentation category; drift to a different href would break the click-through; drift BACK to /docs/api-quickstart would re-point customers at a 301 stub)', () => {
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.io\/quickstart-curl\/"/);
     expect(body).not.toMatch(/href="\/docs\/api-quickstart"/);
     for (const path of [
       '/api-reference',
@@ -75,7 +75,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   it('API reference card pins curated-local versus complete-live reference truth', () => {
     expect(body).toMatch(/Curated route map \+ live reference →/);
     expect(body).toMatch(/Browse common routes and runnable patterns here/);
-    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.dev/);
+    expect(body).toMatch(/complete interactive OpenAPI 3\.1 reference on docs\.driftstack\.io/);
     expect(body).toMatch(/same contract the SDK codegen reads/);
     expect(body).not.toMatch(/Every endpoint, every shape/);
   });
@@ -106,7 +106,7 @@ describe('W498.C apps/marketing-site/src/pages/docs.astro content parity', () =>
   });
 
   it('points recipe readers at the live docs host without a dead marketing mirror', () => {
-    expect(body).toContain('docs.driftstack.dev/api/recipes/');
+    expect(body).toContain('docs.driftstack.io/api/recipes/');
     expect(body).not.toMatch(/href="\/docs\/recipes/);
   });
 

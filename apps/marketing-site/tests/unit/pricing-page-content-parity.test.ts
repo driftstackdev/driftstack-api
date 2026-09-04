@@ -184,8 +184,8 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('free-tier header card cross-links: signup + docs + data-bound price', () => {
-    expect(body).toMatch(/href="https:\/\/app\.driftstack\.dev\/signup\/"/);
-    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"/);
+    expect(body).toMatch(/href="https:\/\/app\.driftstack\.io\/signup\/"/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.io"/);
     expect(body).toMatch(/Free — \{fmtUsd\(freeTier\.monthlyUsd\)\}, forever/);
   });
 

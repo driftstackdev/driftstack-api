@@ -87,7 +87,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
       return {
         apiKey: apiKeyValue,
         baseUrl: 'http://localhost:3000',
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       };
     },
     accountMe: {

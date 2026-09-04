@@ -23,7 +23,7 @@ function setUpDom(
     return '';
   });
   const dom = new JSDOM(htmlNoScripts, {
-    url: 'https://app.driftstack.dev/auth/magic-link-request/',
+    url: 'https://app.driftstack.io/auth/magic-link-request/',
     runScripts: 'dangerously',
     pretendToBeVisual: true,
   });

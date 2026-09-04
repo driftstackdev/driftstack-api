@@ -5,12 +5,12 @@
 // claims a status-page reader anchors on:
 //
 //   • Public pages index by default; error/token utility pages can opt out.
-//   • Header: "Driftstack · status" wordmark + driftstack.dev
+//   • Header: "Driftstack · status" wordmark + driftstack.io
 //     cross-link.
 //   • "Driftstack is a Dutch BV. Status data is operational only —
 //     never customer data." footer claim (load-bearing trust
 //     signal — operationally-pinned guarantee).
-//   • Footer privacy-policy cross-link to driftstack.dev/legal/
+//   • Footer privacy-policy cross-link to driftstack.io/legal/
 //     privacy.
 //   • Single max-w-3xl content container (narrow, focused).
 //   • global.css import (status-site styles).
@@ -60,10 +60,10 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
 
     const publicPages = [
-      ['index.html', 'https://status.driftstack.dev/'],
-      ['history/index.html', 'https://status.driftstack.dev/history/'],
-      ['incident/index.html', 'https://status.driftstack.dev/incident/'],
-      ['subscribe/index.html', 'https://status.driftstack.dev/subscribe/'],
+      ['index.html', 'https://status.driftstack.io/'],
+      ['history/index.html', 'https://status.driftstack.io/history/'],
+      ['incident/index.html', 'https://status.driftstack.io/incident/'],
+      ['subscribe/index.html', 'https://status.driftstack.io/subscribe/'],
     ];
     for (const [relativePath, canonical] of publicPages) {
       const rendered = read(resolve(DIST, relativePath));
@@ -172,9 +172,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     expect(body).toMatch(/<span class="text-ink-muted">status<\/span>/);
   });
 
-  it('R13 header right-nav: driftstack.dev external cross-link — dark-theme ink-muted -> ink-primary hover after status-site migration', () => {
+  it('R13 header right-nav: driftstack.io external cross-link — dark-theme ink-muted -> ink-primary hover after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*driftstack\.dev\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.io" class="text-ink-muted hover:text-ink-primary">\s*driftstack\.io\s*<\/a>/,
     );
   });
 
@@ -184,9 +184,9 @@ describe('W381.C status-site StatusLayout.astro content parity', () => {
     );
   });
 
-  it('R13 footer privacy-policy cross-link to driftstack.dev/legal/privacy — dark-theme hover:text-ink-primary after status-site migration', () => {
+  it('R13 footer privacy-policy cross-link to driftstack.io/legal/privacy — dark-theme hover:text-ink-primary after status-site migration', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*Privacy\s*<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/privacy\/" class="hover:text-ink-primary">\s*Privacy\s*<\/a>/,
     );
   });
 

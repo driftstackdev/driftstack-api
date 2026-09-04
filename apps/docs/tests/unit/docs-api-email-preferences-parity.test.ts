@@ -1,4 +1,4 @@
-// W260.C — drift-guard for docs.driftstack.dev/api/email-preferences. Pins:
+// W260.C — drift-guard for docs.driftstack.io/api/email-preferences. Pins:
 // 1. GET + PUT /v1/account/email-preferences match the live routes.
 // 2. Every event_type in the opt-outable table is a real
 //    OptOutableEmailEventSchema enum value (and vice versa — no live

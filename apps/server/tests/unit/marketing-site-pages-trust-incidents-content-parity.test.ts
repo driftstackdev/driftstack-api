@@ -102,10 +102,10 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
       /lead="Subscribe by email from the status page, or manage account notification preferences from the dashboard\."/,
     );
     expect(body).toMatch(
-      /primaryHref="https:\/\/status\.driftstack\.dev"\s*primaryLabel="Open status page"/,
+      /primaryHref="https:\/\/status\.driftstack\.io"\s*primaryLabel="Open status page"/,
     );
     expect(body).toMatch(
-      /secondaryHref="https:\/\/app\.driftstack\.dev\/settings\/"\s*secondaryLabel="Manage notifications"/,
+      /secondaryHref="https:\/\/app\.driftstack\.io\/settings\/"\s*secondaryLabel="Manage notifications"/,
     );
     expect(body).not.toMatch(/future updates|future-status/i);
   });

@@ -37,7 +37,7 @@ infrastructure.
 under the `/v1/` path at
 [https://api.driftstack.dev](https://api.driftstack.dev). Its current
 developer reference is published at
-[https://docs.driftstack.dev/api/](https://docs.driftstack.dev/api/).
+[https://docs.driftstack.io/api/](https://docs.driftstack.io/api/).
 
 **"API Key"** means an authentication credential issued to Customer by
 Driftstack that authorises calls to the API on Customer's behalf. API
@@ -230,7 +230,7 @@ provider for caches, rate-limit buckets, and ephemeral session state.
 Data residency is the EU Frankfurt region.
 
 **"Cloudflare"** means Cloudflare, Inc. (Delaware, USA), the provider
-of DNS, CDN, edge routing (`driftstack.dev` and subdomains), Pages
+of DNS, CDN, edge routing (`driftstack.io` and subdomains), Pages
 hosting, and R2 object storage for customer-uploaded profile avatars,
 encrypted profile blobs, and public status-page snapshots. R2 uses
 Cloudflare's default jurisdiction and may replicate data in the EU

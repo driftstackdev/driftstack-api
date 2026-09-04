@@ -75,7 +75,7 @@ working checkout that returns to its own origin without touching any
 source.
 
 If you DO send them, they are validated against a **hardcoded** allowlist
-of three origins (`https://app.driftstack.dev` and two local-development
+of three origins (`https://app.driftstack.io` and two local-development
 origins). That list is deliberately not env-driven — a typo in
 environment config would silently re-open the redirect hole the check
 exists to close — so it is edited in source under review. Sending any

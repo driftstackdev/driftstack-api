@@ -64,7 +64,7 @@ describe('admin incident detail mutation lifecycle', () => {
        <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
        <div data-form-group="resolved" class="hidden">${form('reopen-form', 'Reopen')}</div>`,
       {
-        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        url: 'https://admin.driftstack.io/incidents/inc_test',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -138,7 +138,7 @@ describe('admin incident detail mutation lifecycle', () => {
        <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
        <div data-form-group="resolved" class="hidden">${form('reopen-form', 'Reopen')}</div>`,
       {
-        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        url: 'https://admin.driftstack.io/incidents/inc_test',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -200,7 +200,7 @@ describe('admin incident detail mutation lifecycle', () => {
        <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
        <div data-form-group="resolved" class="hidden">${form('reopen-form', 'Reopen')}</div>`,
       {
-        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        url: 'https://admin.driftstack.io/incidents/inc_test',
         runScripts: 'dangerously',
         virtualConsole,
       },
@@ -302,7 +302,7 @@ describe('admin incident detail mutation lifecycle', () => {
        <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
        <div data-form-group="resolved">${form('reopen-form', 'Reopen')}</div>`,
         {
-          url: 'https://admin.driftstack.dev/incidents/inc_test',
+          url: 'https://admin.driftstack.io/incidents/inc_test',
           runScripts: 'dangerously',
           virtualConsole,
         },
@@ -372,7 +372,7 @@ describe('admin incident detail mutation lifecycle', () => {
        <div data-form-group="active">${form('add-update-form', 'Post update', true)}${form('resolve-form', 'Resolve')}</div>
        <div data-form-group="resolved">${form('reopen-form', 'Reopen')}</div>`,
       {
-        url: 'https://admin.driftstack.dev/incidents/inc_test',
+        url: 'https://admin.driftstack.io/incidents/inc_test',
         runScripts: 'dangerously',
         virtualConsole,
       },

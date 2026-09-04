@@ -33,7 +33,7 @@ import { installAdminDeadline } from './admin-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'incidents', 'index.html');
-const PAGE_URL = 'https://admin.driftstack.dev/incidents/';
+const PAGE_URL = 'https://admin.driftstack.io/incidents/';
 
 interface MockFetchCall {
   url: string;

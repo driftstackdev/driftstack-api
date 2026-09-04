@@ -102,7 +102,7 @@ describe('desktop app access public truth', () => {
     expect(welcome).toMatch(/restricted device credential for the\s+app, not a customer API key/);
     expect(overview).toContain('<p class="font-medium text-tk-ink">API quickstart</p>');
     expect(overview).toContain('Paid-tier code walkthrough on docs.');
-    expect(overview).toContain('https://docs.driftstack.dev/quickstart/');
-    expect(overview).not.toMatch(/Get the app[\s\S]{0,240}docs\.driftstack\.dev\/quickstart/);
+    expect(overview).toContain('https://docs.driftstack.io/quickstart/');
+    expect(overview).not.toMatch(/Get the app[\s\S]{0,240}docs\.driftstack\.io\/quickstart/);
   });
 });

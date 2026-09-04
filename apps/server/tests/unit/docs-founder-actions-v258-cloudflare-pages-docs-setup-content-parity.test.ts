@@ -1,5 +1,5 @@
 // W544.B — drift guard for /docs/founder-actions/v258-cloudflare-pages-docs-setup.md.
-// Founder runbook for docs.driftstack.dev Cloudflare Pages setup.
+// Founder runbook for docs.driftstack.io Cloudflare Pages setup.
 // Cross-referenced from W543.B deploy-docs.yml parity. Drift here
 // either drops the direct-upload-not-GitHub-integration rationale
 // (would race the CF GitHub integration against the wrangler workflow),
@@ -12,7 +12,7 @@
 //   • CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID as REPO secrets
 //     (already exist from marketing setup).
 //   • Push-to-main OR manual-dispatch first-deploy.
-//   • docs.driftstack.dev custom-domain wiring + Universal SSL.
+//   • docs.driftstack.io custom-domain wiring + Universal SSL.
 //   • CF-side rollback (atomic) vs repo-side rollback (slower but
 //     tracked).
 //   • Cost: 500 builds/month free tier.
@@ -33,9 +33,9 @@ function read(p: string): string {
 describe('W544.B /docs/founder-actions/v258-cloudflare-pages-docs-setup.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + secret-reuse + path-filtered-workflow framing pinned: '# V-258 — Cloudflare Pages setup for `docs.driftstack.dev` (founder ops action)' + 'Per V-258: the doc-site CI workflow (`.github/workflows/deploy-docs.yml`) needs a Cloudflare Pages project + DNS record + the same `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets that the marketing-site deploy already uses.' + 'The workflow is path-filtered: it only runs when something under `apps/docs/` changes (or its workflow file). Until you complete the steps below, every push to main will run the build-and-skip-upload path successfully (build artifact verified, upload step exits 0 with a \"secret unset\" message).' — pinned so the V-258 + secret-reuse-with-marketing + path-filtered-workflow + build-and-skip-upload-graceful-fallback commitment survives", () => {
+  it("Header + secret-reuse + path-filtered-workflow framing pinned: '# V-258 — Cloudflare Pages setup for `docs.driftstack.io` (founder ops action)' + 'Per V-258: the doc-site CI workflow (`.github/workflows/deploy-docs.yml`) needs a Cloudflare Pages project + DNS record + the same `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` secrets that the marketing-site deploy already uses.' + 'The workflow is path-filtered: it only runs when something under `apps/docs/` changes (or its workflow file). Until you complete the steps below, every push to main will run the build-and-skip-upload path successfully (build artifact verified, upload step exits 0 with a \"secret unset\" message).' — pinned so the V-258 + secret-reuse-with-marketing + path-filtered-workflow + build-and-skip-upload-graceful-fallback commitment survives", () => {
     expect(body).toMatch(
-      /# V-258 — Cloudflare Pages setup for `docs\.driftstack\.dev` \(founder ops action\)/,
+      /# V-258 — Cloudflare Pages setup for `docs\.driftstack\.io` \(founder ops action\)/,
     );
     expect(body).toMatch(
       /Per V-258: the doc-site CI workflow \(`\.github\/workflows\/deploy-docs\.yml`\) needs a Cloudflare Pages project \+ DNS record \+ the same `CLOUDFLARE_API_TOKEN` \/ `CLOUDFLARE_ACCOUNT_ID` secrets that the marketing-site deploy already uses\./,
@@ -91,7 +91,7 @@ describe('W544.B /docs/founder-actions/v258-cloudflare-pages-docs-setup.md conte
     );
   });
 
-  it("First-deploy 2-options + custom-domain + Universal-SSL framing pinned: '### 4. Trigger the first deploy' + '**Option A — push-to-main:** any change under `apps/docs/` triggers `Deploy doc site`.' + '**Option B — manual dispatch:** GitHub repo → **Actions** → **Deploy doc site** → **Run workflow** → from `main`. No code change needed' + '### 5. Wire up the custom domain' + 'CF dashboard → Pages project → **Custom domains** → **Set up a custom domain** → `docs.driftstack.dev`.' + 'CF will prompt to add a DNS record.' + 'TLS provisions automatically (CF universal SSL).' + 'DNS propagation: usually under a minute when the zone is in CF; up to a few minutes elsewhere.' — pinned so the 2-options-for-first-deploy + docs.driftstack.dev custom-domain + universal-SSL + sub-minute-propagation-when-zone-in-CF commitment survives", () => {
+  it("First-deploy 2-options + custom-domain + Universal-SSL framing pinned: '### 4. Trigger the first deploy' + '**Option A — push-to-main:** any change under `apps/docs/` triggers `Deploy doc site`.' + '**Option B — manual dispatch:** GitHub repo → **Actions** → **Deploy doc site** → **Run workflow** → from `main`. No code change needed' + '### 5. Wire up the custom domain' + 'CF dashboard → Pages project → **Custom domains** → **Set up a custom domain** → `docs.driftstack.io`.' + 'CF will prompt to add a DNS record.' + 'TLS provisions automatically (CF universal SSL).' + 'DNS propagation: usually under a minute when the zone is in CF; up to a few minutes elsewhere.' — pinned so the 2-options-for-first-deploy + docs.driftstack.io custom-domain + universal-SSL + sub-minute-propagation-when-zone-in-CF commitment survives", () => {
     expect(body).toMatch(/### 4\. Trigger the first deploy/);
     expect(body).toMatch(
       /\*\*Option A — push-to-main:\*\* any change under `apps\/docs\/` triggers `Deploy doc site`\./,
@@ -101,7 +101,7 @@ describe('W544.B /docs/founder-actions/v258-cloudflare-pages-docs-setup.md conte
     );
     expect(body).toMatch(/### 5\. Wire up the custom domain/);
     expect(body).toMatch(
-      /- CF dashboard → Pages project → \*\*Custom domains\*\* → \*\*Set up a custom domain\*\* → `docs\.driftstack\.dev`\./,
+      /- CF dashboard → Pages project → \*\*Custom domains\*\* → \*\*Set up a custom domain\*\* → `docs\.driftstack\.io`\./,
     );
     expect(body).toMatch(/TLS provisions automatically \(CF universal SSL\)\./);
     expect(body).toMatch(

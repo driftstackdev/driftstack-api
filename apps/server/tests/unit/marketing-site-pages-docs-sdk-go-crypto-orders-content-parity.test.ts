@@ -130,14 +130,14 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
       /<a href="\/docs\/sdk-python-crypto-orders\/">Python SDK crypto orders<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
     );
     expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
     );
     expect(body).not.toMatch(
       /href="\/(?:legal\/refunds|docs\/sdk-go|docs\/sdk-typescript-crypto-orders|docs\/sdk-python-crypto-orders|docs\/idempotency-keys)"/,

@@ -14,7 +14,7 @@
 //
 // Also-acceptable for examples:
 //   - go.dev (Go SDK quickstart docs page)
-//   - https://app.driftstack.dev (canonical dashboard URL for
+//   - https://app.driftstack.io (canonical dashboard URL for
 //     billing-flow example redirects per W800)
 //   - golang.org / httpbin.org (used in W802 Go goroutine_pool
 //     scraping demo).
@@ -130,16 +130,16 @@ describe('W836 cross-SDK example URL safety', () => {
     expect(p).toMatch(/go\.dev/);
   });
 
-  // ─── Billing-flow examples use app.driftstack.dev for redirects ─
+  // ─── Billing-flow examples use app.driftstack.io for redirects ─
 
-  it("CRITICAL TS+Python+Go billing-flow examples all use https://app.driftstack.dev/billing as the success_url + cancel_url. The 'app.driftstack.dev' host is the canonical customer-dashboard origin per W800 — drift to a different host would break the documented Checkout redirect flow.", () => {
+  it("CRITICAL TS+Python+Go billing-flow examples all use https://app.driftstack.io/billing as the success_url + cancel_url. The 'app.driftstack.io' host is the canonical customer-dashboard origin per W800 — drift to a different host would break the documented Checkout redirect flow.", () => {
     const tsBf = read(resolve(REPO_ROOT, 'packages/sdk-typescript/examples/billing-flow.ts'));
     const pyBf = read(resolve(REPO_ROOT, 'packages/sdk-python/examples/billing_flow.py'));
     const goBf = read(resolve(REPO_ROOT, 'packages/sdk-go/examples/billing_flow/main.go'));
 
-    expect(tsBf).toMatch(/https:\/\/app\.driftstack\.dev\/billing/);
-    expect(pyBf).toMatch(/https:\/\/app\.driftstack\.dev\/billing/);
-    expect(goBf).toMatch(/https:\/\/app\.driftstack\.dev\/billing/);
+    expect(tsBf).toMatch(/https:\/\/app\.driftstack\.io\/billing/);
+    expect(pyBf).toMatch(/https:\/\/app\.driftstack\.io\/billing/);
+    expect(goBf).toMatch(/https:\/\/app\.driftstack\.io\/billing/);
   });
 
   // ─── No http:// (non-TLS) URLs except localhost ───────────────

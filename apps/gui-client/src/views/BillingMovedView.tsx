@@ -15,7 +15,7 @@
 // removing the in-app copy, so this view points at the one place that owns it
 // rather than leaving the destination missing and the customer hunting.
 
-const BILLING_URL = 'https://app.driftstack.dev/billing/';
+const BILLING_URL = 'https://app.driftstack.io/billing/';
 
 export function BillingMovedView(): JSX.Element {
   return (

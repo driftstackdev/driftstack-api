@@ -1,12 +1,12 @@
 // W527.A — drift guard for apps/admin-panel/astro.config.mjs.
-// Driftstack-staff-only admin panel at admin.driftstack.dev. Drift here
+// Driftstack-staff-only admin panel at admin.driftstack.io. Drift here
 // either changes the subdomain (would collapse the staff↔customer DNS
 // security boundary) or breaks the V-134/V-174 staff-API-key scope
 // requirement (would weaken staff access control) or drops the static
 // arbitrary-ID shell contract (which would 404 live detail links).
 //
-//   • Staff-only framing + admin.driftstack.dev (separate subdomain
-//     from app.driftstack.dev customer dashboard so security boundary
+//   • Staff-only framing + admin.driftstack.io (separate subdomain
+//     from app.driftstack.io customer dashboard so security boundary
 //     is at DNS + TLS layer, not application logic).
 //   • Auth: driftstack_internal_admin scope + /v1/admin/* control plane
 //     + V-134 + V-174 preHandler enforcement.
@@ -33,12 +33,12 @@ function read(p: string): string {
 describe('W527.A apps/admin-panel/astro.config.mjs content parity', () => {
   const body = read(LIB);
 
-  it("Staff-only + admin-subdomain + DNS-security-boundary framing pinned: 'Admin panel — Driftstack-staff-only surface.' + 'Lives at admin.driftstack.dev (separate subdomain from the customer dashboard at app.driftstack.dev) so security boundary is at the DNS + TLS layer, not application logic.' + 'site: https://admin.driftstack.dev' + 'output: \"static\"' — pinned so the staff-only-surface + admin-subdomain + DNS+TLS-security-boundary (not application-logic) commitment survives (drift to a different subdomain or merging into app. would collapse the staff↔customer security isolation)", () => {
+  it("Staff-only + admin-subdomain + DNS-security-boundary framing pinned: 'Admin panel — Driftstack-staff-only surface.' + 'Lives at admin.driftstack.io (separate subdomain from the customer dashboard at app.driftstack.io) so security boundary is at the DNS + TLS layer, not application logic.' + 'site: https://admin.driftstack.io' + 'output: \"static\"' — pinned so the staff-only-surface + admin-subdomain + DNS+TLS-security-boundary (not application-logic) commitment survives (drift to a different subdomain or merging into app. would collapse the staff↔customer security isolation)", () => {
     expect(body).toMatch(/\/\/ Admin panel — Driftstack-staff-only surface\./);
     expect(body).toMatch(
-      /\/\/ Lives at admin\.driftstack\.dev \(separate subdomain from the customer\s*\/\/ dashboard at app\.driftstack\.dev\) so security boundary is at the DNS\s*\/\/ \+ TLS layer, not application logic\./,
+      /\/\/ Lives at admin\.driftstack\.io \(separate subdomain from the customer\s*\/\/ dashboard at app\.driftstack\.io\) so security boundary is at the DNS\s*\/\/ \+ TLS layer, not application logic\./,
     );
-    expect(body).toMatch(/site: 'https:\/\/admin\.driftstack\.dev',/);
+    expect(body).toMatch(/site: 'https:\/\/admin\.driftstack\.io',/);
     expect(body).toMatch(/output: 'static',/);
   });
 

@@ -148,7 +148,7 @@ export interface AccountLifecycleServiceConfig {
   /**
    * Base URL for the customer-facing docs surface, used to template
    * deep-links into specific sections from outbound emails. Trailing
-   * slashes are stripped at construction time. e.g. `https://driftstack.dev/docs`.
+   * slashes are stripped at construction time. e.g. `https://driftstack.io/docs`.
    */
   docsBaseUrl: string;
   /**

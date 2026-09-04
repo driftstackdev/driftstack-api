@@ -1,6 +1,6 @@
 // W490.B — drift guard for apps/admin-panel/src/pages/incidents/index.astro.
 // V-338 incident list + new-incident form page. Drift here either
-// drops the 'Public incidents propagate to status.driftstack.dev'
+// drops the 'Public incidents propagate to status.driftstack.io'
 // SLA-adjacent framing (operators lose context for the public-
 // checkbox decision) or breaks the open/resolved split (resolved
 // incidents would appear in the open list, hiding the actually-
@@ -42,15 +42,15 @@ describe('W490.B apps/admin-panel/src/pages/incidents/index.astro content parity
     );
   });
 
-  it("Page-purpose framing pinned: 'Manually post and update status-page incidents. Public entries surface on status.driftstack.dev within ~60 seconds. Every action audit-logged.' — pinned so the ~60s SLA-adjacent propagation framing survives + the audit-log invariant stays explicit", () => {
+  it("Page-purpose framing pinned: 'Manually post and update status-page incidents. Public entries surface on status.driftstack.io within ~60 seconds. Every action audit-logged.' — pinned so the ~60s SLA-adjacent propagation framing survives + the audit-log invariant stays explicit", () => {
     expect(body).toMatch(
-      /Manually post and update status-page incidents\. Public entries surface on\s*status\.driftstack\.dev within ~60 seconds\. Every action audit-logged\./,
+      /Manually post and update status-page incidents\. Public entries surface on\s*status\.driftstack\.io within ~60 seconds\. Every action audit-logged\./,
     );
   });
 
   it('CF Pages mirror cadence, Hetzner poller, R2, and audit behavior stay documented without an internal label', () => {
     expect(body).toMatch(
-      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s*within about 60 seconds via the Hetzner poller and R2\./,
+      /Posting an incident writes <code>incident\.created<\/code> to the admin audit log\.\s*Public incidents propagate to status\.driftstack\.io through the Cloudflare Pages mirror\s*within about 60 seconds via the Hetzner poller and R2\./,
     );
   });
 

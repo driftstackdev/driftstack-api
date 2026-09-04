@@ -1,4 +1,4 @@
-// W255.A — drift-guard for docs.driftstack.dev/api/api-keys. Pins
+// W255.A — drift-guard for docs.driftstack.io/api/api-keys. Pins
 // the scope enum + the 24h rotation grace + the key_ id prefix to
 // live constants in the db schema.
 

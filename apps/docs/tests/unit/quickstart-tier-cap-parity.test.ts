@@ -57,7 +57,7 @@ describe('W338.A /quickstart tier-cap parity', () => {
     // just the most relevant four. Marketing /pricing is the
     // source-of-truth for the full table; the link must exist so
     // readers can verify the smaller tiers (solo_manual, etc).
-    expect(body).toContain('https://driftstack.dev/pricing');
+    expect(body).toContain('https://driftstack.io/pricing');
   });
 
   it('does not present the restricted Free desktop credential as a curl or sandbox key', () => {

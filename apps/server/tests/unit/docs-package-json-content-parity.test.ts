@@ -2,7 +2,7 @@
 // V-250 docs site manifest. Drift here either drops @tailwindcss/
 // typography (would break the prose styling that lets long-form docs
 // render readably) or drops @astrojs/sitemap (would break the V-250
-// sitemap auto-generation for docs.driftstack.dev).
+// sitemap auto-generation for docs.driftstack.io).
 //
 //   • Name: @driftstack/docs.
 //   • private: true + type: module.

@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/billing-crypto-integration-guide is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/guides/paying-with-crypto/
+//   https://docs.driftstack.io/guides/paying-with-crypto/
 //   (source: apps/docs/src/pages/guides/paying-with-crypto.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -31,7 +31,7 @@ const PAGE = resolve(
 const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
 const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/guides/paying-with-crypto.md');
 
-describe('S47 redirect tombstone — /docs/billing-crypto-integration-guide → https://docs.driftstack.dev/guides/paying-with-crypto/', () => {
+describe('S47 redirect tombstone — /docs/billing-crypto-integration-guide → https://docs.driftstack.io/guides/paying-with-crypto/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -47,7 +47,7 @@ describe('S47 redirect tombstone — /docs/billing-crypto-integration-guide → 
 
     expect(rule('/docs/billing-crypto-integration-guide'), 'bare-path rule missing').toEqual([
       '/docs/billing-crypto-integration-guide',
-      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      'https://docs.driftstack.io/guides/paying-with-crypto/',
       '301',
     ]);
     expect(
@@ -55,7 +55,7 @@ describe('S47 redirect tombstone — /docs/billing-crypto-integration-guide → 
       'trailing-slash rule missing (matching is exact-path)',
     ).toEqual([
       '/docs/billing-crypto-integration-guide/',
-      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      'https://docs.driftstack.io/guides/paying-with-crypto/',
       '301',
     ]);
   });

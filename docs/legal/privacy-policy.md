@@ -35,7 +35,7 @@ This Privacy Policy applies to:
 2. Personal Data of individual contacts (e.g. founders of B2B
    prospects) that Driftstack collects in pre-sales correspondence.
 3. Personal Data collected through any public-facing Driftstack
-   property (the marketing site at `driftstack.dev`, the API status
+   property (the marketing site at `driftstack.io`, the API status
    page, the GitHub repository — to the extent any of these collect
    Personal Data).
 
@@ -231,7 +231,7 @@ addresses.
 ### 3.8 Marketing-site data
 
 **What:** access logs (IP address, user agent, referrer, request
-timestamp) for visitors to `driftstack.dev` (the marketing site).
+timestamp) for visitors to `driftstack.io` (the marketing site).
 Driftstack does **not** currently set first-party analytics cookies
 on the marketing site.
 
@@ -251,7 +251,7 @@ are active.
 ### 3.9 Status-page data
 
 **What:** access logs (IP address, user agent, referrer, request
-timestamp) for visitors to `status.driftstack.dev` (the public service
+timestamp) for visitors to `status.driftstack.io` (the public service
 status page). Driftstack does **not** set analytics cookies on the
 status page.
 
@@ -295,7 +295,7 @@ link sent by Driftstack). Consent is revocable at any time via the
 one-click unsubscribe link in every notification email.
 
 **Source:** Customer / prospect submits the email address voluntarily
-via the form on `status.driftstack.dev`.
+via the form on `status.driftstack.io`.
 
 **Retention:** subscription data is retained while the address is
 subscribed. Unsubscribe sets a tombstone (the row remains so the
@@ -435,7 +435,7 @@ imposing obligations consistent with Article 28 GDPR.
 
 The Sub-processor list is **subject to change** under the notice and
 objection mechanism in Section 3.4 of the DPA. The current list is
-published at <https://driftstack.dev/trust/sub-processors/>.
+published at <https://driftstack.io/trust/sub-processors/>.
 
 ## 8. Customer-Connected Services (NOT Sub-processors)
 

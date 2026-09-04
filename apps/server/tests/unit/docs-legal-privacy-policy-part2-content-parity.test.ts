@@ -142,7 +142,7 @@ describe('W577.B /docs/legal/privacy-policy.md (part 2) content parity', () => {
     expect(body).toMatch(/WebRTC live-session signaling \+ media SFU/);
     expect(body).toMatch(/The Sub-processor list is \*\*subject to change\*\* under the/);
     expect(body).toMatch(/notice and\s+objection mechanism in Section 3\.4 of the DPA\./);
-    expect(body).toMatch(/https:\/\/driftstack\.dev\/trust\/sub-processors\//);
+    expect(body).toMatch(/https:\/\/driftstack\.io\/trust\/sub-processors\//);
     expect(body).not.toMatch(/marketing site goes live|Section 5 of the DPA/i);
   });
 

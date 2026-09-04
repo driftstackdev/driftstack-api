@@ -66,7 +66,7 @@ describe('W340.C admin /incidents badge taxonomy parity', () => {
 
   it('page pins the "~60 seconds" status-page propagation claim (V-338 SSE freshness)', () => {
     // Customer-facing claim: public incidents surface on
-    // status.driftstack.dev within ~60s. Pin it so a copy revamp
+    // status.driftstack.io within ~60s. Pin it so a copy revamp
     // doesn't silently move the goalposts.
     expect(page).toMatch(/within ~60 seconds/);
   });

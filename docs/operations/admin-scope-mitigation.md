@@ -11,7 +11,7 @@ the application now enforces the customer/staff boundary itself.
 - The deprecated `admin` token remains parseable for stored legacy keys and
   satisfies `account_owner` plus customer `admin:*` checks. It never satisfies
   `driftstack_internal_admin`.
-- Cloudflare Access on `admin.driftstack.dev` remains required defense in
+- Cloudflare Access on `admin.driftstack.io` remains required defense in
   depth, but it is no longer the authorization boundary protecting the API.
 
 The `admin` database-enum value is intentionally retained. Removing it before
@@ -39,7 +39,7 @@ must never call `/v1/admin/*`.
 Application-layer enforcement does not make the admin origin public. Keep the
 separate identity perimeter configured as defense in depth:
 
-- [ ] Cloudflare Access policy covers `admin.driftstack.dev`.
+- [ ] Cloudflare Access policy covers `admin.driftstack.io`.
 - [ ] Bypass is never allowed without identity.
 - [ ] The identity provider is restricted to named Driftstack staff identities
       or the controlled `@driftstack.dev` organization.

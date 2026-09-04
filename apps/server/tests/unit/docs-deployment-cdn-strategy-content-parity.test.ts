@@ -32,7 +32,7 @@ function read(p: string): string {
 describe('W554.A /docs/deployment/cdn-strategy.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-221 + source-of-truth framing pinned: '# CDN strategy — marketing site' + 'V-221 — Cloudflare Pages caching strategy for `apps/marketing-site/`. Cache rules live in `apps/marketing-site/public/_headers`' + '## Where this applies' + '**`apps/marketing-site/`** — static Astro build deployed to Cloudflare Pages at driftstack.dev.' + 'Not applicable to `apps/customer-dashboard/` (SSR, behind auth, no public caching) or `apps/server/`' + 'Not applicable to `apps/admin-panel/` (internal-staff surface, never cached publicly).' — pinned so the V-221-marketing-site-CF-Pages + _headers-source-of-truth + driftstack.dev-static-Astro + customer-dashboard-SSR-excluded + apps/server-per-route-excluded + admin-panel-never-cached commitment survives", () => {
+  it("Header + V-221 + source-of-truth framing pinned: '# CDN strategy — marketing site' + 'V-221 — Cloudflare Pages caching strategy for `apps/marketing-site/`. Cache rules live in `apps/marketing-site/public/_headers`' + '## Where this applies' + '**`apps/marketing-site/`** — static Astro build deployed to Cloudflare Pages at driftstack.io.' + 'Not applicable to `apps/customer-dashboard/` (SSR, behind auth, no public caching) or `apps/server/`' + 'Not applicable to `apps/admin-panel/` (internal-staff surface, never cached publicly).' — pinned so the V-221-marketing-site-CF-Pages + _headers-source-of-truth + driftstack.io-static-Astro + customer-dashboard-SSR-excluded + apps/server-per-route-excluded + admin-panel-never-cached commitment survives", () => {
     expect(body).toMatch(/^# CDN strategy — marketing site$/m);
     expect(body).toMatch(
       /V-221 — Cloudflare Pages caching strategy for `apps\/marketing-site\/`\./,
@@ -42,7 +42,7 @@ describe('W554.A /docs/deployment/cdn-strategy.md content parity', () => {
     expect(body).toMatch(
       /- \*\*`apps\/marketing-site\/`\*\* — static Astro build deployed to Cloudflare/,
     );
-    expect(body).toMatch(/Pages at driftstack\.dev\./);
+    expect(body).toMatch(/Pages at driftstack\.io\./);
     expect(body).toMatch(/- Not applicable to `apps\/customer-dashboard\/` \(SSR, behind auth, no/);
     expect(body).toMatch(/public caching\) or `apps\/server\/`/);
     expect(body).toMatch(
@@ -88,7 +88,7 @@ describe('W554.A /docs/deployment/cdn-strategy.md content parity', () => {
     expect(body).toMatch(/in older browsers\./);
     expect(body).toMatch(/- \*\*`Referrer-Policy: strict-origin-when-cross-origin`\*\* — when the/);
     expect(body).toMatch(/browser follows an outbound link, the destination sees only our/);
-    expect(body).toMatch(/origin \(`https:\/\/driftstack\.dev`\), not the full path\./);
+    expect(body).toMatch(/origin \(`https:\/\/driftstack\.io`\), not the full path\./);
     expect(body).toMatch(/`Strict-Transport-Security` and an enforced `Content-Security-Policy`/);
     expect(body).toMatch(/CSP audit completed 2026-07-13/);
     expect(body).toMatch(/Cloudflare Pages applies and merges every matching rule/);
@@ -96,7 +96,7 @@ describe('W554.A /docs/deployment/cdn-strategy.md content parity', () => {
     expect(body).toMatch(/The `\/\*` catch-all MUST stay last and security-only\./);
   });
 
-  it("What-we-don't-do + Verify-with-curl + Source-of-truth framing pinned: '**Per-page TTL overrides** — every HTML page uses the same Tier 2 config. Special-casing creates surprise' + '**Vary headers** — the marketing site doesn't serve content based on cookie, language, or device.' + '**CDN-level transforms** (image resize, HTML minification) — Astro already minifies at build' + '**Worker-based caching logic** — `_headers` is declarative' + 'curl -sI https://driftstack.dev/_astro/<hashed-bundle>.js | grep -i cache' + 'curl -sI https://driftstack.dev/pricing | grep -iE 'cache|frame|content-type-options|referrer'' + 'curl -sI https://driftstack.dev/robots.txt | grep -i cache' + '`apps/marketing-site/public/_headers` is the source of truth.' — pinned so the no-per-page-TTL + no-Vary + no-CDN-transforms + no-Worker-caching + 3-curl-verify-commands + _headers-source-of-truth commitment survives", () => {
+  it("What-we-don't-do + Verify-with-curl + Source-of-truth framing pinned: '**Per-page TTL overrides** — every HTML page uses the same Tier 2 config. Special-casing creates surprise' + '**Vary headers** — the marketing site doesn't serve content based on cookie, language, or device.' + '**CDN-level transforms** (image resize, HTML minification) — Astro already minifies at build' + '**Worker-based caching logic** — `_headers` is declarative' + 'curl -sI https://driftstack.io/_astro/<hashed-bundle>.js | grep -i cache' + 'curl -sI https://driftstack.io/pricing | grep -iE 'cache|frame|content-type-options|referrer'' + 'curl -sI https://driftstack.io/robots.txt | grep -i cache' + '`apps/marketing-site/public/_headers` is the source of truth.' — pinned so the no-per-page-TTL + no-Vary + no-CDN-transforms + no-Worker-caching + 3-curl-verify-commands + _headers-source-of-truth commitment survives", () => {
     expect(body).toMatch(/- \*\*Per-page TTL overrides\*\* — every HTML page uses the same Tier 2/);
     expect(body).toMatch(/config\. Special-casing creates surprise;/);
     expect(body).toMatch(
@@ -109,12 +109,12 @@ describe('W554.A /docs/deployment/cdn-strategy.md content parity', () => {
     expect(body).toMatch(/already minifies at build;/);
     expect(body).toMatch(/- \*\*Worker-based caching logic\*\* — `_headers` is declarative/);
     expect(body).toMatch(
-      /curl -sI https:\/\/driftstack\.dev\/_astro\/<hashed-bundle>\.js \| grep -i cache/,
+      /curl -sI https:\/\/driftstack\.io\/_astro\/<hashed-bundle>\.js \| grep -i cache/,
     );
     expect(body).toMatch(
-      /curl -sI https:\/\/driftstack\.dev\/pricing \| grep -iE 'cache\|frame\|content-type-options\|referrer'/,
+      /curl -sI https:\/\/driftstack\.io\/pricing \| grep -iE 'cache\|frame\|content-type-options\|referrer'/,
     );
-    expect(body).toMatch(/curl -sI https:\/\/driftstack\.dev\/robots\.txt \| grep -i cache/);
+    expect(body).toMatch(/curl -sI https:\/\/driftstack\.io\/robots\.txt \| grep -i cache/);
     expect(body).toMatch(/`apps\/marketing-site\/public\/_headers` is the source of truth\./);
   });
 

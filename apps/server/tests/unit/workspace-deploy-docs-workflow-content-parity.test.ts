@@ -3,15 +3,15 @@
 // Cloudflare deploys (no Sentry — docs site has no client telemetry).
 // Drift here either adds Sentry to the docs build (intentional gap
 // per V-469 — docs is read-only public content), changes the custom
-// domain (would break docs.driftstack.dev), or widens the path-filter
+// domain (would break docs.driftstack.io), or widens the path-filter
 // (would redeploy on every backend commit).
 //
 //   • Pure Astro static-site (no @astrojs/cloudflare adapter — only
 //     the marketing + customer-dashboard need it).
-//   • NO Sentry envs (deliberate — docs.driftstack.dev is read-only
+//   • NO Sentry envs (deliberate — docs.driftstack.io is read-only
 //     public content with no customer-error telemetry; parity with
 //     status-site).
-//   • Custom domain docs.driftstack.dev.
+//   • Custom domain docs.driftstack.io.
 //   • V-258 founder runbook (single-project setup, not the section-C
 //     subset of V-259).
 //   • CLOUDFLARE_DOCS_PROJECT_NAME (distinct repo var).
@@ -46,7 +46,7 @@ describe('W543.B /.github/workflows/deploy-docs.yml content parity', () => {
     expect(body).toMatch(/Skipped if `CLOUDFLARE_API_TOKEN` is unset \(e\.g\. fresh repo without/);
   });
 
-  it("Shared-secret + V-258 distinct project-var + docs.driftstack.dev framing pinned: 'Required GitHub secrets (repository-wide; shared with the marketing-site deploy):' + 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission.' + 'CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID.' + 'Required repository variable (DISTINCT from the marketing project):' + 'CLOUDFLARE_DOCS_PROJECT_NAME  — Cloudflare Pages project slug for the doc site (e.g. `driftstack-docs`).' + 'docs.driftstack.dev → CNAME to the Pages project' + 'Founder runbook for first-time setup: `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`.' — pinned so the shared-with-marketing-CLOUDFLARE-secret + DISTINCT-from-marketing-CLOUDFLARE_DOCS_PROJECT_NAME-var + docs.driftstack.dev-CNAME + V-258-founder-runbook commitment survives", () => {
+  it("Shared-secret + V-258 distinct project-var + docs.driftstack.io framing pinned: 'Required GitHub secrets (repository-wide; shared with the marketing-site deploy):' + 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission.' + 'CLOUDFLARE_ACCOUNT_ID         — Cloudflare account ID.' + 'Required repository variable (DISTINCT from the marketing project):' + 'CLOUDFLARE_DOCS_PROJECT_NAME  — Cloudflare Pages project slug for the doc site (e.g. `driftstack-docs`).' + 'docs.driftstack.io → CNAME to the Pages project' + 'Founder runbook for first-time setup: `docs/founder-actions/v258-cloudflare-pages-docs-setup.md`.' — pinned so the shared-with-marketing-CLOUDFLARE-secret + DISTINCT-from-marketing-CLOUDFLARE_DOCS_PROJECT_NAME-var + docs.driftstack.io-CNAME + V-258-founder-runbook commitment survives", () => {
     expect(body).toMatch(/# Required GitHub secrets \(repository-wide; shared with the marketing-/);
     expect(body).toMatch(/# site deploy\):/);
     expect(body).toMatch(/#\s+- CLOUDFLARE_API_TOKEN\s+— token with `Cloudflare Pages/);
@@ -56,12 +56,12 @@ describe('W543.B /.github/workflows/deploy-docs.yml content parity', () => {
     expect(body).toMatch(/#\s+- CLOUDFLARE_DOCS_PROJECT_NAME\s+— Cloudflare Pages project slug/);
     expect(body).toMatch(/#\s+for the doc site \(e\.g\./);
     expect(body).toMatch(/#\s+`driftstack-docs`\)\. Pre-create/);
-    expect(body).toMatch(/#\s+- docs\.driftstack\.dev → CNAME to the Pages project/);
+    expect(body).toMatch(/#\s+- docs\.driftstack\.io → CNAME to the Pages project/);
     expect(body).toMatch(/# Founder runbook for first-time setup:/);
     expect(body).toMatch(/# `docs\/founder-actions\/v258-cloudflare-pages-docs-setup\.md`\./);
   });
 
-  it("Trigger + path-filter + env-binding framing pinned: 'name: Deploy doc site' + 'paths: apps/docs/** + .github/workflows/deploy-docs.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-docs-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: docs-production + url: https://docs.driftstack.dev' — pinned so the 4-path-filter + docs-production env-binding + docs.driftstack.dev + cancel-in-progress: FALSE commitment survives", () => {
+  it("Trigger + path-filter + env-binding framing pinned: 'name: Deploy doc site' + 'paths: apps/docs/** + .github/workflows/deploy-docs.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-docs-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: docs-production + url: https://docs.driftstack.io' — pinned so the 4-path-filter + docs-production env-binding + docs.driftstack.io + cancel-in-progress: FALSE commitment survives", () => {
     expect(body).toMatch(/^name: Deploy doc site$/m);
     expect(body).toMatch(/- 'apps\/docs\/\*\*'/);
     expect(body).toMatch(/- '\.github\/workflows\/deploy-docs\.yml'/);
@@ -73,7 +73,7 @@ describe('W543.B /.github/workflows/deploy-docs.yml content parity', () => {
     );
     expect(body).toMatch(/permissions:\s*\n\s*contents: read\s*\n\s*deployments: write/);
     expect(body).toMatch(
-      /environment:\s*\n\s*name: docs-production\s*\n\s*url: https:\/\/docs\.driftstack\.dev/,
+      /environment:\s*\n\s*name: docs-production\s*\n\s*url: https:\/\/docs\.driftstack\.io/,
     );
   });
 

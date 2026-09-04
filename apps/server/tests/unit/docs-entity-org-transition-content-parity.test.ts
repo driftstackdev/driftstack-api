@@ -99,7 +99,7 @@ describe('W546.C /docs/entity-org-transition.md content parity', () => {
     expect(body).toMatch(/\(`go get` stops resolving\)\. \*\*Don't rename the GitHub org\.\*\*/);
   });
 
-  it("Punch-list section-A LICENSE + section-B SDK-metadata framing pinned: '## Punch list — apply at KvK closure' + '### A. Update `LICENSE` (one line, all packages)' + 'If the founder wants to reflect the BV's legal name in the copyright line, change `Copyright (c) 2026 driftstackdev` to `Copyright (c) 2026 <Entity B.V.>`.' + 'Either form is legally defensible for MIT — `driftstackdev` is the GitHub org name, which courts have routinely accepted as the copyright holder string.' + '**Decision lives with founder.** No-op is fine; explicit name is cleaner.' + '### B. SDK package metadata (optional, but tidy)' + 'Add explicit `author` / `maintainer` fields with the entity name + contact email (BV's support address, not founder's personal email)' + 'support@driftstack.dev' + 'https://driftstack.dev' — pinned so the 2-punch-list-section (A-LICENSE-optional + B-SDK-metadata-optional-but-tidy) + Entity-B.V.-placeholder + MIT-court-acceptable-org-name + support@driftstack.dev not-founder-personal-email commitment survives", () => {
+  it("Punch-list section-A LICENSE + section-B SDK-metadata framing pinned: '## Punch list — apply at KvK closure' + '### A. Update `LICENSE` (one line, all packages)' + 'If the founder wants to reflect the BV's legal name in the copyright line, change `Copyright (c) 2026 driftstackdev` to `Copyright (c) 2026 <Entity B.V.>`.' + 'Either form is legally defensible for MIT — `driftstackdev` is the GitHub org name, which courts have routinely accepted as the copyright holder string.' + '**Decision lives with founder.** No-op is fine; explicit name is cleaner.' + '### B. SDK package metadata (optional, but tidy)' + 'Add explicit `author` / `maintainer` fields with the entity name + contact email (BV's support address, not founder's personal email)' + 'support@driftstack.dev' + 'https://driftstack.io' — pinned so the 2-punch-list-section (A-LICENSE-optional + B-SDK-metadata-optional-but-tidy) + Entity-B.V.-placeholder + MIT-court-acceptable-org-name + support@driftstack.dev not-founder-personal-email commitment survives", () => {
     expect(body).toMatch(/## Punch list — apply at KvK closure/);
     expect(body).toMatch(/### A\. Update `LICENSE` \(one line, all packages\)/);
     expect(body).toMatch(/If the founder wants to reflect the BV's legal name in the copyright/);
@@ -114,7 +114,7 @@ describe('W546.C /docs/entity-org-transition.md content parity', () => {
     expect(body).toMatch(/Add explicit `author` \/ `maintainer` fields with the entity name \+/);
     expect(body).toMatch(/contact email \(BV's support address, not founder's personal email\):/);
     expect(body).toMatch(/"email": "support@driftstack\.dev"/);
-    expect(body).toMatch(/"url": "https:\/\/driftstack\.dev"/);
+    expect(body).toMatch(/"url": "https:\/\/driftstack\.io"/);
   });
 
   it('file exists at canonical path', () => {

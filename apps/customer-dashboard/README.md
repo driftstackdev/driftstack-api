@@ -1,6 +1,6 @@
 # @driftstack/customer-dashboard
 
-The pre-launch customer account portal served at `app.driftstack.dev`.
+The pre-launch customer account portal served at `app.driftstack.io`.
 
 ## Stack
 
@@ -34,6 +34,6 @@ npm run typecheck --workspace @driftstack/customer-dashboard
 npm run build --workspace @driftstack/customer-dashboard
 ```
 
-The build writes static assets to `apps/customer-dashboard/dist/`. `.github/workflows/deploy-customer-dashboard.yml` and `scripts/deploy-frontend.sh customer-dashboard` deploy that directory to the `driftstack-customer-dashboard` Cloudflare Pages project. The production custom domain is `app.driftstack.dev`.
+The build writes static assets to `apps/customer-dashboard/dist/`. `.github/workflows/deploy-customer-dashboard.yml` and `scripts/deploy-frontend.sh customer-dashboard` deploy that directory to the `driftstack-customer-dashboard` Cloudflare Pages project. The production custom domain is `app.driftstack.io`.
 
 Security headers and retired-route redirects live in `public/_headers` and `public/_redirects`. Keep authenticated data out of generated HTML and browser-persistent caches.

@@ -111,7 +111,7 @@ cost analysis. Recommendation hinges on launch timeline.
    autonomously on OK.
 
 4. **Real-IDP smoke** — sign in via Google + GitHub from
-   https://app.driftstack.dev/login to validate V-667.C verdicts
+   https://app.driftstack.io/login to validate V-667.C verdicts
    1/2/3 end-to-end with real provider accounts.
 
 5. **deploy-status --check** is suitable for cron wiring on the

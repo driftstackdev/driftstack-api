@@ -2,7 +2,7 @@
 // Customer-facing 500 error page. Drift here either drops the
 // support@driftstack.dev escape-hatch (would leave customers
 // stuck on a hard-error with no recovery path) or breaks the
-// status.driftstack.dev pointer (would orphan customers who want
+// status.driftstack.io pointer (would orphan customers who want
 // to check whether the issue is a known outage vs. their request).
 //
 //   • BaseLayout import + page title + 'Something went wrong on
@@ -10,7 +10,7 @@
 //   • 500 monogram + heading.
 //   • 'This is on us, not you' framing.
 //   • mailto:support@driftstack.dev escape-hatch.
-//   • status.driftstack.dev pointer + future-status framing.
+//   • status.driftstack.io pointer + future-status framing.
 //   • 2-button CTA row: Back home + See status.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -47,15 +47,15 @@ describe('W498.B apps/marketing-site/src/pages/500.astro content parity', () => 
     );
   });
 
-  it("2-button CTA row: 'Back home' → '/' (primary) + 'See status' → status.driftstack.dev (secondary) — pinned so the deflection vocabulary stays 2-button (drift to dropping See status would orphan customers who want to check known-outage state before filing a support ticket)", () => {
+  it("2-button CTA row: 'Back home' → '/' (primary) + 'See status' → status.driftstack.io (secondary) — pinned so the deflection vocabulary stays 2-button (drift to dropping See status would orphan customers who want to check known-outage state before filing a support ticket)", () => {
     expect(body).toMatch(/<a href="\/" class="btn-primary">Back home<\/a>/);
     expect(body).toMatch(
-      /<a href="https:\/\/status\.driftstack\.dev" class="btn-secondary">See status<\/a>/,
+      /<a href="https:\/\/status\.driftstack\.io" class="btn-secondary">See status<\/a>/,
     );
   });
 
   it('R6 status-page link footer pinned (status page is now live so dropped the pre-launch fallback framing)', () => {
-    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.dev"/);
+    expect(body).toMatch(/Live status: <a href="https:\/\/status\.driftstack\.io"/);
   });
 
   it('file exists at canonical path', () => {

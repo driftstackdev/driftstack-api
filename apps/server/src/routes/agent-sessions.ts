@@ -265,7 +265,7 @@ const CreateAgentSessionRequestSchema = z.object({
   // When supplied, overrides the operator-default sessionDispatch.initialUrl.
   // http(s)-only (file:/javascript:/data: rejected here → 400 at the route, not a
   // silent dispatch drop); 2048-char cap blocks pathological payloads. Omit →
-  // operator default (today https://driftstack.dev).
+  // operator default (today https://driftstack.io).
   initial_url: z
     .string()
     .min(1)
@@ -4267,7 +4267,7 @@ export function registerAgentSessionsRoutes(
         'Live input forwarding requires a Mac fleet node with harness end-to-end ' +
           'enabled. Pre-launch this endpoint forwards mode=manual + pair-mode-after-takeover ' +
           'events to a stub; full activation lands with the v1.0 harness Swift work. ' +
-          'See https://docs.driftstack.dev/api/agent-sessions/ for the full agent-session surface.',
+          'See https://docs.driftstack.io/api/agent-sessions/ for the full agent-session surface.',
       );
     },
   );
@@ -5693,9 +5693,9 @@ export function registerAgentSessionsRoutes(
 export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void {
   const detail =
     'AI chat is unavailable on this deployment. To activate it, bring your own Anthropic key ' +
-    '(https://docs.driftstack.dev/api/byok-anthropic/), or opt into the ' +
+    '(https://docs.driftstack.io/api/byok-anthropic/), or opt into the ' +
     "deployment's bundled-LLM budget " +
-    '(https://docs.driftstack.dev/api/bundled-llm/).';
+    '(https://docs.driftstack.io/api/bundled-llm/).';
   const stub = (): never => {
     throw new FeatureUnavailableError(detail);
   };

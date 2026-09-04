@@ -106,7 +106,7 @@ describe('W310.B /api-reference ↔ live route parity', () => {
 
   it('links the canonical archetype catalog and create-payload generator reference', () => {
     expect(existsSync(ARCHETYPES_DOC)).toBe(true);
-    expect(body).toContain('https://docs.driftstack.dev/api/archetypes/');
+    expect(body).toContain('https://docs.driftstack.io/api/archetypes/');
     const reference = read(ARCHETYPES_DOC);
     expect(reference).toContain('## Generate a create payload from the live catalog');
     expect(reference).toContain('async function archetypeCreatePayload');

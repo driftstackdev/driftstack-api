@@ -164,9 +164,9 @@ describe('W718 sdk-typescript-crypto-orders marketing-doc parity', () => {
       // S47 2026-07-07 (founder-approved: mirror deprecation): the
       // integration-guide + webhooks-crypto-events mirrors are
       // deleted; hrefs re-pinned to the docs successors.
-      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      'https://docs.driftstack.io/guides/paying-with-crypto/',
       '/docs/idempotency-keys/',
-      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      'https://docs.driftstack.io/webhooks/crypto-events/',
     ];
     for (const link of links) {
       const re = new RegExp(`href="${link.replace(/\//g, '\\/')}"`);

@@ -23,12 +23,12 @@ describe('docs/pages/api/status content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Public-unauthenticated framing pinned: 'The /v1/status/* surface backs the public Driftstack status site. It is intentionally unauthenticated — visitors don't have accounts — and IP-rate-limited at the edge. Cache-Control headers are set so a CDN (Cloudflare Pages in front of status.driftstack.dev) can coalesce concurrent viewers onto one origin call.' — pinned so the public-unauthenticated + IP-rate-limited-at-edge + Cloudflare-Pages-CDN-coalesce contract all stay documented", () => {
+  it("Public-unauthenticated framing pinned: 'The /v1/status/* surface backs the public Driftstack status site. It is intentionally unauthenticated — visitors don't have accounts — and IP-rate-limited at the edge. Cache-Control headers are set so a CDN (Cloudflare Pages in front of status.driftstack.io) can coalesce concurrent viewers onto one origin call.' — pinned so the public-unauthenticated + IP-rate-limited-at-edge + Cloudflare-Pages-CDN-coalesce contract all stay documented", () => {
     expect(body).toMatch(
       /The `\/v1\/status\/\*` surface backs the public Driftstack status site\. It\s*is intentionally \*\*unauthenticated\*\* — visitors don't have accounts —\s*and IP-rate-limited at the edge\./,
     );
     expect(body).toMatch(
-      /Cache-Control headers are set so a\s*CDN \(Cloudflare Pages in front of `status\.driftstack\.dev`\) can coalesce\s*concurrent viewers onto one origin call\./,
+      /Cache-Control headers are set so a\s*CDN \(Cloudflare Pages in front of `status\.driftstack\.io`\) can coalesce\s*concurrent viewers onto one origin call\./,
     );
   });
 

@@ -101,7 +101,7 @@ describe('status-site subscription timeout recovery', () => {
   it('rejects malformed email without a POST and focuses the invalid input', async () => {
     const setup = setUpPage(
       'subscribe/index.html',
-      'https://status.driftstack.dev/subscribe/',
+      'https://status.driftstack.io/subscribe/',
       () => new Response(null, { status: 202 }),
       false,
     );
@@ -124,7 +124,7 @@ describe('status-site subscription timeout recovery', () => {
     let attempts = 0;
     const setup = setUpPage(
       'subscribe/index.html',
-      'https://status.driftstack.dev/subscribe/',
+      'https://status.driftstack.io/subscribe/',
       () => {
         attempts += 1;
         return new Response(null, { status: attempts === 1 ? 400 : 202 });
@@ -152,7 +152,7 @@ describe('status-site subscription timeout recovery', () => {
   it('blocks subscription replay after delivery becomes ambiguous', async () => {
     const setup = setUpPage(
       'subscribe/index.html',
-      'https://status.driftstack.dev/subscribe/',
+      'https://status.driftstack.io/subscribe/',
       abortOnSignal,
     );
     const { window, fetchCalls } = setup;
@@ -182,7 +182,7 @@ describe('status-site subscription timeout recovery', () => {
   it('keeps an authoritative network failure retryable', async () => {
     const setup = setUpPage(
       'subscribe/index.html',
-      'https://status.driftstack.dev/subscribe/',
+      'https://status.driftstack.io/subscribe/',
       () => Promise.reject(new Error('offline')),
       false,
     );
@@ -209,7 +209,7 @@ describe('status-site subscription timeout recovery', () => {
   it('blocks confirmation-link replay after its outcome becomes ambiguous', async () => {
     const setup = setUpPage(
       'subscribe/confirm/index.html',
-      'https://status.driftstack.dev/subscribe/confirm/?token=confirm_token_1234567890',
+      'https://status.driftstack.io/subscribe/confirm/?token=confirm_token_1234567890',
       abortOnSignal,
     );
     const { window, fetchCalls } = setup;
@@ -237,7 +237,7 @@ describe('status-site subscription timeout recovery', () => {
   it('blocks one-click unsubscribe replay after its outcome becomes ambiguous', async () => {
     const setup = setUpPage(
       'subscribe/unsubscribe/index.html',
-      'https://status.driftstack.dev/subscribe/unsubscribe/?token=unsub_token_1234567890',
+      'https://status.driftstack.io/subscribe/unsubscribe/?token=unsub_token_1234567890',
       abortOnSignal,
     );
     const { window, fetchCalls } = setup;
@@ -265,7 +265,7 @@ describe('status-site subscription timeout recovery', () => {
   it('keeps an authoritative unsubscribe network failure retryable', async () => {
     const setup = setUpPage(
       'subscribe/unsubscribe/index.html',
-      'https://status.driftstack.dev/subscribe/unsubscribe/?token=unsub_token_1234567890',
+      'https://status.driftstack.io/subscribe/unsubscribe/?token=unsub_token_1234567890',
       () => Promise.reject(new Error('offline')),
       false,
     );
@@ -285,7 +285,7 @@ describe('status-site subscription timeout recovery', () => {
   it('does not rewrite a status link when no credential is present', async () => {
     const setup = setUpPage(
       'subscribe/confirm/index.html',
-      'https://status.driftstack.dev/subscribe/confirm/?campaign=status',
+      'https://status.driftstack.io/subscribe/confirm/?campaign=status',
       () => new Response(null, { status: 200 }),
       false,
     );

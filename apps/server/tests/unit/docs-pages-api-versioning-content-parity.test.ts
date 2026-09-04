@@ -36,7 +36,7 @@ describe('W772 docs /api/versioning content parity', () => {
     );
   });
 
-  it("CRITICAL distinct-from-SDK-versioning framing pinned. The 'Versioning policy for the HTTP API surface (/v1/*, eventually /v2/*). Distinct from the SDK versioning policy at docs.driftstack.dev/sdk/versioning: SDKs version independently of the API; this doc covers the API endpoint contract' wording is the load-bearing scope-discrimination.", () => {
+  it("CRITICAL distinct-from-SDK-versioning framing pinned. The 'Versioning policy for the HTTP API surface (/v1/*, eventually /v2/*). Distinct from the SDK versioning policy at docs.driftstack.io/sdk/versioning: SDKs version independently of the API; this doc covers the API endpoint contract' wording is the load-bearing scope-discrimination.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -202,13 +202,13 @@ describe('W772 docs /api/versioning content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Webhook event catalog: \[`docs\.driftstack\.dev\/webhooks\/events`\]\(\/webhooks\/events\/\)/,
+      /Webhook event catalog: \[`docs\.driftstack\.io\/webhooks\/events`\]\(\/webhooks\/events\/\)/,
     );
     expect(p).toMatch(
-      /Rate-limit policy: \[`docs\.driftstack\.dev\/reference\/rate-limits`\]\(\/reference\/rate-limits\/\)/,
+      /Rate-limit policy: \[`docs\.driftstack\.io\/reference\/rate-limits`\]\(\/reference\/rate-limits\/\)/,
     );
     expect(p).toMatch(
-      /Error handling: \[`docs\.driftstack\.dev\/sdk\/error-handling`\]\(\/sdk\/error-handling\/\)/,
+      /Error handling: \[`docs\.driftstack\.io\/sdk\/error-handling`\]\(\/sdk\/error-handling\/\)/,
     );
     expect(p).not.toMatch(
       /\]\(\/(?:webhooks\/events|reference\/rate-limits|sdk\/error-handling)\)/,

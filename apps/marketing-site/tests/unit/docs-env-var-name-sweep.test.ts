@@ -62,7 +62,7 @@ describe('W342.B marketing /docs/* env-var-name sweep', () => {
     // user lands first.
     // S47 2026-07-07 (founder-approved: mirror deprecation): the
     // legacy /docs/api-quickstart mirror is deleted (301 →
-    // docs.driftstack.dev/quickstart-curl/); the landing quickstart
+    // docs.driftstack.io/quickstart-curl/); the landing quickstart
     // is now the docs successor, so the guard reads that source.
     const quickstart = resolve(REPO_ROOT, 'apps/docs/src/pages/quickstart-curl.md');
     expect(read(quickstart)).toContain('DRIFTSTACK_API_KEY');

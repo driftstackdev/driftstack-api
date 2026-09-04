@@ -15,7 +15,7 @@ import { TIER_DISPLAY_NAMES } from '../../src/data/tier-display-names.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'billing', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/billing/';
+const PAGE_URL = 'https://app.driftstack.io/billing/';
 
 function loadBuiltPage(): string {
   return readFileSync(BUILT_PAGE, 'utf8');

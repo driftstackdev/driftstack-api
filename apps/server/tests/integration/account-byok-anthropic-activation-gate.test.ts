@@ -68,7 +68,7 @@ describe('AI-CHAT BYOK Anthropic /v1/account/me/byok-anthropic-key activation ga
       /BYOK Anthropic key management is unavailable on this deployment/,
     );
     expect(body.detail ?? '').toMatch(
-      /See https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the supported key-management flow\./,
+      /See https:\/\/docs\.driftstack\.io\/api\/byok-anthropic\/ for the supported key-management flow\./,
     );
     expect(body.detail ?? '').not.toMatch(/V-\d{3}|planning file|handoff/);
   });

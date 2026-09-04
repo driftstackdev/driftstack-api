@@ -52,7 +52,7 @@ describe('HTTP method routing edge cases end-to-end', () => {
       method: 'OPTIONS',
       url: '/v1/sessions',
       headers: {
-        origin: 'https://app.driftstack.dev',
+        origin: 'https://app.driftstack.io',
         'access-control-request-method': 'POST',
       },
     });

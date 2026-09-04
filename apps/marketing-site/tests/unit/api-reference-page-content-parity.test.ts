@@ -43,7 +43,7 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
       /const OPENAPI_JSON_URL = 'https:\/\/api\.driftstack\.dev\/openapi\.json'/,
     );
     expect(body).toMatch(
-      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.dev\/api\/archetypes\/'/,
+      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.io\/api\/archetypes\/'/,
     );
     expect(body).toMatch(/Interactive reference uses Scalar/);
   });

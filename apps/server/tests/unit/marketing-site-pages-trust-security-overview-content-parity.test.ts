@@ -90,7 +90,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // S20c 2026-07-06 plain-language pass: strict TLS 1.3 + the
     // deploy-gate enforcement survive; plain words lead.
     expect(body).toMatch(
-      /Cloudflare, our edge network, enforces strict TLS 1\.3\s+encryption all the way to our own servers behind\s+<code class="font-mono">api\.driftstack\.dev<\/code> \+\s+<code class="font-mono">app\.driftstack\.dev<\/code> \(the\s+origins\)\./,
+      /Cloudflare, our edge network, enforces strict TLS 1\.3\s+encryption all the way to our own servers behind\s+<code class="font-mono">api\.driftstack\.dev<\/code> \+\s+<code class="font-mono">app\.driftstack\.io<\/code> \(the\s+origins\)\./,
     );
     expect(body).toMatch(
       /No unencrypted page \(plaintext HTTP\) exists on\s+any path — every release is automatically checked for\s+this before it ships; the deploy pipeline's TLS\s+check rejects the release otherwise\./,

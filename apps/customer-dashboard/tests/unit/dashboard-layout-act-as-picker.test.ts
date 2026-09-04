@@ -98,7 +98,7 @@ function setup(options: SetupOptions = {}): {
       </main>
     </body></html>`,
     {
-      url: 'https://app.driftstack.dev/billing/',
+      url: 'https://app.driftstack.io/billing/',
       runScripts: 'outside-only',
       virtualConsole,
     },

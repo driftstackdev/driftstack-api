@@ -22,12 +22,12 @@ End-to-end choreography for "launch day" — the day you flip from pre-launch / 
 
 ### Marketing site / dashboard / docs
 
-- [ ] `https://driftstack.dev` loads with the brand identity (oxblood D-badge + lowercase mono wordmark).
-- [ ] `https://app.driftstack.dev/signup` form posts; verification-email send works (check Postmark dashboard for the test send).
-- [ ] `https://app.driftstack.dev/login` form posts; session token writes to localStorage; redirect lands.
-- [ ] `https://app.driftstack.dev/forgot-password` flow lands a real email in your inbox; reset link works.
-- [ ] `https://docs.driftstack.dev/quickstart/` loads; the code samples render with proper syntax highlighting.
-- [ ] `https://driftstack.dev/legal/terms` loads; no `[BV LEGAL NAME]` / `[KvK NUMBER]` placeholders visible (post-V-264 + post-KvK closure).
+- [ ] `https://driftstack.io` loads with the brand identity (oxblood D-badge + lowercase mono wordmark).
+- [ ] `https://app.driftstack.io/signup` form posts; verification-email send works (check Postmark dashboard for the test send).
+- [ ] `https://app.driftstack.io/login` form posts; session token writes to localStorage; redirect lands.
+- [ ] `https://app.driftstack.io/forgot-password` flow lands a real email in your inbox; reset link works.
+- [ ] `https://docs.driftstack.io/quickstart/` loads; the code samples render with proper syntax highlighting.
+- [ ] `https://driftstack.io/legal/terms` loads; no `[BV LEGAL NAME]` / `[KvK NUMBER]` placeholders visible (post-V-264 + post-KvK closure).
 
 ### Stripe
 
@@ -39,13 +39,13 @@ End-to-end choreography for "launch day" — the day you flip from pre-launch / 
 ### GUI client
 
 - [ ] Latest signed `gui-vX.Y.Z` build downloadable from the Tauri Updater manifest URL (or GitHub Releases page).
-- [ ] First-run wizard on a fresh test machine: Welcome → Cloud → Sign in with browser → opens `app.driftstack.dev/cli/authorize` → confirm → key minted, keychain populated, wizard advances.
+- [ ] First-run wizard on a fresh test machine: Welcome → Cloud → Sign in with browser → opens `app.driftstack.io/cli/authorize` → confirm → key minted, keychain populated, wizard advances.
 
 ### Smoke test (full happy path)
 
 Run through this exact sequence on a fresh-but-real account against production:
 
-1. Visit `app.driftstack.dev/signup` → create account with a real email you control.
+1. Visit `app.driftstack.io/signup` → create account with a real email you control.
 2. Verify email via the link Postmark delivers.
 3. Land on welcome / select-tier → choose Solo Manual monthly → Stripe Checkout opens.
 4. Complete checkout with a real card (we'll refund or destroy the account after the test).
@@ -100,12 +100,12 @@ The actual cutover is small — most work was front-loaded into the V-258/V-259/
 
 ### 2. DNS go-live (if not already)
 
-If `driftstack.dev` / `app.driftstack.dev` / `api.driftstack.dev` etc. were on staging-only DNS, flip to production. Per V-259 + V-278 these should already be production-pointed, but verify:
+If `driftstack.io` / `app.driftstack.io` / `api.driftstack.dev` etc. were on staging-only DNS, flip to production. Per V-259 + V-278 these should already be production-pointed, but verify:
 
 - `dig +short api.driftstack.dev` → production VM IP.
-- `dig +short app.driftstack.dev` → CF Pages CNAME.
-- `dig +short driftstack.dev` → CF Pages CNAME (apex).
-- `dig +short docs.driftstack.dev` → CF Pages CNAME.
+- `dig +short app.driftstack.io` → CF Pages CNAME.
+- `dig +short driftstack.io` → CF Pages CNAME (apex).
+- `dig +short docs.driftstack.io` → CF Pages CNAME.
 
 If any record is wrong, fix in Cloudflare DNS dashboard. TLS provisions in ~2-5 minutes for any newly-added record.
 
@@ -137,7 +137,7 @@ If any of these fire, treat as escalation:
 | `/health` returning non-200                  | any                                | Run `deploy-status.sh`, inspect systemd, then immutably revert to the previous proven SHA (step 15).               |
 | `journalctl -u driftstack-api` "fatal"       | any                                | Bootstrap failure; immutably revert to the previous proven SHA immediately (step 15).                              |
 | Stripe webhook signature-verify failures     | > 0                                | Webhook secret mismatch. Verify Stripe dashboard's webhook signing secret matches `STRIPE_WEBHOOK_SECRET` in .env. |
-| Postmark bounce rate                         | > 5%                               | Email deliverability issue. Check sender reputation, SPF/DKIM/DMARC records on `driftstack.dev`.                   |
+| Postmark bounce rate                         | > 5%                               | Email deliverability issue. Check sender reputation, SPF/DKIM/DMARC records on `driftstack.io`.                    |
 | Customer support inbox                       | unread message > 1 hour            | Personal triage. Day-1 SLO is "respond within 1 hour to anything paying-customer-flagged."                         |
 
 ---

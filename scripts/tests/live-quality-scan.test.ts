@@ -52,9 +52,9 @@ describe('live-quality-scan redirect detection', () => {
     expect(seeds.filter(needsCanonicalSlash)).toEqual([]);
 
     const mutated = seeds.map((seed) =>
-      seed === 'https://driftstack.dev/pricing/' ? seed.slice(0, -1) : seed,
+      seed === 'https://driftstack.io/pricing/' ? seed.slice(0, -1) : seed,
     );
-    expect(mutated.filter(needsCanonicalSlash)).toEqual(['https://driftstack.dev/pricing']);
+    expect(mutated.filter(needsCanonicalSlash)).toEqual(['https://driftstack.io/pricing']);
   });
 
   it('fails when fetch follows an internal redirect to a different final URL', async () => {

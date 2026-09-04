@@ -23,7 +23,7 @@
 //   • mobileExtraItems: Self-hosted + Glossary + Download (S14 — mobile users
 //     keep those paths). Never /roadmap (F-3 / Issue 5).
 //   • V-219* D-badge + lowercase font-mono "driftstack".
-//   • "Sign in" link to https://app.driftstack.dev/login.
+//   • "Sign in" link to https://app.driftstack.io/login.
 //   • "Start free" btn-primary to /pricing#free.
 //   • Mobile hamburger uses CSS-only <details>/<summary> (no JS).
 //   • aria-label="Open navigation menu" on summary.
@@ -83,7 +83,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
       "{ href: '/pricing', label: 'Pricing' },",
       "{ href: '/comparison', label: 'Compare' },",
       "{ href: '/faq', label: 'FAQ' },",
-      "{ href: 'https://docs.driftstack.dev', label: 'Docs', external: true },",
+      "{ href: 'https://docs.driftstack.io', label: 'Docs', external: true },",
     ];
     let lastIdx = -1;
     for (const item of order) {
@@ -112,7 +112,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
 
   it('Sign in CTA + Start free CTA use canonical trailing-slash page URLs', () => {
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/login\/" class="nav-link">Sign in<\/a>/,
     );
     expect(body).toMatch(/<a href="\/pricing\/#free" class="btn-primary">Start free<\/a>/);
   });
@@ -156,7 +156,7 @@ describe('W382.C marketing-site Header.astro content parity', () => {
     const qa = read(BUILT_QA);
     expect(pricing.match(/href="\/pricing\/" aria-current="page"/g)).toHaveLength(2);
     expect(qa.match(/href="\/use-cases\/" aria-current="page"/g)).toHaveLength(2);
-    expect(pricing).not.toMatch(/href="https:\/\/docs\.driftstack\.dev" aria-current="page"/);
+    expect(pricing).not.toMatch(/href="https:\/\/docs\.driftstack\.io" aria-current="page"/);
   });
 });
 
@@ -199,12 +199,12 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     const productColumn = body.slice(body.indexOf('>Product</h3>'), body.indexOf('>Company</h3>'));
     expect(productColumn).not.toMatch(/<a href="\/roadmap"/);
     expect(body).toMatch(/<a href="\/self-hosted\/" class="nav-link">Self-hosted<\/a>/);
-    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.dev"[\s\S]+?Docs/);
+    expect(body).toMatch(/href="https:\/\/docs\.driftstack\.io"[\s\S]+?Docs/);
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/signup\/" class="nav-link">Sign up<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/signup\/" class="nav-link">Sign up<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/login\/" class="nav-link">Sign in<\/a>/,
     );
   });
 
@@ -227,7 +227,7 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
     expect(body).toMatch(
       /<a href="\/trust\/sub-processors\/" class="nav-link">Sub-processors<\/a>/,
     );
-    expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"[\s\S]+?Status/);
+    expect(body).toMatch(/href="https:\/\/status\.driftstack\.io"[\s\S]+?Status/);
   });
 
   it('Legal meta-row links present (F-3 — moved out of headed column): Terms / Privacy / DPA / Acceptable Use', () => {
@@ -275,10 +275,10 @@ describe('W382.C marketing-site Footer.astro content parity', () => {
 
   it('Docs + Status external links carry target="_blank" + rel="noopener noreferrer"', () => {
     expect(body).toMatch(
-      /href="https:\/\/docs\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
+      /href="https:\/\/docs\.driftstack\.io"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
     expect(body).toMatch(
-      /href="https:\/\/status\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
+      /href="https:\/\/status\.driftstack\.io"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer"/,
     );
   });
 });

@@ -1,4 +1,4 @@
-// W256.D — drift-guard for docs.driftstack.dev/api/versioning. Pins:
+// W256.D — drift-guard for docs.driftstack.io/api/versioning. Pins:
 // 1. Cross-link targets exist (no fictional pages).
 // 2. /openapi.json is the actual served path.
 // 3. Scalar UI is mounted at /docs.

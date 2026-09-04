@@ -72,13 +72,13 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     }
   });
 
-  it("CRITICAL Driftstack API key prerequisite framing pinned in all 3. 'Mint one at app.driftstack.dev/api-keys' link is the cross-SDK signup path.", () => {
+  it("CRITICAL Driftstack API key prerequisite framing pinned in all 3. 'Mint one at app.driftstack.io/api-keys' link is the cross-SDK signup path.", () => {
     for (const PAGE of [TS_PAGE, PY_PAGE, GO_PAGE]) {
       const content = read(PAGE);
       expect(content).toMatch(
-        /\[app\.driftstack\.dev\/api-keys\]\(https:\/\/app\.driftstack\.dev\/api-keys\/\)/,
+        /\[app\.driftstack\.io\/api-keys\]\(https:\/\/app\.driftstack\.io\/api-keys\/\)/,
       );
-      expect(content).not.toMatch(/\]\(https:\/\/app\.driftstack\.dev\/api-keys\)/);
+      expect(content).not.toMatch(/\]\(https:\/\/app\.driftstack\.io\/api-keys\)/);
     }
   });
 

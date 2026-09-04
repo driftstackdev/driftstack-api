@@ -38,16 +38,16 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
     );
     expect(body).toMatch(/## Live URLs \(6\/6 HTTP 200, Rule L empirical proof\)/);
     expect(body).toMatch(
-      /\| https:\/\/driftstack\.dev\/\s+\| 200\s+\| Cloudflare Pages → driftstack-marketing\s+\|/,
+      /\| https:\/\/driftstack\.io\/\s+\| 200\s+\| Cloudflare Pages → driftstack-marketing\s+\|/,
     );
     expect(body).toMatch(
-      /\| https:\/\/www\.driftstack\.dev\/\s+\| 200\s+\| Cloudflare Pages → driftstack-marketing\s+\|/,
+      /\| https:\/\/www\.driftstack\.io\/\s+\| 200\s+\| Cloudflare Pages → driftstack-marketing\s+\|/,
     );
     expect(body).toMatch(
-      /\| https:\/\/docs\.driftstack\.dev\/\s+\| 200\s+\| Cloudflare Pages → driftstack-docs\s+\|/,
+      /\| https:\/\/docs\.driftstack\.io\/\s+\| 200\s+\| Cloudflare Pages → driftstack-docs\s+\|/,
     );
     expect(body).toMatch(
-      /\| https:\/\/app\.driftstack\.dev\/\s+\| 200\s+\| Cloudflare Pages → driftstack-customer-dashboard\s+\|/,
+      /\| https:\/\/app\.driftstack\.io\/\s+\| 200\s+\| Cloudflare Pages → driftstack-customer-dashboard\s+\|/,
     );
     expect(body).toMatch(
       /\| https:\/\/api\.driftstack\.dev\/health\s+\| 200\s+\| Hetzner production \(128\.140\.37\.74\) — Fastify \+ nginx \+ Node 22 \|/,
@@ -111,7 +111,7 @@ describe('W572.A /docs/progress/v278-final-state.md content parity', () => {
       /R2 not yet wired into the API/,
     );
     expect(body).toMatch(/- \*\*Postmark\*\* \(US\) — transactional email; sender domain/);
-    expect(body).toMatch(/`driftstack\.dev` DKIM-verified\. Server "driftstack-transactional",/);
+    expect(body).toMatch(/`driftstack\.io` DKIM-verified\. Server "driftstack-transactional",/);
     expect(body).toMatch(/DeliveryType=Live\./);
     expect(body).toMatch(/- \*\*Sentry\*\* \(DE \/ EU region\) — error tracking\./);
     expect(body).toMatch(/- \*\*Stripe\*\* \(US, EU subsidiary for SCA\) — payment processing\./);

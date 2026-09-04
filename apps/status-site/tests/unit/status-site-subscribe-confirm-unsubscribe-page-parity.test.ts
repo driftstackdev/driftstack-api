@@ -1,4 +1,4 @@
-// V-657-followup — drift guard for the status.driftstack.dev double-opt-in
+// V-657-followup — drift guard for the status.driftstack.io double-opt-in
 // landing pages: /subscribe/confirm and /subscribe/unsubscribe. The
 // confirmation email links to /subscribe/confirm/?token=, and every status
 // email links to /subscribe/unsubscribe/?token= (see

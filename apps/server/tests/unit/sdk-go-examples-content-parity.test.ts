@@ -55,8 +55,8 @@ describe('W621 sdk-go/examples content parity', () => {
       /resp, err := client\.Billing\.CreateCheckoutSession\(ctx, &driftstack\.CreateCheckoutSessionRequest\{/,
     );
     expect(body).toMatch(/Tier:\s+driftstack\.TierAPIBuilder,/);
-    expect(body).toMatch(/SuccessURL: "https:\/\/app\.driftstack\.dev\/billing\?ok=1",/);
-    expect(body).toMatch(/CancelURL:\s+"https:\/\/app\.driftstack\.dev\/billing\?cancelled=1",/);
+    expect(body).toMatch(/SuccessURL: "https:\/\/app\.driftstack\.io\/billing\?ok=1",/);
+    expect(body).toMatch(/CancelURL:\s+"https:\/\/app\.driftstack\.io\/billing\?cancelled=1",/);
     expect(body).toMatch(/portal, err := client\.Billing\.CreatePortalSession\(ctx\)/);
     expect(existsSync(E('billing_flow/main.go'))).toBe(true);
   });

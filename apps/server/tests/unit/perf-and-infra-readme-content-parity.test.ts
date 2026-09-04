@@ -105,9 +105,9 @@ describe('W812 perf + infra README content parity', () => {
       /V-278\.A \| Bootstrap both servers via `bootstrap\/bootstrap\.sh production`/,
     );
     expect(p).toMatch(/V-278\.B \| Deploy api\.driftstack\.dev → production/);
-    expect(p).toMatch(/V-278\.C \| Deploy app\.driftstack\.dev → production/);
-    expect(p).toMatch(/V-278\.D \| Deploy docs\.driftstack\.dev/);
-    expect(p).toMatch(/V-278\.E \| Deploy driftstack\.dev root/);
+    expect(p).toMatch(/V-278\.C \| Deploy app\.driftstack\.io → production/);
+    expect(p).toMatch(/V-278\.D \| Deploy docs\.driftstack\.io/);
+    expect(p).toMatch(/V-278\.E \| Deploy driftstack\.io root/);
     expect(p).toMatch(/V-278\.F \| Deploy staging\.driftstack\.dev/);
     expect(p).toMatch(/V-278\.G \| Run migrations on Neon Postgres \(`drizzle-kit migrate`\)\./);
     expect(p).toMatch(/V-278\.H \| DNS records via Cloudflare API\./);

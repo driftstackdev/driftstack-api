@@ -20,7 +20,7 @@ describe('AuthResource cli-authorize flow (V-460)', () => {
       seen.push(opts);
       return Promise.resolve({
         code: 'cliauth_abc',
-        browser_url: 'https://app.driftstack.dev/cli/authorize?code=cliauth_abc&state=xx',
+        browser_url: 'https://app.driftstack.io/cli/authorize?code=cliauth_abc&state=xx',
         expires_at: '2026-05-09T18:05:00Z',
       });
     });

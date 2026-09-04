@@ -14,7 +14,7 @@ describe('legacy roadmap route release-truth parity', () => {
   });
 
   it('uses the live API documentation for current capability truth', () => {
-    expect(page).toContain('https://docs.driftstack.dev/api/');
+    expect(page).toContain('https://docs.driftstack.io/api/');
     expect(page).toContain('current HTTP contract');
   });
 

@@ -32,7 +32,7 @@ export function diagnosticFetchError(err: unknown, targetUrl: string): string | 
       ? '• Start the server: clone driftstackdev/driftstack-api, then `npm install` + `npm run dev` from apps/server/ (listens on http://localhost:3000 by default).'
       : '• Is the server reachable from this machine? (DNS / firewall / VPN?)',
     isLocalhost
-      ? '• No server set up? Switch to Cloud mode in Settings and use https://api.driftstack.dev with a key from app.driftstack.dev — no install needed.'
+      ? '• No server set up? Switch to Cloud mode in Settings and use https://api.driftstack.dev with a key from app.driftstack.io — no install needed.'
       : '• Does the URL use the correct scheme (http vs https)?',
   ];
   return lines.join('\n');

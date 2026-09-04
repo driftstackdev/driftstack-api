@@ -72,14 +72,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>The SLA applies to these public surfaces:</p>
     <ul>
       <li><code>https://api.driftstack.dev/*</code> — every documented endpoint.</li>
-      <li><code>https://app.driftstack.dev/*</code> — the customer dashboard.</li>
+      <li><code>https://app.driftstack.io/*</code> — the customer dashboard.</li>
       <li>The live-view streaming endpoints for an active session.</li>
     </ul>
 
     <h2>What's NOT covered</h2>
     <ul>
       <li>Scheduled maintenance windows announced &gt;72h in advance
-        on <a href="https://status.driftstack.dev">status.driftstack.dev</a>.
+        on <a href="https://status.driftstack.io">status.driftstack.io</a>.
         Maintenance windows are capped at 4h/month and rarely
         triggered (most deploys are zero-downtime rolling restarts).</li>
       <li>Failures attributable to a customer-supplied
@@ -89,7 +89,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>Sub-processor outages we cannot route around: NowPayments
         IPN delivery, Stripe Checkout, Postmark email. We surface
         the impact + the upstream status page link on
-        status.driftstack.dev.</li>
+        status.driftstack.io.</li>
       <li>Force majeure: regional cloud-provider failures, large-scale
         DDoS against shared infrastructure, government-mandated
         shutdowns. We still publish the incident; it just does not
@@ -151,7 +151,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         We reconcile against the probe data + the audit trail on
-        status.driftstack.dev within 5 business days. Approved credits
+        status.driftstack.io within 5 business days. Approved credits
         appear on the next invoice as a line-item.
       </li>
     </ol>
@@ -178,7 +178,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li><a href="/docs/incident-policy/">Incident communication policy</a></li>
       <li><a href="/docs/api-versioning/">API versioning + deprecation timelines</a></li>
-      <li><a href="https://status.driftstack.dev">Status page</a></li>
+      <li><a href="https://status.driftstack.io">Status page</a></li>
     </ul>
   </main>
 </BaseLayout>

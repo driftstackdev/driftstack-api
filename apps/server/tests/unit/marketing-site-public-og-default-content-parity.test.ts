@@ -23,7 +23,7 @@
 //     two-tone wordmark.
 //   • 'Command a fleet of real iPhones.' primary tagline (the hero H1).
 //   • 'they're just people on phones.' positioning subline (Band A).
-//   • 'driftstack.dev' mono footer in accent-2 + quiet 'App · Code · AI'
+//   • 'driftstack.io' mono footer in accent-2 + quiet 'App · Code · AI'
 //     pills bottom-right.
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -80,9 +80,9 @@ describe('W524.C apps/marketing-site/public/og-default.svg content parity', () =
     expect(body).toMatch(/they're just people on phones\./);
   });
 
-  it("mono footer pinned: 'driftstack.dev' in accent-2 + the quiet 'App · Code · AI' access-paths line bottom-right", () => {
+  it("mono footer pinned: 'driftstack.io' in accent-2 + the quiet 'App · Code · AI' access-paths line bottom-right", () => {
     expect(body).toMatch(
-      /<text[^>]*fill="#c04b58"[^>]*font-family="ui-monospace[^"]*"[^>]*>driftstack\.dev<\/text>/,
+      /<text[^>]*fill="#c04b58"[^>]*font-family="ui-monospace[^"]*"[^>]*>driftstack\.io<\/text>/,
     );
     expect(body).toMatch(/App · Code · AI/);
   });

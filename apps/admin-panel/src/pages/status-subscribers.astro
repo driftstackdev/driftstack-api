@@ -24,7 +24,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <h1 class="text-3xl font-semibold tracking-tight text-tk-ink">Status-page subscribers</h1>
        <div class="mt-3 h-px w-16 bg-gradient-to-r from-oxblood-700 to-transparent" aria-hidden="true"></div>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Email addresses subscribed to status.driftstack.dev incident notifications. Confirmed
+          Email addresses subscribed to status.driftstack.io incident notifications. Confirmed
           subscribers receive emails when public incidents are posted or resolved. A forced
           unsubscribe is also written to the admin audit log.
         </p>
@@ -262,7 +262,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function getToken() {
         try {
           // 2026-05-21 — use ds_web_session_token (canonical staff bearer
-          // set by the SSO bridge from app.driftstack.dev). The legacy
+          // set by the SSO bridge from app.driftstack.io). The legacy
           // `driftstack_admin_token` key was never populated.
           return localStorage.getItem('ds_web_session_token') || '';
         } catch (_) {
@@ -516,7 +516,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               '</svg></div>' +
               (offset === 0
                 ? '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers yet</h2>' +
-                  '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">When visitors subscribe to incident notifications on status.driftstack.dev, they appear here for support and compliance review.</p>'
+                  '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">When visitors subscribe to incident notifications on status.driftstack.io, they appear here for support and compliance review.</p>'
                 : '<h2 class="text-base font-semibold tracking-tight text-tk-ink">No subscribers on this page</h2>' +
                   '<p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">Use Previous to return to a newer subscriber page.</p>') +
               '</li>';

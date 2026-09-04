@@ -20,7 +20,7 @@
 //   • V-263 hook-order framing pinned + Cmd+, handler.
 //   • V-244 first-run gate: apiKey === null && !wizardDismissed.
 //   • V-318 atCap = concurrent_session_active >= concurrent_session_cap.
-//   • V-240 deploymentLabel: driftstack.dev / *.driftstack.dev →
+//   • V-240 deploymentLabel: driftstack.io / *.driftstack.dev →
 //     'cloud' else 'self-hosted'; malformed URL → 'self-hosted'
 //     (safer assumption).
 //   • redactBaseUrl strips https?:// prefix.
@@ -103,9 +103,9 @@ describe('W486.A apps/gui-client/src/App.tsx content parity', () => {
     );
   });
 
-  it("V-240 deploymentLabel hostname match: 'driftstack.dev' or endsWith '.driftstack.dev' → 'cloud' else 'self-hosted'; malformed URL try/catch → 'self-hosted' fallback (safer assumption since cloud customers wouldn't typo their base URL) — pinned so the titlebar mode indicator stays consistent with the V-244 wizard's cloud/self-hosted radio", () => {
+  it("V-240 deploymentLabel hostname match: 'driftstack.io' or endsWith '.driftstack.dev' → 'cloud' else 'self-hosted'; malformed URL try/catch → 'self-hosted' fallback (safer assumption since cloud customers wouldn't typo their base URL) — pinned so the titlebar mode indicator stays consistent with the V-244 wizard's cloud/self-hosted radio", () => {
     expect(body).toMatch(
-      /function deploymentLabel\(baseUrl: string\): 'cloud' \| 'self-hosted' \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*if \(host === 'driftstack\.dev' \|\| host\.endsWith\('\.driftstack\.dev'\)\) \{\s*return 'cloud';\s*\}\s*return 'self-hosted';\s*\} catch \{/,
+      /function deploymentLabel\(baseUrl: string\): 'cloud' \| 'self-hosted' \{\s*try \{\s*const host = new URL\(baseUrl\)\.hostname;\s*if \(host === 'driftstack\.io' \|\| host\.endsWith\('\.driftstack\.dev'\)\) \{\s*return 'cloud';\s*\}\s*return 'self-hosted';\s*\} catch \{/,
     );
     expect(body).toMatch(
       /\/\/ Malformed URL — default to self-hosted \(the safer assumption\s*\/\/ since cloud customers wouldn't typo their base URL\)\./,

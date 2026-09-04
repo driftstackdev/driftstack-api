@@ -6,7 +6,7 @@
 // MONOTONICALLY on the live box — i.e. whether the founder's "it scrolls me back up"
 // reproduces. Mirrors sim-tap-probe.mjs: creates a real agent session, joins the
 // session's LiveKit room as a headless participant, navigates the box to a TALL vertical
-// gradient (driftstack.dev/scroll-probe.html — black top → white bottom, so the streamed
+// gradient (driftstack.io/scroll-probe.html — black top → white bottom, so the streamed
 // frame's AVERAGE LUMA encodes scroll position), then injects touch events EXACTLY like
 // the GUI and samples luma over time.
 //
@@ -63,7 +63,7 @@ const KEEP = getFlag('--keep');
 // useInputCapture -> sendInputEvent -> publishData -> box -> scroll. Additive: the existing
 // modes still run unless you pass --e2e (which runs ONLY the e2e flow).
 const E2E = getFlag('--e2e');
-const PROBE_URL = getOpt('--url', 'https://driftstack.dev/scroll-probe.html');
+const PROBE_URL = getOpt('--url', 'https://driftstack.io/scroll-probe.html');
 const MODE = getOpt('--mode', 'both');
 const NOISE = 3; // luma units of frame noise to tolerate before calling a dip a bounce
 const here = path.dirname(fileURLToPath(import.meta.url));

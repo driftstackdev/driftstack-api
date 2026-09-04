@@ -1,6 +1,6 @@
 // Drift guard for apps/marketing-site/public/.well-known/security.txt
 // (RFC 9116 responsible-disclosure metadata served at
-// https://driftstack.dev/.well-known/security.txt).
+// https://driftstack.io/.well-known/security.txt).
 //
 // Why this guard exists: the published coordinated-disclosure policy
 // (apps/marketing-site/src/pages/legal/vulnerability-disclosure.md) directs
@@ -40,11 +40,11 @@ describe('marketing-site /.well-known/security.txt content parity (RFC 9116)', (
   });
 
   it('Policy: points to the coordinated-disclosure policy page (which references this file)', () => {
-    expect(body).toMatch(/^Policy: https:\/\/driftstack\.dev\/legal\/vulnerability-disclosure\/$/m);
+    expect(body).toMatch(/^Policy: https:\/\/driftstack\.io\/legal\/vulnerability-disclosure\/$/m);
   });
 
   it('Canonical: matches the URL the disclosure policy directs researchers to', () => {
-    expect(body).toMatch(/^Canonical: https:\/\/driftstack\.dev\/\.well-known\/security\.txt$/m);
+    expect(body).toMatch(/^Canonical: https:\/\/driftstack\.io\/\.well-known\/security\.txt$/m);
   });
 
   // Cross-source link-rot guard: the Policy: URL points at a /legal/<slug> page;
@@ -54,7 +54,7 @@ describe('marketing-site /.well-known/security.txt content parity (RFC 9116)', (
   // this, renaming/removing the disclosure-policy page would silently turn the
   // security.txt Policy: link (a published, researcher-followed URL) into a 404.
   it("Policy: target /legal/<slug> page exists in the marketing site (link-rot guard — re-derived from the security.txt's actual Policy URL)", () => {
-    const m = body.match(/^Policy: https:\/\/driftstack\.dev\/legal\/([a-z0-9-]+)\/?$/m);
+    const m = body.match(/^Policy: https:\/\/driftstack\.io\/legal\/([a-z0-9-]+)\/?$/m);
     expect(m, 'security.txt must carry a /legal/<slug> Policy URL').not.toBeNull();
     const slug = m![1];
     const page = resolve(REPO_ROOT, `apps/marketing-site/src/pages/legal/${slug}.md`);

@@ -20,7 +20,7 @@
 //     global helper.
 //   • Acting-as banner: verified admin read+write vs member read-only
 //     authority + "Switch back to self" button.
-//   • W211 absolute https://driftstack.dev/* legal-doc footer
+//   • W211 absolute https://driftstack.io/* legal-doc footer
 //     links: Privacy / Terms / DPA / AUP / Sub-processors.
 //   • Onboarding pages opt out via withSidebar={false}.
 
@@ -205,27 +205,27 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
     expect(body).toMatch(/'Self \(' \+ \(me\.email \|\| me\.id\) \+ '\)'/);
   });
 
-  it('W211 absolute-URL footer 5 legal links to https://driftstack.dev/* (Privacy / Terms / DPA / AUP / Sub-processors)', () => {
-    expect(body).toMatch(/W211 — these pages live on the marketing-site at[\s\S]*?driftstack\.dev/);
+  it('W211 absolute-URL footer 5 legal links to https://driftstack.io/* (Privacy / Terms / DPA / AUP / Sub-processors)', () => {
+    expect(body).toMatch(/W211 — these pages live on the marketing-site at[\s\S]*?driftstack\.io/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-tk-accent-text">Privacy<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/privacy\/" class="hover:text-tk-accent-text">Privacy<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/terms\/" class="hover:text-tk-accent-text">Terms<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/terms\/" class="hover:text-tk-accent-text">Terms<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/dpa\/" class="hover:text-tk-accent-text">DPA<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/dpa\/" class="hover:text-tk-accent-text">DPA<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/aup\/" class="hover:text-tk-accent-text">AUP<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/aup\/" class="hover:text-tk-accent-text">AUP<\/a>/,
     );
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/trust\/sub-processors\/" class="hover:text-tk-accent-text"\s*>Sub-processors<\/a\s*>/,
+      /<a href="https:\/\/driftstack\.io\/trust\/sub-processors\/" class="hover:text-tk-accent-text"\s*>Sub-processors<\/a\s*>/,
     );
   });
 
@@ -288,18 +288,18 @@ describe('W382.A customer-dashboard DashboardLayout.astro content parity', () =>
   it('SECURITY — admin SSO bounce validates the redirect origin before attaching the #token= hash (no token exfiltration via ?next-admin=)', () => {
     // 2026-06-03 — the admin bounce builds the redirect from the
     // attacker-controllable ?next-admin= query param:
-    //   new URL('https://admin.driftstack.dev' + nextAdmin)
+    //   new URL('https://admin.driftstack.io' + nextAdmin)
     // Without an origin check, nextAdmin=".evil.com/" or "@evil.com/"
     // parses to a non-admin host and the session token (#token=) would be
     // exfiltrated → account takeover. The guard below MUST stay: on any
     // host escape, reset to the admin root so the token only ever reaches
     // the real admin origin. Dropping it reopens the takeover.
-    expect(body).toMatch(/'https:\/\/admin\.driftstack\.dev' \+ nextAdmin/);
-    expect(body).toMatch(/if \(u\.origin !== 'https:\/\/admin\.driftstack\.dev'\) \{/);
-    expect(body).toMatch(/u = new URL\('https:\/\/admin\.driftstack\.dev\/'\);/);
+    expect(body).toMatch(/'https:\/\/admin\.driftstack\.io' \+ nextAdmin/);
+    expect(body).toMatch(/if \(u\.origin !== 'https:\/\/admin\.driftstack\.io'\) \{/);
+    expect(body).toMatch(/u = new URL\('https:\/\/admin\.driftstack\.io\/'\);/);
     expect(body).toMatch(/u\.hash = '#token=' \+ encodeURIComponent\(t\)/);
     // The guard MUST precede the token-hash assignment in source order.
-    const guardIdx = body.indexOf("if (u.origin !== 'https://admin.driftstack.dev')");
+    const guardIdx = body.indexOf("if (u.origin !== 'https://admin.driftstack.io')");
     const hashIdx = body.indexOf("u.hash = '#token=' + encodeURIComponent(t)");
     expect(guardIdx).toBeGreaterThan(-1);
     expect(hashIdx).toBeGreaterThan(guardIdx);

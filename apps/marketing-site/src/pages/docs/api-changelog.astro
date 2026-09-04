@@ -35,7 +35,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <code>.delete</code>) plus a new Recipes page in the customer
         dashboard. Backward-compatible — all additive. The supported recipe
         contract is capture, list, read, and delete. Full reference at
-        <a href="https://docs.driftstack.dev/api/recipes/">/api/recipes</a>.
+        <a href="https://docs.driftstack.io/api/recipes/">/api/recipes</a>.
       </li>
       <li>
         <strong>API — Live video for agent sessions (LiveKit WebRTC).</strong>
@@ -49,9 +49,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         create. Token TTL is 24h; the room name is always the
         agent_session id. Backward-compatible — the field is optional;
         older SDKs ignore it. Full reference at
-        <a href="https://docs.driftstack.dev/api/agent-sessions/">/api/agent-sessions</a>
+        <a href="https://docs.driftstack.io/api/agent-sessions/">/api/agent-sessions</a>
         and integration guide at
-        <a href="https://docs.driftstack.dev/guides/live-video/">/guides/live-video</a>.
+        <a href="https://docs.driftstack.io/guides/live-video/">/guides/live-video</a>.
       </li>
       <li>
         <strong>API — Mac-node LiveKit credential registration.</strong>
@@ -99,12 +99,12 @@ B: when the user clicks the verification link in
 : lifecycle emails, team-invite emails, and Stripe
         success/cancel/portal defaults now all source from
         <code>config.dashboardOrigin</code>. Removes scattered
-        <code>https://app.driftstack.dev</code> literals + the
+        <code>https://app.driftstack.io</code> literals + the
         legacy <code>PUBLIC_DASHBOARD_URL</code> env var.
       </li>
       <li>
         <strong>Docs — Emails reference page.</strong>
-        New <a href="https://docs.driftstack.dev/reference/emails/">/docs/emails-reference</a>
+        New <a href="https://docs.driftstack.io/reference/emails/">/docs/emails-reference</a>
         listing every template Driftstack sends (verify, magic-link,
         password-reset, payment receipt/failure, status notifications,
         weekly digest), each tagged transactional vs notification,
@@ -212,7 +212,7 @@ B: when the user clicks the verification link in
       <li>
         <strong>Docs — polling vs webhooks for crypto orders.</strong>
         New page at
-        <a href="https://docs.driftstack.dev/webhooks/crypto-events/">/docs/crypto-orders-polling-vs-webhooks</a>
+        <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/crypto-orders-polling-vs-webhooks</a>
         covering when to use each, recommended hybrid pattern, and
         cadence guidance. Closes a frequently-asked integrator
         question.
@@ -414,7 +414,7 @@ B: when the user clicks the verification link in
       <li>
         <strong>Integration guide.</strong>
         Added
-        <a href="https://docs.driftstack.dev/guides/paying-with-crypto/">/docs/billing-crypto-integration-guide</a>
+        <a href="https://docs.driftstack.io/guides/paying-with-crypto/">/docs/billing-crypto-integration-guide</a>
         — end-to-end walkthrough that stitches checkout, webhooks,
         idempotency, and receipts together.
       </li>
@@ -435,7 +435,7 @@ B: when the user clicks the verification link in
         re-running a sweep over already-failed orders does not
         re-emit. Customers can subscribe through
         <code>SubscribableWebhookEventTypeSchema</code> (see
-        <a href="https://docs.driftstack.dev/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>).
+        <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>).
       </li>
       <li>
         <strong>Admin CSV export — reference doc.</strong>
@@ -491,7 +491,7 @@ B: when the user clicks the verification link in
         single-fire, idempotent re-deliver of the same IPN doesn't
         re-emit). Customers can subscribe through
         <code>SubscribableWebhookEventTypeSchema</code> — see
-        <a href="https://docs.driftstack.dev/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>.
+        <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>.
       </li>
     </ul>
 
@@ -554,10 +554,10 @@ B: when the user clicks the verification link in
          email-notification toggles live on bare /settings). */}
     <p>
       We post a summary of each month's changes to
-      <a href="https://status.driftstack.dev">status.driftstack.dev</a>
+      <a href="https://status.driftstack.io">status.driftstack.io</a>
       as a non-incident announcement, and email the
       <code>api-changes@</code> mailing list. Subscribe at
-      <a href="https://app.driftstack.dev/settings/">app.driftstack.dev/settings</a>.
+      <a href="https://app.driftstack.io/settings/">app.driftstack.io/settings</a>.
     </p>
 
     <h2>Related</h2>

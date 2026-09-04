@@ -73,7 +73,7 @@ the exact facts dispatch checks:
   control-plane connection). `connected: true` + `has_livekit: true` on a
   node = launches will dispatch to it.
   `curl -H "Authorization: Bearer <admin-key>" https://api.driftstack.dev/v1/mac-nodes`
-- **Admin → Fleet** (`admin.driftstack.dev/fleet`): the same data as a
+- **Admin → Fleet** (`admin.driftstack.io/fleet`): the same data as a
   live table (auto-refreshes every 15s), so you can watch a worker flip
   `offline → connected` as the harness attaches.
 

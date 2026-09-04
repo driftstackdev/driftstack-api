@@ -40,10 +40,10 @@ the founder needs to do.
   admin panel deploy (V-135) + doc site deploy (V-258).
 - **Action:** Create 4 Cloudflare Pages projects in the Cloudflare
   dashboard:
-  - `driftstack-marketing` → custom domains `driftstack.dev` + `www.driftstack.dev`
-  - `driftstack-customer-dashboard` → custom domain `app.driftstack.dev`
-  - `driftstack-admin-panel` → custom domain `admin.driftstack.dev` (Cloudflare Access SSO gate planned at the origin level)
-  - `driftstack-docs` → custom domain `docs.driftstack.dev` (V-258)
+  - `driftstack-marketing` → custom domains `driftstack.io` + `www.driftstack.io`
+  - `driftstack-customer-dashboard` → custom domain `app.driftstack.io`
+  - `driftstack-admin-panel` → custom domain `admin.driftstack.io` (Cloudflare Access SSO gate planned at the origin level)
+  - `driftstack-docs` → custom domain `docs.driftstack.io` (V-258)
 - **Reference:** `apps/marketing-site/astro.config.mjs`,
   `apps/customer-dashboard/astro.config.mjs`,
   `apps/admin-panel/astro.config.mjs`,

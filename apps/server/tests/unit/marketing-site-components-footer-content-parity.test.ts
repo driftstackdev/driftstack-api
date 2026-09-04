@@ -14,14 +14,14 @@
 //     API, SDK, or GUI.'.
 //   • 2-category nav grid: Product / Company.
 //   • Product 6-link: /pricing + /comparison + /self-hosted +
-//     docs.driftstack.dev (external) + app/signup + app/login.
+//     docs.driftstack.io (external) + app/signup + app/login.
 //   • Company 6-link (2026-07-03 S11): /about + /faq + /changelog +
 //     /roadmap + support@ + sales@. (/roadmap returned as a Company
 //     link with the v2 redesign — the Issue-5 removal targeted the
 //     aspirational Product-column/header placement, which stays gone.)
 //   • Meta link row: /legal/privacy + /legal/terms + /legal/dpa +
 //     /legal/aup + /trust + /security + /trust/sub-processors +
-//     status.driftstack.dev (external).
+//     status.driftstack.io (external).
 //   • Product signal strip: bit-identical iPhone Safari fingerprint +
 //     SOCKS5/WireGuard/OpenVPN proxies + API/SDK/GUI access + EU-hosted.
 //   • StatusBadge component embedded.
@@ -51,7 +51,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(body).toMatch(/&copy; \{year\} Driftstack\. All rights reserved\./);
   });
 
-  it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language; 2026-07-03 S11 scoped the not-check to the Product column since /roadmap now ships as a Company link): /pricing + /comparison + /self-hosted + docs.driftstack.dev (external) + app/signup + app/login', () => {
+  it('Product-category 6-link framing pinned (F-3 — /roadmap removed per Issue 5 no-aspirational-language; 2026-07-03 S11 scoped the not-check to the Product column since /roadmap now ships as a Company link): /pricing + /comparison + /self-hosted + docs.driftstack.io (external) + app/signup + app/login', () => {
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Product<\/h3>/,
     );
@@ -61,13 +61,13 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     expect(productColumn).not.toMatch(/<li><a href="\/roadmap"/);
     expect(body).toMatch(/<li><a href="\/self-hosted\/" class="nav-link">Self-hosted<\/a><\/li>/);
     expect(body).toMatch(
-      /<a\s*href="https:\/\/docs\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Docs<\/a/,
+      /<a\s*href="https:\/\/docs\.driftstack\.io"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Docs<\/a/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/signup\/" class="nav-link">Sign up<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/signup\/" class="nav-link">Sign up<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/app\.driftstack\.dev\/login\/" class="nav-link">Sign in<\/a>/,
+      /<a href="https:\/\/app\.driftstack\.io\/login\/" class="nav-link">Sign in<\/a>/,
     );
   });
 
@@ -87,7 +87,7 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
     );
   });
 
-  it('F-3 meta link row (Trust + Legal collapsed): /legal/privacy + /legal/terms + /legal/dpa + /legal/aup + /trust + /security + /trust/sub-processors + status.driftstack.dev (external). Trust/Legal sub-headed columns removed; surfaces these as a single small bottom link row.', () => {
+  it('F-3 meta link row (Trust + Legal collapsed): /legal/privacy + /legal/terms + /legal/dpa + /legal/aup + /trust + /security + /trust/sub-processors + status.driftstack.io (external). Trust/Legal sub-headed columns removed; surfaces these as a single small bottom link row.', () => {
     // Trust + Legal grid columns must NOT exist as headed sub-blocks.
     expect(body).not.toMatch(
       /<h3 class="font-medium text-tk-ink text-xs uppercase tracking-widest">Trust<\/h3>/,
@@ -107,12 +107,12 @@ describe('W522.B apps/marketing-site/src/components/Footer.astro content parity'
       /<a href="\/trust\/sub-processors\/" class="nav-link">Sub-processors<\/a>/,
     );
     expect(body).toMatch(
-      /<a\s*href="https:\/\/status\.driftstack\.dev"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Status<\/a/,
+      /<a\s*href="https:\/\/status\.driftstack\.io"\s*class="nav-link"\s*target="_blank"\s*rel="noopener noreferrer">Status<\/a/,
     );
     expect(body).not.toMatch(
       /href="\/(?:pricing|comparison|self-hosted|about|faq|changelog|roadmap|legal\/privacy|legal\/terms|legal\/dpa|legal\/aup|trust|security|trust\/sub-processors)"/,
     );
-    expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.dev\/(?:signup|login)"/);
+    expect(body).not.toMatch(/href="https:\/\/app\.driftstack\.io\/(?:signup|login)"/);
   });
 
   it("F-3 product-focused signal strip replaces R7 compliance-badge strip: 'Bit-identical iPhone Safari fingerprint' + 'SOCKS5 · WireGuard · OpenVPN proxies' + 'API · SDK · GUI access' + 'EU-hosted'. Stripe-billed/GDPR-aware/Article 28(2) badges removed from the splash row (legal copy lives on /trust + /legal pages).", () => {

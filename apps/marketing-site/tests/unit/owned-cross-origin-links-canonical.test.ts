@@ -13,11 +13,11 @@ const SOURCE_ROOTS = [
 ].map((path) => resolve(REPO_ROOT, path));
 const SOURCE_EXTENSIONS = new Set(['.astro', '.md', '.mdx', '.ts', '.tsx']);
 const STATIC_HOSTS = new Set([
-  'driftstack.dev',
-  'app.driftstack.dev',
-  'admin.driftstack.dev',
-  'docs.driftstack.dev',
-  'status.driftstack.dev',
+  'driftstack.io',
+  'app.driftstack.io',
+  'admin.driftstack.io',
+  'docs.driftstack.io',
+  'status.driftstack.io',
 ]);
 
 function walk(directory: string): string[] {
@@ -84,14 +84,14 @@ describe('owned cross-origin static links', () => {
   });
 
   it('distinguishes static-route regressions from roots, API-style files, and other hosts', () => {
-    expect(needsCanonicalSlash('https://app.driftstack.dev/signup?next=%2Fbilling#choose')).toBe(
+    expect(needsCanonicalSlash('https://app.driftstack.io/signup?next=%2Fbilling#choose')).toBe(
       true,
     );
-    expect(needsCanonicalSlash('https://app.driftstack.dev/signup/?next=%2Fbilling#choose')).toBe(
+    expect(needsCanonicalSlash('https://app.driftstack.io/signup/?next=%2Fbilling#choose')).toBe(
       false,
     );
-    expect(needsCanonicalSlash('https://docs.driftstack.dev')).toBe(false);
-    expect(needsCanonicalSlash('https://driftstack.dev/.well-known/security.txt')).toBe(false);
+    expect(needsCanonicalSlash('https://docs.driftstack.io')).toBe(false);
+    expect(needsCanonicalSlash('https://driftstack.io/.well-known/security.txt')).toBe(false);
     expect(needsCanonicalSlash('https://api.driftstack.dev/v1/status')).toBe(false);
     expect(needsCanonicalSlash('https://errors.driftstack.dev/forbidden')).toBe(false);
     expect(needsCanonicalSlash('https://example.com/path')).toBe(false);
@@ -99,19 +99,19 @@ describe('owned cross-origin static links', () => {
 
   it('turns red for every clickable source form when a slash is removed', () => {
     const mutatedSource = [
-      '<a href="https://app.driftstack.dev/signup">Sign up</a>',
-      '<CtaBand primaryHref="https://app.driftstack.dev/settings" />',
-      "cta: { href: 'https://driftstack.dev/pricing' }",
-      '[Privacy](https://driftstack.dev/legal/privacy)',
-      '<https://docs.driftstack.dev/quickstart>',
+      '<a href="https://app.driftstack.io/signup">Sign up</a>',
+      '<CtaBand primaryHref="https://app.driftstack.io/settings" />',
+      "cta: { href: 'https://driftstack.io/pricing' }",
+      '[Privacy](https://driftstack.io/legal/privacy)',
+      '<https://docs.driftstack.io/quickstart>',
     ].join('\n');
     const violations = clickableOwnedUrls(mutatedSource, true).filter(needsCanonicalSlash);
     expect(violations).toEqual([
-      'https://app.driftstack.dev/signup',
-      'https://app.driftstack.dev/settings',
-      'https://driftstack.dev/pricing',
-      'https://driftstack.dev/legal/privacy',
-      'https://docs.driftstack.dev/quickstart',
+      'https://app.driftstack.io/signup',
+      'https://app.driftstack.io/settings',
+      'https://driftstack.io/pricing',
+      'https://driftstack.io/legal/privacy',
+      'https://docs.driftstack.io/quickstart',
     ]);
   });
 });

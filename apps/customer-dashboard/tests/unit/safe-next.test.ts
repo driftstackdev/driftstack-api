@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { safeNextPath } from '../../src/lib/safe-next.js';
 
-const ORIGIN = 'https://app.driftstack.dev';
+const ORIGIN = 'https://app.driftstack.io';
 
 describe('safeNextPath — same-origin redirect guard', () => {
   it('keeps a legit same-origin relative path (with query + hash)', () => {
@@ -23,7 +23,7 @@ describe('safeNextPath — same-origin redirect guard', () => {
   it('refuses off-origin absolute urls → "/"', () => {
     expect(safeNextPath('https://evil.com', ORIGIN)).toBe('/');
     expect(safeNextPath('https://evil.com/phish', ORIGIN)).toBe('/');
-    expect(safeNextPath('http://app.driftstack.dev.evil.com', ORIGIN)).toBe('/');
+    expect(safeNextPath('http://app.driftstack.io.evil.com', ORIGIN)).toBe('/');
   });
 
   it('refuses the classic string-sanitizer bypasses → "/"', () => {
@@ -41,7 +41,7 @@ describe('safeNextPath — same-origin redirect guard', () => {
 
   it('a same-origin scheme-relative ref resolves to a same-origin path (safe)', () => {
     // `https:evil.com` shares the base scheme → resolved relative to the base
-    // origin as /evil.com (navigates to app.driftstack.dev/evil.com, NOT
+    // origin as /evil.com (navigates to app.driftstack.io/evil.com, NOT
     // evil.com); safe, so returned as the same-origin path rather than dropped.
     expect(safeNextPath('https:evil.com', ORIGIN)).toBe('/evil.com');
   });

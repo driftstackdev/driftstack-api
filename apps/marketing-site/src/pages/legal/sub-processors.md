@@ -121,5 +121,5 @@ within one business day.
 - [Privacy Policy](/legal/privacy/)
 - [/docs/security-overview](/docs/security-overview/) — overall
   security posture + controls.
-- [docs.driftstack.dev/reference/data-residency](https://docs.driftstack.dev/reference/data-residency/) — region-pinning + the
+- [docs.driftstack.io/reference/data-residency](https://docs.driftstack.io/reference/data-residency/) — region-pinning + the
   no-cross-region-copy guarantee.

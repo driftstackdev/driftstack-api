@@ -128,14 +128,14 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
       /<a href="\/docs\/sdk-typescript-crypto-orders\/">TypeScript SDK crypto orders<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/guides\/paying-with-crypto\/">Integration guide<\/a>/,
     );
     expect(body).toMatch(/<a href="\/docs\/idempotency-keys\/">Idempotency keys<\/a>/);
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/">Crypto webhook events<\/a>/,
     );
     expect(body).toMatch(
-      /<a href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
+      /<a href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/">Polling vs webhooks<\/a>/,
     );
     for (const path of [
       '/docs/sdk-python',

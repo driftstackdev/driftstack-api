@@ -221,10 +221,10 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
 
   it('CRITICAL CORS_ALLOWED_ORIGINS pins the exact production and staging browser surfaces without a wildcard', () => {
     expect(read(ENV_PROD)).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/admin\.driftstack\.io,https:\/\/status\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/www\.driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
     );
     expect(read(ENV_STG)).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
     );
     for (const f of [ENV_PROD, ENV_STG]) {
       expect(read(f)).not.toMatch(/^CORS_ALLOWED_ORIGINS=.*\*/m);
@@ -233,7 +233,7 @@ describe('W807 commit-msg hook + install + env-templates parity', () => {
   });
 
   it('CRITICAL environment base URLs pin production hosts and the live staging API plus stable Dashboard Pages alias', () => {
-    expect(read(ENV_PROD)).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
+    expect(read(ENV_PROD)).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.io$/m);
     expect(read(ENV_STG)).toMatch(
       /^DASHBOARD_BASE_URL=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
     );

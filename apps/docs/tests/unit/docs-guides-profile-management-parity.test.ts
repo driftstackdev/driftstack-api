@@ -1,4 +1,4 @@
-// W259.B — drift-guard for docs.driftstack.dev/guides/profile-management.
+// W259.B — drift-guard for docs.driftstack.io/guides/profile-management.
 // Pins:
 // 1. Profile id prefix is `prof_` (route serialiser), not the legacy `prf_`.
 // 2. Snapshot id prefix is `psnap_` (matches W256.C).

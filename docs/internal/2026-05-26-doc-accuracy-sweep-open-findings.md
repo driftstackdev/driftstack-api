@@ -311,7 +311,7 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
 11. **OpenAPI spec is a subset of the documented customer surface (low).**
     **[RESOLVED 2026-05-28]** Founder chose the complete-surface option; the 4 confirmed-missing endpoints below are now registered in the spec + added to the `openapi-route-coverage` CORE allowlist, and the sdk-python openapi.json snapshot was regenerated (it had been stale since 2026-05-18; the substring-based W622 sync test masked the drift — a follow-up could tighten W622 to an exact path-set assertion). The two SSE endpoints (`/v1/agent-sessions/:id/transcript`, `/v1/account/me/notifications`) are represented as `text/event-stream` responses with a string schema + description.
     Several customer endpoints that have a Markdown doc page on
-    docs.driftstack.dev are absent from the hand-written OpenAPI spec
+    docs.driftstack.io are absent from the hand-written OpenAPI spec
     (`apps/server/src/lib/openapi.ts`), so they don't appear in the
     Scalar reference UI at api.driftstack.dev/docs. Confirmed concrete
     cases (route registered + Markdown-documented + NOT in spec):
@@ -435,7 +435,7 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     to dashboard routes that don't exist. **Resolution:** took option (b) —
     BYOK management stays API-only (no dashboard UI built). Repointed the
     `byok-anthropic-key-rotation-reminder` email's rotation instructions to
-    the working API docs (`https://docs.driftstack.dev/api/byok-anthropic`,
+    the working API docs (`https://docs.driftstack.io/api/byok-anthropic`,
     HEAD 200) and kept its `dashboardUrl` meaningful by pointing the status
     link at the real `/agent-sessions` page (which carries the BYOK status
     pill). Repointed the `agent-sessions.astro` status-pill "Manage key"
@@ -464,7 +464,7 @@ profile-snapshots.ts`) gate writes with only `app.requireAuth` + a
     already reference (then pick ONE canonical path and make email +
     `agent-sessions.astro:202` agree on it), or (b) keep BYOK API-only and
     repoint the email + the status-pill link to the docs
-    (`docs.driftstack.dev/api/byok-anthropic`, which documents the
+    (`docs.driftstack.io/api/byok-anthropic`, which documents the
     `PUT` rotate flow). NOT auto-fixed: whether a dashboard BYOK UI is
     intended-but-unbuilt vs. deliberately API-only is a product call, and the
     email body is parity-pinned.

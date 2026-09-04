@@ -102,6 +102,6 @@ focused, carefully-verified effort (NOT autopilot fallback). Marketing = optiona
 - 2026-06-09 W364: plan + status-site breaking-utility audit (this doc).
 - 2026-06-09 W365: **status-site PILOT MIGRATED + builds clean** (astro 6.4.5 + Tailwind v4 via
   postcss; codemod ran; CSS verified — 21KB, oxblood/surface theme + renamed utilities present).
-  **BANKED, NOT pushed** — pushing auto-deploys to live status.driftstack.dev (Cloudflare Pages)
+  **BANKED, NOT pushed** — pushing auto-deploys to live status.driftstack.io (Cloudflare Pages)
   and the founder asked to spot-check renders; I can't verify pixels. Awaiting founder OK to push,
   OR founder eyeballs the built `apps/status-site/dist`. Recipe proven for the remaining 4 sites.

@@ -1,5 +1,5 @@
 // Cross-source invariant: every activation-gate disabled-stub
-// detail string MUST point at a customer-facing docs.driftstack.dev
+// detail string MUST point at a customer-facing docs.driftstack.io
 // URL — NEVER at an internal handoff or design doc. Per slices
 // 87 + 88 / commit 6efc0a34 fix-shape: the 503 problem-body lands
 // VERBATIM in the customer's SDK, so internal nomenclature
@@ -26,22 +26,22 @@ describe('Activation-gate disabled-stub customer-facing docs URL cross-source in
   const agentSessions = read(AGENT_SESSIONS);
   const accountByok = read(ACCOUNT_BYOK);
 
-  it('routes/recipes disabled-stub references the supported API flow at https://docs.driftstack.dev/api/recipes/', () => {
+  it('routes/recipes disabled-stub references the supported API flow at https://docs.driftstack.io/api/recipes/', () => {
     expect(recipes).toMatch(
-      /'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.'/,
+      /'https:\/\/docs\.driftstack\.io\/api\/recipes\/ for the supported API flow\.'/,
     );
   });
 
   it('routes/agent-sessions disabled-stub references both byok-anthropic + bundled-llm docs URLs — pinned so the 2-recovery-path customer-facing roster stays in sync with the 2-feature surface', () => {
     expect(agentSessions).toMatch(
-      /'\(https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/\), or opt into the ' \+/,
+      /'\(https:\/\/docs\.driftstack\.io\/api\/byok-anthropic\/\), or opt into the ' \+/,
     );
-    expect(agentSessions).toMatch(/'\(https:\/\/docs\.driftstack\.dev\/api\/bundled-llm\/\)\.';/);
+    expect(agentSessions).toMatch(/'\(https:\/\/docs\.driftstack\.io\/api\/bundled-llm\/\)\.';/);
   });
 
-  it('routes/account-byok-anthropic disabled-stub references the supported key-management flow at docs.driftstack.dev/api/byok-anthropic/', () => {
+  it('routes/account-byok-anthropic disabled-stub references the supported key-management flow at docs.driftstack.io/api/byok-anthropic/', () => {
     expect(accountByok).toMatch(
-      /'https:\/\/docs\.driftstack\.dev\/api\/byok-anthropic\/ for the supported key-management flow\.'/,
+      /'https:\/\/docs\.driftstack\.io\/api\/byok-anthropic\/ for the supported key-management flow\.'/,
     );
   });
 

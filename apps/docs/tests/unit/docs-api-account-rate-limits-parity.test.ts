@@ -1,4 +1,4 @@
-// W257.A — drift-guard for docs.driftstack.dev/api/account-rate-limits.
+// W257.A — drift-guard for docs.driftstack.io/api/account-rate-limits.
 // Pins:
 // 1. GET /v1/account/rate-limits is the documented + registered endpoint.
 // 2. The api_builder example row matches TIER_RATE_LIMIT_DEFAULTS exactly.

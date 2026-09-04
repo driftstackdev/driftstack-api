@@ -20,7 +20,7 @@ Driftstack sends two categories of email:
 The endpoint surface is intentionally narrow: list current
 preferences, set one preference. Per-event opt-in is the unit;
 there's no "opt out of everything optional" shorthand because
-the legal posture (per the [DPA](https://driftstack.dev/legal/dpa/)) requires that we
+the legal posture (per the [DPA](https://driftstack.io/legal/dpa/)) requires that we
 deliver each opt-out as an affirmative customer choice.
 
 ## List current preferences

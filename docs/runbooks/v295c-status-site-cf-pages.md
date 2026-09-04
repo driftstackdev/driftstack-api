@@ -1,4 +1,4 @@
-# V-295c — status.driftstack.dev Cloudflare Pages runbook
+# V-295c — status.driftstack.io Cloudflare Pages runbook
 
 Founder-facing one-time setup for the status page CF Pages project +
 DNS. Once these steps are done the GitHub-Pages-style auto-deploy
@@ -7,8 +7,8 @@ takes over; future commits to `main` redeploy the static bundle from
 
 ## Prerequisites
 
-- Cloudflare account with `driftstack.dev` zone already managed (same
-  zone as `driftstack.dev` marketing-site + `api.driftstack.dev` API).
+- Cloudflare account with `driftstack.io` zone already managed (same
+  zone as `driftstack.io` marketing-site + `api.driftstack.dev` API).
 - GitHub access to `driftstackdev/driftstack-api`.
 - The driftstack-api repo's `main` branch contains `apps/status-site/`.
 
@@ -66,21 +66,21 @@ If `R2_BUCKET_PUBLIC` is unset the API server logs a warning at boot and
 the snapshot writer is disabled; the status site then has no fallback
 and shows "Status currently unavailable" if the live API is down.
 
-## DNS — point status.driftstack.dev at the Pages project
+## DNS — point status.driftstack.io at the Pages project
 
-1. Cloudflare dashboard → **driftstack.dev zone** → **DNS** → **Records**.
+1. Cloudflare dashboard → **driftstack.io zone** → **DNS** → **Records**.
 2. Add **CNAME**:
    - Name: `status`
    - Target: `driftstack-status.pages.dev`
    - Proxy status: **Proxied** (orange cloud — keeps Cloudflare's TLS,
      HTTP/3, and caching layer in front).
 3. CF Pages dashboard → the new project → **Custom domains** → **Set
-   up a custom domain** → `status.driftstack.dev`. Cloudflare auto-
+   up a custom domain** → `status.driftstack.io`. Cloudflare auto-
    verifies via the CNAME you just created and issues an EV-style cert.
 
 ## Verification (post-deploy, founder runs once)
 
-1. Visit `https://status.driftstack.dev/`. The page should load with
+1. Visit `https://status.driftstack.io/`. The page should load with
    the "Loading current status…" card briefly, then transition to
    "All systems operational" (green dot) — assuming no incident is
    open at that moment.
@@ -114,6 +114,6 @@ and shows "Status currently unavailable" if the live API is down.
   shares the same SLA as Cloudflare's edge, which is the same edge
   that fronts api.driftstack.dev.
 - **DNS misconfiguration**: covered by step-2 verification above. If
-  `status.driftstack.dev` returns a CF "page not found" error, the
+  `status.driftstack.io` returns a CF "page not found" error, the
   CNAME is wrong; if TLS fails, the custom-domain hookup in CF Pages
   is incomplete.

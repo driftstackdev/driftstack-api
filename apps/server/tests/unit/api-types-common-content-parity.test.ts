@@ -379,7 +379,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     );
     expect(body).not.toMatch(/route handlers always operate against `ctx\.account\.id`/);
     expect(body).toMatch(
-      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.dev \(V-135\) is a\s*\*\s*separate defense-in-depth identity perimeter\./,
+      /\*\s*- `driftstack_internal_admin` — gates Driftstack-staff-only\s*\*\s*operations \(`\/v1\/admin\/\*`: list all accounts, suspend account,\s*\*\s*change tier, force-actions, audit-log read, webhook DLQ\s*\*\s*management\)\. Only the founder \+ Driftstack-internal accounts\s*\*\s*carry this scope\. The exact scope check is the application authority\s*\*\s*boundary; Cloudflare Access SSO on admin\.driftstack\.io \(V-135\) is a\s*\*\s*separate defense-in-depth identity perimeter\./,
     );
     expect(body).toMatch(
       /\*\s*- `admin` — pre-V-174 customer compatibility alias\. It satisfies\s*\*\s*`account_owner` and customer `admin:X` scopes, but never\s*\*\s*`driftstack_internal_admin`/,

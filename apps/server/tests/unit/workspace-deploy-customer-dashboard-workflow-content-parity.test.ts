@@ -2,7 +2,7 @@
 // V-259 / V-278.B/F customer-dashboard Cloudflare Pages deploy. Drift
 // here either drops the PUBLIC_API_BASE_URL fallback (would ship a
 // dashboard pointing at localhost:3000 to production), changes the
-// custom-domain anchor (would break the canonical app.driftstack.dev
+// custom-domain anchor (would break the canonical app.driftstack.io
 // route), or widens the path-filter (would redeploy the dashboard
 // on every backend-only commit).
 //
@@ -11,7 +11,7 @@
 //   • V-278.B/F PUBLIC_API_BASE_URL fallback to api.driftstack.dev.
 //   • V-469 per-service Sentry (PUBLIC_SENTRY_DSN_DASHBOARD +
 //     SENTRY_AUTH_TOKEN + SENTRY_ORG + SENTRY_RELEASE).
-//   • Custom domain app.driftstack.dev via CF Pages CNAME.
+//   • Custom domain app.driftstack.io via CF Pages CNAME.
 //   • Path-filter trigger (apps/customer-dashboard/** + this
 //     workflow + package.json + package-lock.json).
 //   • cancel-in-progress: false (let deploys finish).
@@ -46,7 +46,7 @@ describe('W543.A /.github/workflows/deploy-customer-dashboard.yml content parity
     expect(body).toMatch(/backend-only commits don't redeploy the dashboard\./);
   });
 
-  it("Secret-gate + V-259 runbook + CLOUDFLARE_DASHBOARD_PROJECT_NAME framing pinned: 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission.' + 'CLOUDFLARE_ACCOUNT_ID' + 'CLOUDFLARE_DASHBOARD_PROJECT_NAME — Cloudflare Pages project slug for the dashboard (e.g. `driftstack-customer-dashboard`).' + 'Pre-create the project in the CF dashboard before the first deploy.' + 'app.driftstack.dev → CNAME to the Pages project' + 'Founder runbook: section C of `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`.' — pinned so the Cloudflare-Pages-Edit-permission-token + DASHBOARD-specific-project-name-var (distinct from marketing CLOUDFLARE_PAGES_PROJECT_NAME and docs CLOUDFLARE_DOCS_PROJECT_NAME) + app.driftstack.dev-CNAME + V-259-section-C-runbook commitment survives", () => {
+  it("Secret-gate + V-259 runbook + CLOUDFLARE_DASHBOARD_PROJECT_NAME framing pinned: 'CLOUDFLARE_API_TOKEN          — token with `Cloudflare Pages — Edit` permission.' + 'CLOUDFLARE_ACCOUNT_ID' + 'CLOUDFLARE_DASHBOARD_PROJECT_NAME — Cloudflare Pages project slug for the dashboard (e.g. `driftstack-customer-dashboard`).' + 'Pre-create the project in the CF dashboard before the first deploy.' + 'app.driftstack.io → CNAME to the Pages project' + 'Founder runbook: section C of `docs/founder-actions/v259-cloudflare-pages-all-projects-setup.md`.' — pinned so the Cloudflare-Pages-Edit-permission-token + DASHBOARD-specific-project-name-var (distinct from marketing CLOUDFLARE_PAGES_PROJECT_NAME and docs CLOUDFLARE_DOCS_PROJECT_NAME) + app.driftstack.io-CNAME + V-259-section-C-runbook commitment survives", () => {
     expect(body).toMatch(/#\s+- CLOUDFLARE_API_TOKEN\s+— token with `Cloudflare Pages/);
     expect(body).toMatch(/#\s+— Edit` permission\./);
     expect(body).toMatch(/#\s+- CLOUDFLARE_ACCOUNT_ID\s+— Cloudflare account ID\./);
@@ -55,14 +55,14 @@ describe('W543.A /.github/workflows/deploy-customer-dashboard.yml content parity
     expect(body).toMatch(/`driftstack-customer-dashboard`\)\./);
     expect(body).toMatch(/Pre-create the project in the CF/);
     expect(body).toMatch(/dashboard before the first deploy\./);
-    expect(body).toMatch(/#\s+- app\.driftstack\.dev → CNAME to the Pages project/);
+    expect(body).toMatch(/#\s+- app\.driftstack\.io → CNAME to the Pages project/);
     expect(body).toMatch(/# Founder runbook: section C of/);
     expect(body).toMatch(
       /# `docs\/founder-actions\/v259-cloudflare-pages-all-projects-setup\.md`\./,
     );
   });
 
-  it("Path-filter + environment binding framing pinned: 'name: Deploy customer dashboard' + 'paths: apps/customer-dashboard/** + .github/workflows/deploy-customer-dashboard.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-customer-dashboard-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: customer-dashboard-production + url: https://app.driftstack.dev' — pinned so the 4-path-filter (app-dir + workflow + 2-root-manifest) + customer-dashboard-production env-binding + app.driftstack.dev URL + cancel-in-progress: FALSE commitment survives", () => {
+  it("Path-filter + environment binding framing pinned: 'name: Deploy customer dashboard' + 'paths: apps/customer-dashboard/** + .github/workflows/deploy-customer-dashboard.yml + package.json + package-lock.json' + 'workflow_dispatch' + 'concurrency: group: deploy-customer-dashboard-${{ github.ref }} + cancel-in-progress: false' + 'permissions: contents: read + deployments: write' + 'environment: name: customer-dashboard-production + url: https://app.driftstack.io' — pinned so the 4-path-filter (app-dir + workflow + 2-root-manifest) + customer-dashboard-production env-binding + app.driftstack.io URL + cancel-in-progress: FALSE commitment survives", () => {
     expect(body).toMatch(/^name: Deploy customer dashboard$/m);
     expect(body).toMatch(/- 'apps\/customer-dashboard\/\*\*'/);
     expect(body).toMatch(/- '\.github\/workflows\/deploy-customer-dashboard\.yml'/);
@@ -74,7 +74,7 @@ describe('W543.A /.github/workflows/deploy-customer-dashboard.yml content parity
     );
     expect(body).toMatch(/permissions:\s*\n\s*contents: read\s*\n\s*deployments: write/);
     expect(body).toMatch(
-      /environment:\s*\n\s*name: customer-dashboard-production\s*\n\s*url: https:\/\/app\.driftstack\.dev/,
+      /environment:\s*\n\s*name: customer-dashboard-production\s*\n\s*url: https:\/\/app\.driftstack\.io/,
     );
   });
 

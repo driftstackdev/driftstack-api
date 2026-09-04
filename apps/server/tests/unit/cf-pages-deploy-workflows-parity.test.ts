@@ -6,9 +6,9 @@
 // Each one builds an Astro static site, then uploads to a separate
 // Cloudflare Pages project via the wrangler CLI:
 //
-//   deploy-marketing.yml          → driftstack.dev
-//   deploy-customer-dashboard.yml → app.driftstack.dev
-//   deploy-docs.yml               → docs.driftstack.dev
+//   deploy-marketing.yml          → driftstack.io
+//   deploy-customer-dashboard.yml → app.driftstack.io
+//   deploy-docs.yml               → docs.driftstack.io
 //
 // CRITICAL invariants common to all three:
 //   1. Trigger uses path-filter on the site's subtree + the
@@ -103,11 +103,11 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
     }
   });
 
-  it('CRITICAL deploy-marketing.yml environment URL `driftstack.dev` + custom-domains doc note. Drift to dropping the apex-domain framing would lose institutional memory of which Pages project maps to the apex.', () => {
+  it('CRITICAL deploy-marketing.yml environment URL `driftstack.io` + custom-domains doc note. Drift to dropping the apex-domain framing would lose institutional memory of which Pages project maps to the apex.', () => {
     const w = read(MARKETING);
-    expect(w).toMatch(/url: https:\/\/driftstack\.dev/);
-    expect(w).toMatch(/driftstack\.dev → apex of the Pages project/);
-    expect(w).toMatch(/www\.driftstack\.dev → CNAME to the Pages project/);
+    expect(w).toMatch(/url: https:\/\/driftstack\.io/);
+    expect(w).toMatch(/driftstack\.io → apex of the Pages project/);
+    expect(w).toMatch(/www\.driftstack\.io → CNAME to the Pages project/);
   });
 
   it('CRITICAL deploy-marketing.yml V-469 Sentry per-service framing pinned — PUBLIC_SENTRY_DSN_MARKETING build-time-baked into client bundle. Drift to dropping would lose the per-service DSN isolation.', () => {
@@ -131,7 +131,7 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
     }
   });
 
-  it('CRITICAL deploy-customer-dashboard.yml deploys to app.driftstack.dev + customer-dashboard subtree. Drift to a different subtree path would let unrelated commits redeploy the dashboard.', () => {
+  it('CRITICAL deploy-customer-dashboard.yml deploys to app.driftstack.io + customer-dashboard subtree. Drift to a different subtree path would let unrelated commits redeploy the dashboard.', () => {
     expect(existsSync(DASHBOARD)).toBe(true);
     const w = read(DASHBOARD);
 
@@ -139,19 +139,19 @@ describe('W725 Cloudflare Pages deploy workflows parity', () => {
     expect(w).toMatch(/apps\/customer-dashboard\/\*\*/);
 
     // Environment URL.
-    expect(w).toMatch(/app\.driftstack\.dev/);
+    expect(w).toMatch(/app\.driftstack\.io/);
 
     // Wrangler upload of customer-dashboard dist.
     expect(w).toMatch(/apps\/customer-dashboard\/dist/);
   });
 
-  it('CRITICAL deploy-docs.yml deploys to docs.driftstack.dev + docs subtree path-filter. The dedicated docs project keeps marketing-site changes from blasting cached docs CDN.', () => {
+  it('CRITICAL deploy-docs.yml deploys to docs.driftstack.io + docs subtree path-filter. The dedicated docs project keeps marketing-site changes from blasting cached docs CDN.', () => {
     expect(existsSync(DOCS)).toBe(true);
     const w = read(DOCS);
 
     // Path-filter on apps/docs/** subtree + environment URL pinned.
     expect(w).toMatch(/'apps\/docs\/\*\*'/);
-    expect(w).toMatch(/docs\.driftstack\.dev/);
+    expect(w).toMatch(/docs\.driftstack\.io/);
     // Build invokes the apps/docs workspace.
     expect(w).toMatch(/workspace apps\/docs/);
   });

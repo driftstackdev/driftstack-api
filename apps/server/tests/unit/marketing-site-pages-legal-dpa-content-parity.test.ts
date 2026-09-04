@@ -215,7 +215,7 @@ describe('W506.B apps/marketing-site/src/pages/legal/dpa.md content parity', () 
     expect(body).toMatch(
       /Any contractually binding availability or\s*redundancy commitment is stated in Customer's applicable Order\s*Form or published SLA/,
     );
-    expect(body).toMatch(/public status page at `status\.driftstack\.dev`/);
+    expect(body).toMatch(/public status page at `status\.driftstack\.io`/);
     expect(body).not.toMatch(/status page planned|at launch/i);
   });
 

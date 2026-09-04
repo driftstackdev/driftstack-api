@@ -79,9 +79,9 @@ describe('W418.C apps/server/src/routes/billing.ts content parity', () => {
     );
   });
 
-  it('ALLOWED_RETURN_ORIGINS: readonly 3-origin tuple (https://app.driftstack.dev + http://localhost:5173 + http://app.driftstack.local)', () => {
+  it('ALLOWED_RETURN_ORIGINS: readonly 3-origin tuple (https://app.driftstack.io + http://localhost:5173 + http://app.driftstack.local)', () => {
     expect(body).toMatch(
-      /const ALLOWED_RETURN_ORIGINS: readonly string\[\] = \[\s*'https:\/\/app\.driftstack\.dev',\s*'http:\/\/localhost:5173',\s*\/\/\s*dashboard dev server\s*'http:\/\/app\.driftstack\.local',\s*\/\/\s*e2e fixture\s*\];/,
+      /const ALLOWED_RETURN_ORIGINS: readonly string\[\] = \[\s*'https:\/\/app\.driftstack\.io',\s*'http:\/\/localhost:5173',\s*\/\/\s*dashboard dev server\s*'http:\/\/app\.driftstack\.local',\s*\/\/\s*e2e fixture\s*\];/,
     );
   });
 

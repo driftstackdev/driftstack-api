@@ -4,7 +4,7 @@
 // Every customer-facing URL in `apps/server/src/services/email.ts`
 // must come in via template variables (e.g. `${v.link}`,
 // `${v.dashboardUrl}`, `${v.portalUrl}`). If a future edit drops a
-// raw `https://app.driftstack.dev` literal into the templates, the
+// raw `https://app.driftstack.io` literal into the templates, the
 // V-079.B + W190 normalisation in `config.ts` can't reach into the
 // template body, and the same 2026-05-12 Postmark-link bug class
 // becomes possible again.
@@ -12,10 +12,10 @@
 // The grep is intentionally blunt; jsdoc/comment lines are allowlisted.
 //
 // V-956 — the substring allowlist that used to sit here held two entries,
-// `driftstack.dev/docs` and `driftstack.dev/legal`, justified in this comment as
+// `driftstack.io/docs` and `driftstack.io/legal`, justified in this comment as
 // "separate origins not driven by DASHBOARD_ORIGIN". Neither string occurs
 // anywhere in `services/email.ts`, and neither could have mattered if it did: the
-// allowlist is only consulted for lines already containing `app.driftstack.dev`
+// allowlist is only consulted for lines already containing `app.driftstack.io`
 // or `localhost:5173`. They excused nothing. Removed, with an arm below requiring
 // any future entry to actually excuse a line this guard would otherwise flag.
 //
@@ -42,7 +42,7 @@ const COMMENT_PATTERNS = [/^\s*\/\//, /^\s*\*/];
  * Substrings that excuse a line which otherwise trips a trigger below.
  *
  * Empty, and it should stay that way unless a real case appears — an entry here
- * is only meaningful on a line that ALSO contains `app.driftstack.dev` or
+ * is only meaningful on a line that ALSO contains `app.driftstack.io` or
  * `localhost:5173`, which is a narrow thing to need. The arm below refuses an
  * entry that does not excuse such a line, so this cannot quietly refill with
  * plausible-looking origins the way it did before.
@@ -50,7 +50,7 @@ const COMMENT_PATTERNS = [/^\s*\/\//, /^\s*\*/];
 const SUBSTRING_ALLOWLIST: readonly string[] = [];
 
 /** The two literals this guard exists to keep out of the templates. */
-const TRIGGERS = ['app.driftstack.dev', 'localhost:5173'] as const;
+const TRIGGERS = ['app.driftstack.io', 'localhost:5173'] as const;
 
 function isAllowedLine(line: string): boolean {
   if (COMMENT_PATTERNS.some((re) => re.test(line))) return true;
@@ -90,10 +90,10 @@ describe('W191 email-templates URL-literal drift guard', () => {
     ).toEqual([]);
   });
 
-  it('contains no `https://app.driftstack.dev` literals', () => {
+  it('contains no `https://app.driftstack.io` literals', () => {
     const offenders = SOURCE.split('\n')
       .map((line, idx) => ({ line, lineNumber: idx + 1 }))
-      .filter(({ line }) => line.includes('app.driftstack.dev'))
+      .filter(({ line }) => line.includes('app.driftstack.io'))
       .filter(({ line }) => !isAllowedLine(line));
     expect(
       offenders,

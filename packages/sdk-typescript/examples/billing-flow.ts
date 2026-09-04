@@ -29,8 +29,8 @@ async function main(): Promise<void> {
     const co = await client.billing.createCheckoutSession({
       tier: 'api_builder',
       billing_period: 'monthly',
-      success_url: 'https://app.driftstack.dev/billing?ok=1',
-      cancel_url: 'https://app.driftstack.dev/billing?cancelled=1',
+      success_url: 'https://app.driftstack.io/billing?ok=1',
+      cancel_url: 'https://app.driftstack.io/billing?cancelled=1',
     });
     console.log(`No subscription — redirect customer to:\n  ${co.checkout_url}`);
     return;

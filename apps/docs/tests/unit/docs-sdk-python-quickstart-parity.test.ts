@@ -1,4 +1,4 @@
-// W260.A — drift-guard for docs.driftstack.dev/sdk/python-quickstart.
+// W260.A — drift-guard for docs.driftstack.io/sdk/python-quickstart.
 // Previous revision:
 //   - claimed `err.problem.type` / `err.problem.detail` / `err.request_id`
 //     attributes; the live DriftstackError carries `problem_type` +

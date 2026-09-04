@@ -62,15 +62,15 @@ describe('W540.B /README.md content parity', () => {
     expect(body).toMatch(/GitHub Actions CI/);
   });
 
-  it("6-app + 9-package monorepo layout framing pinned: 'apps/server' (Fastify API + control plane) + 'marketing-site' (driftstack.dev) + 'customer-dashboard' (app.driftstack.dev) + 'admin-panel' (internal) + 'docs' (docs.driftstack.dev) + 'status-site' (status.driftstack.dev) + 'gui-client' (Tauri desktop client macOS/Windows/Linux) + 9 packages (api-types + sdk-typescript + sdk-python + sdk-go + behavioural-simulation + recipe-library + recapture-automation + webrtc-streaming + webhook-delivery) — pinned so the full 6-app + 9-package public inventory commitment survives (drift to dropping a SDK from the list would mislead consumers about which language SDKs ship)", () => {
+  it("6-app + 9-package monorepo layout framing pinned: 'apps/server' (Fastify API + control plane) + 'marketing-site' (driftstack.io) + 'customer-dashboard' (app.driftstack.io) + 'admin-panel' (internal) + 'docs' (docs.driftstack.io) + 'status-site' (status.driftstack.io) + 'gui-client' (Tauri desktop client macOS/Windows/Linux) + 9 packages (api-types + sdk-typescript + sdk-python + sdk-go + behavioural-simulation + recipe-library + recapture-automation + webrtc-streaming + webhook-delivery) — pinned so the full 6-app + 9-package public inventory commitment survives (drift to dropping a SDK from the list would mislead consumers about which language SDKs ship)", () => {
     expect(body).toMatch(/server\/\s*#\s*Fastify API \+ control plane/);
-    expect(body).toMatch(/marketing-site\/\s*#\s*Astro static-build \(driftstack\.dev\)/);
+    expect(body).toMatch(/marketing-site\/\s*#\s*Astro static-build \(driftstack\.io\)/);
     expect(body).toMatch(
-      /customer-dashboard\/\s*#\s*Astro customer portal \(app\.driftstack\.dev\)/,
+      /customer-dashboard\/\s*#\s*Astro customer portal \(app\.driftstack\.io\)/,
     );
     expect(body).toMatch(/admin-panel\/\s*#\s*Astro admin UI \(internal\)/);
-    expect(body).toMatch(/docs\/\s*#\s*Astro docs site \(docs\.driftstack\.dev\)/);
-    expect(body).toMatch(/status-site\/\s*#\s*Status page \(status\.driftstack\.dev\)/);
+    expect(body).toMatch(/docs\/\s*#\s*Astro docs site \(docs\.driftstack\.io\)/);
+    expect(body).toMatch(/status-site\/\s*#\s*Status page \(status\.driftstack\.io\)/);
     expect(body).toMatch(/gui-client\/\s*#\s*Tauri desktop client \(macOS \/ Windows \/ Linux\)/);
     expect(body).toMatch(/api-types\//);
     expect(body).toMatch(/sdk-typescript\//);

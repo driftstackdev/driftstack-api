@@ -52,7 +52,7 @@ The teammate receives an email with a 7-day accept link.
 
 ## Step 2 — Accept the invite (teammate)
 
-The teammate signs up at <https://app.driftstack.dev/signup/> using
+The teammate signs up at <https://app.driftstack.io/signup/> using
 the invitee email address (must match exactly), then clicks the
 accept link from the invite email.
 
@@ -274,7 +274,7 @@ role + `X-Driftstack-Account` header pointing at the owner.
 ## Privacy note
 
 A team member is a separate Data Subject from the owner. Their
-account email is processed under [Privacy §3.1](https://driftstack.dev/legal/privacy/#31-account-data)
+account email is processed under [Privacy §3.1](https://driftstack.io/legal/privacy/#31-account-data)
 on the same legal basis as any other Customer contact. Removing the
 member from the team does not delete their Driftstack account; only
 the membership relationship.

@@ -61,8 +61,8 @@ def test_sync_create_checkout_session_sends_post() -> None:
                 {
                     "tier": "api_builder",
                     "billing_period": "monthly",
-                    "success_url": "https://app.driftstack.dev/welcome",
-                    "cancel_url": "https://app.driftstack.dev/select-tier",
+                    "success_url": "https://app.driftstack.io/welcome",
+                    "cancel_url": "https://app.driftstack.io/select-tier",
                 },
             )
         assert result["url"].startswith("https://checkout.stripe.com/")

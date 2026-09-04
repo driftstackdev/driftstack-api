@@ -35,7 +35,7 @@ describe('OAUTH_CLIENT_PROVIDERS catalogue', () => {
 describe('buildAuthorizeUrl', () => {
   const BASE = {
     clientId: 'test-client-id',
-    callbackUrl: 'https://app.driftstack.dev/auth/oauth-client/callback',
+    callbackUrl: 'https://app.driftstack.io/auth/oauth-client/callback',
     state: 'state-nonce-12345678',
     codeChallenge: 'challenge-base64url-XYZ',
   };
@@ -68,13 +68,11 @@ describe('buildAuthorizeUrl', () => {
       buildAuthorizeUrl({
         ...BASE,
         provider: 'google',
-        callbackUrl: 'https://app.driftstack.dev/cb?next=/billing',
+        callbackUrl: 'https://app.driftstack.io/cb?next=/billing',
         state: 'with spaces & ampersands',
       }),
     );
-    expect(url.searchParams.get('redirect_uri')).toBe(
-      'https://app.driftstack.dev/cb?next=/billing',
-    );
+    expect(url.searchParams.get('redirect_uri')).toBe('https://app.driftstack.io/cb?next=/billing');
     expect(url.searchParams.get('state')).toBe('with spaces & ampersands');
   });
 

@@ -1,4 +1,4 @@
-// W258.D — drift-guard for docs.driftstack.dev/sdk/versioning. Pins:
+// W258.D — drift-guard for docs.driftstack.io/sdk/versioning. Pins:
 // 1. Webhook-signature helper names match the live exports across TS/Py/Go.
 // 2. Package paths cited in the release-process section exist on disk.
 // 3. Each SDK's CHANGELOG.md exists at the cited location.

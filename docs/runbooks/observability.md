@@ -121,10 +121,10 @@ selects, not a description of something running today:
 | `https://api.driftstack.dev/health`    | 60s      | 5s      | 2 consecutive → page |
 | `https://api.driftstack.dev/ready`     | 60s      | 10s     | 2 consecutive → page |
 | `https://api.driftstack.dev/v1/status` | 60s      | 5s      | 2 consecutive → page |
-| `https://app.driftstack.dev`           | 5min     | 10s     | 1 failure → Slack    |
-| `https://docs.driftstack.dev`          | 5min     | 10s     | 1 failure → Slack    |
-| `https://driftstack.dev`               | 5min     | 10s     | 1 failure → Slack    |
-| `https://status.driftstack.dev`        | 60s      | 5s      | 2 consecutive → page |
+| `https://app.driftstack.io`            | 5min     | 10s     | 1 failure → Slack    |
+| `https://docs.driftstack.io`           | 5min     | 10s     | 1 failure → Slack    |
+| `https://driftstack.io`                | 5min     | 10s     | 1 failure → Slack    |
+| `https://status.driftstack.io`         | 60s      | 5s      | 2 consecutive → page |
 
 Synthetic check fails route through the same P-0 channels as
 Sentry fatals (per `docs/runbooks/incidents.md` §5.2).

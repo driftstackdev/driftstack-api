@@ -10,7 +10,7 @@
 // Also pins the capitalisation convention from the v2-#16 audit
 // queue: customer-visible "Driftstack" never appears lowercase in
 // email body text. (Lowercase IS allowed in URLs / identifiers
-// like driftstack.dev / docs.driftstack.dev / @driftstack.dev.)
+// like driftstack.io / docs.driftstack.io / @driftstack.dev.)
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -87,7 +87,7 @@ describe('v2-#16 email-templates V-205 attribution sweep', () => {
     // would trip.
     const stringLiterals = Array.from(body.matchAll(/(?:`[^`]+`|"[^"]+"|'[^']+')/g), (m) => m[0]);
     for (const lit of stringLiterals) {
-      // Strip URL-looking driftstack tokens (driftstack.dev, etc.).
+      // Strip URL-looking driftstack tokens (driftstack.io, etc.).
       const naked = lit.replace(/driftstack\.(dev|com|org|test|io)/g, '');
       const violatesRe = /[\sA-Za-z]driftstack[\s.,'"`?!]/;
       if (violatesRe.test(naked)) {

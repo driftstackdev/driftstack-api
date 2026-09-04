@@ -15,7 +15,7 @@ const navItems = [
   { href: '/pricing', label: 'Pricing' },
   { href: '/comparison', label: 'Compare' },
   { href: '/faq', label: 'FAQ' },
-  { href: 'https://docs.driftstack.dev', label: 'Docs', external: true },
+  { href: 'https://docs.driftstack.io', label: 'Docs', external: true },
 ];
 
 // Mobile-menu list mirrors desktop + adds secondary pages that don't
@@ -116,14 +116,14 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
         class="nav-link"
         data-download-link>Download</a
       >
-      <a href="https://app.driftstack.dev/login/" class="nav-link">Sign in</a>
+      <a href="https://app.driftstack.io/login/" class="nav-link">Sign in</a>
       {/* Sign up sits beside Sign in because the header offered a way BACK to an
           account and no way to START one: measured 2026-09-02, `signup` appeared
           ZERO times inside <header> at any width, and the page's only signup link
           was in the footer. "Start free" points at /pricing/#free, which is a
           deliberate pricing-first funnel and is left alone — this adds the direct
           path for someone who has already decided. */}
-      <a href="https://app.driftstack.dev/signup/" class="nav-link">Sign up</a>
+      <a href="https://app.driftstack.io/signup/" class="nav-link">Sign up</a>
       <a href="/pricing/#free" class="btn-primary">Start free</a>
     </nav>
 
@@ -176,13 +176,13 @@ function isActiveItem(item: { href: string; external?: boolean }): boolean {
             ))
           }
           <a
-            href="https://app.driftstack.dev/login/"
+            href="https://app.driftstack.io/login/"
             class="rounded px-3 py-2 text-sm text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink"
           >
             Sign in
           </a>
           <a
-            href="https://app.driftstack.dev/signup/"
+            href="https://app.driftstack.io/signup/"
             class="rounded px-3 py-2 text-sm text-tk-ink-2 hover:bg-tk-hover hover:text-tk-ink"
           >
             Sign up

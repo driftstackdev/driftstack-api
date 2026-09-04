@@ -30,6 +30,7 @@
       "identifier": "shell:allow-open",
       "allow": [
         { "url": "http://localhost:5173/cli/authorize**" },
+        { "url": "https://app.driftstack.io/cli/authorize**" },
         { "url": "https://app.driftstack.dev/cli/authorize**" },
         {
           "url": "https://staging.driftstack-customer-dashboard.pages.dev/cli/authorize**"

@@ -1,7 +1,7 @@
 // Drift guard for the branded new-tab page (founder 2026-06-25: "our own blank
 // about:me page instead of nothing"). Served at /newtab and opened by the GUI
 // simulator's "+" new-tab action (apps/gui-client SimulatorWindow NEW_TAB_URL =
-// https://driftstack.dev/newtab). Pins the load-fast contract + the on-submit
+// https://driftstack.io/newtab). Pins the load-fast contract + the on-submit
 // navigation so the page stays light + functional:
 //   • Driftstack wordmark (DRIFT + STACK) is present.
 //   • A search/URL input + a submit affordance navigate on submit.

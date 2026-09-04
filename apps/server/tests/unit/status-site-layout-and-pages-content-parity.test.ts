@@ -2,7 +2,7 @@
 // parity bundle. One-hundred-sixteenth in the cross-SDK drift-guard
 // series. Pins the previously-unguarded 5 status-site source files.
 //
-// /status.driftstack.dev is the public-no-auth incident surface +
+// /status.driftstack.io is the public-no-auth incident surface +
 // V-657 incident-email-subscription flow + V-657 90-day history.
 // Drift to the API_BASE/R2_FALLBACK_URL, severity/status badge maps,
 // or the V-540.B-tested double-opt-in subscribe flow would mismatch
@@ -97,14 +97,14 @@ describe('W790 status-site src content parity bundle', () => {
     );
   });
 
-  it('CRITICAL driftstack.dev nav + privacy footer link pinned.', () => {
+  it('CRITICAL driftstack.io nav + privacy footer link pinned.', () => {
     const p = read(LAYOUT);
 
     expect(p).toMatch(
-      /<a href="https:\/\/driftstack\.dev" class="text-ink-muted hover:text-ink-primary">\s*\n\s+driftstack\.dev\s*\n\s+<\/a>/,
+      /<a href="https:\/\/driftstack\.io" class="text-ink-muted hover:text-ink-primary">\s*\n\s+driftstack\.io\s*\n\s+<\/a>/,
     );
     expect(p).toMatch(
-      /<a href="https:\/\/driftstack\.dev\/legal\/privacy\/" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
+      /<a href="https:\/\/driftstack\.io\/legal\/privacy\/" class="hover:text-ink-primary">\s*\n\s+Privacy\s*\n\s+<\/a>/,
     );
   });
 

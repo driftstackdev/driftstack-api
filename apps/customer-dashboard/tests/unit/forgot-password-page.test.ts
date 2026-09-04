@@ -19,7 +19,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'forgot-password', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/forgot-password/';
+const PAGE_URL = 'https://app.driftstack.io/forgot-password/';
 
 interface MockFetchCall {
   url: string;

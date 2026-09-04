@@ -52,7 +52,7 @@ export interface DriftstackSettings {
    * Passed per-launch as agentSessions.create({ initial_url }).
    *
    * ⭐ Default is the START PAGE (`/newtab/`), not the marketing homepage.
-   * P-27 — a session used to open on `https://driftstack.dev`, so the branded
+   * P-27 — a session used to open on `https://driftstack.io`, so the branded
    * start page with the "this device, as sites see it" panel was reachable only
    * by pressing "+". The first thing a customer saw was the product's own
    * marketing site, which tells them nothing about the device they just
@@ -102,7 +102,7 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeMode: 'dark',
   themeAccent: 'oxblood',
   telemetryOptIn: null,
-  startUrl: 'https://driftstack.dev/newtab/',
+  startUrl: 'https://driftstack.io/newtab/',
   autoUpdate: false,
 };
 
@@ -319,10 +319,26 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   const themeAccent: ThemeAccent = DEFAULT_SETTINGS.themeAccent;
   // Start URL the remote browser opens on launch (GUI-local; passed per-launch as
   // agentSessions.create({ initial_url })). Non-empty string or the default.
-  const startUrl =
+  // 2026-09-04 — the website moved to driftstack.io. Changing DEFAULT_SETTINGS
+  // alone would move only FRESH installs: every existing customer has the old
+  // value written into settings.json, so they would keep opening the .dev start
+  // page indefinitely — and the gap is invisible in testing, because a clean
+  // install looks correct. Only the value this app itself shipped as a default is
+  // migrated; a start URL the customer typed is theirs and is left alone.
+  const LEGACY_DEFAULT_START_URLS = new Set([
+    'https://driftstack.io/newtab/',
+    'https://driftstack.io/newtab',
+    'https://driftstack.io/',
+    'https://driftstack.io',
+  ]);
+  const persistedStartUrl =
     persisted && typeof persisted.startUrl === 'string' && persisted.startUrl.length > 0
       ? persisted.startUrl
-      : DEFAULT_SETTINGS.startUrl;
+      : undefined;
+  const startUrl =
+    persistedStartUrl === undefined || LEGACY_DEFAULT_START_URLS.has(persistedStartUrl)
+      ? DEFAULT_SETTINGS.startUrl
+      : persistedStartUrl;
 
   // Only an explicit stored boolean overrides the default, so a settings.json
   // written before this field existed keeps auto-update ON rather than being

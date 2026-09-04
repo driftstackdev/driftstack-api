@@ -103,7 +103,7 @@ describe('W517.C apps/marketing-site/src/pages/docs/oauth-apps.astro content par
   });
 
   it('Hosted /oauth/authorize/ 6-param framing pinned: client_id (oac_) + redirect_uri + state (csrf-token) + code_challenge (sha256(verifier) base64url) + code_challenge_method=S256 + scope (space-separated) + callback outcomes + internal staging boundary', () => {
-    expect(body).toMatch(/GET https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
+    expect(body).toMatch(/GET https:\/\/app\.driftstack\.io\/oauth\/authorize\//);
     expect(body).toMatch(/\?client_id=oac_…/);
     expect(body).toMatch(/&redirect_uri=https:\/\/yourapp\.com\/oauth\/callback/);
     expect(body).toMatch(/&state=<csrf-token>/);

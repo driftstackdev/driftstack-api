@@ -14,8 +14,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const APP_SRC = resolve(HERE, '..', '..', 'src', 'lib', 'app.ts');
 
 const DEPS = {
-  dashboardOrigin: 'https://app.driftstack.dev',
-  corsAllowedOrigins: ['https://admin.driftstack.dev'],
+  dashboardOrigin: 'https://app.driftstack.io',
+  corsAllowedOrigins: ['https://admin.driftstack.io'],
 };
 
 describe('W586 corsOriginMatchers', () => {
@@ -25,48 +25,46 @@ describe('W586 corsOriginMatchers', () => {
     expect((m[0] as RegExp).test('http://localhost:5173')).toBe(true);
     expect((m[1] as RegExp).test('tauri://localhost')).toBe(true);
     expect((m[2] as RegExp).test('https://tauri.localhost')).toBe(true);
-    expect(m).toContain('https://app.driftstack.dev');
-    expect(m).toContain('https://admin.driftstack.dev');
+    expect(m).toContain('https://app.driftstack.io');
+    expect(m).toContain('https://admin.driftstack.io');
   });
 
-  it('always includes the 3 localhost/tauri regexes + the 6 first-party prod origins; omits dashboard/extra when undefined', () => {
+  it('always includes the 3 localhost/tauri regexes + the 12 first-party prod origins (.io + .dev); omits dashboard/extra when undefined', () => {
     const m = corsOriginMatchers({});
     expect(m.filter((x) => x instanceof RegExp)).toHaveLength(3);
     for (const o of [
-      'https://driftstack.dev',
-      'https://www.driftstack.dev',
-      'https://app.driftstack.dev',
-      'https://admin.driftstack.dev',
-      'https://status.driftstack.dev',
-      'https://docs.driftstack.dev',
+      'https://driftstack.io',
+      'https://www.driftstack.io',
+      'https://app.driftstack.io',
+      'https://admin.driftstack.io',
+      'https://status.driftstack.io',
+      'https://docs.driftstack.io',
     ]) {
       expect(m).toContain(o);
     }
-    expect(m).toHaveLength(9); // 3 regex + 6 prod origins, no dashboard/extra
+    expect(m).toHaveLength(15); // 3 regex + 12 prod origins (.io + .dev), no dashboard/extra
   });
 
   it('resolves the first-party prod origins (admin/status/docs) even with NO env allow-list — de-risks the PERMISSIVE_CORS=false flip', () => {
     const bare = {}; // no dashboardOrigin, no corsAllowedOrigins
-    expect(resolveCorsOrigin('https://admin.driftstack.dev', bare)).toBe(
-      'https://admin.driftstack.dev',
+    expect(resolveCorsOrigin('https://admin.driftstack.io', bare)).toBe(
+      'https://admin.driftstack.io',
     );
-    expect(resolveCorsOrigin('https://status.driftstack.dev', bare)).toBe(
-      'https://status.driftstack.dev',
+    expect(resolveCorsOrigin('https://status.driftstack.io', bare)).toBe(
+      'https://status.driftstack.io',
     );
-    expect(resolveCorsOrigin('https://docs.driftstack.dev', bare)).toBe(
-      'https://docs.driftstack.dev',
+    expect(resolveCorsOrigin('https://docs.driftstack.io', bare)).toBe(
+      'https://docs.driftstack.io',
     );
     // exact-match only — a look-alike subdomain is still blocked
-    expect(resolveCorsOrigin('https://admin.driftstack.dev.evil.com', bare)).toBeNull();
+    expect(resolveCorsOrigin('https://admin.driftstack.io.evil.com', bare)).toBeNull();
     expect(resolveCorsOrigin('https://evil.com', bare)).toBeNull();
   });
 });
 
 describe('W586 resolveCorsOrigin', () => {
   it('reflects an allowed origin (never *)', () => {
-    expect(resolveCorsOrigin('https://app.driftstack.dev', DEPS)).toBe(
-      'https://app.driftstack.dev',
-    );
+    expect(resolveCorsOrigin('https://app.driftstack.io', DEPS)).toBe('https://app.driftstack.io');
     expect(resolveCorsOrigin('http://localhost:5173', DEPS)).toBe('http://localhost:5173');
     expect(resolveCorsOrigin('tauri://localhost', DEPS)).toBe('tauri://localhost');
   });
@@ -74,7 +72,7 @@ describe('W586 resolveCorsOrigin', () => {
   it('returns null for a disallowed origin', () => {
     expect(resolveCorsOrigin('https://evil.com', DEPS)).toBeNull();
     // look-alike must not match the dashboard string
-    expect(resolveCorsOrigin('https://app.driftstack.dev.evil.com', DEPS)).toBeNull();
+    expect(resolveCorsOrigin('https://app.driftstack.io.evil.com', DEPS)).toBeNull();
   });
 
   it('returns null when no origin header (non-CORS request)', () => {
@@ -92,14 +90,14 @@ describe('W586 resolveCorsOrigin', () => {
 
 describe('W586 sseCorsHeaders', () => {
   it('allowed origin → ACAO reflected + credentials + Vary', () => {
-    const h = sseCorsHeaders('https://app.driftstack.dev', DEPS);
-    expect(h['access-control-allow-origin']).toBe('https://app.driftstack.dev');
+    const h = sseCorsHeaders('https://app.driftstack.io', DEPS);
+    expect(h['access-control-allow-origin']).toBe('https://app.driftstack.io');
     expect(h['access-control-allow-credentials']).toBe('true');
     expect(h['vary']).toBe('Origin');
   });
 
   it('CRITICAL allowed origin → x-request-id is EXPOSED. A hijacked reply bypasses the @fastify/cors exposedHeaders onSend hook, so the request id the stream writes was unreadable cross-origin on every hijack site — a customer debugging a failed stream could not quote the id support needs. The derived-population arm below guarantees every raw.writeHead spreads these headers, so pinning the value here covers all of them.', () => {
-    const h = sseCorsHeaders('https://app.driftstack.dev', DEPS);
+    const h = sseCorsHeaders('https://app.driftstack.io', DEPS);
     expect(h['access-control-expose-headers']).toBe('x-request-id');
     // Property: exposure rides ONLY with an allowed origin — a disallowed one
     // gets no headers at all, exposure included (never leak the id policy).

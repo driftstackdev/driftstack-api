@@ -39,7 +39,7 @@ This Privacy Policy applies to:
 2. Personal Data of individual contacts (e.g. founders of B2B
    prospects) that Driftstack collects in pre-sales correspondence.
 3. Personal Data collected through any public-facing Driftstack
-   property (the marketing site at `driftstack.dev`, the API status
+   property (the marketing site at `driftstack.io`, the API status
    page, the GitHub repository — to the extent any of these collect
    Personal Data).
 
@@ -220,7 +220,7 @@ preferences page (the underlying contractual notification — actual
 charge confirmation — is sent by Stripe and is not opt-outable).
 The complete catalog of emails Driftstack sends — opt-outable vs
 transactional — is on the public
-[Emails reference page](https://docs.driftstack.dev/reference/emails/).
+[Emails reference page](https://docs.driftstack.io/reference/emails/).
 
 ### 3.7 Support correspondence
 
@@ -241,7 +241,7 @@ addresses.
 ### 3.8 Marketing-site data
 
 **What:** access logs (IP address, user agent, referrer, request
-timestamp) for visitors to `driftstack.dev` (the marketing site).
+timestamp) for visitors to `driftstack.io` (the marketing site).
 Driftstack does **not** currently set first-party analytics cookies
 on the marketing site.
 
@@ -261,7 +261,7 @@ mechanism and disclosure are active.
 ### 3.9 Status-page data
 
 **What:** access logs (IP address, user agent, referrer, request
-timestamp) for visitors to `status.driftstack.dev` (the public
+timestamp) for visitors to `status.driftstack.io` (the public
 Service status page). Driftstack does **not** set analytics cookies on
 the status page.
 
@@ -304,7 +304,7 @@ confirmation link. Every notification includes one-click
 unsubscribe.
 
 **Source:** Customer or prospect voluntarily submits the address at
-`status.driftstack.dev`.
+`status.driftstack.io`.
 
 **Retention:** subscription data is retained while subscribed.
 Unsubscribe creates a tombstone so the address cannot be re-added

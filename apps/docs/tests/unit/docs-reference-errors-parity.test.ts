@@ -1,4 +1,4 @@
-// W258.B — drift-guard for docs.driftstack.dev/reference/errors. Pins
+// W258.B — drift-guard for docs.driftstack.io/reference/errors. Pins
 // every documented problem-type slug to a live PROBLEM_TYPES entry,
 // and pins source-of-truth file paths to disk.
 

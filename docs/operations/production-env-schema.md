@@ -38,10 +38,10 @@ REDIS_URL=rediss://default:<pwd>@<host>.upstash.io:<port>
 The deep-links emailed to users land on the customer-dashboard origin. For production:
 
 ```
-AUTH_VERIFY_EMAIL_URL=https://app.driftstack.dev/verify-email
-AUTH_MAGIC_LINK_URL=https://app.driftstack.dev/auth/magic-link
-AUTH_PASSWORD_RESET_URL=https://app.driftstack.dev/reset-password
-DASHBOARD_ORIGIN=https://app.driftstack.dev
+AUTH_VERIFY_EMAIL_URL=https://app.driftstack.io/verify-email
+AUTH_MAGIC_LINK_URL=https://app.driftstack.io/auth/magic-link
+AUTH_PASSWORD_RESET_URL=https://app.driftstack.io/reset-password
+DASHBOARD_ORIGIN=https://app.driftstack.io
 ```
 
 `DASHBOARD_ORIGIN` is the V-266 browser-OAuth flow's launch surface — the GUI client opens `${DASHBOARD_ORIGIN}/cli/authorize?code=…`.
@@ -103,9 +103,9 @@ EU ingest region. `SENTRY_RELEASE` is set by the deploy workflow at build time; 
 STRIPE_SECRET_KEY=sk_live_…
 STRIPE_WEBHOOK_SECRET=whsec_…
 DRIFTSTACK_TIER_PRICE_IDS={"solo_manual":{"monthly":"price_…","annual":"price_…"},"team_manual":{"monthly":"price_…","annual":"price_…"},"agency_manual":{"monthly":"price_…","annual":"price_…"},"api_starter":{"monthly":"price_…","annual":"price_…"},"api_builder":{"monthly":"price_…","annual":"price_…"},"api_scale":{"monthly":"price_…","annual":"price_…"}}
-STRIPE_SUCCESS_URL=https://app.driftstack.dev/billing/success
-STRIPE_CANCEL_URL=https://app.driftstack.dev/billing/cancel
-STRIPE_PORTAL_RETURN_URL=https://app.driftstack.dev/billing
+STRIPE_SUCCESS_URL=https://app.driftstack.io/billing/success
+STRIPE_CANCEL_URL=https://app.driftstack.io/billing/cancel
+STRIPE_PORTAL_RETURN_URL=https://app.driftstack.io/billing
 ```
 
 **Live-mode keys**: per the `stripe_credential_handling` rule, live `sk_live_…` keys go through the SSH-only root-owned mode-600 pending-file procedure — never through chat, command-line arguments, a commit or a PR description. Test-mode and live-mode values use the same handling.

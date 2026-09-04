@@ -31,7 +31,7 @@ true`. `deps.permissiveCors` is `process.env.PERMISSIVE_CORS === 'true'`
 
 ```
 NODE_ENV=production
-CORS_ALLOWED_ORIGINS=https://app.driftstack.dev,https://driftstack.dev,https://www.driftstack.dev,https://docs.driftstack.dev
+CORS_ALLOWED_ORIGINS=https://app.driftstack.io,https://driftstack.io,https://www.driftstack.io,https://docs.driftstack.io
 PERMISSIVE_CORS=true        ← the dev/webview escape hatch, left ON in prod
 ```
 
@@ -65,17 +65,17 @@ and reconcile the misleading comment.
 The configured allow-list is **incomplete** — the permissive flag was masking that:
 
 - `apps/status-site/src/pages/incident.astro` + `subscribe.astro` fetch
-  `api.driftstack.dev` from the browser, but **`https://status.driftstack.dev` is NOT
+  `api.driftstack.dev` from the browser, but **`https://status.driftstack.io` is NOT
   in `CORS_ALLOWED_ORIGINS`** → incident reads + email subscribe would CORS-break.
 - `apps/admin-panel/src/lib/api-base-url.ts` → the admin SPA calls the API, but
-  **`https://admin.driftstack.dev` is NOT in the list** → admin panel would break.
+  **`https://admin.driftstack.io` is NOT in the list** → admin panel would break.
 
 ## Remediation (founder / focused session — outward-facing prod change)
 
 1. Complete `CORS_ALLOWED_ORIGINS` to the full first-party browser-origin set:
-   `https://app.driftstack.dev, https://driftstack.dev, https://www.driftstack.dev,
-https://docs.driftstack.dev, https://status.driftstack.dev,
-https://admin.driftstack.dev` (the GUI's `tauri://localhost` + `localhost` are
+   `https://app.driftstack.io, https://driftstack.io, https://www.driftstack.io,
+https://docs.driftstack.io, https://status.driftstack.io,
+https://admin.driftstack.io` (the GUI's `tauri://localhost` + `localhost` are
    already hardcoded regexes in the non-permissive branch). Confirm this is the
    complete set of web properties that call the API from a browser.
 2. Set `PERMISSIVE_CORS=false` (or remove it) in `/opt/driftstack/api/.env`; restart.

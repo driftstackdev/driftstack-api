@@ -65,7 +65,7 @@ describe('docs components/Header content parity', () => {
     expect(body).toMatch(/\{ href: '\/sdk\/', label: 'SDKs' \}/);
     expect(body).toMatch(/\{ href: '\/guides\/', label: 'Guides' \}/);
     expect(body).toMatch(
-      /\{ href: 'https:\/\/driftstack\.dev', label: 'Marketing site', external: true \}/,
+      /\{ href: 'https:\/\/driftstack\.io', label: 'Marketing site', external: true \}/,
     );
   });
 

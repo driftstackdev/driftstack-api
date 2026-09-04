@@ -5,7 +5,7 @@ import { validateCssSelector } from '../../src/services/agent-selector-validatio
 
 /**
  * Measured LIVE against production on 2026-09-02, using the owner's own prompt
- * ("go to driftstack.dev, create an account with my email…"). The AI produced a
+ * ("go to driftstack.io, create an account with my email…"). The AI produced a
  * correct plan whose tap step carried:
  *
  *     a[href*='signup'], a[href*='sign-up'], button:has-text('Sign up')
@@ -97,7 +97,7 @@ describe('the decomposer knows it is driving a phone', () => {
   it('⛔ states the device, because the model plans a desktop layout otherwise', () => {
     // Measured live 2026-09-02 AFTER the CSS fix landed: the model emitted
     // perfectly valid `a[href*="signup"]` and still failed "element not found"
-    // — driftstack.dev DOES carry that link, but these are phone viewports where
+    // — driftstack.io DOES carry that link, but these are phone viewports where
     // the header nav collapses behind a toggle (the live page serves
     // aria-label="Open navigation menu"). The prompt said only "a driftstack
     // browser session"; it never said iPhone, Safari, mobile or viewport.
@@ -111,7 +111,7 @@ describe('the decomposer knows it is driving a phone', () => {
     // which is wrong for the reason the rest of the rule gives: the plan is
     // ordered with no branching and no retries, so a menu tap that was not
     // needed is not a fallback — it is one more step the whole task dies on.
-    // Measured live on driftstack.dev: the header carries NO signup link at any
+    // Measured live on driftstack.io: the header carries NO signup link at any
     // width, and the page's signup link is in the footer, reachable without
     // opening any menu. The old rule would have added a mandatory step to reach
     // a link that was never behind the menu — and in the live run it did, and

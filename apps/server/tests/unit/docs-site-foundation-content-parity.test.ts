@@ -26,7 +26,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
       /\/\/ V-250 — docs site footer\. Lighter-weight than marketing-site Footer/,
     );
     expect(body).toMatch(
-      /\/\/ \(no "Product\/Company\/Trust\/Legal" full grid\) since docs\.driftstack\.dev/,
+      /\/\/ \(no "Product\/Company\/Trust\/Legal" full grid\) since docs\.driftstack\.io/,
     );
     expect(body).toMatch(
       /\/\/ is a focused reference surface; primary navigation is the docs tree\./,
@@ -39,10 +39,10 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(body).toMatch(
       /Reference \+ guides for the Driftstack API, SDKs, and self-hosted client\./,
     );
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/pricing\/"/);
-    expect(body).toMatch(/href="https:\/\/driftstack\.dev\/security\/"/);
-    expect(body).not.toMatch(/href="https:\/\/driftstack\.dev\/(?:pricing|security)"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/pricing\/"/);
+    expect(body).toMatch(/href="https:\/\/driftstack\.io\/security\/"/);
+    expect(body).not.toMatch(/href="https:\/\/driftstack\.io\/(?:pricing|security)"/);
     expect(body).toMatch(/href="mailto:support@driftstack\.dev"/);
     expect(body).toMatch(/&copy; \{year\} Driftstack\./);
     expect(existsSync(FOOTER)).toBe(true);
@@ -54,7 +54,7 @@ describe('W599 apps/docs foundation modules content parity', () => {
     expect(body).toMatch(/\/\/ for brand consistency: oxblood D-badge \+ lowercase font-mono/);
     expect(body).toMatch(/\/\/ "driftstack" wordmark, "docs" subtitle to disambiguate cross-app\./);
     expect(body).toMatch(
-      /^const navItems = \[\s*\n\s*\{ href: '\/', label: 'Overview' \},\s*\n\s*\{ href: '\/api\/', label: 'API' \},\s*\n\s*\{ href: '\/sdk\/', label: 'SDKs' \},\s*\n\s*\{ href: '\/guides\/', label: 'Guides' \},\s*\n\s*\{ href: 'https:\/\/driftstack\.dev', label: 'Marketing site', external: true \},\s*\n\];/m,
+      /^const navItems = \[\s*\n\s*\{ href: '\/', label: 'Overview' \},\s*\n\s*\{ href: '\/api\/', label: 'API' \},\s*\n\s*\{ href: '\/sdk\/', label: 'SDKs' \},\s*\n\s*\{ href: '\/guides\/', label: 'Guides' \},\s*\n\s*\{ href: 'https:\/\/driftstack\.io', label: 'Marketing site', external: true \},\s*\n\];/m,
     );
     expect(body).toMatch(/function isActive\(href: string\): boolean \{/);
     expect(body).toMatch(/if \(href === '\/'\) return pathname === '\/';/);

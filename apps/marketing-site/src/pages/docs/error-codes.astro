@@ -29,7 +29,7 @@ const ERRORS = [
   { uri: 'legal-acceptance-required', http: 403, when: 'A new ToS / Privacy revision hasn\'t been accepted by the calling account.', action: 'POST to /v1/legal/accept with the current revision id.' },
   { uri: 'not-found', http: 404, when: 'Resource id does not exist OR you do not have access (both surface as 404; no enumeration).', action: 'Verify the id; cross-account lookups return 404 by design.' },
   { uri: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, idempotency-key replay with different body).', action: 'Read `detail` — often "mint a fresh resource instead".' },
-  { uri: 'concurrency-limit', http: 429, when: 'Account has hit its tier-bound concurrent-session cap. Extensions `current_sessions` + `limit`.', action: 'Wait for a running session to finish, or upgrade the tier. See https://docs.driftstack.dev/guides/concurrency/.' },
+  { uri: 'concurrency-limit', http: 429, when: 'Account has hit its tier-bound concurrent-session cap. Extensions `current_sessions` + `limit`.', action: 'Wait for a running session to finish, or upgrade the tier. See https://docs.driftstack.io/guides/concurrency/.' },
   { uri: 'tier-limit', http: 429, when: 'Tier cap reached on a non-session resource (e.g. profile count, API keys per account).', action: 'Upgrade tier or delete unused resources.' },
   { uri: 'storage-quota-exceeded', http: 409, when: 'A profile-backed session-launch was refused because your profiles’ total stored size reached your tier’s storage cap. Extensions `used_bytes` + `cap_bytes` + `tier`. Sessions without a profile are never affected; Enterprise is soft-only (never blocks).', action: 'Delete or trim a profile, or upgrade the tier, then launch again.' },
   { uri: 'profile-in-use', http: 409, when: 'A session-create carried a `profile_id` that already has a live session — two sessions on the same profile would overwrite each other’s saved cookies/logins. Extension `active_session_id` names the live session. Sessions without a profile are never affected.', action: 'End the named session (or wait for it to finish), then launch again.' },
@@ -142,7 +142,7 @@ Content-Type: application/problem+json
     <h2>Status outages</h2>
     <p>
       For platform-level outages (everyone hits 5xx),
-      check <a href="https://status.driftstack.dev">status.driftstack.dev</a>.
+      check <a href="https://status.driftstack.io">status.driftstack.io</a>.
       Subscribe to email notifications from the same page if you'd
       like to be told before your dashboard refreshes.
     </p>

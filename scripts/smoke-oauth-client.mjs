@@ -190,7 +190,7 @@ async function smoke(p) {
     return false;
   }
   // Also: redirect_uri must be on the API origin (api.driftstack.dev),
-  // not the SPA origin (app.driftstack.dev). The pre-Path-A wiring
+  // not the SPA origin (app.driftstack.io). The pre-Path-A wiring
   // pointed at the SPA URL; if we see that, fail loud.
   try {
     const redirectHost = new URL(redirectUri).hostname;

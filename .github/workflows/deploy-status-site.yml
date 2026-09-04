@@ -18,8 +18,8 @@
 #   - CLOUDFLARE_STATUS_SITE_PROJECT_NAME — Pages project slug
 #                                            (`driftstack-status`).
 #
-# Custom domain + DNS (status.driftstack.dev → the Pages project) are
-# configured in the Cloudflare dashboard / DNS for the driftstack.dev
+# Custom domain + DNS (status.driftstack.io → the Pages project) are
+# configured in the Cloudflare dashboard / DNS for the driftstack.io
 # zone. Setup runbook: docs/founder-actions/v660-status-site-cloudflare-setup.md.
 
 name: Deploy status site
@@ -47,7 +47,7 @@ jobs:
       deployments: write
     environment:
       name: status-site-production
-      url: https://status.driftstack.dev
+      url: https://status.driftstack.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6

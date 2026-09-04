@@ -31,7 +31,7 @@ function makeSvc(overrides: { dashboardOrigin?: string } = {}): {
   const store = new InMemoryCliAuthorizeStore();
   const svc = new CliAuthorizeService({
     store,
-    dashboardOrigin: overrides.dashboardOrigin ?? 'https://app.driftstack.dev',
+    dashboardOrigin: overrides.dashboardOrigin ?? 'https://app.driftstack.io',
     secretEncryptionKeyBase64: ENC_KEY,
   });
   return { svc, store };
@@ -51,7 +51,7 @@ describe('V-553.B-22 CliAuthorizeService.initiate', () => {
     const { svc, store } = makeSvc();
     const out = await svc.initiate({ state: 'st_xyz', client_label: 'CLI v1.0' });
     expect(out.code).toMatch(/^[A-Za-z0-9_-]{40,}$/);
-    expect(out.browser_url).toContain('https://app.driftstack.dev/cli/authorize');
+    expect(out.browser_url).toContain('https://app.driftstack.io/cli/authorize');
     expect(out.browser_url).toContain('state=st_xyz');
     expect(out.browser_url).toContain(`code=${encodeURIComponent(out.code)}`);
     expect(out.user_code).toMatch(/^[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/);
@@ -78,7 +78,7 @@ describe('V-553.B-22 CliAuthorizeService.initiate', () => {
     const store = new InMemoryCliAuthorizeStore();
     const svc = new CliAuthorizeService({
       store,
-      dashboardOrigin: 'https://app.driftstack.dev/',
+      dashboardOrigin: 'https://app.driftstack.io/',
       dashboardPath: '/connect-cli',
       secretEncryptionKeyBase64: ENC_KEY,
     });
@@ -298,7 +298,7 @@ describe('V-553.B-22 CliAuthorizeService.exchange', () => {
     const store = new SwappingClaimStore();
     const svc = new CliAuthorizeService({
       store,
-      dashboardOrigin: 'https://app.driftstack.dev',
+      dashboardOrigin: 'https://app.driftstack.io',
       secretEncryptionKeyBase64: ENC_KEY,
     });
     const first = await svc.initiate({ state: STATE });
@@ -394,7 +394,7 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
     const store = new InMemoryCliAuthorizeStore();
     const svc = new CliAuthorizeService({
       store,
-      dashboardOrigin: 'https://app.driftstack.dev',
+      dashboardOrigin: 'https://app.driftstack.io',
       secretEncryptionKeyBase64: ENC_KEY,
     });
     const { code, user_code } = await svc.initiate({ state: STATE });
@@ -420,7 +420,7 @@ describe('V-266 D1 — encryption of the minted key at rest', () => {
     const store = new InMemoryCliAuthorizeStore();
     const svc = new CliAuthorizeService({
       store,
-      dashboardOrigin: 'https://app.driftstack.dev',
+      dashboardOrigin: 'https://app.driftstack.io',
       secretEncryptionKeyBase64: ENC_KEY,
     });
     const { code } = await svc.initiate({ state: STATE });
@@ -472,7 +472,7 @@ describe('V-266 C2 — atomic one-shot exchange (no double-delivery under concur
     const store = new InMemoryCliAuthorizeStore();
     const svc = new CliAuthorizeService({
       store,
-      dashboardOrigin: 'https://app.driftstack.dev',
+      dashboardOrigin: 'https://app.driftstack.io',
       secretEncryptionKeyBase64: ENC_KEY,
     });
     const { code, user_code } = await svc.initiate({ state: STATE });

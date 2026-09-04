@@ -7,7 +7,7 @@
 // The legacy marketing mirror page /docs/data-residency is DELETED and
 // 301-redirects (apps/marketing-site/public/_redirects) to its
 // verified docs successor:
-//   https://docs.driftstack.dev/reference/data-residency/
+//   https://docs.driftstack.io/reference/data-residency/
 //   (source: apps/docs/src/pages/reference/data-residency.md; S29/S37 content batches — every claim
 //   re-verified against server source before carry-over. Ongoing
 //   content-parity guarding for this topic lives with the docs
@@ -28,7 +28,7 @@ const PAGE = resolve(REPO_ROOT, 'apps/marketing-site/src/pages/docs/data-residen
 const REDIRECTS = resolve(REPO_ROOT, 'apps/marketing-site/public/_redirects');
 const DOCS_SUCCESSOR_SRC = resolve(REPO_ROOT, 'apps/docs/src/pages/reference/data-residency.md');
 
-describe('S47 redirect tombstone — /docs/data-residency → https://docs.driftstack.dev/reference/data-residency/', () => {
+describe('S47 redirect tombstone — /docs/data-residency → https://docs.driftstack.io/reference/data-residency/', () => {
   it('mirror page stays deleted; both _redirects rules (bare + trailing slash) 301 to the live docs successor', () => {
     expect(
       existsSync(PAGE),
@@ -44,7 +44,7 @@ describe('S47 redirect tombstone — /docs/data-residency → https://docs.drift
 
     expect(rule('/docs/data-residency'), 'bare-path rule missing').toEqual([
       '/docs/data-residency',
-      'https://docs.driftstack.dev/reference/data-residency/',
+      'https://docs.driftstack.io/reference/data-residency/',
       '301',
     ]);
     expect(
@@ -52,7 +52,7 @@ describe('S47 redirect tombstone — /docs/data-residency → https://docs.drift
       'trailing-slash rule missing (matching is exact-path)',
     ).toEqual([
       '/docs/data-residency/',
-      'https://docs.driftstack.dev/reference/data-residency/',
+      'https://docs.driftstack.io/reference/data-residency/',
       '301',
     ]);
   });

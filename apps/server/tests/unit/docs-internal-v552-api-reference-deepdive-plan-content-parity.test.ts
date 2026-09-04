@@ -7,7 +7,7 @@
 //
 //   • V-552. PLAN. Human-authored layer complementing OpenAPI auto-
 //     generation.
-//   • Current: /openapi.json + /docs Swagger UI + docs.driftstack.dev/
+//   • Current: /openapi.json + /docs Swagger UI + docs.driftstack.io/
 //     api/* (V-499/V-512/V-523).
 //   • V-552.A concept docs per resource (~500 words each).
 //   • V-552.B per-SDK code samples (TS+Python+Go+curl) with CI drift
@@ -33,23 +33,23 @@ function read(p: string): string {
 describe('W564.B /docs/internal/v552-api-reference-deepdive-plan.md content parity', () => {
   const body = read(LIB);
 
-  it("Header + V-552-PLAN-Wave-25 + 3-current-surface + 4-layer framing pinned: '# V-552 — API reference deep-dive plan' + '**Date:** 2026-05-11' + '**Wave:** 25' + '**Status:** PLAN — current API reference is auto-generated from the' + 'OpenAPI 3.1 spec + ships at `/docs` (Swagger UI) + powers the' + 'docs.driftstack.dev reference section. V-552 designs the' + 'human-authored deep-dive layer that complements the auto-generated' + '`/openapi.json` — generated from Zod schemas; canonical contract.' + '`/docs` — Swagger UI rendering of the OpenAPI doc.' + '`docs.driftstack.dev/api/*` — Astro-rendered per-route pages' + 'V-499 / V-512 / V-523' + 'Four layers of human-authored content that the auto-generation can't' + 'produce.' — pinned so the V-552-PLAN-Wave-25-2026-05-11 + OpenAPI-3.1-auto-gen + /docs-Swagger-UI + docs.driftstack.dev/api/*-V-499/V-512/V-523 + 4-layer-human-authored commitment survives", () => {
+  it("Header + V-552-PLAN-Wave-25 + 3-current-surface + 4-layer framing pinned: '# V-552 — API reference deep-dive plan' + '**Date:** 2026-05-11' + '**Wave:** 25' + '**Status:** PLAN — current API reference is auto-generated from the' + 'OpenAPI 3.1 spec + ships at `/docs` (Swagger UI) + powers the' + 'docs.driftstack.io reference section. V-552 designs the' + 'human-authored deep-dive layer that complements the auto-generated' + '`/openapi.json` — generated from Zod schemas; canonical contract.' + '`/docs` — Swagger UI rendering of the OpenAPI doc.' + '`docs.driftstack.io/api/*` — Astro-rendered per-route pages' + 'V-499 / V-512 / V-523' + 'Four layers of human-authored content that the auto-generation can't' + 'produce.' — pinned so the V-552-PLAN-Wave-25-2026-05-11 + OpenAPI-3.1-auto-gen + /docs-Swagger-UI + docs.driftstack.io/api/*-V-499/V-512/V-523 + 4-layer-human-authored commitment survives", () => {
     expect(body).toMatch(/^# V-552 — API reference deep-dive plan$/m);
     expect(body).toMatch(/\*\*Date:\*\* 2026-05-11/);
     expect(body).toMatch(/\*\*Wave:\*\* 25/);
     expect(body).toMatch(/\*\*Status:\*\* PLAN — current API reference is auto-generated from the/);
     expect(body).toMatch(/OpenAPI 3\.1 spec \+ ships at `\/docs` \(Swagger UI\) \+ powers the/);
-    expect(body).toMatch(/docs\.driftstack\.dev reference section\. V-552 designs the/);
+    expect(body).toMatch(/docs\.driftstack\.io reference section\. V-552 designs the/);
     expect(body).toMatch(/human-authored deep-dive layer that complements the auto-generated/);
     expect(body).toMatch(/- `\/openapi\.json` — generated from Zod schemas; canonical contract\./);
     expect(body).toMatch(/- `\/docs` — Swagger UI rendering of the OpenAPI doc\./);
-    expect(body).toMatch(/- `docs\.driftstack\.dev\/api\/\*` — Astro-rendered per-route pages/);
+    expect(body).toMatch(/- `docs\.driftstack\.io\/api\/\*` — Astro-rendered per-route pages/);
     expect(body).toMatch(/V-499 \/ V-512 \/ V-523/);
     expect(body).toMatch(/Four layers of human-authored content that the auto-generation can't/);
     expect(body).toMatch(/produce\./);
   });
 
-  it("V-552.A/B/C/D 4-layer framing pinned: '### V-552.A — concept docs per resource' + 'one concept doc that answers:' + 'What is this resource? (1 paragraph)' + 'When do you use it? (3-4 use cases)' + 'Lifecycle (create → use → revoke).' + 'Cross-resource relationships' + 'Quotas + limits per tier.' + 'Common gotchas.' + '`apps/docs/src/pages/concepts/<resource>.md`. ~500 words' + '### V-552.B — code samples per SDK per endpoint' + 'per-SDK code samples for every endpoint, tabbed:' + '[TypeScript] [Python] [Go] [curl]' + '`docs/code-samples/<endpoint-id>/` directory with' + '4 files per endpoint (`ts.ts`, `py.py`, `go.go`, `curl.sh`)' + 'CI runs every sample against the live test API to catch drift' + '### V-552.C — error catalogue' + 'a full per-error-code catalogue' + '`https://docs.driftstack.dev/errors/concurrency_limit_exceeded`' + '`ConcurrencyLimitError` in TS' + '`docs/data/error-catalogue.json` (NEW)' + '### V-552.D — endpoint deep-dive for the hard ones' + 'a 2000-word deep-dive' + '`POST /v1/sessions` — concurrent-cap + tier interaction + behaviour' + '`POST /v1/webhooks/stripe` — signature verification + idempotency' + '`POST /v1/auth/cli-authorize/{initiate,complete}`' + '`GET /v1/captures/:id` — content-type negotiation + R2 streaming' + 'Each deep-dive at `apps/docs/src/pages/deep-dives/<endpoint>.md`' — pinned so the 4-layer (concept-/concepts/<resource>.md-~500-words + 4-language-code-sample + error-catalogue-/errors/<id>-JSON + 4-hard-endpoint-2000-word-deep-dive) + CI-live-test-API-drift commitment survives", () => {
+  it("V-552.A/B/C/D 4-layer framing pinned: '### V-552.A — concept docs per resource' + 'one concept doc that answers:' + 'What is this resource? (1 paragraph)' + 'When do you use it? (3-4 use cases)' + 'Lifecycle (create → use → revoke).' + 'Cross-resource relationships' + 'Quotas + limits per tier.' + 'Common gotchas.' + '`apps/docs/src/pages/concepts/<resource>.md`. ~500 words' + '### V-552.B — code samples per SDK per endpoint' + 'per-SDK code samples for every endpoint, tabbed:' + '[TypeScript] [Python] [Go] [curl]' + '`docs/code-samples/<endpoint-id>/` directory with' + '4 files per endpoint (`ts.ts`, `py.py`, `go.go`, `curl.sh`)' + 'CI runs every sample against the live test API to catch drift' + '### V-552.C — error catalogue' + 'a full per-error-code catalogue' + '`https://docs.driftstack.io/errors/concurrency_limit_exceeded`' + '`ConcurrencyLimitError` in TS' + '`docs/data/error-catalogue.json` (NEW)' + '### V-552.D — endpoint deep-dive for the hard ones' + 'a 2000-word deep-dive' + '`POST /v1/sessions` — concurrent-cap + tier interaction + behaviour' + '`POST /v1/webhooks/stripe` — signature verification + idempotency' + '`POST /v1/auth/cli-authorize/{initiate,complete}`' + '`GET /v1/captures/:id` — content-type negotiation + R2 streaming' + 'Each deep-dive at `apps/docs/src/pages/deep-dives/<endpoint>.md`' — pinned so the 4-layer (concept-/concepts/<resource>.md-~500-words + 4-language-code-sample + error-catalogue-/errors/<id>-JSON + 4-hard-endpoint-2000-word-deep-dive) + CI-live-test-API-drift commitment survives", () => {
     expect(body).toMatch(/### V-552\.A — concept docs per resource/);
     expect(body).toMatch(/one concept doc that answers:/);
     expect(body).toMatch(/- What is this resource\? \(1 paragraph\)/);
@@ -68,7 +68,7 @@ describe('W564.B /docs/internal/v552-api-reference-deepdive-plan.md content pari
     expect(body).toMatch(/sample against the live test API to catch drift between docs \+/);
     expect(body).toMatch(/### V-552\.C — error catalogue/);
     expect(body).toMatch(/a full per-error-code catalogue/);
-    expect(body).toMatch(/`https:\/\/docs\.driftstack\.dev\/errors\/concurrency_limit_exceeded`/);
+    expect(body).toMatch(/`https:\/\/docs\.driftstack\.io\/errors\/concurrency_limit_exceeded`/);
     expect(body).toMatch(/`ConcurrencyLimitError` in TS/);
     expect(body).toMatch(/`docs\/data\/error-catalogue\.json`/);
     expect(body).toMatch(/### V-552\.D — endpoint deep-dive for the hard ones/);

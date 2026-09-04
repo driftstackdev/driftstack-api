@@ -151,7 +151,7 @@ describe('W382.B marketing-site BaseLayout.astro content parity', () => {
     expect(script).toBeDefined();
 
     const dom = new JSDOM(html, {
-      url: 'https://driftstack.dev/',
+      url: 'https://driftstack.io/',
       runScripts: 'outside-only',
     });
     dom.window.eval(script!);

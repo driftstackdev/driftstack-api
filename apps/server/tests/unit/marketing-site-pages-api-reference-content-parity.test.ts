@@ -126,7 +126,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   it('Archetypes card links the live catalog and generator reference', () => {
     expect(body).toContain('<li>GET /v1/archetypes</li>');
     expect(body).toMatch(
-      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.dev\/api\/archetypes\/';/,
+      /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.io\/api\/archetypes\/';/,
     );
     expect(body).toMatch(/catalog and create-payload generator reference/);
   });

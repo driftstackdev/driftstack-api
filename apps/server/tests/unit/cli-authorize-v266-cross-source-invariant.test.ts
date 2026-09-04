@@ -18,7 +18,7 @@
 //   evicted it'.
 //
 //   Public-facing browser URL: built from configured dashboardOrigin
-//   (e.g. https://app.driftstack.dev) so dev / staging / production
+//   (e.g. https://app.driftstack.io) so dev / staging / production
 //   wire correctly.
 //
 //   dashboardPath default = '/cli/authorize' →
@@ -101,10 +101,10 @@ describe('W934 V-266 cli-authorize cross-source invariant', () => {
 
   // ─── dashboardOrigin URL framing ─────────────────────────────
 
-  it("CRITICAL dashboardOrigin framing — 'Public-facing browser URL: built from the configured dashboardOrigin (e.g. https://app.driftstack.dev) so dev / staging / production all wire correctly'. The DASHBOARD_ORIGIN-driven URL keeps the CLI flow environment-agnostic.", () => {
+  it("CRITICAL dashboardOrigin framing — 'Public-facing browser URL: built from the configured dashboardOrigin (e.g. https://app.driftstack.io) so dev / staging / production all wire correctly'. The DASHBOARD_ORIGIN-driven URL keeps the CLI flow environment-agnostic.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/cli-authorize.ts'));
     expect(p).toMatch(/Public-facing browser URL: built from the configured/);
-    expect(p).toMatch(/`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.dev`\) so dev \//);
+    expect(p).toMatch(/`dashboardOrigin` \(e\.g\. `https:\/\/app\.driftstack\.io`\) so dev \//);
     expect(p).toMatch(/staging \/ production all wire correctly/);
   });
 

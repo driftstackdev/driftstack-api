@@ -151,7 +151,7 @@ const BASE_SETTINGS: MockSettings = {
     apiKey: 'ds_live_x',
     baseUrl: 'https://api.driftstack.dev',
     telemetryOptIn: null,
-    startUrl: 'https://driftstack.dev',
+    startUrl: 'https://driftstack.io',
   },
   loading: false,
   client: makeClient(),

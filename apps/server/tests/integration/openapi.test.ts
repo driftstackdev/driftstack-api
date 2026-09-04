@@ -637,7 +637,7 @@ describe('OpenAPI spec generation', () => {
     );
     // The fleet-events summary line no longer cites the internal
     // `docs/network-architecture.md` repo path — that doc lives at
-    // the repo root, not on docs.driftstack.dev, so customers reading
+    // the repo root, not on docs.driftstack.io, so customers reading
     // the Scalar UI couldn't follow the reference anyway.
     expect(json).not.toMatch(/docs\/network-architecture\.md/);
   });

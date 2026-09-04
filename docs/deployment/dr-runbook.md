@@ -136,7 +136,7 @@ replica today (single-region Neon project).
 
 1. Confirm scope on status.neon.tech.
 2. Surface customer-facing comms: a static "We're tracking a
-   provider incident" page on `status.driftstack.dev` (powered by
+   provider incident" page on `status.driftstack.io` (powered by
    `/v1/status`) — verify the status endpoint reports `degraded`
    (it will, if the postgres readiness check fails).
 3. Wait for Neon recovery; we don't have a hot fallback.
@@ -338,7 +338,7 @@ order :: An unexpected error occurred.` (transient — retry).
 
 2. If the Cloudflare token rotated, refresh
    `/etc/letsencrypt/cf-dns-creds.ini` with the new token (must
-   carry `Zone:DNS:Edit` scope on the `driftstack.dev` zone):
+   carry `Zone:DNS:Edit` scope on the `driftstack.io` zone):
 
    ```
    ssh root@128.140.37.74
@@ -557,7 +557,7 @@ regional outage requires cross-region failover.
    data migration required.
 6. **Customer comms**: hourly updates on the trust center until
    resolved. SLA credits are governed by the published policy at
-   <https://driftstack.dev/docs/sla-policy>
+   <https://driftstack.io/docs/sla-policy>
    (`apps/marketing-site/src/pages/docs/sla-policy.astro`). They are NOT
    automatic — that policy's "How to request a credit" section requires the
    customer to email `billing@driftstack.dev`. On an SLA-carrying tier

@@ -27,8 +27,8 @@
 #                                       dashboard before the first deploy.
 #
 # Custom domain configured in the Cloudflare Pages dashboard:
-#   - admin.driftstack.dev → CNAME to the Pages project
-# DNS records live in Cloudflare DNS for the driftstack.dev zone.
+#   - admin.driftstack.io → CNAME to the Pages project
+# DNS records live in Cloudflare DNS for the driftstack.io zone.
 #
 # Security posture: admin panel is staff-only. Every dashboard route
 # calls /v1/admin/* against api.driftstack.dev which gates on the
@@ -62,7 +62,7 @@ jobs:
       deployments: write
     environment:
       name: admin-panel-production
-      url: https://admin.driftstack.dev
+      url: https://admin.driftstack.io
     steps:
       - name: Checkout
         uses: actions/checkout@v6

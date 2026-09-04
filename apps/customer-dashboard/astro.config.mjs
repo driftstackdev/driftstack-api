@@ -2,7 +2,7 @@
 import { defineConfig } from 'astro/config';
 import sentry from '@sentry/astro';
 
-// Customer dashboard for app.driftstack.dev. Static-build per the
+// Customer dashboard for app.driftstack.io. Static-build per the
 // dashboard-stack proposal in docs/architecture/customer-dashboard-stack.md
 // (pending founder review of Option A — Astro + React islands shared with
 // marketing site). When founder approves, React islands land alongside;
@@ -48,7 +48,7 @@ if (
 }
 
 export default defineConfig({
-  site: 'https://app.driftstack.dev',
+  site: 'https://app.driftstack.io',
   output: 'static',
   // Preserve Astro 5/6's HTML-aware whitespace semantics under Astro 7.
   compressHTML: true,

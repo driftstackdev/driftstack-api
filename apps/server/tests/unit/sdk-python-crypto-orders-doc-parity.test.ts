@@ -182,9 +182,9 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
       // integration-guide / webhooks-crypto-events /
       // polling-vs-webhooks mirrors are deleted; hrefs re-pinned to
       // the docs successors.
-      'https://docs.driftstack.dev/guides/paying-with-crypto/',
+      'https://docs.driftstack.io/guides/paying-with-crypto/',
       '/docs/idempotency-keys/',
-      'https://docs.driftstack.dev/webhooks/crypto-events/',
+      'https://docs.driftstack.io/webhooks/crypto-events/',
     ];
     for (const link of links) {
       const re = new RegExp(`href="${link.replace(/\//g, '\\/')}"`);
@@ -192,7 +192,7 @@ describe('W719 sdk-python-crypto-orders marketing-doc parity', () => {
     }
     const related = doc.slice(doc.indexOf('<h2>Related</h2>'));
     expect(
-      related.match(/href="https:\/\/docs\.driftstack\.dev\/webhooks\/crypto-events\/"/g),
+      related.match(/href="https:\/\/docs\.driftstack\.io\/webhooks\/crypto-events\/"/g),
     ).toHaveLength(2);
     expect(doc).not.toMatch(
       /href="\/(?:docs\/sdk-python|docs\/sdk-typescript-crypto-orders|docs\/idempotency-keys)"/,

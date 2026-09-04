@@ -12,7 +12,7 @@
 //   • 2-prop interface: className (default '') + withLabel (default true).
 //   • Default fallback dot: bg-slate-300 (slate-300 = 'checking…' /
 //     'unknown' / fetch-error).
-//   • https://status.driftstack.dev anchor with noopener noreferrer
+//   • https://status.driftstack.io anchor with noopener noreferrer
 //     + target=_blank + honest dynamic dot-only aria-label.
 //   • 4-state applyState: operational (emerald-500 + 'All systems
 //     operational') / degraded (amber-500 + 'Degraded performance') /
@@ -37,12 +37,12 @@ function read(p: string): string {
 describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content parity', () => {
   const body = read(LIB);
 
-  it("V-474 framing + failure-mode + 30s-cache pinned: 'public status badge. Client-side fetches /v1/status from the production API and renders an operational / degraded / major_outage indicator. Embeds anywhere on the marketing site.' + 'Failure mode: if the fetch fails (CORS, timeout, network), the badge falls back to \"status unavailable\" and links to the future status.driftstack.dev page; nothing is implied about uptime from a fetch error alone.' + 'Cached server-side for 30s by /v1/status itself; cf-edge cache likely extends that.' — pinned so the V-474 anchor + 3-state-indicator + 3-failure-mode (CORS/timeout/network) + nothing-implied-on-fetch-error + 30s-server-side-cache + cf-edge-extends commitment survives", () => {
+  it("V-474 framing + failure-mode + 30s-cache pinned: 'public status badge. Client-side fetches /v1/status from the production API and renders an operational / degraded / major_outage indicator. Embeds anywhere on the marketing site.' + 'Failure mode: if the fetch fails (CORS, timeout, network), the badge falls back to \"status unavailable\" and links to the future status.driftstack.io page; nothing is implied about uptime from a fetch error alone.' + 'Cached server-side for 30s by /v1/status itself; cf-edge cache likely extends that.' — pinned so the V-474 anchor + 3-state-indicator + 3-failure-mode (CORS/timeout/network) + nothing-implied-on-fetch-error + 30s-server-side-cache + cf-edge-extends commitment survives", () => {
     expect(body).toMatch(
       /\/\/ V-474 — public status badge\. Client-side fetches \/v1\/status from\s*\/\/ the production API and renders an operational \/ degraded \/\s*\/\/ major_outage indicator\. Embeds anywhere on the marketing site\./,
     );
     expect(body).toMatch(
-      /\/\/ Failure mode: if the fetch fails \(CORS, timeout, network\), the\s*\/\/ badge falls back to "status unavailable" and links to the future\s*\/\/ status\.driftstack\.dev page; nothing is implied about uptime from\s*\/\/ a fetch error alone\./,
+      /\/\/ Failure mode: if the fetch fails \(CORS, timeout, network\), the\s*\/\/ badge falls back to "status unavailable" and links to the future\s*\/\/ status\.driftstack\.io page; nothing is implied about uptime from\s*\/\/ a fetch error alone\./,
     );
     expect(body).toMatch(
       /\/\/ Cached server-side for 30s by \/v1\/status itself; cf-edge cache\s*\/\/ likely extends that\./,
@@ -59,9 +59,9 @@ describe('W522.C apps/marketing-site/src/components/StatusBadge.astro content pa
     expect(body).toMatch(/const \{ className = '', withLabel = true \} = Astro\.props;/);
   });
 
-  it('apiBaseUrl + status.driftstack.dev anchor framing pinned with honest dot-only checking label and external-link safety', () => {
+  it('apiBaseUrl + status.driftstack.io anchor framing pinned with honest dot-only checking label and external-link safety', () => {
     expect(body).toMatch(/const apiBaseUrl = 'https:\/\/api\.driftstack\.dev';/);
-    expect(body).toMatch(/href="https:\/\/status\.driftstack\.dev"/);
+    expect(body).toMatch(/href="https:\/\/status\.driftstack\.io"/);
     expect(body).toMatch(/target="_blank"/);
     expect(body).toMatch(/rel="noopener noreferrer"/);
     // S17 2026-07-04 (Lighthouse label-content-name-mismatch): the labeled

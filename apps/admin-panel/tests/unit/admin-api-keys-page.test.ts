@@ -13,7 +13,7 @@ import { installAdminDeadline } from './admin-test-runtime';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'api-keys', 'index.html');
 const PAGE_SOURCE = resolve(HERE, '..', '..', 'src', 'pages', 'api-keys.astro');
-const PAGE_URL = 'https://admin.driftstack.dev/api-keys/';
+const PAGE_URL = 'https://admin.driftstack.io/api-keys/';
 const REVOKED_AT = '2026-07-17T12:00:00.000Z';
 
 interface MockFetchCall {

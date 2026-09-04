@@ -42,7 +42,7 @@ const API_REF = readFileSync(
 // regex below.
 // S47 2026-07-07 (founder-approved: mirror deprecation): the legacy
 // /docs/api-quickstart mirror page is deleted (301 →
-// docs.driftstack.dev/quickstart-curl/), so this guard now scans the
+// docs.driftstack.io/quickstart-curl/), so this guard now scans the
 // docs successor source — same bug class (documented endpoint that
 // the server never registers), same URL-literal shape.
 const API_QUICKSTART = readFileSync(

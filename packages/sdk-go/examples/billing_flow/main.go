@@ -38,8 +38,8 @@ func main() {
 		// No subscription yet — start a checkout for the API Builder tier.
 		resp, err := client.Billing.CreateCheckoutSession(ctx, &driftstack.CreateCheckoutSessionRequest{
 			Tier:       driftstack.TierAPIBuilder,
-			SuccessURL: "https://app.driftstack.dev/billing?ok=1",
-			CancelURL:  "https://app.driftstack.dev/billing?cancelled=1",
+			SuccessURL: "https://app.driftstack.io/billing?ok=1",
+			CancelURL:  "https://app.driftstack.io/billing?cancelled=1",
 		})
 		if err != nil {
 			log.Fatalf("createCheckoutSession: %v", err)

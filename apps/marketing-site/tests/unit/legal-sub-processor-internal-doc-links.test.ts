@@ -6,7 +6,7 @@
 //
 // S47 2026-07-07 (founder-approved: mirror deprecation): a /docs/*
 // link ALSO resolves if it has a 301 rule in public/_redirects (the
-// superseded mirror pages now redirect to docs.driftstack.dev, so
+// superseded mirror pages now redirect to docs.driftstack.io, so
 // such links are live, not dead). sub-processors.md itself is in the
 // concurrent S43 session's lane — updating its /docs/data-residency
 // link text to the docs successor is deferred to that session via

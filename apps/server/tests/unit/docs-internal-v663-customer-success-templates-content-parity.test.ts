@@ -143,7 +143,7 @@ describe('W568.A /docs/internal/v663-customer-success-templates.md content parit
     expect(body).toMatch(/· Upgrade to the next tier — instant, prorated to the remaining/);
     expect(body).toMatch(/billing period: \{\{upgrade_url\}\}/);
     expect(body).toMatch(
-      /Tier comparison side-by-side: https:\/\/driftstack\.dev\/pricing\/comparison/,
+      /Tier comparison side-by-side: https:\/\/driftstack\.io\/pricing\/comparison/,
     );
     expect(body).toMatch(/## Slack-Connect \(internal-team\): on-the-hour customer health/);
     expect(body).toMatch(

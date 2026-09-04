@@ -210,8 +210,8 @@ expectation). Today they're only reachable from the marketing site
 
 **PHASE 2 redline**: add a minimal footer to `DashboardLayout` —
 slate-500 small text, links to `/legal/privacy` `/legal/terms`
-`/legal/dpa` `/legal/aup` (existing pages on `app.driftstack.dev`
-or external links to driftstack.dev/legal/\* if those redirect).
+`/legal/dpa` `/legal/aup` (existing pages on `app.driftstack.io`
+or external links to driftstack.io/legal/\* if those redirect).
 Single-line; doesn't intrude on the page content area.
 
 ## PHASE 2 working-tree drafts — proposed surface

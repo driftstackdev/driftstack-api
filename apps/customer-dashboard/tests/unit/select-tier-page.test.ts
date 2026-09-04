@@ -16,7 +16,7 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'select-tier', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/select-tier/';
+const PAGE_URL = 'https://app.driftstack.io/select-tier/';
 const DEFAULT_SELF_ACCOUNT_ID = 'acc_00000000-0000-4000-8000-000000000001';
 const FUTURE_EXPIRES_AT = '2099-01-01T00:00:00.000Z';
 

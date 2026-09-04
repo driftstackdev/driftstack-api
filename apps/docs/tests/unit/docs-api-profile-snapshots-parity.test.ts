@@ -1,4 +1,4 @@
-// W256.C — drift-guard for docs.driftstack.dev/api/profile-snapshots.
+// W256.C — drift-guard for docs.driftstack.io/api/profile-snapshots.
 // Previous revision rendered snapshot ids as `snap_<uuid>` but the
 // live server emits `psnap_<uuid>`. Pin the prefix + endpoints.
 

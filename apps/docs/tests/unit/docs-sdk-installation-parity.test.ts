@@ -1,4 +1,4 @@
-// W257.C — drift-guard for docs.driftstack.dev/sdk/installation.
+// W257.C — drift-guard for docs.driftstack.io/sdk/installation.
 // Previous revision was missing the profileSnapshots / billing /
 // cryptoOrders / emailPreferences resources from the TS resource
 // list. Pin every top-level accessor + a representative method to

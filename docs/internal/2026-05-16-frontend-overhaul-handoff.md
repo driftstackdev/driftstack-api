@@ -136,7 +136,7 @@ should no longer fire.
 
 **What's NOT yet verified** (founder-side browser test, can't be
 done from terminal): real-IDP click-through from
-https://app.driftstack.dev/login through Google + GitHub consent
+https://app.driftstack.io/login through Google + GitHub consent
 screens. The smoke validates the URL shape; only a browser session
 validates Google + GitHub actually accept it end-to-end.
 

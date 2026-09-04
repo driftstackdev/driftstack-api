@@ -7,7 +7,7 @@ import { signOauthClientState, verifyOauthClientState } from '../../src/lib/oaut
 const SECRET = 'x'.repeat(48); // ≥32 chars per lib min
 const BASE = {
   provider: 'google' as const,
-  redirectTo: 'https://app.driftstack.dev/billing',
+  redirectTo: 'https://app.driftstack.io/billing',
   signingSecret: SECRET,
   nowMs: 1_715_000_000_000,
   nonce: 'fixed-nonce-1234',

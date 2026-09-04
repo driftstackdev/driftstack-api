@@ -17,7 +17,7 @@ session. For the multi-language overview see the [combined quickstart](/quicksta
   `ds_test_…` device credential; that credential is not a general SDK or
   sandbox key.
 - A `ds_live_…` customer API key. Mint one at
-  [app.driftstack.dev/api-keys](https://app.driftstack.dev/api-keys/).
+  [app.driftstack.io/api-keys](https://app.driftstack.io/api-keys/).
 
 ## 1. Install
 

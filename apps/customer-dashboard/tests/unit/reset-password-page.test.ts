@@ -20,8 +20,8 @@ import { installDashboardDeadline } from './dashboard-test-runtime';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'reset-password', 'index.html');
-const TOKEN_URL = 'https://app.driftstack.dev/reset-password/?token=reset_tok_123';
-const NO_TOKEN_URL = 'https://app.driftstack.dev/reset-password/';
+const TOKEN_URL = 'https://app.driftstack.io/reset-password/?token=reset_tok_123';
+const NO_TOKEN_URL = 'https://app.driftstack.io/reset-password/';
 
 interface MockFetchCall {
   url: string;

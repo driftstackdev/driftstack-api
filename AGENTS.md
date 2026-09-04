@@ -62,7 +62,7 @@ The codebase is **pure engineering**. Business and legal/compliance content live
 
 **Exception extension (effective 2026-05-03):** the legal/compliance exception is extended to cover three additional categories when explicitly directed:
 
-1. **Customer-facing copy** (marketing website at `driftstack.dev`, in-product onboarding flow text, transactional email templates, pricing-page positioning, docs-site landing).
+1. **Customer-facing copy** (marketing website at `driftstack.io`, in-product onboarding flow text, transactional email templates, pricing-page positioning, docs-site landing).
 2. **Billing integration code** (Stripe SDK + webhook handlers, Moneybird API integration, subscription state machine, customer portal redirects, BYOK metering).
 3. **Onboarding flow with copy** (signup, email verification, legal acceptance UI, BYO-requirements explainer, payment-method selection, first-API-key issuance flow).
 

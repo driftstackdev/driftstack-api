@@ -716,7 +716,7 @@ export interface AppDeps {
   trustProxy?: boolean | number | string;
   /**
    * V-278.B follow-up — explicit allow-list of origins for production
-   * CORS. Set via env `CORS_ALLOWED_ORIGINS=https://app.driftstack.dev,https://staging.driftstack.dev`.
+   * CORS. Set via env `CORS_ALLOWED_ORIGINS=https://app.driftstack.io,https://staging.driftstack.dev`.
    * When set + `permissiveCors=false`, the app accepts requests from
    * exactly these origins (in addition to the localhost regex pattern
    * for ad-hoc dev probing). Empty / undefined = localhost-only (dev).

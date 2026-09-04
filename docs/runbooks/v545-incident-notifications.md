@@ -17,7 +17,7 @@ incident post + update + resolve will send to whom.
 
 ## Subscriber lifecycle
 
-- Subscribers opt in at `https://status.driftstack.dev/subscribe` →
+- Subscribers opt in at `https://status.driftstack.io/subscribe` →
   `status-subscription-confirmation` email → click the link →
   `status-subscription-welcome`.
 - Once confirmed, the subscriber gets:

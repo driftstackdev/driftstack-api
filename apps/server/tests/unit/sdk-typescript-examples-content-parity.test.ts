@@ -49,8 +49,8 @@ describe('W619 sdk-typescript/examples content parity', () => {
     expect(body).toMatch(/await client\.billing\.createCheckoutSession\(\{/);
     expect(body).toMatch(/tier: 'api_builder',/);
     expect(body).toMatch(/billing_period: 'monthly',/);
-    expect(body).toMatch(/success_url: 'https:\/\/app\.driftstack\.dev\/billing\?ok=1',/);
-    expect(body).toMatch(/cancel_url: 'https:\/\/app\.driftstack\.dev\/billing\?cancelled=1',/);
+    expect(body).toMatch(/success_url: 'https:\/\/app\.driftstack\.io\/billing\?ok=1',/);
+    expect(body).toMatch(/cancel_url: 'https:\/\/app\.driftstack\.io\/billing\?cancelled=1',/);
     expect(body).toMatch(/const portal = await client\.billing\.createPortalSession\(\);/);
     expect(existsSync(E('billing-flow.ts'))).toBe(true);
   });

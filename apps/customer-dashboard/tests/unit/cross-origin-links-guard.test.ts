@@ -2,10 +2,10 @@
 // `/trust/...` / `/docs/...` links in the customer-dashboard.
 //
 // The dashboard ships as its own Cloudflare Pages project at
-// app.driftstack.dev. Pages on driftstack.dev (the marketing-site,
+// app.driftstack.io. Pages on driftstack.io (the marketing-site,
 // separate Pages project) are reachable only via absolute URLs from
 // the dashboard origin. A relative `/legal/privacy` link from the
-// dashboard 404s against app.driftstack.dev's own pages, which has
+// dashboard 404s against app.driftstack.io's own pages, which has
 // no legal directory.
 //
 // This guard walks every .astro under src/ and asserts no
@@ -32,8 +32,8 @@ function walk(dir: string): string[] {
   return out;
 }
 
-// Routes that are only hosted at driftstack.dev (marketing-site), not
-// app.driftstack.dev (dashboard). A relative link to any of these
+// Routes that are only hosted at driftstack.io (marketing-site), not
+// app.driftstack.io (dashboard). A relative link to any of these
 // from the dashboard 404s. Update the list if a future deploy proxies
 // these paths under the dashboard host.
 const MARKETING_ONLY_PREFIXES = ['/legal/', '/trust/', '/docs/', '/changelog'];
@@ -68,7 +68,7 @@ describe('W211 customer-dashboard cross-origin link guard', () => {
       'a known-bad relative link is still detected by the matcher above',
     ).toEqual(['/legal/privacy']);
     expect(
-      marketingOnlyHrefs('<a href="https://driftstack.dev/legal/privacy">Privacy</a>'),
+      marketingOnlyHrefs('<a href="https://driftstack.io/legal/privacy">Privacy</a>'),
       'and the absolute form it should be written as is not reported',
     ).toEqual([]);
   });
@@ -82,7 +82,7 @@ describe('W211 customer-dashboard cross-origin link guard', () => {
     }
     expect(
       violations,
-      `Dashboard surfaces must use absolute URLs (https://driftstack.dev/...) ` +
+      `Dashboard surfaces must use absolute URLs (https://driftstack.io/...) ` +
         `for legal / trust / docs links — relative paths 404 against the ` +
         `dashboard's own Pages project. Violations:\n${violations
           .map((v) => `  ${v.file} → ${v.href}`)

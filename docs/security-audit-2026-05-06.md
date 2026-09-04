@@ -51,7 +51,7 @@ left intact because an audit records what was found, not what is true today.
 
 **Risk:** moderate. Stripe does some basic validation (HTTPS, well-formed URL) but doesn't enforce a customer-specific allowlist — that's the integrator's job.
 
-**Fix shape:** validate `success_url` + `cancel_url` against a configured allowlist of origins (default: `https://app.driftstack.dev`). Customer needing custom URLs gets a clear error pointing at "contact support" for enterprise allowlisting.
+**Fix shape:** validate `success_url` + `cancel_url` against a configured allowlist of origins (default: `https://app.driftstack.io`). Customer needing custom URLs gets a clear error pointing at "contact support" for enterprise allowlisting.
 
 **Targeted at V-248.**
 
@@ -86,7 +86,7 @@ alias satisfies that scope. Cloudflare Access remains defense in depth.
 
 **File:** `apps/server/src/services/auth.ts` lines 255–267 (pre-existing `KNOWN GAP` comment).
 
-**Pattern:** the V-174 scope split intentionally allowed `account_owner` (customer dashboard) to reach `/v1/admin/*` routes alongside `driftstack_internal_admin` (Driftstack staff). Operationally mitigated by Cloudflare Access on `admin.driftstack.dev` (V-135 separate origin).
+**Pattern:** the V-174 scope split intentionally allowed `account_owner` (customer dashboard) to reach `/v1/admin/*` routes alongside `driftstack_internal_admin` (Driftstack staff). Operationally mitigated by Cloudflare Access on `admin.driftstack.io` (V-135 separate origin).
 
 **Risk:** if a customer ever gets a key with `account_owner` scope AND knows the admin route shape AND can reach the origin (Cloudflare Access bypass), they could act on other customers' data.
 
@@ -155,7 +155,7 @@ Pre-launch security audit revisit four days after V-246. Closure status per find
 | V-246-P0-001 | P0       | **CLOSED (V-247)**          | Key-version counter shipped; cache key bakes the version, stale entries unreachable.        |
 | V-246-P1-001 | P1       | **CLOSED (V-248)**          | Stripe URL allowlist enforced at `/v1/billing/checkout-session` + `/v1/billing/trial-pack`. |
 | V-246-P1-002 | P1       | **DOCUMENTED**              | Runbook §"Log-handling — PII posture" published; ops know to gate raw-log sharing.          |
-| V-246-P1-003 | P1       | **DEFERRED (V-NNN)**        | Operational mitigation via V-135 Cloudflare Access on `admin.driftstack.dev`. Post-launch.  |
+| V-246-P1-003 | P1       | **DEFERRED (V-NNN)**        | Operational mitigation via V-135 Cloudflare Access on `admin.driftstack.io`. Post-launch.   |
 | V-246-P1-004 | P1       | **DEFERRED (V-NNN)**        | IP-based rate limiting on auth endpoints. Post-launch; current scale doesn't draw attacks.  |
 | V-246-P2-001 | P2       | DEFERRED                    | Cache invalidation key-version coverage extension — nice-to-have.                           |
 | V-246-P2-002 | P2       | DEFERRED                    | 30s revocation lag — internal doc only; no customer-facing copy yet.                        |

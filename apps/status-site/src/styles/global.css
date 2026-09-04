@@ -76,7 +76,7 @@
    customer-dashboard: light+violet default (the rest of the product is
    now light-first), dark preserved under [data-mode='dark']. Customers
    checking status during an incident see the same brand surface as
-   driftstack.dev. */
+   driftstack.io. */
 
 @layer base {
   :root {

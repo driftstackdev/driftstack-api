@@ -16,7 +16,7 @@ import { TIER_DISPLAY_NAMES } from '../../src/data/tier-display-names.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'index.html');
-const PAGE_URL = 'https://app.driftstack.dev/';
+const PAGE_URL = 'https://app.driftstack.io/';
 
 function loadBuiltPage(): string {
   return readFileSync(BUILT_PAGE, 'utf8');
@@ -448,7 +448,7 @@ describe('customer-dashboard Overview (index.astro) behaviour', () => {
   it('?subscribed=<tier> (the post-checkout Stripe landing) greets the new subscription in the banner', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
-      url: 'https://app.driftstack.dev/?subscribed=team_manual',
+      url: 'https://app.driftstack.io/?subscribed=team_manual',
       route: makeRouter({ me: { name: 'A', tier: 'team_manual' } }),
     });
     win = window;

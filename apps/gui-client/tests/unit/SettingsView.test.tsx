@@ -133,7 +133,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         apiKey: null,
         baseUrl: 'https://api.driftstack.dev',
         telemetryOptIn: null,
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       },
       loading: false,
       client: null,
@@ -184,7 +184,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         apiKey: 'ds_live_x',
         baseUrl: 'https://api.driftstack.dev',
         telemetryOptIn: null,
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       },
       loading: false,
       client: null,
@@ -194,7 +194,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     });
     renderWithToasts();
 
-    const startInput = screen.getByPlaceholderText<HTMLInputElement>('https://driftstack.dev');
+    const startInput = screen.getByPlaceholderText<HTMLInputElement>('https://driftstack.io');
     // Type a rejected scheme.
     fireEvent.change(startInput, { target: { value: 'javascript:alert(1)' } });
 
@@ -246,10 +246,10 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     // session now opens on the branded page with the device-info panel rather
     // than on the product's own marketing site.
     expect(update.mock.calls[0]?.[0]).toMatchObject({
-      startUrl: 'https://driftstack.dev/newtab/',
+      startUrl: 'https://driftstack.io/newtab/',
     });
     // And the field re-syncs to the saved default instead of staying blank.
-    expect(startInput.value).toBe('https://driftstack.dev/newtab/');
+    expect(startInput.value).toBe('https://driftstack.io/newtab/');
   });
 
   it('coalesces rapid Save clicks into one credential-store write', async () => {
@@ -265,7 +265,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         apiKey: null,
         baseUrl: 'https://api.driftstack.dev',
         telemetryOptIn: null,
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       },
       loading: false,
       client: null,
@@ -275,7 +275,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     });
     renderWithToasts();
 
-    fireEvent.change(screen.getByPlaceholderText('https://driftstack.dev'), {
+    fireEvent.change(screen.getByPlaceholderText('https://driftstack.io'), {
       target: { value: 'https://example.com' },
     });
     const save = screen.getByRole('button', { name: 'Save' });
@@ -310,7 +310,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         apiKey: null,
         baseUrl: 'https://api.driftstack.dev',
         telemetryOptIn: null,
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       },
       loading: false,
       client: null,
@@ -320,7 +320,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     });
     renderWithToasts();
 
-    fireEvent.change(screen.getByPlaceholderText('https://driftstack.dev'), {
+    fireEvent.change(screen.getByPlaceholderText('https://driftstack.io'), {
       target: { value: 'https://example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -478,7 +478,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
         apiKey: null,
         baseUrl: 'https://api.driftstack.dev',
         telemetryOptIn: null,
-        startUrl: 'https://driftstack.dev',
+        startUrl: 'https://driftstack.io',
       },
       loading: false,
       client: null,

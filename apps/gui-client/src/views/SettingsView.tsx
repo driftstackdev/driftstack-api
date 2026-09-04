@@ -616,8 +616,8 @@ export function SettingsView(): JSX.Element {
         setKeyCheck({
           kind: 'fail',
           message: isCloudBaseUrl(url)
-            ? 'Saved, but the key was not accepted. Double-check it, or create a new one at app.driftstack.dev/api-keys.'
-            : `Saved, but the key was not accepted by ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.dev won't authenticate here.`,
+            ? 'Saved, but the key was not accepted. Double-check it, or create a new one at app.driftstack.io/api-keys.'
+            : `Saved, but the key was not accepted by ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.io won't authenticate here.`,
         });
       } else {
         setKeyCheck({
@@ -773,12 +773,12 @@ export function SettingsView(): JSX.Element {
             {draftMode === 'cloud' ? (
               <>
                 Sign in with your browser to mint a fresh API key bound to your account, or paste an
-                existing key from <span className="mono">app.driftstack.dev/api-keys</span> below.
+                existing key from <span className="mono">app.driftstack.io/api-keys</span> below.
               </>
             ) : (
               <>
                 Paste a key created on your own server's dashboard. A key from{' '}
-                <span className="mono">app.driftstack.dev</span> won't authenticate against a
+                <span className="mono">app.driftstack.io</span> won't authenticate against a
                 self-hosted server — keys are bound to the deployment that minted them.
               </>
             )}
@@ -1086,7 +1086,7 @@ export function SettingsView(): JSX.Element {
               type="url"
               value={draftStartUrl}
               onChange={(e) => setDraftStartUrl(e.target.value)}
-              placeholder="https://driftstack.dev"
+              placeholder="https://driftstack.io"
               className={`form-input mono ${startUrlInvalid ? 'border-status-error' : ''}`}
               spellCheck={false}
               autoComplete="off"
@@ -1394,7 +1394,7 @@ export function SettingsView(): JSX.Element {
         <ul className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-ink-secondary">
           <li>
             <a
-              href="https://status.driftstack.dev"
+              href="https://status.driftstack.io"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"
@@ -1405,7 +1405,7 @@ export function SettingsView(): JSX.Element {
           </li>
           <li>
             <a
-              href="https://docs.driftstack.dev"
+              href="https://docs.driftstack.io"
               target="_blank"
               rel="noopener noreferrer"
               className="text-accent hover:underline"

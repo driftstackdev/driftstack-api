@@ -103,7 +103,7 @@ describe('routes/recipes content parity', () => {
       /\/\/ Customer-facing detail\. Lands verbatim in the SDK's 503 problem\s*\/\/ body\. Same fix shape as agent-sessions \/ byok-anthropic \/\s*\/\/ proxy disabled-stubs \(slices 87 \+ 88\): point at customer-facing\s*\/\/ docs URL, NOT the internal handoff\/design doc\./,
     );
     expect(body).toMatch(
-      /'Recipes are unavailable on this deployment\. ' \+\s*'Contact the deployment operator if recipe access is expected\. See ' \+\s*'https:\/\/docs\.driftstack\.dev\/api\/recipes\/ for the supported API flow\.';/,
+      /'Recipes are unavailable on this deployment\. ' \+\s*'Contact the deployment operator if recipe access is expected\. See ' \+\s*'https:\/\/docs\.driftstack\.io\/api\/recipes\/ for the supported API flow\.';/,
     );
   });
 });

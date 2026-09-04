@@ -86,9 +86,9 @@ describe('W1044 routes/billing V-082 + V-248 cross-source invariant', () => {
     expect(p).toMatch(/who'd land on the phishing site after entering their card\./);
   });
 
-  it("CRITICAL ALLOWED_RETURN_ORIGINS — 3 entries (https://app.driftstack.dev / http://localhost:5173 / http://app.driftstack.local). The 3-entry list balances 'prod + dev + e2e' against attack surface.", () => {
+  it("CRITICAL ALLOWED_RETURN_ORIGINS — 3 entries (https://app.driftstack.io / http://localhost:5173 / http://app.driftstack.local). The 3-entry list balances 'prod + dev + e2e' against attack surface.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/routes/billing.ts'));
-    expect(p).toMatch(/'https:\/\/app\.driftstack\.dev',/);
+    expect(p).toMatch(/'https:\/\/app\.driftstack\.io',/);
     expect(p).toMatch(/'http:\/\/localhost:5173', \/\/ dashboard dev server/);
     expect(p).toMatch(/'http:\/\/app\.driftstack\.local', \/\/ e2e fixture/);
   });

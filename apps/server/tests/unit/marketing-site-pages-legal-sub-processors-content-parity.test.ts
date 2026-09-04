@@ -125,7 +125,7 @@ describe('W505.A apps/marketing-site/src/pages/legal/sub-processors.md content p
     expect(body).toMatch(/\[Privacy Policy\]\(\/legal\/privacy\/\)/);
     expect(body).toMatch(/\[\/docs\/security-overview\]\(\/docs\/security-overview\/\)/);
     expect(body).toMatch(
-      /\[docs\.driftstack\.dev\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.dev\/reference\/data-residency\/\) — region-pinning \+ the\s*no-cross-region-copy guarantee\./,
+      /\[docs\.driftstack\.io\/reference\/data-residency\]\(https:\/\/docs\.driftstack\.io\/reference\/data-residency\/\) — region-pinning \+ the\s*no-cross-region-copy guarantee\./,
     );
     expect(body).not.toMatch(/\]\((?:dpa|privacy)\.md\)/);
     expect(body).not.toMatch(/\]\(\/docs\/security-overview\)/);

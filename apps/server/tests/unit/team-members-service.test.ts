@@ -265,7 +265,7 @@ function makeCache(): { cache: AuthCache; spy: ReturnType<typeof vi.fn> } {
   return { cache, spy };
 }
 
-const CONFIG = { dashboardBaseUrl: 'https://app.driftstack.dev/' };
+const CONFIG = { dashboardBaseUrl: 'https://app.driftstack.io/' };
 
 describe('V-553.B-13 TeamMembersService.invite', () => {
   it('rejects invalid email', async () => {
@@ -299,7 +299,7 @@ describe('V-553.B-13 TeamMembersService.invite', () => {
     expect(captures).toHaveLength(1);
     expect(captures[0]?.to).toBe('new@example.com');
     expect(captures[0]?.acceptLink).toMatch(
-      /^https:\/\/app\.driftstack\.dev\/team\/accept\/\?token=/,
+      /^https:\/\/app\.driftstack\.io\/team\/accept\/\?token=/,
     );
     expect(captures[0]?.role).toBe('admin');
   });

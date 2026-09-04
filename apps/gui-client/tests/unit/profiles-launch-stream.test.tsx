@@ -61,7 +61,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
     settings: {
       apiKey: 'ds_test_x',
       baseUrl: 'http://localhost:3000',
-      startUrl: 'https://driftstack.dev',
+      startUrl: 'https://driftstack.io',
     },
     accountMe: {
       tier: 'solo_manual',
@@ -236,7 +236,7 @@ describe('ProfilesView launch → stream', () => {
         // now FAILS CLOSED rather than omitting proxy_id on a sync error (sweep).
         proxy_id: 'aprx_1',
         mode: 'manual',
-        initial_url: 'https://driftstack.dev/',
+        initial_url: 'https://driftstack.io/',
       },
       // A client-generated Idempotency-Key rides on create so a founder retry after a
       // perceived hang (the ~12s proxy probe) replays the cached 201 instead of creating

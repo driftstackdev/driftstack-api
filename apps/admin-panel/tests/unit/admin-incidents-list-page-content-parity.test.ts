@@ -12,7 +12,7 @@
 //     (load-bearing — the page promises "Every action audit-
 //     logged" + `incident.created` shows up in the admin audit
 //     log).
-//   • V-295c "public propagates to status.driftstack.dev within
+//   • V-295c "public propagates to status.driftstack.io within
 //     ~60 seconds via Hetzner cron + R2" mechanism pinned —
 //     specific, falsifiable claim that a future Cloudflare-only
 //     refactor would need to update.
@@ -88,7 +88,7 @@ describe('W366.C admin-panel /incidents (list) page content parity', () => {
     // Falsifiable claim — a future "Cloudflare-only push" or
     // "real-time SSE" refactor must update this copy first.
     expect(body).toMatch(
-      /Public incidents propagate to status\.driftstack\.dev through the Cloudflare Pages mirror\s+within about 60 seconds via the Hetzner poller and R2/,
+      /Public incidents propagate to status\.driftstack\.io through the Cloudflare Pages mirror\s+within about 60 seconds via the Hetzner poller and R2/,
     );
   });
 

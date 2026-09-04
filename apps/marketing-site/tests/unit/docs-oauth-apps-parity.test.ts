@@ -59,7 +59,7 @@ describe('W266.A /docs/oauth-apps ↔ live OAuth surface parity', () => {
   });
 
   it('sends integrators to the hosted Dashboard instead of the provider-internal stage API', () => {
-    expect(page).toMatch(/GET https:\/\/app\.driftstack\.dev\/oauth\/authorize\//);
+    expect(page).toMatch(/GET https:\/\/app\.driftstack\.io\/oauth\/authorize\//);
     expect(page).toMatch(/provider-internal steps/);
     expect(page).toMatch(
       /never receives or handles\s*the intermediate <code>authorization_id<\/code>/,

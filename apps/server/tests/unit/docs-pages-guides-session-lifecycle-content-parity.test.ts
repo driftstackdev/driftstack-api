@@ -118,13 +118,13 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it('CRITICAL pricing-source-of-truth cross-reference pinned. driftstack.dev/pricing is the canonical paywall location.', () => {
+  it('CRITICAL pricing-source-of-truth cross-reference pinned. driftstack.io/pricing is the canonical paywall location.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Pricing source of truth: \[driftstack\.dev\/pricing\]\(https:\/\/driftstack\.dev\/pricing\/\)\./,
+      /Pricing source of truth: \[driftstack\.io\/pricing\]\(https:\/\/driftstack\.io\/pricing\/\)\./,
     );
-    expect(p).not.toMatch(/\]\(https:\/\/driftstack\.dev\/pricing\)/);
+    expect(p).not.toMatch(/\]\(https:\/\/driftstack\.io\/pricing\)/);
   });
 
   it('CRITICAL 3-tier-error pinned on create — 429 concurrency-limit / 429 tier-limit / 403 forbidden. Matches W776 /sdk/error-handling 15-row error-class table.', () => {

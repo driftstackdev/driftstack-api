@@ -145,14 +145,14 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
       [
         // S47 2026-07-07: integration-guide mirror deleted; docs
         // successor is the paying-with-crypto guide.
-        'https://docs.driftstack.dev/guides/paying-with-crypto/',
+        'https://docs.driftstack.io/guides/paying-with-crypto/',
         'apps/docs/src/pages/guides/paying-with-crypto.md',
       ],
       [
         // S47 2026-07-07 (founder-approved: mirror deprecation): the
         // webhooks-crypto-events mirror is deleted; the page
         // cross-links its docs successor.
-        'https://docs.driftstack.dev/webhooks/crypto-events/',
+        'https://docs.driftstack.io/webhooks/crypto-events/',
         'apps/docs/src/pages/webhooks/crypto-events.md',
       ],
       ['/legal/refunds', 'apps/marketing-site/src/pages/legal/refunds.md'],

@@ -67,7 +67,7 @@ via support.
 └──┬───┘                                         └─────┬──────┘
    │                                                   │
    │ 1. redirect customer's browser to                 │
-   │    app.driftstack.dev/oauth/authorize/?PKCE=…     │
+   │    app.driftstack.io/oauth/authorize/?PKCE=…     │
    │ ────────────────────────────────────────────────► │
    │                                                   │
    │                 ┌────────────────┐                │
@@ -96,7 +96,7 @@ via support.
 
 ## 1 — Redirect to Driftstack
 
-`GET https://app.driftstack.dev/oauth/authorize/`
+`GET https://app.driftstack.io/oauth/authorize/`
 
 Query parameters (RFC 7636 PKCE — `S256` only):
 
@@ -154,7 +154,7 @@ their matching granular scopes (for example, `read:sessions`), while a
 granular scope cannot approve a broad or sibling scope. Privileged
 internal and account-owner scopes are never minted into OAuth tokens.
 The OAuth request itself may contain only the 13 granular scopes in the
-[integrator scope table](https://driftstack.dev/docs/oauth-apps/);
+[integrator scope table](https://driftstack.io/docs/oauth-apps/);
 deprecated broad aliases, `gui_control`, and newly added API-key scopes
 fail closed with `invalid_scope` rather than becoming available by
 default.

@@ -36,7 +36,7 @@ describe('W614 infra/ content parity', () => {
       /V-278\.A \| Bootstrap both servers via `bootstrap\/bootstrap\.sh production`/,
     );
     expect(body).toMatch(/V-278\.B \| Deploy api\.driftstack\.dev → production/);
-    expect(body).toMatch(/V-278\.C \| Deploy app\.driftstack\.dev → production/);
+    expect(body).toMatch(/V-278\.C \| Deploy app\.driftstack\.io → production/);
     expect(body).toMatch(/V-278\.G \| Run migrations on Neon Postgres \(`drizzle-kit migrate`\)/);
     expect(body).toMatch(/V-278\.H \| DNS records via Cloudflare API/);
     expect(body).toMatch(
@@ -465,13 +465,13 @@ describe('W614 infra/ content parity', () => {
     expect(body).toMatch(/deploy-api\.sh writes the local HEAD SHA at deploy time\./);
     expect(body).toMatch(/^GIT_SHA=PLACEHOLDER_GIT_SHA$/m);
     expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
-    expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
-    expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
+    expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.io$/m);
+    expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.io$/m);
+    expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.io$/m);
     expect(body).toMatch(/^TRUST_PROXY=1$/m);
     expect(body).toMatch(/V-278 — CORS allow-list\. Comma-separated origin URLs that the/);
     expect(body).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/admin\.driftstack\.io,https:\/\/status\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/www\.driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
     );
     expect(existsSync(I('env-templates/production.env.template'))).toBe(true);
   });
@@ -522,7 +522,7 @@ describe('W614 infra/ content parity', () => {
       /^DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
     );
     expect(body).toMatch(
-      /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+      /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
     );
     expect(existsSync(I('env-templates/staging.env.template'))).toBe(true);
   });
@@ -579,15 +579,15 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(/^WEBHOOK_DEFAULT_SIGNING_SEED=[0-9a-f]{64}$/m);
       expect(body).toMatch(/# Public URLs|# ── Misc/);
       expect(body).toMatch(/^PUBLIC_BASE_URL=https:\/\/api\.driftstack\.dev$/m);
-      expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.dev$/m);
+      expect(body).toMatch(/^DASHBOARD_BASE_URL=https:\/\/app\.driftstack\.io$/m);
       // Required by config.ts's boot-time guard — see the matching comment
       // in the staging.env block below.
-      expect(body).toMatch(/^DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.dev$/m);
-      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
-      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
+      expect(body).toMatch(/^DASHBOARD_ORIGIN=https:\/\/app\.driftstack\.io$/m);
+      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.io$/m);
+      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.io$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
       expect(body).toMatch(
-        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/admin\.driftstack\.io,https:\/\/status\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/www\.driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/app\.driftstack\.dev,https:\/\/admin\.driftstack\.dev,https:\/\/status\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/www\.driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
       );
       expect(existsSync(I('env-templates/production.env'))).toBe(true);
     },
@@ -634,11 +634,11 @@ describe('W614 infra/ content parity', () => {
       expect(body).toMatch(
         /^DASHBOARD_ORIGIN=https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev$/m,
       );
-      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.dev$/m);
-      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.dev$/m);
+      expect(body).toMatch(/^DOCS_BASE_URL=https:\/\/docs\.driftstack\.io$/m);
+      expect(body).toMatch(/^MARKETING_BASE_URL=https:\/\/driftstack\.io$/m);
       expect(body).toMatch(/^TRUST_PROXY=1$/m);
       expect(body).toMatch(
-        /^CORS_ALLOWED_ORIGINS=https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
+        /^CORS_ALLOWED_ORIGINS=https:\/\/app\.driftstack\.io,https:\/\/driftstack\.io,https:\/\/docs\.driftstack\.io,https:\/\/staging\.driftstack\.dev,https:\/\/staging\.driftstack-customer-dashboard\.pages\.dev,https:\/\/staging\.driftstack-admin-panel\.pages\.dev,https:\/\/staging\.driftstack-status\.pages\.dev,https:\/\/app\.driftstack\.dev,https:\/\/driftstack\.dev,https:\/\/docs\.driftstack\.dev$/m,
       );
       expect(existsSync(I('env-templates/staging.env'))).toBe(true);
     },

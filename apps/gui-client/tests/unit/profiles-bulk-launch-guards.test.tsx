@@ -84,7 +84,7 @@ const stableContext = {
   settings: {
     apiKey: 'ds_test_x',
     baseUrl: 'http://localhost:3000',
-    startUrl: 'https://driftstack.dev',
+    startUrl: 'https://driftstack.io',
   },
   accountMe: {
     tier: 'solo_manual',

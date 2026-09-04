@@ -109,7 +109,7 @@ describe('AI-B1.b ClaudeAgentDecomposer', () => {
       );
       expect(res.kind).toBe('refuse');
       if (res.kind !== 'refuse') throw new Error('type narrow');
-      expect(res.refuseReason).toMatch(/driftstack\.dev\/legal\/aup/);
+      expect(res.refuseReason).toMatch(/driftstack\.io\/legal\/aup/);
       expect(calls).toHaveLength(0);
     });
 

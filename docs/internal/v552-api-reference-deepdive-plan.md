@@ -4,7 +4,7 @@
 **Wave:** 25
 **Status:** PLAN — current API reference is auto-generated from the
 OpenAPI 3.1 spec + ships at `/docs` (Swagger UI) + powers the
-docs.driftstack.dev reference section. V-552 designs the
+docs.driftstack.io reference section. V-552 designs the
 human-authored deep-dive layer that complements the auto-generated
 reference.
 
@@ -12,7 +12,7 @@ reference.
 
 - `/openapi.json` — generated from Zod schemas; canonical contract.
 - `/docs` — Swagger UI rendering of the OpenAPI doc.
-- `docs.driftstack.dev/api/*` — Astro-rendered per-route pages
+- `docs.driftstack.io/api/*` — Astro-rendered per-route pages
   generated from the same OpenAPI doc + per-route handwritten pages
   for the trickier surfaces (auth, webhooks, sessions, etc. — landed
   in V-499 / V-512 / V-523).
@@ -72,7 +72,7 @@ expands to a full per-error-code catalogue:
 - One page per error code.
 - For each code: HTTP status + problem+json `type` URI + when it
   fires + how to recover + per-SDK error-class mapping.
-- Example: `https://docs.driftstack.dev/errors/concurrency_limit_exceeded`
+- Example: `https://docs.driftstack.io/errors/concurrency_limit_exceeded`
   shows the 429 trigger + how to back off + the SDK class
   (`ConcurrencyLimitError` in TS, `concurrency_limit_error` enum in
   Python, etc.).
