@@ -54,7 +54,7 @@ describe('Astro Pages toolchain parity', () => {
     for (const app of TAILWIND_3_APPS) {
       const dependencies = packageJson(app).dependencies;
       expect(dependencies, app).not.toHaveProperty('@astrojs/tailwind');
-      expect(dependencies.postcss, app).toBe('8.5.19');
+      expect(dependencies.postcss, app).toBe('8.5.28');
       expect(dependencies.autoprefixer, app).toBe('10.5.2');
       expect(read(`apps/${app}/postcss.config.mjs`), app).toMatch(/tailwindcss:\s*\{\}/);
       expect(read(`apps/${app}/tailwind.config.mjs`), app).not.toMatch(

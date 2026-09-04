@@ -55,7 +55,7 @@ describe('W526.C apps/customer-dashboard/package.json content parity', () => {
     expect(pkg.dependencies).toHaveProperty('@astrojs/check');
     expect(pkg.dependencies).not.toHaveProperty('@astrojs/cloudflare');
     expect(pkg.dependencies).not.toHaveProperty('@astrojs/tailwind');
-    expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.19' });
+    expect(pkg.dependencies).toMatchObject({ autoprefixer: '10.5.2', postcss: '8.5.28' });
     expect(pkg.dependencies).toHaveProperty('@driftstack/api-types');
     expect(pkg.dependencies).toHaveProperty('@sentry/astro');
     expect(pkg.dependencies.astro).toBe('7.1.6');
