@@ -28,7 +28,7 @@
 import {
   DEFAULT_BEHAVIORAL_PROFILE,
   DEFAULT_SESSION_PURPOSE,
-  LOCKED_ARCHETYPE_ID,
+  defaultArchetypeIdForTier,
   MAX_SESSION_MINUTES_PER_TIER,
   PROFILES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
@@ -65,7 +65,10 @@ import {
   NotFoundError,
   SessionDestroyedError,
 } from '../lib/errors.js';
-import { requireScope as throwIfMissingScope } from '../lib/errors-helpers.js';
+import {
+  requireArchetypeForTier,
+  requireScope as throwIfMissingScope,
+} from '../lib/errors-helpers.js';
 import type { EffectiveOwner } from '../lib/effective-account-header.js';
 import {
   classifySessionFailure,
@@ -487,13 +490,19 @@ export class SessionsService {
 
     const limit = concurrentSessionLimitFor(tier);
 
-    const archetype = body.archetype ?? LOCKED_ARCHETYPE_ID;
+    // P-15 (2026-09-05) — the SESSION door judges the device too. An omitted archetype
+    // resolves PER TIER (a free account gets an entitled device, not the iPhone 17), and
+    // unless the device was inherited from a profile — judged when that profile was
+    // minted — it is judged here exactly as POST /v1/profiles judges it: unknown → 400,
+    // a device outside the tier's entitlement → 403.
+    const archetype = body.archetype ?? defaultArchetypeIdForTier(tier);
     if (!opts.inheritedProfileArchetype && !isSelectableArchetypeId(archetype)) {
       throw new BadRequestError(
         `Archetype "${archetype}" is not selectable. Use GET /v1/archetypes for accepted ids.`,
         { field: 'archetype' },
       );
     }
+    if (!opts.inheritedProfileArchetype) requireArchetypeForTier(tier, archetype);
     const purpose: SessionPurpose = body.purpose ?? DEFAULT_SESSION_PURPOSE;
     // 2026-06-05 — behavioural persona, defaulted at the service like purpose
     // (the harness always gets a persona). Passed to the driver create-input;

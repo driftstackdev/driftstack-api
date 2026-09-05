@@ -217,8 +217,13 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
     );
   });
 
-  it('create: archetype = body.archetype ?? LOCKED_ARCHETYPE_ID; purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE; emits session.created audit', () => {
-    expect(body).toMatch(/const archetype = body\.archetype \?\? LOCKED_ARCHETYPE_ID;/);
+  it('create: archetype = body.archetype ?? defaultArchetypeIdForTier(tier) and judged against the tier unless inherited from a profile (P-15, 2026-09-05); purpose = body.purpose ?? DEFAULT_SESSION_PURPOSE; emits session.created audit', () => {
+    expect(body).toMatch(
+      /const archetype = body\.archetype \?\? defaultArchetypeIdForTier\(tier\);/,
+    );
+    expect(body).toMatch(
+      /if \(!opts\.inheritedProfileArchetype\) requireArchetypeForTier\(tier, archetype\);/,
+    );
     expect(body).toMatch(
       /const purpose: SessionPurpose = body\.purpose \?\? DEFAULT_SESSION_PURPOSE;/,
     );
@@ -434,7 +439,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
 
   it('imports: api-types defaults (DEFAULT_BEHAVIORAL_PROFILE + DEFAULT_SESSION_PURPOSE + LOCKED_ARCHETYPE_ID + MAX_SESSION_MINUTES_PER_TIER + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS) + AccountContext + Driver + errors + GUIInputRequest', () => {
     expect(body).toMatch(
-      /import \{\s*DEFAULT_BEHAVIORAL_PROFILE,\s*DEFAULT_SESSION_PURPOSE,\s*LOCKED_ARCHETYPE_ID,\s*MAX_SESSION_MINUTES_PER_TIER,\s*PROFILES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,/,
+      /import \{\s*DEFAULT_BEHAVIORAL_PROFILE,\s*DEFAULT_SESSION_PURPOSE,\s*defaultArchetypeIdForTier,\s*MAX_SESSION_MINUTES_PER_TIER,\s*PROFILES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,/,
     );
     expect(body).toMatch(/import type \{ AccountContext \} from '\.\/auth\.js';/);
     expect(body).toMatch(
@@ -445,7 +450,7 @@ describe('W404.C apps/server/src/services/sessions.ts content parity', () => {
       /import \{[\s\S]*?BadRequestError,[\s\S]*?ConcurrencyLimitError,[\s\S]*?ConflictError,[\s\S]*?DriverError,[\s\S]*?DriverNotIntegratedError,[\s\S]*?NotFoundError,[\s\S]*?SessionDestroyedError,[\s\S]*?\} from '\.\.\/lib\/errors\.js';/,
     );
     expect(body).toMatch(
-      /import \{ requireScope as throwIfMissingScope \} from '\.\.\/lib\/errors-helpers\.js';/,
+      /import \{\s*requireArchetypeForTier,\s*requireScope as throwIfMissingScope,\s*\} from '\.\.\/lib\/errors-helpers\.js';/,
     );
   });
 

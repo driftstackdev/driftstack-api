@@ -118,6 +118,7 @@ import type {
 import { customerSafeCapabilityReport } from '../services/session-capability-report-store.js';
 import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
 import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
+import { archetypeAllowedForTier, defaultArchetypeIdForTier } from '@driftstack/api-types';
 import {
   decryptGuiControlKey,
   encryptGuiControlKey,
@@ -1242,6 +1243,7 @@ export async function dispatchSessionAssignOnCreate(args: {
       archetype: resolveDispatchArchetype({
         profileArchetype,
         staticDefault: sessionDispatch.archetype,
+        tier: ownerTier,
       }).archetype,
       behaviorProfile: sessionDispatch.behaviorProfile,
       // Customer-supplied initial_url wins; falls back to the operator-config
@@ -1805,10 +1807,20 @@ export async function dispatchResumeSession(args: {
 export function resolveDispatchArchetype(args: {
   profileArchetype: string | undefined;
   staticDefault: string;
-}): { archetype: string; archetypeSource: 'profile' | 'static-default' } {
-  return args.profileArchetype !== undefined
-    ? { archetype: args.profileArchetype, archetypeSource: 'profile' }
-    : { archetype: args.staticDefault, archetypeSource: 'static-default' };
+  /** P-15 (2026-09-05) — the owner's tier. A profile-less session dispatches the
+   *  fleet's static default only when the tier is entitled to it; a restricted tier
+   *  (free: iPhone 13 / 13 mini) falls back to its own default device instead of
+   *  being handed a paid one. Omitted → the pre-P-15 behaviour (tests, callers that
+   *  already judged the device). */
+  tier?: AccountTier;
+}): { archetype: string; archetypeSource: 'profile' | 'static-default' | 'tier-default' } {
+  if (args.profileArchetype !== undefined) {
+    return { archetype: args.profileArchetype, archetypeSource: 'profile' };
+  }
+  if (args.tier !== undefined && !archetypeAllowedForTier(args.tier, args.staticDefault)) {
+    return { archetype: defaultArchetypeIdForTier(args.tier), archetypeSource: 'tier-default' };
+  }
+  return { archetype: args.staticDefault, archetypeSource: 'static-default' };
 }
 
 /**

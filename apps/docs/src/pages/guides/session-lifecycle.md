@@ -65,7 +65,7 @@ Pricing source of truth: [driftstack.io/pricing](https://driftstack.io/pricing/)
 ```ts
 const session = await client.sessions.create({
   label: 'checkout flow',
-  // archetype: optional override of the locked default
+  // archetype: optional override of your tier's default device
   // metadata: optional Record<string, unknown> for your own tracking
 });
 console.log(session.id, session.created_at);

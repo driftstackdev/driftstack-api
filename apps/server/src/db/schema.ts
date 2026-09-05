@@ -634,6 +634,10 @@ export const profiles = pgTable(
       .notNull()
       .references(() => accounts.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
+    // The column default is tier-blind and is NOT the application's default: since
+    // P-15 (2026-09-05) every insert path (profiles AND sessions) resolves the device
+    // per tier before it gets here, so this only covers a raw SQL insert that names
+    // no archetype.
     archetype: text('archetype').notNull().default('iphone17_ios18_7_safari26_4'),
     description: text('description'),
     // Organization metadata (2026-06-12) — backend half of the GUI's
@@ -1229,6 +1233,10 @@ export const sessions = pgTable(
     // iPhone archetype slug, e.g. "iphone17_ios18_7_safari26_4". See
     // packages/api-types/src/common.ts LOCKED_ARCHETYPE_ID +
     // docs/architecture/archetype-naming-convention.md for shape rationale.
+    // The column default is tier-blind and is NOT the application's default: since
+    // P-15 (2026-09-05) every insert path (profiles AND sessions) resolves the device
+    // per tier before it gets here, so this only covers a raw SQL insert that names
+    // no archetype.
     archetype: text('archetype').notNull().default('iphone17_ios18_7_safari26_4'),
     // V-169 — harness purpose (drives WebKit driver harness selection).
     purpose: sessionPurpose('purpose').notNull().default('production_customer'),

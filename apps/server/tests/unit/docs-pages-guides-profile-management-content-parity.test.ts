@@ -91,7 +91,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `archetype` field is optional and defaults to the locked archetype \(`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18\.7 with Safari 26\.4\)\./,
+      /The `archetype` field is optional and defaults to your tier's device: the locked launch archetype \(`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18\.7 with Safari 26\.4\) on tiers entitled to every device, the newest iPhone 13 archetype on the free tier\./,
     );
     expect(p).toMatch(
       /Pin to an older archetype only if you have a behavioural-stability reason\./,

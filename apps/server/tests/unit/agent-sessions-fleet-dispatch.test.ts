@@ -5,6 +5,7 @@
 // PUBLISHER token (canPublish:true) — distinct from the customer's subscriber
 // token; best-effort (a decrypt/mint failure never throws).
 
+import { archetypeAllowedForTier, defaultArchetypeIdForTier } from '@driftstack/api-types';
 import { describe, expect, it, vi } from 'vitest';
 import {
   dispatchSessionAssignOnCreate,
@@ -792,6 +793,27 @@ describe('dispatchSessionAssignOnCreate', () => {
     });
     const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
     expect(frame.archetype).toBe(DISPATCH.archetype);
+  });
+
+  // P-15 (2026-09-05) — the static default is a PAID device; a free owner's stateless
+  // dispatch must resolve to a device the free tier is entitled to instead.
+  it("CRITICAL a FREE owner's stateless dispatch does not get the static (paid) archetype — it gets the tier default", async () => {
+    const sent: string[] = [];
+    const registry = new FleetControlRegistry();
+    registry.register(NODE_ID, (d) => sent.push(d));
+    await dispatchSessionAssignOnCreate({
+      ownerTier: 'free',
+      sessionId: 'agt_arch3',
+      fleetControlRegistry: registry,
+      fleetNodesRepo: repoReturning(macWithLivekit()),
+      livekitSecretEncryptionKey: KEY,
+      sessionDispatch: DISPATCH,
+      logger: logger(),
+    });
+    const frame = JSON.parse(sent[0]!) as Record<string, unknown>;
+    expect(frame.archetype).toBe(defaultArchetypeIdForTier('free'));
+    expect(frame.archetype).not.toBe(DISPATCH.archetype);
+    expect(archetypeAllowedForTier('free', String(frame.archetype))).toBe(true);
   });
 
   it('best-effort: a profile-fetch failure falls back to the static archetype (does NOT abort the dispatch)', async () => {

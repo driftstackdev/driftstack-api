@@ -58,12 +58,12 @@ describe('W801 cross-SDK profile-management examples parity', () => {
 
   // ─── V-136 LOCKED_ARCHETYPE_ID server-default ─────────────────
 
-  it("CRITICAL V-136 LOCKED_ARCHETYPE_ID server-default framing pinned in TS + Python. The 'Archetype defaults to the locked iPhone 17 / iOS 18.7 / Safari 26.4 surface server-side if omitted (V-136)' wording explains why the create call omits archetype.", () => {
+  it("CRITICAL V-136 LOCKED_ARCHETYPE_ID server-default framing pinned in TS + Python (per-tier since P-15, 2026-09-05). The 'Archetype defaults server-side to your tier's device if omitted … (V-136 LOCKED_ARCHETYPE_ID), the newest iPhone 13 on the free tier' wording explains why the create call omits archetype.", () => {
     expect(read(TS)).toMatch(
-      /Archetype defaults to the locked\s*\n\s*\/\/\s+iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4 surface server-side\s*\n\s*\/\/\s+if omitted \(V-136 LOCKED_ARCHETYPE_ID\)\./,
+      /Archetype defaults server-side to your tier's\s*\n\s*\/\/\s+device if omitted: the locked iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4\s*\n\s*\/\/\s+surface on tiers entitled to every device \(V-136 LOCKED_ARCHETYPE_ID\),\s*\n\s*\/\/\s+the newest iPhone 13 on the free tier\./,
     );
     expect(read(PY)).toMatch(
-      /Archetype defaults to the locked\s*\n\s*#\s+iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4 surface server-side\s*\n\s*#\s+if omitted \(V-136 LOCKED_ARCHETYPE_ID\)\./,
+      /Archetype defaults server-side to your tier's\s*\n\s*#\s+device if omitted: the locked iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4\s*\n\s*#\s+surface on tiers entitled to every device \(V-136 LOCKED_ARCHETYPE_ID\),\s*\n\s*#\s+the newest iPhone 13 on the free tier\./,
     );
   });
 

@@ -1506,10 +1506,30 @@ export function defaultArchetypeIdForTier(tier: AccountTier): string {
     const candidates = ARCHETYPE_REGISTRY.filter(
       (a) => a.device === device && isSelectableArchetypeId(a.id),
     );
-    const newest = candidates[candidates.length - 1];
+    // Newest by NUMERIC (iOS, Safari) version — registry position is an editing
+    // accident, not a contract.
+    const newest = candidates.reduce<(typeof candidates)[number] | undefined>((best, a) => {
+      if (best === undefined) return a;
+      return compareVersions(a.iosVersion, best.iosVersion) > 0 ||
+        (compareVersions(a.iosVersion, best.iosVersion) === 0 &&
+          compareVersions(a.safariVersion, best.safariVersion) > 0)
+        ? a
+        : best;
+    }, undefined);
     if (newest !== undefined) return newest.id;
   }
   return LOCKED_ARCHETYPE_ID;
+}
+
+/** Dotted version compare ('18.7' vs '18.6' → 1; '26.4' vs '26.10' → -1). */
+function compareVersions(a: string, b: string): number {
+  const pa = a.split('.').map((x) => Number.parseInt(x, 10) || 0);
+  const pb = b.split('.').map((x) => Number.parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i += 1) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
 }
 
 /**

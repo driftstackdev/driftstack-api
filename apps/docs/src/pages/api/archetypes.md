@@ -49,8 +49,11 @@ Only customer-selectable entries are returned:
 - `available` — selectable, but not the default
 
 Internal fingerprint-reference baselines and other non-selectable entries are
-never included. `default_archetype_id` is the value the platform currently
-chooses when `POST /v1/sessions` or `POST /v1/profiles` omits an archetype.
+never included. `default_archetype_id` is the launch default — what
+`POST /v1/sessions` or `POST /v1/profiles` gets when an archetype is omitted on
+a tier entitled to every device. A tier with a device entitlement (the free
+tier: iPhone 13 and iPhone 13 mini) gets its own default instead: the newest
+archetype of its first entitled device.
 
 Direct session creation, profile creation, and profile import accept only an
 `id` present in the current response. Any other id returns
@@ -114,7 +117,7 @@ const sessionBody = await archetypeCreatePayload({
 ```
 
 If no capability filter is needed, omit `archetype` and let the server use
-`default_archetype_id`. Existing stored profiles keep their pinned archetype
+the tier's default (`default_archetype_id` on tiers entitled to every device). Existing stored profiles keep their pinned archetype
 even if it later leaves the selectable catalog; compatibility operations on
 those profiles remain available, but new direct creates and imports must choose
 from the live response.

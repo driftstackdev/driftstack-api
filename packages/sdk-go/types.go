@@ -356,8 +356,10 @@ type EgressCapabilities struct {
 }
 
 // CreateSessionRequest. All fields are optional; leave empty to let the
-// server default (Archetype → locked archetype, Purpose →
-// DefaultSessionPurpose, BehavioralProfile → DefaultBehavioralProfile).
+// server default (Archetype → your tier's default device: the locked
+// archetype on tiers entitled to every device, the newest iPhone 13 on the
+// free tier; Purpose → DefaultSessionPurpose, BehavioralProfile →
+// DefaultBehavioralProfile).
 type CreateSessionRequest struct {
 	Archetype string         `json:"archetype,omitempty"`
 	Purpose   SessionPurpose `json:"purpose,omitempty"`

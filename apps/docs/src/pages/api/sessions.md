@@ -114,9 +114,11 @@ nullable on every read.
 }
 ```
 
-All fields optional. `archetype` defaults to the locked iPhone 17 /
-iOS 18.7 / Safari 26.4 archetype when omitted (`LOCKED_ARCHETYPE_ID`
-= `iphone17_ios18_7_safari26_4`). `purpose` defaults to
+All fields optional. `archetype` defaults to your tier's device when
+omitted: the locked iPhone 17 / iOS 18.7 / Safari 26.4 archetype
+(`LOCKED_ARCHETYPE_ID` = `iphone17_ios18_7_safari26_4`) on tiers entitled to
+every device, the newest iPhone 13 archetype on the free tier. A device
+outside your tier's entitlement is refused with 403. `purpose` defaults to
 `production_customer`.
 
 When supplied directly, `archetype` must be an `id` returned by the current

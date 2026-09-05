@@ -116,8 +116,9 @@ idempotent and one-shot resource creation).
 
 Use `GET /v1/archetypes` to generate the request from the live selectable
 catalog. Any id absent from the current response is rejected before the profile
-repository is read or written. Omitting the field selects the catalog's
-`default_archetype_id`.
+repository is read or written. Omitting the field selects the tier's default
+device (the catalog's `default_archetype_id` on tiers entitled to every device,
+the newest iPhone 13 archetype on the free tier).
 
 Errors:
 

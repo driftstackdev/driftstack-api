@@ -22,6 +22,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { resolveDispatchArchetype } from '../../src/routes/agent-sessions.js';
+import { archetypeAllowedForTier, defaultArchetypeIdForTier } from '@driftstack/api-types';
 
 const STATIC_DEFAULT = 'iphone16pro_ios18_6_safari18_6';
 
@@ -84,5 +85,35 @@ describe('one profile provisions one fingerprint, every launch', () => {
       resolveDispatchArchetype({ profileArchetype: undefined, staticDefault: STATIC_DEFAULT })
         .archetypeSource,
     ).toBe('static-default');
+  });
+
+  // P-15 (2026-09-05) — a profile-less session dispatches the fleet's static default only
+  // when the owner's tier is entitled to it; a restricted tier gets its own default.
+  it('CRITICAL a free owner without a profile is NOT dispatched the static default when that device is outside the free entitlement', () => {
+    const r = resolveDispatchArchetype({
+      profileArchetype: undefined,
+      staticDefault: STATIC_DEFAULT,
+      tier: 'free',
+    });
+    expect(r.archetypeSource).toBe('tier-default');
+    expect(r.archetype).toBe(defaultArchetypeIdForTier('free'));
+    expect(archetypeAllowedForTier('free', r.archetype)).toBe(true);
+  });
+
+  it('a paid owner without a profile still gets the static default; a bound profile always wins', () => {
+    expect(
+      resolveDispatchArchetype({
+        profileArchetype: undefined,
+        staticDefault: STATIC_DEFAULT,
+        tier: 'api_builder',
+      }),
+    ).toEqual({ archetype: STATIC_DEFAULT, archetypeSource: 'static-default' });
+    expect(
+      resolveDispatchArchetype({
+        profileArchetype: 'iphone13_ios18_7_safari26_5',
+        staticDefault: STATIC_DEFAULT,
+        tier: 'free',
+      }).archetypeSource,
+    ).toBe('profile');
   });
 });

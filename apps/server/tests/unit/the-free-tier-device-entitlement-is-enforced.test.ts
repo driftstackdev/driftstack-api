@@ -82,6 +82,9 @@ describe('the free-tier device entitlement is enforced', () => {
     expect(archetypeAllowedForTier('free', freeDefault), freeDefault).toBe(true);
     expect(ARCHETYPE_REGISTRY.find((a) => a.id === freeDefault)?.device).toBe('iPhone 13');
     expect(freeDefault).not.toBe(LOCKED_ARCHETYPE_ID);
+    // Pinned by id so a registry edit reds here instead of silently moving the default:
+    // the newest selectable iPhone 13 by numeric (iOS, Safari) version.
+    expect(freeDefault).toBe('iphone13_ios18_7_safari26_5');
     // Tiers with every device keep the launch default.
     for (const tier of ['api_builder', 'solo_manual', 'enterprise'] as const) {
       expect(defaultArchetypeIdForTier(tier), tier).toBe(LOCKED_ARCHETYPE_ID);

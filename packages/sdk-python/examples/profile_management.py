@@ -31,9 +31,10 @@ def main() -> int:
     base_url = os.environ.get("DRIFTSTACK_BASE_URL", "https://api.driftstack.dev")
     client = Driftstack(api_key=api_key, base_url=base_url)
 
-    # 1. Create a fresh profile. Archetype defaults to the locked
-    #    iPhone 17 / iOS 18.7 / Safari 26.4 surface server-side
-    #    if omitted (V-136 LOCKED_ARCHETYPE_ID).
+    # 1. Create a fresh profile. Archetype defaults server-side to your tier's
+    #    device if omitted: the locked iPhone 17 / iOS 18.7 / Safari 26.4
+    #    surface on tiers entitled to every device (V-136 LOCKED_ARCHETYPE_ID),
+    #    the newest iPhone 13 on the free tier.
     print("creating profile…")
     created = client.profiles.create(
         {

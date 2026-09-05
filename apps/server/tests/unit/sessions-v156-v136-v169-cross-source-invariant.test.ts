@@ -211,10 +211,12 @@ describe('W946 V-156 + V-136 + V-169 sessions cross-source invariant', () => {
 
   // ─── 9 api-types imports ─────────────────────────────────────
 
-  it('CRITICAL imports 9 api-types primitives — DEFAULT_SESSION_PURPOSE + LOCKED_ARCHETYPE_ID + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS + 5 request/type aliases. The 9-import surface is the V-156 + V-136 + V-169 cross-source binding.', () => {
+  it('CRITICAL imports 9 api-types primitives — DEFAULT_SESSION_PURPOSE + defaultArchetypeIdForTier (was LOCKED_ARCHETYPE_ID until P-15 made the default per tier, 2026-09-05) + PROFILES_PER_TIER + TIER_CONCURRENT_SESSION_LIMITS + 5 request/type aliases. The 9-import surface is the V-156 + V-136 + V-169 cross-source binding.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/sessions.ts'));
     expect(p).toMatch(/DEFAULT_SESSION_PURPOSE,/);
-    expect(p).toMatch(/LOCKED_ARCHETYPE_ID,/);
+    // P-15 (2026-09-05) — the default is per tier; the service imports the resolver, not the constant.
+    expect(p).toMatch(/defaultArchetypeIdForTier,/);
+    expect(p).not.toMatch(/LOCKED_ARCHETYPE_ID/);
     expect(p).toMatch(/PROFILES_PER_TIER,/);
     expect(p).toMatch(/TIER_CONCURRENT_SESSION_LIMITS,/);
     expect(p).toMatch(/type AccountTier,/);

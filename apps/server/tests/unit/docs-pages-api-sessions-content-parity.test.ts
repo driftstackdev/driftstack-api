@@ -144,7 +144,7 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`archetype` defaults to the locked iPhone 17 \/\s*\n?iOS 18\.7 \/ Safari 26\.4 archetype when omitted \(`LOCKED_ARCHETYPE_ID`\s*\n?= `iphone17_ios18_7_safari26_4`\)\./,
+      /`archetype` defaults to your tier's device when\s*\n?omitted: the locked iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4 archetype\s*\n?\(`LOCKED_ARCHETYPE_ID` = `iphone17_ios18_7_safari26_4`\) on tiers entitled to\s*\n?every device, the newest iPhone 13 archetype on the free tier\./,
     );
     expect(p).toMatch(/`purpose` defaults to\s*\n?`production_customer`\./);
     expect(p).toMatch(
