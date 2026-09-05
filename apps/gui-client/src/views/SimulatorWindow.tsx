@@ -5500,7 +5500,20 @@ export function SimulatorWindow(): JSX.Element {
                 authorityEpoch: pending.authorityEpoch,
               });
             }
-            showNotice('Could not switch tab', 3000);
+            // A3 contract audit (2026-09-05, harness 07c8a693f) — "session ended" is not a
+            // per-switch failure: the whole session is gone, so the tab the revert above
+            // just selected is gone too, and the next tap would repeat this same toast.
+            // Say it once, in the vocabulary the agent-session panel already uses for
+            // session loss. Every other token the harness can send here ("unknown tab",
+            // "tab activation failed", …) IS per-switch and the revert is right for it, so
+            // they keep today's copy — and so does an unrecognised one, which degrades to
+            // the generic message rather than to silence.
+            const harnessError =
+              typeof msg.error === 'string' ? msg.error.trim().toLowerCase() : '';
+            showNotice(
+              harnessError === 'session ended' ? 'Session ended' : 'Could not switch tab',
+              3000,
+            );
           } else if (pending !== undefined && pending.tabId === activeTabIdRef.current && !failed) {
             // CONFIRMED switch — the box acknowledged it landed on `pending.tabId`.
             // Fire a one-shot reconcile so the now-active tab refreshes from the box
