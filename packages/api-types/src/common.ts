@@ -1493,6 +1493,26 @@ export function archetypeIdsForTier(tier: AccountTier): readonly string[] {
 }
 
 /**
+ * The archetype a create that names NO device gets, per tier. Tiers with every device
+ * keep the launch default (LOCKED_ARCHETYPE_ID). A tier with a device entitlement gets
+ * the NEWEST selectable archetype of its first entitled device — a free account that
+ * omits the device must not be handed the iPhone 17 it is not entitled to (and could
+ * not then clone, import or restore). Decided 2026-09-05 (ledger P-15).
+ */
+export function defaultArchetypeIdForTier(tier: AccountTier): string {
+  const allowed = ARCHETYPE_DEVICES_PER_TIER[tier];
+  if (allowed === null) return LOCKED_ARCHETYPE_ID;
+  for (const device of allowed) {
+    const candidates = ARCHETYPE_REGISTRY.filter(
+      (a) => a.device === device && isSelectableArchetypeId(a.id),
+    );
+    const newest = candidates[candidates.length - 1];
+    if (newest !== undefined) return newest.id;
+  }
+  return LOCKED_ARCHETYPE_ID;
+}
+
+/**
  * Map an internal archetype identifier to its human-readable label,
  * derived from ARCHETYPE_REGISTRY (single source of truth). Falls back to
  * the identifier itself when unknown — UIs surface the raw id rather than

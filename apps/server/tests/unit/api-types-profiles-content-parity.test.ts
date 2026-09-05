@@ -89,7 +89,7 @@ describe('W434.B packages/api-types/src/profiles.ts content parity', () => {
 
   it('CreateProfileRequest: name + optional selectable archetype (default server-side) + optional description', () => {
     expect(body).toMatch(
-      /\*\s*Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`\s*\*\s*\(`iphone17_ios18_7_safari26_4`\) server-side if omitted\.\s*\*\s*Customers may select any older archetype the live catalog still marks\s*\*\s*available for behavioural-stability reasons\./,
+      /\*\s*Archetype slug — resolved server-side PER TIER if omitted: `LOCKED_ARCHETYPE_ID`\s*\*\s*\(`iphone17_ios18_7_safari26_4`\) on tiers with every device, the newest entitled\s*\*\s*archetype \(an iPhone 13\) on the free tier — see `defaultArchetypeIdForTier`\.\s*\*\s*Customers may select any older archetype the live catalog still marks\s*\*\s*available for behavioural-stability reasons\./,
     );
     expect(body).toMatch(
       /export const CreateProfileRequestSchema = z\.object\(\{\s*name: ProfileNameSchema,/,

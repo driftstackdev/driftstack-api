@@ -16,6 +16,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   ARCHETYPE_DEVICES_PER_TIER,
+  defaultArchetypeIdForTier,
+  LOCKED_ARCHETYPE_ID,
   ARCHETYPE_REGISTRY,
   archetypeAllowedForTier,
   archetypeIdsForTier,
@@ -70,5 +72,19 @@ describe('the free-tier device entitlement is enforced', () => {
     expect(paidOnly, 'the registry carries a device free does not get').toBeDefined();
     expect(archetypeAllowedForTier('free', paidOnly!.id)).toBe(false);
     expect(archetypeAllowedForTier('api_builder', paidOnly!.id)).toBe(true);
+  });
+
+  // P-15 (2026-09-05) — the DEFAULT is a door too. A create that names no device used to
+  // get the launch default on every tier, which the free tier is not entitled to; the
+  // default now resolves per tier and is judged like an explicit choice.
+  it('CRITICAL the default device a tier gets when it names none is one it is entitled to', () => {
+    const freeDefault = defaultArchetypeIdForTier('free');
+    expect(archetypeAllowedForTier('free', freeDefault), freeDefault).toBe(true);
+    expect(ARCHETYPE_REGISTRY.find((a) => a.id === freeDefault)?.device).toBe('iPhone 13');
+    expect(freeDefault).not.toBe(LOCKED_ARCHETYPE_ID);
+    // Tiers with every device keep the launch default.
+    for (const tier of ['api_builder', 'solo_manual', 'enterprise'] as const) {
+      expect(defaultArchetypeIdForTier(tier), tier).toBe(LOCKED_ARCHETYPE_ID);
+    }
   });
 });

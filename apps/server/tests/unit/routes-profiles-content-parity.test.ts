@@ -48,7 +48,7 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
 
   it('imports: 6 Zod schemas + PROFILE_EXPORT_ENVELOPE_VERSION from api-types; ProfileRecord/ProfilesService; BadRequest/Forbidden/Validation errors; AccountAuthRepo + resolveEffectiveAccount', () => {
     expect(body).toMatch(
-      /import \{\s*CloneProfileRequestSchema,\s*CreateProfileRequestSchema,\s*PaginationQuerySchema,\s*PROFILE_EXPORT_ENVELOPE_VERSION,\s*ProfileImportRequestSchema,\s*UpdateProfileRequestSchema,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*CloneProfileRequestSchema,\s*CreateProfileRequestSchema,\s*PaginationQuerySchema,\s*PROFILE_EXPORT_ENVELOPE_VERSION,\s*ProfileImportRequestSchema,\s*UpdateProfileRequestSchema,\s*defaultArchetypeIdForTier,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import type \{ ProfileRecord, ProfilesService \} from '\.\.\/services\/profiles\.js';/,

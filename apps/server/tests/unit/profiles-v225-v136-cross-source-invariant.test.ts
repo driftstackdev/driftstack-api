@@ -145,12 +145,26 @@ describe('W948 V-225 + V-136 profiles cross-source invariant', () => {
 
   // ─── DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID ─────────────────
 
-  it('CRITICAL DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID — api-types canonical. The single-source-of-truth import prevents profile-default-archetype drift between server + api-types.', () => {
+  it('CRITICAL the default archetype is resolved PER TIER by api-types (defaultArchetypeIdForTier) — the single source of truth prevents profile-default drift between server + api-types, and keeps the free tier off the iPhone 17 it is not entitled to (P-15, 2026-09-05).', () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/services/profiles.ts'));
+    // The service imports the resolver rather than the LOCKED constant: no local
+    // default literal can drift from the tier rule again.
     expect(p).toMatch(
-      /import \{\s*LOCKED_ARCHETYPE_ID,\s*isSelectableArchetypeId,\s*type AccountTier,?\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*defaultArchetypeIdForTier,\s*isSelectableArchetypeId,\s*type AccountTier,?\s*\} from '@driftstack\/api-types';/,
     );
-    expect(p).toMatch(/const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;/);
+    expect(p).not.toMatch(/const DEFAULT_ARCHETYPE = /);
+    expect(p).toMatch(/args\.archetype \?\? defaultArchetypeIdForTier\(args\.tier\)/);
+    // api-types keeps LOCKED_ARCHETYPE_ID as the launch default for tiers with every
+    // device, and hands an entitled device to a tier with a device restriction.
+    const c = read(resolve(REPO_ROOT, 'packages/api-types/src/common.ts'));
+    expect(c).toMatch(
+      /export function defaultArchetypeIdForTier\(tier: AccountTier\): string \{\s*const allowed = ARCHETYPE_DEVICES_PER_TIER\[tier\];\s*if \(allowed === null\) return LOCKED_ARCHETYPE_ID;/,
+    );
+    // The route judges the RESOLVED archetype — omission is no longer an ungated door.
+    const r = read(resolve(REPO_ROOT, 'apps/server/src/routes/profiles.ts'));
+    expect(r).toMatch(
+      /requireArchetypeForTier\(tier, parsed\.data\.archetype \?\? defaultArchetypeIdForTier\(tier\)\);/,
+    );
   });
 
   // ─── create() tier-cap via profileLimitFor ───────────────────

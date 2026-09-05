@@ -78,8 +78,10 @@ With no header, the calling account remains the owner.
   max 120 chars. Must start and end with an alphanumeric character;
   allowed inner characters are letters, digits, spaces, underscore,
   hyphen, and dot. Leading/trailing whitespace is trimmed.
-- `archetype` — the pinned device + OS + Safari version triple. New
-  profiles default to `iphone17_ios18_7_safari26_4`. When supplied,
+- `archetype` — the pinned device + OS + Safari version triple. When omitted,
+  new profiles get the tier's default device: the iPhone 17 launch archetype
+  (`iphone17_ios18_7_safari26_4`) on tiers with every device, the newest
+  iPhone 13 archetype on the free tier. When supplied,
   the id must be present in the current
   [`GET /v1/archetypes`](/api/archetypes/) response; this includes any
   older combination the platform still marks `available`. Once set,

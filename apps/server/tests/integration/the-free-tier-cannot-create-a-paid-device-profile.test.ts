@@ -18,6 +18,7 @@ import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js'
 import {
   ARCHETYPE_DEVICES_PER_TIER,
   ARCHETYPE_REGISTRY,
+  LOCKED_ARCHETYPE_ID,
   PROFILE_EXPORT_ENVELOPE_VERSION,
 } from '@driftstack/api-types';
 import { generateApiKey, hashApiKey, keyPrefixFromPlaintext } from '../../src/lib/api-keys.js';
@@ -211,5 +212,32 @@ describe('the free tier cannot create a paid-device profile', () => {
       res.statusCode,
       `transferring a paid device to a free recipient is 403: ${res.body}`,
     ).toBe(403);
+  });
+
+  it('CRITICAL P-15 a free account that names NO device gets an entitled one, not the iPhone 17 launch default', async () => {
+    fx = await buildTestApp();
+    const key = await seedFreeAccount(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${key}` },
+      payload: { name: 'no-device-named' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const archetype = (JSON.parse(res.body) as { archetype: string }).archetype;
+    expect(archetype).not.toBe(LOCKED_ARCHETYPE_ID);
+    expect(ARCHETYPE_REGISTRY.find((a) => a.id === archetype)?.device).toBe('iPhone 13');
+  });
+
+  it('a PAID account that names no device still gets the launch default', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/profiles',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { name: 'no-device-named-paid' },
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect((JSON.parse(res.body) as { archetype: string }).archetype).toBe(LOCKED_ARCHETYPE_ID);
   });
 });

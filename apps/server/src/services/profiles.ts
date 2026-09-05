@@ -12,7 +12,7 @@
 
 import { randomUUID } from 'node:crypto';
 import {
-  LOCKED_ARCHETYPE_ID,
+  defaultArchetypeIdForTier,
   isSelectableArchetypeId,
   type AccountTier,
 } from '@driftstack/api-types';
@@ -244,8 +244,6 @@ export interface ProfilesRepo {
   getWrappedDek(args: { id: string; accountId: string }): Promise<string | null>;
 }
 
-const DEFAULT_ARCHETYPE = LOCKED_ARCHETYPE_ID;
-
 function requireSelectableArchetype(archetype: string): string {
   if (!isSelectableArchetypeId(archetype)) {
     throw new BadRequestError(
@@ -407,7 +405,11 @@ export class ProfilesService {
   }
 
   async create(args: CreateProfileArgs): Promise<ProfileRecord> {
-    const archetype = requireSelectableArchetype(args.archetype ?? DEFAULT_ARCHETYPE);
+    // P-15 (2026-09-05) — the default is PER TIER: an omitted device resolves to what the
+    // tier is entitled to, and the route judges the resolved id like an explicit one.
+    const archetype = requireSelectableArchetype(
+      args.archetype ?? defaultArchetypeIdForTier(args.tier),
+    );
     const limit = profileLimitFor(args.tier);
     if (limit !== null) {
       const current = await this.repo.countByAccount(args.accountId);

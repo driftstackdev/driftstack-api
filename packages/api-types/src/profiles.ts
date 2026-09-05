@@ -315,8 +315,9 @@ export type Profile = z.infer<typeof ProfileSchema>;
 export const CreateProfileRequestSchema = z.object({
   name: ProfileNameSchema,
   /**
-   * Archetype slug — defaults to `LOCKED_ARCHETYPE_ID`
-   * (`iphone17_ios18_7_safari26_4`) server-side if omitted.
+   * Archetype slug — resolved server-side PER TIER if omitted: `LOCKED_ARCHETYPE_ID`
+   * (`iphone17_ios18_7_safari26_4`) on tiers with every device, the newest entitled
+   * archetype (an iPhone 13) on the free tier — see `defaultArchetypeIdForTier`.
    * Customers may select any older archetype the live catalog still marks
    * available for behavioural-stability reasons.
    */

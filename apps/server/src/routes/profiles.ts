@@ -22,6 +22,7 @@ import {
   PROFILE_EXPORT_ENVELOPE_VERSION,
   ProfileImportRequestSchema,
   UpdateProfileRequestSchema,
+  defaultArchetypeIdForTier,
 } from '@driftstack/api-types';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -196,9 +197,11 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       // resolution above, so an act-as create is judged on the OWNER's tier and
       // not the caller's: a free member acting on a paid owner gets the owner's
       // devices, and a paid member acting on a free owner does not smuggle one in.
-      if (parsed.data.archetype !== undefined) {
-        requireArchetypeForTier(tier, parsed.data.archetype);
-      }
+      // P-15 (2026-09-05) — judged on the RESOLVED device: an omitted archetype used to
+      // skip this guard and hand a free account the iPhone 17 launch default it could not
+      // then clone, import or restore. The default is now per tier (api-types
+      // defaultArchetypeIdForTier) and passes through the same check as an explicit one.
+      requireArchetypeForTier(tier, parsed.data.archetype ?? defaultArchetypeIdForTier(tier));
 
       const profile = await service.create({
         accountId,
