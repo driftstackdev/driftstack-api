@@ -51,6 +51,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          # a-deploy-snapshot-that-does-not-judge-the-sha-is-not-a-check derives the
+          # "behind" distance from git (HEAD~5); a shallow clone has no such revision.
+          fetch-depth: 50
 
       - name: Setup Node 22
         uses: actions/setup-node@v6
@@ -60,6 +64,25 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Setup Python 3.10 (the Python-SDK integration arms run the installed package)
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+          cache-dependency-path: 'packages/sdk-python/pyproject.toml'
+
+      - name: Install the Python SDK into its venv
+        # sdk-python-against-the-real-server + webhook-signature-verifies-in-every-sdk
+        # assert packages/sdk-python/.venv/bin/python exists and can import driftstack
+        # (a silent skip there read as a pass — V-2128). The Python SDK job installs
+        # into the runner's interpreter; these arms need the venv path. This job never
+        # created one, which is why build-test has been red on every run of record.
+        working-directory: packages/sdk-python
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/pip install -e '.[dev]'
 
       # SDK examples import from `@driftstack/sdk`, which resolves through
       # the workspace symlink to packages/sdk-typescript/dist/. Building the
