@@ -37,6 +37,7 @@ import {
   ListProfilesResponseSchema,
   ProfileExportEnvelopeSchema,
   ProfileImportRequestSchema,
+  ProfileActivityResponseSchema,
   ProfileSchema,
   UpdateProfileRequestSchema,
   AdminApplyIpnRequestSchema,
@@ -7822,6 +7823,38 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Paginated profile list.',
         content: { 'application/json': { schema: ListProfilesResponseSchema } },
+      },
+      ...errors4xx,
+    },
+  });
+  registerRoute(r, {
+    method: 'get',
+    path: '/v1/profiles/{id}/activity',
+    operationId: 'getProfileActivity',
+    summary:
+      'Recent navigation for a profile, projected from its agent sessions (requires `read:profiles`)',
+    description:
+      'The pages agent sessions planned to open while using this profile, most recent first, ' +
+      'with the session each belonged to. This is ACCOUNT ACTIVITY, not browsing history: the ' +
+      "profile's Clear-history action (trim with scope `history`) clears its open tabs on the " +
+      'device and does not remove these rows, which are governed by account-level retention. ' +
+      'Bounded: when `truncated` is true, older activity exists but is not returned.',
+    tags: ['profiles'],
+    security: auth,
+    request: { params: z.object({ id: prefixedIdParam('prof', 'profile') }) },
+    responses: {
+      200: {
+        description: 'Recent navigation, most recent first.',
+        content: { 'application/json': { schema: ProfileActivityResponseSchema } },
+      },
+      404: {
+        description: 'Profile not found (or owned by another account).',
+        content: problemContent,
+      },
+      503: {
+        description:
+          'The agent session store is not configured on this deployment, so no activity can be read.',
+        content: problemContent,
       },
       ...errors4xx,
     },

@@ -19,7 +19,13 @@ import { Room, RoomEvent } from 'livekit-client';
 import type { LiveKitInfo } from '@driftstack/sdk';
 import { isReliableInputCongested, ReliableInputCongestedError } from './livekit-input-congestion';
 import { isBenignTeardownError } from './livekit-errors';
-import { cancelInputReceipt, registerInputReceipt } from './livekit-input-ack';
+import {
+  cancelInputReceipt,
+  registerInputReceipt,
+  releaseReliablePublish,
+  ReliableChannelStalledError,
+  reserveReliablePublish,
+} from './livekit-input-ack';
 
 export { isBenignTeardownError } from './livekit-errors';
 
@@ -337,9 +343,31 @@ export async function sendInputEvent(
         : undefined;
     registerInputReceipt(room, receiptId, deadlineMs);
   }
-  const outcome = await publishWithinInputBound(
-    room.localParticipant.publishData(data, { reliable }),
-  );
+  // P-25 — the stall bound. Claimed BEFORE publishData is called, and only for
+  // the reliable channel: the vendored client parks a reliable publish forever on
+  // a wedged channel (see reserveReliablePublish), and a race over that await
+  // cannot un-issue it. Refusing here is the only bounded option. The receipt
+  // registered above is cancelled on refusal — nothing was sent, so "did not
+  // confirm" would be the wrong story; the badge tells the true one (`stalled`).
+  if (reliable && !reserveReliablePublish(room)) {
+    if (receiptId !== null) cancelInputReceipt(room, receiptId);
+    throw new ReliableChannelStalledError();
+  }
+  const publish = room.localParticipant.publishData(data, { reliable });
+  if (reliable) {
+    // Both arms, attached to the publish ITSELF (not the bounded race), so the
+    // slot is released when the SDK settles — however long that takes — and
+    // never on the caller's timeout, which the SDK does not observe.
+    publish.then(
+      () => {
+        releaseReliablePublish(room, true);
+      },
+      () => {
+        releaseReliablePublish(room, false);
+      },
+    );
+  }
+  const outcome = await publishWithinInputBound(publish);
   if (outcome.kind === 'sent') return;
   if (outcome.kind === 'timeout') {
     // ⛔ THE RECEIPT IS DELIBERATELY LEFT ARMED. Routing a timeout into the

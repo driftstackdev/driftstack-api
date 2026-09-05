@@ -283,6 +283,11 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'DELETE',
           },
           {
+            href: '/api/profiles/#recent-activity',
+            label: 'Recent activity',
+            method: 'GET',
+          },
+          {
             href: '/api/profiles/#trim-cached-site-data',
             label: 'Trim cached site data',
             method: 'POST',

@@ -166,7 +166,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     void py;
   });
 
-  it("CRITICAL method-verb mix on profiles pinned — 7× POST (create + clone + launch + import + transfer + L4b restore + doc-150 §8 trim) + 4× GET (list + get + export + L4b listTrash) + 1× PATCH (update) + 2× DELETE (delete + L4b purge). The 14-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch + V-480 portability + V-666 transfer + L4b recycle-bin + storage-trim flows depend on. (2026-05-20 launch; 2026-05-31 export/import/transfer; 2026-06-16 recycle bin; 2026-06-17 purge; 2026-06-25 trim.)", () => {
+  it("CRITICAL method-verb mix on profiles pinned — 7× POST (create + clone + launch + import + transfer + L4b restore + doc-150 §8 trim) + 5× GET (list + get + export + P-23 activity +L4b listTrash) + 1× PATCH (update) + 2× DELETE (delete + L4b purge). The 14-method count (excluding iterate which delegates to list) is what the dashboard's CRUD + antidetect-launch + V-480 portability + V-666 transfer + L4b recycle-bin + storage-trim flows depend on. (2026-05-20 launch; 2026-05-31 export/import/transfer; 2026-06-16 recycle bin; 2026-06-17 purge; 2026-06-25 trim.)", () => {
     const ts = read(TS_PROFILES);
 
     // sdk-typescript: count method strings.
@@ -176,7 +176,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const tsDelete = (ts.match(/method: 'DELETE'/g) ?? []).length;
 
     expect(tsPost, 'sdk-typescript POST count').toBe(7);
-    expect(tsGet, 'sdk-typescript GET count').toBe(4);
+    expect(tsGet, 'sdk-typescript GET count').toBe(5);
     expect(tsPatch, 'sdk-typescript PATCH count').toBe(1);
     expect(tsDelete, 'sdk-typescript DELETE count').toBe(2);
 
@@ -187,7 +187,7 @@ describe('W698 cross-SDK V-081/V-313 profiles 7-verb lifecycle parity', () => {
     const goDelete = (go.match(/method: "DELETE"/g) ?? []).length;
 
     expect(goPost, 'sdk-go POST count').toBe(7);
-    expect(goGet, 'sdk-go GET count').toBe(4);
+    expect(goGet, 'sdk-go GET count').toBe(5);
     expect(goPatch, 'sdk-go PATCH count').toBe(1);
     expect(goDelete, 'sdk-go DELETE count').toBe(2);
   });

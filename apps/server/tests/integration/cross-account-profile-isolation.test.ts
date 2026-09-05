@@ -45,6 +45,7 @@ const PROFILE_ROUTES: ReadonlyArray<{
   { method: 'GET', suffix: '' },
   { method: 'PATCH', suffix: '', payload: { name: 'renamed-by-b' } },
   { method: 'GET', suffix: '/export' },
+  { method: 'GET', suffix: '/activity' }, // P-23 — the ownership check precedes the store read
   { method: 'POST', suffix: '/clone', payload: { name: 'cloned-by-b' } },
   { method: 'POST', suffix: '/trim', payload: {} },
   { method: 'DELETE', suffix: '/purge' },

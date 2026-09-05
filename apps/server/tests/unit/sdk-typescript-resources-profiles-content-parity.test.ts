@@ -58,9 +58,9 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     expect(body).toMatch(/\/\/ ProfilesResource — typed methods for \/v1\/profiles \(V-081\)\./);
   });
 
-  it('Imports — 6 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + Session + UpdateProfileRequest) + HttpClient + iteratePaginated. 2026-05-20 — Session added because launch() returns the freshly-minted Session.', () => {
+  it('Imports — 7 api-types shapes (CloneProfileRequest + CreateProfileRequest + PaginationQueryInput + Profile + Session + UpdateProfileRequest + ProfileActivityResponse) + HttpClient + iteratePaginated. 2026-05-20 — Session added because launch() returns the freshly-minted Session. 2026-09-05 — ProfileActivityResponse added for activity() (P-23).', () => {
     expect(body).toMatch(
-      /import type \{\s*CloneProfileRequest,\s*CreateProfileRequest,\s*PaginationQueryInput,\s*Profile,\s*Session,\s*UpdateProfileRequest,\s*\} from '@driftstack\/api-types';/,
+      /import type \{\s*CloneProfileRequest,\s*CreateProfileRequest,\s*PaginationQueryInput,\s*Profile,\s*Session,\s*UpdateProfileRequest,\s*ProfileActivityResponse,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(/import type \{ HttpClient \} from '\.\.\/http\.js';/);
     expect(body).toMatch(/import \{ iteratePaginated \} from '\.\.\/pagination\.js';/);
@@ -142,21 +142,21 @@ describe('W427.C packages/sdk-typescript/src/resources/profiles.ts content parit
     );
   });
 
-  it('encodeURIComponent invariant — :id escaped EXACTLY 10 times (get + update + delete + launch + clone + export + transfer + L4b restore + L4b purge + doc-150 §8 trim). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b); 2026-06-17 — purge (L4b); 2026-06-25 — trim (doc-150 §8).', () => {
+  it('encodeURIComponent invariant — :id escaped EXACTLY 11 times (get + update + delete + launch + clone + export + transfer + L4b restore + L4b purge + doc-150 §8 trim + P-23 activity). import() + listTrash() take no :id. 2026-05-31 — export/transfer (V-480/V-666); 2026-06-16 — restore (L4b); 2026-06-17 — purge (L4b); 2026-06-25 — trim (doc-150 §8); 2026-09-05 — activity (P-23).', () => {
     const matches = body.match(/encodeURIComponent\(id\)/g) ?? [];
-    expect(matches.length, 'expected encodeURIComponent(id) 10 times').toBe(10);
+    expect(matches.length, 'expected encodeURIComponent(id) 11 times').toBe(11);
   });
 
-  it('15-verb inventory + verb-mix invariants — exactly 15 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + purge + clone + export + import + transfer + trim). Verb mix: 7 POSTs (create + launch + restore + clone + import + transfer + trim) + 4 GETs (list + get + listTrash + export) + 1 PATCH (update) + 2 DELETEs (delete + L4b purge) = 14 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
+  it('16-verb inventory + verb-mix invariants — exactly 16 method declarations (create + list + iterate + get + update + launch + delete + listTrash + restore + purge + clone + export + import + transfer + trim + activity). Verb mix: 7 POSTs (create + launch + restore + clone + import + transfer + trim) + 5 GETs (list + get + listTrash + export + activity) + 1 PATCH (update) + 2 DELETEs (delete + L4b purge) = 15 wire-call verbs (iterate is delegation). NO PUT — partial updates use PATCH.', () => {
     const methods = body.match(/^ {2}(?!constructor)[a-zA-Z]+\(/gm) ?? [];
-    expect(methods.length, 'expected 15 verb declarations').toBe(15);
+    expect(methods.length, 'expected 16 verb declarations').toBe(16);
     const posts = (body.match(/method: 'POST'/g) ?? []).length;
     expect(
       posts,
       'expected 7 POSTs (create + launch + restore + clone + import + transfer + trim)',
     ).toBe(7);
     const gets = (body.match(/method: 'GET'/g) ?? []).length;
-    expect(gets, 'expected 4 GETs (list + get + listTrash + export)').toBe(4);
+    expect(gets, 'expected 5 GETs (list + get + listTrash + export + activity)').toBe(5);
     const patches = (body.match(/method: 'PATCH'/g) ?? []).length;
     expect(patches, 'expected 1 PATCH (update)').toBe(1);
     const deletes = (body.match(/method: 'DELETE'/g) ?? []).length;

@@ -1,6 +1,11 @@
 import type { Room } from 'livekit-client';
 
-export type InputReceiptIssue = 'timeout' | 'dropped' | 'failed' | null;
+/**
+ * `stalled` (P-25) is not about one input: the reliable DataChannel has stopped
+ * draining and the GUI has REFUSED to queue more behind it. See
+ * `reserveReliablePublish` for why refusing is the only bounded option.
+ */
+export type InputReceiptIssue = 'timeout' | 'dropped' | 'failed' | 'stalled' | null;
 
 type Listener = (issue: InputReceiptIssue) => void;
 
@@ -165,6 +170,81 @@ function stateFor(room: Room): ReceiptState {
     states.set(room, state);
   }
   return state;
+}
+
+// ── P-25: bound the reliable publishes that can be PARKED per Room ──────────
+//
+// The vendored livekit-client's reliable `publishData` awaits
+// `waitForBufferStatusLow` BEFORE `dc.send`, and that promise has no timer: it
+// settles only on a `bufferedamountlow` event or engine close. So once the
+// reliable channel wedges, every further reliable publish parks forever, each
+// retaining its listener, its encoded payload and its suspended async frame,
+// released only by a restart — which is the customer's report: no error, no
+// recovery, every session lost. The GUI's existing bound (`publishWithinInputBound`)
+// is a race over that await, and a race cannot un-issue an SDK call: the caller
+// returns, the parked frame stays. The daemon side has the same SDK and bounded
+// its publishes with a 5 s throw (W1013/W2090), which is why this only ever
+// froze the GUI.
+//
+// So the bound here is a REFUSAL TO ISSUE. Past `MAX_INFLIGHT_RELIABLE_PUBLISHES`
+// unsettled publishes, `sendInputEvent` throws instead of calling `publishData`,
+// and the badge says why. Nothing is created that a timeout would then fail to
+// release; when the channel drains (or the engine closes and rejects them all)
+// the count falls, the gate reopens, and the next confirmed send clears the badge.
+//
+// Chosen at 32: a healthy channel settles a publish in milliseconds, so 32 parked
+// is not a burst, it is a stall — and it is small enough that the retained memory
+// at the bound is a few hundred KB, not a heap.
+export const MAX_INFLIGHT_RELIABLE_PUBLISHES = 32;
+
+export class ReliableChannelStalledError extends Error {
+  constructor() {
+    super(
+      `The reliable input channel has ${String(MAX_INFLIGHT_RELIABLE_PUBLISHES)} publishes ` +
+        'parked and is not draining; refusing to queue more.',
+    );
+    this.name = 'ReliableChannelStalledError';
+  }
+}
+
+const inflightReliable = new WeakMap<Room, number>();
+
+/** Test/diagnostic view: reliable publishes issued and not yet settled. */
+export function inflightReliablePublishCount(room: Room): number {
+  return inflightReliable.get(room) ?? 0;
+}
+
+/**
+ * Claim a slot for one reliable publish. Returns false — and publishes the
+ * `stalled` issue — when the bound is reached; the caller must then NOT call
+ * `publishData`. Applies to EVERY reliable event, including navigate and the
+ * mandatory releases that the congestion shed exempts: that exemption is about
+ * transient congestion, where fresh intent replayed late is the harm. A hard
+ * stall is different — a 33rd navigate parked behind 32 others cannot escape
+ * anything. The escape is the reconnect the badge offers.
+ */
+export function reserveReliablePublish(room: Room): boolean {
+  const n = inflightReliable.get(room) ?? 0;
+  if (n >= MAX_INFLIGHT_RELIABLE_PUBLISHES) {
+    const state = stateFor(room);
+    if (state.issue !== 'stalled') publish(state, 'stalled', state.settledSequence);
+    return false;
+  }
+  inflightReliable.set(room, n + 1);
+  return true;
+}
+
+/**
+ * Release a slot once the publish has settled on EITHER arm. A confirmed send
+ * after a stall clears the badge: the channel is demonstrably draining again.
+ */
+export function releaseReliablePublish(room: Room, sent: boolean): void {
+  const n = inflightReliable.get(room) ?? 0;
+  inflightReliable.set(room, n > 0 ? n - 1 : 0);
+  if (sent) {
+    const state = stateFor(room);
+    if (state.issue === 'stalled') publish(state, null, state.settledSequence);
+  }
 }
 
 /**

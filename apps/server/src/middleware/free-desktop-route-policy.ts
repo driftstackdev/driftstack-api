@@ -40,6 +40,9 @@ export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>(
   'POST:/v1/profiles/:id/restore',
   'DELETE:/v1/profiles/:id/purge',
   'POST:/v1/profiles/:id/trim',
+  // P-23 — the desktop app's per-profile Activity panel (read-only projection
+  // of the account's own session transcripts; scoped by ownership + account).
+  'GET:/v1/profiles/:id/activity',
   'GET:/v1/profiles/:id/export',
   'POST:/v1/profiles/:id/clone',
   'POST:/v1/profiles/import',

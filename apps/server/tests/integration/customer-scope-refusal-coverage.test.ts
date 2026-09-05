@@ -259,6 +259,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'POST /v1/profiles/:id/snapshots [write:profiles]',
   'POST /v1/profiles/:id/transfer [write:profiles]',
   'POST /v1/profiles/:id/trim [write:profiles]',
+  'GET /v1/profiles/:id/activity [read:profiles]',
   'POST /v1/profiles/import [write:profiles]',
   'POST /v1/recipes [write]',
   'POST /v1/sessions [write:sessions]',

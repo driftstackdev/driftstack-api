@@ -620,11 +620,14 @@ describe('all-route caller-authority invariant', () => {
     // authorized via controlKeyOrAccountAuth) + its disabled 503 twin. The
     // authority arm below was confirmed empty of violations at this count first,
     // so the +2 is one properly gated live route + one reviewed disabled stub.
-    expect(routes).toHaveLength(309);
+    // P-23 — 310 since GET /v1/profiles/:id/activity (read:profiles, owner-scoped).
+    expect(routes).toHaveLength(310);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(218);
+    // 219 since P-23: GET /v1/profiles/:id/activity is structurally authorized
+    // (requireAuth + requireScope('read:profiles') + ownership via service.get).
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(219);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {

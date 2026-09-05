@@ -87,6 +87,7 @@ import {
   type UpdateProfileRequest,
   type TrimProfileScope,
 } from '@driftstack/sdk';
+import { ProfileActivityPanel } from '../components/ProfileActivityPanel';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
 import { validateProfileName } from '../lib/profile-name';
@@ -801,6 +802,8 @@ export function ProfilesView({
   // issue duplicate/overlapping restore and irreversible purge requests.
   const trashMutationInFlightRef = useRef(false);
   const confirm = useConfirm();
+  // P-23 — which profile's Activity panel is open (null = none).
+  const [activityFor, setActivityFor] = useState<{ id: string; name: string } | null>(null);
   // Onboarding checklist dismissal — webview localStorage persists per
   // install. Guarded: some embeddings/test environments stub storage out.
   const { dismissed: onboardingDismissed, dismiss: dismissOnboarding } = useOnboardingDismissed();
@@ -4318,6 +4321,7 @@ export function ProfilesView({
                           onClone={CLONE_ENABLED ? () => void handleClone(profile.id) : undefined}
                           cloneDisabled={atProfileCap}
                           cloneDisabledReason={profileCapReason}
+                          onActivity={() => setActivityFor({ id: profile.id, name: profile.name })}
                           onExport={
                             IMPORT_EXPORT_ENABLED ? () => void handleExport(profile.id) : undefined
                           }
@@ -4537,6 +4541,14 @@ export function ProfilesView({
         />
       )}
 
+      {activityFor !== null && client ? (
+        <ProfileActivityPanel
+          client={client}
+          profileId={activityFor.id}
+          profileName={activityFor.name}
+          onClose={() => setActivityFor(null)}
+        />
+      ) : null}
       {IMPORT_EXPORT_ENABLED && importOpen && (
         <ImportProfileModal
           onClose={() => setImportOpen(false)}

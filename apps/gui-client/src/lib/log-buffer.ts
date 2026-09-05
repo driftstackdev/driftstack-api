@@ -47,18 +47,51 @@ let installed = false;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let dirEnsured = false;
 
+// P-25 — ONE write in flight, ever. `persistNow` used to be `void`-called per
+// `console.error`, and post-boot every unhandled rejection is routed to
+// console.error (main.tsx). An error storm therefore issued N concurrent Tauri
+// IPC writes, each of them the WHOLE formatted ring (~500 entries), and the
+// WebView↔Rust message loop saturated — "nothing responds, no error", which is
+// the shape of the freeze. The immediate-flush semantics #137 wanted are kept:
+// the FIRST error flushes at once; errors that arrive while that write is in
+// flight mark the buffer dirty and are written by ONE follow-up write when it
+// completes. Nothing is dropped, and the write count is bounded by 2 per burst.
+let persistInFlight: Promise<void> | null = null;
+let persistDirty = false;
+
 async function persistNow(): Promise<void> {
-  try {
-    if (!dirEnsured) {
-      await mkdir(LOG_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
-      dirEnsured = true;
-    }
-    await writeTextFile(logFile, formatLogEntries() + '\n', { baseDir: BaseDirectory.AppData });
-  } catch {
-    // Best-effort: a missing fs permission / scope, or a non-Tauri context,
-    // must NEVER break logging or the app. The in-memory buffer + panel still
-    // work; only the on-disk copy is skipped.
+  if (persistInFlight !== null) {
+    persistDirty = true;
+    return persistInFlight;
   }
+  persistInFlight = (async () => {
+    try {
+      do {
+        persistDirty = false;
+        try {
+          if (!dirEnsured) {
+            await mkdir(LOG_DIR, { baseDir: BaseDirectory.AppData, recursive: true });
+            dirEnsured = true;
+          }
+          await writeTextFile(logFile, formatLogEntries() + '\n', {
+            baseDir: BaseDirectory.AppData,
+          });
+        } catch {
+          // Best-effort: a missing fs permission / scope, or a non-Tauri context,
+          // must NEVER break logging or the app. The in-memory buffer + panel still
+          // work; only the on-disk copy is skipped.
+        }
+      } while (persistDirty);
+    } finally {
+      persistInFlight = null;
+    }
+  })();
+  return persistInFlight;
+}
+
+/** Test seam: how many writes are queued behind the one in flight (0 or 1). */
+export function persistBacklogForTests(): { inFlight: boolean; dirty: boolean } {
+  return { inFlight: persistInFlight !== null, dirty: persistDirty };
 }
 
 // Debounced: coalesce bursts into at most one write per second.

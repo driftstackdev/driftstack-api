@@ -509,6 +509,42 @@ Team RBAC: `X-Driftstack-Account` is honored for both reads and
 writes — member roles cannot write on the owner's account; admin
 members can.
 
+## Recent activity
+
+`GET /v1/profiles/:id/activity`
+
+Returns the profile's recent navigation — every page an agent session
+planned to open while using this profile — most recent first, with the
+session it belonged to.
+
+**This is account activity, not browsing history.** The profile itself
+stores no history; these rows come from the account's agent session
+transcripts, which are operational records of what the account did. That
+is why clearing a profile's history (`POST /v1/profiles/:id/trim` with
+`scope: "history"`, or **Clear history** in the desktop app) does not
+remove them: that action clears the profile's open tabs on the device and
+nothing else. Session records are removed only when the account is deleted.
+
+```json
+{
+  "data": [
+    {
+      "at": "2026-09-05T08:12:44.120Z",
+      "url": "https://example.com/pricing",
+      "agent_session_id": "agt_3f9a2c1d-7b4e-4c8a-9d2f-1e6b5a7c3d9f"
+    }
+  ],
+  "sessions_scanned": 12,
+  "truncated": false
+}
+```
+
+The response is bounded: the server reads the profile's most recent
+sessions and returns the most recent navigations from them. When
+`truncated` is `true`, older activity exists but is not returned. Requires
+`read:profiles`. Returns `404` for a profile the account does not own and
+`503` on a deployment without the agent session store.
+
 ## Trim cached site data
 
 `POST /v1/profiles/:id/trim`

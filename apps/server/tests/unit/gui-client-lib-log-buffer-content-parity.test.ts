@@ -51,10 +51,19 @@ describe('gui-client lib/log-buffer content parity', () => {
     expect(body).toMatch(/let logFile = 'recordings\/dev-log\.txt';/);
     expect(body).toMatch(/logFile = `recordings\/dev-log\$\{fileTag\}\.txt`;/);
     expect(body).toMatch(
-      /await writeTextFile\(logFile, formatLogEntries\(\) \+ '\\n', \{ baseDir: BaseDirectory\.AppData \}\);/,
+      // P-25 — the call is now inside a single-flight loop and prettier wraps it;
+      // the pinned property is the call and its arguments, not its line layout.
+      /await writeTextFile\(logFile, formatLogEntries\(\) \+ '\\n', \{\s*baseDir: BaseDirectory\.AppData,?\s*\}\);/,
     );
     // Best-effort: persistNow must swallow all errors (no throw can escape).
-    expect(body).toMatch(/async function persistNow\(\): Promise<void> \{\s*try \{/);
+    // P-25 — persistNow is single-flight: it first joins an in-flight write (marking
+    // the buffer dirty) and only then enters the try/catch that swallows errors.
+    // Pinned: the coalescing guard comes first, AND the swallow-all try still exists.
+    expect(body).toMatch(
+      /async function persistNow\(\): Promise<void> \{\s*if \(persistInFlight !== null\) \{\s*persistDirty = true;/,
+    );
+    expect(body).toMatch(/do \{\s*persistDirty = false;\s*try \{/);
+    expect(body).toMatch(/\} while \(persistDirty\);/);
     // Debounced: at most one write per second.
     expect(body).toMatch(/if \(persistTimer !== null\) return;/);
     expect(body).toMatch(/\}, 1000\);/);

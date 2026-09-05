@@ -39,6 +39,7 @@ import type { Database } from './client.js';
 import { agentSessions, sessions } from './schema.js';
 import { profileSessionAdvisoryLockKey } from './profile-session-lock.js';
 import type { TranscriptEntry } from '../services/agent-decomposer.js';
+import { projectProfileActivity, type ProfileActivity } from '../services/profile-activity.js';
 import {
   AGENT_TRANSCRIPT_ENVELOPE_KIND,
   readAgentTranscript,
@@ -534,6 +535,37 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .from(agentSessions)
       .where(and(eq(agentSessions.accountId, accountId), eq(agentSessions.status, 'active')));
     return rows[0]?.n ?? 0;
+  }
+
+  async listProfileActivity(args: {
+    accountId: string;
+    profileId: string;
+    sessionLimit: number;
+    entryLimit: number;
+  }): Promise<ProfileActivity> {
+    // Newest first with the same (created_at, id) tiebreak as listByAccount, and
+    // ONE over the session limit so the projection can report "more sessions
+    // exist" without a count query. Full rows (not a transcript-only select) so
+    // decryption goes through rowToRecord exactly as every other reader's does —
+    // a second decode path is where a transcript-format change would silently
+    // diverge. Account-scoped even though the route already 404'd a foreign
+    // profile: the two guards must agree, not merely coexist.
+    const rows = await this.database.db
+      .select()
+      .from(agentSessions)
+      .where(
+        and(
+          eq(agentSessions.accountId, args.accountId),
+          eq(agentSessions.profileId, args.profileId),
+        ),
+      )
+      .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id))
+      .limit(args.sessionLimit + 1);
+    const records = rows.map((row) => rowToRecord(row, this.transcriptEncryptionKeyBase64));
+    return projectProfileActivity(records, {
+      sessionLimit: args.sessionLimit,
+      entryLimit: args.entryLimit,
+    });
   }
 
   async countActiveForProfile(profileId: string): Promise<number> {

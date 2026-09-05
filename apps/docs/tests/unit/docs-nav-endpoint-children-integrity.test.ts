@@ -198,7 +198,8 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // 138 since V-1611 #14 added `/api/team/#the-team-itself`. Refreshed the way
     // this tripwire requires: the EXACTNESS arm above passed first, so the +1 is
     // a nav child that matches a real h2 rather than a drifting count.
-    expect(apiTotal).toBe(138);
+    // 139 since P-23 (2026-09-05) added `/api/profiles/#recent-activity` (GET activity).
+    expect(apiTotal).toBe(139);
     expect(webhooksTotal).toBe(8);
   });
 });

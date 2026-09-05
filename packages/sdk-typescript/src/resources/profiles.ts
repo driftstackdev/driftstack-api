@@ -7,6 +7,7 @@ import type {
   Profile,
   Session,
   UpdateProfileRequest,
+  ProfileActivityResponse,
 } from '@driftstack/api-types';
 import type { HttpClient } from '../http.js';
 import { iteratePaginated } from '../pagination.js';
@@ -113,6 +114,21 @@ export class ProfilesResource {
     return this.http.request<Profile>({
       method: 'GET',
       path: `/v1/profiles/${encodeURIComponent(id)}`,
+    });
+  }
+
+  /**
+   * P-23 — the profile's recent navigation, projected from the account's agent
+   * session transcripts, most recent first. This is ACCOUNT ACTIVITY, not
+   * browsing history: the profile's "Clear history" (`trim` with
+   * `scope: 'history'`) clears its open tabs on the device and does not remove
+   * these rows — see the `activity` section of the profiles reference. Bounded:
+   * when `truncated` is true, older activity exists but is not returned.
+   */
+  activity(id: string): Promise<ProfileActivityResponse> {
+    return this.http.request<ProfileActivityResponse>({
+      method: 'GET',
+      path: `/v1/profiles/${encodeURIComponent(id)}/activity`,
     });
   }
 

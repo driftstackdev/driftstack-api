@@ -177,6 +177,8 @@ export type {
   NavigateResponse,
   PaginationQuery,
   PaginationQueryInput,
+  ProfileActivityEntry,
+  ProfileActivityResponse,
   Problem,
   ProblemType,
   Session,

@@ -128,6 +128,10 @@ export interface ProfilePhoneCardProps {
   cloneDisabled?: boolean;
   cloneDisabledReason?: string;
   onExport?: () => void;
+  /** P-23 — open the profile's recent-activity panel (pages its sessions opened,
+   *  read from the account's session records). Labelled ACTIVITY, never history:
+   *  Clear history does not remove these rows (D-1). Omitted → not offered. */
+  onActivity?: () => void;
   /** doc-150 §8 — "Clear cache, keep logins". Trims the profile's re-fetchable
    *  caches while keeping logins/storage/tabs. Omitted → the action isn't
    *  offered. Disabled while busy (a launch/clone/trim in flight). */
@@ -757,6 +761,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 onClick={() => {
                   setActionsOpen(false);
                   p.onClone?.();
+                }}
+              />
+            ) : null}
+            {p.onActivity ? (
+              <MenuRow
+                glyph="🕘"
+                caption="Activity"
+                label={`Recent pages opened with ${p.name}`}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onActivity?.();
                 }}
               />
             ) : null}

@@ -251,6 +251,8 @@ interface LogicalTabActivation {
   requestIds: Set<string>;
   terminalTargetFrameSeen: boolean;
   settled: boolean;
+  // P-26 (2026-09-05) — when the optimistic switch began; the ack logs the latency.
+  startedAt: number;
 }
 
 interface TabActivationRetry {
@@ -5415,6 +5417,17 @@ export function SimulatorWindow(): JSX.Element {
           // so clear immediately. A cold success only cancels retry ownership; its
           // terminal target page_state clears the cover after this correlated commit.
           // A final explicit failure clears before reverting.
+          // P-26 (2026-09-05) — the switch-latency instrument. The ledger asks for the NUMBER
+          // a tab switch costs on a warm-tabs box and the GUI kept none: this is the only
+          // durable record. Info-level so the log buffer mirrors it into the on-disk
+          // recordings/dev-log*.txt; `wasWarm` is the harness's own claim (#116), so a
+          // warm ack with a cold-sized elapsedMs is a finding, not a pass.
+          console.info('[tab-switch] ack', {
+            tabId: pending.tabId,
+            elapsedMs: Date.now() - pending.startedAt,
+            wasWarm: msg.wasWarm === true,
+            ok: !failed,
+          });
           if (msg.wasWarm === true || pending.terminalTargetFrameSeen || failed) {
             resolveSwitchRef.current(pending.tabId);
           }
@@ -7837,6 +7850,7 @@ export function SimulatorWindow(): JSX.Element {
           requestIds: new Set(),
           terminalTargetFrameSeen: ctx.terminalTargetFrameSeen === true,
           settled: false,
+          startedAt: Date.now(),
         };
         activationOwnersRef.current.set(ctx.tabId, pendingOwner);
       }
@@ -8575,7 +8589,9 @@ export function SimulatorWindow(): JSX.Element {
                             ? 'Device dropped the last input'
                             : controlReceiptIssue === 'failed'
                               ? 'Device could not apply the last input'
-                              : 'Control may not be reaching the device'}
+                              : controlReceiptIssue === 'stalled'
+                                ? 'Connection to the device stalled — inputs are being held. Reconnect to recover.'
+                                : 'Control may not be reaching the device'}
                       </span>
                       <button
                         type="button"

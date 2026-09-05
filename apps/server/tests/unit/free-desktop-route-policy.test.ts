@@ -34,6 +34,7 @@ const EXPECTED_GUI_ROUTES = [
   'POST:/v1/profiles/:id/restore',
   'DELETE:/v1/profiles/:id/purge',
   'POST:/v1/profiles/:id/trim',
+  'GET:/v1/profiles/:id/activity',
   'GET:/v1/profiles/:id/export',
   'POST:/v1/profiles/:id/clone',
   'POST:/v1/profiles/import',
@@ -89,7 +90,7 @@ function registeredRouteCalls(): ReadonlySet<string> {
 
 describe('Free desktop route policy', () => {
   it('pins exactly the 59 current non-denied GUI route templates', () => {
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(59);
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(60);
     expect([...FREE_DESKTOP_ALLOWED_ROUTES].sort()).toEqual([...EXPECTED_GUI_ROUTES].sort());
   });
 

@@ -16,6 +16,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { DEFAULT_AGENT_MODEL, type AgentModel } from '@driftstack/api-types';
 import { ProfileInUseError } from '../lib/errors.js';
 import type { TranscriptEntry } from './agent-decomposer.js';
+import { projectProfileActivity, type ProfileActivity } from './profile-activity.js';
 import { z } from 'zod';
 
 export type AgentSessionStatus = 'active' | 'paused' | 'closed';
@@ -329,6 +330,21 @@ export interface AgentSessionsRepo {
   countActiveForProfile(profileId: string): Promise<number>;
 
   /**
+   * P-23 — a profile's recent navigation projected from its sessions'
+   * transcripts (see services/profile-activity.ts for the projection and why it
+   * is named ACTIVITY). Account-scoped AND profile-scoped: the route 404s a
+   * foreign profile before calling this, and the query re-checks the account so
+   * the two guards cannot disagree. Bounded by both limits; `truncated` reports
+   * when either was hit.
+   */
+  listProfileActivity(args: {
+    accountId: string;
+    profileId: string;
+    sessionLimit: number;
+    entryLimit: number;
+  }): Promise<ProfileActivity>;
+
+  /**
    * Orphaned-session backstop — bulk-close every session still
    * `status='active'` whose `created_at` is strictly before `cutoff`,
    * setting `closed_reason='orphaned-lifetime'` + `closed_at=now`.
@@ -621,6 +637,29 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       if (rec.profileId === profileId && rec.status === 'active') n += 1;
     }
     return Promise.resolve(n);
+  }
+
+  listProfileActivity(args: {
+    accountId: string;
+    profileId: string;
+    sessionLimit: number;
+    entryLimit: number;
+  }): Promise<ProfileActivity> {
+    // Same shape as the Drizzle repo: newest first, one over the session limit so
+    // the projection can report "more exist" without a second pass.
+    const mine = [...this.records.values()]
+      .filter((rec) => rec.accountId === args.accountId && rec.profileId === args.profileId)
+      .sort((a, b) => {
+        const t = b.createdAt.getTime() - a.createdAt.getTime();
+        return t !== 0 ? t : b.id < a.id ? -1 : b.id > a.id ? 1 : 0;
+      })
+      .slice(0, args.sessionLimit + 1);
+    return Promise.resolve(
+      projectProfileActivity(mine, {
+        sessionLimit: args.sessionLimit,
+        entryLimit: args.entryLimit,
+      }),
+    );
   }
 
   listByAccount(

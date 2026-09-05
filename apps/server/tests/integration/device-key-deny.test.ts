@@ -297,7 +297,7 @@ describe('C1 device-key deny-gate — device-need routes stay open to a device k
 
 describe('Free desktop credential — fail-closed route surface', () => {
   it('every allowlisted template remains disjoint from the independent deny-set', () => {
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(59);
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(60);
     for (const route of FREE_DESKTOP_ALLOWED_ROUTES) {
       expect(DEVICE_KEY_DENY_ROUTES.has(route), route).toBe(false);
     }

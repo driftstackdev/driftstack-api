@@ -170,6 +170,16 @@ class ProfilesResource:
         code. On ``ok`` the profile's ``size_bytes`` is updated server-side."""
         return self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
 
+    def activity(self, profile_id: str) -> dict[str, Any]:
+        """P-23 — the profile's recent navigation, projected from the account's
+        agent session transcripts, most recent first. This is ACCOUNT ACTIVITY,
+        not browsing history: ``trim(scope="history")`` clears the profile's open
+        tabs on the device and does not remove these rows. Bounded — when
+        ``result["truncated"]`` is true, older activity exists but is not
+        returned."""
+        path = f"/v1/profiles/{quote(profile_id, safe='')}/activity"
+        return self._http.request("GET", path)
+
 
 class AsyncProfilesResource:
     """Async profiles resource."""
@@ -268,3 +278,13 @@ class AsyncProfilesResource:
         IndexedDB/open tabs. Always 200 with a DISCRIMINATED body; branch on
         ``result["status"]``, not the HTTP code."""
         return await self._http.request("POST", f"/v1/profiles/{quote(profile_id, safe='')}/trim")
+
+    async def activity(self, profile_id: str) -> dict[str, Any]:
+        """P-23 — the profile's recent navigation, projected from the account's
+        agent session transcripts, most recent first. This is ACCOUNT ACTIVITY,
+        not browsing history: ``trim(scope="history")`` clears the profile's open
+        tabs on the device and does not remove these rows. Bounded — when
+        ``result["truncated"]`` is true, older activity exists but is not
+        returned."""
+        path = f"/v1/profiles/{quote(profile_id, safe='')}/activity"
+        return await self._http.request("GET", path)

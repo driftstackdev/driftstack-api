@@ -63,6 +63,34 @@ describe('log-buffer crash trail (#137)', () => {
     expect(writeTextFile).toHaveBeenCalledTimes(1);
   });
 
+  it('P-25 CRITICAL an error STORM while a write is in flight issues ONE follow-up write, not one per error — N concurrent full-ring IPC writes is the loop saturation that presents as a freeze', async () => {
+    // Hold the first write open so every error that follows lands while it is in flight.
+    let releaseFirst: (() => void) | null = null;
+    writeTextFile.mockImplementationOnce(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseFirst = resolve;
+        }),
+    );
+    const mod = await import('../../src/lib/log-buffer');
+    mod.record('error', ['first']);
+    await flush();
+    expect(writeTextFile).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 25; i += 1) mod.record('error', [`storm ${String(i)}`]);
+    await flush();
+    // Still exactly one: the storm marked the buffer dirty instead of fanning out.
+    expect(writeTextFile).toHaveBeenCalledTimes(1);
+    expect(mod.persistBacklogForTests()).toEqual({ inFlight: true, dirty: true });
+    releaseFirst?.();
+    await flush();
+    await flush();
+    // ONE follow-up carries everything the storm added — nothing dropped, 2 writes total.
+    expect(writeTextFile).toHaveBeenCalledTimes(2);
+    const [, body] = writeTextFile.mock.calls[1] as [string, string];
+    expect(body).toContain('[ERROR] storm 24');
+    expect(mod.persistBacklogForTests()).toEqual({ inFlight: false, dirty: false });
+  });
+
   it('the simulator window mirrors to its OWN dev-log-simulator.txt', async () => {
     const mod = await import('../../src/lib/log-buffer');
     mod.installLogCapture('-simulator');

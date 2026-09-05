@@ -362,3 +362,34 @@ func (r *ProfilesResource) Trim(ctx context.Context, profileID string) (*TrimPro
 	}
 	return &out, nil
 }
+
+// ProfileActivityEntry is one planned navigation from an agent session.
+type ProfileActivityEntry struct {
+	At        string `json:"at"`
+	URL       string `json:"url"`
+	AgentSessionID string `json:"agent_session_id"`
+}
+
+// ProfileActivityResponse is a profile's recent navigation, most recent first.
+// Truncated is true when older activity exists beyond the server's bounds.
+type ProfileActivityResponse struct {
+	Data            []ProfileActivityEntry `json:"data"`
+	SessionsScanned int                    `json:"sessions_scanned"`
+	Truncated       bool                   `json:"truncated"`
+}
+
+// Activity returns the profile's recent navigation, projected from the
+// account's agent session transcripts. This is ACCOUNT ACTIVITY, not browsing
+// history: Trim with scope "history" clears the profile's open tabs on the
+// device and does not remove these rows.
+func (r *ProfilesResource) Activity(ctx context.Context, profileID string) (*ProfileActivityResponse, error) {
+	var out ProfileActivityResponse
+	if err := r.client.do(ctx, requestOptions{
+		method: "GET",
+		path:   "/v1/profiles/" + url.PathEscape(profileID) + "/activity",
+		out:    &out,
+	}); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

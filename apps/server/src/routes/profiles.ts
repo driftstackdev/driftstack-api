@@ -39,7 +39,17 @@ export const TrimScopeBodySchema = z
   .strict();
 import type { ProfileRecord, ProfilesService } from '../services/profiles.js';
 import type { AgentSessionsRepo } from '../services/agent-sessions.js';
-import { BadRequestError, ForbiddenError, NotFoundError, ValidationError } from '../lib/errors.js';
+import {
+  BadRequestError,
+  FeatureUnavailableError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError,
+} from '../lib/errors.js';
+import {
+  PROFILE_ACTIVITY_ENTRY_LIMIT,
+  PROFILE_ACTIVITY_SESSION_LIMIT,
+} from '../services/profile-activity.js';
 import { requireArchetypeForTier } from '../lib/errors-helpers.js';
 import type { AccountAuthRepo } from '../services/auth.js';
 import { resolveEffectiveAccount } from '../services/auth.js';
@@ -257,6 +267,52 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       const id = uuidFromProfileId(req.params.id);
       const row = await service.get({ id, accountId: effective.accountId });
       return publicProfile(row);
+    },
+  );
+
+  // ── PATCH /v1/profiles/:id ───────────────────────────────────────────
+  // ── GET /v1/profiles/:id/activity ────────────────────────────────────
+  // P-23 — the profile's recent navigation, projected from the account's agent
+  // session transcripts. ⛔ ACCOUNT ACTIVITY, not "browsing history": D-1 keeps
+  // the transcript out of the profile's Clear-history action, so this view
+  // still shows rows after a clear, and the name is part of the contract.
+  // Read scope mirrors GET /:id. Ownership: `service.get` 404s a foreign or
+  // unknown profile BEFORE the sessions store is touched, so the projection
+  // can never read across accounts even though it is keyed by profile id —
+  // and the store query is ALSO account-scoped, so the two guards agree.
+  // No query parameters by design (fixed server bounds; see profile-activity).
+  app.get<{ Params: { id: string } }>(
+    '/v1/profiles/:id/activity',
+    {
+      preHandler: [app.requireAuth, app.requireScope('read:profiles'), app.rateLimit('global')],
+    },
+    async (req) => {
+      const ctx = requireCtx(req);
+      const effective = resolveEffectiveAccount(ctx, readEffectiveAccountHeader(req));
+      const id = uuidFromProfileId(req.params.id);
+      await service.get({ id, accountId: effective.accountId }); // 404 on unknown/foreign
+      if (agentSessions === undefined) {
+        // Stateless deploy / fleet off: the same machine-readable 503 the
+        // sessions routes return, not a bare 404 that reads as "no such profile".
+        throw new FeatureUnavailableError(
+          'Session activity is not available on this deployment: the agent session store is not configured.',
+        );
+      }
+      const activity = await agentSessions.listProfileActivity({
+        accountId: effective.accountId,
+        profileId: id,
+        sessionLimit: PROFILE_ACTIVITY_SESSION_LIMIT,
+        entryLimit: PROFILE_ACTIVITY_ENTRY_LIMIT,
+      });
+      return {
+        data: activity.entries.map((e) => ({
+          at: e.at,
+          url: e.url,
+          agent_session_id: e.agentSessionId,
+        })),
+        sessions_scanned: activity.sessionsScanned,
+        truncated: activity.truncated,
+      };
     },
   );
 

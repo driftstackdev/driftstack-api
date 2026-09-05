@@ -247,6 +247,37 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
 ]);
 export type AccountProxyTestResult = z.infer<typeof AccountProxyTestResultSchema>;
 
+/**
+ * P-23 — a profile's recent navigation, projected from the account's agent
+ * session transcripts. ⛔ This is ACCOUNT ACTIVITY, not "browsing history":
+ * ledger decision D-1 keeps the server-side transcript out of the profile's
+ * "Clear history" action (that clears the profile's tabs on the device and
+ * nothing else), so a customer who clears history and then opens this view
+ * still sees these rows. The name is part of the contract, not a label.
+ */
+export const ProfileActivityEntrySchema = z.object({
+  /** ISO-8601 time the navigation was planned. */
+  at: z.string(),
+  /** The destination URL as the agent planned it — path and query included. */
+  url: z.string(),
+  /** The agent session the navigation belonged to. */
+  agent_session_id: z.string(),
+});
+export type ProfileActivityEntry = z.infer<typeof ProfileActivityEntrySchema>;
+
+export const ProfileActivityResponseSchema = z.object({
+  /** Most recent first. Bounded — see `truncated`. */
+  data: z.array(ProfileActivityEntrySchema),
+  /** How many of the profile's most recent sessions were read to build `data`. */
+  sessions_scanned: z.number().int().nonnegative(),
+  /**
+   * True when either bound was hit: more sessions exist than were scanned, or
+   * more navigations than were returned. Older activity is then not shown.
+   */
+  truncated: z.boolean(),
+});
+export type ProfileActivityResponse = z.infer<typeof ProfileActivityResponseSchema>;
+
 export const ProfileSchema = z.object({
   id: ProfileIdSchema,
   name: z.string(),

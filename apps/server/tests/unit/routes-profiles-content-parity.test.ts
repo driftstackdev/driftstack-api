@@ -54,7 +54,9 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
       /import type \{ ProfileRecord, ProfilesService \} from '\.\.\/services\/profiles\.js';/,
     );
     expect(body).toMatch(
-      /import \{ BadRequestError, ForbiddenError, NotFoundError, ValidationError \} from '\.\.\/lib\/errors\.js';/,
+      // P-23 (2026-09-05) — FeatureUnavailableError joined the import (503 when no
+      // agent-session store is wired) and prettier wrapped the list one-per-line.
+      /import \{\s*BadRequestError,\s*FeatureUnavailableError,\s*ForbiddenError,\s*NotFoundError,\s*ValidationError,\s*\} from '\.\.\/lib\/errors\.js';/,
     );
   });
 

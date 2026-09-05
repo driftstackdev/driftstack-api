@@ -269,6 +269,7 @@ describe('OpenAPI spec generation', () => {
         // V-456 profile base CRUD
         '/v1/profiles',
         '/v1/profiles/{id}',
+        '/v1/profiles/{id}/activity',
         // one-shot launch-from-profile verb (handler in routes/sessions.ts)
         '/v1/profiles/{id}/launch',
         // V-313 profile clone

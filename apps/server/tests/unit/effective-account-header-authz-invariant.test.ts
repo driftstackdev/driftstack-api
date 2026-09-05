@@ -213,11 +213,12 @@ describe('X-Driftstack-Account acting-as authz invariant (all routes/)', () => {
 
   it('discovers the complete current acting-as reader surface', () => {
     // Review tripwire, not the security assertion — the invariant below is what
-    // enforces authorization. Refreshed after confirming every one of the 32
+    // enforces authorization. Refreshed after confirming every one of the 33
     // reads is authorized (unvalidatedReads() is empty) and that the reader
     // surface is exactly these 10 route files. The two new reads are the
-    // profile-taxonomy GET/PUT pair, both resolved before repository access.
-    expect(reads).toHaveLength(32);
+    // profile-taxonomy GET/PUT pair, both resolved before repository access. The 33rd
+    // is P-23 GET /v1/profiles/:id/activity (2026-09-05), resolved before the store read.
+    expect(reads).toHaveLength(33);
     expect(new Set(reads.map((read) => read.file)).size).toBe(10);
 
     expect(
