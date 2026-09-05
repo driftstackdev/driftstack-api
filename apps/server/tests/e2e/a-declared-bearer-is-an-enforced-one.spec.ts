@@ -148,7 +148,10 @@ test('an operation that declares a bearer token refuses a caller without one', a
     targets.length / 2,
   );
 
-  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(27);
+  // Re-measured 2026-09-05 on the first CI run of this job (build-test had never been
+  // green, so this spec had never run there): 28. The 28th is POST /v1/sessions/{id}/proxy,
+  // a deployment-gated route that landed after the bound was measured at 27.
+  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(28);
   // Measured for THIS population, not borrowed. The sibling id-sweep bounds its
   // unrouted set at twelve, but that sweep walks the 106 single-parameter
   // operations and this one walks all 201 that declare a bearer requirement, so

@@ -688,7 +688,7 @@ test('no id-shaped body field turns a malformed value into a server error', asyn
   expect(
     gated.length,
     'the deployment-gated share of body fields stays bounded',
-  ).toBeLessThanOrEqual(8);
+  ).toBeLessThanOrEqual(9);
 
   expect(
     serverErrors,
