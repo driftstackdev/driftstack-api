@@ -6,13 +6,18 @@
 // window's full-buffer overwrite.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const writeTextFile = vi.fn((): Promise<void> => Promise.resolve());
+// Typed to the real signature so `mock.calls[n]` is a [path, body, opts?] tuple the
+// arms can destructure without a cast from `[]` (four TS2352s under tsconfig.test).
+const writeTextFile = vi.fn(
+  (_path: string, _body: string, _opts?: unknown): Promise<void> => Promise.resolve(),
+);
 const mkdir = vi.fn((): Promise<void> => Promise.resolve());
 
 vi.mock('@tauri-apps/plugin-fs', () => ({
   BaseDirectory: { AppData: 'AppData' },
   mkdir: (...a: unknown[]): Promise<void> => mkdir(...(a as [])),
-  writeTextFile: (...a: unknown[]): Promise<void> => writeTextFile(...(a as [])),
+  writeTextFile: (path: string, body: string, opts?: unknown): Promise<void> =>
+    writeTextFile(path, body, opts),
 }));
 
 // Let all pending microtasks (the mkdir → writeTextFile await chain in persistNow)
@@ -65,7 +70,9 @@ describe('log-buffer crash trail (#137)', () => {
 
   it('P-25 CRITICAL an error STORM while a write is in flight issues ONE follow-up write, not one per error — N concurrent full-ring IPC writes is the loop saturation that presents as a freeze', async () => {
     // Hold the first write open so every error that follows lands while it is in flight.
-    let releaseFirst: (() => void) | null = null;
+    // Never null: TS cannot see the assignment inside the Promise executor, so a
+    // nullable binding narrows to `null` at the call site (TS2349).
+    let releaseFirst: () => void = () => {};
     writeTextFile.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
@@ -81,7 +88,7 @@ describe('log-buffer crash trail (#137)', () => {
     // Still exactly one: the storm marked the buffer dirty instead of fanning out.
     expect(writeTextFile).toHaveBeenCalledTimes(1);
     expect(mod.persistBacklogForTests()).toEqual({ inFlight: true, dirty: true });
-    releaseFirst?.();
+    releaseFirst();
     await flush();
     await flush();
     // ONE follow-up carries everything the storm added — nothing dropped, 2 writes total.

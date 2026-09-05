@@ -41,7 +41,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
  *    ~89  argument/assignment mismatches.
  */
 const BACKLOG = [
-  { project: 'apps/gui-client/tsconfig.test.json', pinned: 94, minTestFiles: 200 },
+  // 94 → 91 on 2026-09-05: log-buffer-crash-trail's writeTextFile mock typed to its real
+  // signature, which removed three `[]` → [string, string] casts (P-25 storm arm landed clean).
+  { project: 'apps/gui-client/tsconfig.test.json', pinned: 91, minTestFiles: 200 },
   // W-12, 2026-08-26 — every `packages/*` suite was transpiled by vitest and
   // typechecked by NOTHING: each package's `tsconfig.json` includes only
   // `src/**/*`, and five of them additionally `exclude` tests. Measured at 50

@@ -38,7 +38,7 @@ function makeWedgedRoom(): { room: Room; drain: () => void; calls: () => number 
   };
 }
 
-const tap = (i: number): InputEvent => ({ type: 'tap', x: i, y: i, timestamp: i });
+const tap = (i: number): InputEvent => ({ type: 'tap', x: i, y: i });
 const flush = async (): Promise<void> => {
   for (let i = 0; i < 4; i += 1) await Promise.resolve();
 };
@@ -100,11 +100,7 @@ describe('P-25 reliable-publish stall bound', () => {
   it('CONTROL lossy publishes are not counted against the bound — the lossy channel already self-drops, and a wedge there cannot park anything', async () => {
     const { room, calls } = makeWedgedRoom();
     for (let i = 0; i < MAX_INFLIGHT_RELIABLE_PUBLISHES + 5; i += 1) {
-      void sendInputEvent(
-        room,
-        { type: 'mouseMove', x: i, y: i, timestamp: i },
-        { reliable: false },
-      );
+      void sendInputEvent(room, { type: 'mouseMove', x: i, y: i }, { reliable: false });
     }
     await flush();
     expect(calls()).toBe(MAX_INFLIGHT_RELIABLE_PUBLISHES + 5);
