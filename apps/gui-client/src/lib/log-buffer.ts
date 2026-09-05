@@ -58,6 +58,12 @@ let dirEnsured = false;
 // completes. Nothing is dropped, and the write count is bounded by 2 per burst.
 let persistInFlight: Promise<void> | null = null;
 let persistDirty = false;
+// P-25 (2026-09-05) — the mirror's first failure is recorded ONCE into the in-memory
+// buffer (so the dev-log panel shows it) instead of vanishing into the catch below:
+// on the owner's Mac the mirror had never written a byte in months because the
+// fs:scope allowed `$APPDATA/recordings/**` but not the directory itself, so the
+// mkdir was refused — and nothing said so.
+let mirrorFailureRecorded = false;
 
 async function persistNow(): Promise<void> {
   if (persistInFlight !== null) {
@@ -76,10 +82,17 @@ async function persistNow(): Promise<void> {
           await writeTextFile(logFile, formatLogEntries() + '\n', {
             baseDir: BaseDirectory.AppData,
           });
-        } catch {
+        } catch (err) {
           // Best-effort: a missing fs permission / scope, or a non-Tauri context,
           // must NEVER break logging or the app. The in-memory buffer + panel still
-          // work; only the on-disk copy is skipped.
+          // work; only the on-disk copy is skipped — but say so, once.
+          if (!mirrorFailureRecorded) {
+            mirrorFailureRecorded = true;
+            record('warn', [
+              '[dev-log] on-disk mirror unavailable — the crash trail is in-memory only:',
+              err instanceof Error ? err.message : String(err),
+            ]);
+          }
         }
       } while (persistDirty);
     } finally {

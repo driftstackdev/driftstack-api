@@ -20,6 +20,9 @@
       "identifier": "fs:scope",
       "allow": [
         {
+          "path": "$APPDATA/recordings"
+        },
+        {
           "path": "$APPDATA/recordings/**"
         },
         {

@@ -116,4 +116,28 @@ describe('log-buffer crash trail (#137)', () => {
     const [path] = writeTextFile.mock.calls[0] as [string, string];
     expect(path).toBe('recordings/dev-log.txt');
   });
+
+  // P-25 (2026-09-05) — a refused mirror must be VISIBLE. The fs:scope had allowed
+  // `$APPDATA/recordings/**` but not the directory itself, so the mkdir was refused
+  // and the crash trail had never reached disk on the owner's Mac — and nothing said
+  // so. The first failure is recorded once into the in-memory buffer; it must not
+  // throw, and must not loop (recording triggers another persist that fails again).
+  it('CRITICAL a refused mirror is recorded ONCE as a warn entry, without throwing or looping', async () => {
+    mkdir.mockImplementationOnce(() => Promise.reject(new Error('forbidden path: recordings')));
+    const mod = await import('../../src/lib/log-buffer');
+    mod.record('error', ['first']);
+    await flush();
+    await flush();
+    const warns = mod
+      .getLogEntries()
+      .filter((e) => e.level === 'warn' && e.text.includes('on-disk mirror unavailable'));
+    expect(warns).toHaveLength(1);
+    expect(warns[0]?.text).toContain('forbidden path: recordings');
+    // A later error does not add a second notice.
+    mod.record('error', ['second']);
+    await flush();
+    expect(
+      mod.getLogEntries().filter((e) => e.text.includes('on-disk mirror unavailable')),
+    ).toHaveLength(1);
+  });
 });

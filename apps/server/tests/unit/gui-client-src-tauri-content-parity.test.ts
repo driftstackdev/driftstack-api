@@ -505,7 +505,10 @@ describe('W617 apps/gui-client/src-tauri/ content parity', () => {
     // $DOWNLOAD/** added so the recordings/profile Export can actually write to
     // Downloads from the main window (the boolean from downloadJson is now truthful).
     expect(body).toMatch(
-      /"allow": \[\{ "path": "\$APPDATA\/recordings\/\*\*" \}, \{ "path": "\$DOWNLOAD\/\*\*" \}\]/,
+      // P-25 (2026-09-05) — the directory ITSELF is in scope now: `recordings/**` alone
+      // never matched `recordings`, so the mkdir behind the dev-log mirror AND the
+      // session recordings store was refused (and swallowed) on every install.
+      /"allow": \[\s*\{ "path": "\$APPDATA\/recordings" \},\s*\{ "path": "\$APPDATA\/recordings\/\*\*" \},\s*\{ "path": "\$DOWNLOAD\/\*\*" \}\s*\]/,
     );
     expect(body).toMatch(/"fs:allow-read-text-file"/);
     expect(body).toMatch(/"fs:allow-write-text-file"/);
