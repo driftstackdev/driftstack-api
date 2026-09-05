@@ -20,6 +20,7 @@ on:
           - dns-probe
           - pages-domain-probe
           - attach-io-sites
+          - verify-io-domains
 
 permissions:
   contents: read
@@ -54,6 +55,41 @@ jobs:
           r=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/driftstack-marketing/domains")
           echo "pages domains: success=$(jq -r .success <<<"$r") errors=$(jq -c '[.errors[].code]' <<<"$r")"
           jq -r '.result[]? | "domain: \(.name) status=\(.status)"' <<<"$r"
+
+      - name: Ask Pages to re-verify the pending .io domains (may self-provision DNS)
+        if: ${{ inputs.action == 'verify-io-domains' }}
+        run: |
+          set -euo pipefail
+          # The six .io hosts are attached but stuck at status=pending because no
+          # CNAME exists and this token cannot see the zone. PATCHing a custom
+          # domain asks Pages to re-run verification; for a zone in the SAME
+          # account Cloudflare may create the record itself with its own
+          # privileges. If it does, the move completes with no new credential. If
+          # it does not, the status stays pending and that is the answer.
+          check() {
+            proj="$1"; host="$2"
+            r=$(curl -sS -X PATCH -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$proj/domains/$host" --data '{}')
+            echo "  $host: patch success=$(jq -r '.success' <<<"$r") status=$(jq -r '.result.status // "n/a"' <<<"$r") errors=$(jq -c '[.errors[]?.code]' <<<"$r")"
+          }
+          check driftstack-marketing          driftstack.io
+          check driftstack-marketing          www.driftstack.io
+          check driftstack-customer-dashboard app.driftstack.io
+          check driftstack-docs               docs.driftstack.io
+          check driftstack-status             status.driftstack.io
+          check driftstack-admin-panel        admin.driftstack.io
+          echo "--- waiting 45s then re-reading status and DNS ---"
+          sleep 45
+          for pair in "driftstack-marketing driftstack.io" "driftstack-customer-dashboard app.driftstack.io"; do
+            set -- $pair
+            st=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/accounts/$CF_ACCOUNT/pages/projects/$1/domains" \
+              | jq -r --arg h "$2" '.result[]?|select(.name==$h)|.status')
+            echo "  $2 status now: ${st:-unknown}"
+          done
+          echo "--- does it answer over HTTP yet? ---"
+          for h in driftstack.io app.driftstack.io; do
+            echo "  https://$h/ -> $(curl -s -o /dev/null -w '%{http_code}' --max-time 12 "https://$h/" || true)"
+          done
 
       - name: Attach the driftstack.io hosts to their Pages projects
         if: ${{ inputs.action == 'attach-io-sites' }}
