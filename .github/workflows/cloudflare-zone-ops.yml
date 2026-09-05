@@ -21,6 +21,7 @@ on:
           - pages-domain-probe
           - attach-io-sites
           - verify-io-domains
+          - redirect-dev-to-io
 
 permissions:
   contents: read
@@ -123,6 +124,68 @@ jobs:
           attach driftstack-admin-panel        admin.driftstack.io
           echo "done — every .dev custom domain left attached and serving"
           exit $fail
+
+      - name: 301 the driftstack.dev WEBSITE hosts to driftstack.io (T-3 step 8; probes scope before writing)
+        if: ${{ inputs.action == 'redirect-dev-to-io' }}
+        run: |
+          set -euo pipefail
+          # The last step of the website move. Only the six website hosts move; api.,
+          # errors., fleet. and staging. are NOT matched and keep serving on .dev. The
+          # .dev custom domains stay attached to Pages so the 301 is served on a valid
+          # certificate. Path + query are preserved (the desktop auth flow
+          # app.driftstack.dev/cli/authorize?… must survive the hop).
+          zid=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$CF_API/zones?name=driftstack.dev" | jq -r '.result[0].id // empty')
+          test -n "$zid" || { echo "driftstack.dev zone not visible to this token"; exit 1; }
+          ep="$CF_API/zones/$zid/rulesets/phases/http_request_dynamic_redirect/entrypoint"
+          # Scope probe FIRST: reading the phase entrypoint needs the same Rulesets scope
+          # as writing it. An auth error (10000/10001) means the token cannot do this and
+          # NOTHING is changed — record the exact code on T-3. A "not found" only means
+          # no redirect rules exist yet in this zone, which is the expected starting state.
+          probe=$(curl -sS -H "Authorization: Bearer $CF_TOKEN" "$ep")
+          if [ "$(jq -r .success <<<"$probe")" != "true" ]; then
+            code=$(jq -r '.errors[0].code // 0' <<<"$probe")
+            echo "entrypoint read: success=false code=$code message=$(jq -r '.errors[0].message // ""' <<<"$probe")"
+            case "$code" in 10000|10001|10004) echo "→ token lacks Zone → Dynamic Redirect (Rulesets) on driftstack.dev; no change made"; exit 1;; esac
+            existing=0; rid=""
+          else
+            rid=$(jq -r '.result.id // empty' <<<"$probe")
+            existing=$(jq -r '[.result.rules[]?]|length' <<<"$probe")
+            echo "entrypoint read: ruleset ${rid:-<none>} with $existing existing rule(s)"
+            if [ "$(jq -r '[.result.rules[]?|select(.description|startswith("T-3 dev→io"))]|length' <<<"$probe")" != "0" ]; then
+              echo "already configured — the T-3 rules are present; nothing to do"; exit 0
+            fi
+          fi
+          rules='[
+            {"description":"T-3 dev→io apex","enabled":true,"expression":"(http.host eq \"driftstack.dev\")","action":"redirect",
+             "action_parameters":{"from_value":{"status_code":301,"preserve_query_string":true,
+               "target_url":{"expression":"concat(\"https://driftstack.io\", http.request.uri.path)"}}}},
+            {"description":"T-3 dev→io website subdomains","enabled":true,
+             "expression":"(http.host in {\"www.driftstack.dev\" \"app.driftstack.dev\" \"docs.driftstack.dev\" \"status.driftstack.dev\" \"admin.driftstack.dev\"})",
+             "action":"redirect","action_parameters":{"from_value":{"status_code":301,"preserve_query_string":true,
+               "target_url":{"expression":"wildcard_replace(http.request.full_uri, \"https://*.driftstack.dev/*\", \"https://${1}.driftstack.io/${2}\")"}}}}
+          ]'
+          if [ "$existing" != "0" ] && [ -n "$rid" ]; then
+            # Never PUT over someone else's rules: APPEND to the existing ruleset.
+            for i in 0 1; do
+              r=$(curl -sS -X POST -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+                "$CF_API/zones/$zid/rulesets/$rid/rules" --data "$(jq -c ".[$i]" <<<"$rules")")
+              echo "append rule $i: success=$(jq -r .success <<<"$r") $(jq -c '[.errors[]?|{code,message}]' <<<"$r")"
+              [ "$(jq -r .success <<<"$r")" = "true" ] || exit 1
+            done
+          else
+            r=$(curl -sS -X PUT -H "Authorization: Bearer $CF_TOKEN" -H "Content-Type: application/json" \
+              "$ep" --data "$(jq -c '{name:"default",description:"T-3 website move: driftstack.dev → driftstack.io",kind:"zone",phase:"http_request_dynamic_redirect",rules:.}' <<<"$rules")")
+            echo "create entrypoint: success=$(jq -r .success <<<"$r") rules=$(jq -r '[.result.rules[]?]|length' <<<"$r") $(jq -c '[.errors[]?|{code,message}]' <<<"$r")"
+            [ "$(jq -r .success <<<"$r")" = "true" ] || exit 1
+          fi
+          echo "→ verifying from the runner (propagation is usually seconds):"
+          sleep 10
+          for u in "https://driftstack.dev/pricing/" "https://www.driftstack.dev/" "https://app.driftstack.dev/cli/authorize?code=probe&state=x" "https://docs.driftstack.dev/api/profiles/"; do
+            printf '  %s → ' "$u"; curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 15 "$u"
+          done
+          for u in "https://api.driftstack.dev/version" "https://errors.driftstack.dev/"; do
+            printf '  KEEP %s → ' "$u"; curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' --max-time 15 "$u"
+          done
 
       - name: Pages custom-domain probe (attach one throwaway .io host to a Pages project, then remove it)
         if: ${{ inputs.action == 'pages-domain-probe' }}
