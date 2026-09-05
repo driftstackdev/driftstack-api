@@ -9,9 +9,11 @@
 //   1. the logical activation carries `startedAt`, stamped when the optimistic
 //      switch begins (not when the publish resolves — LiveKit's publish promise
 //      can lag the ack on a loopback-fast box);
-//   2. the correlated ack logs `[tab-switch] ack` at INFO level with the elapsed
-//      ms, the harness's `wasWarm` claim and the outcome — before the branch
-//      that decides whether to drop the cover;
+//   2. the correlated ack records `[tab-switch] ack` through the log buffer's own
+//      `record('info', …)` (the path console.info takes after installLogCapture,
+//      minus the no-console lint) with the elapsed ms, the harness's `wasWarm`
+//      claim and the outcome — before the branch that decides whether to drop
+//      the cover;
 //   3. `info` is a captured level, so the line reaches recordings/dev-log*.txt.
 //
 // Drift guard, not a behaviour test: the ack handler lives 5000 lines into a
@@ -44,9 +46,13 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
     );
   });
 
-  it('the correlated ack logs elapsedMs + wasWarm + ok at INFO, before the cover decision', () => {
-    const ack = body.indexOf("console.info('[tab-switch] ack', {");
-    expect(ack, 'the ack log line exists').toBeGreaterThan(0);
+  it('the correlated ack records elapsedMs + wasWarm + ok at INFO via log-buffer.record, before the cover decision', () => {
+    // Through the buffer's own entry point, not console.info: the same capture
+    // path, and the file's lint (no-console allows only warn/error) stays clean.
+    expect(body).toMatch(/import \{ record \} from '\.\.\/lib\/log-buffer';/);
+    expect(body).toMatch(/record\('info', \[\s*'\[tab-switch\] ack',\s*\{/);
+    const ack = body.indexOf("'[tab-switch] ack',");
+    expect(ack, 'the ack record line exists').toBeGreaterThan(0);
     const block = body.slice(ack, ack + 400);
     expect(block).toMatch(/tabId: pending\.tabId,/);
     expect(block).toMatch(/elapsedMs: Date\.now\(\) - pending\.startedAt,/);
@@ -60,7 +66,7 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
     expect(branch, 'the cover branch exists').toBeGreaterThan(0);
     expect(ack).toBeLessThan(branch);
     // Exactly one instrument — a second copy would double-count a switch.
-    expect(body.split("console.info('[tab-switch] ack'")).toHaveLength(2);
+    expect(body.split("'[tab-switch] ack'")).toHaveLength(2);
   });
 
   it("'info' is a captured log level, so the line reaches the on-disk dev-log", () => {

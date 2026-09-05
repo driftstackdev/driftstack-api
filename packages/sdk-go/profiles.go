@@ -365,8 +365,8 @@ func (r *ProfilesResource) Trim(ctx context.Context, profileID string) (*TrimPro
 
 // ProfileActivityEntry is one planned navigation from an agent session.
 type ProfileActivityEntry struct {
-	At        string `json:"at"`
-	URL       string `json:"url"`
+	At             string `json:"at"`
+	URL            string `json:"url"`
 	AgentSessionID string `json:"agent_session_id"`
 }
 
