@@ -4930,6 +4930,23 @@ export function SimulatorWindow(): JSX.Element {
     owner.timer = window.setTimeout(() => {
       if (switchAffordanceOwnerRef.current !== owner) return;
       switchAffordanceOwnerRef.current = null;
+      // P-26 (2026-09-05) — the hold expired. Two cases, told apart by whether the logical
+      // activation is still open: no ack at all (the switch took the daemon's cold reload
+      // path past the bound — A3's canary saw exactly this, no ACTIVATE-RESULT within 45 s)
+      // or an ack whose target never published its loaded frame in time. Recorded so a
+      // reload-path switch is a NUMBER in the dev-log rather than an absence; the ack
+      // instrument below only writes when an ack arrives.
+      const open = activationOwnersRef.current.get(tabId);
+      record('info', [
+        '[tab-switch] hold-expired',
+        {
+          tabId,
+          kind: open !== undefined && !open.settled ? 'no-ack' : 'no-loaded-frame',
+          heldMs: SWITCH_AFFORDANCE_TIMEOUT_MS,
+          attempts: activationRetryRef.current.get(tabId)?.attempts ?? 0,
+          elapsedMs: open === undefined ? null : Date.now() - open.startedAt,
+        },
+      ]);
       setSwitchingTabId((current) => (current === tabId ? null : current));
     }, SWITCH_AFFORDANCE_TIMEOUT_MS);
   }, []);

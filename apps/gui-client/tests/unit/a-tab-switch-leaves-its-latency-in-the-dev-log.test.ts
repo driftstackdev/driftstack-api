@@ -75,4 +75,30 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
       /const levels: LogLevel\[\] = \['log', 'info', 'warn', 'error', 'debug'\];/,
     );
   });
+
+  it('the hold expiry records [tab-switch] hold-expired with kind no-ack / no-loaded-frame — a reload-path switch is a number, not an absence', () => {
+    // A3's canary (2026-09-05) hit a switch that never acked within its 45 s wait: the
+    // daemon took the cold reload path. The ack instrument writes nothing for that
+    // case, so the affordance's own expiry must.
+    const begin = body.indexOf('const beginSwitchAffordance = useCallback(');
+    expect(begin, 'beginSwitchAffordance exists').toBeGreaterThan(0);
+    const block = body.slice(begin, begin + 2200);
+    expect(block).toMatch(/record\('info', \[\s*'\[tab-switch\] hold-expired',\s*\{/);
+    expect(block).toMatch(
+      /kind: open !== undefined && !open\.settled \? 'no-ack' : 'no-loaded-frame',/,
+    );
+    expect(block).toMatch(/heldMs: SWITCH_AFFORDANCE_TIMEOUT_MS,/);
+    expect(block).toMatch(
+      /attempts: activationRetryRef\.current\.get\(tabId\)\?\.attempts \?\? 0,/,
+    );
+    // Recorded BEFORE the cover is dropped, inside the expiry callback.
+    const rec = block.indexOf("'[tab-switch] hold-expired'");
+    const drop = block.indexOf(
+      'setSwitchingTabId((current) => (current === tabId ? null : current));',
+      rec,
+    );
+    expect(rec).toBeGreaterThan(0);
+    expect(drop).toBeGreaterThan(rec);
+    expect(body.split("'[tab-switch] hold-expired'")).toHaveLength(2);
+  });
 });
