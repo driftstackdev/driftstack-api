@@ -60,6 +60,17 @@ const DRIFTSTACK_PROD_ORIGINS: readonly string[] = [
   'https://docs.driftstack.dev',
 ];
 
+// T-3 host move (2026-09-05): the customer dashboard answers on BOTH of these until
+// the .dev 301 lands, and its SPA sends its OWN origin as `redirect_to`. The
+// OAuth-client open-redirect guard accepts either one only when the CONFIGURED
+// dashboard origin is itself one of them — a self-hosted operator's guard stays
+// exact. Measured on prod before this landed: DASHBOARD_ORIGIN=app.driftstack.dev
+// answered 400 to every sign-in started from app.driftstack.io.
+export const FIRST_PARTY_DASHBOARD_ORIGINS: readonly string[] = [
+  'https://app.driftstack.io',
+  'https://app.driftstack.dev',
+];
+
 /** The non-permissive allow-list (regex + exact-string matchers), in order. */
 export function corsOriginMatchers(deps: CorsAllowDeps): Array<string | RegExp> {
   return [

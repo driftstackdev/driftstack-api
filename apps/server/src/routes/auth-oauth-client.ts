@@ -37,6 +37,7 @@ import type { OAuthClientService } from '../services/oauth-client.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
 import type { RateLimitStore } from '../services/rate-limit.js';
 import { BadRequestError, ValidationError } from '../lib/errors.js';
+import { FIRST_PARTY_DASHBOARD_ORIGINS } from '../lib/cors-allow.js';
 import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { Logger } from '../lib/logger.js';
@@ -149,7 +150,18 @@ export function registerOAuthClientRoutes(
     // back in its JSON and the SPA navigates it). The dashboard client always
     // sends a same-origin value, so a mismatch is misconfiguration or abuse.
     // Belt-and-suspenders with the SPA-side safeNextPath sanitizer.
-    if (new URL(parsed.data.redirect_to).origin !== new URL(deps.dashboardOrigin).origin) {
+    // T-3 host move (2026-09-05): while the dashboard serves on both app.driftstack.io
+    // and app.driftstack.dev, the SPA on either host sends its own origin, so a
+    // single configured origin rejected the other host's sign-in (measured on prod:
+    // 400 for every start from .io). When the configured origin is one of the two
+    // first-party hosts, accept both; any other configuration stays exact. Still a
+    // closed allow-list — never the request's own host.
+    const configuredOrigin = new URL(deps.dashboardOrigin).origin;
+    const allowedOrigins = new Set([configuredOrigin]);
+    if (FIRST_PARTY_DASHBOARD_ORIGINS.includes(configuredOrigin)) {
+      for (const origin of FIRST_PARTY_DASHBOARD_ORIGINS) allowedOrigins.add(origin);
+    }
+    if (!allowedOrigins.has(new URL(parsed.data.redirect_to).origin)) {
       throw new BadRequestError('redirect_to must be on the dashboard origin.');
     }
     const creds = deps.providers[provider];

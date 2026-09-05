@@ -58,9 +58,14 @@ describe('routes/auth-oauth-client content parity', () => {
     );
   });
 
-  it('/start redirect_to open-redirect guard pinned: redirect_to must be on the dashboard origin (new URL(redirect_to).origin === new URL(dashboardOrigin).origin else BadRequestError). Drift to dropping this would let a forged /start mint an authorize URL whose redirect_to bounces a just-signed-in user off-site — the callback echoes redirect_to back and the SPA navigates it. Source-level defense paired with the SPA-side safeNextPath sanitizer.', () => {
+  it('/start redirect_to open-redirect guard pinned: redirect_to must be on the dashboard origin (a CLOSED allow-list: the configured dashboardOrigin, widened to BOTH first-party dashboard hosts only when the configured origin is itself one of them — T-3 host move 2026-09-05, when a single origin answered 400 to every sign-in from app.driftstack.io; else BadRequestError). Drift to dropping this would let a forged /start mint an authorize URL whose redirect_to bounces a just-signed-in user off-site — the callback echoes redirect_to back and the SPA navigates it. Source-level defense paired with the SPA-side safeNextPath sanitizer.', () => {
     expect(body).toMatch(
-      /if \(new URL\(parsed\.data\.redirect_to\)\.origin !== new URL\(deps\.dashboardOrigin\)\.origin\) \{\s*throw new BadRequestError\('redirect_to must be on the dashboard origin\.'\);\s*\}/,
+      /const configuredOrigin = new URL\(deps\.dashboardOrigin\)\.origin;\s*const allowedOrigins = new Set\(\[configuredOrigin\]\);\s*if \(FIRST_PARTY_DASHBOARD_ORIGINS\.includes\(configuredOrigin\)\) \{\s*for \(const origin of FIRST_PARTY_DASHBOARD_ORIGINS\) allowedOrigins\.add\(origin\);\s*\}\s*if \(!allowedOrigins\.has\(new URL\(parsed\.data\.redirect_to\)\.origin\)\) \{\s*throw new BadRequestError\('redirect_to must be on the dashboard origin\.'\);\s*\}/,
+    );
+    // The list itself is pinned where it lives (lib/cors-allow.ts): exactly the two
+    // first-party dashboard hosts, never derived from the request.
+    expect(body).toMatch(
+      /import \{ FIRST_PARTY_DASHBOARD_ORIGINS \} from '\.\.\/lib\/cors-allow\.js';/,
     );
   });
 
