@@ -82,6 +82,10 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
     ).resolves.toBe(false);
   });
 
+  // CI 2026-09-05 (run 33970280665): once build-test finally had the venv, this arm timed
+  // out at vitest's 10 s default on the cold runner — the spawn below is bounded at 60 s,
+  // so the test's own bound must be at least that, or the interpreter's verdict is never
+  // read. Same for the Go arm and its 180 s `go test`.
   it('CRITICAL Python accepts both secrets and rejects a tampered body, run in the published package rather than compared as text', (ctx) => {
     // V-2128 — a silent return here read as a pass, so a local run without the venv
     // said "verified in every SDK" about an arm that never ran. Report the skip.
@@ -106,7 +110,7 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
     expect(out.cur, 'current secret').toBe(true);
     expect(out.prev, 'previous secret inside the grace window').toBe(true);
     expect(out.tam, 'a tampered body must not verify').toBe(false);
-  });
+  }, 60_000);
 
   // V-1354 — Go, now that the arm is trustworthy.
   //
@@ -140,5 +144,5 @@ describe('a server-signed webhook header verifies in every published SDK', () =>
       `the Go fixture case did not pass:\n${out}`,
     ).toBe(1);
     expect(run.status, 'and go test exits clean').toBe(0);
-  });
+  }, 180_000);
 });
