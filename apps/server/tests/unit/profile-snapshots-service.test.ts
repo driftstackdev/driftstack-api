@@ -32,7 +32,9 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     id: 'prof_1',
     accountId: 'acc_1',
     name: 'p1',
-    archetype: 'default',
+    // P-15 — clone/transfer/restore now judge the device against the tier, so fixtures
+    // carry a REAL registry archetype every tier is entitled to, not a placeholder.
+    archetype: 'iphone13_ios18_6_safari18_6',
     description: null,
     folder: null,
     tags: [],
@@ -55,7 +57,7 @@ function makeSnapshot(overrides: Partial<ProfileSnapshotRecord> = {}): ProfileSn
     parentProfileId: 'prof_1',
     label: 'before-update',
     description: null,
-    parentArchetype: 'default',
+    parentArchetype: 'iphone13_ios18_6_safari18_6',
     parentName: 'p1',
     stateBlob: {},
     capturedAt: new Date(),
@@ -245,7 +247,9 @@ describe('V-553.B-19 ProfileSnapshotsService.capture', () => {
 
   it('captures parent archetype + name + empty state_blob', async () => {
     const { snapshotsRepo, profilesRepo, state } = makeRepos({
-      profiles: [makeProfile({ id: 'prof_1', name: 'sales-bot', archetype: 'mobile_ios' })],
+      profiles: [
+        makeProfile({ id: 'prof_1', name: 'sales-bot', archetype: 'iphone13_ios18_6_safari18_6' }),
+      ],
     });
     const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo);
     const snap = await svc.capture({
@@ -255,7 +259,7 @@ describe('V-553.B-19 ProfileSnapshotsService.capture', () => {
       description: 'before tweaking viewport',
     });
     expect(snap.parentName).toBe('sales-bot');
-    expect(snap.parentArchetype).toBe('mobile_ios');
+    expect(snap.parentArchetype).toBe('iphone13_ios18_6_safari18_6');
     expect(snap.label).toBe('pre-update');
     expect(snap.description).toBe('before tweaking viewport');
     expect(snap.stateBlob).toEqual({});
@@ -378,7 +382,7 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
 
   it('creates a new profile from the snapshot archetype + records audit', async () => {
     const { snapshotsRepo, profilesRepo, state } = makeRepos({
-      snapshots: [makeSnapshot({ parentArchetype: 'mobile_ios' })],
+      snapshots: [makeSnapshot({ parentArchetype: 'iphone13_ios18_6_safari18_6' })],
     });
     const { audit, calls } = makeAudit();
     const svc = new ProfileSnapshotsService(snapshotsRepo, profilesRepo, audit);
@@ -389,14 +393,19 @@ describe('V-553.B-19 ProfileSnapshotsService.restore', () => {
       name: 'mobile-bot-v2',
     });
     expect(restored.name).toBe('mobile-bot-v2');
-    expect(restored.archetype).toBe('mobile_ios');
+    expect(restored.archetype).toBe('iphone13_ios18_6_safari18_6');
     expect(state.profiles).toHaveLength(1);
     expect(calls.map((c) => c.action)).toEqual(['profile.created']);
   });
 
   it('preallocates the restored UUID and stores a fresh account+profile-bound v2 DEK', async () => {
     const { snapshotsRepo, profilesRepo } = makeRepos({
-      snapshots: [makeSnapshot({ accountId: CRYPTO_ACCOUNT_A, parentArchetype: 'mobile_ios' })],
+      snapshots: [
+        makeSnapshot({
+          accountId: CRYPTO_ACCOUNT_A,
+          parentArchetype: 'iphone13_ios18_6_safari18_6',
+        }),
+      ],
     });
     const originalInsert = profilesRepo.insertWithLimit.bind(profilesRepo);
     let captured: NewProfileInput | undefined;

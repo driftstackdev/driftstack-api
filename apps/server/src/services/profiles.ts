@@ -24,6 +24,7 @@ import {
   TierLimitError,
 } from '../lib/errors.js';
 import { isUniqueViolation } from '../lib/pg-error.js';
+import { requireArchetypeForTier } from '../lib/errors-helpers.js';
 import { profileLimitFor } from './sessions.js';
 import type { AccountAuditService } from './account-audit.js';
 import { computeAccountStorageState, type AccountStorageState } from './profile-storage-quota.js';
@@ -802,6 +803,10 @@ export class ProfilesService {
     // save-back) → sealed-state persistence silently breaks for it.
     const cloneIdentity = this.mintProfileIdentity(args.accountId);
 
+    // P-15 (2026-09-05) — a clone mints a new profile on the same device; an account
+    // downgraded below that device's tier must not be able to multiply it.
+    requireArchetypeForTier(args.tier, source.archetype);
+
     // V-714 — atomic limit-check + insert (count above is the fast-fail
     // pre-check; insertWithLimit re-checks under an account-row lock).
     let result: Awaited<ReturnType<typeof this.repo.insertWithLimit>>;
@@ -1046,6 +1051,9 @@ export class ProfilesService {
       accountId: args.sourceAccountId,
     });
     if (source === null) throw new NotFoundError('Profile not found.');
+    // P-15 (2026-09-05) — the RECIPIENT's tier must be entitled to the device: a
+    // transfer mints the profile on their account, so it is a create for them.
+    requireArchetypeForTier(args.recipientTier, source.archetype);
 
     // #3 (2026-06-30) — refuse the transfer while the source profile still
     // has a live session bound to it (see assertNoActiveSession). findById

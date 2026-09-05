@@ -219,10 +219,14 @@ describe('POST /v1/profiles/:id/transfer', () => {
     await fx.profilesRepo.insert({
       accountId: RECIPIENT_ID,
       name: 'recipient-existing',
-      archetype: 'iphone16pro_ios18_7_safari26_4',
+      archetype: 'iphone13_ios18_6_safari18_6',
       description: null,
     });
-    const profile = await seedOne(fx);
+    // P-15 — the TRANSFERRED profile must be a device the free recipient is entitled to,
+    // so this arm still measures the CAP (a paid device to a free recipient is now
+    // refused as an entitlement — see the free-tier test).
+    const [profile] = await seedProfiles(fx, 1, { archetype: 'iphone13_ios18_6_safari18_6' });
+    if (!profile) throw new Error('seedProfiles returned no profile');
 
     const res = await fx.app.inject({
       method: 'POST',
@@ -258,7 +262,10 @@ describe('POST /v1/profiles/:id/transfer', () => {
         targetResourceId: `profile_seed_${i.toString()}`,
       });
     }
-    const profile = await seedOne(fx);
+    // P-15 — an entitled device, so this arm measures the per-cycle import cap and not
+    // the device entitlement.
+    const [profile] = await seedProfiles(fx, 1, { archetype: 'iphone13_ios18_6_safari18_6' });
+    if (!profile) throw new Error('seedProfiles returned no profile');
 
     const res = await fx.app.inject({
       method: 'POST',

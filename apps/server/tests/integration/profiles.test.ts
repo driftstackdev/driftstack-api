@@ -1236,7 +1236,8 @@ describe('the profile cap holds on clone and import, not just create', () => {
       method: 'POST',
       url: '/v1/profiles',
       headers: auth,
-      payload: { name: 'the-only-one' },
+      // P-15 — an entitled device, so the cap arms below (clone, import) measure the CAP.
+      payload: { name: 'the-only-one', archetype: 'iphone13_ios18_6_safari18_6' },
     });
     expect(first.statusCode, first.body).toBe(200);
     return { id: first.json<ProfileResponse>().id, auth };

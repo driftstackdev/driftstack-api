@@ -194,7 +194,9 @@ describe('W437.B apps/server/src/routes/profiles.ts content parity', () => {
       /\/\/ ── POST \/v1\/profiles\/import \(V-480\) ─[\s\S]*?\/\/ Accepts a v1 envelope, mints a fresh profile in the caller's\s*\/\/ account\. Tier-cap \+ name-conflict semantics match POST \/v1\/profiles\.\s*\/\/ Importing into a different account than the source is permitted\s*\/\/ \(transfer between teammate accounts via the file\)\./,
     );
     expect(body).toMatch(
-      /const env = parsed\.data\.envelope;\s*const row = await service\.importProfile\(\{\s*accountId,\s*tier,\s*sourceProfileId: env\.source_profile_id,\s*sourceAccountId: env\.source_account_id,\s*payload: env\.profile,\s*\.\.\.\(parsed\.data\.name_override !== undefined\s*\? \{ nameOverride: parsed\.data\.name_override \}\s*: \{\}\),\s*\}\);/,
+      // P-15 (2026-09-05) — the device entitlement guard now sits between the envelope
+      // and the import call; the framing pin keeps it there.
+      /const env = parsed\.data\.envelope;\s*(?:\/\/[^\n]*\n\s*)*requireArchetypeForTier\(tier, env\.profile\.archetype\);\s*const row = await service\.importProfile\(\{\s*accountId,\s*tier,\s*sourceProfileId: env\.source_profile_id,\s*sourceAccountId: env\.source_account_id,\s*payload: env\.profile,\s*\.\.\.\(parsed\.data\.name_override !== undefined\s*\? \{ nameOverride: parsed\.data\.name_override \}\s*: \{\}\),\s*\}\);/,
     );
   });
 

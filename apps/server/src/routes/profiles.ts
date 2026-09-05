@@ -535,6 +535,10 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
       }
 
       const env = parsed.data.envelope;
+      // P-15 (2026-09-05) — the device entitlement is enforced wherever a profile is
+      // MINTED, not only on POST /v1/profiles: an import used to hand a free account a
+      // paid-device profile the create route would have refused.
+      requireArchetypeForTier(tier, env.profile.archetype);
       const row = await service.importProfile({
         accountId,
         tier,

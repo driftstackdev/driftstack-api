@@ -344,7 +344,8 @@ describe('POST /v1/profiles/import — per-cycle import cap', () => {
       exported_at: new Date().toISOString(),
       source_profile_id: 'prof_11111111-1111-4111-8111-111111111111',
       source_account_id: 'acc_22222222-2222-4222-8222-222222222222',
-      profile: { name, archetype: 'iphone16pro_ios18_7_safari26_4', description: null },
+      // P-15 — a device every tier is entitled to, so the cap arms below measure the cap.
+      profile: { name, archetype: 'iphone13_ios18_6_safari18_6', description: null },
     };
   }
 

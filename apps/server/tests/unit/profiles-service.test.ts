@@ -49,7 +49,9 @@ function makeProfile(overrides: Partial<ProfileRecord> = {}): ProfileRecord {
     id: 'p1',
     accountId: 'acc_1',
     name: 'starter',
-    archetype: 'default',
+    // P-15 — clone/transfer/restore now judge the device against the tier, so fixtures
+    // carry a REAL registry archetype every tier is entitled to, not a placeholder.
+    archetype: 'iphone13_ios18_6_safari18_6',
     description: null,
     folder: null,
     tags: [],
@@ -591,13 +593,18 @@ describe('V-553.B-21 ProfilesService.clone', () => {
 
   it('auto-derives "(copy)" when source name is taken, "(copy 2)" when the first copy exists too', async () => {
     const { repo } = makeRepo([
-      makeProfile({ id: 'p1', accountId: 'acc_1', name: 'src', archetype: 'mobile_ios' }),
+      makeProfile({
+        id: 'p1',
+        accountId: 'acc_1',
+        name: 'src',
+        archetype: 'iphone13_ios18_6_safari18_6',
+      }),
       makeProfile({ id: 'p2', accountId: 'acc_1', name: 'src (copy)' }),
     ]);
     const svc = new ProfilesService(repo);
     const row = await svc.clone({ id: 'p1', accountId: 'acc_1', tier: TEAM });
     expect(row.name).toBe('src (copy 2)');
-    expect(row.archetype).toBe('mobile_ios');
+    expect(row.archetype).toBe('iphone13_ios18_6_safari18_6');
   });
 
   // V-1377 — the copy-name search is a bounded loop, and coverage put its exhaustion

@@ -21,6 +21,7 @@
 
 import type { AccountTier } from '@driftstack/api-types';
 import { ConflictError, NotFoundError, TierLimitError } from '../lib/errors.js';
+import { requireArchetypeForTier } from '../lib/errors-helpers.js';
 import { profileLimitFor } from './sessions.js';
 import { isProfileNameRaceViolation, mintProfileRowIdentity } from './profiles.js';
 import type { ProfileRecord, ProfilesRepo } from './profiles.js';
@@ -209,6 +210,10 @@ export class ProfileSnapshotsService {
     // account + preallocated profile UUID. A missing master key keeps the
     // feature inert (wrappedDek omitted), matching every other insert path.
     const identity = mintProfileRowIdentity(this.profileMasterKey, args.accountId);
+
+    // P-15 (2026-09-05) — a restore mints a profile on the snapshot's device; the
+    // account's CURRENT tier must be entitled to it (the snapshot may predate a downgrade).
+    requireArchetypeForTier(args.tier, snapshot.parentArchetype);
 
     let result: Awaited<ReturnType<typeof this.profilesRepo.insertWithLimit>>;
     try {
