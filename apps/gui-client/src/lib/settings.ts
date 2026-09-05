@@ -325,11 +325,15 @@ export async function loadSettings(): Promise<DriftstackSettings> {
   // page indefinitely — and the gap is invisible in testing, because a clean
   // install looks correct. Only the value this app itself shipped as a default is
   // migrated; a start URL the customer typed is theirs and is left alone.
+  // 2026-09-05 — these are the OLD shipped defaults (the .dev forms). The first cut of
+  // this migration listed the NEW .io forms here, so an install that had persisted the
+  // .dev default was never migrated — exactly the gap the comment above warns about.
+  // Guard: a-persisted-dev-start-page-migrates-to-io.test.ts.
   const LEGACY_DEFAULT_START_URLS = new Set([
-    'https://driftstack.io/newtab/',
-    'https://driftstack.io/newtab',
-    'https://driftstack.io/',
-    'https://driftstack.io',
+    'https://driftstack.dev/newtab/',
+    'https://driftstack.dev/newtab',
+    'https://driftstack.dev/',
+    'https://driftstack.dev',
   ]);
   const persistedStartUrl =
     persisted && typeof persisted.startUrl === 'string' && persisted.startUrl.length > 0
