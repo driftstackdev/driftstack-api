@@ -68,6 +68,9 @@ export { CANONICAL_MODIFIER_NAMES, type CanonicalModifier } from '@driftstack/ap
 // new device lights up everywhere once its `status` flips to launch/available.
 export {
   ARCHETYPE_REGISTRY,
+  ARCHETYPE_DEVICES_PER_TIER,
+  archetypeAllowedForTier,
+  defaultArchetypeIdForTier,
   LOCKED_ARCHETYPE_ID,
   LOCKED_ARCHETYPE_DISPLAY_LABEL,
   archetypeDisplayLabel,

@@ -87,6 +87,11 @@ import {
   type UpdateProfileRequest,
   type TrimProfileScope,
 } from '@driftstack/sdk';
+import {
+  entitledDevicesNote,
+  initialArchetypeForTier,
+  pickerDevicesForTier,
+} from '../lib/device-entitlement';
 import { ProfileActivityPanel } from '../components/ProfileActivityPanel';
 import { openSimulatorWindow } from '../lib/open-simulator';
 import { mintGuiControlKey } from '../lib/agent-session-control';
@@ -4652,8 +4657,11 @@ function CreateProfileModal({
    *  created from inside a tag view carries it. Empty = no tag. */
   initialTag?: string;
 }): JSX.Element {
-  const { client, settings } = useSettings();
-  const initialArchetype = KNOWN_ARCHETYPES[0]?.id ?? '';
+  const { client, settings, accountMe } = useSettings();
+  // P-15 — seed from the account's tier default; devices outside the entitlement are
+  // reference rows (see lib/device-entitlement).
+  const initialArchetype = initialArchetypeForTier(accountMe?.tier, KNOWN_ARCHETYPES[0]?.id ?? '');
+  const entitlementNote = entitledDevicesNote(accountMe?.tier);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [archetype, setArchetype] = useState(initialArchetype);
@@ -5153,6 +5161,9 @@ function CreateProfileModal({
                       A bit-exact mobile fingerprint, not a spoofed user-agent — pick the device;
                       everything stays coherent with it. Search or filter to find one of{' '}
                       {PICKER_DEVICES.length} devices.
+                      {entitlementNote !== null && (
+                        <span className="text-ink-secondary"> {entitlementNote}</span>
+                      )}
                     </p>
                   </div>
                   {/* Redesigned device picker (2026-06-25): searchable, chip-
@@ -5161,7 +5172,7 @@ function CreateProfileModal({
                       and `selectable` is the SAME SELECTABLE_STATUSES gate — so
                       reference rows render but never become the selection. */}
                   <DevicePicker
-                    devices={PICKER_DEVICES}
+                    devices={pickerDevicesForTier(accountMe?.tier, PICKER_DEVICES)}
                     selectedId={archetype}
                     onSelect={setArchetype}
                     onRandomize={(candidates) => {

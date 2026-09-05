@@ -32,6 +32,7 @@ import {
   ARCHETYPE_REGISTRY,
   type ArchetypeStatus,
 } from '@driftstack/sdk';
+import { initialArchetypeForTier, isEntitled } from '../lib/device-entitlement';
 import { TitleBar } from '../components/TitleBar';
 import { useBrowserSignIn } from '../lib/browser-sign-in';
 import { useSettings } from '../lib/SettingsContext';
@@ -771,6 +772,39 @@ export function ProfileStep({
   const { client } = useSettings();
   const [name, setName] = useState('');
   const [archetype, setArchetype] = useState<ProfileArchetype>('iphone17_ios18_7_safari26_4');
+  // P-15 (2026-09-05) — learn the account's tier once and preselect ITS default device
+  // (unless the customer already chose); options outside the entitlement are disabled
+  // and say so, instead of a 403 after Create.
+  const [tier, setTier] = useState<string | undefined>(undefined);
+  const archetypeTouchedRef = useRef(false);
+  useEffect(() => {
+    if (client === null) return undefined;
+    let cancelled = false;
+    // Test harnesses mount this step with a minimal client; a missing account resource
+    // must not throw out of the effect — the wizard still works without the tier.
+    let lookup: Promise<{ tier: string }>;
+    try {
+      lookup = client.account.me();
+    } catch {
+      return undefined;
+    }
+    lookup
+      .then((me) => {
+        if (cancelled) return;
+        setTier(me.tier);
+        if (archetypeTouchedRef.current) return;
+        const preferred = initialArchetypeForTier(me.tier, 'iphone17_ios18_7_safari26_4');
+        if (PROFILE_ARCHETYPE_OPTIONS.some((o) => o.value === preferred)) {
+          setArchetype(preferred);
+        }
+      })
+      .catch(() => {
+        /* the wizard still works without the tier; the server judges the device */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // V-1592 — attaching a proxy was possible from the Profiles modal and NOT
@@ -952,12 +986,22 @@ export function ProfileStep({
                 name="profile-archetype"
                 value={opt.value}
                 checked={archetype === opt.value}
-                onChange={() => setArchetype(opt.value)}
-                disabled={submitting}
+                onChange={() => {
+                  archetypeTouchedRef.current = true;
+                  setArchetype(opt.value);
+                }}
+                disabled={submitting || !isEntitled(tier, opt.value)}
                 className="mt-0.5"
               />
               <span className="flex-1">
-                <span className="block text-sm font-medium text-ink-primary">{opt.label}</span>
+                <span className="block text-sm font-medium text-ink-primary">
+                  {opt.label}
+                  {!isEntitled(tier, opt.value) && (
+                    <span className="ml-2 text-2xs font-normal text-ink-muted">
+                      Not on your plan
+                    </span>
+                  )}
+                </span>
                 <span className="mt-0.5 block text-xs text-ink-secondary">{opt.description}</span>
               </span>
             </label>
