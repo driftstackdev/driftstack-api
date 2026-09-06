@@ -39,6 +39,7 @@ import { useSettings } from '../lib/SettingsContext';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
 import { addProxy, type ProxyDraft } from '../lib/proxies';
+import { ProxyHostWarning } from '../components/ProxyHostWarning';
 import { setDefaultProxy } from '../lib/profile-bindings';
 import { buildWireGuardProxyInput, buildOpenVpnProxyInput } from '../lib/account-proxies';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
@@ -1129,9 +1130,14 @@ export function ProfileStep({
                     value={proxy.host}
                     onChange={(e) => setProxy((p) => ({ ...p, host: e.target.value }))}
                     className="w-full rounded-sm border border-surface-divider bg-surface-base px-2 py-1.5 text-sm text-ink-primary"
-                    placeholder="127.0.0.1"
+                    // ⛔ NOT 127.0.0.1. Profiles run on Driftstack's servers, so a
+                    // loopback host is the one value that cannot ever work — and
+                    // offering it as the EXAMPLE is worse than showing nothing,
+                    // because a placeholder reads as a suggestion.
+                    placeholder="proxy.example.com"
                     disabled={submitting}
                   />
+                  <ProxyHostWarning host={proxy.host} />
                 </label>
                 <label className="flex flex-col gap-1.5">
                   <span className="section-label">Port</span>

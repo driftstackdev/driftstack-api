@@ -19,6 +19,7 @@
 // with an untouched form. A previous attempt at this suite could not get the
 // form to submit and was deleted rather than shipped vacuous.
 
+import type * as ProxiesModule from '../../src/lib/proxies';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ProxyConfig, ProxyDraft, ProxyTestResult } from '../../src/lib/proxies';
@@ -55,7 +56,13 @@ const ADDED_ROW: ProxyConfig = {
 let stored: ProxyConfig[] = [];
 let listProxiesFails = false;
 
-vi.mock('../../src/lib/proxies', () => ({
+// ⛔ PARTIAL mock, not a replacement. A factory that enumerates exports breaks the
+// moment the module gains one — `hostWarningFor` was added for the local-proxy
+// advice and seven suites went red on a module they only wanted two stubs from.
+// The spread keeps every real export; the keys below still override the ones this
+// suite controls.
+vi.mock('../../src/lib/proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProxiesModule>()),
   // Real predicate, not a stub — a stub here would let this suite disagree with
   // the app about what "usable" means.
   isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>

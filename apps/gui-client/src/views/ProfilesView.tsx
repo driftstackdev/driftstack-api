@@ -122,6 +122,7 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
+import { ProxyHostWarning } from '../components/ProxyHostWarning';
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
@@ -5268,6 +5269,7 @@ function CreateProfileModal({
                     {!newProxyIsVpn && proxyPasteHint !== null && (
                       <span className="text-2xs text-ink-muted">{proxyPasteHint}</span>
                     )}
+                    {!newProxyIsVpn && <ProxyHostWarning host={newProxy.host} />}
                     {!newProxyIsVpn && (
                       <div className="grid grid-cols-2 gap-1.5">
                         <input
@@ -6173,6 +6175,7 @@ function EditProfileModal({
               {proxyPasteHint !== null && (
                 <span className="text-2xs text-ink-muted">{proxyPasteHint}</span>
               )}
+              <ProxyHostWarning host={newProxy.host} />
               <div className="grid grid-cols-2 gap-1.5">
                 <input
                   type="text"

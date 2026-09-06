@@ -13,6 +13,7 @@
 // did — in particular that a reachable-but-auth-rejected probe reads
 // "auth fail", never the misleading "unreachable".
 
+import type * as ProxiesModule from '../../src/lib/proxies';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
@@ -30,7 +31,13 @@ const savedProxy: ProxyConfig = {
   createdAt: '2026-05-20T00:00:00.000Z',
 };
 
-vi.mock('../../src/lib/proxies', () => ({
+// ⛔ PARTIAL mock, not a replacement. A factory that enumerates exports breaks the
+// moment the module gains one — `hostWarningFor` was added for the local-proxy
+// advice and seven suites went red on a module they only wanted two stubs from.
+// The spread keeps every real export; the keys below still override the ones this
+// suite controls.
+vi.mock('../../src/lib/proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProxiesModule>()),
   // Pure predicate — use the real one. A stub here would let a suite
   // disagree with the app about what "usable" means, which is the very
   // drift this predicate was introduced to remove.

@@ -18,6 +18,7 @@
 // parser rejects must produce an error here, because that is the actual
 // contract a customer meets.
 
+import type * as ProxiesModule from '../../src/lib/proxies';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
@@ -32,7 +33,13 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   }),
 }));
 
-vi.mock('../../src/lib/proxies', () => ({
+// ⛔ PARTIAL mock, not a replacement. A factory that enumerates exports breaks the
+// moment the module gains one — `hostWarningFor` was added for the local-proxy
+// advice and seven suites went red on a module they only wanted two stubs from.
+// The spread keeps every real export; the keys below still override the ones this
+// suite controls.
+vi.mock('../../src/lib/proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProxiesModule>()),
   addProxy: (...args: unknown[]) => addProxy(...(args as [])),
 }));
 
@@ -105,7 +112,9 @@ describe('the first profile can have a proxy too', () => {
     });
     openProxyPanel();
     fireEvent.change(screen.getByPlaceholderText('residential-uk'), { target: { value: 'uk1' } });
-    fireEvent.change(screen.getByPlaceholderText('127.0.0.1'), { target: { value: '10.0.0.9' } });
+    fireEvent.change(screen.getByPlaceholderText('proxy.example.com'), {
+      target: { value: '10.0.0.9' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());
@@ -173,7 +182,9 @@ describe('the first profile can have a proxy too', () => {
     });
     openProxyPanel();
     fireEvent.change(screen.getByPlaceholderText('residential-uk'), { target: { value: 'uk1' } });
-    fireEvent.change(screen.getByPlaceholderText('127.0.0.1'), { target: { value: '10.0.0.9' } });
+    fireEvent.change(screen.getByPlaceholderText('proxy.example.com'), {
+      target: { value: '10.0.0.9' },
+    });
     fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());

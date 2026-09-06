@@ -7,6 +7,7 @@
 // mocked) through the real modals: a pasted vendor line fills all four fields,
 // and in the edit modal the minted proxy is created + bound on Save.
 
+import type * as ProxiesModule from '../../src/lib/proxies';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 
@@ -101,7 +102,13 @@ vi.mock('../../src/lib/profile-bindings', () => ({
   deleteBinding: vi.fn(() => Promise.resolve()),
 }));
 
-vi.mock('../../src/lib/proxies', () => ({
+// ⛔ PARTIAL mock, not a replacement. A factory that enumerates exports breaks the
+// moment the module gains one — `hostWarningFor` was added for the local-proxy
+// advice and seven suites went red on a module they only wanted two stubs from.
+// The spread keeps every real export; the keys below still override the ones this
+// suite controls.
+vi.mock('../../src/lib/proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProxiesModule>()),
   isProxyUsable: (r: { reachable: boolean; auth_ok: boolean; can_route: boolean }): boolean =>
     r.reachable && r.auth_ok && r.can_route,
   proxyVerdict: (): { ok: boolean; label: string } => ({ ok: true, label: 'Reachable · 12 ms' }),
