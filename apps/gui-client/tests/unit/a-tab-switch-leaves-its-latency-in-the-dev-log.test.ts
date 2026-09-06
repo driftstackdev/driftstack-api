@@ -51,8 +51,16 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
     // path, and the file's lint (no-console allows only warn/error) stays clean.
     expect(body).toMatch(/import \{ record \} from '\.\.\/lib\/log-buffer';/);
     expect(body).toMatch(/record\('info', \[\s*'\[tab-switch\] ack',\s*\{/);
-    const ack = body.indexOf("'[tab-switch] ack',");
-    expect(ack, 'the ack record line exists').toBeGreaterThan(0);
+    // P-26 (2026-09-06) — there are now TWO `[tab-switch] ack` records: this one, for
+    // an ack we were still waiting on, and the LATE one for an ack that arrives after
+    // the activation was discarded. Select this one by the field only it has
+    // (`wasWarm` comes off the live message), rather than by "the first in the file",
+    // which silently re-pointed this arm at the new record when it was added above.
+    const ack = body.indexOf(
+      "'[tab-switch] ack',",
+      body.indexOf('wasWarm: msg.wasWarm === true,') - 400,
+    );
+    expect(ack, 'the live ack record line exists').toBeGreaterThan(0);
     const block = body.slice(ack, ack + 400);
     expect(block).toMatch(/tabId: pending\.tabId,/);
     expect(block).toMatch(/elapsedMs: Date\.now\(\) - pending\.startedAt,/);
@@ -65,8 +73,9 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
     );
     expect(branch, 'the cover branch exists').toBeGreaterThan(0);
     expect(ack).toBeLessThan(branch);
-    // Exactly one instrument — a second copy would double-count a switch.
-    expect(body.split("'[tab-switch] ack'")).toHaveLength(2);
+    // Exactly two instruments — the live ack and the late ack. A third copy would
+    // double-count a switch.
+    expect(body.split("'[tab-switch] ack'")).toHaveLength(3);
   });
 
   it("'info' is a captured log level, so the line reaches the on-disk dev-log", () => {
@@ -82,14 +91,27 @@ describe('P-26 — a tab switch leaves its latency in the dev-log', () => {
     // case, so the affordance's own expiry must.
     const begin = body.indexOf('const beginSwitchAffordance = useCallback(');
     expect(begin, 'beginSwitchAffordance exists').toBeGreaterThan(0);
-    const block = body.slice(begin, begin + 2200);
+    // Widened 2026-09-06: the corrected classification carries a comment recording
+    // why the old one was dead, which pushed the fields past the previous window.
+    const block = body.slice(begin, begin + 3600);
     expect(block).toMatch(/record\('info', \[\s*'\[tab-switch\] hold-expired',\s*\{/);
-    expect(block).toMatch(
-      /kind: open !== undefined && !open\.settled \? 'no-ack' : 'no-loaded-frame',/,
-    );
+    // ⛔ THIS PIN WAS REPLACED 2026-09-06, and the reason is the point of the arm.
+    // It used to require `kind: open !== undefined && !open.settled ? 'no-ack' :
+    // 'no-loaded-frame'`, which is a branch that can never take its first arm:
+    // ACTIVATE_ACK_TIMEOUT_MS (1200) × ACTIVATE_MAX_ATTEMPTS (3) = 3600 ms of retries
+    // ALWAYS discards the activation before SWITCH_AFFORDANCE_TIMEOUT_MS (6000) fires,
+    // so `open` is always undefined here — every hold-expiry was labelled
+    // 'no-loaded-frame' and every `elapsedMs` was null. A pin that encodes a dead
+    // branch reds on the fix and trains the next reader to route around it, so it is
+    // corrected here rather than worked around.
+    expect(block).toMatch(/kind: ackSeen \? 'no-loaded-frame' : 'no-ack',/);
     expect(block).toMatch(/heldMs: SWITCH_AFFORDANCE_TIMEOUT_MS,/);
+    // Both variable fields must survive the discard, or they read null/0 in exactly
+    // the case worth measuring.
+    expect(block).toMatch(/const discarded = lastDiscardedActivationRef\.current\.get\(tabId\);/);
+    expect(block).toMatch(/discarded\?\.attempts \?\? 0,/);
     expect(block).toMatch(
-      /attempts: activationRetryRef\.current\.get\(tabId\)\?\.attempts \?\? 0,/,
+      /elapsedMs: startedAt === undefined \? null : Date\.now\(\) - startedAt,/,
     );
     // Recorded BEFORE the cover is dropped, inside the expiry callback.
     const rec = block.indexOf("'[tab-switch] hold-expired'");

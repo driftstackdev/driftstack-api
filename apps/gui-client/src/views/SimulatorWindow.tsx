@@ -51,6 +51,10 @@ import {
   SIMULATOR_FLIGHT_STORE_FILE,
 } from '../lib/main-thread-stall-detector';
 import { record } from '../lib/log-buffer';
+import {
+  rememberDiscardedActivation,
+  type DiscardedActivation,
+} from '../lib/activation-tombstones';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
@@ -253,6 +257,11 @@ interface LogicalTabActivation {
   settled: boolean;
   // P-26 (2026-09-05) — when the optimistic switch began; the ack logs the latency.
   startedAt: number;
+  /** P-26 (2026-09-06) — whether ANY activateTabResult arrived for this activation.
+   *  `hold-expired` used to classify 'no-ack' by asking whether the activation was
+   *  still open, but exhaustion at 3.6 s always discards it before the 6 s hold
+   *  fires, so that arm was unreachable and always mislabelled. */
+  ackSeen: boolean;
 }
 
 interface TabActivationRetry {
@@ -4848,6 +4857,16 @@ export function SimulatorWindow(): JSX.Element {
   // keyed by tabId; cleared on any ack (ok or reject) or when superseded by a newer
   // switch. The re-issue is the ONLY non-blocking failure path — no alert().
   const activationRetryRef = useRef<Map<string, TabActivationRetry>>(new Map());
+  // P-26 (2026-09-06) — tombstones for activations we stopped tracking. Keyed by
+  // requestId for a LATE ack, and by tabId for `hold-expired`. Neither may grow
+  // without limit: a wedged session must not turn an instrument into a leak,
+  // which is the same class of defect P-28 bounded on the publish path. They are
+  // held down differently — the requestId map EVICTS at
+  // MAX_ACTIVATION_TOMBSTONES, while the per-tab map holds one entry per tab and
+  // is cleared with the rest of the activation state when the tab set is
+  // replaced.
+  const activationTombstonesRef = useRef<Map<string, DiscardedActivation>>(new Map());
+  const lastDiscardedActivationRef = useRef<Map<string, DiscardedActivation>>(new Map());
   // Exactly one admitted activation may wait for the SAME Room to become writable
   // again. This is used both for reliable-channel congestion and for a transient
   // connected/publisher readiness drop. It carries explicit transport ownership so
@@ -4889,11 +4908,21 @@ export function SimulatorWindow(): JSX.Element {
     if (activationOwnersRef.current.get(owner.tabId) === owner) {
       activationOwnersRef.current.delete(owner.tabId);
     }
+    // P-26 (2026-09-06) — read `attempts` BEFORE the retry record is deleted below,
+    // and leave a tombstone so a late ack and the hold-expiry can still be measured.
+    const tomb: DiscardedActivation = {
+      tabId: owner.tabId,
+      startedAt: owner.startedAt,
+      attempts: activationRetryRef.current.get(owner.tabId)?.attempts ?? 0,
+      ackSeen: owner.ackSeen,
+    };
     for (const requestId of owner.requestIds) {
       if (pendingActivationsRef.current.get(requestId) === owner) {
         pendingActivationsRef.current.delete(requestId);
       }
+      rememberDiscardedActivation(activationTombstonesRef.current, requestId, tomb);
     }
+    lastDiscardedActivationRef.current.set(owner.tabId, tomb);
     owner.requestIds.clear();
     const retry = activationRetryRef.current.get(owner.tabId);
     if (retry?.owner === owner) {
@@ -4930,21 +4959,30 @@ export function SimulatorWindow(): JSX.Element {
     owner.timer = window.setTimeout(() => {
       if (switchAffordanceOwnerRef.current !== owner) return;
       switchAffordanceOwnerRef.current = null;
-      // P-26 (2026-09-05) — the hold expired. Two cases, told apart by whether the logical
-      // activation is still open: no ack at all (the switch took the daemon's cold reload
-      // path past the bound — A3's canary saw exactly this, no ACTIVATE-RESULT within 45 s)
-      // or an ack whose target never published its loaded frame in time. Recorded so a
-      // reload-path switch is a NUMBER in the dev-log rather than an absence; the ack
-      // instrument below only writes when an ack arrives.
+      // P-26 (2026-09-05, corrected 2026-09-06) — the hold expired. Two cases: no ack
+      // at all (the switch took the daemon's cold reload path past the bound — A3's
+      // canary saw exactly this, no ACTIVATE-RESULT within 45 s) or an ack whose target
+      // never published its loaded frame in time.
+      //
+      // ⛔ The first version classified those by asking whether the activation was still
+      // open, and read `attempts`/`elapsedMs` off it. That was wrong in every case that
+      // matters: retry exhaustion at 3.6 s ALWAYS discards the activation before this
+      // 6 s hold fires, so `open` was always undefined — the 'no-ack' arm was
+      // unreachable and `elapsedMs` was always null. A branch whose every variable field
+      // is null is not an instrument. Both now come from the tombstone the discard
+      // leaves behind, so the reload-path switch is a NUMBER rather than an absence.
       const open = activationOwnersRef.current.get(tabId);
+      const discarded = lastDiscardedActivationRef.current.get(tabId);
+      const ackSeen = open !== undefined ? open.ackSeen : (discarded?.ackSeen ?? false);
+      const startedAt = open !== undefined ? open.startedAt : discarded?.startedAt;
       record('info', [
         '[tab-switch] hold-expired',
         {
           tabId,
-          kind: open !== undefined && !open.settled ? 'no-ack' : 'no-loaded-frame',
+          kind: ackSeen ? 'no-loaded-frame' : 'no-ack',
           heldMs: SWITCH_AFFORDANCE_TIMEOUT_MS,
-          attempts: activationRetryRef.current.get(tabId)?.attempts ?? 0,
-          elapsedMs: open === undefined ? null : Date.now() - open.startedAt,
+          attempts: activationRetryRef.current.get(tabId)?.attempts ?? discarded?.attempts ?? 0,
+          elapsedMs: startedAt === undefined ? null : Date.now() - startedAt,
         },
       ]);
       setSwitchingTabId((current) => (current === tabId ? null : current));
@@ -4990,6 +5028,14 @@ export function SimulatorWindow(): JSX.Element {
     pendingActivationsRef.current.clear();
     for (const r of activationRetryRef.current.values()) window.clearTimeout(r.timer);
     activationRetryRef.current.clear();
+    // P-26 — drop the tombstones with everything else. They exist to measure the
+    // switch that was abandoned; once the tab set is replaced there is no switch
+    // left to attribute a late ack to, and `lastDiscardedActivationRef` is the
+    // only one of the two that is not otherwise bounded (the requestId map evicts
+    // at MAX_ACTIVATION_TOMBSTONES). An instrument must not be the thing that
+    // grows across a long session.
+    activationTombstonesRef.current.clear();
+    lastDiscardedActivationRef.current.clear();
     deferredActivationUntilReadyRef.current = null;
     const affordance = switchAffordanceOwnerRef.current;
     if (affordance?.timer !== null && affordance?.timer !== undefined) {
@@ -5405,7 +5451,28 @@ export function SimulatorWindow(): JSX.Element {
         // a DROPPED reply leaves the optimistic switch in place (acceptable for v1).
         if (msg.type === 'activateTabResult' && typeof msg.requestId === 'string') {
           const pending = pendingActivationsRef.current.get(msg.requestId);
-          if (pending === undefined) return;
+          if (pending === undefined) {
+            // P-26 (2026-09-06) — a reply for an activation we stopped tracking. This
+            // returned in silence, which is why A3's 102,431 ms ack on the fleet box
+            // left no trace: by the time it landed the pending record was long gone.
+            // The tombstone keeps the one number that matters.
+            const tomb = activationTombstonesRef.current.get(msg.requestId);
+            if (tomb !== undefined) {
+              activationTombstonesRef.current.delete(msg.requestId);
+              record('info', [
+                '[tab-switch] ack',
+                {
+                  tabId: tomb.tabId,
+                  elapsedMs: Date.now() - tomb.startedAt,
+                  attempts: tomb.attempts,
+                  late: true,
+                  ok: msg.ok !== false,
+                },
+              ]);
+            }
+            return;
+          }
+          pending.ackSeen = true;
           if (pendingActivationsRef.current.get(msg.requestId) === pending) {
             pendingActivationsRef.current.delete(msg.requestId);
           }
@@ -7885,6 +7952,7 @@ export function SimulatorWindow(): JSX.Element {
           terminalTargetFrameSeen: ctx.terminalTargetFrameSeen === true,
           settled: false,
           startedAt: Date.now(),
+          ackSeen: false,
         };
         activationOwnersRef.current.set(ctx.tabId, pendingOwner);
       }
@@ -7982,6 +8050,18 @@ export function SimulatorWindow(): JSX.Element {
         } else {
           // Exhausted — give up softly. Clear the affordance + retry record; leave the
           // operator on the tab they tapped (a dropped ack ≠ a reject). A gentle toast.
+          //
+          // P-26 (2026-09-06) — record the give-up BEFORE discarding. This branch used
+          // to produce a toast and nothing else, so the slowest switches — the only ones
+          // worth measuring — were the only ones that left no number in the dev-log.
+          record('info', [
+            '[tab-switch] exhausted',
+            {
+              tabId: ctx.tabId,
+              attempts: cur.attempts,
+              elapsedMs: Date.now() - owner.startedAt,
+            },
+          ]);
           discardActivationOwner(owner);
           resolveSwitchRef.current(ctx.tabId);
           showNotice('Still switching tabs…', 3000);
