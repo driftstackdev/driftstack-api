@@ -1287,6 +1287,24 @@ const CapabilityReportPayloadSchema = z.object({
   // through this proxy" signal — and is never present-but-false.
   interposeImageLoaded: z.boolean().optional(),
   h3ConnectionObserved: z.boolean().optional(),
+  // W-29 — the number of completed QUIC handshakes this session, monotone.
+  //
+  // ⛔ IT EXISTS BECAUSE THE BOOLEAN ABOVE IS LATCHED. `h3ConnectionObserved` is
+  // backed by an insert-only Set and can never return to false: once any
+  // handshake completes it is true for the rest of the session. That makes it a
+  // sound "h3 was reached at least once" claim and an UNSOUND liveness signal —
+  // a consumer treating it as current would refresh a verdict on a relay that
+  // died an hour ago, and the timestamp would look fresh precisely because
+  // nothing was checking.
+  //
+  // A monotone COUNT carries what the boolean cannot: its RATE OF CHANGE. New
+  // handshakes still landing means QUIC is working now; a static count means no
+  // new handshakes — which is a TRIGGER to look, never a verdict on its own,
+  // because an idle page produces the same stillness as a dead relay.
+  //
+  // Declared before it is emitted: this frame is lenient, so an undeclared key
+  // is not rejected — it is silently stripped, which is the quieter failure.
+  h3ConnectionCount: z.number().int().nonnegative().optional(),
   httpsSkipActive: z.boolean(),
   safeguardChecks: z
     .array(

@@ -18,7 +18,12 @@
 // speaks a dialect the other cannot read, INCLUDING the direction where this
 // change is the one rolled back.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 import {
   CapabilityReportSchema,
   ProbeEgressResultSchema,
@@ -81,6 +86,68 @@ describe('a probe verdict is not a pass', () => {
     // that reached a verdict is the same frame that says the proxy is unusable.
     expect(probeReachedVerdict({ ...DEAD, status: 'verdict' })).toBe(true);
     expect(DEAD.reachable || DEAD.auth_ok || DEAD.can_route).toBe(false);
+  });
+
+  it('CRITICAL the registry OBSERVES which keys the node sent — names only, no values', () => {
+    // ⛔ Without this, `status` arriving-and-agreeing and `status` not arriving at
+    // all produce identical evidence: the frame parses either way. A clean parse
+    // is a fact about validation, not about the key set, and reading one as the
+    // other is the proxy-for-the-thing mistake this whole migration removes. It
+    // is also what step 3 needs to confirm `ok` has GONE, so it is not scaffolding.
+    const src = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'services', 'fleet-control-registry.ts'),
+      'utf8',
+    );
+    expect(src).toContain("'probeEgressResult accepted: key set'");
+    expect(src).toContain("Object.keys(frame).sort().join(',')");
+    // ⛔ Structure only. These frames carry an exit IP and a proxy's detail
+    // string; a log line here must never carry a VALUE.
+    const line = src.slice(
+      src.indexOf('probeEgressResult accepted: key set') - 400,
+      src.indexOf('probeEgressResult accepted: key set'),
+    );
+    expect(line).not.toMatch(
+      /JSON\.stringify\(frame\)|\.\.\.frame|frame\.exit_ip|frame\.quic_detail/,
+    );
+  });
+
+  it('CRITICAL h3ConnectionCount is accepted — a latched boolean cannot carry liveness', () => {
+    // ⛔ `h3ConnectionObserved` is backed by an insert-only Set on the node and can
+    // never return to false. It is a sound "h3 was reached at least once" claim
+    // and an unsound liveness signal: a consumer treating it as current would
+    // refresh a verdict on a relay that died an hour ago, and the timestamp would
+    // look fresh BECAUSE nothing was checking. The monotone count carries the rate
+    // the boolean cannot. Declared before it is emitted — this frame strips
+    // undeclared keys rather than rejecting them, so an early emission would be
+    // invisible on both sides.
+    const frame = {
+      type: 'capabilityReport' as const,
+      sessionId: 's1',
+      timestamp: 't',
+      egressPhase: 'phase_1_socks5' as const,
+      proxyKind: 'socks5' as const,
+      proxyUdpSupported: true,
+      proxyIpv4Supported: true,
+      proxyIpv6Supported: false,
+      transportModeRequested: 'h2-and-h3' as const,
+      transportModeActive: 'h2-and-h3' as const,
+      h3InterposeLoaded: true,
+      httpsSkipActive: false,
+      safeguardChecks: [],
+      archetypeId: 'a1',
+    };
+    const ok = CapabilityReportSchema.safeParse({ ...frame, h3ConnectionCount: 7 });
+    expect(ok.success).toBe(true);
+    if (ok.success) expect(ok.data.h3ConnectionCount).toBe(7);
+    // Zero is a real value — "the session has completed none" — not an absence.
+    const zero = CapabilityReportSchema.safeParse({ ...frame, h3ConnectionCount: 0 });
+    expect(zero.success && zero.data.h3ConnectionCount === 0).toBe(true);
+    // A count cannot be negative or fractional; those are producer bugs, not data.
+    for (const bad of [-1, 1.5]) {
+      expect(CapabilityReportSchema.safeParse({ ...frame, h3ConnectionCount: bad }).success).toBe(
+        false,
+      );
+    }
   });
 
   it('an unknown status value is refused rather than coerced', () => {

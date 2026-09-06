@@ -782,6 +782,24 @@ export class FleetControlConnection {
           // connection's probe correlator, keyed by requestId. An unknown/stale
           // requestId is a no-op (already settled). Provenance (node_id === the
           // dispatched node) is asserted by the registry on the ok path, not here.
+          // W-28 — WHICH KEYS the node actually sent, names only, never values.
+          //
+          // ⛔ The instrument exists because it was missing when it was needed. The
+          // node began emitting `status` alongside `ok` and there was no way to
+          // observe it from here: a frame that parses tells you validation
+          // succeeded, not which keys were present, so "arriving and agreeing" and
+          // "not arriving at all" produce identical evidence. Inferring one from a
+          // clean parse is the proxy-for-the-thing reading this whole migration
+          // exists to remove.
+          //
+          // It is also the instrument step 3 needs — confirming `ok` has GONE from
+          // the wire — so it outlives the migration rather than being scaffolding.
+          // Structure only: `Object.keys`, sorted, no value ever leaves here. One
+          // line per probe (a customer-initiated Test, not a launch path).
+          this.logger?.info(
+            { nodeId: this.nodeId, frameKeys: Object.keys(frame).sort().join(',') },
+            'probeEgressResult accepted: key set',
+          );
           this.probeEgressCorrelator.onResultFrame(frame);
           break;
         case 'trimResult':
