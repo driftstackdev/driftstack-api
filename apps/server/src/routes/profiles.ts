@@ -632,7 +632,10 @@ export function registerProfileRoutes(app: FastifyInstance, deps: ProfileRoutesD
   //   status:'ok'          → { size_bytes, bytes_reclaimed }   (trimmed + persisted)
   //   status:'unavailable' → not wired (R2/fleet off) / no node connected / no stored
   //                          state to trim (a fresh profile has no sealed blob)
-  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'timeout'     → node genuinely didn't reply in time — NOT "handler
+  //                          pending"; the handler is live (⛔ STALE wording corrected
+  //                          2026-09-06, P-33: `HarnessCoordinator.swift`
+  //                          `handleTrimProfile` at :2760, dispatched at :4240)
   //   status:'error'       → node reported a failure (reason set) — row NOT updated
   app.post<{ Params: { id: string } }>(
     '/v1/profiles/:id/trim',

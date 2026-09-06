@@ -3090,12 +3090,23 @@ export function registerAgentSessionsRoutes(
   // control WSS (setCookies → setCookiesResult). Returns a DISCRIMINATED 200 body in
   // every relay case (ok / unavailable / timeout / error), mirroring the upload route,
   // so the GUI renders expected-inert states without HTTP-error noise. Malformed body
-  // (not an array of cookies) is a 422. Ships gated-inert until A3's harness setCookies
-  // WD-extension lands: until then a live node never replies → status:'timeout', which
-  // the GUI surfaces — and a not-live/offline session → status:'unavailable'.
+  // (not an array of cookies) is a 422.
+  //
+  // ⛔ STALE (marked 2026-09-06, P-33), kept rather than deleted because the
+  // sentence did damage worth recording: the "ships gated-inert / A3 handler
+  // pending" framing below is FALSE. The node handler has landed —
+  // `harness/Sources/SessionManager/HarnessCoordinator.swift` `handleSetCookies` at :1638, dispatched
+  // at :4203 (read 2026-09-06). A live node DOES reply. Anyone checking
+  // whether a defect on this path was reachable would read this comment and
+  // conclude the path was dead; it is live. Same correction already applied to
+  // the cookies-read route above.
+  // ORIGINAL WORDING, quoted: "Ships gated-inert until A3's harness setCookies
+  // WD-extension lands: until then a live node never replies → status:'timeout',
+  // which the GUI surfaces — and a not-live/offline session → status:'unavailable'."
   //   status:'ok'          → write applied
   //   status:'unavailable' → not wired / not live / node offline
-  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'timeout'     → node genuinely didn't reply in time — NOT "handler
+  //                          pending"; the handler is live
   //   status:'error'       → node reported a failure (reason set)
   // Fastify defaults to a 1 MiB JSON body. A legit token-heavy jar (up to the schema's
   // .max(2000) cookies with ~KB session-token values) can exceed that and 413 BEFORE the
@@ -3195,13 +3206,23 @@ export function registerAgentSessionsRoutes(
   // (navigateHistory → navigateHistoryResult). Returns a DISCRIMINATED 200 body in
   // every relay case (ok / unavailable / timeout / error), mirroring the cookies-import
   // route, so the GUI's back/forward buttons render expected-inert states without
-  // HTTP-error noise. Malformed body (direction not 'back'|'forward') is a 422. Ships
-  // gated-inert until A3's harness navigateHistory WD-extension lands: until then a live
-  // node never replies → status:'timeout', which the GUI surfaces — and a not-live /
-  // offline session → status:'unavailable'.
+  // HTTP-error noise. Malformed body (direction not 'back'|'forward') is a 422.
+  //
+  // ⛔ STALE (marked 2026-09-06, P-33), kept rather than deleted because the
+  // sentence did damage worth recording: the "ships gated-inert / A3 handler
+  // pending" framing below is FALSE. The node handler has landed —
+  // `harness/Sources/SessionManager/HarnessCoordinator.swift` `handleNavigateHistory` at :1709, dispatched
+  // at :4213 (read 2026-09-06). A live node DOES reply. Anyone checking
+  // whether a defect on this path was reachable would read this comment and
+  // conclude the path was dead; it is live. Same correction already applied to
+  // the cookies-read route above.
+  // ORIGINAL WORDING, quoted: "Ships gated-inert until A3's harness navigateHistory
+  // WD-extension lands: until then a live node never replies → status:'timeout',
+  // which the GUI surfaces — and a not-live / offline session → status:'unavailable'."
   //   status:'ok'          → step applied
   //   status:'unavailable' → not wired / not live / node offline
-  //   status:'timeout'     → node didn't reply (A3 handler pending)
+  //   status:'timeout'     → node genuinely didn't reply in time — NOT "handler
+  //                          pending"; the handler is live
   //   status:'error'       → node reported a failure (reason set)
   const NavigateHistoryBodySchema = z.object({
     // The only two history steps; the closed enum mirrors the wire schema.
