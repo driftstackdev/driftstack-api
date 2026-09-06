@@ -354,12 +354,64 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // EXISTENCE ONLY, no display / visibility / opacity / zero-area test.
       // `docs/locked-decisions.md:29` is literal, not shorthand. So switching to it
       // would regress `6d1d80ee6` ("wait for rendered selectors"), and the predicate
-      // stays. A3 also answered the world question: `WebDriverClient.waitFor` polls
-      // through `/session/<id>/execute/sync`, the W3C execute endpoint, so this runs
-      // in the WEBDRIVER world, whose global object page script does not share.
-      // ⚠️ Recorded as SOURCE-derived, not measured: neither side has empirically
-      // tested the isolation boundary, so this is why the brand had to go regardless
-      // rather than a licence to inject freely.
+      // stays.
+      //
+      // ⛔⛔ RETRACTION, same day. An earlier version of this comment said the
+      // predicate runs in the WEBDRIVER world "whose global object page script does
+      // not share", reasoned from the `/session/<id>/execute/sync` endpoint. THAT IS
+      // FALSE and A3 corrected it: `WebDriverClient.waitFor` polls by calling
+      // `executeScript(predicate)`, and V-2026-09-04 established first-hand that
+      // every `executeScript` compiles in the PAGE'S MAIN WORLD, through
+      // page-replaceable built-ins. So this predicate runs where a site's own
+      // overrides apply, and everything it touches is observable:
+      //
+      // Per wait variant, as of A3's 2026-09-06 revision (they corrected their own
+      // first answer, so this table is the one to trust):
+      //
+      //   {seconds}      no script at all                      safe
+      //   {url_matches}  native `GET /url` since `2b3ae7793`   safe — and it was
+      //                                                        OBSERVABLE before
+      //                                                        that commit
+      //   {selector}     main-world JS                         OBSERVABLE
+      //   {text}         main-world JS                         OBSERVABLE
+      //   this predicate main-world JS                         OBSERVABLE by
+      //                                                        construction
+      //
+      // For `{selector}`: a page that has replaced `Document.prototype.querySelector`
+      // sees the call, with our selector string, on every poll. For `{text}`:
+      // `document.body.innerText` is an `HTMLElement` prototype accessor a page can
+      // redefine, and it forces a style/layout flush, so it is observable by timing
+      // even without an override — and there is NO native equivalent for it at all.
+      //
+      // ⚠️ So the de-branding above was NECESSARY, not merely prudent — the old
+      // `Symbol.for('driftstack.…')` was reachable from page script, not hidden
+      // behind a world boundary. Nothing here may be described as "not observable".
+      //
+      // ⛔ AND THE OBVIOUS FIX IS BLOCKED, so do not plan around it. Moving the
+      // selector wait onto the native WebDriver element endpoint is the structurally
+      // right answer and it is NOT AVAILABLE: W3165 (2026-09-05) measured that this
+      // fork's `findElement` returns "no such element" for EVERY locator strategy,
+      // xpath included — which is also why the tap and type paths carry script
+      // fallbacks (they are working around a broken endpoint, not reaching into
+      // shadow DOM). Routing there "with a script fallback" would be worse than
+      // today: two round-trips per poll and the identical page-world entry. It
+      // becomes a small change the day the fork's find-element is fixed.
+      //
+      // ⚠️ This walk is not free either: on a light-DOM miss it calls
+      // `document.querySelectorAll('*')`, a LOUDER pattern than a single
+      // `querySelector`, repeating on every poll of a wait that has not resolved.
+      // A3 reviewed it and said keep it — it closes a real reach gap and the native
+      // path is not coming to rescue it. A comment that admits the cost is worth
+      // more than trading reach for quiet.
+      //
+      // ⭐ A3's larger finding, which is theirs: the tell is the CADENCE, not the
+      // call. `pollIntervalMs` is a fixed 250 ms with no jitter, so an instrumented
+      // page sees the same selector at a machine-perfect interval — something no
+      // page's own code does, findable with a counter and a timestamp array.
+      // Deliberately NOT fixed with jitter: a jittered fixed-mean poll is a fatter
+      // peak, not the absence of one, and picking a distribution to defeat a
+      // detector nobody has measured is tuning against a hypothesis. Tracked on
+      // ledger row P-3.
       //
       // `return …;` — the box waitFor evaluates the predicate as a function body
       // (see selector_visible above); a bare expression yields undefined.
