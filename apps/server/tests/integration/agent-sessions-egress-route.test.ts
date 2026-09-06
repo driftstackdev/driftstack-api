@@ -145,12 +145,50 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     expect(body.reason).toMatch(/not live on a node/);
   });
 
+  it('CRITICAL by DEFAULT the route refuses and sends NOTHING — no device can answer setEgress', () => {
+    // Production behaviour, and the reason this arm exists rather than the relay
+    // arms alone: `setEgress` has no handler in the harness and was never in its
+    // contract, so relaying costs the customer a 20 s correlator timeout and
+    // returns `status:'timeout'` — which reads as a slow node and gets diagnosed as
+    // fleet health. The refusal must therefore happen BEFORE any frame is sent.
+    return (async () => {
+      fx = await buildTestApp({
+        enableAgentRuntime: true,
+        enableFleetControlPlane: true,
+        proxyConnectivityProbe: probeStub(true),
+        // deliberately NOT passing midSessionEgressEnabled — the default is the subject
+      });
+      const id = await createSession(fx);
+      const proxyId = await createProxy(fx);
+      const nodeId = 'node-egress-default-off';
+      await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+      let framesSent = 0;
+      fx.fleetControlRegistry.register(nodeId, () => {
+        framesSent += 1;
+      });
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/egress`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { proxy_id: proxyId },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json<EgressBody>();
+      expect(body.status).toBe('unavailable');
+      expect(body.reason).toMatch(/do not support changing egress/);
+      // The load-bearing half: nothing crossed the wire, so no 20 s timeout is
+      // charged and no node sees a frame it cannot decode.
+      expect(framesSent).toBe(0);
+    })();
+  });
+
   it('CRITICAL an unresolvable proxy FAILS CLOSED with a 422 — never a silent fall back to the operator default', async () => {
     // Falling back would move a customer's live session onto shared egress they
     // never chose. That is an egress-identity leak, and it would look like success.
     fx = await buildTestApp({
       enableAgentRuntime: true,
       enableFleetControlPlane: true,
+      midSessionEgressEnabled: true, // exercise the relay path; production default is false
       proxyConnectivityProbe: probeStub(true),
     });
     const id = await createSession(fx);
@@ -175,6 +213,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     fx = await buildTestApp({
       enableAgentRuntime: true,
       enableFleetControlPlane: true,
+      midSessionEgressEnabled: true, // exercise the relay path; production default is false
       proxyConnectivityProbe: probeStub(false), // connects, measures nothing
     });
     const id = await createSession(fx);
@@ -209,6 +248,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     fx = await buildTestApp({
       enableAgentRuntime: true,
       enableFleetControlPlane: true,
+      midSessionEgressEnabled: true, // exercise the relay path; production default is false
       proxyConnectivityProbe: probeStub(true),
     });
     const id = await createSession(fx);

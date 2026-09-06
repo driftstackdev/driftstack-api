@@ -237,6 +237,12 @@ class AgentSessionsResource:
     ) -> dict[str, Any]:
         """P-17 — move a RUNNING session onto a different egress.
 
+        NOT AVAILABLE YET: no device can change egress on a running
+        session, so this currently returns ``{"status": "unavailable"}``
+        for every call — create a new session with the ``proxy_id`` you
+        want instead. The shapes are stable and will not change when
+        device support lands.
+
         The page keeps its tabs, cookies and scroll position; only the
         exit changes.
 

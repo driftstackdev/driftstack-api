@@ -858,6 +858,13 @@ applied; on any other status nothing was written.
 { "proxy_id": "prx_…", "apply_point": "next_navigation" }
 ```
 
+> **Not available yet.** Devices cannot change egress on a running
+> session, so this endpoint currently answers
+> `{"status":"unavailable"}` for every call. Create a new session with
+> the `proxy_id` you want instead. This note goes away when device
+> support lands; the request and response shapes below are stable and
+> will not change.
+
 Moves a **running** session onto one of your stored proxies without
 restarting it — the page keeps its tabs, cookies and scroll position.
 

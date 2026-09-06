@@ -452,6 +452,8 @@ export interface TestAppOptions {
    * (default true in the route, ON in prod). Lets a test assert the disable path.
    */
   proxyPrelaunchProbeEnabled?: boolean;
+  /** P-17 — enable the mid-session egress relay path (production default: false). */
+  midSessionEgressEnabled?: boolean;
   /**
    * v2-#18 — when `true` AND `enableAgentRuntime` is also `true`,
    * AgentRuntime is wired with a capturing usage recorder that
@@ -1837,6 +1839,11 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
       : {}),
     ...(opts.proxyPrelaunchProbeEnabled !== undefined
       ? { proxyPrelaunchProbeEnabled: opts.proxyPrelaunchProbeEnabled }
+      : {}),
+    // P-17 — off by default here exactly as in production, so a test that wants
+    // the relay path has to say so and the refusal is what an unconfigured app does.
+    ...(opts.midSessionEgressEnabled !== undefined
+      ? { midSessionEgressEnabled: opts.midSessionEgressEnabled }
       : {}),
     // #128 / P-17 — the per-proxy exit-identity cache. Wired UNCONDITIONALLY here
     // because bootstrap wires it unconditionally: leaving it out made the fixture

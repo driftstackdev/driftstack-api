@@ -456,8 +456,15 @@ type AgentSessionEgressResult struct {
 }
 
 // SetEgress moves a RUNNING session onto a different egress without
-// restarting it (P-17). The page keeps its tabs, cookies and scroll
-// position; only the exit changes.
+// restarting it (P-17).
+//
+// NOT AVAILABLE YET: no device can change egress on a running session,
+// so this currently returns Status "unavailable" for every call —
+// create a new session with the proxyID you want instead. The shapes
+// are stable and will not change when device support lands.
+//
+// The page keeps its tabs, cookies and scroll position; only the exit
+// changes.
 //
 // proxyID must be a proxy on your own account that has been tested at
 // least once: the swap carries the exit's MEASURED identity — IP,

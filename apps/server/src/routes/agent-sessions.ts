@@ -708,6 +708,18 @@ export interface AgentSessionsRoutesDeps {
    */
   proxyPrelaunchProbeEnabled?: boolean;
   /**
+   * P-17 — whether any device on this fleet can change egress on a RUNNING
+   * session. Defaults FALSE because none can: `setEgress` has no handler in the
+   * harness and was never in its contract (see the route for the measurement).
+   * The route refuses explicitly rather than relaying into a 20 s timeout.
+   *
+   * Injectable so the relay path below it keeps its test coverage while the
+   * capability is off — the downstream logic is correct and proved, just
+   * unreachable in production. Flip the default (and delete the guard) when A3
+   * lands a mid-session egress handler.
+   */
+  midSessionEgressEnabled?: boolean;
+  /**
    * Strict-FK (2026-06-16) — driver SessionsRepo. When wired + a create carries
    * `driftstack_session_id`, the route validates the referenced session is owned
    * by the same (owner) account before storing the uuid, closing the latent
@@ -1884,6 +1896,7 @@ export function registerAgentSessionsRoutes(
     accountProxiesService,
     proxyConnectivityProbe,
     proxyPrelaunchProbeEnabled = true,
+    midSessionEgressEnabled = false,
     driverSessionsRepo,
     r2,
     uploadMaxAccountInFlightBytes = UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES_DEFAULT,
@@ -3232,6 +3245,35 @@ export function registerAgentSessionsRoutes(
   // `apply_point` defaults to 'next_navigation' HERE and only here. The registry
   // deliberately carries no default so the safe value cannot live in two places
   // that disagree silently.
+  // ⛔⛔ NO DEVICE CAN ANSWER THIS YET, SO THE ROUTE REFUSES INSTEAD OF RELAYING.
+  //
+  // Measured 2026-09-06 with eight positive controls, one per CP→node frame, against
+  // `harness/Sources`: `setCookies`, `cookiesRequest`, `navigateHistory`,
+  // `trimProfile`, `uploadFile`, `probeEgress`, `sessionAssign` and `sessionEnd` each
+  // have exactly one `case`; `setEgress` has ZERO — and A3 confirmed by walking
+  // `ControlInbound` brace-by-brace (18 cases) that it was NEVER in their contract.
+  // The frame shape here came from an A2 commit (`413a5f32f`) that the ledger then
+  // recorded as A3's, which is how it read as an agreed dependency eleven days later.
+  //
+  // ⚠️ A grep does NOT settle this and would say the opposite: `setegress`
+  // case-insensitively matches `testStartupConfigInfoOnUnsetEgressProbe` (the
+  // substring of "UNSET Egress") and `setEgressThroughProbeForTesting` (an internal
+  // test helper, not a frame). Both are false positives. Enumerate the case list.
+  //
+  // WHY REFUSE RATHER THAN SEND: relaying costs the customer a 20 s correlator
+  // timeout and returns `status:'timeout'`, which reads as a SLOW NODE — so it gets
+  // diagnosed as fleet health rather than a missing capability, and the customer
+  // retries. An explicit `unavailable` is the honest answer and costs nothing.
+  //
+  // ⛔ It also cannot be re-pointed at the `probeEgress` pair that already works:
+  // that frame is NODE-scoped and its decoder deliberately REJECTS a `sessionId`, so
+  // a per-session swap fails closed at decode. Egress is established once, at
+  // `sessionAssign` (`egressPhase`); there is no mid-session setter of any kind.
+  //
+  // TO TURN THIS ON: flip the `midSessionEgressEnabled` default to true and delete
+  // the guard that reads it, once A3 lands a mid-session egress handler. Everything
+  // below it is already correct and tested — the dep is injectable precisely so that
+  // coverage survives while the capability is off. Tracked on ledger row P-17.
   const SetEgressBodySchema = z.object({
     // Which stored proxy to move onto. Owner-scoped at resolve time.
     proxy_id: z.string().min(1),
@@ -3289,6 +3331,17 @@ export function registerAgentSessionsRoutes(
       }
       if (accountProxiesService === undefined) {
         return { status: 'unavailable' as const, reason: 'egress management not enabled' };
+      }
+      // See DEVICES_SUPPORT_MID_SESSION_EGRESS above. Placed AFTER validation so a
+      // malformed request still gets its 422 — a caller fixing their body should not
+      // have to discover the capability gap twice — and BEFORE the relay so no frame
+      // is sent into the void and no 20 s timeout is charged to the customer.
+      if (!midSessionEgressEnabled) {
+        return {
+          status: 'unavailable' as const,
+          reason:
+            'devices do not support changing egress on a running session yet — create a new session with this proxy_id instead',
+        };
       }
       const proxyId = parsed.data.proxy_id;
       // Same validation the launch path applies, so a swap cannot install an exit

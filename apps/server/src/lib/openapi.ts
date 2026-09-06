@@ -5647,7 +5647,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/egress',
-    summary: 'Move a running session onto a different egress',
+    summary: 'Move a running session onto a different egress (not available yet)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -5670,7 +5670,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated body. status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the egress was NOT changed.",
+          "NOT AVAILABLE YET: devices cannot change egress on a running session, so this currently answers status 'unavailable' for every call — create a new session with the proxy_id instead. The shapes below are stable and will not change when support lands. Discriminated body: status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the egress was NOT changed.",
         content: {
           'application/json': {
             schema: z.object({

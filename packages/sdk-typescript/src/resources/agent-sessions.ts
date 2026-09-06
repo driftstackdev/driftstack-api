@@ -538,6 +538,13 @@ export class AgentSessionsResource {
    * restarting it. The page keeps its tabs, cookies and scroll
    * position; only the exit changes.
    *
+   * ⛔ NOT AVAILABLE YET. No device can change egress on a running
+   * session, so this currently returns `{ status: 'unavailable' }`
+   * for every call — create a new session with the `proxyId` you
+   * want instead. The shapes are stable and will not change when
+   * device support lands, so code written against this today keeps
+   * working; only the `status` you get back changes.
+   *
    * `proxyId` must be a proxy on your own account that has been
    * tested at least once (`account.proxies.test(id)`): the swap
    * carries the exit's MEASURED identity — IP, country, timezone —

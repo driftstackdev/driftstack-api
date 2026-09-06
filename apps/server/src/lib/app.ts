@@ -639,6 +639,9 @@ export interface AppDeps {
   /** Founder directive #63: master switch for the pre-launch probe (ON by default
    *  in bootstrap via DRIFTSTACK_PROXY_PRELAUNCH_PROBE; set 0 to disable). */
   proxyPrelaunchProbeEnabled?: boolean;
+  /** P-17 — enable the mid-session egress relay. Default false: no device can
+   *  answer `setEgress` yet, so the route refuses rather than timing out. */
+  midSessionEgressEnabled?: boolean;
   /** ARC A slice 4b: injectable TCP-reachability probe for the proxy test
    *  endpoint (tests inject a deterministic stub; prod uses the default). */
   proxyTcpProbe?: (host: string, port: number, timeoutMs: number) => Promise<void>;
@@ -1677,6 +1680,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         : {}),
       ...(deps.proxyPrelaunchProbeEnabled !== undefined
         ? { proxyPrelaunchProbeEnabled: deps.proxyPrelaunchProbeEnabled }
+        : {}),
+      ...(deps.midSessionEgressEnabled !== undefined
+        ? { midSessionEgressEnabled: deps.midSessionEgressEnabled }
         : {}),
       // Strict-FK: validate an owned driftstack_session_id on create (closes the
       // latent cross-account pointer gap). The driver SessionRepo is the same
