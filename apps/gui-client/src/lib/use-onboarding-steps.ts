@@ -7,7 +7,7 @@
 // duplicated (and drifting) per view. Each surface still computes its own
 // done-states from the data it already has and wires its own `go` navigation.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ChecklistStep } from '../components/OnboardingChecklist';
 import {
   accountSaysOnboardingCompleted,
@@ -85,6 +85,33 @@ export function useOnboardingCompleted(account: object | null = null): {
     }
     setLocalCompleted(true);
   }, [accountCompleted, localCompleted]);
+  // BACKFILL: the mirror ran from `markCompleted` and nowhere else, and
+  // `markCompleted` fires exactly once — at the moment a customer finishes. So
+  // every customer who finished BEFORE the account gained
+  // `onboarding_completed_at` has local=1 and an account that says nothing, and
+  // no code path ever tells it. The SEED effect above runs the other direction,
+  // which is why the gap is invisible on the Mac that has the flag and shows up
+  // only on the NEXT one — as "Get set up" for someone who set up months ago,
+  // the exact complaint this pair of flags was built to answer.
+  //
+  // Guarded on `account !== null`: before /me lands we do not yet know what the
+  // account says, and PATCHing on a guess would write completion for a customer
+  // who never finished. The ref keeps it to one attempt per mount — the sync is
+  // fire-and-forget, so a retry loop here would be invisible and unbounded.
+  const backfilled = useRef(false);
+  // ⛔ Only a flag that was ALREADY on disk when this hook mounted needs a
+  // backfill. One set DURING this session was mirrored by `markCompleted` itself,
+  // and firing on that too PATCHes twice for every fresh completion — measured,
+  // it broke the mirror suite's "exactly one PATCH" arm. Reading the initial
+  // value into a ref keeps the two paths disjoint by construction rather than by
+  // ordering, which is the part that would rot.
+  const preexisting = useRef(localCompleted);
+  useEffect(() => {
+    if (backfilled.current) return;
+    if (account === null || !preexisting.current || accountCompleted) return;
+    backfilled.current = true;
+    syncOnboardingCompletedToAccount();
+  }, [account, accountCompleted]);
   const markCompleted = useCallback(() => {
     try {
       localStorage.setItem(COMPLETED_KEY, '1');
