@@ -64,6 +64,11 @@ export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>(
   'GET:/v1/agent-sessions/:id/page-state',
   'GET:/v1/agent-sessions/:id/cookies',
   'POST:/v1/agent-sessions/:id/cookies/set',
+  // P-17 — swapping a live session onto one of YOUR OWN stored proxies. The
+  // tier check is not here: `resolveForDispatch` refuses a VPN row an
+  // unentitled tier still owns, so a free desktop user can move onto their own
+  // socks5 exit and no further.
+  'POST:/v1/agent-sessions/:id/egress',
   'POST:/v1/agent-sessions/:id/history',
   'POST:/v1/agent-sessions/:id/files',
   'GET:/v1/agent-sessions/:id/downloads',

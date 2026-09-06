@@ -224,6 +224,11 @@ export const DOC_NAV: DocNavSection[] = [
           },
           { href: '/api/agent-sessions/#import-cookies', label: 'Import cookies', method: 'POST' },
           {
+            href: '/api/agent-sessions/#change-the-sessions-egress',
+            label: "Change the session's egress",
+            method: 'POST',
+          },
+          {
             href: '/api/agent-sessions/#step-browser-history',
             label: 'Step browser history',
             method: 'POST',

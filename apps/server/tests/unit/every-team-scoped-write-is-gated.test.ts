@@ -117,6 +117,7 @@ const ROSTER: Readonly<Record<string, readonly string[]>> = {
   // now fails the "still carries the gate" arm, which compares the full set.
   'POST /v1/agent-sessions': ['callerCanAccessAgentSession', 'inline role check'],
   'POST /v1/agent-sessions/:id/cookies/set': ['callerCanAccessAgentSession'],
+  'POST /v1/agent-sessions/:id/egress': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/files': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/handback': ['callerCanAccessAgentSession'],
   'POST /v1/agent-sessions/:id/history': ['callerCanAccessAgentSession'],

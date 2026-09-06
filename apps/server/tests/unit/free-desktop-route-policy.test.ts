@@ -52,6 +52,7 @@ const EXPECTED_GUI_ROUTES = [
   'GET:/v1/agent-sessions/:id/page-state',
   'GET:/v1/agent-sessions/:id/cookies',
   'POST:/v1/agent-sessions/:id/cookies/set',
+  'POST:/v1/agent-sessions/:id/egress',
   'POST:/v1/agent-sessions/:id/history',
   'POST:/v1/agent-sessions/:id/files',
   'GET:/v1/agent-sessions/:id/downloads',
@@ -89,8 +90,11 @@ function registeredRouteCalls(): ReadonlySet<string> {
 }
 
 describe('Free desktop route policy', () => {
-  it('pins exactly the 59 current non-denied GUI route templates', () => {
-    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(60);
+  // ⚠️ The title said 59 while the assertion said 60 — the number in the title had
+  // drifted, which is how a count pin stops being readable. Both say 61 now: +1 for
+  // P-17's `POST /v1/agent-sessions/:id/egress`.
+  it('pins exactly the 61 current non-denied GUI route templates', () => {
+    expect(FREE_DESKTOP_ALLOWED_ROUTES.size).toBe(61);
     expect([...FREE_DESKTOP_ALLOWED_ROUTES].sort()).toEqual([...EXPECTED_GUI_ROUTES].sort());
   });
 

@@ -850,6 +850,34 @@ running session's cookie store. Response (200) is the discriminated
 `{ "status": …, "reason"?: … }` shape — `ok` means the write was
 applied; on any other status nothing was written.
 
+## Change the session's egress
+
+`POST /v1/agent-sessions/{id}/egress`
+
+```json
+{ "proxy_id": "prx_…", "apply_point": "next_navigation" }
+```
+
+Moves a **running** session onto one of your stored proxies without
+restarting it — the page keeps its tabs, cookies and scroll position.
+
+`proxy_id` must be a proxy on your own account that has been tested at
+least once. The swap carries the exit's measured identity (IP, country,
+timezone) to the device so the page keeps seeing a consistent origin,
+and an untested proxy has no measured identity to carry — that case
+answers `unavailable` rather than guessing one. Test a proxy with
+`POST /v1/account/me/proxies/{id}/test`.
+
+`apply_point` defaults to `"next_navigation"`, which swaps on the next
+page load and leaves connections in flight alone. `"immediate"` swaps
+at once and may reset connections mid-page.
+
+Response (200) is the discriminated `{ "status": …, "reason"?: … }`
+shape, plus `apply_point` when the swap was accepted — `"immediate"`,
+`"next_navigation"`, or `null` when the device accepted it but did not
+confirm when it applies (treat `null` as possibly-immediate). On any
+status other than `ok`, the egress was **not** changed.
+
 ## Step browser history
 
 `POST /v1/agent-sessions/{id}/history`

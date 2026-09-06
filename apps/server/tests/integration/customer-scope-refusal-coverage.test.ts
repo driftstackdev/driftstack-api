@@ -236,6 +236,7 @@ const EXPECTED_SCOPED_ROUTES: readonly string[] = [
   'POST /v1/account/mfa/verify [account_owner]',
   'POST /v1/agent-sessions [write]',
   'POST /v1/agent-sessions/:id/cookies/set [write]',
+  'POST /v1/agent-sessions/:id/egress [write]',
   'POST /v1/agent-sessions/:id/files [write]',
   'POST /v1/agent-sessions/:id/handback [write]',
   'POST /v1/agent-sessions/:id/history [write]',

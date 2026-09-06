@@ -1496,6 +1496,20 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
   // same null, not a separate flag the route consults.
   const proxyMasterKey = opts.profileMasterKeyUnset === true ? null : Buffer.alloc(32, 7);
   const accountProxiesService = new AccountProxiesService(accountProxiesRepo, proxyMasterKey);
+  // P-17 — a Map-backed ExitIdentityStore. `probedAt` is stamped on write, the
+  // same shape RedisExitIdentityStore returns.
+  const exitIdentityRows = new Map<string, { identity: unknown; probedAt: string }>();
+  const testExitIdentityCache = {
+    set: (accountId: string, proxyId: string, identity: unknown): Promise<void> => {
+      exitIdentityRows.set(`${accountId}:${proxyId}`, {
+        identity,
+        probedAt: new Date().toISOString(),
+      });
+      return Promise.resolve();
+    },
+    get: (accountId: string, proxyId: string): Promise<unknown> =>
+      Promise.resolve(exitIdentityRows.get(`${accountId}:${proxyId}`)),
+  } as unknown as never;
   // V-225 — accountAudit wired for profile.{created,deleted}.
   const profilesService = new ProfilesService(profilesRepo, accountAuditService);
   // V-312 — profile snapshots service shares the profiles repo for
@@ -1824,6 +1838,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
     ...(opts.proxyPrelaunchProbeEnabled !== undefined
       ? { proxyPrelaunchProbeEnabled: opts.proxyPrelaunchProbeEnabled }
       : {}),
+    // #128 / P-17 — the per-proxy exit-identity cache. Wired UNCONDITIONALLY here
+    // because bootstrap wires it unconditionally: leaving it out made the fixture
+    // unfaithful in a way that silently changed behaviour rather than failing —
+    // the pre-launch probe's `exitIdentityCache?.set(...)` became a no-op, so a
+    // route that reads a measured exit identity could never see one and answered
+    // "unavailable" for a reason that existed only in the test harness.
+    // In-memory rather than Redis-backed: same contract, no server.
+    exitIdentityCache: testExitIdentityCache,
     profileMasterKey: proxyMasterKey,
     // ARC A slice 4b — deterministic probe so the proxy test endpoint doesn't
     // open real sockets. Use a reserved example hostname instead of TEST-NET

@@ -229,6 +229,44 @@ class AgentSessionsResource:
             json_body=coerce_body({"mode": mode}),
         )
 
+    def set_egress(
+        self,
+        agent_session_id: str,
+        proxy_id: str,
+        apply_point: str | None = None,
+    ) -> dict[str, Any]:
+        """P-17 — move a RUNNING session onto a different egress.
+
+        The page keeps its tabs, cookies and scroll position; only the
+        exit changes.
+
+        ``proxy_id`` must be a proxy on your own account that has been
+        tested at least once. The swap carries the exit's MEASURED
+        identity — IP, country, timezone — to the device so the page
+        keeps seeing a consistent origin. An untested proxy has no
+        measured identity to carry, and the response is
+        ``status='unavailable'`` rather than a guessed one.
+
+        ``apply_point`` defaults to ``'next_navigation'``, which swaps
+        on the next page load and leaves connections in flight alone.
+        ``'immediate'`` swaps at once and may reset connections
+        mid-page.
+
+        Read ``status`` before assuming anything moved: only ``'ok'``
+        means the egress changed. On ``'ok'``, ``apply_point`` says
+        WHEN — and ``None`` there means the device accepted the swap
+        without confirming the timing, which should be treated as
+        possibly-immediate.
+        """
+        body: dict[str, Any] = {"proxy_id": proxy_id}
+        if apply_point is not None:
+            body["apply_point"] = apply_point
+        return self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/egress",
+            json_body=coerce_body(body),
+        )
+
     def send_input_event(
         self,
         agent_session_id: str,
@@ -484,6 +522,22 @@ class AsyncAgentSessionsResource:
             "POST",
             f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/mode",
             json_body=coerce_body({"mode": mode}),
+        )
+
+    async def set_egress(
+        self,
+        agent_session_id: str,
+        proxy_id: str,
+        apply_point: str | None = None,
+    ) -> dict[str, Any]:
+        """Async mirror — same P-17 egress-swap semantics as sync."""
+        body: dict[str, Any] = {"proxy_id": proxy_id}
+        if apply_point is not None:
+            body["apply_point"] = apply_point
+        return await self._http.request(
+            "POST",
+            f"/v1/agent-sessions/{quote(agent_session_id, safe='')}/egress",
+            json_body=coerce_body(body),
         )
 
     async def send_input_event(

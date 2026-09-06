@@ -102,7 +102,7 @@ import type {
   FleetControlRegistry,
   FleetControlConnection,
 } from '../services/fleet-control-registry.js';
-import { CookieSchema } from '../schemas/harness-control-protocol.js';
+import { CookieSchema, SetEgressApplyPointSchema } from '../schemas/harness-control-protocol.js';
 import {
   resolvePageStateMaxAgeSeconds,
   type SessionPageStateStore,
@@ -3201,6 +3201,190 @@ export function registerAgentSessionsRoutes(
     },
   );
 
+  // Live egress swap (P-17). Moves a RUNNING agent session onto a different exit
+  // over the node's live control WSS (setEgress -> setEgressResult). Mirrors the
+  // cookies-import route above: the same control-auth path (the separate
+  // Simulator app holds a per-session gui_control_key, not an account Bearer),
+  // the same discriminated 200 body in every relay case, and the same per-account
+  // relay-slot shedding.
+  //
+  // ⛔ FAIL-CLOSED ON THE PROXY. `resolveForDispatch` is the single choke point
+  // that turns a stored row into a dispatchable egress config: owner-scoped, it
+  // re-asserts the SSRF host guard (UnsafeProxyHostError, mapped to a 4xx by this
+  // file's error mapper) and refuses a VPN row an unentitled tier still owns. A
+  // null resolve is a 422, NEVER a fall back to the operator-default egress — that
+  // would move a customer's LIVE session onto shared egress they never chose,
+  // which is the egress-identity leak the dispatch path documents.
+  //
+  // ⛔ AN UNPROBED PROXY IS REFUSED, NOT GUESSED. `setEgress` REQUIRES an
+  // exitIdentity, and that block is what the box's new-tab IP panel shows and what
+  // T-11 spoofs navigator.geolocation from. Synthesising one would put a false IP
+  // and a mismatched timezone in front of the site under test — a fingerprint
+  // inconsistency, which is the single thing this product exists not to produce.
+  // So when the pre-launch probe is wired we run the SAME gate the create path
+  // runs, which both validates the proxy and warms the identity cache; if no
+  // identity is available after that, the answer is `unavailable` with a reason,
+  // not a swap. That gate throwing is a 422 with a customer-safe detail
+  // (`ProxyValidationFailedError`: unreachable / auth_failed / timeout /
+  // egress_blocked), never a 500 — an egress the customer picked that cannot be
+  // reached is their input being wrong, not ours.
+  //
+  // `apply_point` defaults to 'next_navigation' HERE and only here. The registry
+  // deliberately carries no default so the safe value cannot live in two places
+  // that disagree silently.
+  const SetEgressBodySchema = z.object({
+    // Which stored proxy to move onto. Owner-scoped at resolve time.
+    proxy_id: z.string().min(1),
+    // Optional: WHEN the swap takes effect. Defaulted below, not here, so the
+    // default lives in exactly one place. NOT `.strict()` — the sibling relay
+    // routes warn on unknown keys through `reportUnknownRequestFields` rather
+    // than rejecting, and a body schema that 422s where its siblings warn is an
+    // inconsistency a customer hits, not a reviewer.
+    apply_point: SetEgressApplyPointSchema.optional(),
+  });
+  app.post<{ Params: { id: string } }>(
+    '/v1/agent-sessions/:id/egress',
+    { preHandler: [controlKeyOrAccountAuth('write'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      // Account path: enforce ownership. Control-key path: already decrypt-matched
+      // against THIS `:id` in the preHandler (same as POST /:id/cookies/set).
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      const ownerTier = await consumeEffectiveOwnerRateLimit(
+        app,
+        req,
+        reply,
+        rec.accountId,
+        'global',
+      );
+      const parsed = SetEgressBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+      reportUnknownRequestFields({
+        body: req.body ?? {},
+        knownKeys: knownRequestKeys(SetEgressBodySchema),
+        reply,
+        logger: req.log,
+        route: 'POST /v1/agent-sessions/:id/egress',
+      });
+      // Control plane not wired (stateless deploy / no fleet registry).
+      if (fleetControlRegistry === undefined) {
+        return { status: 'unavailable' as const, reason: 'fleet control plane not enabled' };
+      }
+      // The swap targets a LIVE session's egress — a closed or never-dispatched
+      // session has none to move.
+      if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
+        return { status: 'unavailable' as const, reason: 'session is not live on a node' };
+      }
+      const conn = fleetControlRegistry.get(rec.nodeId);
+      if (conn === undefined) {
+        return { status: 'unavailable' as const, reason: 'session node is not connected' };
+      }
+      if (accountProxiesService === undefined) {
+        return { status: 'unavailable' as const, reason: 'egress management not enabled' };
+      }
+      const proxyId = parsed.data.proxy_id;
+      // Same validation the launch path applies, so a swap cannot install an exit
+      // that a create would have refused — and it warms the exit-identity cache.
+      await runProxyPrelaunchGate({
+        tier: ownerTier,
+        probe: proxyConnectivityProbe,
+        enabled: proxyPrelaunchProbeEnabled,
+        accountProxiesService,
+        proxyId,
+        accountId: rec.accountId,
+        logger: req.log,
+        exitIdentityCache,
+      });
+      const resolved = await accountProxiesService.resolveForDispatch({
+        proxyId,
+        accountId: rec.accountId,
+        tier: ownerTier,
+      });
+      if (resolved === null) {
+        throw new ValidationError({
+          fieldErrors: {
+            proxy_id: [
+              'Proxy not found for this account, or not dispatchable (only socks5 and entitled VPN schemes can carry a session).',
+            ],
+          },
+          formErrors: [],
+        });
+      }
+      const hit = await exitIdentityCache?.get(rec.accountId, proxyId);
+      if (hit === undefined) {
+        return {
+          status: 'unavailable' as const,
+          reason:
+            'no probed exit identity for this proxy — run POST /v1/account/me/proxies/:id/test first',
+        };
+      }
+      const exitIdentity = {
+        ip: hit.identity.ip,
+        country: hit.identity.country,
+        region: hit.identity.region,
+        city: hit.identity.city,
+        timezone: hit.identity.timezone,
+        ...(typeof hit.identity.lat === 'number' ? { lat: hit.identity.lat } : {}),
+        ...(typeof hit.identity.lon === 'number' ? { lon: hit.identity.lon } : {}),
+        quic_ok:
+          'type' in resolved && (resolved.type === 'openvpn' || resolved.type === 'wireguard')
+            ? true
+            : (resolved as { udp_capable?: boolean | null }).udp_capable === true,
+        probed_at: hit.probedAt,
+      };
+      const applyPoint = parsed.data.apply_point ?? 'next_navigation';
+      const releaseRelay = reserveRelaySlot(rec.accountId);
+      if (releaseRelay === null) {
+        return { status: 'error' as const, reason: RELAY_BUSY_REASON };
+      }
+      try {
+        const outcome = await conn.setEgress(
+          randomUUID(),
+          rec.id,
+          resolved,
+          exitIdentity,
+          applyPoint,
+        );
+        if (outcome.status === 'applied') {
+          return { status: 'ok' as const, apply_point: 'immediate' as const };
+        }
+        if (outcome.status === 'accepted_pending_navigation') {
+          return { status: 'ok' as const, apply_point: 'next_navigation' as const };
+        }
+        if (outcome.status === 'ok_apply_point_unconfirmed') {
+          // ⛔ NOT a bare success. A node predating the applyPoint field accepts the
+          // request, DROPS the field, does whatever it does by default and replies
+          // ok — so the caller could believe they bought a deferred swap while the
+          // node reset every in-flight connection. The null is load-bearing: it says
+          // the apply point is UNKNOWN, which is the only thing the CP learned.
+          return {
+            status: 'ok' as const,
+            apply_point: null,
+            reason:
+              'the node accepted the swap but did not confirm when it applies; it may have taken effect immediately',
+          };
+        }
+        if (outcome.status === 'error') {
+          return {
+            status: 'error' as const,
+            reason: customerSafeNodeDiagnostic(outcome.message),
+          };
+        }
+        return { status: 'timeout' as const };
+      } finally {
+        releaseRelay();
+      }
+    },
+  );
+
   // Sim browser back/forward (A3 W2870). Steps the running session's WebKit
   // back-forward list one entry in `direction` over the node's live control WSS
   // (navigateHistory → navigateHistoryResult). Returns a DISCRIMINATED 200 body in
@@ -5750,6 +5934,11 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // Cookie-import — the cookies WRITE (import) is gated too (machine-readable 503,
   // not a bare 404) so the GUI Cookies panel's Import surfaces the documented state.
   app.post('/v1/agent-sessions/:id/cookies/set', stub);
+  // P-17 — the disabled twin. Without it a gated deployment answers 404 for a
+  // route the document publishes, which reads as "you got the path wrong"
+  // instead of "this deployment does not run the agent". Found by the route's
+  // own gated-503 arm, which is why that arm exists.
+  app.post('/v1/agent-sessions/:id/egress', stub);
   // Sim back/forward (A3 W2870) — the history step is gated too (machine-readable 503,
   // not a bare 404) so the GUI's back/forward buttons surface the documented state.
   app.post('/v1/agent-sessions/:id/history', stub);

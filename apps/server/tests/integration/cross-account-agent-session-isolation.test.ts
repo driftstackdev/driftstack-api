@@ -113,6 +113,14 @@ const AGENT_ROUTES: ReadonlyArray<{
   },
   { method: 'GET', suffix: '/downloads/content?name=secret.pdf' },
   { method: 'POST', suffix: '/history', payload: { direction: 'back' } },
+  // P-17 — the egress swap. Ownership is checked before the body is parsed, so a
+  // placeholder proxy_id is enough to prove account B never reaches account A's
+  // session; a real one would test the proxy resolver, not the boundary.
+  {
+    method: 'POST',
+    suffix: '/egress',
+    payload: { proxy_id: '00000000-0000-4000-8000-0000000000bb' },
+  },
   // These two the source grep could not have found: they are registered in
   // routes/recipes.ts and routes/agent-sessions-transport-report.ts, not in
   // agent-sessions.ts. The runtime enumeration below found them immediately,

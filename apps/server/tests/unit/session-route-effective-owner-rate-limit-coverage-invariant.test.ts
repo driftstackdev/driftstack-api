@@ -128,6 +128,13 @@ const AGENT_MAIN_ROUTES: readonly ExpectedRoute[] = [
     'agent-sessions.ts',
     'registerAgentSessionsRoutes',
     'post',
+    '/v1/agent-sessions/:id/egress',
+    'global',
+  ),
+  route(
+    'agent-sessions.ts',
+    'registerAgentSessionsRoutes',
+    'post',
     '/v1/agent-sessions/:id/history',
     'global',
   ),
@@ -274,6 +281,10 @@ const EXPECTED_OWNER_AUTHORITY = new Map<string, string>([
   ],
   [
     'agent-sessions.ts#registerAgentSessionsRoutes POST /v1/agent-sessions/:id/cookies/set',
+    'rec.accountId',
+  ],
+  [
+    'agent-sessions.ts#registerAgentSessionsRoutes POST /v1/agent-sessions/:id/egress',
     'rec.accountId',
   ],
   [
@@ -874,12 +885,15 @@ function fallbackConsumeCounts(source: string): {
 describe('session-route effective-owner rate-limit coverage invariant', () => {
   const sources = Object.fromEntries(SOURCE_FILES.map((file) => [file, sourceText(file)]));
 
-  it('pins exactly 14 direct routes and 22 live agent routes (20 main + 2 split)', () => {
+  // 21 main since P-17's `POST /v1/agent-sessions/:id/egress`, which consumes the
+  // effective-owner limiter against `rec.accountId` exactly as its siblings do.
+  it('pins exactly 14 direct routes and 23 live agent routes (21 main + 2 split)', () => {
     expect(DIRECT_ROUTES).toHaveLength(14);
-    expect(AGENT_MAIN_ROUTES).toHaveLength(20);
+    expect(AGENT_MAIN_ROUTES).toHaveLength(21);
     expect(AGENT_SPLIT_ROUTES).toHaveLength(2);
-    expect(EXPECTED_ROUTES).toHaveLength(36);
-    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(36);
+    expect(EXPECTED_ROUTES).toHaveLength(37);
+    // 37 with P-17's egress route, whose owner authority is `rec.accountId`.
+    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(37);
     expect(audit(sources)).toEqual([]);
   });
 

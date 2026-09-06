@@ -287,6 +287,8 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
       ['get', '/v1/agent-sessions/:id/network'],
       ['get', '/v1/agent-sessions/:id/cookies'],
       ['post', '/v1/agent-sessions/:id/cookies/set'],
+      // P-17 — the egress swap's disabled twin (503, not a bare 404).
+      ['post', '/v1/agent-sessions/:id/egress'],
       ['post', '/v1/agent-sessions/:id/history'],
       ['post', '/v1/agent-sessions/:id/files'],
       ['get', '/v1/agent-sessions/:id/downloads'],
@@ -621,13 +623,22 @@ describe('all-route caller-authority invariant', () => {
     // authority arm below was confirmed empty of violations at this count first,
     // so the +2 is one properly gated live route + one reviewed disabled stub.
     // P-23 — 310 since GET /v1/profiles/:id/activity (read:profiles, owner-scoped).
-    expect(routes).toHaveLength(310);
+    // 311 since P-17 registered `POST /v1/agent-sessions/:id/egress`.
+    // 312 since P-17's DISABLED twin: the live route was +1 above, the 503 stub
+    // is this one. A published route without its twin answers 404 on a gated
+    // deployment, which reads as a wrong path rather than a disabled feature.
+    expect(routes).toHaveLength(312);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
     // 219 since P-23: GET /v1/profiles/:id/activity is structurally authorized
     // (requireAuth + requireScope('read:profiles') + ownership via service.get).
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(219);
+    // 220 since P-17: POST /v1/agent-sessions/:id/egress is structurally
+    // authorized (controlKeyOrAccountAuth('write') + ownership via
+    // callerCanAccessAgentSession on the account path). The count moving in
+    // step with the total is the point of this arm — a route that shipped
+    // ungated would move the total and leave this number where it was.
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(220);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {
@@ -647,7 +658,8 @@ describe('all-route caller-authority invariant', () => {
     // stubs their gates had always lacked.
     // T-9 — 55 since the agent-sessions disabled registrar gained the
     // network-log read's twin.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(55);
+    // 56 since P-17's egress twin joined the disabled surface.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(56);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,

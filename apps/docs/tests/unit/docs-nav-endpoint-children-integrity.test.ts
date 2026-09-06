@@ -185,7 +185,7 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     expect(offenders).toEqual([]);
   });
 
-  it('V-1080 the tree carries a substantial endpoint census (137 API + 8 webhooks; includes the public archetype catalog endpoint, and the agent-session LIST route whose page had no section for it until V-1080). V-846 raised it from 133: V-843 documented the crypto quote and receipt endpoints, which the page had been omitting, and every documented endpoint earns a nav child', () => {
+  it('V-1080 the tree carries a substantial endpoint census (138 API + 8 webhooks; includes the public archetype catalog endpoint, and the agent-session LIST route whose page had no section for it until V-1080). V-846 raised it from 133: V-843 documented the crypto quote and receipt endpoints, which the page had been omitting, and every documented endpoint earns a nav child', () => {
     const apiTotal = (apiSection?.items ?? []).reduce((n, i) => n + (i.children?.length ?? 0), 0);
     const webhooksTotal = (webhooksSection?.items ?? []).reduce(
       (n, i) => n + (i.children?.length ?? 0),
@@ -199,7 +199,8 @@ describe('S22.4/S27 DOC_NAV endpoint children ↔ api/*.md + webhooks/*.md integ
     // this tripwire requires: the EXACTNESS arm above passed first, so the +1 is
     // a nav child that matches a real h2 rather than a drifting count.
     // 139 since P-23 (2026-09-05) added `/api/profiles/#recent-activity` (GET activity).
-    expect(apiTotal).toBe(139);
+    // 140 since P-17 documented POST /v1/agent-sessions/{id}/egress.
+    expect(apiTotal).toBe(140);
     expect(webhooksTotal).toBe(8);
   });
 });

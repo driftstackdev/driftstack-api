@@ -322,6 +322,7 @@ describe('OpenAPI spec generation', () => {
         '/v1/agent-sessions/{id}/network',
         '/v1/agent-sessions/{id}/cookies',
         '/v1/agent-sessions/{id}/cookies/set',
+        '/v1/agent-sessions/{id}/egress',
         '/v1/agent-sessions/{id}/history',
         '/v1/agent-sessions/{id}/files',
         '/v1/agent-sessions/{id}/downloads',

@@ -5,6 +5,7 @@
 //   get(id)
 //   message(id, user_message)
 //   close(id)
+//   setEgress(id, proxyId, applyPoint?)
 //
 // AI-backed operations depend on the deployment's configured BYOK or
 // bundled-LLM provider. Deployments without one return the stable
@@ -34,6 +35,18 @@ export type InputEvent =
   | { type: 'touchEnd'; x: number; y: number; touchId: number }
   | { type: 'swipe'; x1: number; y1: number; x2: number; y2: number; durationMs: number }
   | { type: 'ping'; timestamp: number };
+
+/**
+ * P-17 — the discriminated result of an egress swap. Only `'ok'` means the
+ * egress changed; every other status leaves the session exactly as it was, with
+ * `reason` saying why. `apply_point` is present on success and is `null` when
+ * the device accepted the swap without confirming when it takes effect.
+ */
+export interface AgentSessionEgressResult {
+  status: 'ok' | 'unavailable' | 'timeout' | 'error';
+  apply_point?: 'next_navigation' | 'immediate' | null;
+  reason?: string;
+}
 
 /** Slice 4 + Slice 5 response envelope for POST /v1/agent-sessions/
  *  :id/input-event. Discriminated union — callers MUST branch on
@@ -517,6 +530,42 @@ export class AgentSessionsResource {
       method: 'POST',
       path: `/v1/agent-sessions/${encodeURIComponent(id)}/mode`,
       body: { mode },
+    });
+  }
+
+  /**
+   * P-17 — move a RUNNING session onto a different egress without
+   * restarting it. The page keeps its tabs, cookies and scroll
+   * position; only the exit changes.
+   *
+   * `proxyId` must be a proxy on your own account that has been
+   * tested at least once (`account.proxies.test(id)`): the swap
+   * carries the exit's MEASURED identity — IP, country, timezone —
+   * to the device so the page keeps seeing a consistent origin. An
+   * untested proxy has no measured identity to carry, and the
+   * response is `status:'unavailable'` rather than a guessed one.
+   *
+   * `applyPoint` defaults to `'next_navigation'`, which swaps on the
+   * next page load and leaves connections in flight alone.
+   * `'immediate'` swaps at once and may reset connections mid-page.
+   *
+   * ⛔ Read `status` before assuming anything moved: only `'ok'`
+   * means the egress changed. On `'ok'`, `apply_point` says WHEN —
+   * and `null` there means the device accepted the swap but did not
+   * confirm the timing, which you should treat as possibly-immediate.
+   */
+  setEgress(
+    id: string,
+    proxyId: string,
+    applyPoint?: 'next_navigation' | 'immediate',
+  ): Promise<AgentSessionEgressResult> {
+    return this.http.request<AgentSessionEgressResult>({
+      method: 'POST',
+      path: `/v1/agent-sessions/${encodeURIComponent(id)}/egress`,
+      body: {
+        proxy_id: proxyId,
+        ...(applyPoint !== undefined ? { apply_point: applyPoint } : {}),
+      },
     });
   }
 

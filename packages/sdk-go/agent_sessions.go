@@ -443,6 +443,53 @@ func (r *AgentSessionsResource) SetMode(ctx context.Context, agentSessionID, mod
 	return &out, nil
 }
 
+// AgentSessionEgressResult is the discriminated result of an egress
+// swap (P-17). Only Status "ok" means the egress changed; every other
+// status leaves the session exactly as it was, with Reason saying why.
+// ApplyPoint is present on success and is nil when the device accepted
+// the swap without confirming when it takes effect — treat nil as
+// possibly-immediate.
+type AgentSessionEgressResult struct {
+	Status     string  `json:"status"`
+	ApplyPoint *string `json:"apply_point,omitempty"`
+	Reason     string  `json:"reason,omitempty"`
+}
+
+// SetEgress moves a RUNNING session onto a different egress without
+// restarting it (P-17). The page keeps its tabs, cookies and scroll
+// position; only the exit changes.
+//
+// proxyID must be a proxy on your own account that has been tested at
+// least once: the swap carries the exit's MEASURED identity — IP,
+// country, timezone — to the device so the page keeps seeing a
+// consistent origin. An untested proxy has no measured identity to
+// carry, and the response is status "unavailable" rather than a
+// guessed one.
+//
+// applyPoint may be "" (defaults to "next_navigation", swapping on the
+// next page load and leaving connections in flight alone) or
+// "immediate", which swaps at once and may reset connections mid-page.
+//
+// Read Status before assuming anything moved: only "ok" means the
+// egress changed.
+func (r *AgentSessionsResource) SetEgress(ctx context.Context, agentSessionID, proxyID, applyPoint string) (*AgentSessionEgressResult, error) {
+	var out AgentSessionEgressResult
+	body := map[string]string{"proxy_id": proxyID}
+	if applyPoint != "" {
+		body["apply_point"] = applyPoint
+	}
+	req := requestOptions{
+		method: "POST",
+		path:   "/v1/agent-sessions/" + url.PathEscape(agentSessionID) + "/egress",
+		body:   body,
+		out:    &out,
+	}
+	if err := r.client.do(ctx, req); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // SendInputEventResponse is the envelope POST /:id/input-event
 // returns (Slice 4 + Slice 5, Wave 29-NNN ARC 3). Discriminated
 // union via `Kind`:

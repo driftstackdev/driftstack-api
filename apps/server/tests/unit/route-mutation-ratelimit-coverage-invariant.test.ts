@@ -134,6 +134,7 @@ const STUB_EXEMPTIONS: readonly StubExemption[] = [
   ...[
     ['post', '/v1/agent-sessions'],
     ['post', '/v1/agent-sessions/:id/cookies/set'],
+    ['post', '/v1/agent-sessions/:id/egress'],
     ['post', '/v1/agent-sessions/:id/history'],
     ['post', '/v1/agent-sessions/:id/files'],
     ['post', '/v1/agent-sessions/:id/message'],
@@ -362,14 +363,20 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // order, cancel) for the cryptoOrdersService gate.
     // V-1756 — 170 since account-mfa (+5 mutations) and auth-cli (+3) gained the
     // disabled stubs their activation gates had always lacked.
-    expect(routes).toHaveLength(173);
+    // 175 since P-17: the live egress route AND its disabled twin are both
+    // mutation registrations, so this moves by two where the route counts moved
+    // by one each.
+    expect(routes).toHaveLength(175);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a
     // `Querystring: { vantage?: 'cp' | 'fleet' }` generic (the route already
     // existed and was already a mutation, so the total above is unchanged; only the
     // type-argument count moves). Refreshed with violations() proven empty first.
-    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(77);
+    // 78 since P-17: the live egress route carries a `<{ Params: { id: string } }>`
+    // type argument like its siblings (the disabled twin does not, which is why
+    // this moves by one where the surface above moved by two).
+    expect(routes.filter((route) => route.hasTypeArguments)).toHaveLength(78);
   });
 
   it('every mutation route has a limiter, privileged gate, or exact exemption', () => {

@@ -10,7 +10,10 @@ describe('customer-facing node diagnostic boundary', () => {
   it('sanitizes every free-form agent-session operation failure', () => {
     const source = readSource('routes/agent-sessions.ts');
 
-    expect(source.match(/reason: customerSafeNodeDiagnostic\(outcome\.message\)/g)).toHaveLength(6);
+    // 7 since P-17's egress swap. This counts SANITIZED sites, so it moving with a
+    // new relay route is the pass condition — a route that returned a raw node
+    // message would leave this number where it was while the route count grew.
+    expect(source.match(/reason: customerSafeNodeDiagnostic\(outcome\.message\)/g)).toHaveLength(7);
     expect(source).not.toContain('reason: outcome.message');
   });
 

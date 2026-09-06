@@ -5646,6 +5646,51 @@ function buildRegistry(): OpenAPIRegistry {
   });
   registerRoute(r, {
     method: 'post',
+    path: '/v1/agent-sessions/{id}/egress',
+    summary: 'Move a running session onto a different egress',
+    tags: ['agent-chat'],
+    security: auth,
+    request: {
+      params: z.object({ id: z.string() }),
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              proxy_id: z.string().min(1),
+              // Defaulted at the route, not on the wire: a caller who says
+              // nothing gets the deferred swap, the one that cannot reset
+              // connections mid-page.
+              apply_point: z.enum(['next_navigation', 'immediate']).optional(),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      200: {
+        description:
+          "Discriminated body. status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the egress was NOT changed.",
+        content: {
+          'application/json': {
+            schema: z.object({
+              status: agentRelayStatus,
+              apply_point: z.enum(['next_navigation', 'immediate']).nullable().optional(),
+              reason: z.string().optional(),
+            }),
+          },
+        },
+      },
+      404: { description: 'Agent session not found.', content: problemContent },
+      ...errors4xx,
+      503: {
+        description: 'AI chat agent not enabled on this deployment.',
+        content: problemContent,
+      },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
     path: '/v1/agent-sessions/{id}/history',
     summary: "Step the running session's browser history one entry back or forward",
     tags: ['agent-chat'],
