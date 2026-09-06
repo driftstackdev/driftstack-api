@@ -1483,7 +1483,43 @@ export async function createProductionDeps(
     decomposer: agentDecomposer,
     executor: agentExecutor,
     sessions: agentSessionsRepo,
+    // FALLBACK only — used when an agent session has NEITHER an attached
+    // driftstack session NOR a bound profile, i.e. nothing has been launched yet
+    // so there is no real device to name. The resolver below supersedes it in
+    // every other case.
     archetype: 'iphone17_ios18_7_safari26_4',
+    // P-15 follow-up (a) — plan against the device this session is really running
+    // instead of the literal above. Two sources, in order of authority:
+    //
+    //   1. the ATTACHED driftstack session, when the caller supplied one — that
+    //      row is what the box launched, so it is the ground truth;
+    //   2. the BOUND PROFILE, which is what a session actually carries in the
+    //      normal case (`driftstack_session_id` is an optional create-body field
+    //      and everything the desktop app creates leaves it null). The dispatch
+    //      computes the launch archetype from this profile, so reading it here
+    //      reproduces the same answer without persisting a second copy that could
+    //      drift.
+    //
+    // Both reads are ACCOUNT-SCOPED. `findSessionUnscoped` is pinned at zero
+    // callers by the unscoped-finders sweep because it skips the account check,
+    // and a device hint is nowhere near worth an IDOR-shaped escape hatch — so a
+    // cross-account id resolves to null and the planner falls back to the
+    // default. Both ids come off the agent-session row the turn already loaded,
+    // never from request input.
+    // `profilesRepo` is declared below this construction. That forward reference is
+    // deliberate and safe: the closure is only ever called while serving a turn,
+    // long after bootstrap has finished evaluating.
+    resolveSessionArchetype: async ({ accountId, driftstackSessionId, profileId }) => {
+      if (driftstackSessionId !== null) {
+        const attached = await sessionsRepo.findSession(driftstackSessionId, accountId);
+        if (attached !== null) return attached.archetype;
+      }
+      if (profileId !== null) {
+        const profile = await profilesRepo.findById({ id: profileId, accountId });
+        if (profile !== null) return profile.archetype;
+      }
+      return undefined;
+    },
     maxConcurrentTurnsPerAccount: config.agentTurnMaxAccountInFlight,
     usageRecorder: agentDecomposerUsageRecorder,
     eventBus: agentSessionEventBus,

@@ -2775,3 +2775,198 @@ describe('W589 task-refusal start-gate wiring', () => {
     expect(calls.n).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------
+// P-15 follow-up (a) — the planner is told the device the box actually
+// launched, not the bootstrap literal.
+//
+// Before this, `deps.archetype` (one process-wide string) was passed to
+// decompose() on EVERY turn for EVERY customer, so any session running a
+// different device was planned against the wrong viewport, touch geometry
+// and capability set. It is a silent defect by construction: a wrong
+// archetype never errors, it just degrades the plan.
+//
+// These arms measure what the DECOMPOSER RECEIVED, which is the only place
+// the value has an effect. A recording decomposer + a stub resolver keeps
+// them pure — no db, no fleet.
+// ---------------------------------------------------------------------
+describe('P-15 (a) — decompose archetype comes from the attached session', () => {
+  const BOOTSTRAP_DEFAULT = 'iphone17_ios18_7_safari26_4';
+  const LAUNCHED = 'ipadpro11_ipados18_6_safari18_6';
+
+  function recorder() {
+    const seen: string[] = [];
+    return {
+      seen,
+      decomposer: {
+        decompose: (a: DecomposeArgs) => {
+          seen.push(a.archetype);
+          return Promise.resolve({
+            kind: 'clarify' as const,
+            clarifyingQuestion: 'which account?',
+            tokensConsumed: 5,
+          });
+        },
+      },
+    };
+  }
+
+  it('CRITICAL attached session → the launched device reaches DecomposeArgs, NOT the bootstrap literal', async () => {
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      driftstackSessionId: 'ses_attached_1',
+    });
+    const asked: string[] = [];
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+      resolveSessionArchetype: (a) => {
+        asked.push(`${a.accountId}/${String(a.driftstackSessionId)}/${String(a.profileId)}`);
+        return Promise.resolve(LAUNCHED);
+      },
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    // Scoped, not unscoped: the resolver is handed the OWNING account too, so it
+    // can use `findSession(id, accountId)` — a cross-account attachment then
+    // resolves to null instead of leaking another account's device. Both ids come
+    // off the agent-session row, never from request input.
+    expect(asked).toEqual(['acc_1/ses_attached_1/null']);
+    // THE load-bearing assertion: what the planner was actually told.
+    expect(seen).toEqual([LAUNCHED]);
+    // Vacuity control: the two values must actually differ, or this arm
+    // would pass against the unfixed code.
+    expect(LAUNCHED).not.toBe(BOOTSTRAP_DEFAULT);
+  });
+
+  it('CRITICAL unattached AND profile-less session → falls back, and never spends a read finding that out', async () => {
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({ accountId: 'acc_1', tokenBudgetTotal: 100_000 });
+    let asked = 0;
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+      resolveSessionArchetype: () => {
+        asked += 1;
+        return Promise.resolve(LAUNCHED);
+      },
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    // Nothing has been launched, so there is no real device to prefer and
+    // no reason to spend a read finding that out.
+    expect(asked).toBe(0);
+    expect(seen).toEqual([BOOTSTRAP_DEFAULT]);
+  });
+
+  it('CRITICAL profile-bound but UNATTACHED session still resolves — this is the common case', async () => {
+    // `driftstack_session_id` is an optional create-body field, so everything the
+    // desktop app creates leaves it null. A fix that keyed only on that id would
+    // be inert for almost every real session while looking correct in review.
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      profileId: 'prof_1',
+    });
+    const asked: string[] = [];
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+      resolveSessionArchetype: (a) => {
+        asked.push(`${a.accountId}/${String(a.driftstackSessionId)}/${String(a.profileId)}`);
+        return Promise.resolve(LAUNCHED);
+      },
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(asked).toEqual(['acc_1/null/prof_1']);
+    expect(seen).toEqual([LAUNCHED]);
+  });
+
+  it('CRITICAL a resolver that THROWS degrades the device hint, it does not fail the turn', async () => {
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      driftstackSessionId: 'ses_attached_2',
+    });
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+      resolveSessionArchetype: () => Promise.reject(new Error('db down')),
+    });
+    const result = await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    // The recorder answers `clarify`, so a completed turn is the clarify
+    // lane — the point is that it COMPLETED rather than propagating the
+    // resolver's error.
+    expect(result.kind).toBe('clarify');
+    expect(seen).toEqual([BOOTSTRAP_DEFAULT]);
+  });
+
+  it('a resolver that cannot answer (row gone → undefined) falls back rather than passing an empty device', async () => {
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      driftstackSessionId: 'ses_attached_3',
+    });
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+      resolveSessionArchetype: () => Promise.resolve(undefined),
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(seen).toEqual([BOOTSTRAP_DEFAULT]);
+  });
+
+  it('an UNWIRED resolver (direct/test callers) keeps the literal — the dependency stays optional', async () => {
+    const { seen, decomposer } = recorder();
+    const sessions = new InMemoryAgentSessionsRepo();
+    const seed = await sessions.create({
+      accountId: 'acc_1',
+      tokenBudgetTotal: 100_000,
+      driftstackSessionId: 'ses_attached_4',
+    });
+    const runtime = new AgentRuntime({
+      decomposer,
+      executor: new StubAgentExecutor(),
+      sessions,
+      archetype: BOOTSTRAP_DEFAULT,
+    });
+    await runtime.runTurn({
+      agentSessionId: seed.id,
+      userMessage: 'a sufficiently long task description for clarity',
+    });
+    expect(seen).toEqual([BOOTSTRAP_DEFAULT]);
+  });
+});

@@ -288,7 +288,40 @@ export interface AgentRuntimeDeps {
   decomposer: AgentDecomposer;
   executor: AgentExecutor;
   sessions: AgentSessionsRepo;
+  /**
+   * Process-wide FALLBACK device told to the planner. Correct only for a session
+   * that has neither an attached driftstack session nor a bound profile — i.e.
+   * one where nothing has been launched, so there is no real device to name. For
+   * every other session this literal is the WRONG device on every turn; see
+   * `resolveSessionArchetype`, which supersedes it whenever it can answer.
+   */
   archetype: string;
+  /**
+   * P-15 follow-up (a) — resolves the device the box ACTUALLY launched, from the
+   * two ids carried on the agent-session row: the attached driftstack session
+   * (authoritative — that row is what the box launched) and, failing that, the
+   * bound profile (the common case, since `driftstack_session_id` is an optional
+   * create-body field that most sessions leave null).
+   *
+   * Without it the planner was told `deps.archetype` — one bootstrap literal —
+   * for every customer on every turn, so a session running an iPad or an older
+   * iPhone was planned against an iPhone 17. The archetype steers viewport,
+   * touch geometry and capability assumptions in the prompt, so a wrong value
+   * is a silently degraded plan, never an error.
+   *
+   * ⛔ SCOPED, NOT UNSCOPED. Both ids come off the agent-session row this turn
+   * already loaded, and the resolver is wired to the ACCOUNT-SCOPED finder —
+   * `findSession(id, accountId)`, never `findSessionUnscoped`, which the
+   * `unscoped-finders-admin-only-sweep` guard pins at zero callers because it
+   * skips the account check. A cross-account attachment therefore resolves to
+   * null and falls back to the literal, rather than reading another account's
+   * device. Optional: unwired (direct/test callers) keeps the literal.
+   */
+  resolveSessionArchetype?: (args: {
+    accountId: string;
+    driftstackSessionId: string | null;
+    profileId: string | null;
+  }) => Promise<string | null | undefined>;
   /** Per-owner-account AI turns allowed concurrently across distinct agent
    *  sessions. Manual transcript-only turns do not consume a slot. Default 3. */
   maxConcurrentTurnsPerAccount?: number;
@@ -857,10 +890,50 @@ export class AgentRuntime {
         'task refused by start-gate',
       );
     } else {
+      // P-15 follow-up (a) — plan against the device this session is really
+      // running. `deps.archetype` is a process-wide literal; when the agent
+      // session is attached to a driftstack session, that session's row is
+      // what the box launched. Resolution failures are non-fatal: a degraded
+      // device hint is better than a failed turn, so fall back to the literal.
+      //
+      // ⛔ BOTH ids matter, and the second one is the COMMON case. An agent session
+      // stores no archetype of its own (there is no such column), and
+      // `driftstack_session_id` is an OPTIONAL create-body field the caller
+      // supplies — everything the desktop app creates leaves it null. Resolving
+      // only from that id would have made this fix inert for almost every real
+      // session while looking correct. `profile_id` is what a profile-bound
+      // session actually carries, and the profile's archetype is what the dispatch
+      // computed the launch from.
+      let turnArchetype = this.deps.archetype;
+      const attachedSessionId = sessionWithUser.driftstackSessionId ?? null;
+      const boundProfileId = sessionWithUser.profileId ?? null;
+      if (
+        this.deps.resolveSessionArchetype !== undefined &&
+        (attachedSessionId !== null || boundProfileId !== null)
+      ) {
+        try {
+          const launched = await this.deps.resolveSessionArchetype({
+            accountId: session.accountId,
+            driftstackSessionId: attachedSessionId,
+            profileId: boundProfileId,
+          });
+          if (typeof launched === 'string' && launched.length > 0) turnArchetype = launched;
+        } catch (err) {
+          this.deps.logger?.warn?.(
+            {
+              component: 'agent-runtime',
+              event: 'session_archetype_unresolved',
+              agent_session_id: session.id,
+              err: err instanceof Error ? err.message : String(err),
+            },
+            'could not resolve the attached session archetype; planning with the default device',
+          );
+        }
+      }
       try {
         decomposed = await this.deps.decomposer.decompose({
           task: args.userMessage,
-          archetype: this.deps.archetype,
+          archetype: turnArchetype,
           history: sessionWithUser.transcript,
           budgetTokensRemaining: sessionWithUser.tokenBudgetRemaining,
           // 6.c / #15 — the session's picked Claude 4.x model drives the
