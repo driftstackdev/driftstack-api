@@ -255,7 +255,10 @@ describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
     });
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
-    expect(r.params.predicate).toContain('document.querySelector(".ready")');
+    // P-3 (2026-09-06) — the call moved from `document.querySelector` to the
+    // shadow-piercing `deepQuery`, which takes the SAME single JSON literal. The
+    // property this arm pins is the literal, not the function name.
+    expect(r.params.predicate).toContain('deepQuery(".ready")');
   });
 
   it('converts timeoutMs → ceil seconds when >= 1s', () => {
@@ -292,9 +295,12 @@ describe('agentIntentToDispatch — wait:selector_visible → wait_for', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('narrow');
     // The selector must appear ONLY as a JSON string literal argument.
-    expect(r.params.predicate).toContain(`document.querySelector(${JSON.stringify(evil)})`);
+    expect(r.params.predicate).toContain(`deepQuery(${JSON.stringify(evil)})`);
     // No raw break-out: the fetch payload is inside the quoted literal.
-    expect(r.params.predicate).not.toMatch(/querySelector\(""\)\);/);
+    expect(r.params.predicate).not.toMatch(/deepQuery\(""\)\);/);
+    // The selector reaches the DOM exactly once, through the one interpolation —
+    // `deepQuery` forwards its argument and never rebuilds the string.
+    expect(String(r.params.predicate).split(JSON.stringify(evil))).toHaveLength(2);
     const querySelector = vi.fn(() => null);
     expect(
       runInNewContext(`(function () { ${String(r.params.predicate)} })()`, {
@@ -469,4 +475,114 @@ describe('agentIntentToDispatch — produced params satisfy the harness contract
       expect(HARNESS_INTENT_PARAM_SCHEMAS[r.intentName].safeParse(r.params).success).toBe(true);
     });
   }
+});
+
+describe('P-3 — the generated wait predicate names nobody and outlives nothing', () => {
+  // Three properties, all A2-only, all found by auditing what this module SHIPS
+  // rather than what it returns. The predicate is a source string evaluated on a
+  // customer's page, so every character of it is product surface.
+
+  it('CRITICAL no emitted predicate carries a product or company string', () => {
+    // A static guard on the OUTPUT, so a future edit cannot reintroduce a brand.
+    // The old key was `Symbol.for('driftstack.agent.wait.idle.v1')`, assigned on
+    // `globalThis`: one line of page script
+    // (`Object.getOwnPropertySymbols(globalThis).map((s) => s.description)`) reads
+    // the company name straight out of it.
+    const emitted = [
+      agentIntentToDispatch({ kind: 'wait', condition: 'idle' }),
+      agentIntentToDispatch({ kind: 'wait', condition: 'selector_visible', selector: '.x' }),
+    ];
+    for (const r of emitted) {
+      expect(r.ok).toBe(true);
+      if (!r.ok) throw new Error('narrow');
+      const predicate = String(r.params.predicate);
+      expect(predicate).not.toMatch(/driftstack/i);
+      expect(predicate).not.toMatch(/anthropic|claude/i);
+    }
+  });
+
+  it('CRITICAL a page that never completes never gets a document-wide MutationObserver', () => {
+    // The observer used to be installed ABOVE the readyState gate and is only
+    // disconnected on the SUCCESS return, so a page stuck before `complete` kept a
+    // subtree observer (and the global) for its whole lifetime. It bought nothing
+    // there: the pre-complete branch resets `lastActivity` on every poll anyway.
+    const r = agentIntentToDispatch({ kind: 'wait', condition: 'idle' });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+    const predicate = String(r.params.predicate);
+
+    let constructed = 0;
+    class TestMutationObserver {
+      constructor() {
+        constructed += 1;
+      }
+      observe(): void {}
+      disconnect(): void {}
+    }
+    const document = { readyState: 'loading', documentElement: {}, fonts: { status: 'loading' } };
+    const context = createContext({
+      document,
+      MutationObserver: TestMutationObserver,
+      performance: { now: () => 1_000, getEntriesByType: () => [] },
+    });
+    // Poll repeatedly while the document stays loading, as a real wait would.
+    for (let i = 0; i < 5; i += 1) {
+      expect(runInContext(`(function () { ${predicate} })()`, context)).toBe(false);
+    }
+    expect(constructed, 'no observer may be installed before readyState complete').toBe(0);
+
+    // Control: once the document completes, the instrument DOES arm — otherwise
+    // this arm would pass against a predicate that never observes at all.
+    document.readyState = 'complete';
+    runInContext(`(function () { ${predicate} })()`, context);
+    runInContext(`(function () { ${predicate} })()`, context);
+    expect(constructed).toBe(1);
+  });
+
+  it('CRITICAL selector_visible reaches into open shadow roots, as the native wait does', () => {
+    // A3 supplied the native template while answering whether this predicate could
+    // be dropped: it is `!!deepQuerySelector(sel)`, which pierces shadow roots.
+    // A plain `document.querySelector` does not, so the two waits disagreed about
+    // whether the same selector matched.
+    const r = agentIntentToDispatch({
+      kind: 'wait',
+      condition: 'selector_visible',
+      selector: '.inside',
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('narrow');
+
+    const target = {
+      getBoundingClientRect: () => ({ width: 10, height: 10 }),
+      checkVisibility: () => true,
+      parentElement: null,
+    };
+    const shadowRoot = {
+      querySelector: (sel: string) => (sel === '.inside' ? target : null),
+      querySelectorAll: () => [],
+    };
+    const host = { shadowRoot };
+    const document = {
+      querySelector: () => null, // light DOM does NOT have it
+      querySelectorAll: () => [host],
+    };
+    const found = runInNewContext(`(function () { ${String(r.params.predicate)} })()`, {
+      document,
+      getComputedStyle: () => ({
+        display: 'block',
+        visibility: 'visible',
+        contentVisibility: 'visible',
+        opacity: '1',
+      }),
+    }) as boolean;
+    expect(found, 'an element inside an open shadow root must be found').toBe(true);
+
+    // Vacuity control: with no shadow root, the same fake DOM answers false — so
+    // the arm above measured the descent and not a predicate that returns true.
+    const noShadow = runInNewContext(`(function () { ${String(r.params.predicate)} })()`, {
+      document: { querySelector: () => null, querySelectorAll: () => [{ shadowRoot: null }] },
+      getComputedStyle: () => ({ display: 'block', visibility: 'visible', opacity: '1' }),
+    }) as boolean;
+    expect(noShadow).toBe(false);
+  });
 });

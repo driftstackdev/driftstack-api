@@ -232,9 +232,55 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // (execute/sync wraps it in `function(){ … }`), so it needs an explicit
       // `return` to yield a value — a bare expression returns undefined → the
       // condition is never met → a full 5s timeout. Emit a return-statement.
+      //
+      // ⛔ SHADOW ROOTS (P-3, 2026-09-06). A3 supplied the native template while
+      // answering the "can we drop this predicate" question, and it reads
+      // `!!deepQuerySelector(sel)` — the harness's own selector resolution PIERCES
+      // shadow roots. A plain `document.querySelector` does not, so this predicate
+      // could not see an element the native path finds, and the two waits disagreed
+      // about whether the same selector matched. That is worse than either
+      // behaviour alone: the reason this predicate exists is that it does MORE than
+      // the native one (rendered visibility, which the native wait does not check at
+      // all), so it must not quietly do LESS on another axis. ⚠️ What A3 supplied is
+      // the CALL, not the implementation — the walker below is our own
+      // breadth-first descent into open shadow roots, so it matches the native path's
+      // REACH and is not claimed to match its traversal. Kept small because it ships
+      // as a source string on every wait.
+      //
+      // ⚠️ The walk is BUDGETED (2,000 elements examined) and runs only when the
+      // light-DOM query misses, which during a wait is the common case — an
+      // unbounded full-tree descent on every poll of a large page is a cost the
+      // customer pays for a shape most pages do not have. Named rather than hidden:
+      // past the budget this reports "not found", i.e. it keeps waiting, which is
+      // the same answer it gave before shadow roots were searched at all.
       const selector = JSON.stringify(intent.selector);
       const predicate = [
-        `const element = document.querySelector(${selector});`,
+        'const deepQuery = (sel) => {',
+        'const direct = document.querySelector(sel);',
+        'if (direct !== null && direct !== undefined) return direct;',
+        // Every step is feature-guarded: this string is evaluated verbatim on
+        // whatever the page happens to be, and a TypeError here does not fail the
+        // wait honestly — it fails it as a timeout, which reads as "the element
+        // never appeared". A predicate that can throw is a predicate that lies.
+        "if (typeof document.querySelectorAll !== 'function') return null;",
+        'let budget = 2000;',
+        'const queue = [document];',
+        'while (queue.length > 0 && budget > 0) {',
+        'const node = queue.shift();',
+        "if (node === null || node === undefined || typeof node.querySelectorAll !== 'function') continue;",
+        "const hosts = node.querySelectorAll('*');",
+        'for (let index = 0; index < hosts.length && budget > 0; index += 1) {',
+        'budget -= 1;',
+        'const root = hosts[index].shadowRoot;',
+        'if (root === null || root === undefined) continue;',
+        "const found = typeof root.querySelector === 'function' ? root.querySelector(sel) : null;",
+        'if (found !== null && found !== undefined) return found;',
+        'queue.push(root);',
+        '}',
+        '}',
+        'return null;',
+        '};',
+        `const element = deepQuery(${selector});`,
         'if (element === null) return false;',
         'const rect = element.getBoundingClientRect();',
         'if (!(rect.width > 0 && rect.height > 0)) return false;',
@@ -243,11 +289,20 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
         'return element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true, contentVisibilityAuto: true });',
         '} catch {}',
         '}',
-        'for (let current = element; current !== null; current = current.parentElement) {',
+        // Ascend THROUGH shadow boundaries: `parentElement` is null at a shadow
+        // root, so a hidden host outside the root would otherwise never be
+        // consulted and a target inside a `display:none` custom element would read
+        // as visible.
+        'let current = element;',
+        'while (current !== null && current !== undefined) {',
         'const style = getComputedStyle(current);',
         "if (style.display === 'none' || style.visibility === 'hidden' || style.visibility === 'collapse' || style.contentVisibility === 'hidden') return false;",
         'const opacity = Number.parseFloat(style.opacity);',
         'if (!Number.isNaN(opacity) && opacity <= 0) return false;',
+        'const parent = current.parentElement;',
+        'if (parent !== null && parent !== undefined) { current = parent; continue; }',
+        "const rootNode = typeof current.getRootNode === 'function' ? current.getRootNode() : null;",
+        'current = rootNode !== null && rootNode !== undefined && rootNode.host ? rootNode.host : null;',
         '}',
         'return true;',
       ].join(' ');
@@ -271,10 +326,45 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
       // ceiling prevents animated/live pages from stalling the plan forever.
       // Previously this returned ok:false → the executor HALTED the whole plan on
       // the settle step, so a "navigate then screenshot" plan lost its screenshot.
+      // ⛔ P-3 (2026-09-06) — TWO corrections to this predicate, both A2-only.
+      //
+      // 1. THE KEY CARRIED THE COMPANY NAME. It was
+      //    `Symbol.for('driftstack.agent.wait.idle.v1')`, assigned on `globalThis`.
+      //    `Object.getOwnPropertySymbols(globalThis).map((s) => s.description)` reads
+      //    that string out in one line — a product-branded global on a page the
+      //    product exists to browse anonymously. Whether page script can actually see
+      //    it depends on which JS world the harness evaluates the predicate in, which
+      //    is A3's question and still open; the brand is wrong under BOTH answers, so
+      //    it is not gated on the answer. The key is now neutral: it says what the
+      //    state is for and names nobody.
+      //
+      // 2. THE OBSERVER OUTLIVED THE WAIT. The MutationObserver was installed ABOVE
+      //    the readyState gate, and the only `disconnect()` is on the success return
+      //    below. A page that never reaches `readyState === 'complete'` inside the
+      //    wait window therefore kept a document-wide subtree observer AND the global
+      //    for the rest of its life. It bought nothing there either: the pre-complete
+      //    branch already resets `lastActivity` on every poll, so mutations before
+      //    `complete` are not information. Installed after the gate, the leak is
+      //    bounded by the 3s post-complete ceiling like every other path.
+      //
+      // ✅ ANSWERED by A3 2026-09-06, so the "should this exist at all" question is
+      // now settled rather than open. The native JS-free form
+      // (`WaitForParamsSchema` → `{ for: { selector, appears } }`) compiles to
+      // `!!deepQuerySelector(arguments[0]) === arguments[1]` in `IntentExecutor` —
+      // EXISTENCE ONLY, no display / visibility / opacity / zero-area test.
+      // `docs/locked-decisions.md:29` is literal, not shorthand. So switching to it
+      // would regress `6d1d80ee6` ("wait for rendered selectors"), and the predicate
+      // stays. A3 also answered the world question: `WebDriverClient.waitFor` polls
+      // through `/session/<id>/execute/sync`, the W3C execute endpoint, so this runs
+      // in the WEBDRIVER world, whose global object page script does not share.
+      // ⚠️ Recorded as SOURCE-derived, not measured: neither side has empirically
+      // tested the isolation boundary, so this is why the brand had to go regardless
+      // rather than a licence to inject freely.
+      //
       // `return …;` — the box waitFor evaluates the predicate as a function body
       // (see selector_visible above); a bare expression yields undefined.
       const predicate = [
-        "const key = Symbol.for('driftstack.agent.wait.idle.v1');",
+        "const key = Symbol.for('idle-settle.v1');",
         'const root = globalThis;',
         'const now = performance.now();',
         'let state = root[key];',
@@ -282,14 +372,15 @@ function mapWait(intent: Extract<AgentIntent, { kind: 'wait' }>): AgentIntentDis
         'state = { document, lastActivity: now, readySince: null, observer: null };',
         'root[key] = state;',
         '}',
-        "if (state.observer === null && typeof MutationObserver === 'function' && document.documentElement !== null) {",
-        'state.observer = new MutationObserver(() => { state.lastActivity = performance.now(); });',
-        'state.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });',
-        '}',
         "if (document.readyState !== 'complete') {",
         'state.readySince = null;',
         'state.lastActivity = now;',
         'return false;',
+        '}',
+        // Installed only once the document is complete — see correction 2 above.
+        "if (state.observer === null && typeof MutationObserver === 'function' && document.documentElement !== null) {",
+        'state.observer = new MutationObserver(() => { state.lastActivity = performance.now(); });',
+        'state.observer.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });',
         '}',
         'if (state.readySince === null) {',
         'state.readySince = now;',
