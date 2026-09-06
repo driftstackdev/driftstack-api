@@ -59,7 +59,7 @@ export const EXPECTED_TEST_FILES = 3130;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3328;
+export const EXPECTED_TEST_FILES_ALL = 3329;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.

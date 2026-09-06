@@ -2609,7 +2609,10 @@ function CookieFlag({
  * write-twin of the cookies read); it no-ops gracefully ("ships with the next
  * device update") until A3's harness setCookies extension lands.
  */
-function CookiesPane({
+// Exported for test only: the note-latch fix below is the kind that survives
+// precisely because nothing renders the component in isolation. Its Network twin
+// lives in its own module and is tested directly; this one is reachable now too.
+export function CookiesPane({
   cookies,
   cookiesNote,
   refreshing,
@@ -2908,6 +2911,23 @@ function CookiesPane({
           the height") — responsive cap so a long jar is browsable, short jars stay
           compact, and it never overflows the window. */}
       <div className="max-h-[55vh] overflow-y-auto px-2 py-2">
+        {/* ⛔ A STANDING NOTE RENDERS IN EVERY STATE. It used to render only in the
+            `cookies === null` branch below, and one successful poll flips that to an
+            array permanently — so every later message (credential expired, device
+            not ready, transient failure) was computed, stored and never shown. The
+            carve-out at the poll site was written specifically to keep the
+            expired-credential note actionable and could therefore only fire in the
+            exact state where nothing was displayable. Identical defect to the
+            Network pane's, fixed in the same shape: "we cannot fetch this" and
+            "there is nothing to fetch" are different answers. */}
+        {cookies !== null && cookiesNote !== null && (
+          <div
+            data-component="simulator-cookies-note"
+            className="px-1 pb-2 font-mono text-[10px] text-white/45"
+          >
+            {cookiesNote}
+          </div>
+        )}
         {cookies === null ? (
           <div className="px-1 py-1 font-mono text-[10px] text-white/40">
             {cookiesNote ?? 'loading…'}
@@ -6416,8 +6436,12 @@ export function SimulatorWindow(): JSX.Element {
                 : status === 503
                   ? "cookies aren't enabled on this deployment"
                   : "couldn't load cookies — retrying";
-          const credsExpired = status === 401 || status === 403;
-          setCookiesNote(hasCookiesRef.current && !credsExpired ? null : note);
+          // The note now renders alongside a loaded jar (see the pane), so the
+          // suppression that made the expired-credential carve-out unreachable is
+          // gone — and with it the `credsExpired` flag that existed only to feed
+          // that carve-out. A failing poll is worth saying out loud even when stale
+          // rows are still shown; the 401/403 wording is already in `note` above.
+          setCookiesNote(note);
           backoff = Math.min(backoff * 2, 30000); // failure → back off
         })
         .finally(() => {
