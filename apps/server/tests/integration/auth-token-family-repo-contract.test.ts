@@ -45,7 +45,20 @@ import type * as schema from '../../src/db/schema.js';
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
-const NOW = new Date('2026-08-20T12:00:00.000Z');
+// ⛔ WALL-CLOCK, DELIBERATELY NOT A FIXED LITERAL (N-AUTH-TOKEN-FLAKE, 2026-09-06).
+// This file used `new Date('2026-08-20T12:00:00.000Z')`, which put EXPIRES an hour
+// into 2026-08-20 — i.e. permanently in the past. `deleteStaleAuthTokens` has NO
+// account predicate (see `apps/server/src/db/auth-flows-repo.ts:238`): it deletes
+// EVERY unconsumed `password_reset_tokens` row with `expiresAt < now - 1h`. So when
+// `db-auth-flows-stale-token-sweep-drizzle.test.ts` ran against the same database,
+// its sweep deleted THIS file's rows mid-test and the failure surfaced here, in a
+// file that had done nothing wrong.
+//
+// Isolating the account fixture per worker does not help — the DELETE is not scoped
+// by account. Anchoring to wall time does: EXPIRES is then always in the future, so
+// the sweep's unconsumed branch can never match these rows. Every relation below is
+// relative (LATER = NOW+60s < EXPIRES = NOW+1h), so no assertion shifts.
+const NOW = new Date();
 const LATER = new Date(NOW.getTime() + 60_000);
 const EXPIRES = new Date(NOW.getTime() + 3_600_000);
 const KIND = 'password_reset' as const;
