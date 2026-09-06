@@ -64,6 +64,40 @@ describe('W722 Husky pre-push gate + installer parity', () => {
     expect(p).toMatch(/^set -e$/m);
   });
 
+  it('CRITICAL W-27 pre-push refuses a LIGHTWEIGHT release tag — the last place it can be stopped', () => {
+    // Three published GUI tags are lightweight (`gui-v0.1.3`, `gui-v0.1.13`,
+    // `gui-v0.1.14` — measured, `%(objecttype)` returns `commit` where
+    // `gui-v0.1.4` returns `tag`). The release policy has always said "annotated
+    // only"; nothing checked it.
+    //
+    // ⛔ It has to be here rather than in the release workflow. That workflow only
+    // fires once the tag is ON ORIGIN, and the same policy forbids retagging — so a
+    // CI check catches the defect after it is published and unfixable.
+    const p = read(PRE_PUSH);
+    expect(p).toMatch(/W-27 — a release tag must be ANNOTATED/);
+    // Reads the ref lines git supplies on stdin; nothing else in this hook does,
+    // so consuming stdin here is safe.
+    expect(p).toMatch(/while read -r _local_ref local_sha remote_ref _remote_sha; do/);
+    // Both tag families the release policy governs.
+    expect(p).toMatch(/refs\/tags\/gui-v\*\|refs\/tags\/server-v\*\)/);
+    // The discriminator: git hands over the TAG object for an annotated tag and
+    // the COMMIT itself for a lightweight one.
+    expect(p).toMatch(
+      /tag_kind=\$\(git cat-file -t "\$local_sha" 2>\/dev\/null \|\| echo unknown\)/,
+    );
+    expect(p).toMatch(/if \[ "\$tag_kind" != "tag" \]; then/);
+    // A deletion pushes an all-zero sha and must pass through untouched.
+    expect(p).toMatch(/\[ "\$local_sha" = "\$tag_zero" \] && continue/);
+    // V-231 stays the first step: the tag check sits between it and the verify
+    // chain, so the cheap structural check still runs before anything expensive.
+    const journal = p.indexOf('migration journal sync');
+    const tagcheck = p.indexOf('W-27 — a release tag must be ANNOTATED');
+    const typecheck = p.indexOf('→ typecheck (workspaces');
+    expect(journal).toBeGreaterThan(0);
+    expect(tagcheck).toBeGreaterThan(journal);
+    expect(typecheck).toBeGreaterThan(tagcheck);
+  });
+
   it("CRITICAL pre-push shebang pinned — `#!/usr/bin/env sh` (POSIX shell, NOT bash). The POSIX-sh shebang is what Husky executes; drift to /bin/bash would break on systems where bash isn't at that path.", () => {
     const p = read(PRE_PUSH);
     expect(p).toMatch(/^#!\/usr\/bin\/env sh/);

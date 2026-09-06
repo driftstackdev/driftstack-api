@@ -107,6 +107,35 @@ jobs:
       - name: Build SDK (transitive dep of gui-client)
         run: npm run build --workspace packages/sdk-typescript
 
+      # W-27 — BACKSTOP for the pre-push check of the same name. The real
+      # enforcement is local (.husky/pre-push), because by the time this workflow
+      # runs the tag is already on origin and the release policy forbids
+      # retagging — so a failure here means the bad tag exists and cannot be
+      # replaced, only abandoned. This still earns its place: a push with
+      # --no-verify, or from a clone without hooks installed, reaches origin
+      # without ever meeting that check, and a release built on a tag carrying no
+      # tagger, date or message is worth failing loudly rather than shipping.
+      #
+      # FAIL-CLOSED on an unresolvable ref: a guard that cannot see its subject
+      # must not report success. The explicit fetch is why that should not arise —
+      # actions/checkout can leave only the commit behind a tag push.
+      - name: Tag must be annotated
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force origin \
+            "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}" 2>/dev/null || true
+          kind=$(git for-each-ref "refs/tags/${GITHUB_REF_NAME}" --format='%(objecttype)')
+          if [ -z "$kind" ]; then
+            echo "::error::cannot resolve refs/tags/${GITHUB_REF_NAME} in this checkout, so this step cannot tell an annotated tag from a lightweight one. Failing closed rather than passing on absence."
+            exit 1
+          fi
+          if [ "$kind" != "tag" ]; then
+            echo "::error::${GITHUB_REF_NAME} is a LIGHTWEIGHT tag (objecttype=${kind}). docs/operations/release-policy.md requires annotated tags — they carry the tagger, the date and the release message. This tag is already published and the policy forbids replacing it: abandon it and cut the next version with 'git tag -a'."
+            exit 1
+          fi
+          echo "${GITHUB_REF_NAME} is an annotated tag"
+
       # A tag that disagrees with the app version ships a DEAD updater: the
       # assets are named for the app version, latest.json advertises the app
       # version, and every install already running that version is told it is

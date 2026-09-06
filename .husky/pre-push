@@ -13,6 +13,7 @@
 
 set -e
 
+
 # V-231 — every new SQL migration MUST have a matching journal entry
 # (catch V-228-class regressions structurally; per founder verdict on
 # TD-002 Option A). Compares migration SQL filenames against journal
@@ -30,6 +31,45 @@ if [ -f "$journal" ]; then
     fi
   done
 fi
+
+# W-27 — a release tag must be ANNOTATED, and this is the last place it can be
+# stopped. `docs/operations/release-policy.md` says "annotated tags only" and the
+# GUI runbook gives the `-a` form, but prose is not a check: `gui-v0.1.3`,
+# `gui-v0.1.13` and `gui-v0.1.14` all shipped LIGHTWEIGHT. Measured, not assumed —
+# `git for-each-ref refs/tags/<t> --format='%(objecttype)'` returns `commit` for
+# those three and `tag` for `gui-v0.1.4` and `gui-v0.1.17`. A lightweight tag
+# carries no tagger, no date and no message, so the release record is whatever the
+# commit happened to say.
+#
+# ⛔ It has to be caught HERE rather than in CI. The release workflow only fires
+# once the tag is on origin, and the same policy forbids retagging — so a CI check
+# catches the defect after it is published and unfixable. Those three are
+# deliberately NOT retagged; this stops the next one.
+#
+# Discriminator: on a tag push git hands us the object the ref points at —
+# the TAG object for an annotated tag, the COMMIT itself for a lightweight one.
+# An all-zero sha is a deletion and is none of our business.
+tag_zero=0000000000000000000000000000000000000000
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  [ -n "$remote_ref" ] || continue
+  case "$remote_ref" in
+    refs/tags/gui-v*|refs/tags/server-v*) ;;
+    *) continue ;;
+  esac
+  [ "$local_sha" = "$tag_zero" ] && continue
+  tag_kind=$(git cat-file -t "$local_sha" 2>/dev/null || echo unknown)
+  if [ "$tag_kind" != "tag" ]; then
+    name=${remote_ref#refs/tags/}
+    echo "✗ $name is a LIGHTWEIGHT tag (objecttype=$tag_kind)"
+    echo "  docs/operations/release-policy.md requires annotated tags, and a"
+    echo "  published tag cannot be replaced — so this is the last chance to fix it."
+    echo "  Re-cut it:"
+    echo "    git tag -d $name"
+    echo "    git tag -a $name -m \"Driftstack $name — <what changed>\""
+    exit 1
+  fi
+  echo "→ ${remote_ref#refs/tags/} is an annotated tag"
+done
 
 echo "→ typecheck (workspaces, including tsconfig.test.json)"
 npm run typecheck
