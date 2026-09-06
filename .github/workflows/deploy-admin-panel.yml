@@ -44,6 +44,11 @@ on:
     branches: [main]
     paths:
       - 'apps/admin-panel/**'
+      # T-3 step 8 — the .dev→.io redirect middleware is deployed WITH this site
+      # (wrangler picks up functions/ from the repo root), so a change to it must
+      # redeploy every site that serves a .dev host. Proven in production on the
+      # marketing project first (b683d32a0).
+      - 'functions/**'
       - '.github/workflows/deploy-admin-panel.yml'
       - 'package.json'
       - 'package-lock.json'
