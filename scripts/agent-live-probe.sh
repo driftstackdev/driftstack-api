@@ -22,18 +22,27 @@ set -euo pipefail
 BASE="https://api.driftstack.dev"
 PROFILE_ID=""
 PROXY_ID=""
+# --proxy-test runs the account proxy Test route INSTEAD of a session. It lives in
+# this script rather than an ad-hoc curl for the reason in the header: it reads a
+# secret and sends it over the network, which is exactly the shape one allow-list
+# rule should cover once. No session is created, so nothing is torn down.
+PROXY_TEST=""
+VANTAGE="fleet"
 PROMPTS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="$2"; shift 2 ;;
     --profile-id) PROFILE_ID="$2"; shift 2 ;;
     --proxy-id) PROXY_ID="$2"; shift 2 ;;
+    --proxy-test) PROXY_TEST="$2"; shift 2 ;;
+    --vantage) VANTAGE="$2"; shift 2 ;;
     -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) PROMPTS+=("$1"); shift ;;
   esac
 done
-if [ "${#PROMPTS[@]}" -eq 0 ]; then
+if [ "${#PROMPTS[@]}" -eq 0 ] && [ -z "$PROXY_TEST" ]; then
   echo "usage: $0 [--base URL] [--profile-id ID] \"prompt\" [\"prompt\" ...]" >&2
+  echo "       $0 [--base URL] --proxy-test <proxyId> [--vantage fleet|cp]" >&2
   exit 1
 fi
 
@@ -130,6 +139,59 @@ if not saw_body:
 sys.exit(2 if failed else 0)
 PY
 }
+
+# ── proxy test (no session) ────────────────────────────────────────────────
+# N-2/T-1: prints the Test route's verdict for one stored proxy, including
+# `measured_from` (which machine measured the latency) and `os_fingerprint` (the
+# passive TCP/IP fingerprint of the proxy's own stack, observed control-plane
+# side on BOTH vantages). Reports "ABSENT" explicitly rather than printing
+# nothing for a missing fingerprint — absence is a legitimate answer here, and a
+# blank line cannot be told apart from a field the printer forgot.
+if [ -n "$PROXY_TEST" ]; then
+  case "$VANTAGE" in
+    fleet|cp) ;;
+    *) echo "--vantage must be 'fleet' or 'cp' (got: $VANTAGE)" >&2; exit 1 ;;
+  esac
+  echo "  base:    $BASE"
+  echo "  proxy:   $PROXY_TEST  (vantage=$VANTAGE)"
+  PT=$(curl -sS --max-time 90 -w '\n%{http_code}' -X POST \
+         "$BASE/v1/account/me/proxies/$PROXY_TEST/test?vantage=$VANTAGE" -H "$AUTH")
+  PTCODE=${PT##*$'\n'}
+  PTBODY=${PT%$'\n'*}
+  echo "  HTTP $PTCODE"
+  printf '%s' "$PTBODY" | python3 -c '
+import json, sys
+try:
+    b = json.load(sys.stdin)
+except Exception:
+    print("    UNPARSEABLE BODY:", sys.stdin.read()[:400]); sys.exit(1)
+print("    ok           %s" % b.get("ok"))
+print("    latency_ms   %s" % b.get("latency_ms"))
+print("    measured_from %s" % b.get("measured_from", "(absent = plain cp test)"))
+if b.get("node_id"):
+    print("    node_id      %s" % b["node_id"])
+# ⛔ The node fields, ALWAYS printed when present. `ok` on a fleet result means
+# "the probe reached a verdict", NOT "the proxy is good" — a proxy that answers
+# and then cannot route is a real measurement with ok:true. So the granular legs
+# are the verdict; printing ok alone invites exactly that misreading.
+for k in ("reachable", "auth_ok", "udp_associate", "can_route", "h2_ok", "quic_ok",
+          "quic_detail", "exit_ip"):
+    if k in b:
+        print("    %-12s %s" % (k, b[k]))
+fp = b.get("os_fingerprint")
+if fp is None:
+    # The whole point of the flag: say WHICH answer this is.
+    print("    os_fingerprint  ABSENT (no SYN observed, or the branch does not attach it)")
+else:
+    print("    os_fingerprint  %s / %s  via %s @ %s" % (
+        fp.get("os"), fp.get("confidence"), fp.get("observed_via"), fp.get("observed_ip")))
+    print("        reason: %s" % fp.get("reason"))
+if b.get("ok") is False:
+    print("    reason       %s" % b.get("reason"))
+'
+  [ "$PTCODE" = "200" ] || exit 1
+  exit 0
+fi
 
 # ── create ─────────────────────────────────────────────────────────────────
 # With no proxy_id the session takes the OPERATOR-DEFAULT egress, which is a
