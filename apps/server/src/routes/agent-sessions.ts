@@ -1350,6 +1350,31 @@ export async function dispatchSessionAssignOnCreate(args: {
           profileArchetype,
           staticDefault: sessionDispatch.archetype,
         }),
+        // T-11 — WHICH geolocation the box was told to spoof, and where it came
+        // from. Without this the control-plane half of "navigator.geolocation
+        // matches the exit IP" cannot be checked at all: the only other way to
+        // learn what we sent is to re-derive it, which tests the derivation and
+        // not the dispatch. That gap is why the item sat open through two
+        // verification attempts — one of them measured a hand-set env override
+        // in a command that bypassed the daemon, because there was nothing
+        // authoritative to compare against.
+        //
+        // `unset` is a real third answer, not a missing value: it means we told
+        // the box nothing and its own IP-derived fallback applies, which is a
+        // DIFFERENT outcome from spoofing to measured coordinates and must not
+        // read as an absent log field. These are the coordinates of a PROXY
+        // EXIT, never of a person.
+        geolocation:
+          resolvedGeolocation === undefined
+            ? { source: 'unset-harness-derives' as const }
+            : {
+                source:
+                  geolocation !== undefined
+                    ? ('customer-override' as const)
+                    : ('exit-measured' as const),
+                lat: resolvedGeolocation.latitude,
+                lon: resolvedGeolocation.longitude,
+              },
       },
       'dispatched sessionAssign to fleet node',
     );
