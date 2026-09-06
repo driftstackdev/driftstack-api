@@ -162,6 +162,22 @@ describe('the cache', () => {
     expect(c?.quicMeasuredAt).toBe(2);
   });
 
+  it('CRITICAL an explicit null CLEARS the stored latency; undefined leaves it alone', async () => {
+    // Three answers, not two. `undefined` means "nothing new this time"; `null`
+    // means "measured, and there is no number". Merging them is what let a stale
+    // figure reload from disk on the next launch after the in-memory value was
+    // dropped — the card would show a number no measurement had produced.
+    await saveProbeResult('p1', OK, 1);
+    await saveServerProbeResult('p1', { latencyMs: 9 }, 2);
+    expect((await loadProbeCache()).p1?.serverLatencyMs).toBe(9);
+    await saveServerProbeResult('p1', { quicMeasured: 'h3' }, 3);
+    expect((await loadProbeCache()).p1?.serverLatencyMs, 'undefined keeps it').toBe(9);
+    await saveServerProbeResult('p1', { latencyMs: null }, 4);
+    expect((await loadProbeCache()).p1?.serverLatencyMs, 'null clears it').toBeUndefined();
+    // …and nothing else on the entry was collateral damage.
+    expect((await loadProbeCache()).p1?.quicMeasured).toBe('h3');
+  });
+
   it('PRESERVES server latency + measured QUIC across a native capability re-test', async () => {
     await saveProbeResult('p1', OK, 1);
     await saveServerProbeResult('p1', { latencyMs: 9, quicMeasured: 'h3', quicMeasuredAt: 2 }, 2);

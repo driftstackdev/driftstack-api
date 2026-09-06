@@ -237,8 +237,14 @@ export type AccountProxyTestResult =
   | {
       ok: true;
       /** SERVER-measured latency (ms) — the control plane's own round-trip to the
-       *  proxy, closer to the fleet vantage than the customer's Mac (T-1). */
-      latency_ms: number;
+       *  proxy, closer to the fleet vantage than the customer's Mac (T-1).
+       *
+       *  ⛔ NULL on a fleet result that reached the proxy but produced no timing.
+       *  The spec's fleet member types this nullable and always has; the parser
+       *  below used to refuse it, which threw `malformed response` into a caller
+       *  that swallows throws — so the customer's re-test did nothing at all and
+       *  the previous number stayed on the card looking freshly measured. */
+      latency_ms: number | null;
       os_fingerprint?: OsFingerprint;
       /** T-6 — the measured QUIC verdict, present only when the server measured
        *  one in a live session; absent = never measured (chip stays inferred). */
@@ -314,7 +320,17 @@ export async function testAccountProxy(
   // T-1 — the vantage is a CLOSED set; a value outside it is dropped (the number
   // then renders unlabelled), never shown under a label it did not earn.
   const vantage = cleanProxyVantage(body.measured_from);
-  if (body.ok === true && typeof body.latency_ms === 'number') {
+  // T-1 — `latency_ms: null` is a DOCUMENTED ok answer from a fleet Mac, not a
+  // malformed one: the node reached the proxy and produced no timing. Accepted
+  // for the fleet vantage ONLY — the cp member of the spec types the field as a
+  // required integer, so a null there really is malformed and is still refused.
+  const latency =
+    typeof body.latency_ms === 'number'
+      ? body.latency_ms
+      : body.latency_ms === null && vantage === 'fleet'
+        ? null
+        : undefined;
+  if (body.ok === true && latency !== undefined) {
     const fp = cleanWireFingerprint(body.os_fingerprint);
     // T-6 — a value outside the closed set is DROPPED (the field is omitted, read
     // downstream as "never measured"), never coerced into a would-be green chip.
@@ -334,7 +350,7 @@ export async function testAccountProxy(
     const h2Ok = fleet ? optBool(body.h2_ok) : undefined;
     return {
       ok: true,
-      latency_ms: body.latency_ms,
+      latency_ms: latency,
       ...(fp !== undefined ? { os_fingerprint: fp } : {}),
       ...(quic !== null
         ? {

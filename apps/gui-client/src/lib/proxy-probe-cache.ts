@@ -469,7 +469,11 @@ export function saveOsFingerprint(
 export function saveServerProbeResult(
   proxyId: string,
   server: {
-    latencyMs?: number;
+    /** T-1 — a number STORES, `null` CLEARS, `undefined` leaves what is there.
+     *  Three answers, not two: a fleet result can be ok with no timing, and
+     *  merging that with "nothing new this time" is what leaves a stale number
+     *  on the card after a measurement that produced none. */
+    latencyMs?: number | null;
     quicMeasured?: MeasuredQuic | null;
     quicMeasuredAt?: number;
     measuredFrom?: ProxyVantage;
@@ -485,6 +489,9 @@ export function saveServerProbeResult(
     const quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
     const vantage = cleanServerVantage(server.measuredFrom, server.nodeId);
     const { measuredFrom: _m, nodeId: _n, quicProbe: _q, ...kept } = prior;
+    // An explicit null erases the stored number so it cannot outlive the
+    // measurement that failed to produce one. `undefined` deliberately does not.
+    if (server.latencyMs === null) delete kept.serverLatencyMs;
     all[proxyId] = {
       ...kept,
       ...(typeof server.latencyMs === 'number' ? { serverLatencyMs: server.latencyMs } : {}),

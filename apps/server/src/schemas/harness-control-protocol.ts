@@ -1300,6 +1300,33 @@ const CapabilityReportPayloadSchema = z.object({
     .max(16),
   archetypeId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   webkitForkBuild: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  // W-29 — the UPSTREAM this session's egress actually uses, `host:port`.
+  //
+  // Why it rides the frame rather than being joined control-plane side: the QUIC
+  // verdict is keyed per upstream (the same proxy under different credentials is
+  // the same relay), and this frame is SESSION-scoped. The CP can usually map
+  // session → proxy row → host:port, but not always: a row edited or deleted
+  // mid-session, and the operator-default egress, which has no customer row at
+  // all. Those are exactly the cases where a join would have to guess, and
+  // guessing an upstream attributes a failure to a proxy that did not produce it.
+  //
+  // ⛔ ACCEPTED BEFORE IT IS EMITTED, on purpose. Measured 2026-09-06: this frame
+  // is not strict, so a node sending an undeclared key does NOT lose the frame —
+  // but the key is silently STRIPPED, which is the quieter failure. The producer
+  // would emit it, nothing would break, and it would simply never arrive.
+  //
+  // ⛔ host:port ONLY, never credentials — the same rule as `failureReason`. The
+  // pattern is the enforcement, not the comment: `@` and `/` cannot appear, so a
+  // `user:pass@host:port` form is rejected rather than logged.
+  proxyUpstream: z
+    .string()
+    .max(HARNESS_FRAME_ID_MAX_LENGTH)
+    // Two shapes, neither of which can contain `@` or `/`: a bracketed IPv6
+    // literal (whose inner colons are why a single character class will not do —
+    // the first version of this pattern rejected every IPv6 upstream), or a
+    // hostname/IPv4. The port is required, so a bare host is refused too.
+    .regex(/^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._-]+):\d{1,5}$/)
+    .optional(),
   // W1397/W2216/EGRESS-2 — these are the customer-visible state signals the
   // harness already emits. Keep optional for older nodes, but never strip them:
   // the registry relay drives the installed GUI and persistence from this data.
@@ -2155,23 +2182,78 @@ export type ProbeEgressFrame = z.infer<typeof ProbeEgressFrameSchema>;
 // (ok:false, reachable:false), not an `error` — the same way the control-plane
 // probe returns a 200 verdict for a dead proxy. Plain object (lenient
 // forward-compat), like the sibling result frames.
-export const ProbeEgressResultSchema = z.object({
-  type: z.literal('probeEgressResult'),
-  requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-  ok: z.boolean(),
-  reachable: z.boolean(),
-  auth_ok: z.boolean(),
-  udp_associate: z.boolean(),
-  can_route: z.boolean(),
-  latency_ms: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
-  h2_ok: z.boolean(),
-  quic_ok: z.boolean(),
-  quic_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
-  exit_ip: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable(),
-  error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
-});
+/**
+ * W-28 — whether the probe REACHED A VERDICT. Migrating away from a boolean.
+ *
+ * ⛔ `ok` on this frame has never meant "the proxy is good": a proxy that answers
+ * nothing at all is `ok: true` with every leg false. Its structural sibling
+ * `ProxyValidationResult.ok` is FALSE for that identical condition, and the doc
+ * called the two frames different in exactly one (unrelated) respect. Two
+ * independent consumers read `ok` as a pass; the second published a customer-facing
+ * PASS for a dead proxy. The warning existed, was emphatic, and did not work —
+ * which is evidence about the warning, so the field's SHAPE changes rather than
+ * its comment. A Bool named `ok` sitting beside seven Bools named for the subject
+ * invites being read as a summary of them; an enum cannot be rendered as a green
+ * tick by accident.
+ *
+ * Step 1 of 3 (see ledger W-28): the control plane accepts BOTH and prefers
+ * `status`. The node then emits both for a window, derived from one construction
+ * site so they cannot disagree. Only then does `ok` go. Ordered this way so no
+ * window exists in which either side speaks a dialect the other cannot read —
+ * including the direction where THIS change is the one rolled back.
+ */
+export const PROBE_EGRESS_STATUSES = ['verdict', 'could_not_run'] as const;
+export type ProbeEgressStatus = (typeof PROBE_EGRESS_STATUSES)[number];
+
+export const ProbeEgressResultSchema = z
+  .object({
+    type: z.literal('probeEgressResult'),
+    requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+    node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
+    ok: z.boolean(),
+    /** W-28 — the replacement for `ok`. Optional until every node emits it. */
+    status: z.enum(PROBE_EGRESS_STATUSES).optional(),
+    reachable: z.boolean(),
+    auth_ok: z.boolean(),
+    udp_associate: z.boolean(),
+    can_route: z.boolean(),
+    latency_ms: z.number().finite().nonnegative().max(Number.MAX_SAFE_INTEGER).nullable(),
+    h2_ok: z.boolean(),
+    quic_ok: z.boolean(),
+    quic_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
+    exit_ip: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable(),
+    error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
+  })
+  .superRefine((frame, ctx) => {
+    // ⛔ A frame carrying BOTH keys and disagreeing is REFUSED, not silently
+    // resolved in favour of one. During the migration both are derived from a
+    // single construction site on the node, so a disagreement cannot be version
+    // skew — it can only be a real bug, which is exactly when it should be loud.
+    // Refusing routes it through the rejection reporter (structure only: the log
+    // gets `status:custom`, never a value), and the probe times out with a
+    // diagnosable line instead of returning a verdict nobody can trust.
+    if (frame.status !== undefined && (frame.status === 'verdict') !== frame.ok) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['status'],
+        message: 'status and ok disagree',
+      });
+    }
+  });
 export type ProbeEgressResult = z.infer<typeof ProbeEgressResultSchema>;
+
+/**
+ * Did the probe reach a verdict? Prefers `status`; falls back to `ok` for a node
+ * that has not migrated. The schema has already refused any frame where the two
+ * disagree, so this cannot silently pick a side.
+ *
+ * ⛔ A verdict is NOT a pass. Callers still read reachable / auth_ok / can_route
+ * to learn whether the proxy is usable — that is the whole distinction this
+ * migration exists to make unmissable.
+ */
+export function probeReachedVerdict(frame: Pick<ProbeEgressResult, 'ok' | 'status'>): boolean {
+  return frame.status !== undefined ? frame.status === 'verdict' : frame.ok;
+}
 
 // ── HarnessOutbound union (server DECODES) ────────────────────────────
 // All 19 variants pinned. intentResult + sessionStatus are consumed precisely;

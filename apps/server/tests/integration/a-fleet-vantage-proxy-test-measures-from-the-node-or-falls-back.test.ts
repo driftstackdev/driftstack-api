@@ -71,6 +71,35 @@ const throwingObserverStub = (): never =>
     observeOs: () => Promise.reject(new Error('observer socket exploded')),
   }) as unknown as never;
 
+/** Register a node that answers with the shape a DEAD proxy really produces:
+ *  `ok:true` (the probe reached a verdict) and every leg false. Measured on a live
+ *  proxy 2026-09-06 — including `quic_detail: 'skipped: endpoint_unreachable'`. */
+function registerDeadProxyNode(nodeId: string, legs: Record<string, unknown> = {}): void {
+  const conn: FleetControlConnection = fx.fleetControlRegistry.register(nodeId, (data) => {
+    const f = JSON.parse(data) as { type: string; requestId: string };
+    if (f.type !== 'probeEgress') return;
+    conn.handleInbound(
+      JSON.stringify({
+        type: 'probeEgressResult',
+        requestId: f.requestId,
+        node_id: nodeId,
+        ok: true,
+        reachable: false,
+        auth_ok: false,
+        udp_associate: false,
+        can_route: false,
+        latency_ms: null,
+        h2_ok: false,
+        quic_ok: false,
+        quic_detail: 'skipped: endpoint_unreachable',
+        exit_ip: null,
+        error: null,
+        ...legs,
+      }),
+    );
+  });
+}
+
 /** Register a fleet node that auto-answers a probeEgress with a node-measured
  *  result carrying its OWN node id (so the registry's provenance check passes). */
 function registerReplyingNode(nodeId: string, latencyMs: number): void {
@@ -214,6 +243,74 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     expect(body.node_id).toBe('mac-us-003');
     expect(body.latency_ms).toBe(91);
     expect('os_fingerprint' in body).toBe(false);
+  });
+
+  // ⛔ THE NODE'S `ok` IS NOT THE CUSTOMER'S `ok`. On the node's frame it means
+  // "the probe reached a verdict"; a proxy that answers nothing comes back ok:true
+  // with every leg false. Forwarding that flag under the same name published a
+  // PASS for a dead proxy — measured live on 2026-09-06, four identical results —
+  // while the other two members of this union use `ok` to mean "usable".
+  it('CRITICAL a node ok:true with every leg false is a FAILED test, not a pass', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-us-004');
+    const id = await makeProxy('fleet-dead.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok, 'a proxy that answered nothing must not read as a pass').toBe(false);
+    expect(body.reason).toMatch(/did not answer/i);
+    // Still honestly labelled as a fleet measurement — the verdict changed, not
+    // the provenance, and the customer is owed both.
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-us-004');
+  });
+
+  it('CRITICAL the failing LEG picks the sentence, in the order the probe establishes them', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // Reachable and authenticated, but it cannot route — the condition that
+    // blocked every launch on 2026-08-18 while reachability checks read healthy.
+    registerDeadProxyNode('mac-us-005', { reachable: true, auth_ok: true, udp_associate: true });
+    const id = await makeProxy('fleet-noroute.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(/could not reach the internet/i);
+    // NOT the earlier sentence — the legs are ordered, and reporting the last
+    // failure instead of the first would send a customer to the wrong setting.
+    expect(body.reason).not.toMatch(/did not answer/i);
+  });
+
+  it('VACUITY CONTROL — a node with every leg TRUE is still a pass', async () => {
+    // Proves the two arms above measure the legs and not a verdict that now
+    // always fails. `registerReplyingNode` answers with every leg true.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerReplyingNode('mac-us-006', 42);
+    const id = await makeProxy('fleet-good.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(true);
+    expect('reason' in body, 'a passing test carries no failure sentence').toBe(false);
   });
 
   it('an unknown vantage value is a 400, not a silent default', async () => {

@@ -825,9 +825,26 @@ function usesUserPassAuth(scheme: AccountProxyScheme | undefined): boolean {
   return scheme === undefined || scheme === 'socks5' || scheme === 'http';
 }
 
+/**
+ * The host advice for a bare host string.
+ *
+ * Exists because most places a customer types a proxy host do NOT have a
+ * `ProxyDraft` to hand — the first-run wizard and the two profile modals each
+ * carry their own partly-filled state, and `validateDraft` needs a label before
+ * it will say anything. Those four entry points showed no warning at all, so the
+ * advice the owner asked for appeared on exactly one of the five ways in.
+ *
+ * ⛔ One implementation, shared with `draftWarnings` below. A second copy of the
+ * sentence is how three of them would drift the first time it is reworded.
+ */
+export function hostWarningFor(host: string): string | undefined {
+  return isPrivateOrLocalHost(host) ? PRIVATE_HOST_WARNING : undefined;
+}
+
 function draftWarnings(d: ProxyDraft): DraftWarnings {
   const warnings: DraftWarnings = {};
-  if (isPrivateOrLocalHost(d.host)) warnings.host = PRIVATE_HOST_WARNING;
+  const host = hostWarningFor(d.host);
+  if (host !== undefined) warnings.host = host;
   if (usesUserPassAuth(d.scheme) && isBlank(d.username) && isBlank(d.password)) {
     warnings.auth = NO_CREDENTIALS_WARNING;
   }

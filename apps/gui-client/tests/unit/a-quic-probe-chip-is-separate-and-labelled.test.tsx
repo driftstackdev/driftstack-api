@@ -324,6 +324,42 @@ describe('the Proxies grid labels the server latency with where it was measured'
     expect(testAccountProxy.mock.calls[0]?.[3]).toEqual({ vantage: 'fleet' });
   });
 
+  it('CRITICAL a FAILED server test clears the numbers a previous one left behind', async () => {
+    // ⛔ The native probe from this Mac can call a proxy usable while the server —
+    // which is what actually runs the profile — cannot use it at all. Until the
+    // fleet vantage learned to report that honestly, a fleet result was never
+    // `ok:false` and this path could not be reached; now a proxy that answers
+    // nothing produces one. Without the clear, the row keeps the fleet latency,
+    // its "from a fleet Mac" label and the relay chip from the LAST successful
+    // test, sitting next to a row the customer has just re-tested.
+    testAccountProxy.mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 31,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      quic_probe: true,
+    });
+    render(<ProxiesView />);
+    await testTheRow();
+    expect(await screen.findByText('from a fleet Mac')).toBeInTheDocument();
+
+    // Second test: the server now refuses it.
+    testAccountProxy.mockResolvedValueOnce({
+      ok: false,
+      reason: 'The proxy did not answer. Check the host and port, and that it is online.',
+      measured_from: 'fleet',
+    });
+    // The action reads "Test" only until a result exists; after one it is
+    // "Re-test" (and "Testing…" while in flight). Waiting for that exact label is
+    // also the signal that the first probe has fully settled.
+    const retest = await screen.findByRole('button', { name: 'Re-test' });
+    fireEvent.click(retest);
+    await waitFor(() => expect(testAccountProxy).toHaveBeenCalledTimes(2));
+    await waitFor(() => {
+      expect(screen.queryByText('from a fleet Mac')).not.toBeInTheDocument();
+    });
+  });
+
   it('a fleet reply labels the latency "from a fleet Mac"', async () => {
     testAccountProxy.mockResolvedValue({
       ok: true,

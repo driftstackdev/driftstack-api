@@ -26,6 +26,7 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
+import { ProxyHostWarning } from '../components/ProxyHostWarning';
 import {
   invalidateProbe,
   deriveProbeViewState,
@@ -564,7 +565,13 @@ export function ProxiesView(): JSX.Element {
               serverTest.quic_measured === 'h3' || serverTest.quic_measured === 'h2-only'
                 ? serverTest.quic_measured
                 : undefined;
-            setServerLatency((m) => ({ ...m, [p.id]: serverTest.latency_ms }));
+            // T-1 — a fleet result can be ok with NO timing. The old number must
+            // then GO: left in place beside a fresh vantage label it reads as "the
+            // Mac just measured this", which is the opposite of what happened.
+            const measured = serverTest.latency_ms;
+            setServerLatency((m) =>
+              measured !== null ? { ...m, [p.id]: measured } : dropKey(m, p.id),
+            );
             if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [p.id]: quic }));
             // T-1 — where that number was measured travels WITH it: a fleet Mac
             // (named) or, when none was free, the server — replaced on every
@@ -578,15 +585,21 @@ export function ProxiesView(): JSX.Element {
                     ...(serverTest.node_id !== undefined ? { nodeId: serverTest.node_id } : {}),
                   }
                 : undefined;
+            // The label describes a NUMBER — where it was measured. With no number
+            // it describes nothing, so it travels with the latency, not beside it.
             setServerVantage((m) =>
-              vantage !== undefined ? { ...m, [p.id]: vantage } : dropKey(m, p.id),
+              vantage !== undefined && measured !== null
+                ? { ...m, [p.id]: vantage }
+                : dropKey(m, p.id),
             );
             const relay = serverTest.quic_probe;
             setQuicProbe((m) => (relay !== undefined ? { ...m, [p.id]: relay } : dropKey(m, p.id)));
             void saveServerProbeResult(
               p.id,
               {
-                latencyMs: serverTest.latency_ms,
+                // null CLEARS the persisted number — without this the card would
+                // reload the stale one on next launch, after the in-memory drop.
+                latencyMs: measured,
                 quicMeasured: quic,
                 quicMeasuredAt: now,
                 measuredFrom: serverTest.measured_from,
@@ -595,6 +608,21 @@ export function ProxiesView(): JSX.Element {
               },
               now,
             ).catch(() => undefined);
+          } else if (serverTest !== null) {
+            // ⛔ The server says this proxy is NOT usable, while the native probe
+            // from this Mac said it was. That disagreement is real information —
+            // the servers are what run the profile — so the server-measured values
+            // must GO. Leaving them shows a latency, a vantage, a QUIC verdict and
+            // a fingerprint from a test that has since failed, beside a card that
+            // was just re-tested, which reads as "all of this is current".
+            //
+            // This path was unreachable while a fleet result could never be
+            // `ok:false`. It cannot stay unhandled now that a proxy answering
+            // nothing correctly reports one.
+            setServerLatency((m) => dropKey(m, p.id));
+            setServerVantage((m) => dropKey(m, p.id));
+            setQuicProbe((m) => dropKey(m, p.id));
+            setOsFingerprints((m) => dropKey(m, p.id));
           }
         }
       } else {
@@ -1887,15 +1915,11 @@ export function ProxyForm({
                   onChange={(e) => setField('host', e.target.value)}
                   placeholder="proxy.example.com"
                 />
-                {liveWarnings?.host !== undefined && (
-                  <span
-                    data-component="proxy-host-warning"
-                    role="note"
-                    className="mt-1 text-2xs text-status-busy"
-                  >
-                    {liveWarnings.host}
-                  </span>
-                )}
+                {/* The SAME component the wizard and both profile modals now use.
+                    This markup was the original and the only one; three other entry
+                    points showed nothing because each would have had to re-derive
+                    the advice from its own partly-filled state. */}
+                <ProxyHostWarning host={draft.host} />
               </Field>
             </div>
             <Field label="Port" error={validation.errors.port}>

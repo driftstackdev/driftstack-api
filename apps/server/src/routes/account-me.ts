@@ -63,6 +63,7 @@ import {
   type ProxyConnectivityProbe,
 } from '../services/proxy-connectivity-probe.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
+import { probeReachedVerdict } from '../schemas/harness-control-protocol.js';
 import { z } from 'zod';
 
 /** V-352b — avatar presigned-GET TTL. 1h is long enough that a single
@@ -1031,6 +1032,42 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           });
           if (dispatch.status !== 'ok') return null;
           const r = dispatch.result;
+          // ⛔ `r.ok` IS NOT "THE PROXY WORKS". Its contract on the node's frame is
+          // "the probe reached a verdict" — a proxy that answers nothing at all
+          // comes back `ok:true` with reachable/auth_ok/udp_associate/can_route all
+          // false and `quic_detail: "skipped: endpoint_unreachable"`. Measured on a
+          // live proxy 2026-09-06, four consecutive identical results.
+          //
+          // On the other two members of this union `ok` means the proxy is USABLE,
+          // and a client reads one field. Passing the node's flag straight through
+          // under the same name published a PASS for a dead proxy: the desktop card
+          // showed a successful test for something no session could ever launch on.
+          // One field, one meaning — so translate here, at the protocol boundary,
+          // rather than asking every client to know which member it is holding.
+          //
+          // The sentences are the cp branch's, deliberately: a customer who reads
+          // one and then the other must not be told two different stories. Reported
+          // in the order the probe establishes the legs, so they are told the FIRST
+          // thing that went wrong rather than the last.
+          const fleetFailure = ((): string | undefined => {
+            // W-28 — ask the question through the reader, which prefers the node's
+            // `status` and falls back to `ok`. The schema has already refused any
+            // frame where the two disagree, so this cannot pick a side quietly.
+            if (!probeReachedVerdict(r)) {
+              return 'The test could not be completed on the measuring Mac. Try again shortly.';
+            }
+            if (!r.reachable) {
+              return 'The proxy did not answer. Check the host and port, and that it is online.';
+            }
+            if (!r.auth_ok) {
+              return 'The proxy rejected the username and password. Re-enter them and try again.';
+            }
+            if (!r.can_route) {
+              return 'The proxy connected but could not reach the internet. Its upstream egress is blocked.';
+            }
+            return undefined;
+          })();
+          const usable = fleetFailure === undefined;
           // N-2 — the fingerprint is measured by the CONTROL PLANE even here (see
           // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
           // than coming back from the node. Only on an `ok` result: a proxy the node
@@ -1039,7 +1076,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // obligation — a VPN wire carries `type` and no host/port — and is
           // unreachable in practice because the guard above refuses a non-socks5 row.
           const osFields =
-            r.ok && 'host' in resolved
+            usable && 'host' in resolved
               ? await osFingerprintFields(
                   {
                     protocol: 'socks5' as const,
@@ -1052,7 +1089,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 )
               : {};
           return {
-            ok: r.ok,
+            ok: usable,
+            ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),
             latency_ms: r.latency_ms,
             ...quicFields,
             ...osFields,

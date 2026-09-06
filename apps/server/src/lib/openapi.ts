@@ -2442,7 +2442,16 @@ function buildRegistry(): OpenAPIRegistry {
       // verdict; the granular fields say what worked. `latency_ms` / `quic_detail`
       // / `exit_ip` are null when not measured. `node_id` names the measuring node.
       z.object({
+        // ⛔ The CUSTOMER verdict — "this proxy is usable" — NOT the node's
+        // "the probe reached a verdict" flag. The node reports a completely
+        // unreachable proxy as ok with every leg false, so the control plane
+        // translates rather than forwarding: `ok` means the same thing on all
+        // three members of this union, which is the only way one client field
+        // can be read without knowing which member arrived.
         ok: z.boolean(),
+        // Present exactly when `ok` is false: which leg failed, in the customer's
+        // words. Same four sentences the control-plane member uses.
+        reason: z.string().optional(),
         measured_from: z.literal('fleet'),
         node_id: z.string(),
         reachable: z.boolean(),

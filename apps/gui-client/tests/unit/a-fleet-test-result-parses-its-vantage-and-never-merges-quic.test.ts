@@ -258,6 +258,31 @@ describe('the wire — the honest fallback and the closed set', () => {
     expect(r).toHaveProperty('quic_probe', false);
   });
 
+  it('CRITICAL a fleet result that is ok with NO timing parses — it used to throw `malformed`', async () => {
+    // ⛔ The node reached the proxy and produced no number. The spec's fleet member
+    // has ALWAYS typed latency_ms nullable, but the parser required a number, fell
+    // through every branch, and threw. The only caller wraps this in
+    // `.catch(() => null)` — so the customer's re-test did nothing at all: no
+    // fingerprint, no vantage, no error, and the PREVIOUS numbers stayed on the
+    // card looking freshly measured. A silent no-op is the worst of both.
+    nextResponse = () => json({ ...FLEET_BODY, latency_ms: null });
+    const r = await testAccountProxy('https://api.example', 'ds_x', 'srv1', { vantage: 'fleet' });
+    expect(r).toMatchObject({ ok: true, latency_ms: null, measured_from: 'fleet' });
+    // The rest of the node's measurement survives: the missing number costs the
+    // number, not the result.
+    expect(r).toMatchObject({ node_id: 'mac-mini-07', quic_probe: true });
+  });
+
+  it('CRITICAL a null latency WITHOUT the fleet vantage is still malformed', async () => {
+    // The cp member types latency_ms as a required integer, so a null there is a
+    // broken response. Accepting it everywhere would turn that into a silent ok
+    // with no number — trading a loud failure for the quiet one just fixed.
+    nextResponse = () => json({ ok: true, latency_ms: null });
+    await expect(testAccountProxy('https://api.example', 'ds_x', 'srv1')).rejects.toThrow(
+      /malformed/,
+    );
+  });
+
   it("labels a fleet 'ok:false' (no prose on the node's frame) rather than calling it malformed", async () => {
     nextResponse = () =>
       json({ ...FLEET_BODY, ok: false, reachable: false, latency_ms: null, quic_ok: false });

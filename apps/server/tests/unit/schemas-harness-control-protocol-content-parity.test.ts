@@ -336,9 +336,20 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toContain('requestId: z.string().uuid(),');
     expect(body).toContain('inlineProxyConfig: z.string().min(1),');
     // node→CP RESULT — node_id REQUIRED (provenance), lenient forward-compat.
-    expect(body).toContain('export const ProbeEgressResultSchema = z.object({');
+    // W-28: the declaration is now `z\n  .object({…})\n  .superRefine(…)`, so the
+    // pin matches the NAME and the object opener separately rather than one line
+    // that a formatter owns.
+    expect(body).toContain('export const ProbeEgressResultSchema = z');
     expect(body).toContain("type: z.literal('probeEgressResult'),");
     expect(body).toContain('node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
+    // W-28 — `status` is the replacement for `ok`, and the two are refused when
+    // they disagree. Pinned here because a silent removal of the refinement would
+    // restore exactly the ambiguity this frame is being migrated away from.
+    expect(body).toContain('status: z.enum(PROBE_EGRESS_STATUSES).optional(),');
+    expect(body).toContain(
+      "export const PROBE_EGRESS_STATUSES = ['verdict', 'could_not_run'] as const;",
+    );
+    expect(body).toMatch(/\.superRefine\(\(frame, ctx\) => \{/);
   });
 
   it('behavioral: a valid probeEgress frame round-trips (the vacuity control for the strict-reject below)', () => {
