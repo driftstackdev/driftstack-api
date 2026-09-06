@@ -12,18 +12,27 @@
 // fallback and told them nothing. So an arm asserts `unavailable` is NOT a member
 // and coerces — if someone "restores" it, that arm says why it was wrong.
 //
-// ⚠️ The deployed daemon is OLDER than the token commit (ledger N-DAEMON-STALE),
-// so today's live wire still carries prose. The transitional map keeps the copy
-// correct in both states; without it, narrowing to tokens would have coerced every
-// real error to `unknown` and made the customer's message WORSE until a restart.
+// ⚠️ CORRECTED — the daemon has since restarted (verified on the box 2026-09-06:
+// pid 9014 at 10:02:56, binary built 10:02:47, and `strings` finds ZERO of the old
+// prose in the running binary). The prose map was written when the fleet ran a
+// two-day-old build and narrowing to tokens alone would have coerced every live
+// error to `unknown` — a WORSE message than the prose it replaced. It is now
+// rollback defence rather than a live workaround, and the arms below still pin it
+// because a rolled-back daemon is the case it exists for.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+
 import {
   COOKIE_ERROR_TOKENS,
   LEGACY_COOKIE_ERROR_PROSE,
   cookieErrorToken,
 } from '../../src/schemas/harness-control-protocol.js';
 import { cookieErrorCopy } from '../../src/services/cookie-error-copy.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 describe('a cookie error is a token, not harness prose', () => {
   it('CRITICAL every token maps to customer copy that names no internals', () => {
@@ -59,9 +68,10 @@ describe('a cookie error is a token, not harness prose', () => {
     expect(cookieErrorToken('unavailable')).toBe('unknown');
   });
 
-  it('CRITICAL the transitional prose the DEPLOYED daemon still emits maps to real tokens', () => {
-    // Without this the fix would regress every live cookie error to "unrecognised"
-    // until the daemon restarts — worse than the prose it replaced.
+  it('CRITICAL the pre-token prose maps to real tokens — rollback defence', () => {
+    // Without this the fix WOULD have regressed every live cookie error to
+    // "unrecognised" while the fleet ran the older build. It still guards a
+    // rollback, which is why it is pinned rather than deleted with the row.
     expect(cookieErrorToken('unknown or inactive session')).toBe('no_session');
     expect(cookieErrorToken('cookie jar too large to stream')).toBe('too_large');
     expect(cookieErrorToken('cookie query failed')).toBe('read_failed');
@@ -82,5 +92,38 @@ describe('a cookie error is a token, not harness prose', () => {
     // Proves the prose arm above measures the map: an unmapped prose string lands
     // on the fallback, so the mapped ones passing is a real signal.
     expect(cookieErrorToken('some prose nobody registered')).toBe('unknown');
+  });
+  it('CRITICAL the token mapper is called ONLY from the two cookie routes', () => {
+    // ⛔ A3 flagged this hazard and it is real. `unknown or inactive session` is
+    // ALSO emitted by navigateHistoryResult, the tab-activation path, and three
+    // upload/download sites — none of which have a token contract, and two of
+    // which we agreed to leave as prose. Applying this mapper there would rewrite
+    // a legitimate prose error into `no_session`: inventing a token for a frame
+    // that has none, and making it look as though the harness had tokenised
+    // surfaces it has not. Worse than the problem the mapper solves.
+    //
+    // The mapper is correctly scoped today — verified — so this arm exists to keep
+    // it that way, because the failure would be silent and would look like data.
+    const routes = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'routes', 'agent-sessions.ts'),
+      'utf8',
+    );
+    const calls = routes.match(/cookieErrorToken\(/g) ?? [];
+    expect(calls, 'exactly two call sites: the cookies read and the cookies write').toHaveLength(2);
+    // And both must sit in cookie handlers — checked by the frame each relays.
+    for (const marker of ['conn.requestCookies(', 'conn.setCookies(']) {
+      expect(routes, `${marker} is the relay next to a permitted call site`).toContain(marker);
+    }
+    // ⛔ And the frames that must NEVER be mapped are present in the same file, so
+    // this arm is measuring scope rather than their absence.
+    for (const forbidden of ['conn.navigateHistory(', 'conn.requestUpload(']) {
+      expect(routes, `${forbidden} exists and must stay unmapped`).toContain(forbidden);
+    }
+    // Nothing outside this file may import it beyond the schema that defines it.
+    const server = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'services', 'cookie-error-copy.ts'),
+      'utf8',
+    );
+    expect(server).not.toMatch(/navigateHistory|activateTab|upload|download/i);
   });
 });

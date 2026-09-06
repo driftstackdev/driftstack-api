@@ -1705,14 +1705,29 @@ export const CookieErrorTokenSchema = z.enum(COOKIE_ERROR_TOKENS).catch('unknown
 export type CookieErrorToken = (typeof COOKIE_ERROR_TOKENS)[number];
 
 /**
- * ⚠️ TRANSITIONAL, and delete it once the fleet daemon is current. The token
- * commit landed 2026-09-06 04:48; the running daemon started 2026-09-04 20:06, so
- * every cookie error on the live wire today is still the OLD prose. Narrowing to
- * tokens alone would coerce all of it to `unknown` and REGRESS the customer's
- * message until the restart — worse than what they have now.
+ * Rollback defence. These were A3's emitted strings before the cookie handlers
+ * were tokenised, mapped to the tokens they became.
  *
- * These are A3's exact emitted strings, mapped to the tokens they became, so the
- * fix works on both the stale daemon and the current one. Ledger N-DAEMON-STALE.
+ * ⚠️ NO LONGER LOAD-BEARING, and the comment that said so is corrected rather than
+ * left standing. It was written when the fleet daemon predated the token commit,
+ * so every live cookie error was still prose and narrowing to tokens alone would
+ * have coerced all of it to `unknown` — a WORSE customer message than the prose it
+ * replaced. The owner restarted the daemon 2026-09-06 10:02:56 (binary built
+ * 10:02:47, so the process is after its binary), and `strings` on the running
+ * binary returns ZERO for `cookie jar too large to stream` in the same pass that
+ * finds the new tokens. So nothing on this fleet emits these any more.
+ *
+ * Kept, not deleted: it costs one lookup, and it is the only thing standing
+ * between a rolled-back daemon and every cookie error reading "unrecognised".
+ *
+ * ⛔⛔ SCOPED TO COOKIE FRAMES ONLY — THIS IS NOT A GENERAL ERROR MAPPER.
+ * `unknown or inactive session` is ALSO emitted by `navigateHistoryResult`, the
+ * tab-activation path, and three upload/download sites, none of which have a token
+ * contract and two of which are deliberately still prose. Applying this map to
+ * those frames would INVENT a token for them — worse than the problem it solves,
+ * and it would look like the harness had tokenised surfaces it has not. A guard
+ * pins the two permitted call sites; see
+ * tests/unit/a-cookie-error-is-a-token-not-harness-prose.test.ts.
  */
 export const LEGACY_COOKIE_ERROR_PROSE: Readonly<Record<string, CookieErrorToken>> = {
   'unknown or inactive session': 'no_session',
