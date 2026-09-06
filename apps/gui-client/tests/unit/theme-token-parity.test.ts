@@ -52,22 +52,66 @@ function contrast(a: [number, number, number], b: [number, number, number]): num
 
 const WHITE: [number, number, number] = [255, 255, 255];
 
-describe('the bright first-action button is oxblood-400, scoped, and bold-text AA', () => {
-  it('.btn-primary-bright exists with base background rgb(200 96 110) (#c8606e)', () => {
+/**
+ * The contrast floor this button's OWN face requires, derived from its classes.
+ *
+ * ⛔ This used to be hand-labelled, and the label was wrong. The suite asserted a
+ * 3.0–4.5 band and titled it "bold-text AA", while pinning `text-sm` +
+ * `font-semibold` in the very same arm. WCAG large text is 24px at ANY weight or
+ * 18.66px at BOLD (700); 14px semibold (600) is neither, so the band the guard
+ * enforced was the band that fails. A guard cannot certify a class it decides by
+ * hand — so the threshold is computed from the face, and a future restyle to
+ * genuinely large type relaxes it automatically instead of silently keeping a
+ * floor that no longer matches the text.
+ */
+const TW_PX: Record<string, number> = {
+  'text-xs': 12,
+  'text-sm': 14,
+  'text-base': 16,
+  'text-lg': 18,
+  'text-xl': 20,
+  'text-2xl': 24,
+};
+const TW_WEIGHT: Record<string, number> = {
+  'font-normal': 400,
+  'font-medium': 500,
+  'font-semibold': 600,
+  'font-bold': 700,
+  'font-extrabold': 800,
+};
+function requiredRatio(rule: string): number {
+  const px = Object.entries(TW_PX).find(([cls]) => rule.includes(cls))?.[1];
+  const weight = Object.entries(TW_WEIGHT).find(([cls]) => rule.includes(cls))?.[1];
+  if (px === undefined || weight === undefined) {
+    throw new Error('cannot read the button face — size or weight class missing');
+  }
+  // WCAG 2.x §1.4.3: large text is >=18pt (24px), or >=14pt (18.66px) BOLD.
+  const isLarge = px >= 24 || (px >= 18.66 && weight >= 700);
+  return isLarge ? 3.0 : 4.5;
+}
+
+describe('the bright first-action button clears the AA floor its own type requires', () => {
+  it('.btn-primary-bright exists with base background rgb(189 83 98) (#bd5362)', () => {
     const rule = brightBaseRule();
-    expect(rule).toContain('background-color: rgb(200 96 110)');
-    expect(rule).toContain('#c8606e');
-    // Bold at 14px is what makes 3.9:1 acceptable — both are part of the pin.
+    expect(rule).toContain('background-color: rgb(189 83 98)');
+    expect(rule).toContain('#bd5362');
+    // The face is still pinned — it is an INPUT to the floor above, not a
+    // justification for ignoring it.
     expect(rule).toContain('font-semibold');
     expect(rule).toContain('text-sm');
     expect(rule).toContain('text-ink-inverted');
     expect(rule).toContain('focus-visible:ring-accent-ring');
   });
 
-  it('hover lightens to oxblood-300 and active returns to oxblood-500', () => {
+  it('hover DARKENS toward oxblood-500 and active lands on it', () => {
+    // The direction is the point. Lightening on hover is what dropped the label
+    // to 2.57:1 on the one interaction that says "this is about to be pressed".
     const hover = /\.btn-primary-bright:hover[^{]*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
     const active = /\.btn-primary-bright:active[^{]*\{([^}]*)\}/.exec(CSS)?.[1] ?? '';
-    expect(rgbTriple(hover)).toEqual([220, 139, 150]);
+    expect(rgbTriple(hover)).toEqual([176, 74, 90]);
+    expect(luminance(rgbTriple(hover)), 'hover must not be lighter than the base').toBeLessThan(
+      luminance(rgbTriple(brightBaseRule())),
+    );
     expect(rgbTriple(active)).toEqual([168, 59, 77]);
   });
 
@@ -81,15 +125,28 @@ describe('the bright first-action button is oxblood-400, scoped, and bold-text A
     expect(primary).not.toContain('rgb(');
   });
 
-  it('white on the base colour in the file is 3.92:1 — bold-text AA, not normal-text AA', () => {
-    const base = rgbTriple(brightBaseRule());
-    const ratio = contrast(WHITE, base);
-    // The real number, pinned: lightening to oxblood-300 (220 139 150) reads
-    // 2.57 and fails the floor; darkening back to oxblood-500 reads 6.18 and
-    // fails the ceiling (that would just be .btn-primary again).
-    expect(ratio).toBeCloseTo(3.92, 2);
-    expect(ratio).toBeGreaterThanOrEqual(3.0);
-    expect(ratio).toBeLessThan(4.5);
+  it('CRITICAL white on the base clears the floor its own face requires', () => {
+    const rule = brightBaseRule();
+    const ratio = contrast(WHITE, rgbTriple(rule));
+    const floor = requiredRatio(rule);
+    // 4.5 for this face, derived — not asserted here, so a restyle moves it.
+    expect(floor, 'a 14px semibold label is not WCAG large text').toBe(4.5);
+    expect(ratio).toBeGreaterThanOrEqual(floor);
+    // Still meaningfully brighter than .btn-primary (oxblood-500, 6.18:1), which
+    // is the whole reason this variant exists — the owner read that as too dark.
+    expect(ratio, 'as dark as .btn-primary would make the variant pointless').toBeLessThan(6.0);
+  });
+
+  it('CRITICAL the HOVER state clears the floor too — it used to drop to 2.57:1', () => {
+    // ⛔ The old hover lightened to oxblood-300, so the label became hardest to
+    // read at the exact moment the pointer was on it. A hover is a state, not a
+    // decoration: every state a customer can put the control into is a state the
+    // text has to survive.
+    const hover = /\.btn-primary-bright:hover:not\(:disabled\)\s*\{([^}]*)\}/.exec(CSS)?.[1];
+    if (hover === undefined) throw new Error('hover rule not found');
+    expect(contrast(WHITE, rgbTriple(hover))).toBeGreaterThanOrEqual(
+      requiredRatio(brightBaseRule()),
+    );
   });
 
   it('VACUITY CONTROL — the same contrast function reads the accent at 6.18:1 (normal-text AA)', () => {

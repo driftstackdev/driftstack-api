@@ -58,10 +58,18 @@
      "Get started"). The owner read the oxblood-500 button as too dark, so this
      starts one step up the ramp and hovers one further. Scoped on purpose:
      --accent-rgb and .btn-primary are untouched — the accent still drives the
-     logo, rings and progress bars at oxblood-500. Contrast of white on
-     oxblood-400 is ~3.9:1 (see theme-token-parity test), which passes WCAG AA
-     only for large/bold text — so the face is semibold at text-sm (14px) and
-     the base must not lighten past oxblood-400. */
+     logo, rings and progress bars at oxblood-500. ⛔ THE NOTE THAT WAS HERE REFUTED ITSELF. It said white on
+     oxblood-400 is ~3.9:1, "which passes WCAG AA only for large/bold text — so
+     the face is semibold at text-sm (14px)". WCAG large text is 24px at any
+     weight, or 18.66px at BOLD (700). A 14px semibold (600) label is neither, so
+     3.92:1 was simply under the 4.5:1 this face needs — and the sentence claiming
+     the exemption also stated the two facts that disqualify it. The hover was
+     worse: oxblood-300 reads 2.57:1, so the label got HARDER to read on the one
+     interaction that says it is about to be pressed.
+     Now oxblood-450 at 4.59:1, which clears AA for normal text and is still 49%
+     brighter in luminance than the oxblood-500 the owner called too dark — the
+     constraint that produced this variant in the first place. Hover DARKENS
+     (5.29:1): the conventional direction, and the only one that keeps contrast. */
   .btn-primary-bright {
     @apply inline-flex items-center justify-center rounded
            px-3 py-1.5 text-sm font-semibold
@@ -69,10 +77,10 @@
            focus-visible:ring-2 focus-visible:ring-accent-ring
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors;
-    background-color: rgb(200 96 110); /* oxblood-400 #c8606e */
+    background-color: rgb(189 83 98); /* oxblood-450 #bd5362 — 4.59:1 on white */
   }
   .btn-primary-bright:hover:not(:disabled) {
-    background-color: rgb(220 139 150); /* oxblood-300 #dc8b96 */
+    background-color: rgb(176 74 90); /* oxblood-475 #b04a5a — 5.29:1 on white */
   }
   .btn-primary-bright:active:not(:disabled) {
     background-color: rgb(168 59 77); /* oxblood-500 #a83b4d */
