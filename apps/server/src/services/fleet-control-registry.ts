@@ -98,6 +98,11 @@ import {
 import type { Cookie } from '../schemas/harness-control-protocol.js';
 import type { Logger } from '../lib/logger.js';
 import {
+  describeRejection,
+  frameTypeLabel,
+  shouldLogRejection,
+} from './harness-frame-rejection.js';
+import {
   FLEET_INBOUND_LARGE_FRAME_THRESHOLD_BYTES,
   FleetInboundFrameBudget,
   readLargeDownloadResultHeader,
@@ -201,6 +206,8 @@ export class FleetControlConnection {
     reportingNodeId: string,
   ) => void;
   private readonly logger: Logger | null;
+  /** Throttle state for refused inbound frames, keyed by type+shape. */
+  private readonly rejectedFrameCounts = new Map<string, number>();
   private readonly admitInbound?: (byteLength: number, largeFrameCandidate: boolean) => boolean;
   // Actively closes THIS connection's underlying socket. Called from `supersede()`
   // when a newer connection for the node replaces this one, so a half-open box socket
@@ -551,6 +558,27 @@ export class FleetControlConnection {
   }
 
   /**
+   * Report an inbound frame we refused. Throttled per connection so a node
+   * looping on a malformed frame cannot flood the log, and never fully silent so
+   * a standing rejection stays visible. See services/harness-frame-rejection.ts.
+   */
+  private reportRejectedFrame(frameType: string, detail: string): void {
+    const seen = shouldLogRejection(this.rejectedFrameCounts, `${frameType} ${detail}`);
+    if (seen === null) return;
+    this.logger?.warn(
+      {
+        component: 'fleet-control-registry',
+        event: 'inbound_frame_rejected',
+        nodeId: this.nodeId,
+        frameType,
+        detail,
+        occurrences: seen,
+      },
+      'refused an inbound harness frame — it was DROPPED; the node believes it was delivered',
+    );
+  }
+
+  /**
    * Production receive entrypoint. Admission happens on raw bytes so rejected
    * frames never allocate a same-sized UTF-8 string or parsed object graph.
    * Oversized payloads consume an exact one-shot pending download fetch before
@@ -608,10 +636,22 @@ export class FleetControlConnection {
     try {
       json = JSON.parse(raw);
     } catch {
-      return; // not JSON → ignore
+      // Dropped, but no longer in silence — see the module header on why. Nothing
+      // from the payload is logged: it did not parse, so we know nothing about it
+      // beyond its size.
+      this.reportRejectedFrame('<not-json>', `bytes:${raw.length}`);
+      return;
     }
     const parsed = HarnessOutboundSchema.safeParse(json);
-    if (!parsed.success) return; // unknown/malformed HarnessOutbound → ignore
+    if (!parsed.success) {
+      // ⛔ THE FRAME IS STILL DROPPED — this changes only whether we can SEE it.
+      // A frame the node emitted and we refused used to be indistinguishable from
+      // a frame the node never emitted, which is why P-29's rejected `http_status`
+      // and P-30's over-cap `pageState.url` both sat undetected. Structure only:
+      // paths and issue codes, never a message or a value.
+      this.reportRejectedFrame(frameTypeLabel(json), describeRejection(parsed.error));
+      return;
+    }
     const frame = parsed.data;
     // Enforce the documented contract (above) at the DISPATCH layer too, not just
     // the parse layer: a handler throwing on an otherwise-valid frame must NOT
