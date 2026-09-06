@@ -56,8 +56,10 @@ import {
   NotFoundError,
 } from '../lib/errors.js';
 import { requireTierFeature } from '../lib/errors-helpers.js';
+import type { FingerprintedOs } from '../lib/tcp-os-fingerprint.js';
 import {
   DEFAULT_PROBE_TARGET_URL,
+  type ProbeProxyDescriptor,
   type ProxyConnectivityProbe,
 } from '../services/proxy-connectivity-probe.js';
 import type { FleetControlRegistry } from '../services/fleet-control-registry.js';
@@ -856,6 +858,65 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       const vantage = parsedQuery.data.vantage;
 
+      // N-2 — the OS fingerprint, and it belongs to BOTH vantages.
+      //
+      // ⛔ It is a CONTROL-PLANE observation that does not ride the node's
+      // result: `observeOs` CONNECTs through the proxy to our own raw-socket
+      // observer and reads the SYN the proxy's own kernel built, so it is measured
+      // from HERE no matter which machine measured the latency. It used to be
+      // attached on the cp branch alone, so a customer whose GUI asked for the
+      // fleet vantage lost the chip with nothing on the wire to say why.
+      //
+      // Returns the fields to spread onto an ok result, or `{}` when nothing was
+      // observed — a miss is ABSENCE, never a placeholder OS, so no client can
+      // colour a cell on a value nobody measured. It NEVER throws: on the fleet
+      // branch an exception here would be caught by `runFleetProbe`'s own handler
+      // and fall the whole request back to the control plane, which would relabel
+      // a node measurement `control_plane`. A wrong provenance is worse than a
+      // missing chip.
+      const osFingerprintFields = async (
+        descriptor: ProbeProxyDescriptor,
+        exitIp: string | null | undefined,
+      ): Promise<{
+        os_fingerprint?: {
+          os: FingerprintedOs;
+          confidence: 'high' | 'medium' | 'low' | 'none';
+          reason: string;
+          observed_ip: string;
+          observed_via: 'proxy_host' | 'exit_ip';
+        };
+      }> => {
+        if (proxyConnectivityProbe === undefined) return {};
+        try {
+          const os = await proxyConnectivityProbe.observeOs(descriptor, exitIp ?? undefined);
+          if (!os.observed) {
+            // info, not debug: production runs at info, and a miss that cannot be
+            // read there is the silent failure this field exists to avoid. One
+            // line per customer-initiated test; the launch path never reaches it.
+            request.log.info(
+              { proxyId: row.id, reason: os.reason },
+              'proxy test: os fingerprint not observed',
+            );
+            return {};
+          }
+          return {
+            os_fingerprint: {
+              os: os.os,
+              confidence: os.confidence,
+              reason: os.reason,
+              observed_ip: os.observedIp,
+              observed_via: os.via,
+            },
+          };
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: os fingerprint observation failed',
+          );
+          return {};
+        }
+      };
+
       // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
       // answer for vantage=cp and the fallback for vantage=fleet, so it lives in one
       // place rather than being duplicated and drifting.
@@ -902,32 +963,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           const result = await proxyConnectivityProbe.probe(descriptor);
           if (result.ok) {
             const latency_ms = Date.now() - startedAt;
-            // N-2 — passive OS fingerprint of the proxy's own TCP stack. Attached
-            // ONLY when a SYN was actually observed; a miss is logged with its
-            // reason and the field stays absent, so the client can never colour
-            // a cell on a value nobody measured.
-            const os = await proxyConnectivityProbe.observeOs(descriptor, result.exitIdentity?.ip);
-            if (!os.observed) {
-              // info, not debug: production runs at info, and a miss that cannot be
-              // read there is the silent failure this field exists to avoid. One
-              // line per customer-initiated test; the launch path never reaches it.
-              request.log.info(
-                { proxyId: row.id, reason: os.reason },
-                'proxy test: os fingerprint not observed',
-              );
-              return { ok: true as const, latency_ms, ...quicFields };
-            }
+            // N-2 — passive OS fingerprint of the proxy's own TCP stack, via the
+            // shared helper above. ONE implementation on purpose: this attachment
+            // existed here and nowhere else, and the fleet branch shipped without
+            // it for four days because a second copy was never written.
             return {
               ok: true as const,
               latency_ms,
               ...quicFields,
-              os_fingerprint: {
-                os: os.os,
-                confidence: os.confidence,
-                reason: os.reason,
-                observed_ip: os.observedIp,
-                observed_via: os.via,
-              },
+              ...(await osFingerprintFields(descriptor, result.exitIdentity?.ip)),
             };
           }
           // The same four sentences the desktop client renders, so a customer who
@@ -987,10 +1031,31 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           });
           if (dispatch.status !== 'ok') return null;
           const r = dispatch.result;
+          // N-2 — the fingerprint is measured by the CONTROL PLANE even here (see
+          // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
+          // than coming back from the node. Only on an `ok` result: a proxy the node
+          // could not use has no stack worth fingerprinting and must not spend the
+          // observer's budget. The `'host' in resolved` narrowing is a type
+          // obligation — a VPN wire carries `type` and no host/port — and is
+          // unreachable in practice because the guard above refuses a non-socks5 row.
+          const osFields =
+            r.ok && 'host' in resolved
+              ? await osFingerprintFields(
+                  {
+                    protocol: 'socks5' as const,
+                    host: resolved.host,
+                    port: resolved.port,
+                    ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+                    ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+                  },
+                  r.exit_ip,
+                )
+              : {};
           return {
             ok: r.ok,
             latency_ms: r.latency_ms,
             ...quicFields,
+            ...osFields,
             reachable: r.reachable,
             auth_ok: r.auth_ok,
             udp_associate: r.udp_associate,

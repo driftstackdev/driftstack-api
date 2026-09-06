@@ -2403,6 +2403,19 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
     },
   });
+  // N-2 — the passive OS fingerprint of the proxy's own TCP stack. ONE definition,
+  // spread into BOTH ok-shaped members below on purpose: the observation is made by
+  // the CONTROL PLANE on either vantage (it dials through the proxy to our own
+  // raw-socket observer), so a fleet result carries it too. It was documented on the
+  // cp member alone once, and that is exactly how the field went missing from the
+  // fleet response — a second copy is a second thing to forget.
+  const OsFingerprintOpenApi = z.object({
+    os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
+    confidence: z.enum(['high', 'medium', 'low', 'none']),
+    reason: z.string(),
+    observed_ip: z.string(),
+    observed_via: z.enum(['proxy_host', 'exit_ip']),
+  });
   const AccountProxyTestResultOpenApi = z
     .union([
       z.object({
@@ -2413,15 +2426,7 @@ function buildRegistry(): OpenAPIRegistry {
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
         // N-2 — present ONLY when the passive observer recorded the proxy's SYN.
-        os_fingerprint: z
-          .object({
-            os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
-            confidence: z.enum(['high', 'medium', 'low', 'none']),
-            reason: z.string(),
-            observed_ip: z.string(),
-            observed_via: z.enum(['proxy_host', 'exit_ip']),
-          })
-          .optional(),
+        os_fingerprint: OsFingerprintOpenApi.optional(),
         // T-1 — present only when a fleet-vantage request FELL BACK to the control
         // plane (no node free). Absent on a plain control-plane test.
         measured_from: z.enum(['fleet', 'control_plane']).optional(),
@@ -2451,6 +2456,9 @@ function buildRegistry(): OpenAPIRegistry {
         exit_ip: z.string().nullable(),
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
+        // N-2 — the fingerprint the CONTROL PLANE observed while the node measured
+        // the latency. Same field, same shape, same "absent means unobserved" rule.
+        os_fingerprint: OsFingerprintOpenApi.optional(),
       }),
     ])
     .openapi('AccountProxyTestResult');

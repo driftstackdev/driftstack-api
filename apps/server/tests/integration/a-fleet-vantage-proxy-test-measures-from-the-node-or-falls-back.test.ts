@@ -44,6 +44,33 @@ const cpProbeStub = (): never =>
     observeOs: () => Promise.resolve({ observed: false, reason: 'no SYN recorded' }),
   }) as unknown as never;
 
+/** N-2 — a cp probe whose observer DOES record a SYN. The fingerprint is a
+ *  CONTROL-PLANE measurement on BOTH vantages (the cp dials through the proxy to
+ *  its own raw-socket observer), so a fleet result must carry it alongside the
+ *  node's latency. */
+const observingProbeStub = (): never =>
+  ({
+    probe: () => Promise.resolve({ ok: true }),
+    observeOs: () =>
+      Promise.resolve({
+        observed: true,
+        observedIp: '198.51.100.7',
+        via: 'proxy_host',
+        signature: {},
+        os: 'windows',
+        confidence: 'medium',
+        reason: 'initial TTL 128 with a Windows option layout',
+      }),
+  }) as unknown as never;
+
+/** An observer that THROWS rather than answering `{observed:false}` — the case the
+ *  fleet branch must survive without losing the node's measurement. */
+const throwingObserverStub = (): never =>
+  ({
+    probe: () => Promise.resolve({ ok: true }),
+    observeOs: () => Promise.reject(new Error('observer socket exploded')),
+  }) as unknown as never;
+
 /** Register a fleet node that auto-answers a probeEgress with a node-measured
  *  result carrying its OWN node id (so the registry's provenance check passes). */
 function registerReplyingNode(nodeId: string, latencyMs: number): void {
@@ -130,6 +157,63 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     const body = res.json<Record<string, unknown>>();
     expect('measured_from' in body).toBe(false);
     expect(body.ok).toBe(true);
+  });
+
+  // ⛔ N-2 REGRESSION GUARD. The OS-fingerprint chip worked on the cp vantage and
+  // vanished the moment the GUI started asking for `fleet`, because the attachment
+  // lived in the cp branch alone. Nothing failed — the field was simply absent, and
+  // absence is the documented "not observed" answer, so the wire looked correct.
+  // These two arms are the reason it cannot be dropped again silently.
+  it('CRITICAL vantage=fleet carries the control-plane OS fingerprint too', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: observingProbeStub(),
+    });
+    registerReplyingNode('mac-us-002', 77);
+    const id = await makeProxy('fleet-fp.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    // The node still measured the latency — the fingerprint rides ALONGSIDE it,
+    // which is the whole claim: two vantages in one response, each labelled.
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-us-002');
+    expect(body.latency_ms).toBe(77);
+    expect(body.os_fingerprint).toEqual({
+      os: 'windows',
+      confidence: 'medium',
+      reason: 'initial TTL 128 with a Windows option layout',
+      observed_ip: '198.51.100.7',
+      observed_via: 'proxy_host',
+    });
+  });
+
+  it('CRITICAL an observer that THROWS costs the chip, never the node measurement', async () => {
+    // ⛔ The subtle failure: an exception inside `runFleetProbe` is caught by its
+    // own handler, which returns null and falls the request back to the control
+    // plane. A fingerprint failure would then relabel a node measurement as
+    // `control_plane` — a WRONG provenance, and worse than no chip at all.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: throwingObserverStub(),
+    });
+    registerReplyingNode('mac-us-003', 91);
+    const id = await makeProxy('fleet-fp-throw.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-us-003');
+    expect(body.latency_ms).toBe(91);
+    expect('os_fingerprint' in body).toBe(false);
   });
 
   it('an unknown vantage value is a 400, not a silent default', async () => {
