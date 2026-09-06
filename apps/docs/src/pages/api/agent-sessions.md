@@ -895,10 +895,14 @@ status other than `ok`, the egress was **not** changed.
 
 Steps the running session's back-forward list one entry in
 `direction` (`"back"` or `"forward"`) — what the GUI's back/forward
-buttons call. The optional `tabId` targets a specific tab's
-back-forward list; omitted, the session's current tab is stepped.
-Response (200) is the discriminated `{ "status": …, "reason"?: … }`
-shape.
+buttons call. The session's **current** tab is stepped.
+
+> **`tabId` is not supported yet.** Devices step the current tab only,
+> so sending `tabId` is rejected with a `422` rather than silently
+> stepping a different tab than you asked for. To step a specific
+> tab, activate it first.
+> Response (200) is the discriminated `{ "status": …, "reason"?: … }`
+> shape.
 
 ## Upload a file
 

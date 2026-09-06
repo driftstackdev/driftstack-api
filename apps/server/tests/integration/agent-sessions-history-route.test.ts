@@ -157,50 +157,15 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     expect(relayedDirection).toBe('forward');
   });
 
-  it('an optional tabId in the request body crosses the wire verbatim (multi-tab forward-compat); omitted when not given', async () => {
-    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
-    const id = await createSession(fx);
-    const nodeId = 'node-history-tabid';
-    await fx.agentSessionsRepo!.setNodeId(id, nodeId);
-    let relayedTabId: unknown = 'UNSET';
-    const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
-      const frame = JSON.parse(data) as {
-        type?: string;
-        requestId?: string;
-        sessionId?: string;
-        tabId?: unknown;
-      };
-      if (frame.type === 'navigateHistory') {
-        relayedTabId = 'tabId' in frame ? frame.tabId : 'ABSENT';
-        conn.handleInbound(
-          JSON.stringify({
-            type: 'navigateHistoryResult',
-            requestId: frame.requestId,
-            sessionId: frame.sessionId,
-            ok: true,
-          }),
-        );
-      }
-    });
-    const withTabId = await fx.app.inject({
-      method: 'POST',
-      url: `/v1/agent-sessions/${id}/history`,
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { direction: 'back' as const, tabId: 'tab_42' },
-    });
-    expect(withTabId.statusCode).toBe(200);
-    expect(withTabId.json<NavigateHistoryBody>().status).toBe('ok');
-    expect(relayedTabId).toBe('tab_42');
-
-    const withoutTabId = await fx.app.inject({
-      method: 'POST',
-      url: `/v1/agent-sessions/${id}/history`,
-      headers: { authorization: `Bearer ${fx.plaintext}` },
-      payload: { direction: 'back' as const },
-    });
-    expect(withoutTabId.statusCode).toBe(200);
-    expect(relayedTabId).toBe('ABSENT');
-  });
+  // ⛔ REMOVED 2026-09-06: an arm that pinned `tabId` crossing the wire verbatim
+  // from the ROUTE. It asserted the forward-compat plumbing worked, and it did —
+  // but the plumbing forwarded a field no device decodes, so the customer-visible
+  // result was a 200 and the session's CURRENT tab stepped. The arm was true and
+  // the behaviour it protected was a wrong answer, which is why it had to go
+  // rather than be worked around: keeping it would have made the refusal look like
+  // the regression. The route now refuses `tabId` (see the arms at the end of this
+  // file); the codec-level serialization is unchanged and still exercised where it
+  // belongs, at the codec.
 
   it('connected node reports an error → 200 { status:"error", reason }', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
@@ -249,6 +214,53 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
 // The history route drives the running session (state-changing), so its per-session
 // gui_control_key boundary matters: a key authorizes ONLY the session it was minted
 // for; a wrong/cross-session/missing key 401s. Mirrors the cookies-import route pins.
+describe('POST /v1/agent-sessions/:id/history — tabId is refused, not ignored', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('CRITICAL a supplied tabId is a 422 naming the field — never a 200 stepping the wrong tab', () => {
+    // The defect this replaces: the CP forwards `tabId`, but the harness decodes
+    // only requestId/sessionId/direction and a synthesized Codable decoder drops
+    // unknown keys. So the field vanished and the session's CURRENT tab was
+    // stepped — the caller got a 200 and the wrong tab, with no way to detect it.
+    // An explicit refusal is recoverable; a wrong tab is not.
+    return (async () => {
+      fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+      const id = await createSession(fx);
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/history`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { direction: 'back', tabId: 'tab_other' },
+      });
+      expect([400, 422]).toContain(res.statusCode);
+      // Specifically NOT a success: the old behaviour was a 200.
+      expect(res.statusCode).not.toBe(200);
+      // And it must name the field, or the caller cannot tell which input to drop.
+      expect(res.body).toMatch(/tabId/);
+    })();
+  });
+
+  it('omitting tabId still works — the refusal is scoped to the unsupported field', () => {
+    // Control: without this the arm above would pass against a route that rejects
+    // every history request, which would be a worse regression than the defect.
+    return (async () => {
+      fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+      const id = await createSession(fx);
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/history`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: { direction: 'back' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json<NavigateHistoryBody>().status).toBeDefined();
+    })();
+  });
+});
+
 describe('POST /v1/agent-sessions/:id/history gui_control_key auth', () => {
   const GCK_HEADER = 'x-driftstack-gui-control-key';
   let fx: TestAppFixture;

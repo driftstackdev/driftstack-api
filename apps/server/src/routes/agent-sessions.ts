@@ -3464,9 +3464,17 @@ export function registerAgentSessionsRoutes(
   const NavigateHistoryBodySchema = z.object({
     // The only two history steps; the closed enum mirrors the wire schema.
     direction: z.enum(['back', 'forward']),
-    // Optional (multi-tab): which tab's back-forward list to step. Omitted →
-    // the session's current tab (today's only behavior, unchanged). Gated-inert
-    // like navigateHistory itself until A3's harness reads it.
+    // ⛔ ACCEPTED ONLY TO BE REFUSED — see the guard in the handler. The CP does
+    // forward this field (harness-control-codec), but the harness's
+    // `NavigateHistoryRequest` decodes exactly `requestId`, `sessionId` and
+    // `direction` (`ControlClient.swift:1263-1265`), and a synthesized Codable
+    // decoder IGNORES unknown keys. So a supplied `tabId` was silently dropped and
+    // the session's CURRENT tab stepped — a 200 and the WRONG TAB.
+    //
+    // It stays in the schema rather than being deleted so the refusal can name the
+    // field precisely; a stripped unknown key would 422 with a less useful message,
+    // and `navigateHistory`'s own comment already noted this as forward-compat
+    // plumbing. The wire plumbing is kept for the day a handler reads it.
     tabId: z.string().optional(),
   });
   app.post<{ Params: { id: string } }>(
@@ -3503,6 +3511,26 @@ export function registerAgentSessionsRoutes(
         logger: req.log,
         route: 'POST /v1/agent-sessions/:id/history',
       });
+      // ⛔ REFUSE rather than accept-and-ignore. No device reads this field, so
+      // honouring the request is impossible, and silently stepping a different tab
+      // than the one asked for is the worst available answer — the caller cannot
+      // even detect it. An explicit 422 naming the field is recoverable; a wrong
+      // tab is not. Delete this guard when a harness handler decodes `tabId`.
+      //
+      // ⚠️ Placed AFTER reportUnknownRequestFields deliberately, and not merely to
+      // satisfy its 16-line proximity window: a caller who sent BOTH an unknown key
+      // and a tabId should learn about both in one round trip, so the report runs
+      // first and this refuses second.
+      if (parsed.data.tabId !== undefined) {
+        throw new ValidationError({
+          fieldErrors: {
+            tabId: [
+              "Targeting a specific tab is not supported yet — devices step the session's current tab. Omit tabId, or activate the tab first.",
+            ],
+          },
+          formErrors: [],
+        });
+      }
       // Control plane not wired (stateless deploy / no fleet registry).
       if (fleetControlRegistry === undefined) {
         return {

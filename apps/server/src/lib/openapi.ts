@@ -4769,8 +4769,13 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/sessions/{id}/proxy',
     operationId: 'attachSessionProxy',
+    // ⛔ NOT WIRED IN ANY DEPLOYMENT — routes/session-proxy.ts throws
+    // FeatureUnavailableError unconditionally. The refusal is honest; what was
+    // dishonest was publishing a 200 for it with no disclosure, while all three
+    // SDKs expose it as a working method. Use POST /v1/agent-sessions/{id}/egress
+    // (also device-gated today) or set proxy_id at session create.
     summary:
-      'Set the customer-configurable proxy for a session (requires `write:sessions`, broad `write`, or `account_owner`)',
+      'NOT AVAILABLE — set the customer-configurable proxy for a session (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['egress'],
     security: auth,
     request: {
@@ -4807,8 +4812,9 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/sessions/{id}/proxy',
     operationId: 'getSessionProxy',
+    // ⛔ NOT WIRED IN ANY DEPLOYMENT — throws NotFoundError unconditionally.
     summary:
-      "Read a session's current proxy config (type + safeguards only — no secret material) (requires `read:sessions`, broad `read`, or `account_owner`)",
+      "NOT AVAILABLE — read a session's current proxy config (type + safeguards only — no secret material) (requires `read:sessions`, broad `read`, or `account_owner`)",
     tags: ['egress'],
     security: auth,
     responses: {
@@ -5692,7 +5698,8 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/history',
-    summary: "Step the running session's browser history one entry back or forward",
+    summary:
+      "Step the running session's browser history one entry back or forward (current tab only)",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -5703,8 +5710,11 @@ function buildRegistry(): OpenAPIRegistry {
           'application/json': {
             schema: z.object({
               direction: z.enum(['back', 'forward']),
-              // Optional (multi-tab): which tab's back-forward list to step.
-              // Omitted → the session's current tab.
+              // ⛔ NOT SUPPORTED YET, and REJECTED with a 422 rather than ignored.
+              // Devices decode only requestId/sessionId/direction, so a supplied
+              // tabId used to be dropped and the CURRENT tab stepped — a 200 and
+              // the wrong tab. Kept in the published shape so the refusal names the
+              // field, and so callers can see it exists and is not yet honoured.
               tabId: z.string().optional(),
             }),
             example: { direction: 'back' },
