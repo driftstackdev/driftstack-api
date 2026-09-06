@@ -1,7 +1,7 @@
 {
   "name": "@driftstack/gui-client",
   "private": true,
-  "version": "0.1.17",
+  "version": "0.1.18",
   "description": "Driftstack self-hosted GUI client (Tauri + React + TS + Tailwind). Per file 128.",
   "type": "module",
   "scripts": {
