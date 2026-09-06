@@ -102,7 +102,12 @@ import type {
   FleetControlRegistry,
   FleetControlConnection,
 } from '../services/fleet-control-registry.js';
-import { CookieSchema, SetEgressApplyPointSchema } from '../schemas/harness-control-protocol.js';
+import {
+  CookieSchema,
+  SetEgressApplyPointSchema,
+  cookieErrorToken,
+} from '../schemas/harness-control-protocol.js';
+import { cookieErrorCopy } from '../services/cookie-error-copy.js';
 import {
   resolvePageStateMaxAgeSeconds,
   type SessionPageStateStore,
@@ -3028,10 +3033,16 @@ export function registerAgentSessionsRoutes(
           return { cookies: outcome.cookies, status: 'ok' as const };
         }
         if (outcome.status === 'error') {
+          // N-COOKIE-ERROR-CONTRACT — derive the sentence from the token rather
+          // than forwarding harness prose. `cookieErrorToken` also maps the
+          // transitional prose the currently-deployed daemon still emits, so this
+          // reads correctly before and after that restart (ledger N-DAEMON-STALE).
+          const token = cookieErrorToken(outcome.message);
           return {
             cookies: null,
             status: 'error' as const,
-            reason: customerSafeNodeDiagnostic(outcome.message),
+            reason:
+              token === null ? customerSafeNodeDiagnostic(outcome.message) : cookieErrorCopy(token),
           };
         }
         return { cookies: null, status: 'timeout' as const };
@@ -3202,9 +3213,12 @@ export function registerAgentSessionsRoutes(
           return { status: 'ok' as const };
         }
         if (outcome.status === 'error') {
+          // See the cookies-read route above: token → sentence, never prose.
+          const token = cookieErrorToken(outcome.message);
           return {
             status: 'error' as const,
-            reason: customerSafeNodeDiagnostic(outcome.message),
+            reason:
+              token === null ? customerSafeNodeDiagnostic(outcome.message) : cookieErrorCopy(token),
           };
         }
         return { status: 'timeout' as const };

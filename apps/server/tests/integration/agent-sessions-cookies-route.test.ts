@@ -132,6 +132,41 @@ describe('GET /v1/agent-sessions/:id/cookies (wired)', () => {
     expect(body.cookies).toEqual(jar);
   });
 
+  it('CRITICAL a real token gets its OWN sentence, not the generic fallback', async () => {
+    // The fallback arm above only proves arbitrary text is suppressed. This proves
+    // the token set is actually wired — without it, a route that answered the
+    // generic sentence for EVERYTHING would pass.
+    fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+    const id = await createSession(fx);
+    const nodeId = 'node-cookies-token';
+    await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+    const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
+      const frame = JSON.parse(data) as { type?: string; requestId?: string; sessionId?: string };
+      if (frame.type === 'cookiesRequest') {
+        conn.handleInbound(
+          JSON.stringify({
+            type: 'cookiesResult',
+            requestId: frame.requestId,
+            sessionId: frame.sessionId,
+            error: 'too_large',
+          }),
+        );
+      }
+    });
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: `/v1/agent-sessions/${id}/cookies`,
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+    });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<CookiesBody>();
+    expect(body.status).toBe('error');
+    // Says REFUSED, not truncated — a customer who thinks it was shortened hunts
+    // for partial state that does not exist.
+    expect(body.reason).toMatch(/refused/i);
+    expect(body.reason).not.toMatch(/truncat/i);
+  });
+
   it('connected node reports an error → 200 { status:"error", reason }', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);
@@ -158,7 +193,13 @@ describe('GET /v1/agent-sessions/:id/cookies (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<CookiesBody>();
     expect(body).toMatchObject({ status: 'error', cookies: null });
-    expect(body.reason).toMatch(/no cookie store/);
+    // ⛔ CHANGED 2026-09-06 (N-COOKIE-ERROR-CONTRACT). This used to assert the
+    // harness's own words reached the customer — which is the defect, not the
+    // contract. `session has no cookie store` is an invented fixture: the harness
+    // emits a CLOSED token set, verified in its source. Arbitrary device text must
+    // now coerce to our own sentence, so this asserts the property the route has.
+    expect(body.reason).not.toMatch(/no cookie store/);
+    expect(body.reason).toMatch(/does not recognise/);
   });
 });
 

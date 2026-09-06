@@ -13,7 +13,15 @@ describe('customer-facing node diagnostic boundary', () => {
     // 7 since P-17's egress swap. This counts SANITIZED sites, so it moving with a
     // new relay route is the pass condition — a route that returned a raw node
     // message would leave this number where it was while the route count grew.
-    expect(source.match(/reason: customerSafeNodeDiagnostic\(outcome\.message\)/g)).toHaveLength(7);
+    // 5 since N-COOKIE-ERROR-CONTRACT: the two COOKIE sites no longer forward
+    // device text at all. They derive the customer sentence from a closed token
+    // set, so there is nothing left to sanitise — a stronger guarantee than
+    // redaction, and the reason this count went DOWN rather than up.
+    // ⛔ It must never go down for any other reason: a site dropping this call
+    // while still forwarding `outcome.message` is exactly the leak this guards.
+    expect(source.match(/reason: customerSafeNodeDiagnostic\(outcome\.message\)/g)).toHaveLength(5);
+    // The cookie routes now derive copy instead, and that must stay true.
+    expect(source.match(/reason:\s*token === null/g) ?? []).toHaveLength(2);
     expect(source).not.toContain('reason: outcome.message');
   });
 

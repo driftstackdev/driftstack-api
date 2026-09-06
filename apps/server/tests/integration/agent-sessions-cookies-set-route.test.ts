@@ -197,14 +197,26 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<SetCookiesBody>();
     expect(body).toMatchObject({ status: 'error' });
-    expect(body.reason).toMatch(/write failed/);
-    expect(body.reason).toContain('direct=[redacted]');
-    expect(body.reason).toContain('token=[redacted]');
-    expect(body.reason).toContain('Bearer [redacted]');
+    // ⛔ CHANGED 2026-09-06 (N-COOKIE-ERROR-CONTRACT). The fixture sends prose that
+    // the harness does not emit, and prose no longer reaches the customer at all —
+    // the wire carries a closed token set and the sentence is derived here. This
+    // now asserts the property: arbitrary device text is suppressed.
+    expect(body.reason).not.toMatch(/write failed/);
+    expect(body.reason).toMatch(/does not recognise/);
+    // ⭐ THE GUARANTEE GOT STRONGER, so the assertions did too. This used to check
+    // that the sanitiser REDACTED credentials inside the forwarded device text
+    // ('direct=[redacted]', 'Bearer [redacted]'). Redaction is a mitigation for
+    // passthrough; there is no passthrough now, so nothing needs redacting and the
+    // customer sees only our own sentence. Asserting the redaction markers would
+    // now require the leak in order to pass.
     expect(body.reason).not.toContain('10.0.0.7');
     expect(body.reason).not.toContain('pass');
     expect(body.reason).not.toContain('secret');
     expect(body.reason).not.toContain('abcdefgh');
+    // Not even the redacted SHAPE survives — no fragment of the device's message
+    // reaches the customer at all.
+    expect(body.reason).not.toContain('[redacted]');
+    expect(body.reason).not.toMatch(/direct=|Bearer|https?:\/\//);
   });
 
   it('connected node never replies → 200 { status:"timeout" } (no-ops gracefully pre-box-half)', async () => {
@@ -224,6 +236,49 @@ describe('POST /v1/agent-sessions/:id/cookies/set (wired)', () => {
 // The import route mutates the session's cookie store, so its per-session
 // gui_control_key boundary matters: a key authorizes ONLY the session it was minted
 // for; a wrong/cross-session/missing key 401s. Mirrors the cookies + files route pins.
+describe('POST /v1/agent-sessions/:id/cookies/set — the token decides the copy', () => {
+  let fx: TestAppFixture;
+  afterEach(async () => {
+    if (fx) await fx.cleanup();
+  });
+
+  it('CRITICAL `unsupported` tells the customer a retry cannot help — unlike write_failed', () => {
+    // The distinction that made this a closed set: `unsupported` means the box has
+    // no cookie-import extension, so retrying can NEVER succeed. Sharing copy with
+    // the transient failure would send the customer round a loop that never ends.
+    return (async () => {
+      fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
+      const id = await createSession(fx);
+      const nodeId = 'node-set-cookies-unsupported';
+      await fx.agentSessionsRepo!.setNodeId(id, nodeId);
+      const conn = fx.fleetControlRegistry.register(nodeId, (data) => {
+        const frame = JSON.parse(data) as { type?: string; requestId?: string; sessionId?: string };
+        if (frame.type === 'setCookies') {
+          conn.handleInbound(
+            JSON.stringify({
+              type: 'setCookiesResult',
+              requestId: frame.requestId,
+              sessionId: frame.sessionId,
+              error: 'unsupported',
+            }),
+          );
+        }
+      });
+      const res = await fx.app.inject({
+        method: 'POST',
+        url: `/v1/agent-sessions/${id}/cookies/set`,
+        headers: { authorization: `Bearer ${fx.plaintext}` },
+        payload: IMPORT_BODY,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = res.json<SetCookiesBody>();
+      expect(body.status).toBe('error');
+      expect(body.reason).toMatch(/will not help|cannot set cookies/i);
+      expect(body.reason).not.toMatch(/try again in a moment/i);
+    })();
+  });
+});
+
 describe('POST /v1/agent-sessions/:id/cookies/set gui_control_key auth', () => {
   const GCK_HEADER = 'x-driftstack-gui-control-key';
   let fx: TestAppFixture;

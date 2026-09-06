@@ -1673,6 +1673,61 @@ export type Cookie = z.infer<typeof CookieSchema>;
 // node→CP RESULT: echoes `requestId`. SUCCESS → `cookies` is the full jar; FAILURE
 // (unknown/inactive session, fork-ext error) → `error` set, and the CP fast-fails the
 // pending request. Plain object (lenient forward-compat), like the sibling frames.
+/**
+ * N-COOKIE-ERROR-CONTRACT — the closed token set a cookie result may carry in its
+ * `error` field, authoritative list read off A3's emit sites 2026-09-06.
+ *
+ * The customer used to see opaque harness PROSE here, and the contract doc
+ * described tokens no code produced. The tokens ride in the EXISTING `error`
+ * field rather than a new sibling: `error` changed MEANING (prose → token), and
+ * two fields where one changed meaning is how the next reader gets it wrong.
+ *
+ * ⛔ `unsupported` is a CAPABILITY condition, not a failure: the fork's
+ * cookie-import extension is absent, so that box can never set cookies and a retry
+ * will never succeed. It needs different customer copy from `write_failed` for
+ * exactly that reason — "try again" is wrong for one and right for the other.
+ *
+ * ⚠️ `unavailable` is NOT a member, and the near-miss is worth recording: A2
+ * inferred it from the stderr prose at that emit site ("setCookies unavailable —
+ * fork cookie-import ext absent"). A3 caught it. Had it shipped, the one condition
+ * a customer on an extension-less box actually hits would have coerced to the
+ * fallback and told them nothing.
+ */
+export const COOKIE_ERROR_TOKENS = [
+  'no_session',
+  'too_large',
+  'read_failed',
+  'unsupported',
+  'write_failed',
+  'unknown',
+] as const;
+export const CookieErrorTokenSchema = z.enum(COOKIE_ERROR_TOKENS).catch('unknown');
+export type CookieErrorToken = (typeof COOKIE_ERROR_TOKENS)[number];
+
+/**
+ * ⚠️ TRANSITIONAL, and delete it once the fleet daemon is current. The token
+ * commit landed 2026-09-06 04:48; the running daemon started 2026-09-04 20:06, so
+ * every cookie error on the live wire today is still the OLD prose. Narrowing to
+ * tokens alone would coerce all of it to `unknown` and REGRESS the customer's
+ * message until the restart — worse than what they have now.
+ *
+ * These are A3's exact emitted strings, mapped to the tokens they became, so the
+ * fix works on both the stale daemon and the current one. Ledger N-DAEMON-STALE.
+ */
+export const LEGACY_COOKIE_ERROR_PROSE: Readonly<Record<string, CookieErrorToken>> = {
+  'unknown or inactive session': 'no_session',
+  'cookie jar too large to stream': 'too_large',
+  'cookie query failed': 'read_failed',
+};
+
+/** Narrow a wire `error` to a token, honouring the transitional prose above. */
+export function cookieErrorToken(raw: string | undefined): CookieErrorToken | null {
+  if (raw === undefined) return null;
+  const legacy = LEGACY_COOKIE_ERROR_PROSE[raw.trim().toLowerCase()];
+  if (legacy !== undefined) return legacy;
+  return CookieErrorTokenSchema.parse(raw);
+}
+
 export const CookiesResultSchema = z.object({
   type: z.literal('cookiesResult'),
   requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
