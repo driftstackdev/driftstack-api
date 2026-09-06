@@ -8,8 +8,13 @@
 // and, for each, a protocol badge whose tone is derived SOLELY from
 // cleanMeasuredProtocol's verdict. The h3 tone is the only one carrying the green
 // (emerald) color class; h1/h2/unknown carry non-green classes. The pane also
-// shows an honest "No requests captured yet" empty state, because A3 has not wired
-// the harness emission yet so the feed is legitimately empty in production today.
+// The pane's empty state is pinned too, and its copy CHANGED 2026-09-06 for cause:
+// it used to say "No requests captured yet", which this file called honest. It was
+// not. A3 measured, case-insensitively across all of `harness/Sources`, that no
+// `networkRequests` frame exists under any spelling — the outbound enum is
+// exhaustively NINETEEN types with no request log among them. So "yet" told the
+// customer to keep browsing for data that no device will ever send, and the owner
+// reported the pane as broken. The state now describes the CAPABILITY.
 //
 // Renders the real component (no full SimulatorWindow, so none of the ~17
 // simulator-window mocks are involved). .test.tsx → jsdom.
@@ -109,15 +114,76 @@ describe('Network pane — protocol badges never green an unknown value', () => 
     expect(green[0]?.tone).toBe('h3');
   });
 
-  it('an empty feed shows the honest "No requests captured yet" state', () => {
+  it('CRITICAL an empty feed explains the CAPABILITY, and never says requests are still coming', () => {
+    // ⛔ This arm replaces one that asserted the string "No requests captured yet"
+    // and called it honest. A pin that encodes a misleading string keeps it alive:
+    // the old copy is unreachable now, and asserting it would have made this fix
+    // look like the regression.
     const store = createNetworkLogStore();
     store.append([], null); // an empty ok poll → [] snapshot, not null
     const { container, queryByText } = render(
       <NetworkListSubscriber store={store} sessionId="agt_x" note={null} refreshing={false} />,
     );
-    expect(queryByText('No requests captured yet')).not.toBeNull();
+    const empty = container.querySelector('[data-component="simulator-network-empty"]');
+    expect(empty, 'the empty state renders').not.toBeNull();
+    const text = empty?.textContent ?? '';
+    // It must not promise arriving data. "yet" alone is fine ("don't report ... yet"
+    // is a capability statement); what is banned is the old claim that THIS session
+    // simply has not captured anything so far.
+    expect(queryByText('No requests captured yet')).toBeNull();
+    expect(text).not.toMatch(/captured yet/i);
+    // It must say something about devices not reporting, so a reader learns the
+    // pane is not waiting on them.
+    expect(text).toMatch(/don.t report|not report/i);
     // And no rows / no green badge in the empty state.
     expect(container.querySelectorAll('[data-component="simulator-network-row"]').length).toBe(0);
     expect(badges(container).length).toBe(0);
+  });
+  it('CRITICAL a standing note RENDERS after a successful poll — it used to be unreachable', () => {
+    // The defect: `note` rendered only while the snapshot was null, and one 200
+    // flipped null to [] forever. So every message computed after the first
+    // successful poll — credential expired, 404, transient, and the route's own
+    // `unavailable` reason — was stored and never shown.
+    const store = createNetworkLogStore();
+    store.append([], null); // the poll that used to disable all messaging
+    const { container, queryByText } = render(
+      <NetworkListSubscriber
+        store={store}
+        sessionId="agt_x"
+        note="Session control credential expired — reopen the session to refresh."
+        refreshing={false}
+      />,
+    );
+    expect(container.querySelector('[data-component="simulator-network-note"]')).not.toBeNull();
+    expect(queryByText(/credential expired/)).not.toBeNull();
+  });
+
+  it('CRITICAL does not claim "live" while a note is standing', () => {
+    // The badge was gated on `entries !== null` alone, so after one empty poll it
+    // pulsed "live" over an empty table forever — including while the server was
+    // saying the session was not connected to a browser.
+    const store = createNetworkLogStore();
+    store.append([], null);
+    const withNote = render(
+      <NetworkListSubscriber
+        store={store}
+        sessionId="agt_x"
+        note="This session is not connected to a browser yet."
+        refreshing={false}
+      />,
+    );
+    expect(
+      withNote.container.querySelector('[data-component="simulator-network-live"]'),
+      'a pane that cannot fetch must not advertise itself as live',
+    ).toBeNull();
+    withNote.unmount();
+    // Control: with no note, the badge DOES appear — so the arm above measures the
+    // note and not a badge that never renders.
+    const healthy = render(
+      <NetworkListSubscriber store={store} sessionId="agt_x" note={null} refreshing={false} />,
+    );
+    expect(
+      healthy.container.querySelector('[data-component="simulator-network-live"]'),
+    ).not.toBeNull();
   });
 });

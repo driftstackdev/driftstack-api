@@ -17,10 +17,12 @@
 //   node, a typo, a future value the badge doesn't understand) must render
 //   NEUTRAL, never a green HTTP/3 badge. cleanMeasuredProtocol is that gate.
 //
-// A3 has NOT wired the harness emission yet, so in production today the server
-// relay ring is legitimately EMPTY: a healthy poll returns `{ entries: [],
-// next_after: null }` and the pane shows an honest "No requests captured yet"
-// empty state. Everything here is ready to receive the moment emission lands.
+// ⛔ CORRECTED 2026-09-06 — "not wired YET" understated it. There is no
+// `networkRequests` emitter ANYWHERE: not in the harness (whose outbound enum is
+// exhaustively nineteen types, none a request log) and not in the fork. So the
+// ring is not awaiting a wiring step, it is awaiting a feature not started on
+// either side, and a healthy poll returns `{ entries: [], next_after: null }`
+// indefinitely. Everything here is ready to receive it. Ledger row T-9.
 
 // The auth shape only — a `import type` is erased at compile, so this creates NO
 // runtime dependency on the widely-mocked agent-session-control module (N-1).
@@ -71,9 +73,17 @@ export type NetworkCursor = string | number | null;
 
 /** One page of the ring, exactly the wire contract:
  *    GET /v1/agent-sessions/:id/network?after=<id> -> { entries, next_after }. */
+/** The route's discriminated verdict, narrowed to a closed set. */
+export type NetworkLogStatus = 'ok' | 'unavailable';
+
 export interface NetworkLogPage {
   entries: NetworkRequestEntry[];
   next_after: NetworkCursor;
+  /** The route's own verdict. 'unavailable' means the session is not in a state
+   *  that can produce a log — NOT that it produced none. */
+  status: NetworkLogStatus;
+  /** The server's written explanation when status is not 'ok'. Shown verbatim. */
+  reason: string | null;
 }
 
 /** Server ring bound (wire contract): the session ring holds at most this many
@@ -147,17 +157,35 @@ export async function fetchAgentSessionNetwork(
     { method: 'GET' },
     auth,
   );
-  const body = await readBoundedApiJson<{ entries?: unknown; next_after?: unknown }>(res);
+  // ⛔ READ THE DISCRIMINANT. The route answers 200 in every relay case and puts
+  // the verdict in `status` with a written `reason` — "This session is not running…",
+  // "This session is not connected to a browser yet." This function used to type the
+  // body as `{entries?, next_after?}` and drop both, which made an `unavailable` 200
+  // indistinguishable from a healthy empty one. That is the whole reason the pane
+  // could sit blank and confident while the server was explaining itself.
+  const body = await readBoundedApiJson<{
+    entries?: unknown;
+    next_after?: unknown;
+    status?: unknown;
+    reason?: unknown;
+  }>(res);
   const entries = Array.isArray(body.entries)
     ? body.entries.map(cleanEntry).filter((e): e is NetworkRequestEntry => e !== null)
     : [];
-  return { entries, next_after: normalizeCursor(body.next_after) };
+  // Anything that is not the literal 'ok' is treated as not-ok: an unrecognised
+  // status must not read as success (the same closed-set discipline the protocol
+  // badge uses). An ABSENT status stays 'ok' — older deployments omit it.
+  const rawStatus = typeof body.status === 'string' ? body.status : 'ok';
+  const status: NetworkLogStatus = rawStatus === 'ok' ? 'ok' : 'unavailable';
+  const reason = typeof body.reason === 'string' && body.reason.length > 0 ? body.reason : null;
+  return { entries, next_after: normalizeCursor(body.next_after), status, reason };
 }
 
 /** External store for the Network pane — mirrors the Cookies list store so only the
  *  open pane repaints when a fresh page lands, never the live video/browser host.
  *  `getSnapshot`: null before the first successful poll (→ a calm "connecting"
- *  note); [] after an empty ok (→ the honest "No requests captured yet" state);
+ *  note); [] after an empty ok (→ the capability empty state, which says devices
+ *  do not report per-request logs rather than implying data is still arriving);
  *  a populated array once entries arrive. */
 export interface NetworkLogStore {
   getSnapshot: () => NetworkRequestEntry[] | null;

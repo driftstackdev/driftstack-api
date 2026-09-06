@@ -18,9 +18,23 @@ import {
 // protocol we can't actually vouch for. cleanMeasuredProtocol is that gate; this
 // component only chooses a tone from its verdict.
 //
-// A3 has not wired the harness emission yet, so the feed is legitimately empty in
-// production today. That is NOT an error — an empty ok poll shows an honest "No
-// requests captured yet", plainly stated.
+// ⛔ THE EMPTY STATE USED TO SAY "No requests captured yet", AND THAT WAS NOT
+// HONEST. The word "yet" tells a customer to keep browsing and the requests will
+// arrive. They never will: measured 2026-09-06 by A3, case-insensitively across
+// all of `harness/Sources`, `networkRequests` does not exist in the harness under
+// any spelling, and its outbound frame enum (`ControlClient.swift` `HarnessOutbound`,
+// counted brace-by-brace) is exhaustively NINETEEN types with no request log among
+// them. The producer was never built — so the pane rendered a
+// DevTools-shaped surface that is permanently, silently blank, and the owner
+// reported it as "network still doesnt work". They were right.
+//
+// The copy now describes the CAPABILITY, not the timing. It stays true in both
+// states — a device that cannot report, and (once the frame lands) a session that
+// genuinely made no requests — because it says devices do not report these yet
+// rather than claiming this session had none. When the harness ships the frame,
+// change this string in the same commit that consumes it; a capability flag on
+// capabilityReport would let the pane tell the two apart properly, and that is
+// proposed to A3 rather than guessed at here.
 
 type ProtocolTone = MeasuredProtocol | 'neutral';
 
@@ -138,7 +152,7 @@ export function NetworkListSubscriber({
           <span aria-hidden="true">🌐</span>
           Network
         </span>
-        {entries !== null && (
+        {entries !== null && note === null && (
           <span
             data-component="simulator-network-live"
             data-refreshing={refreshing ? 'true' : 'false'}
@@ -192,12 +206,29 @@ export function NetworkListSubscriber({
               ? 'Start the session to see its network activity.'
               : (note ?? 'connecting…')}
           </div>
+        ) : note !== null ? (
+          // ⛔ THE NOTE USED TO RENDER ONLY IN THE BRANCH ABOVE — i.e. only while the
+          // snapshot was still null, which is only ever before the first successful
+          // poll. One 200 flipped null to [] permanently, so every subsequent
+          // message (credential expired, 404, transient failure, and the route's own
+          // `unavailable` reason) was computed, stored, and never shown. This branch
+          // is the fix: a standing note outranks an empty table, because "we cannot
+          // fetch this" and "there is nothing to fetch" are different answers.
+          <div
+            data-component="simulator-network-note"
+            className="px-1 py-2 font-mono text-[10px] text-white/45"
+          >
+            {note}
+          </div>
         ) : entries.length === 0 ? (
           <div
             data-component="simulator-network-empty"
             className="px-1 py-2 font-mono text-[10px] text-white/40"
           >
-            No requests captured yet
+            <div>No network activity to show.</div>
+            <div className="mt-1 text-white/30">
+              Devices don&rsquo;t report per-request logs yet — this pane fills in once they do.
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-1 py-1 font-mono text-[10px] text-white/40">no matching requests</div>

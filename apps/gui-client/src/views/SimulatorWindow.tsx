@@ -6439,8 +6439,10 @@ export function SimulatorWindow(): JSX.Element {
   // module (NOT agent-session-control) so the ~17 simulator-window mocks — which
   // hand-list agent-session-control's exports — never see an undefined new export
   // (N-1). The feed pages a bounded ring over the control plane via an `after`
-  // cursor. A3 has NOT wired the harness emission yet, so a healthy poll returns
-  // an EMPTY page today and the pane shows an honest "No requests captured yet".
+  // cursor. ⛔ There is NO networkRequests emitter anywhere — not in the harness
+  // (nineteen outbound types, none a request log) and not in the fork — so a
+  // healthy poll returns an EMPTY page and will keep doing so until the feature is
+  // built on both sides. The pane says that in capability terms rather than".
   const networkStoreRef = useRef<NetworkLogStore | null>(null);
   if (networkStoreRef.current === null) networkStoreRef.current = createNetworkLogStore();
   const networkStore = networkStoreRef.current;
@@ -6472,9 +6474,18 @@ export function SimulatorWindow(): JSX.Element {
       void fetchAgentSessionNetwork(sessionId, networkStore.getCursor(), controlAuth)
         .then((page) => {
           if (cancelled) return;
-          // A 200 always carries a page. append flips a null snapshot to a real
-          // array even when the ring is empty — so an empty ok surfaces the honest
-          // "No requests captured yet" state, not the "connecting" note.
+          // ⛔ A 200 IS NOT NECESSARILY A YES. The route answers 200 in every relay
+          // case and carries its verdict in `status`, with a written `reason` for the
+          // customer. This used to append unconditionally and clear the note, so an
+          // `unavailable` 200 — "This session is not connected to a browser yet." —
+          // was rendered as a healthy empty log. Worse, `append` flips the snapshot
+          // from null to [], and the note can only render while it is null, so that
+          // first swallowed poll ALSO disabled every later error message.
+          if (page.status !== 'ok') {
+            setNetworkNote(page.reason ?? 'network activity is not available for this session');
+            backoff = Math.min(backoff * 2, 30000);
+            return;
+          }
           networkStore.append(page.entries, page.next_after);
           hasNetworkRef.current = true;
           setNetworkNote(null);
@@ -6494,9 +6505,17 @@ export function SimulatorWindow(): JSX.Element {
               : status === 503
                 ? "the network view isn't enabled on this deployment"
                 : "couldn't load network activity — retrying";
-          // Retain the last-known list; note only when nothing fetched yet, EXCEPT
-          // expired creds (the list can't refresh) which keeps its actionable note.
-          setNetworkNote(hasNetworkRef.current && !credsExpired ? null : note);
+          // ⛔ THE OLD CARVE-OUT HERE WAS 100% DEAD and is removed. It read
+          // `hasNetworkRef.current && !credsExpired ? null : note`, meant to keep the
+          // expired-credential note actionable while suppressing noise once a list
+          // had loaded. But `hasNetworkRef.current` and `entries !== null` move in
+          // lockstep, and the note could only RENDER while entries was null — so the
+          // branch it protected could fire only in the exact state where nothing was
+          // displayable. Every 401/403, 404 and transient note was unreachable.
+          // The note now renders in all states (see NetworkListSubscriber), so
+          // setting it unconditionally is both simpler and the only honest option:
+          // a failing poll is worth saying out loud even when stale rows are shown.
+          setNetworkNote(note);
           backoff = Math.min(backoff * 2, 30000);
         })
         .finally(() => {
@@ -9754,9 +9773,11 @@ export function SimulatorWindow(): JSX.Element {
                     {/* Network — a devtools-style request list showing per-request
                       protocol (HTTP/2 vs HTTP/3). The store + poll + closed-set
                       protocol validation live in lib/network-log-feed (isolated from
-                      the widely-mocked agent-session-control, N-1). A3 has not wired
-                      the harness emission yet, so the feed is honestly empty today —
-                      the pane says "No requests captured yet" rather than erroring. */}
+                      the widely-mocked agent-session-control, N-1). ⛔ The harness has
+                      NO networkRequests frame at all — measured 2026-09-06, not merely
+                      "not wired yet" — so this pane is permanently blank until one
+                      exists, and its empty state says so in capability terms rather
+                      than the old "captured yet", which read as "keep browsing". */}
                     {activePane === 'network' && (
                       <NetworkListSubscriber
                         store={networkStore}
