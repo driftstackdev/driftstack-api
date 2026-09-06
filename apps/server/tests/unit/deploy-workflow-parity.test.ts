@@ -78,7 +78,7 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
       /^\s{2}deploy-staging:\s*\n\s*name: Deploy to staging \(via deploy-bridge\.sh\)\s*\n\s*needs: source-map-upload/m,
     );
     expect(d).toMatch(
-      /^\s{2}deploy-production:\s*\n\s*name: Deploy to production \(manual approval; via deploy-bridge\.sh\)\s*\n\s*needs: \[source-map-upload, deploy-staging\]/m,
+      /^\s{2}deploy-production:\s*\n\s*name: Deploy to production \(CONTINUOUS — no approval gate; via deploy-bridge\.sh\)\s*\n\s*needs: \[source-map-upload, deploy-staging\]/m,
     );
   });
 
@@ -191,10 +191,34 @@ describe('W724 GitHub Actions deploy.yml workflow parity (Option B verdict)', ()
     );
   });
 
-  it('CRITICAL "production" GitHub-environment approval gate framing pinned. The "configured in repo settings to require approval from the founder" framing tells engineers the approval is enforced server-side by GitHub, NOT by a job-level check.', () => {
+  it('CRITICAL the production job does NOT claim an approval gate that repo settings do not have', () => {
+    // ⛔⛔ THIS ARM WAS INVERTED 2026-09-06, and the inversion is the finding.
+    //
+    // It used to REQUIRE the comment "The production environment is configured in
+    // repo settings to require approval from the founder before this job runs",
+    // reasoning that the framing "tells engineers the approval is enforced
+    // server-side". It told them something false. Measured:
+    // `gh api repos/:owner/:repo/environments` returns `protection_rules: []` for
+    // EVERY environment including production, and `.../branches/main/protection`
+    // answers "Branch not protected". The last five runs each went
+    // staging→production in 267-294 s with no pause.
+    //
+    // So a CRITICAL test was enforcing the PRESENCE of a false safety claim, and
+    // would have reded on any attempt to tell the truth. That is the worst shape a
+    // guard can take: it does not merely miss a defect, it defends one.
+    //
+    // Continuous deploy is the owner's deliberate choice — they asked for it
+    // explicitly. The behaviour is right; only the description was wrong.
     const d = read(DEPLOY);
-    expect(d).toMatch(/The "production" environment is configured in repo settings to/);
-    expect(d).toMatch(/require approval from the founder before this job runs/);
+    expect(d).not.toMatch(/is configured in repo settings to/);
+    // ⚠️ Whitespace-tolerant on purpose. The first version of this assertion
+    // PASSED FOR THE WRONG REASON: the phrase was present in a comment and a
+    // line wrap split it, so a literal regex missed it. An absence assertion that
+    // formatting can satisfy is not an absence assertion.
+    expect(d).not.toMatch(/require approval from the founder[\s#]+before this job runs/);
+    expect(d).toMatch(/CONTINUOUS — no approval gate/);
+    expect(d).toMatch(/ships to production unreviewed/i);
+    expect(d).toMatch(/ALSO NOT GATED ON CI/);
   });
 
   it('CRITICAL docker / docker-compose / ghcr.io / buildx ACTIVE workflow steps MUST NOT return — Option B verdict explicitly removed them. (Comments may still name them as removed-context.)', () => {

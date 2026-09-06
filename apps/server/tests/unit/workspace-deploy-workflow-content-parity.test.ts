@@ -103,7 +103,9 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(body).toMatch(/bash scripts\/deploy-bridge\.sh staging/);
 
     expect(body).toMatch(/deploy-production:/);
-    expect(body).toMatch(/name: Deploy to production \(manual approval; via deploy-bridge\.sh\)/);
+    expect(body).toMatch(
+      /name: Deploy to production \(CONTINUOUS — no approval gate; via deploy-bridge\.sh\)/,
+    );
     expect(body).toMatch(/needs: \[source-map-upload, deploy-staging\]/);
     expect(body).toMatch(/url: https:\/\/api\.driftstack\.dev/);
     expect(body).toMatch(/bash scripts\/deploy-bridge\.sh prod/);
@@ -134,9 +136,25 @@ describe('W542.A /.github/workflows/deploy.yml content parity (Option B)', () =>
     expect(failClear).toBe(2);
   });
 
-  it('Production GitHub-environment approval gate framing pinned', () => {
-    expect(body).toMatch(/# The "production" environment is configured in repo settings to/);
-    expect(body).toMatch(/# require approval from the founder before this job runs\./);
+  it('the production job does NOT claim an approval gate repo settings do not have', () => {
+    // ⛔⛔ INVERTED 2026-09-06. This is the SECOND file pinning the same false
+    // safety claim — its twin is deploy-workflow-parity. Both required the file to
+    // SAY production is gated on founder approval; measured, every GitHub
+    // environment has `protection_rules: []`, `main` is not branch-protected, and
+    // the last five runs went staging→production in 267-294 s with no pause.
+    //
+    // ⚠️ Two files pinning one claim is the same trap that bit twice today with
+    // count censuses — fix the one the failure names and the other keeps the lie
+    // alive. Grep the SYMBOL, not the file.
+    //
+    // Continuous deploy is the owner's explicit choice. Only the wording was wrong.
+    expect(body).not.toMatch(/is configured in repo settings to/);
+    // ⚠️ Whitespace-tolerant on purpose. The first version of this assertion
+    // PASSED FOR THE WRONG REASON: the phrase was present in a comment and a
+    // line wrap split it, so a literal regex missed it. An absence assertion that
+    // formatting can satisfy is not an absence assertion.
+    expect(body).not.toMatch(/require approval from the founder[\s#]+before this job runs/);
+    expect(body).toMatch(/CONTINUOUS — no approval gate/);
   });
 
   it('docker / docker-compose / ghcr.io workflow STEPS MUST NOT return — Option B removed them (the comment block may still name them as removed-context)', () => {

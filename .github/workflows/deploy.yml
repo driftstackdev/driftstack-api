@@ -220,11 +220,33 @@ jobs:
         run: bash scripts/deploy-bridge.sh staging '${{ github.sha }}'
 
   deploy-production:
-    name: Deploy to production (manual approval; via deploy-bridge.sh)
+    name: Deploy to production (CONTINUOUS — no approval gate; via deploy-bridge.sh)
     needs: [source-map-upload, deploy-staging]
     runs-on: ubuntu-latest
-    # The "production" environment is configured in repo settings to
-    # require approval from the founder before this job runs.
+    # ⛔ CORRECTED 2026-09-06. This previously asserted that the "production"
+    # environment was configured in repo settings to demand founder sign-off before
+    # this job ran. IT WAS NOT, and was not when that sentence was written.
+    # (The original wording is deliberately NOT reproduced here: a guard asserts
+    # that claim is absent from this file, and quoting it verbatim would either
+    # trip the guard or — worse — pass only because a line wrap split the string.)
+    #
+    # Measured, not read: `gh api repos/:owner/:repo/environments` returns
+    # `protection_rules: []` for EVERY environment, production included, and
+    # `gh api .../branches/main/protection` answers "Branch not protected". The
+    # five most recent runs each completed staging→production in 267-294 s with no
+    # approval pause.
+    #
+    # So every push to `main` ships to production unreviewed. That is the owner's
+    # deliberate choice — they confirmed they want continuous auto-deploy — and the
+    # wording is corrected rather than the behaviour, because a claimed control
+    # nobody configured is worse than an acknowledged absence: an auditor reads the
+    # sentence and stops looking.
+    #
+    # ⚠️ ALSO NOT GATED ON CI. `needs:` lists only source-map-upload and
+    # deploy-staging, so a red test suite does not block a production deploy. If
+    # that is ever wanted, adding the CI workflow to `needs:` is the one-line
+    # change — deliberately NOT made, since it would block the auto-deploy the
+    # owner asked for. Tracked on ledger row N-DEPLOY-GATE.
     environment:
       name: production
       url: https://api.driftstack.dev
