@@ -45,6 +45,10 @@ on:
     branches: [main]
     paths:
       - 'apps/marketing-site/**'
+      # T-3 step 8 — the .dev→.io redirect middleware is deployed WITH this site
+      # (wrangler picks up functions/ from the repo root), so a change to it must
+      # redeploy every site that serves a .dev host.
+      - 'functions/**'
       - '.github/workflows/deploy-marketing.yml'
       - 'package.json'
       - 'package-lock.json'

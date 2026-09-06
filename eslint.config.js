@@ -46,6 +46,11 @@ export default tseslint.config(
       // self-verify harness) — same standalone-.mjs case as `scripts/**`
       // above: ESM-only, outside any tsconfig, not type-checked here.
       'operations/scripts/**',
+      // T-3 step 8 — the Cloudflare Pages Function that 301s the .dev website
+      // hosts to .io. Deployed by wrangler from the repo root, outside any
+      // tsconfig: the same standalone-JS case as `scripts/**` above. Its shape
+      // is pinned by apps/server/tests/unit/the-dev-hosts-redirect-to-io.test.ts.
+      'functions/**',
     ],
   },
   js.configs.recommended,
