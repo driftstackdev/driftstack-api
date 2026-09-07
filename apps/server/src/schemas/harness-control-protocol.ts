@@ -2228,7 +2228,10 @@ export const ProbeEgressResultSchema = z
     type: z.literal('probeEgressResult'),
     requestId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
     node_id: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
-    ok: z.boolean(),
+    /** ⛔ W-28 step 3 — OPTIONAL, so a migrated node can stop sending it. It was
+     *  REQUIRED, and that made the migration undeployable: dropping it node-side
+     *  first would have failed every frame and timed out every probe. */
+    ok: z.boolean().optional(),
     /** W-28 — the replacement for `ok`. Optional until every node emits it. */
     status: z.enum(PROBE_EGRESS_STATUSES).optional(),
     reachable: z.boolean(),
@@ -2250,7 +2253,26 @@ export const ProbeEgressResultSchema = z
     // Refusing routes it through the rejection reporter (structure only: the log
     // gets `status:custom`, never a value), and the probe times out with a
     // diagnosable line instead of returning a verdict nobody can trust.
-    if (frame.status !== undefined && (frame.status === 'verdict') !== frame.ok) {
+    // ⛔ AT LEAST ONE of the pair must be present. With both optional, a frame
+    // carrying neither would otherwise parse and then answer "did the probe reach
+    // a verdict?" with `undefined` — the silent no-answer this migration exists
+    // to remove, arriving through the migration itself.
+    if (frame.ok === undefined && frame.status === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['status'],
+        message: 'neither ok nor status present',
+      });
+    }
+    // ⛔ `frame.ok !== undefined` is load-bearing, not defensive. Without it,
+    // `(frame.status === 'verdict') !== undefined` is ALWAYS true, so every
+    // migrated frame — the exact frames this step exists to accept — would be
+    // refused. Measured before shipping: status-only frames refused 100%.
+    if (
+      frame.ok !== undefined &&
+      frame.status !== undefined &&
+      (frame.status === 'verdict') !== frame.ok
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['status'],
@@ -2270,7 +2292,21 @@ export type ProbeEgressResult = z.infer<typeof ProbeEgressResultSchema>;
  * migration exists to make unmissable.
  */
 export function probeReachedVerdict(frame: Pick<ProbeEgressResult, 'ok' | 'status'>): boolean {
-  return frame.status !== undefined ? frame.status === 'verdict' : frame.ok;
+  if (frame.status !== undefined) return frame.status === 'verdict';
+  // ⛔ THIS READER DEPENDS ON THE at-least-one REFINEMENT ABOVE. `?? false` cannot
+  // distinguish "the node said could_not_run" from "this object never went through
+  // the schema" — both are `false` — and that is only safe because both-absent is
+  // unreachable for a validated frame. ⚠️ The signature is a `Pick<>`, so a test
+  // fixture or a hand-built row CAN reach it without ever being parsed. If someone
+  // later relaxes that refinement, this fallback absorbs it silently and the tell
+  // is gone. Relax one and you must revisit the other.
+  //
+  // Both absent is refused by the schema above, so this cannot be reached from
+  // a PARSED frame. Handled rather than asserted away: the previous body returned
+  // `frame.ok` directly and, the moment `ok` became optional, returned `undefined`
+  // while declaring `boolean` — a lie the type system accepted, which a caller
+  // would have read as "did not reach a verdict".
+  return frame.ok ?? false;
 }
 
 // ── HarnessOutbound union (server DECODES) ────────────────────────────

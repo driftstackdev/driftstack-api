@@ -176,6 +176,48 @@ describe('a probe verdict is not a pass', () => {
     }
   });
 
+  // ⛔ W-28 STEP 3 — these four arms are one change, and shipping any subset breaks
+  // the migration. The peer found the trap before either side deployed: `ok` was
+  // REQUIRED, so a node dropping it would have failed every frame and timed out
+  // every probe — and making it optional ALONE is worse, because the disagreement
+  // check compares against `undefined` and refuses 100% of migrated frames.
+  it('CRITICAL a status-only frame (no `ok`) is ACCEPTED — the migrated shape', () => {
+    const { ok: _dropped, ...noOk } = DEAD;
+    const parsed = ProbeEgressResultSchema.safeParse({ ...noOk, status: 'verdict' });
+    expect(parsed.success, 'the whole point of step 3').toBe(true);
+    expect(probeReachedVerdict({ status: 'verdict' })).toBe(true);
+    expect(probeReachedVerdict({ status: 'could_not_run' })).toBe(false);
+  });
+
+  it('CRITICAL a frame with NEITHER `ok` nor `status` is refused', () => {
+    // Both optional would otherwise let a frame parse and then answer "did the
+    // probe reach a verdict?" with undefined — the silent no-answer this whole
+    // migration exists to remove, arriving through the migration itself.
+    const { ok: _dropped, ...neither } = DEAD;
+    const parsed = ProbeEgressResultSchema.safeParse(neither);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((i) => i.path.join('.') === 'status')).toBe(true);
+    }
+  });
+
+  it('CRITICAL the reader never returns undefined while declaring boolean', () => {
+    // Unreachable from a parsed frame, and handled anyway: the previous body
+    // returned `frame.ok` directly, which the moment `ok` became optional returned
+    // undefined under a `boolean` signature — a lie the type system accepted and a
+    // caller would read as "did not reach a verdict".
+    expect(probeReachedVerdict({})).toBe(false);
+    expect(typeof probeReachedVerdict({})).toBe('boolean');
+  });
+
+  it('VACUITY CONTROL — an `ok`-only frame still parses, so step 3 did not just widen everything', () => {
+    // The un-migrated shape must keep working for the whole window; if this arm
+    // ever fails, the CP has stopped accepting nodes that have not moved yet.
+    expect(ProbeEgressResultSchema.safeParse(DEAD).success).toBe(true);
+    expect(probeReachedVerdict({ ok: true })).toBe(true);
+    expect(probeReachedVerdict({ ok: false })).toBe(false);
+  });
+
   it('an unknown status value is refused rather than coerced', () => {
     expect(ProbeEgressResultSchema.safeParse({ ...DEAD, status: 'probably' }).success).toBe(false);
   });
