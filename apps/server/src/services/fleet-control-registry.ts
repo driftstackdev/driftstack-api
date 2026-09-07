@@ -831,6 +831,18 @@ export class FleetControlConnection {
           // streaming blank/failed recovery, dead/recovered upstream proxy).
           // The ownership-gated consumer updates GUI state and the linked
           // driver-session egress persistence/webhook path.
+          // W-29 — same key-set observation as probeEgressResult above, and for
+          // the same reason: a frame that parses tells you validation succeeded,
+          // not which keys arrived. `h3ConnectionCount` is being introduced on
+          // this frame precisely because the latched `h3ConnectionObserved` cannot
+          // carry liveness, and the customer-safe projection strips the count — so
+          // WITHOUT this line there is no instrument anywhere that can see whether
+          // the node is sending it. Names only, never values: these frames carry
+          // an archetype id, a fork build string and safeguard detail.
+          this.logger?.info(
+            { nodeId: this.nodeId, frameKeys: Object.keys(frame).sort().join(',') },
+            'capabilityReport accepted: key set',
+          );
           this.onCapabilityReport?.(frame, this.nodeId);
           break;
         case 'errorEvent':

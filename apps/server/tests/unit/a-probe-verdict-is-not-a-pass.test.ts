@@ -99,16 +99,34 @@ describe('a probe verdict is not a pass', () => {
       'utf8',
     );
     expect(src).toContain("'probeEgressResult accepted: key set'");
+    // W-29 — the SAME observation on capabilityReport. Without it nothing can see
+    // whether the node sends `h3ConnectionCount`: the customer-safe projection
+    // strips it, so a clean parse is again the only evidence and it says nothing.
+    expect(src).toContain("'capabilityReport accepted: key set'");
     expect(src).toContain("Object.keys(frame).sort().join(',')");
-    // ⛔ Structure only. These frames carry an exit IP and a proxy's detail
-    // string; a log line here must never carry a VALUE.
-    const line = src.slice(
-      src.indexOf('probeEgressResult accepted: key set') - 400,
-      src.indexOf('probeEgressResult accepted: key set'),
-    );
-    expect(line).not.toMatch(
-      /JSON\.stringify\(frame\)|\.\.\.frame|frame\.exit_ip|frame\.quic_detail/,
-    );
+    // ⛔ Structure only, on BOTH lines. The first version of this arm checked the
+    // probeEgressResult site alone — the identical "an instrument built for one
+    // member of a pair covers only that member" mistake, committed inside the
+    // change that exists to fix it. Whatever is asserted of one of these lines is
+    // asserted of every one of them.
+    for (const marker of [
+      'probeEgressResult accepted: key set',
+      'capabilityReport accepted: key set',
+    ]) {
+      const at = src.indexOf(marker);
+      expect(at, `${marker} not found`).toBeGreaterThan(0);
+      const line = src.slice(at - 400, at);
+      expect(
+        line,
+        `${marker}: key NAMES only — these frames hold an exit IP, a proxy detail ` +
+          'string, an archetype id and the customer upstream',
+      ).not.toMatch(
+        // ⛔ `proxyUpstream` is named explicitly: it is CUSTOMER INFRASTRUCTURE and
+        // belongs in the control-plane join, never in a log line. Naming it gives a
+        // later "just add the upstream for debugging" something to fail against.
+        /JSON\.stringify\(frame\)|\.\.\.frame|frame\.exit_ip|frame\.quic_detail|frame\.proxyUpstream|frame\.archetypeId/,
+      );
+    }
   });
 
   it('CRITICAL h3ConnectionCount is accepted — a latched boolean cannot carry liveness', () => {
