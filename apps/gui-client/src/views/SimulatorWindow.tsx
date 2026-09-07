@@ -108,6 +108,7 @@ import {
   pageStateResolvesInFlight,
   type PendingNavigation,
 } from '../lib/url-bar-inflight';
+import { capabilityReportsEqual } from '../lib/capability-report-equal';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
 import { downloadBlob, downloadJson, downloadResponse } from '../lib/download';
@@ -3402,13 +3403,13 @@ export function SimulatorWindow(): JSX.Element {
       const candidate = { ...current, ...patch };
       const currentCapability = current.capabilityReport;
       const nextCapability = candidate.capabilityReport;
-      const capabilityUnchanged =
-        currentCapability === nextCapability ||
-        (currentCapability !== null &&
-          nextCapability !== null &&
-          currentCapability.manual_input_available === nextCapability.manual_input_available &&
-          currentCapability.streaming_state === nextCapability.streaming_state &&
-          currentCapability.egress_state === nextCapability.egress_state);
+      // #12 (T-26/T-27) — compare EVERY field the parser can put on the report, not
+      // just the original health triple, so a later report that changes only the live
+      // exit-identity (exit_ip / country / tz / webrtc_candidate_ips / observed_at) or
+      // the QUIC signal (h3_connection_observed / count / reported_at) is treated as
+      // CHANGED and applied — the ExitIpChip and QUIC readout stay live in steady
+      // state. Was dropping those updates once a session had any report.
+      const capabilityUnchanged = capabilityReportsEqual(currentCapability, nextCapability);
       const unchanged =
         current.sessionId === candidate.sessionId &&
         current.mode === candidate.mode &&

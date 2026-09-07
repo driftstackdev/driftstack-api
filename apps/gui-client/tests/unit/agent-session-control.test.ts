@@ -22,7 +22,9 @@ import {
   fetchAgentSessionDownload,
   reportTransport,
   AgentSessionControlError,
+  type AgentSessionCapabilityReport,
 } from '../../src/lib/agent-session-control';
+import { capabilityReportsEqual } from '../../src/lib/capability-report-equal';
 
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -668,5 +670,90 @@ describe('reportTransport (#60 transport telemetry)', () => {
       packet_loss_recent_pct: null,
     });
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// #12 (T-26/T-27) — capabilityReportsEqual is the change-detector behind the
+// simulator's manual-input snapshot. The bug: it compared ONLY the health triple
+// (manual_input_available / streaming_state / egress_state), so a later report that
+// changed only a live exit-identity or QUIC field was judged "unchanged" and dropped
+// — the ExitIpChip and QUIC readout froze in steady state once a session had any
+// report. Each arm below flips exactly one added field and asserts CHANGED; the
+// vacuity arm proves byte-identical reports are still UNCHANGED (no spurious churn).
+describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)', () => {
+  // A fully-populated baseline so every field participates in the compare.
+  const base: AgentSessionCapabilityReport = {
+    manual_input_available: true,
+    streaming_state: 'live',
+    egress_state: 'live',
+    exit_ip: '203.0.113.7',
+    exit_country: 'US',
+    exit_timezone: 'America/New_York',
+    observed_at: '2026-09-07T12:00:00.000Z',
+    h3_connection_observed: true,
+    h3_connection_count: 3,
+    reported_at: 1_700_000_000_000,
+    webrtc_candidate_ips: ['203.0.113.7', '198.51.100.4'],
+  };
+  const withField = (
+    over: Partial<AgentSessionCapabilityReport>,
+  ): AgentSessionCapabilityReport => ({
+    ...base,
+    ...over,
+  });
+
+  it('GUARD — a report that changes only exit_ip is CHANGED (the reported bug)', () => {
+    // Two DISTINCT objects that differ ONLY in exit_ip must not be judged equal.
+    // Mutation: drop `a.exit_ip === b.exit_ip` from the compare → this reds.
+    expect(capabilityReportsEqual(base, withField({ exit_ip: '198.51.100.9' }))).toBe(false);
+  });
+
+  it('GUARD — each other added field, changed alone, is CHANGED', () => {
+    expect(capabilityReportsEqual(base, withField({ exit_country: 'CA' }))).toBe(false);
+    expect(capabilityReportsEqual(base, withField({ exit_timezone: 'Europe/Paris' }))).toBe(false);
+    expect(
+      capabilityReportsEqual(base, withField({ observed_at: '2026-09-07T12:00:05.000Z' })),
+    ).toBe(false);
+    expect(capabilityReportsEqual(base, withField({ h3_connection_count: 4 }))).toBe(false);
+    expect(capabilityReportsEqual(base, withField({ reported_at: 1_700_000_000_001 }))).toBe(false);
+    // h3 flips from observed → absent (the parser omits it when unset).
+    const noH3 = { ...base };
+    delete noH3.h3_connection_observed;
+    expect(capabilityReportsEqual(base, noH3)).toBe(false);
+  });
+
+  it('GUARD — webrtc_candidate_ips is compared ELEMENT-WISE (a changed leak candidate is CHANGED)', () => {
+    // Same length, one element differs.
+    expect(
+      capabilityReportsEqual(
+        base,
+        withField({ webrtc_candidate_ips: ['203.0.113.7', '10.0.0.9'] }),
+      ),
+    ).toBe(false);
+    // Different length.
+    expect(capabilityReportsEqual(base, withField({ webrtc_candidate_ips: ['203.0.113.7'] }))).toBe(
+      false,
+    );
+    // Present vs absent.
+    const noIps = { ...base };
+    delete noIps.webrtc_candidate_ips;
+    expect(capabilityReportsEqual(base, noIps)).toBe(false);
+  });
+
+  it('VACUITY — two byte-identical (but distinct-object) reports are UNCHANGED', () => {
+    // A deep clone: every field equal, different reference. Must be judged equal, so a
+    // report that genuinely did not move never forces a spurious snapshot bump.
+    const clone: AgentSessionCapabilityReport = {
+      ...base,
+      webrtc_candidate_ips: [...(base.webrtc_candidate_ips ?? [])],
+    };
+    expect(base).not.toBe(clone);
+    expect(capabilityReportsEqual(base, clone)).toBe(true);
+    // Same reference and both-null short-circuits stay true.
+    expect(capabilityReportsEqual(base, base)).toBe(true);
+    expect(capabilityReportsEqual(null, null)).toBe(true);
+    // One null and one present is a change (the first report arriving).
+    expect(capabilityReportsEqual(null, base)).toBe(false);
+    expect(capabilityReportsEqual(base, null)).toBe(false);
   });
 });

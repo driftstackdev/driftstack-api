@@ -307,25 +307,78 @@ export function shouldAutoInstall(args: { autoUpdate: boolean; sessionRunning: b
 }
 
 /**
- * Best-effort "is the customer mid-session".
- *
- * Simulator windows are labelled `simulator-<sessionId>` by open-simulator, so
- * their presence is the concrete signal. Honest limitation: on macOS the
- * simulator is a SEPARATE application, so the main app cannot see its windows
- * and this returns false there. That errs toward auto-installing on macOS —
- * acceptable only because the failure is bounded (a relaunch of the main
- * window) and because the platform where auto-update matters most, and where
- * the simulator IS in-process, is Windows. Any throw means "unknown", and
- * unknown must not read as "safe to relaunch".
+ * A cross-platform signal source for {@link isSessionRunning}, injected so the
+ * server-list path stays testable without a live SDK client.
  */
-export async function isSessionRunning(): Promise<boolean> {
+export interface SessionSignalDeps {
+  /**
+   * The account's ACTIVE-session count, or `null` when it cannot be determined
+   * (no client / route unavailable / the fetch failed / slow). `null` is
+   * "unknown" and, because a relaunch mid-session is unrecoverable, is treated
+   * as "a session may be running" — the veto defers to the banner rather than
+   * auto-installing on an inconclusive answer.
+   */
+  activeSessionCount?: () => Promise<number | null>;
+}
+
+/**
+ * Best-effort "is the customer mid-session" — the load-bearing veto that stops
+ * an unattended install from relaunching the app out from under live work.
+ *
+ * TWO independent signals, because neither alone covers every platform:
+ *
+ *   1. In-process simulator WINDOWS, labelled `simulator-<sessionId>` by
+ *      open-simulator. On Windows/Linux the simulator runs inside the main app,
+ *      so a live session has a visible window — a free, concrete "yes".
+ *
+ *   2. The account's active-session COUNT from the server (injected via
+ *      `deps.activeSessionCount`). ⛔ BUG (T-14): on macOS the simulator is a
+ *      SEPARATE application whose windows are invisible here, and a ProfilesView
+ *      bulk-launch loop holds only server-side agent sessions with NO window at
+ *      all — so signal 1 alone reported `false` on macOS even mid-session. With
+ *      auto-update now defaulting ON and macOS able to self-install, that false
+ *      let the 6-hour recheck relaunch the main app and abort in-flight work
+ *      with no prompt. The server count sees the session regardless of platform,
+ *      which is what makes the "never auto-install while a session runs" guard
+ *      actually fire on Mac.
+ *
+ * Fail SAFE: a relaunch mid-session is unrecoverable, so anything short of a
+ * confident "no session" defers to the banner. A window probe that throws, and a
+ * server count that comes back `null` (call failed/slow/unavailable), both read
+ * as "a session may be running". An install proceeds only on an affirmative "no
+ * window AND the server says zero" — or, when no server signal is wired, a window
+ * probe that succeeded and found none.
+ */
+export async function isSessionRunning(deps: SessionSignalDeps = {}): Promise<boolean> {
+  // Signal 1 — in-process windows (Windows/Linux). A visible simulator window is
+  // a definite yes. A probe that THROWS is "unknown", not "no": remember that
+  // rather than concluding false from a failed enumeration.
+  let windowProbeFailed = false;
   try {
     const { getAllWebviewWindows } = await import('@tauri-apps/api/webviewWindow');
     const all = await getAllWebviewWindows();
-    return all.some((w) => w.label.startsWith('simulator-'));
+    if (all.some((w) => w.label.startsWith('simulator-'))) return true;
   } catch {
-    return true;
+    windowProbeFailed = true;
   }
+
+  // Signal 2 — the server's active-session count (all platforms, incl. macOS,
+  // where signal 1 is structurally blind). A positive count is a session; a
+  // `null` is unknown and must not read as "safe to relaunch".
+  if (deps.activeSessionCount !== undefined) {
+    let count: number | null;
+    try {
+      count = await deps.activeSessionCount();
+    } catch {
+      count = null;
+    }
+    if (count === null) return true; // unknown → defer to the banner
+    return count > 0;
+  }
+
+  // No server signal wired: the window probe is all we have. A probe that threw
+  // is unknown (→ running); a probe that found no window is a confident "no".
+  return windowProbeFailed;
 }
 
 /**

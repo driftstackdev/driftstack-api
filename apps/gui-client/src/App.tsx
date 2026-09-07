@@ -61,6 +61,7 @@ import {
   startUpdateChecks,
   type AvailableUpdate,
 } from './lib/updater';
+import { fetchActiveAgentSessionCount } from './lib/active-agent-sessions';
 import { buildClient } from './lib/client';
 import { dispatchDeepLink } from './lib/deep-link';
 import { openSessionById } from './lib/open-simulator';
@@ -701,6 +702,16 @@ function Shell(): JSX.Element {
   // never seen by a re-check. A ref carries the live value into the loop.
   const autoUpdateRef = useRef(kbSettings.autoUpdate);
   autoUpdateRef.current = kbSettings.autoUpdate;
+  // T-14 BUG 2 — the session veto must see a macOS session. There the simulator
+  // is a separate app invisible to this window, and a ProfilesView bulk-launch
+  // loop holds only server-side agent sessions with no window at all, so the
+  // window-only probe reported "no session" mid-run and the recheck could
+  // relaunch the main app out from under live work. Feed the veto the account's
+  // live active-session count so it fires on every platform. A ref carries the
+  // current client into the loop without re-subscribing it (same pattern as
+  // autoUpdateRef above), and the loop below stays keyed on `loading` alone.
+  const sessionCountClientRef = useRef(bellClient);
+  sessionCountClientRef.current = bellClient;
   // The version the banner last showed, so a re-check that finds the SAME one
   // keeps a session-only "Later", while a NEWER one surfaces again.
   const lastOfferedVersionRef = useRef<string | null>(null);
@@ -718,7 +729,21 @@ function Shell(): JSX.Element {
     return startUpdateChecks({
       check: checkForUpdate,
       autoUpdate: () => autoUpdateRef.current,
-      sessionRunning: isSessionRunning,
+      // T-14 BUG 2 — the veto with the cross-platform server signal wired in.
+      // Keeps the in-process window probe (Windows/Linux) and adds the account's
+      // active-session count so a macOS session (separate-app simulator / a
+      // windowless bulk-launch loop) also blocks the unattended install.
+      sessionRunning: () =>
+        isSessionRunning({
+          activeSessionCount: () => {
+            const client = sessionCountClientRef.current;
+            // Signed out → the account has no sessions to protect, so a relaunch
+            // is safe (a confident zero). A non-null client whose fetch then
+            // FAILS returns null from the helper, which the veto reads as
+            // "unknown → do not relaunch".
+            return client === null ? Promise.resolve(0) : fetchActiveAgentSessionCount(client);
+          },
+        }),
       onOffered: (u) => {
         setUpdate(u);
         // M16 — "Later" persists per-version so the banner doesn't re-nag on

@@ -26,6 +26,16 @@
 // reds the unmarked-false arm and the marker-decides control while every
 // marked arm stays green; deleting `settingsVersion: SETTINGS_VERSION` from
 // `saveSettingsUnlocked` reds the round-trip arm alone.
+//
+// T-14 BUG 1 — the marker must land on the FIRST load, not only on a later save.
+// loadSettings now persists the resolved whole object (stamping the marker)
+// whenever the file predates it, so a set-and-forget OFF (no marker, no legacy
+// key) is migrated ONCE instead of re-migrated on every launch forever. Mutation
+// for that arm: narrow the loader's persist guard back to the plaintext-purge
+// condition alone (`if (hasLegacyPlaintext)`), i.e. stamp only in the purge
+// branch — the "load stamps the marker / a second load does not re-migrate" arm
+// reds while the honor arm (an already-marked `false`) stays green because it
+// was never rewritten in the first place.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -44,6 +54,17 @@ const invoke = vi.fn((command: string, args: { key: string; value?: string }): P
   return Promise.reject(new Error(`unexpected command ${command}`));
 });
 
+// A locked/failing store, toggled per-case, so the best-effort marker write can
+// be exercised (the load must survive a store that rejects the stamp).
+let storeShouldThrow = false;
+function setShouldThrow(v: boolean): void {
+  storeShouldThrow = v;
+}
+// Counts ACTUAL whole-object writes, so an arm can prove loadSettings writes
+// NOTHING for an already-marked file — a content compare cannot (a value-identical
+// rewrite passes toEqual), so a `set` on every load would slip past. Reset per case.
+let storeSetCalls = 0;
+
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 vi.mock('@tauri-apps/plugin-store', () => ({
   LazyStore: class {
@@ -51,10 +72,13 @@ vi.mock('@tauri-apps/plugin-store', () => ({
       return Promise.resolve(disk.get(key) as T | undefined);
     }
     set(key: string, value: unknown): Promise<void> {
+      if (storeShouldThrow) return Promise.reject(new Error('store locked'));
+      storeSetCalls += 1;
       disk.set(key, value);
       return Promise.resolve();
     }
     save(): Promise<void> {
+      if (storeShouldThrow) return Promise.reject(new Error('store locked'));
       return Promise.resolve();
     }
   },
@@ -76,6 +100,8 @@ beforeEach(() => {
   disk.clear();
   keychain.clear();
   invoke.mockClear();
+  storeShouldThrow = false;
+  storeSetCalls = 0;
   resetKeychainCache();
 });
 
@@ -177,17 +203,82 @@ describe('auto-update is on unless the customer turned it off (T-14)', () => {
     expect((await loadSettings()).autoUpdate).toBe(DEFAULT_SETTINGS.autoUpdate);
   });
 
-  it('the read itself writes nothing back — neither the value nor the marker', async () => {
-    // Loading must not turn "never said" into "said yes" on disk, and must not
-    // stamp the marker over an unmarked `false`: only a save that carries the
-    // customer's own value may claim it as a choice. (The one-time plaintext
-    // purge is the only writer in loadSettings and it is not triggered here.)
-    disk.set('driftstack', { ...EXISTING_INSTALL });
-    await loadSettings();
-    expect(disk.get('driftstack')).toEqual(EXISTING_INSTALL);
+  it('CRITICAL BUG 1 the FIRST load stamps the marker for a set-and-forget OFF — so the migration is one-time by construction even with no legacy key', async () => {
+    // The owner's file shape reduced to the failure that never terminated: an
+    // explicit `autoUpdate: false` with NO marker and NO legacy plaintext key.
+    // Before the fix the marker was stamped only by an explicit whole-object
+    // save or the plaintext-purge branch — neither of which a set-and-forget
+    // customer ever triggers — so every launch re-read version 0, forced the ON
+    // default in memory, wrote nothing back, and re-migrated the OFF to ON
+    // forever. The load must now write the marker itself.
     const unmarkedFalse = { ...EXISTING_INSTALL, autoUpdate: false };
     disk.set('driftstack', { ...unmarkedFalse });
-    await loadSettings();
-    expect(disk.get('driftstack')).toEqual(unmarkedFalse);
+
+    const first = await loadSettings();
+    expect(first.autoUpdate, 'migrated ON in memory on first load').toBe(true);
+    // The migration WROTE the whole object exactly once — the write that was
+    // missing, and the whole reason the migration terminates.
+    expect(storeSetCalls, 'the first-load migration stamps the marker (one write)').toBe(1);
+    // The store now HOLDS the marker AND the resolved (migrated) value.
+    expect(disk.get('driftstack')).toMatchObject({
+      autoUpdate: true,
+      settingsVersion: SETTINGS_VERSION,
+    });
+    // Vacuity: the write is the RESOLVED object, not a default one — every other
+    // field round-trips from the seeded record rather than being reset.
+    expect(disk.get('driftstack')).toMatchObject({
+      baseUrl: EXISTING_INSTALL.baseUrl,
+      themeMode: EXISTING_INSTALL.themeMode,
+      startUrl: EXISTING_INSTALL.startUrl,
+      telemetryOptIn: EXISTING_INSTALL.telemetryOptIn,
+    });
+
+    // A SECOND load reads a marked file: it does not re-migrate, and — the honor
+    // property that makes the fix safe — a marked value is left exactly as it is.
+    const before = JSON.stringify(disk.get('driftstack'));
+    const writesBeforeSecond = storeSetCalls;
+    const second = await loadSettings();
+    expect(second.autoUpdate, 'second load holds the migrated value, not re-migrated').toBe(true);
+    expect(JSON.stringify(disk.get('driftstack')), 'a marked file is not rewritten').toBe(before);
+    // The load of a now-marked file writes NOTHING — this is what a content compare
+    // alone cannot prove, and what makes stamp-on-load one-time rather than every-launch.
+    expect(storeSetCalls, 'second load of a marked file writes nothing').toBe(writesBeforeSecond);
+  });
+
+  it('CRITICAL BUG 1 honor arm: an already-marked `false` STAYS false across loads AND the read writes nothing back', async () => {
+    // A genuine post-marker choice: `false` under `settingsVersion: 2`. The load
+    // must neither migrate it (it is a choice) nor rewrite the file (there is
+    // nothing to migrate). This is the arm that proves stamping-on-load did not
+    // become "stamp on every load", which would churn the store on every launch
+    // and could clobber a concurrent write.
+    const markedFalse = {
+      ...EXISTING_INSTALL,
+      autoUpdate: false,
+      settingsVersion: SETTINGS_VERSION,
+    };
+    disk.set('driftstack', { ...markedFalse });
+
+    expect((await loadSettings()).autoUpdate, 'first load keeps the choice').toBe(false);
+    expect(disk.get('driftstack'), 'first load rewrites nothing').toEqual(markedFalse);
+    // ⛔ The write-count is the real over-stamp guard: a value-identical rewrite
+    // passes the toEqual above, so only a zero write-count proves the load did not
+    // stamp-on-every-launch (the `if (true)` over-stamp mutation reds HERE).
+    expect(storeSetCalls, 'a marked file triggers NO write on load').toBe(0);
+    expect((await loadSettings()).autoUpdate, 'second load keeps the choice').toBe(false);
+    expect(disk.get('driftstack'), 'second load rewrites nothing').toEqual(markedFalse);
+    expect(storeSetCalls, 'still no write after a second load').toBe(0);
+  });
+
+  it('a store write failure while stamping the marker does not break the load — the in-memory resolution still stands', async () => {
+    // Best-effort by design (mirrors keychainSave): persistence can be lost
+    // without failing the load, and the next launch retries the stamp.
+    disk.set('driftstack', { ...EXISTING_INSTALL, autoUpdate: false });
+    setShouldThrow(true);
+    try {
+      const loaded = await loadSettings();
+      expect(loaded.autoUpdate, 'still migrated in memory despite the failed write').toBe(true);
+    } finally {
+      setShouldThrow(false);
+    }
   });
 });

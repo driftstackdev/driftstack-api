@@ -451,29 +451,58 @@ export async function loadSettings(): Promise<DriftstackSettings> {
     }
   }
 
-  // Purge BOTH historical plaintext shapes after the migration attempt. Never
-  // fall back to settings.json on a locked/dismissed keychain: the current
-  // value remains in memory, and a future launch safely asks for it again.
-  if (persisted && ('apiKey' in persisted || 'apiKeys' in persisted)) {
-    await getStore().set(SETTINGS_KEY, {
-      baseUrl,
-      themeMode,
-      themeAccent,
-      telemetryOptIn,
-      startUrl,
-      // V-1611 — `autoUpdate` was omitted here, so a customer who had turned it
-      // on and then happened to hit the one-time plaintext migration silently
-      // reverted to the default. The purge rewrites the WHOLE settings object,
-      // so every persisted field has to be listed or it is dropped. The return
-      // below carries it, which is why the loss was invisible until relaunch.
-      autoUpdate,
-      // T-14 — this write carries the RESOLVED autoUpdate, so it is a layout-2
-      // record: without the marker the next load would migrate it again.
-      settingsVersion: SETTINGS_VERSION,
-      // Same lesson: the remembered window sizes are persisted state too.
-      ...windowSizesField(simulatorWindowSize),
-    });
-    await getStore().save();
+  // Persist the resolved whole object when this file predates the current layout
+  // marker OR still carries a historical plaintext key. Either way the write
+  // purges BOTH plaintext shapes and stamps `settingsVersion: SETTINGS_VERSION`,
+  // so the migration is one-time by construction. Never fall back to
+  // settings.json for the KEY on a locked/dismissed keychain: the current value
+  // remains in memory, and a future launch safely asks for it again.
+  //
+  // ⛔ T-14 BUG 1 — the marker used to be stamped ONLY inside the
+  // plaintext-purge branch (or by an explicit whole-object `saveSettingsUnlocked`
+  // save). A set-and-forget customer who turned auto-update OFF on 0.1.16–0.1.19
+  // has no marker AND no legacy plaintext key, so nothing here ever wrote the
+  // marker back: every launch re-read `persistedSettingsVersion = 0`, forced the
+  // ON default in memory, wrote nothing, and re-migrated their OFF to ON on the
+  // NEXT launch too — every release auto-installing forever, the exact opposite
+  // of the "one-time by construction" guarantee this marker documents. Stamping
+  // on first load whenever the file predates the marker closes it: the next load
+  // reads a marked file, and from then on the stored value is a choice.
+  const hasLegacyPlaintext =
+    persisted !== undefined &&
+    persisted !== null &&
+    ('apiKey' in persisted || 'apiKeys' in persisted);
+  const needsLayoutMarker = persistedSettingsVersion < SETTINGS_VERSION;
+  if (hasLegacyPlaintext || needsLayoutMarker) {
+    // Best-effort: a locked/failed store write must NOT break loadSettings — the
+    // in-memory resolution returned below still stands, and a future launch
+    // retries the stamp. (Mirrors keychainSave's soft-fail: persistence can be
+    // lost without failing the load.)
+    try {
+      await getStore().set(SETTINGS_KEY, {
+        baseUrl,
+        themeMode,
+        themeAccent,
+        telemetryOptIn,
+        startUrl,
+        // V-1611 — `autoUpdate` was omitted here once, so a customer who had
+        // turned it on and then hit the one-time plaintext migration silently
+        // reverted to the default. The write rewrites the WHOLE settings object,
+        // so every persisted field has to be listed or it is dropped.
+        autoUpdate,
+        // T-14 — this write carries the RESOLVED autoUpdate under the marker, so
+        // it is a layout-2 record: without the marker the next load re-migrates.
+        settingsVersion: SETTINGS_VERSION,
+        // Same lesson: the remembered window sizes are persisted state too.
+        ...windowSizesField(simulatorWindowSize),
+      });
+      await getStore().save();
+    } catch (err) {
+      console.warn(
+        '[settings] layout-marker persist failed (in-memory resolution stands, retried next launch):',
+        err,
+      );
+    }
   }
 
   return {
