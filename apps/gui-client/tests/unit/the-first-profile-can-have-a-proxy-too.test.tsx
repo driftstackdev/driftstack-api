@@ -111,13 +111,16 @@ describe('the first profile can have a proxy too', () => {
       target: { value: 'first' },
     });
     openProxyPanel();
-    fireEvent.change(screen.getByPlaceholderText('residential-uk'), { target: { value: 'uk1' } });
+    // T-21 — the proxy is added via the canonical ProxyForm's own "Add proxy"
+    // button (its label placeholder is 'prod-eu-west'); that creates it and
+    // attaches it. The profile create then binds the already-created proxy.
+    fireEvent.change(screen.getByPlaceholderText('prod-eu-west'), { target: { value: 'uk1' } });
     fireEvent.change(screen.getByPlaceholderText('proxy.example.com'), {
       target: { value: '10.0.0.9' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
-
-    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
+    // The proxy is created on Add, and the panel confirms it is attached.
+    await screen.findByText(/Proxy attached/i);
     expect(addProxy).toHaveBeenCalledTimes(1);
     expect(addProxy.mock.calls[0]![0]).toMatchObject({
       label: 'uk1',
@@ -125,32 +128,44 @@ describe('the first profile can have a proxy too', () => {
       host: '10.0.0.9',
       port: 1080,
     });
+
+    fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    // The proxy is NOT re-created on profile submit (it already exists)…
+    expect(addProxy).toHaveBeenCalledTimes(1);
+    // …and it is bound to the new profile.
     expect(
       setDefaultProxy,
       'the proxy was created but never bound to the profile',
     ).toHaveBeenCalledWith('prof_new', 'aprx_new');
   });
 
-  it('CRITICAL a malformed config fails BEFORE the profile is created, so a bad paste cannot leave a billed profile behind', async () => {
+  it('CRITICAL a malformed config is rejected in the form, so no proxy is created and no profile can be billed behind it', async () => {
     render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
 
     fireEvent.change(screen.getByPlaceholderText('my-recurring-workflow'), {
       target: { value: 'first' },
     });
     openProxyPanel();
-    fireEvent.change(screen.getByPlaceholderText('residential-uk'), { target: { value: 'bad' } });
+    fireEvent.change(screen.getByPlaceholderText('prod-eu-west'), { target: { value: 'bad' } });
     setScheme('wireguard');
     fireEvent.change(screen.getByRole('textbox', { name: /paste your wg0.conf/i }), {
       target: { value: 'not a wireguard config' },
     });
-    fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
+    // "Add proxy" runs the form's own validation, which refuses a config that did
+    // not parse — the proxy is never created, so it cannot be attached, and a
+    // profile can never be created behind it.
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
 
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/WireGuard config/i));
+    await waitFor(() =>
+      expect(screen.getByText(/Paste a valid wg0.conf configuration\./i)).toBeInTheDocument(),
+    );
+    expect(addProxy, 'a proxy was created from an invalid config').not.toHaveBeenCalled();
+    // The profile step was never reached, so nothing was billed.
     expect(
       createProfile,
       'a profile was created despite an invalid proxy config',
     ).not.toHaveBeenCalled();
-    expect(addProxy).not.toHaveBeenCalled();
   });
 
   it('leaving the panel closed creates the profile exactly as before, with no proxy calls at all', async () => {
@@ -181,10 +196,12 @@ describe('the first profile can have a proxy too', () => {
       target: { value: 'first' },
     });
     openProxyPanel();
-    fireEvent.change(screen.getByPlaceholderText('residential-uk'), { target: { value: 'uk1' } });
+    fireEvent.change(screen.getByPlaceholderText('prod-eu-west'), { target: { value: 'uk1' } });
     fireEvent.change(screen.getByPlaceholderText('proxy.example.com'), {
       target: { value: '10.0.0.9' },
     });
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
+    await screen.findByText(/Proxy attached/i);
     fireEvent.click(screen.getByRole('button', { name: /create profile/i }));
 
     await waitFor(() => expect(onCreated).toHaveBeenCalled());

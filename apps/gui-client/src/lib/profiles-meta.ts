@@ -32,6 +32,14 @@ export interface ProfileMeta {
    *  exact coordinates. Client-side org metadata only (no server profile column);
    *  read at launch and threaded into agentSessions.create. */
   geolocation?: { latitude: number; longitude: number; accuracy?: number };
+  /** T-26 (owner #12) — when true, launches of this profile pass
+   *  `stop_on_exit_ip_change: true` on session create, so the server ends the
+   *  session if its exit IP rotates mid-session (a silent exit change is a
+   *  fingerprint/geo break). Default OFF: absent/undefined = never stop, so only
+   *  a literal `true` is persisted — a `false` is dropped to the absent default.
+   *  Client-side launch setting only (no server profile column); read at launch
+   *  and threaded into agentSessions.create. */
+  stopOnExitIpChange?: boolean;
 }
 
 export type ProfilesMetaMap = Record<string, ProfileMeta>;
@@ -111,6 +119,10 @@ function cleanEntry(raw: unknown): ProfileMeta {
       out.geolocation = geo;
     }
   }
+  // T-26 — the "stop on exit IP change" launch flag. Only a literal `true` is
+  // adopted; anything else (absent, false, wrong-type) degrades to the OFF
+  // default, so the field is never persisted as an explicit `false`.
+  if (r.stopOnExitIpChange === true) out.stopOnExitIpChange = true;
   return out;
 }
 

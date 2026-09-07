@@ -1556,12 +1556,19 @@ export function ProxyForm({
   saving = false,
   onCancel,
   onSave,
+  compact = false,
 }: {
   initial: ProxyDraft;
   mode: 'add' | 'edit';
   saving?: boolean;
   onCancel: () => void;
   onSave: (d: ProxyDraft) => void | Promise<void>;
+  /** T-21 — embedded inside a host that already owns the surrounding card
+   *  (the New-Profile / Edit-Profile / first-run proxy panels). Drops this
+   *  form's own card chrome + header and tightens spacing so it reads as one
+   *  block inside the host, without changing any field, validation, or the
+   *  onSave contract. Default false = the standalone Proxies-tab appearance. */
+  compact?: boolean;
 }): JSX.Element {
   const [draft, setDraft] = useState<ProxyDraft>(initial);
   const [validation, setValidation] = useState<DraftValidation>({ ok: true, errors: {} });
@@ -1729,6 +1736,13 @@ export function ProxyForm({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>): Promise<void> {
     e.preventDefault();
+    // T-21 — when this form is embedded inside a host that is itself a <form>
+    // (the New-Profile / Edit-Profile modals wrap their body in one), the submit
+    // of THIS form bubbles through React's delegated listener to the outer form
+    // too. Stop it here so clicking "Add proxy" adds the proxy and never also
+    // fires the host's own submit (which would create the profile). Harmless in
+    // the standalone Proxies tab, where there is no ancestor form.
+    e.stopPropagation();
     if (submitInFlightRef.current) return;
     const v = validateDraft(draft);
     setValidation(v);
@@ -1811,33 +1825,42 @@ export function ProxyForm({
       onSubmit={(e) => void handleSubmit(e)}
       aria-busy={locked}
       aria-disabled={locked}
-      className="relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-lg"
+      className={
+        compact
+          ? 'relative flex flex-col gap-2.5'
+          : 'relative flex flex-col gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised p-4 shadow-lg'
+      }
     >
-      {/* Soft accent glow (matches the Command Center hero) so the form reads as
-          a premium surface rather than a flat dark box. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -right-10 -top-16 h-36 w-36 rounded-full opacity-40"
-        style={{
-          background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.45), transparent 70%)',
-        }}
-      />
-      <header className="flex items-start gap-3 border-b border-surface-divider pb-3">
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-base text-accent ring-1 ring-accent/25">
-          🌍
-        </span>
-        <div className="min-w-0 flex-1">
-          <span className="section-label text-accent">
-            {mode === 'add' ? 'Add proxy' : 'Edit proxy'}
-          </span>
-          <p className="mt-0.5 text-xs text-ink-muted">
-            Route sessions through your own egress — SOCKS5, OpenVPN or WireGuard.
-          </p>
-        </div>
-        <span className="mono shrink-0 rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-2xs font-semibold text-ink-secondary">
-          {scheme.toUpperCase()}
-        </span>
-      </header>
+      {!compact && (
+        <>
+          {/* Soft accent glow (matches the Command Center hero) so the form reads
+              as a premium surface rather than a flat dark box. Dropped in the
+              compact embed, where the host already owns the card surface. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -right-10 -top-16 h-36 w-36 rounded-full opacity-40"
+            style={{
+              background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.45), transparent 70%)',
+            }}
+          />
+          <header className="flex items-start gap-3 border-b border-surface-divider pb-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-base text-accent ring-1 ring-accent/25">
+              🌍
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="section-label text-accent">
+                {mode === 'add' ? 'Add proxy' : 'Edit proxy'}
+              </span>
+              <p className="mt-0.5 text-xs text-ink-muted">
+                Route sessions through your own egress — SOCKS5, OpenVPN or WireGuard.
+              </p>
+            </div>
+            <span className="mono shrink-0 rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-2xs font-semibold text-ink-secondary">
+              {scheme.toUpperCase()}
+            </span>
+          </header>
+        </>
+      )}
       <Field label="Type">
         <select
           className="form-input"

@@ -28,6 +28,7 @@ import {
   type ProfileMeta,
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
+import { stopOnExitIpChangeCreateFields } from '../lib/agent-session-create-fields';
 import {
   loadFolders,
   addFolder,
@@ -75,7 +76,7 @@ import {
   type ProfileSortDir,
   type ProfileStatusFilter,
 } from '../components/ProfilesActionBar';
-import { ProxyCapabilityChips, proxyCapabilities } from '../components/ProxyCapabilities';
+import { proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
 import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
@@ -118,7 +119,6 @@ import {
 } from '../lib/profile-bindings';
 import {
   isProxyUsable,
-  proxyVerdict,
   addProxy,
   listProxies,
   setProxyServerId,
@@ -129,18 +129,17 @@ import {
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
-import { ProxyHostWarning } from '../components/ProxyHostWarning';
+// T-21 — the New-Profile + Edit-Profile "add new proxy" panels render the ONE
+// canonical proxy form (the same component the Proxies tab uses), so OpenVPN /
+// WireGuard credentials can be entered here identically. The three hand-rolled
+// mini-forms that used to live inline (and omitted the VPN auth fields) are gone.
+import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable } from '../lib/proxy-scheme';
 import { persistServerProbe, testProxyOnServer } from '../lib/proxy-server-test';
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
-  buildWireGuardProxyInput,
-  buildOpenVpnProxyInput,
 } from '../lib/account-proxies';
-import { parseWireGuardConfig } from '../lib/parse-wireguard';
-import { parseProxyString } from '../lib/parse-proxy';
-import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
 /** Which proxy a freshly created profile should be auto-probed through.
@@ -2878,13 +2877,20 @@ export function ProfilesView({
       // deployment"), and both no-id outcomes returned as an egress block. There is
       // deliberately no proxy-less variant of this object — the leak is not guarded
       // against, it is unwritable.
-      const createBody: CreateAgentSessionRequest & { skip_proxy_probe?: boolean } = {
+      const createBody: CreateAgentSessionRequest & {
+        skip_proxy_probe?: boolean;
+        stop_on_exit_ip_change?: boolean;
+      } = {
         profile_id: profile.id,
         proxy_id: proxyIdForLaunch,
         mode: 'manual',
         initial_url: startUrl,
         ...(geoOverride !== undefined ? { geolocation: geoOverride } : {}),
         ...(skipProxyProbe ? { skip_proxy_probe: true } : {}),
+        // T-26 (owner #12) — pass stop_on_exit_ip_change:true ONLY when this
+        // profile opted in; the server ends the session on a rotated exit IP.
+        // Absent by default (never stop), so a `false` is never written.
+        ...stopOnExitIpChangeCreateFields(profilesMeta[profile.id]),
       };
       // Idempotency-Key on create: the server runs a pre-launch proxy probe (up to ~12s)
       // before responding, so a launch feels slow and a network blip can drop the 201
@@ -4857,14 +4863,12 @@ function CreateProfileModal({
   const [icon, setIcon] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Inline "Add new proxy" mints a proxy BEFORE creating the profile. If the
-  // create then fails (tier cap / dup name / network), the proxy was already
-  // saved — and the catch lets the user retry, which would run addProxy AGAIN,
-  // minting a SECOND identical proxy (the Proxies tab accumulates duplicates).
-  // Cache the minted proxy id for THIS modal session so a retry REUSES it
-  // instead of re-creating. Cleared when the proxy choice/draft changes. (audit)
-  const mintedProxyIdRef = useRef<string | null>(null);
-  // Same duplicate-on-retry hazard as the proxy mint above, one step later: if
+  // T-21 — the inline "add new proxy" panel now renders the canonical ProxyForm,
+  // which creates the proxy on its OWN "Add proxy" button (see
+  // handleInlineCreateProxy below) and then selects it as `proxyChoice`. So the
+  // profile submit no longer mints a proxy, and the mint-on-retry de-dupe ref
+  // that guarded that path is gone with it.
+  // Duplicate-on-retry hazard for the PROFILE create, one step later: if
   // client.profiles.create() SUCCEEDS but a follow-up step (saveProfileMeta /
   // setDefaultProxy) throws, the catch lets the user retry — which re-ran
   // profiles.create() and minted a SECOND (billed) profile. Cache the created
@@ -4880,36 +4884,17 @@ function CreateProfileModal({
   // Organization metadata at create (backend columns, migration 0076).
   const [folder, setFolder] = useState(initialFolder ?? '');
   const [tags, setTags] = useState(initialTag ?? '');
-  // 2026-05-20 — antidetect-style advanced panel. Proxy is selected
-  // up-front + bound to the profile via profile-bindings on create.
-  // 'create-new' opens an inline mini-form so the customer can mint a
-  // proxy from inside this modal (no context-switch to the Proxies tab):
-  // SOCKS5/HTTP host:port:user:pass, or paste/upload a .ovpn / wg0.conf
-  // for OpenVPN / WireGuard.
+  // 2026-05-20 — antidetect-style advanced panel. Proxy is selected up-front +
+  // bound to the profile via profile-bindings on create. 'create-new' renders
+  // the canonical ProxyForm inline (T-21) so a proxy — SOCKS5/HTTP or a pasted /
+  // uploaded .ovpn / wg0.conf with its auth credentials — can be added here
+  // without a trip to the Proxies tab; adding it selects it as `proxyChoice`.
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
   const [proxyChoice, setProxyChoice] = useState<string>('first-available');
   // Hydration can automatically switch an account with zero proxies to the
   // inline "create new" form. Record that hydrated value as the baseline so the
   // automatic switch does not falsely make a pristine form look dirty.
   const initialProxyChoiceRef = useRef<string | null>(null);
-  const [newProxy, setNewProxy] = useState<{
-    scheme: NonNullable<ProxyDraft['scheme']>;
-    label: string;
-    host: string;
-    port: string;
-    username: string;
-    password: string;
-    /** OpenVPN .ovpn / WireGuard wg0.conf paste — config_blob for the matching scheme. */
-    configBlob: string;
-  }>({
-    scheme: 'socks5',
-    label: '',
-    host: '',
-    port: '1080',
-    username: '',
-    password: '',
-    configBlob: '',
-  });
   const dirty =
     name !== '' ||
     description !== '' ||
@@ -4917,57 +4902,13 @@ function CreateProfileModal({
     icon !== '' ||
     folder !== (initialFolder ?? '') ||
     tags !== (initialTag ?? '') ||
-    (initialProxyChoiceRef.current !== null && proxyChoice !== initialProxyChoiceRef.current) ||
-    newProxy.scheme !== 'socks5' ||
-    newProxy.label !== '' ||
-    newProxy.host !== '' ||
-    newProxy.port !== '1080' ||
-    newProxy.username !== '' ||
-    newProxy.password !== '' ||
-    newProxy.configBlob !== '';
+    (initialProxyChoiceRef.current !== null && proxyChoice !== initialProxyChoiceRef.current);
   const { requestClose, discardConfirmOpen } = useProfileDraftCloseGuard({
     dirty,
     submitting,
     dialogRef,
     onClose,
   });
-  // VPN paste-parse feedback (✓ endpoint host:port, or the parse error).
-  const [newProxyVpnHint, setNewProxyVpnHint] = useState<string | null>(null);
-  // Quick paste (owner 2026-08-30) — same affordance as the Proxies page form:
-  // one pasted line auto-fills host/port/user/pass. Clears itself on success so
-  // the pasted credential doesn't linger in a second visible field.
-  const [proxyPaste, setProxyPaste] = useState('');
-  const [proxyPasteHint, setProxyPasteHint] = useState<string | null>(null);
-  function handleProxyPaste(value: string): void {
-    setProxyPaste(value);
-    if (value.trim() === '') {
-      setProxyPasteHint(null);
-      return;
-    }
-    const parsed = parseProxyString(value);
-    if (parsed === null) {
-      setProxyPasteHint('Could not parse — fill the fields below manually.');
-      return;
-    }
-    setNewProxy((p) => ({
-      ...p,
-      host: parsed.host,
-      port: String(parsed.port),
-      username: parsed.username ?? '',
-      password: parsed.password ?? '',
-    }));
-    setTestResult(null);
-    setProxyPaste('');
-    setProxyPasteHint(
-      `Filled ${parsed.host}:${String(parsed.port)}${parsed.username !== null ? ' (with auth)' : ''}.`,
-    );
-  }
-  // If the customer edits the proxy choice or the new-proxy draft, invalidate the
-  // cached minted-proxy id so the NEXT attempt mints a fresh proxy for the new
-  // inputs (rather than reusing the one minted for the old inputs).
-  useEffect(() => {
-    mintedProxyIdRef.current = null;
-  }, [proxyChoice, newProxy]);
   // Invalidate the cached created-profile id when the identity-defining inputs
   // change — a different name/archetype is a genuinely different profile, so the
   // next submit should create it (not reuse the one already created for the old
@@ -4975,19 +4916,6 @@ function CreateProfileModal({
   useEffect(() => {
     createdProfileIdRef.current = null;
   }, [name, archetype]);
-  const newProxyIsVpn = newProxy.scheme === 'openvpn' || newProxy.scheme === 'wireguard';
-  // The native "Test proxy" probe runs a SOCKS5 handshake, so it is only
-  // meaningful for socks5 proxies. For an HTTP proxy it would always fail the
-  // handshake → a valid HTTP proxy showed "Not reachable". Gate the Test button
-  // to socks5 (VPN schemes already hide it via newProxyIsVpn).
-  const newProxyCanTest = isSocks5Probeable(newProxy.scheme); // T-20 — the shared predicate
-  // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
-  // Runs against the inline create-new draft so the customer can confirm
-  // the proxy works — and whether UDP/QUIC/WebRTC will tunnel — before
-  // minting the profile. Cleared whenever the draft host/port changes so
-  // a stale "reachable" badge can't outlive its inputs.
-  const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<ProxyTestResult | null>(null);
   useEffect(() => {
     void (async () => {
       const list = await listProxies();
@@ -4998,52 +4926,14 @@ function CreateProfileModal({
     })();
   }, []);
 
-  async function handleTestDraftProxy(): Promise<void> {
-    const portNum = Number.parseInt(newProxy.port, 10);
-    if (
-      newProxy.host.trim().length === 0 ||
-      Number.isNaN(portNum) ||
-      portNum < 1 ||
-      portNum > 65535
-    ) {
-      setTestResult({
-        reachable: false,
-        auth_ok: false,
-        udp_associate: false,
-        // A synthesised result is not evidence of routing. Fail closed: an
-        // unknown proxy must never inherit a usable verdict by omission.
-        can_route: false,
-        connect_reply: 0xff,
-        latency_ms: 0,
-        message: 'Enter a host and a port between 1–65535 before testing.',
-      });
-      return;
-    }
-    setTesting(true);
-    setTestResult(null);
-    try {
-      const result = await testProxy({
-        host: newProxy.host.trim(),
-        port: portNum,
-        username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
-        password: newProxy.password.length > 0 ? newProxy.password : null,
-      });
-      setTestResult(result);
-    } catch (err) {
-      setTestResult({
-        reachable: false,
-        auth_ok: false,
-        udp_associate: false,
-        // A synthesised result is not evidence of routing. Fail closed: an
-        // unknown proxy must never inherit a usable verdict by omission.
-        can_route: false,
-        connect_reply: 0xff,
-        latency_ms: 0,
-        message: humanizeError(err, "Couldn't test this proxy. Check the details and try again."),
-      });
-    } finally {
-      setTesting(false);
-    }
+  // T-21 — the inline ProxyForm's own "Add proxy" button lands here: create the
+  // proxy (with its VPN auth credentials, if any) and select it as this
+  // profile's proxy. addProxy returns the created row, so the picker can show it
+  // selected at once — no re-list, no mint-on-profile-submit.
+  async function handleInlineCreateProxy(draft: ProxyDraft): Promise<void> {
+    const created = await addProxy(draft);
+    setProxies((prev) => [...prev, created]);
+    setProxyChoice(created.id);
   }
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
@@ -5068,102 +4958,13 @@ function CreateProfileModal({
     setSubmitting(true);
     setError(null);
     try {
-      // 1. Optionally mint a new proxy first (inline create flow keyed by
-      //    proxyChoice === 'create-new'). SOCKS5/HTTP take host/port/user/pass
-      //    fields; OpenVPN/WireGuard take the pasted .ovpn / wg0.conf and parse
-      //    the endpoint out of it (host/port are the display endpoint).
-      let resolvedProxyId: string | null = null;
-      let mintedProxy: LocalProxyConfig | null = null;
-      if (proxyChoice === 'create-new' && mintedProxyIdRef.current !== null) {
-        // A prior attempt already minted this proxy; reuse it (don't re-create).
-        resolvedProxyId = mintedProxyIdRef.current;
-      } else if (proxyChoice === 'create-new') {
-        const label = newProxy.label.trim();
-        if (label.length === 0) {
-          // Consistency #10 — the error renders in the always-visible preview
-          // rail, but it names a field on the Proxy tab. Switch to that tab so
-          // the founder can SEE the field the message is about (otherwise the
-          // error reads as a dead-end when they're on the Identity tab).
-          setTab('proxy');
-          setError('Proxy label is required.');
-          setSubmitting(false);
-          return;
-        }
-        let draft: ProxyDraft;
-        if (newProxy.scheme === 'wireguard') {
-          const built = buildWireGuardProxyInput(label, parseWireGuardConfig(newProxy.configBlob));
-          if ('error' in built) {
-            setTab('proxy'); // #10 — reveal the WireGuard paste field
-            setError(`WireGuard config: ${built.error}`);
-            setSubmitting(false);
-            return;
-          }
-          draft = {
-            label,
-            scheme: 'wireguard',
-            host: built.host,
-            port: built.port,
-            username: null,
-            password: null,
-            wireguard: built.wireguard,
-          };
-        } else if (newProxy.scheme === 'openvpn') {
-          const v = validateOpenVpnConfig(newProxy.configBlob);
-          if (!v.ok) {
-            setTab('proxy'); // #10 — reveal the OpenVPN paste field
-            setError(`OpenVPN config: ${v.reason}`);
-            setSubmitting(false);
-            return;
-          }
-          const built = buildOpenVpnProxyInput(label, newProxy.configBlob, {
-            host: v.remoteHost,
-            port: v.remotePort,
-          });
-          if ('error' in built) {
-            setTab('proxy'); // #10 — reveal the OpenVPN paste field
-            setError(`OpenVPN config: ${built.error}`);
-            setSubmitting(false);
-            return;
-          }
-          draft = {
-            label,
-            scheme: 'openvpn',
-            host: built.host,
-            port: built.port,
-            username: null,
-            password: null,
-            openvpn: built.openvpn,
-          };
-        } else {
-          const portNum = Number.parseInt(newProxy.port, 10);
-          if (
-            newProxy.host.trim().length === 0 ||
-            Number.isNaN(portNum) ||
-            portNum < 1 ||
-            portNum > 65535
-          ) {
-            setTab('proxy'); // #10 — reveal the host/port fields
-            setError('Proxy host and a port between 1–65535 are all required.');
-            setSubmitting(false);
-            return;
-          }
-          draft = {
-            label,
-            scheme: newProxy.scheme,
-            host: newProxy.host.trim(),
-            port: portNum,
-            username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
-            password: newProxy.password.length > 0 ? newProxy.password : null,
-          };
-        }
-        const created = await addProxy(draft);
-        resolvedProxyId = created.id;
-        mintedProxy = created;
-        // Remember it so a retry after a later failure reuses it, not re-mints.
-        mintedProxyIdRef.current = created.id;
-      } else if (proxyChoice !== 'first-available') {
-        resolvedProxyId = proxyChoice;
-      }
+      // 1. Resolve which proxy to bind. A proxy added inline (T-21) was already
+      //    created by the ProxyForm's own "Add proxy" button and is now the
+      //    selected `proxyChoice`, so there is nothing to mint here. 'create-new'
+      //    still selected means the customer opened the form but never added a
+      //    proxy — treat that as "first available" (null), same as no pick.
+      const resolvedProxyId: string | null =
+        proxyChoice === 'first-available' || proxyChoice === 'create-new' ? null : proxyChoice;
       // 2. Create the profile (organization metadata rides the create —
       //    backend columns since migration 0076; a pre-0076 server strips
       //    the unknown fields harmlessly).
@@ -5222,11 +5023,11 @@ function CreateProfileModal({
       });
       onCreated({
         ...(explicitProxyBindFailed ? { proxyBindFailed: true } : {}),
+        // A proxy added inline is already in `proxies` (handleInlineCreateProxy
+        // appended it), so the find covers both an inline-added and a pre-existing
+        // pick; the post-create probe targets whatever it returns.
         resolvedProxy:
-          mintedProxy ??
-          (resolvedProxyId !== null
-            ? (proxies.find((p) => p.id === resolvedProxyId) ?? null)
-            : null),
+          resolvedProxyId !== null ? (proxies.find((p) => p.id === resolvedProxyId) ?? null) : null,
       });
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
@@ -5402,246 +5203,29 @@ function CreateProfileModal({
                   <option value="create-new">+ Add new proxy…</option>
                 </select>
                 {proxyChoice === 'create-new' && (
-                  <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
-                    <select
-                      aria-label="Proxy type"
-                      value={newProxy.scheme}
-                      onChange={(e) => {
-                        // Switch scheme — clear the now-irrelevant fields so a
-                        // half-typed socks5 password can't ride along on a VPN
-                        // proxy (and vice versa) + drop the stale test result.
-                        const scheme = e.target.value as NonNullable<ProxyDraft['scheme']>;
-                        setNewProxy((p) => ({
-                          ...p,
-                          scheme,
-                          configBlob: '',
-                          ...(scheme === 'openvpn' || scheme === 'wireguard'
-                            ? { username: '', password: '' }
-                            : {}),
-                        }));
-                        setNewProxyVpnHint(null);
-                        setTestResult(null);
+                  <div className="mt-2 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
+                    {/* T-21 — the ONE canonical proxy form (same component as the
+                        Proxies tab), embedded compact. Its own "Add proxy" button
+                        creates the proxy — with OpenVPN / WireGuard auth credentials
+                        when entered — and selects it as this profile's proxy. */}
+                    <ProxyForm
+                      mode="add"
+                      compact
+                      saving={submitting}
+                      initial={{
+                        label: '',
+                        scheme: 'socks5',
+                        host: '',
+                        port: 1080,
+                        username: null,
+                        password: null,
                       }}
-                      disabled={submitting}
-                      className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                    >
-                      <option value="socks5">SOCKS5</option>
-                      <option value="http">HTTP</option>
-                      <option value="openvpn">OpenVPN</option>
-                      <option value="wireguard">WireGuard</option>
-                    </select>
-                    <input
-                      type="text"
-                      value={newProxy.label}
-                      onChange={(e) => setNewProxy((p) => ({ ...p, label: e.target.value }))}
-                      placeholder="Label (e.g. shopify-us-east)"
-                      disabled={submitting}
-                      className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+                      onCancel={() =>
+                        setProxyChoice(proxies.length > 0 ? 'first-available' : 'create-new')
+                      }
+                      onSave={handleInlineCreateProxy}
                     />
-                    {!newProxyIsVpn && (
-                      <input
-                        type="text"
-                        value={proxyPaste}
-                        onChange={(e) => handleProxyPaste(e.target.value)}
-                        placeholder="Quick paste — host:port:user:pass or user:pass@host:port"
-                        autoComplete="off"
-                        spellCheck={false}
-                        disabled={submitting}
-                        className="mono rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                      />
-                    )}
-                    {!newProxyIsVpn && proxyPasteHint !== null && (
-                      <span className="text-2xs text-ink-muted">{proxyPasteHint}</span>
-                    )}
-                    {!newProxyIsVpn && <ProxyHostWarning host={newProxy.host} />}
-                    {!newProxyIsVpn && (
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <input
-                          type="text"
-                          value={newProxy.host}
-                          onChange={(e) => {
-                            setNewProxy((p) => ({ ...p, host: e.target.value }));
-                            setTestResult(null);
-                          }}
-                          placeholder="Host (e.g. proxy.example.com)"
-                          disabled={submitting}
-                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                        />
-                        <input
-                          type="number"
-                          min={1}
-                          max={65535}
-                          value={newProxy.port}
-                          onChange={(e) => {
-                            setNewProxy((p) => ({ ...p, port: e.target.value }));
-                            setTestResult(null);
-                          }}
-                          placeholder="Port"
-                          disabled={submitting}
-                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                        />
-                        <input
-                          type="text"
-                          value={newProxy.username}
-                          onChange={(e) => {
-                            setNewProxy((p) => ({ ...p, username: e.target.value }));
-                            setTestResult(null);
-                          }}
-                          placeholder="Username (optional)"
-                          disabled={submitting}
-                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                        />
-                        <input
-                          type="text"
-                          // ⛔ NOT type="password". A proxy credential is configuration the operator
-                          // is pasting and needs to VERIFY against their provider's dashboard; masking
-                          // it hides typos in the one field whose typo reads downstream as
-                          // "auth_failed" on a working proxy (owner 2026-08-30: "proxy password
-                          // should just be clean visible, not hidden"). It is not a login secret and
-                          // there is no shoulder-surfing threat model for a local desktop tool.
-                          autoCapitalize="off"
-                          autoCorrect="off"
-                          spellCheck={false}
-                          value={newProxy.password}
-                          onChange={(e) => {
-                            setNewProxy((p) => ({ ...p, password: e.target.value }));
-                            setTestResult(null);
-                          }}
-                          placeholder="Password (optional)"
-                          disabled={submitting}
-                          className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                        />
-                      </div>
-                    )}
-                    {newProxyIsVpn && (
-                      <div className="flex flex-col gap-1">
-                        <textarea
-                          value={newProxy.configBlob}
-                          onChange={(e) => {
-                            const text = e.target.value;
-                            // Parse the paste so the customer sees the extracted
-                            // endpoint (or the error) before they hit Create.
-                            let hint: string | null = null;
-                            if (text.trim() === '') {
-                              hint = null;
-                            } else if (newProxy.scheme === 'wireguard') {
-                              const built = buildWireGuardProxyInput(
-                                newProxy.label.trim(),
-                                parseWireGuardConfig(text),
-                              );
-                              hint =
-                                'error' in built
-                                  ? built.error
-                                  : `✓ endpoint ${built.host}:${built.port.toString()}`;
-                            } else {
-                              const v = validateOpenVpnConfig(text);
-                              hint = v.ok
-                                ? `✓ remote ${v.remoteHost}:${v.remotePort.toString()}`
-                                : v.reason;
-                            }
-                            setNewProxy((p) => ({ ...p, configBlob: text }));
-                            setNewProxyVpnHint(hint);
-                          }}
-                          placeholder={
-                            newProxy.scheme === 'wireguard'
-                              ? '[Interface]\nPrivateKey = …\n[Peer]\nPublicKey = …\nEndpoint = host:port'
-                              : 'client\nremote vpn.example.com 1194 udp\ndev tun\n…'
-                          }
-                          disabled={submitting}
-                          autoComplete="off"
-                          spellCheck={false}
-                          className="mono min-h-[120px] rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                        />
-                        <label className="inline-flex cursor-pointer items-center gap-1 text-2xs text-accent hover:underline">
-                          <span aria-hidden>⤓</span> or upload your{' '}
-                          {newProxy.scheme === 'wireguard' ? 'wg0.conf' : '.ovpn'} file
-                          <input
-                            type="file"
-                            accept={
-                              newProxy.scheme === 'wireguard'
-                                ? '.conf,.txt,text/plain'
-                                : '.ovpn,.conf,.txt,text/plain'
-                            }
-                            className="sr-only"
-                            disabled={submitting}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              e.target.value = '';
-                              if (!file) return;
-                              const reader = new FileReader();
-                              reader.onload = () => {
-                                if (typeof reader.result !== 'string') return;
-                                const text = reader.result;
-                                let hint: string | null = null;
-                                if (newProxy.scheme === 'wireguard') {
-                                  const built = buildWireGuardProxyInput(
-                                    newProxy.label.trim(),
-                                    parseWireGuardConfig(text),
-                                  );
-                                  hint =
-                                    'error' in built
-                                      ? built.error
-                                      : `✓ endpoint ${built.host}:${built.port.toString()}`;
-                                } else {
-                                  const v = validateOpenVpnConfig(text);
-                                  hint = v.ok
-                                    ? `✓ remote ${v.remoteHost}:${v.remotePort.toString()}`
-                                    : v.reason;
-                                }
-                                setNewProxy((p) => ({ ...p, configBlob: text }));
-                                setNewProxyVpnHint(hint);
-                              };
-                              reader.onerror = () =>
-                                setNewProxyVpnHint('Could not read that file.');
-                              reader.readAsText(file);
-                            }}
-                          />
-                        </label>
-                        {newProxyVpnHint !== null && (
-                          <span className="text-2xs text-ink-muted">{newProxyVpnHint}</span>
-                        )}
-                      </div>
-                    )}
-                    {newProxyCanTest && (
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void handleTestDraftProxy()}
-                          disabled={submitting || testing || newProxy.host.trim().length === 0}
-                          className="btn-secondary text-xs"
-                        >
-                          {testing ? 'Testing…' : 'Test proxy'}
-                        </button>
-                        <span className="text-2xs text-ink-muted">
-                          Runs a SOCKS5 handshake from this Mac — checks reachability, auth, and UDP
-                          support.
-                        </span>
-                      </div>
-                    )}
-                    {newProxyCanTest && testResult !== null && (
-                      <div
-                        role="status"
-                        className={`flex flex-col gap-1 rounded-sm border px-2 py-1.5 text-2xs ${
-                          isProxyUsable(testResult)
-                            ? 'border-status-success/40 bg-status-success/10 text-status-success'
-                            : 'border-status-error/40 bg-status-error/10 text-status-error'
-                        }`}
-                      >
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {/* One shared verdict for the label AND the colour.
-                              This ladder used to stop at auth_ok while the
-                              colour above already came from isProxyUsable, so a
-                              proxy that authenticates but cannot route rendered
-                              RED and read "Reachable · 12 ms". */}
-                          <span className="font-medium">{proxyVerdict(testResult).label}</span>
-                          {testResult.reachable && (
-                            <ProxyCapabilityChips result={testResult} size="sm" />
-                          )}
-                        </div>
-                        <span className="text-ink-secondary">{testResult.message}</span>
-                      </div>
-                    )}
-                    <span className="text-2xs text-ink-muted">
+                    <span className="mt-2 block text-2xs text-ink-muted">
                       Protected locally in this app · synced encrypted to your account when used for
                       a session.
                     </span>
@@ -5766,7 +5350,7 @@ function CreateProfileModal({
                     k="Proxy"
                     v={
                       proxyChoice === 'create-new'
-                        ? newProxy.label.trim() || 'new SOCKS5'
+                        ? 'adding…'
                         : proxyChoice === 'first-available'
                           ? 'first available'
                           : (proxies.find((p) => p.id === proxyChoice)?.label ?? '—')
@@ -5946,6 +5530,8 @@ function EditProfileModal({
     geoLat: meta?.geolocation ? String(meta.geolocation.latitude) : '',
     geoLon: meta?.geolocation ? String(meta.geolocation.longitude) : '',
     geoAccuracy: meta?.geolocation?.accuracy !== undefined ? String(meta.geolocation.accuracy) : '',
+    // T-26 (owner #12) — the per-profile "stop on exit IP change" launch flag.
+    stopOnExitIpChange: meta?.stopOnExitIpChange === true,
   });
   const baseline = baselineRef.current;
   const initialTags = baseline.tags.join(', ');
@@ -5963,49 +5549,20 @@ function EditProfileModal({
   // setDefaultProxy when it changed, and the parent's refresh(false) reloads
   // bindings so pickProxy re-renders the card/table with the rebound proxy.
   const [proxyChoice, setProxyChoice] = useState<string>(baseline.proxyChoice);
-  // Inline "+ Add new proxy…" (owner 2026-08-30) — the edit modal previously
-  // offered only already-saved proxies, so the Proxies-page paste-autofill had
-  // nothing to attach to here. SOCKS5/HTTP only: a VPN config is a file paste
-  // with its own validation flow and stays on the Proxies page (linked below).
-  const [newProxy, setNewProxy] = useState<{
-    scheme: 'socks5' | 'http';
-    label: string;
-    host: string;
-    port: string;
-    username: string;
-    password: string;
-  }>({ scheme: 'socks5', label: '', host: '', port: '1080', username: '', password: '' });
-  const [proxyPaste, setProxyPaste] = useState('');
-  const [proxyPasteHint, setProxyPasteHint] = useState<string | null>(null);
-  // A prior save attempt may have minted the proxy and then failed on a later
-  // step; reuse the minted id on retry rather than re-creating (same guard as
-  // the create modal). Cleared when any mini-form field changes.
-  const mintedProxyIdRef = useRef<string | null>(null);
-  function setNewProxyField(patch: Partial<typeof newProxy>): void {
-    mintedProxyIdRef.current = null;
-    setNewProxy((prev) => ({ ...prev, ...patch }));
-  }
-  function handleProxyPaste(value: string): void {
-    setProxyPaste(value);
-    if (value.trim() === '') {
-      setProxyPasteHint(null);
-      return;
-    }
-    const parsed = parseProxyString(value);
-    if (parsed === null) {
-      setProxyPasteHint('Could not parse — fill the fields below manually.');
-      return;
-    }
-    setNewProxyField({
-      host: parsed.host,
-      port: String(parsed.port),
-      username: parsed.username ?? '',
-      password: parsed.password ?? '',
-    });
-    setProxyPaste('');
-    setProxyPasteHint(
-      `Filled ${parsed.host}:${String(parsed.port)}${parsed.username !== null ? ' (with auth)' : ''}.`,
-    );
+  // Proxies added inline this session (the `proxies` prop is the parent's list
+  // and does not refresh until the modal closes). Merged into the picker options
+  // so a just-added proxy shows as the selected choice.
+  const [extraProxies, setExtraProxies] = useState<LocalProxyConfig[]>([]);
+  // T-21 — "+ Add new proxy…" now renders the canonical ProxyForm inline, so the
+  // edit modal gains the SAME proxy-creation surface as the Proxies tab: SOCKS5,
+  // HTTP, and the two VPN schemes with their auth credentials, which the old
+  // hand-rolled SOCKS5/HTTP-only mini-form could not accept. Its own "Add proxy"
+  // button creates the proxy and selects it as this profile's `proxyChoice`.
+  async function handleInlineCreateProxyEdit(draft: ProxyDraft): Promise<void> {
+    const created = await addProxy(draft);
+    setExtraProxies((prev) => [...prev, created]);
+    setProxyChoice(created.id);
+    onProxyMinted?.(created);
   }
   // Advanced geolocation override (A3-approved per-session contract 2026-07-01).
   // Held as strings so a partially-typed value doesn't fight a numeric input;
@@ -6014,6 +5571,8 @@ function EditProfileModal({
   const [geoLat, setGeoLat] = useState(baseline.geoLat);
   const [geoLon, setGeoLon] = useState(baseline.geoLon);
   const [geoAccuracy, setGeoAccuracy] = useState(baseline.geoAccuracy);
+  // T-26 (owner #12) — stop the session automatically when the exit IP rotates.
+  const [stopOnExitIpChange, setStopOnExitIpChange] = useState(baseline.stopOnExitIpChange);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dirty =
@@ -6026,7 +5585,8 @@ function EditProfileModal({
     proxyChoice !== baseline.proxyChoice ||
     geoLat !== baseline.geoLat ||
     geoLon !== baseline.geoLon ||
-    geoAccuracy !== baseline.geoAccuracy;
+    geoAccuracy !== baseline.geoAccuracy ||
+    stopOnExitIpChange !== baseline.stopOnExitIpChange;
   const { requestClose, discardConfirmOpen } = useProfileDraftCloseGuard({
     dirty,
     submitting,
@@ -6041,25 +5601,6 @@ function EditProfileModal({
     if (trimmedName.length === 0) {
       setError('Name is required.');
       return;
-    }
-    // Validate the inline new-proxy form BEFORE any request leaves: the PATCH
-    // below applies immediately, so failing this late would save half the form
-    // and then stop on a message about the other half.
-    if (proxyChoice === 'create-new' && mintedProxyIdRef.current === null) {
-      const portNum = Number.parseInt(newProxy.port, 10);
-      if (newProxy.label.trim().length === 0) {
-        setError('Proxy label is required.');
-        return;
-      }
-      if (
-        newProxy.host.trim().length === 0 ||
-        Number.isNaN(portNum) ||
-        portNum < 1 ||
-        portNum > 65535
-      ) {
-        setError('Proxy host and a port between 1–65535 are all required.');
-        return;
-      }
     }
     setError(null);
     setSubmitting(true);
@@ -6144,29 +5685,12 @@ function EditProfileModal({
       // reverted. Swallow a rebind-write failure so the org-metadata mirror
       // below always runs; the proxy binding is independently recoverable from
       // the row. (audit)
-      // '+ Add new proxy…' — mint it first (reusing a previously-minted id on
-      // retry), then fall through to the rebind below with the new id.
-      let resolvedChoice = proxyChoice;
-      if (proxyChoice === 'create-new') {
-        if (mintedProxyIdRef.current !== null) {
-          resolvedChoice = mintedProxyIdRef.current;
-        } else {
-          // Field validity was checked before the PATCH left; only the mint
-          // itself can fail here, and the catch below reports it.
-          const created = await addProxy({
-            label: newProxy.label.trim(),
-            scheme: newProxy.scheme,
-            host: newProxy.host.trim(),
-            port: Number.parseInt(newProxy.port, 10),
-            username: newProxy.username.trim().length > 0 ? newProxy.username.trim() : null,
-            password: newProxy.password.length > 0 ? newProxy.password : null,
-          });
-          mintedProxyIdRef.current = created.id;
-          resolvedChoice = created.id;
-          onProxyMinted?.(created);
-        }
-      }
-      const nextProxyId = resolvedChoice === 'first-available' ? null : resolvedChoice;
+      // T-21 — a proxy added inline (ProxyForm's "Add proxy") was already created
+      // and is now the selected `proxyChoice`, so there is nothing to mint here.
+      // 'create-new' still selected means the form was opened but no proxy added:
+      // bind nothing (null), same as "first available".
+      const nextProxyId =
+        proxyChoice === 'first-available' || proxyChoice === 'create-new' ? null : proxyChoice;
       if (nextProxyId !== baseline.proxyId) {
         await setDefaultProxy(profile.id, nextProxyId).catch((err: unknown) => {
           console.warn('[profiles] setDefaultProxy failed (profile updated):', err);
@@ -6182,6 +5706,7 @@ function EditProfileModal({
         tags: tagList,
         note: nextNote,
         geolocation: nextGeolocation,
+        stopOnExitIpChange,
       });
     } catch (err) {
       setError(friendlyError(err, settings.baseUrl));
@@ -6302,113 +5827,71 @@ function EditProfileModal({
         {/* Proxy rebind (2026-06-19) — change the bound proxy after creation;
             mirrors the create modal's saved-proxy picker. 'first-available' =
             no fixed binding (the first saved proxy is used at launch). */}
-        <label className="flex flex-col gap-1">
-          <span className="section-label">Proxy</span>
-          <select
-            aria-label="Profile proxy"
-            value={proxyChoice}
-            onChange={(e) => setProxyChoice(e.target.value)}
-            disabled={submitting}
-            className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-          >
-            <option value="first-available">First available saved proxy</option>
-            {proxies.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label} ·{' '}
-                {p.scheme === 'openvpn' || p.scheme === 'wireguard'
-                  ? `${p.scheme} · ${p.host}:${p.port}`
-                  : `${p.host}:${p.port}`}
-              </option>
-            ))}
-            <option value="create-new">+ Add new proxy…</option>
-          </select>
+        <div className="flex flex-col gap-1">
+          <label className="flex flex-col gap-1">
+            <span className="section-label">Proxy</span>
+            <select
+              aria-label="Profile proxy"
+              value={proxyChoice}
+              onChange={(e) => setProxyChoice(e.target.value)}
+              disabled={submitting}
+              className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
+            >
+              <option value="first-available">First available saved proxy</option>
+              {[...proxies, ...extraProxies].map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label} ·{' '}
+                  {p.scheme === 'openvpn' || p.scheme === 'wireguard'
+                    ? `${p.scheme} · ${p.host}:${p.port}`
+                    : `${p.host}:${p.port}`}
+                </option>
+              ))}
+              <option value="create-new">+ Add new proxy…</option>
+            </select>
+          </label>
           {proxyChoice === 'create-new' && (
-            <div className="mt-2 flex flex-col gap-1.5 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
-              <div className="grid grid-cols-2 gap-1.5">
-                <select
-                  aria-label="Proxy type"
-                  value={newProxy.scheme}
-                  onChange={(e) =>
-                    setNewProxyField({ scheme: e.target.value as 'socks5' | 'http' })
-                  }
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                >
-                  <option value="socks5">SOCKS5</option>
-                  <option value="http">HTTP</option>
-                </select>
-                <input
-                  type="text"
-                  value={newProxy.label}
-                  onChange={(e) => setNewProxyField({ label: e.target.value })}
-                  placeholder="Label (e.g. shopify-us-east)"
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                />
-              </div>
-              <input
-                type="text"
-                value={proxyPaste}
-                onChange={(e) => handleProxyPaste(e.target.value)}
-                placeholder="Quick paste — host:port:user:pass or user:pass@host:port"
-                autoComplete="off"
-                spellCheck={false}
-                disabled={submitting}
-                className="mono rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
+            <div className="mt-2 rounded-sm border border-dashed border-surface-divider bg-surface-base/60 p-2">
+              {/* T-21 — the ONE canonical proxy form. Its own "Add proxy" button
+                  creates the proxy (VPN auth included) and selects it here. */}
+              <ProxyForm
+                mode="add"
+                compact
+                saving={submitting}
+                initial={{
+                  label: '',
+                  scheme: 'socks5',
+                  host: '',
+                  port: 1080,
+                  username: null,
+                  password: null,
+                }}
+                onCancel={() => setProxyChoice(baseline.proxyChoice)}
+                onSave={handleInlineCreateProxyEdit}
               />
-              {proxyPasteHint !== null && (
-                <span className="text-2xs text-ink-muted">{proxyPasteHint}</span>
-              )}
-              <ProxyHostWarning host={newProxy.host} />
-              <div className="grid grid-cols-2 gap-1.5">
-                <input
-                  type="text"
-                  value={newProxy.host}
-                  onChange={(e) => setNewProxyField({ host: e.target.value })}
-                  placeholder="Host (e.g. proxy.example.com)"
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  max={65535}
-                  value={newProxy.port}
-                  onChange={(e) => setNewProxyField({ port: e.target.value })}
-                  placeholder="Port"
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                />
-                <input
-                  type="text"
-                  value={newProxy.username}
-                  onChange={(e) => setNewProxyField({ username: e.target.value })}
-                  placeholder="Username (optional)"
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                />
-                <input
-                  type="text"
-                  // Same visibility rule as everywhere else (owner 2026-08-30):
-                  // a proxy credential is configuration to verify, not a login
-                  // secret to mask.
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  value={newProxy.password}
-                  onChange={(e) => setNewProxyField({ password: e.target.value })}
-                  placeholder="Password (optional)"
-                  disabled={submitting}
-                  className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-xs text-ink-primary"
-                />
-              </div>
-              <span className="text-2xs text-ink-muted">
-                Saved to your proxies and bound to this profile on Save. OpenVPN / WireGuard
-                configs: add them on the Proxies page, then pick them here.
+              <span className="mt-2 block text-2xs text-ink-muted">
+                Saved to your proxies and bound to this profile on Save.
               </span>
             </div>
           )}
-        </label>
+          {/* T-26 (owner #12) — per-profile launch option, next to the proxy it
+              guards: end the session automatically if the exit IP rotates
+              mid-session (a silently changed proxy exit is a fingerprint/geo
+              break). Persisted in profiles-meta; read at launch. Default OFF. */}
+          <label className="mt-1 flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              aria-label="Stop the session if the exit IP changes"
+              data-field="stop-on-exit-ip-change"
+              checked={stopOnExitIpChange}
+              onChange={(e) => setStopOnExitIpChange(e.target.checked)}
+              disabled={submitting}
+              className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-accent"
+            />
+            <span className="text-sm text-ink-secondary">
+              Stop the session if the exit IP changes
+            </span>
+          </label>
+        </div>
         <label className="flex flex-col gap-1">
           <span className="section-label">Note (optional)</span>
           <textarea

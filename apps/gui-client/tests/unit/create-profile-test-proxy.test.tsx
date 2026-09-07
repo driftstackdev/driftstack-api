@@ -87,7 +87,11 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   addProxy: vi.fn(() => Promise.resolve({ id: 'p_new' })),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: vi.fn(() => Promise.resolve({})),
-  validateDraft: () => ({ ok: true, errors: {} }),
+  // ⛔ validateDraft is the REAL one (from the spread): T-21 replaced the inline
+  // mini-form with the canonical ProxyForm, whose "Test connection" gate is the
+  // form's own validation, not a hand-rolled empty-host check. Stubbing it ok
+  // would let the probe fire on an empty draft — the opposite of what the first
+  // arm asserts.
   testProxy: (input: unknown) => testProxy(input),
 }));
 
@@ -95,37 +99,41 @@ const { ProfilesView } = await import('../../src/views/ProfilesView');
 
 async function openCreateModal(): Promise<void> {
   render(<ProfilesView onGoToSettings={vi.fn()} />);
-  // Empty state CTA opens the modal. With no saved proxies the modal's
-  // proxy selector defaults to the inline "create-new" SOCKS5 form, so
-  // the "Test proxy" button is present without further interaction.
+  // Empty state CTA opens the modal. With no saved proxies the modal's proxy
+  // selector defaults to the inline "create-new" path, which now renders the
+  // canonical ProxyForm — so its "Test connection" button is present.
   const open = await screen.findByRole('button', { name: 'Create your first profile' });
   fireEvent.click(open);
-  // Configurator port (2026-06-12): the proxy mini-form lives behind the
-  // Proxy tab now — select it so the Test button renders.
+  // Configurator port (2026-06-12): the proxy form lives behind the Proxy tab —
+  // select it so the form renders.
   fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
 }
 
-describe('create-profile modal "Test proxy" draft validation', () => {
+describe('create-profile modal "Test connection" draft validation', () => {
   beforeEach(() => {
     testProxy.mockClear();
   });
 
-  it('empty host → Test button disabled, native probe cannot be invoked', async () => {
+  it('empty host → the form validation blocks the probe (it is never invoked)', async () => {
     await openCreateModal();
-    const testBtn = await screen.findByRole('button', { name: 'Test proxy' });
-    // The button guards the empty-host case (the handler also validates
-    // defensively); a disabled button means the probe never fires.
-    expect(testBtn).toBeDisabled();
-    fireEvent.click(testBtn);
+    // A label but no host: the ProxyForm's own validateDraft refuses the draft,
+    // so clicking Test connection returns before touching the native probe.
+    fireEvent.change(await screen.findByPlaceholderText('prod-eu-west'), {
+      target: { value: 'eu-1' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Test connection' }));
     expect(testProxy).not.toHaveBeenCalled();
   });
 
-  it('valid host + default port → forwards the draft to the native probe', async () => {
+  it('valid label + host + default port → forwards the draft to the native probe', async () => {
     await openCreateModal();
-    const host = await screen.findByPlaceholderText(/Host \(e\.g\. proxy\.example\.com\)/);
+    fireEvent.change(await screen.findByPlaceholderText('prod-eu-west'), {
+      target: { value: 'eu-1' },
+    });
+    const host = await screen.findByPlaceholderText('proxy.example.com');
     fireEvent.change(host, { target: { value: 'proxy.example.com' } });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Test proxy' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Test connection' }));
 
     expect(testProxy).toHaveBeenCalledTimes(1);
     expect(testProxy).toHaveBeenCalledWith(
@@ -136,9 +144,12 @@ describe('create-profile modal "Test proxy" draft validation', () => {
   it('humanizes a thrown native probe exception', async () => {
     testProxy.mockRejectedValueOnce(new Error('offline helper stack /private/tmp/proxy'));
     await openCreateModal();
-    const host = await screen.findByPlaceholderText(/Host \(e\.g\. proxy\.example\.com\)/);
+    fireEvent.change(await screen.findByPlaceholderText('prod-eu-west'), {
+      target: { value: 'eu-1' },
+    });
+    const host = await screen.findByPlaceholderText('proxy.example.com');
     fireEvent.change(host, { target: { value: 'proxy.example.com' } });
-    fireEvent.click(await screen.findByRole('button', { name: 'Test proxy' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Test connection' }));
 
     await waitFor(() =>
       expect(screen.getByText('Check your connection and try again.')).toBeTruthy(),

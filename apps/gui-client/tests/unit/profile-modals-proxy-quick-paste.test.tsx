@@ -116,7 +116,9 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   addProxy: (...args: unknown[]) => addProxy(...args),
   removeProxy: vi.fn(() => Promise.resolve()),
   updateProxy: vi.fn(() => Promise.resolve({})),
-  validateDraft: () => ({ ok: true, errors: {} }),
+  // ⛔ validateDraft is the REAL one (from the spread). T-21 moved proxy creation
+  // into the canonical ProxyForm, whose "Add proxy" gate IS this validation — so a
+  // draft with no label must be refused here, not waved through by a stub.
   testProxy: vi.fn(() => Promise.resolve({})),
 }));
 
@@ -137,20 +139,22 @@ describe('create-profile modal — proxy quick paste', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: /New profile/ }));
     fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
-    // With no saved proxies the selector defaults to the inline create-new form.
-    const paste = await screen.findByPlaceholderText(/Quick paste/);
+    // With no saved proxies the selector defaults to the inline create-new form,
+    // which renders the canonical ProxyForm (T-21). Its Quick-paste field carries
+    // the label but not the placeholder, so target it by its accessible name.
+    const paste = await screen.findByLabelText<HTMLInputElement>(/Quick paste/);
     fireEvent.change(paste, { target: { value: VENDOR_LINE } });
 
-    expect((await screen.findByPlaceholderText<HTMLInputElement>(/Host \(e\.g\./)).value).toBe(
+    expect((await screen.findByPlaceholderText<HTMLInputElement>('proxy.example.com')).value).toBe(
       'gate.nodemaven.com',
     );
-    expect(screen.getByPlaceholderText<HTMLInputElement>('Port').value).toBe('1080');
-    expect(screen.getByPlaceholderText<HTMLInputElement>(/Username/).value).toBe(
+    expect(screen.getByLabelText<HTMLInputElement>('Port').value).toBe('1080');
+    expect(screen.getByLabelText<HTMLInputElement>(/^Username \(optional\)/).value).toBe(
       'user-country-us-sid-42',
     );
-    expect(screen.getByPlaceholderText<HTMLInputElement>(/Password/).value).toBe('s3cret');
+    expect(screen.getByLabelText<HTMLInputElement>(/^Password \(optional\)/).value).toBe('s3cret');
     // The paste field clears itself so the credential doesn't linger twice.
-    expect((paste as HTMLInputElement).value).toBe('');
+    expect(paste.value).toBe('');
   });
 });
 
@@ -162,23 +166,24 @@ describe('edit-profile modal — inline "+ Add new proxy…"', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Edit Warm profile' }));
   }
 
-  it('⛔ paste + Save mints the proxy and binds it to the profile', async () => {
+  it('⛔ paste + Add proxy creates the proxy, and Save binds it to the profile', async () => {
     await openEditModal();
     const select = await screen.findByLabelText('Profile proxy');
     fireEvent.change(select, { target: { value: 'create-new' } });
 
-    fireEvent.change(screen.getByPlaceholderText(/Label \(e\.g\./), {
+    // ProxyForm's label field (T-21) — placeholder 'prod-eu-west'.
+    fireEvent.change(screen.getByPlaceholderText('prod-eu-west'), {
       target: { value: 'pasted-proxy' },
     });
-    fireEvent.change(screen.getByPlaceholderText(/Quick paste/), {
+    fireEvent.change(screen.getByLabelText(/Quick paste/), {
       target: { value: VENDOR_LINE },
     });
-    expect(screen.getByPlaceholderText<HTMLInputElement>(/Host \(e\.g\./).value).toBe(
+    expect(screen.getByPlaceholderText<HTMLInputElement>('proxy.example.com').value).toBe(
       'gate.nodemaven.com',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
-
+    // "Add proxy" creates it (with the pasted credentials) and selects it.
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
     await waitFor(() => {
       expect(addProxy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -191,24 +196,28 @@ describe('edit-profile modal — inline "+ Add new proxy…"', () => {
         }),
       );
     });
+
+    // Save then binds the already-created proxy to the profile.
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
     await waitFor(() => {
       expect(setDefaultProxy).toHaveBeenCalledWith('prof_1', 'p_minted');
     });
   });
 
-  it('an empty label blocks the save BEFORE any request leaves', async () => {
+  it('an empty label is refused by the form, so no proxy is created and nothing is bound', async () => {
     await openEditModal();
     const select = await screen.findByLabelText('Profile proxy');
     fireEvent.change(select, { target: { value: 'create-new' } });
-    fireEvent.change(screen.getByPlaceholderText(/Quick paste/), {
+    // Paste fills host/port/user/pass but not the label. The ProxyForm's own
+    // validation refuses the draft on "Add proxy", so nothing is created.
+    fireEvent.change(screen.getByLabelText(/Quick paste/), {
       target: { value: VENDOR_LINE },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add proxy' }));
 
-    expect(await screen.findByText('Proxy label is required.')).toBeInTheDocument();
-    // The PATCH must not have gone out with the proxy half broken.
-    expect(updateProfile).not.toHaveBeenCalled();
+    // The label field shows its required error and no proxy request leaves.
+    expect(await screen.findByText('Required.')).toBeInTheDocument();
     expect(addProxy).not.toHaveBeenCalled();
   });
 });

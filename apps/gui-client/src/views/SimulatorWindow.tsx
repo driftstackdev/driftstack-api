@@ -57,6 +57,7 @@ import {
   type DiscardedActivation,
 } from '../lib/activation-tombstones';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { ExitIpChip } from '../components/ExitIpChip';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
 import {
@@ -9869,6 +9870,11 @@ export function SimulatorWindow(): JSX.Element {
                                         </span>
                                       )}
                                     </div>
+                                    {/* T-26 (owner #12) — the LIVE measured exit identity for
+                                        THIS session (exit IP + country/tz + WebRTC leak tell),
+                                        read off the capabilityReport the simulator already holds.
+                                        Degrades to "measuring…" until the harness emits it. */}
+                                    <ExitIpChip report={sessionCapabilityReport} />
                                   </div>
                                 )}
 

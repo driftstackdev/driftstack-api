@@ -7,11 +7,17 @@
 // which suggests the single configuration that can never work, because profiles
 // run on Driftstack's servers and cannot reach the customer's own machine.
 //
-// ⛔ THE HAND-LISTED VERSION OF THIS TEST WOULD BE WORTHLESS. Naming today's four
-// call sites pins today's four call sites; the defect was a FIFTH entry point
-// nobody thought about. So the roster arm below DERIVES the set — every view that
-// binds an input to a proxy host must also render the warning — and fails on a new
+// ⛔ THE HAND-LISTED VERSION OF THIS TEST WOULD BE WORTHLESS. Naming today's call
+// sites pins today's call sites; the original defect was an entry point nobody
+// thought about. So the roster arm below DERIVES the set — every view that binds
+// an input to a proxy host must also render the warning — and fails on a new
 // entry point that forgets it, which is the failure that actually happened.
+//
+// T-21 (2026-09-07) consolidated the three hand-rolled proxy forms (the two
+// profile modals + the first-run wizard) into the ONE canonical ProxyForm, which
+// renders the warning. So the derived set is now a single entry point — the form
+// in ProxiesView. The arm keeps deriving rather than hard-listing: the day a new
+// file binds a host input, it joins the set and must carry the warning too.
 
 import { render, screen } from '@testing-library/react';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -56,11 +62,18 @@ describe('a local proxy is warned about everywhere it can be typed', () => {
   it('CRITICAL every view that takes a proxy host renders the warning', () => {
     const entryPoints = sourceFiles().filter(([, src]) => takesAProxyHost(src));
     // Control: if the detector matched nothing, the arm below would pass on an
-    // empty set and this whole test would certify the opposite of its name.
+    // empty set and this whole test would certify the opposite of its name. Since
+    // T-21 the floor is 1 (the single canonical form), and it MUST be that form —
+    // a detector that stopped matching it (e.g. the input markup changed shape)
+    // would fail here rather than pass on an empty set.
     expect(
       entryPoints.length,
       'the host-input detector found no entry points',
-    ).toBeGreaterThanOrEqual(3);
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      entryPoints.map(([path]) => path),
+      'the canonical ProxyForm must be a detected entry point',
+    ).toContain('views/ProxiesView.tsx');
     // …and it DISCRIMINATES, rather than matching every file with a `.host` in it:
     // a read-only host row is not somewhere a customer can type a bad value.
     expect(

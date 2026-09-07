@@ -176,6 +176,75 @@ describe('agent-session-control transport', () => {
     });
   });
 
+  // T-26 (owner #12) — the live exit-identity fields on capability_report.
+  it('getAgentSession parses the T-26 exit-identity fields when the report carries them', async () => {
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'active',
+        capability_report: {
+          manual_input_available: true,
+          streaming_state: 'live',
+          egress_state: 'live',
+          exit_ip: '203.0.113.7',
+          exit_country: 'US',
+          exit_timezone: 'America/New_York',
+          // A non-string and an empty string are dropped; real IPs are kept.
+          webrtc_candidate_ips: ['203.0.113.7', 42, '', '198.51.100.4'],
+          observed_at: '2026-09-07T12:00:00.000Z',
+        },
+      }),
+    );
+    expect((await getAgentSession('agt_1')).capabilityReport).toMatchObject({
+      exit_ip: '203.0.113.7',
+      exit_country: 'US',
+      exit_timezone: 'America/New_York',
+      webrtc_candidate_ips: ['203.0.113.7', '198.51.100.4'],
+      observed_at: '2026-09-07T12:00:00.000Z',
+    });
+  });
+
+  it('getAgentSession omits the exit-identity fields when absent or wrong-typed (vacuity)', async () => {
+    // Vacuity 1 — no capability_report at all → no report (so no exit fields).
+    mockFetch.mockResolvedValue(ok({ mode: 'manual', status: 'active' }));
+    expect((await getAgentSession('agt_1')).capabilityReport).toBeUndefined();
+
+    // Vacuity 2 — a report carrying ONLY the h3 signal: h3 is present, and every
+    // exit field is absent (the live state today, until A3 emits them). This is
+    // the control that proves the "parses exit_ip" arm above is not vacuous — a
+    // report without exit_ip must NOT grow one.
+    mockFetch.mockResolvedValue(
+      ok({ mode: 'manual', status: 'active', capability_report: { h3_connection_observed: true } }),
+    );
+    const h3Only = (await getAgentSession('agt_1')).capabilityReport;
+    expect(h3Only?.h3_connection_observed).toBe(true);
+    expect(h3Only?.exit_ip).toBeUndefined();
+    expect(h3Only?.exit_country).toBeUndefined();
+    expect(h3Only?.exit_timezone).toBeUndefined();
+    expect(h3Only?.webrtc_candidate_ips).toBeUndefined();
+    expect(h3Only?.observed_at).toBeUndefined();
+
+    // Vacuity 3 — present but wrong-typed exit fields degrade to omitted, never
+    // coerced (a number IP / non-array webrtc / empty exit_ip are dropped).
+    mockFetch.mockResolvedValue(
+      ok({
+        mode: 'manual',
+        status: 'active',
+        capability_report: {
+          exit_ip: '',
+          exit_country: 7,
+          webrtc_candidate_ips: 'not-an-array',
+          observed_at: null,
+        },
+      }),
+    );
+    const bad = (await getAgentSession('agt_1')).capabilityReport;
+    expect(bad?.exit_ip).toBeUndefined();
+    expect(bad?.exit_country).toBeUndefined();
+    expect(bad?.webrtc_candidate_ips).toBeUndefined();
+    expect(bad?.observed_at).toBeUndefined();
+  });
+
   it('getAgentSession preserves a validated harness error and ignores malformed customer state', async () => {
     mockFetch.mockResolvedValue(
       ok({

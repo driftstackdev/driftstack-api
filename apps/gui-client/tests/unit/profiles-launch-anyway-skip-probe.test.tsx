@@ -12,6 +12,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
+import type * as ProfilesMetaModule from '../../src/lib/profiles-meta';
 
 const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'agt_1', livekit: LIVEKIT }),
@@ -224,6 +225,21 @@ vi.mock('../../src/lib/open-simulator', () => ({
   openSimulatorWindow: vi.fn(() => Promise.resolve({ opened: true })),
 }));
 
+// T-26 (owner #12) — inject a controlled per-profile meta map so a launch can
+// exercise the create-body wiring `...stopOnExitIpChangeCreateFields(profilesMeta[profile.id])`.
+// Spread the REAL module (folderList/aggregateTags/seed/persist stay pure + real);
+// ONLY loadProfilesMeta is overridden — a hand-listed factory would silently omit
+// every export ProfilesView added later. The default {} matches the real jsdom
+// degradation (no Tauri store → loadProfilesMeta catches and returns {}), so the
+// skip_proxy_probe arms above are unaffected.
+const { metaState } = vi.hoisted(
+  (): { metaState: { map: ProfilesMetaModule.ProfilesMetaMap } } => ({ metaState: { map: {} } }),
+);
+vi.mock('../../src/lib/profiles-meta', async (importOriginal) => ({
+  ...(await importOriginal<typeof ProfilesMetaModule>()),
+  loadProfilesMeta: () => Promise.resolve(metaState.map),
+}));
+
 const { ProfilesView } = await import('../../src/views/ProfilesView');
 
 describe('ProfilesView — "Launch anyway" sends skip_proxy_probe', () => {
@@ -305,5 +321,69 @@ describe('ProfilesView — "Launch anyway" sends skip_proxy_probe', () => {
     const body = agentCreate.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(body.proxy_id).toBe('aprx_1');
     expect('skip_proxy_probe' in body).toBe(false);
+  });
+});
+
+// T-26 (owner #12) — the launch-path wiring that threads a profile's opt-in
+// into the create body. Sibling of skip_proxy_probe above: `stop_on_exit_ip_change`
+// is spread right beside it in createBody. The pure fragment builder is unit-tested
+// in the-simulator-surfaces-the-live-exit-ip-and-webrtc-leak.test.tsx; THIS asserts
+// the ONE production call site actually reads the launched profile's meta and rides
+// the flag onto agentSessions.create — the wiring the pure test cannot see.
+describe('ProfilesView — launch threads the T-26 stop_on_exit_ip_change flag', () => {
+  beforeEach(() => {
+    agentCreate.mockClear();
+    confirmMock.mockClear();
+    confirmMock.mockResolvedValue(true);
+    testProxyMock.mockReset();
+    testProxyMock.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 12,
+      message: 'Working — CONNECT succeeded.',
+    });
+    // Healthy cache → a clean launch with no "Launch anyway?" override, so the
+    // create body is the plain proxied one (no skip_proxy_probe to confound).
+    cachedReachable = true;
+    metaState.map = {};
+  });
+
+  it('a profile opted into "stop on exit IP change" → create body carries stop_on_exit_ip_change:true', async () => {
+    // The launched profile (prof_1) opted in.
+    metaState.map = {
+      prof_1: { folder: '', tags: [], note: '', icon: '', stopOnExitIpChange: true },
+    };
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+    const body = agentCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.proxy_id).toBe('aprx_1');
+    expect(
+      body.stop_on_exit_ip_change,
+      'the opt-in did not ride the create body — the meta lookup is severed from createBody',
+    ).toBe(true);
+  });
+
+  it('the flag is keyed to the LAUNCHED profile: an opted-in DECOY (a different id) does NOT leak onto prof_1 (vacuity + wrong-key guard)', async () => {
+    // prof_1 (the only profile in the list, the one launched) is NOT opted in;
+    // a DIFFERENT profile's meta IS. Reading the launched profile's own meta
+    // yields no flag; a regression that read the wrong entry (a fixed/other id,
+    // or Object.values[0]) would land on the opted-in decoy and wrongly emit it.
+    metaState.map = {
+      prof_1: { folder: '', tags: [], note: '', icon: '' },
+      prof_decoy: { folder: '', tags: [], note: '', icon: '', stopOnExitIpChange: true },
+    };
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+    await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+    const body = agentCreate.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(body.proxy_id).toBe('aprx_1');
+    expect(
+      'stop_on_exit_ip_change' in body,
+      'the flag rode a launch of a profile that never opted in — the lookup read the wrong meta entry',
+    ).toBe(false);
   });
 });

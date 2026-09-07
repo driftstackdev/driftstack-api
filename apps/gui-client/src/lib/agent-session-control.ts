@@ -77,6 +77,22 @@ export interface AgentSessionCapabilityReport {
   /** The report's own `timestamp` (server time, epoch ms) when parseable —
    *  the stamp a verdict derived from this report carries. */
   reported_at?: number;
+  /** T-26 (owner #12) — the LIVE exit-identity fields the harness's
+   *  capabilityReport carries and the server projects onto `capability_report`
+   *  (exit_ip / exit_country / exit_timezone / webrtc_candidate_ips /
+   *  observed_at). Each is present ONLY when the report carried a well-typed
+   *  value: they are INERT until the harness (A3) emits them, so an absent
+   *  field must render as "measuring…", never a crash or a false leak claim.
+   *  Parsed defensively — wrong type / empty → omitted, never coerced. */
+  exit_ip?: string;
+  exit_country?: string;
+  exit_timezone?: string;
+  /** Candidate IPs the device's WebRTC stack would expose; any that differs
+   *  from `exit_ip` is a leak tell the cockpit marks. Non-string entries are
+   *  dropped, so the array is always `string[]` when present. */
+  webrtc_candidate_ips?: string[];
+  /** The report's own exit-measurement stamp (ISO string) when it carried one. */
+  observed_at?: string;
 }
 
 export interface AgentSessionErrorEvent {
@@ -177,6 +193,13 @@ function isTerminalSession(body: ApiSession): boolean {
   return false;
 }
 
+/** A capability-report string field when it is present, a string, and non-empty;
+ *  undefined otherwise. Kept tiny so every T-26 exit-identity string parses by
+ *  the same defensive rule (wrong type / empty → omitted, never throws). */
+function optionalReportString(v: unknown): string | undefined {
+  return typeof v === 'string' && v.length > 0 ? v : undefined;
+}
+
 function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | undefined {
   const value = body.capability_report;
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -187,6 +210,18 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   // the report carried them, so a report without them is byte-identical to
   // before and an absent signal never collapses into a false negative.
   const h3 = parseH3Observation(report);
+  // T-26 (owner #12) — the live exit-identity fields ride the SAME envelope and
+  // follow the same additive rule as h3: a key is present ONLY when the report
+  // carried a well-typed value, so a report without them stays byte-identical to
+  // before, an absent field renders as "measuring…", and a wrong-typed one is
+  // dropped rather than coerced into a false leak claim.
+  const exitIp = optionalReportString(report.exit_ip);
+  const exitCountry = optionalReportString(report.exit_country);
+  const exitTimezone = optionalReportString(report.exit_timezone);
+  const observedAt = optionalReportString(report.observed_at);
+  const webrtcIps = Array.isArray(report.webrtc_candidate_ips)
+    ? report.webrtc_candidate_ips.filter((v): v is string => typeof v === 'string' && v.length > 0)
+    : undefined;
   return {
     manual_input_available:
       typeof report.manual_input_available === 'boolean' ? report.manual_input_available : null,
@@ -201,6 +236,11 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
     ...(h3 !== null ? { h3_connection_observed: true as const } : {}),
     ...(h3?.count !== undefined ? { h3_connection_count: h3.count } : {}),
     ...(h3?.at !== undefined ? { reported_at: h3.at } : {}),
+    ...(exitIp !== undefined ? { exit_ip: exitIp } : {}),
+    ...(exitCountry !== undefined ? { exit_country: exitCountry } : {}),
+    ...(exitTimezone !== undefined ? { exit_timezone: exitTimezone } : {}),
+    ...(webrtcIps !== undefined ? { webrtc_candidate_ips: webrtcIps } : {}),
+    ...(observedAt !== undefined ? { observed_at: observedAt } : {}),
   };
 }
 

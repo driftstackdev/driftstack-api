@@ -141,14 +141,20 @@ async function openModalAndFill(): Promise<void> {
   // Name (Identity tab is default).
   const nameInput = await screen.findByPlaceholderText('my-recurring-workflow');
   fireEvent.change(nameInput, { target: { value: 'Retry Profile' } });
-  // Proxy tab → inline create-new SOCKS5 (the default when no saved proxies).
+  // Proxy tab → inline create-new (the default when no saved proxies) renders the
+  // canonical ProxyForm. T-21 — the proxy is created by the form's OWN "Add proxy"
+  // button, up front, and then selected as the profile's proxy; the profile submit
+  // no longer mints. So a failed-then-retried profile create cannot re-mint it.
   fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
-  fireEvent.change(await screen.findByPlaceholderText(/Label \(e\.g\./i), {
+  fireEvent.change(await screen.findByPlaceholderText('prod-eu-west'), {
     target: { value: 'inline-eu' },
   });
-  fireEvent.change(await screen.findByPlaceholderText(/Host \(e\.g\. proxy\.example\.com\)/), {
+  fireEvent.change(await screen.findByPlaceholderText('proxy.example.com'), {
     target: { value: 'proxy.example.com' },
   });
+  fireEvent.click(await screen.findByRole('button', { name: 'Add proxy' }));
+  // The proxy is created exactly once, here, before any profile create attempt.
+  await waitFor(() => expect(addProxy).toHaveBeenCalledTimes(1));
 }
 
 describe('create-profile modal — inline proxy is not duplicated on a failed-then-retried create', () => {
@@ -245,9 +251,10 @@ describe('create-profile modal — unsaved draft close guard', () => {
     renderWithConfirm();
     await openCreate();
     fireEvent.click(await screen.findByRole('tab', { name: '🌍 Proxy' }));
-    // Zero saved proxies auto-selects the inline create-new path. Waiting for
-    // its controls proves hydration completed before we test the dirty baseline.
-    await screen.findByPlaceholderText(/Label \(e\.g\./i);
+    // Zero saved proxies auto-selects the inline create-new path (the canonical
+    // ProxyForm). Waiting for its label field proves hydration completed before
+    // we test the dirty baseline.
+    await screen.findByPlaceholderText('prod-eu-west');
     const formDialog = screen.getByRole('dialog', { name: 'New profile' });
     fireEvent.click(formDialog);
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New profile' })).toBeNull());
