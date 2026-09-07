@@ -51,6 +51,7 @@ import {
   SIMULATOR_FLIGHT_STORE_FILE,
 } from '../lib/main-thread-stall-detector';
 import { record } from '../lib/log-buffer';
+import { applyInputFocusFromPageState, type KeyboardFocusActuator } from '../lib/keyboard-focus';
 import {
   rememberDiscardedActivation,
   type DiscardedActivation,
@@ -102,7 +103,9 @@ import { pointerToViewport } from '../lib/livekit-input-capture';
 import {
   URL_BAR_INFLIGHT_ARM_MS,
   URL_BAR_INFLIGHT_CEILING_MS,
+  judgePendingNavigationFrame,
   pageStateResolvesInFlight,
+  type PendingNavigation,
 } from '../lib/url-bar-inflight';
 import { pageErrorCopy, pageErrorInfoEqual, type PageErrorInfo } from '../lib/page-error-copy';
 import { formatSessionDiagnostics } from '../lib/session-diagnostics';
@@ -388,16 +391,6 @@ const SWITCH_AFFORDANCE_TIMEOUT_MS = 6000;
 // product needs (V-2153 widened it and the page-state error-grace test caught the
 // regression). The lagging-frame window that V-2153 actually needed is
 // SWITCH_LAGGING_FRAME_GRACE_MS below.
-/**
- * When a navigation stops looking normal, and when it stops looking survivable.
- *
- * Deliberately generous: the fleet is remote and a real page on a real device
- * over a real proxy is legitimately slow sometimes. These exist to distinguish
- * a slow load from a dead one for the CUSTOMER, not to time anything out — the
- * navigation is never cancelled, and a page that arrives at 90s still arrives.
- */
-const NAV_SLOW_MS = 8_000;
-const NAV_STALLED_MS = 25_000;
 
 const PAGE_STATE_GRACE_MS = 2500;
 
@@ -435,6 +428,12 @@ const PAGE_LOAD_FALLBACK_MS = 45_000;
 // non-sliding cycle as the deadline: repeated `loading` frames must not keep
 // pushing it back.
 const PAGE_LOAD_SLOW_HINT_MS = 9_000;
+// T-15 — the SECOND rung of the same local ladder. Two independent "still loading"
+// notices used to stack on a slow proxy: the browser bar's own elapsed-time pill
+// (8s/25s) and this advisory (9s/45s). The owner asked for one. The bar's pill is
+// gone; its 25s escalation ("it may not arrive on its own" + a retry) lives here so
+// the ladder reads 9s → 25s → 45s from ONE element, on the same target-owned clock.
+const PAGE_LOAD_STALLED_HINT_MS = 25_000;
 // flip true when A3's navigateHistory handler deploys — bus W2870
 const BACK_FORWARD_ENABLED = true; // A3 navigateHistory handler deployed (bus W2872; A3 01a5d48f1)
 // Finding #6 — throttle for the unrecognized-data-frame breadcrumb (below). One warn at
@@ -1693,24 +1692,12 @@ function BrowserBar({
   // quite reaching it), snap to 100% on completion, then fade out.
   const [barProgress, setBarProgress] = useState(0);
   const [barVisible, setBarVisible] = useState(false);
-  /**
-   * How long this navigation has been running, bucketed for the customer.
-   *
-   * ⛔ Owner-reported TWICE: "it loads, the loading bar, and just suddenly
-   * stops. No error code nothing, it just stays on the old page… after like
-   * 1/2 minutes it jumped to this url. But we still need better handle this."
-   *
-   * The bar trickles toward 90% and DECELERATES, so a slow load looks exactly
-   * like a stopped one — the animation is asymptotic and never finishes, and
-   * nothing else on screen changes. The customer cannot tell "still working"
-   * from "gave up", because the UI renders them identically.
-   *
-   * This does not make the page load faster and does not need the harness. It
-   * makes the wait legible: at SLOW we say it is taking longer than usual, at
-   * STALLED we say it may not arrive and offer the reload the customer would
-   * otherwise reach for blindly.
-   */
-  const [navAge, setNavAge] = useState<'normal' | 'slow' | 'stalled'>('normal');
+  // T-15 — the bar deliberately carries NO "still loading" notice of its own. It used
+  // to bucket elapsed load time (8s / 25s) into a pill under the address field, while
+  // the page-load advisory over the video ran its own clock (9s / 45s); on a slow
+  // proxy both showed at once and the owner asked for one. The advisory is the
+  // superset (it also carries the box's own timeout-stall frame), so the escalation
+  // lives there now — see PAGE_LOAD_SLOW_HINT_MS / PAGE_LOAD_STALLED_HINT_MS.
   const trickleRef = useRef<number | null>(null);
   const hideRef = useRef<number | null>(null);
   const loadingActiveRef = useRef(false);
@@ -1733,23 +1720,14 @@ function BrowserBar({
         // progress updates cannot make the bar jump mid-flight.
         setBarProgress(Math.max(0.08, Math.min(loadProgressRef.current ?? 0, 0.15)));
       }
-      if (startingNewLoad) setNavAge('normal');
       if (trickleRef.current === null) {
-        const startedAt = Date.now();
         trickleRef.current = window.setInterval(() => {
           setBarProgress((p) => (p >= 0.9 ? p : p + (0.9 - p) * 0.12));
-          const elapsed = Date.now() - startedAt;
-          // Thresholds, not a spinner: a page that has been loading for 8s is
-          // unusual, and one at 25s is very likely not coming without help.
-          setNavAge(
-            elapsed >= NAV_STALLED_MS ? 'stalled' : elapsed >= NAV_SLOW_MS ? 'slow' : 'normal',
-          );
         }, 400);
       }
     } else if (loadingActiveRef.current) {
       // Was loading, now done → snap to 100%, then fade the bar out.
       loadingActiveRef.current = false;
-      setNavAge('normal');
       if (trickleRef.current !== null) {
         window.clearInterval(trickleRef.current);
         trickleRef.current = null;
@@ -2179,35 +2157,6 @@ function BrowserBar({
               opacity: barProgress >= 1 ? 0 : 1,
             }}
           />
-        </div>
-      )}
-      {/* ⛔ THE BAR ALONE CANNOT SAY "STILL WORKING". It decelerates toward 90%
-          and never arrives, so a slow load and a dead one render identically —
-          which is exactly what the owner reported twice: "the loading bar just
-          suddenly stops. No error code nothing." This says which one it is.
-          It never cancels the navigation: a page that lands at 90s still lands,
-          and this disappears when it does. */}
-      {barVisible && navAge !== 'normal' && (
-        <div
-          data-component="simulator-slow-nav"
-          data-nav-age={navAge}
-          className="pointer-events-auto absolute bottom-2 left-1/2 z-20 -translate-x-1/2 rounded-full border border-surface-divider bg-surface-raised/95 px-3 py-1.5 text-2xs text-ink-secondary shadow-sm"
-        >
-          {navAge === 'slow' ? (
-            'Still loading — this page is taking longer than usual.'
-          ) : (
-            <span className="flex items-center gap-2">
-              <span className="text-ink-primary">Still loading. It may not arrive on its own.</span>
-              <button
-                type="button"
-                data-action="retry-slow-nav"
-                onClick={reload}
-                className="rounded-full bg-accent/15 px-2 py-0.5 font-semibold text-accent transition-colors hover:bg-accent/25"
-              >
-                Reload
-              </button>
-            </span>
-          )}
         </div>
       )}
       {/* T-10 — the box reported the page did not load. Say so on the bar, in plain
@@ -4085,6 +4034,24 @@ export function SimulatorWindow(): JSX.Element {
   const keyboardOverlay = keyboardVisible;
   const keyboardOverlayRef = useRef(keyboardOverlay);
   keyboardOverlayRef.current = keyboardOverlay;
+  // T-25 — the single keyboard actuator both page-state transports (the LiveKit
+  // data-channel handler and the ~2s CP poll) drive through the shared
+  // applyInputFocusFromPageState helper, so an auto-show/hide can never behave
+  // differently depending on which transport delivered the focus frame. Showing
+  // always overlays (never resizes the window); setVisible keeps the live ref
+  // mirrors in step with the React state so a following frame reads the new value
+  // synchronously. Stable identity — it only closes over refs + the state setter.
+  const keyboardFocusActuatorRef = useRef<KeyboardFocusActuator>({
+    getSuppressedTab: () => keyboardFocusSuppressedTabRef.current,
+    setSuppressedTab: (tab) => {
+      keyboardFocusSuppressedTabRef.current = tab;
+    },
+    setVisible: (visible) => {
+      keyboardVisibleRef.current = visible;
+      keyboardOverlayRef.current = visible;
+      setKeyboardVisible(visible);
+    },
+  });
   // The keyboard contributes KEYBOARD_H to `chrome` ONLY when it docks BELOW the video
   // (not in overlay mode). One helper so every sizing site agrees — a site that still
   // subtracted KEYBOARD_H after an overlay clamp would re-narrow the window.
@@ -4746,9 +4713,17 @@ export function SimulatorWindow(): JSX.Element {
   // and per A3's contract a later 'loaded' clears it while an 'errored' upgrades it to the
   // hard overlay. The timeout `error.kind` is what distinguishes it from the freeze stall
   // (which carries no error), so the two don't collide on the shared 'stalled' state.
-  const [pageLoadStalled, setPageLoadStalled] = useState<{ url: string; message: string } | null>(
-    null,
-  );
+  // T-15 — `local: true` marks a rung of the GUI's own elapsed-time ladder (9s / 25s,
+  // armed by armLoadWatchdog) as opposed to the box's timeout-stall frame. The
+  // distinction matters in exactly one place: a repeated same-target `loading` frame
+  // supersedes the BOX's advisory (its contract) but must not erase the local ladder —
+  // on a proxy slow enough that the box's own `loading` frame lands after 9s, that
+  // frame would otherwise blank the notice the owner is waiting on.
+  const [pageLoadStalled, setPageLoadStalled] = useState<{
+    url: string;
+    message: string;
+    local?: true;
+  } | null>(null);
   // Client fallback when the box's ~40s timeout-stall frame itself is dropped.
   // Kept separate from pageLoadStalled so repeated same-target `loading` frames
   // cannot erase it; both feed the same gentle Retry banner below.
@@ -4789,6 +4764,12 @@ export function SimulatorWindow(): JSX.Element {
   // the founder's stale "PAGE FAILED TO LOAD" over a working page AND the inverse
   // (a stale 'loaded' from the old page suppressing a real new-page failure — audit #2).
   const currentNavTargetRef = useRef<string>('');
+  // T-23 — the navigation the GUI itself issued and the box has not yet confirmed.
+  // While set, a poll/data frame for that tab carrying the PRE-navigation url is held
+  // (see judgePendingNavigationFrame): the typed target must not be written back to
+  // the old address by a frame describing the page the box is still on. A ref, not
+  // state: the data-channel + poll callbacks read it synchronously.
+  const pendingNavRef = useRef<PendingNavigation | null>(null);
   // Browser-style page TABS (doc-150 item 4; locked A2↔A3 contract). The GUI owns the
   // tab model; each tab is a page the harness keeps a renderer for, and `activeTabId`
   // is the one currently published into the video. We seed exactly one tab on mount so
@@ -4899,6 +4880,8 @@ export function SimulatorWindow(): JSX.Element {
   }>({ timer: null, target: '', expired: false });
   /** Timer for the local slow-load hint; cleared on the same paths as the deadline. */
   const slowHintRef = useRef<number | null>(null);
+  /** T-15 — timer for the ladder's 25s rung; same ownership + clearing as slowHintRef. */
+  const stalledHintRef = useRef<number | null>(null);
   // Timestamp of the last operator navigate. The ~2s page-state poll can fire before
   // the box has seen a just-submitted navigate and would read the PREVIOUS page as
   // 'loaded' → kill the optimistic spinner instantly (audit wqhvarsb9). For a short
@@ -5219,7 +5202,15 @@ export function SimulatorWindow(): JSX.Element {
       window.clearTimeout(slowHintRef.current);
       slowHintRef.current = null;
     }
+    if (stalledHintRef.current !== null) {
+      window.clearTimeout(stalledHintRef.current);
+      stalledHintRef.current = null;
+    }
     loadWatchdogRef.current = { timer: null, target: '', expired: false };
+    // T-15 — the local ladder belongs to the cycle being torn down (a changed target
+    // or an operator action owns a fresh one); a box-sourced advisory is left to the
+    // frame contract that clears it.
+    setPageLoadStalled((prev) => (prev?.local === true ? null : prev));
   };
   const clearLoadWatchdog = (): void => {
     cancelLoadWatchdog();
@@ -5256,10 +5247,23 @@ export function SimulatorWindow(): JSX.Element {
           : {
               url: '',
               message: 'Still loading — this proxy is slow. The page is on its way.',
+              local: true,
             },
       );
     }, PAGE_LOAD_SLOW_HINT_MS);
     slowHintRef.current = hint;
+    // T-15 — the 25s rung: the page is very likely not coming without help, so say
+    // so and lean on the banner's Retry. Replaces the local 9s copy only; a box-sourced
+    // advisory (it has the real url and its own message) is left alone.
+    const escalate = window.setTimeout(() => {
+      if (loadWatchdogRef.current.target !== target) return;
+      setPageLoadStalled((prev) =>
+        prev !== null && prev.local !== true
+          ? prev
+          : { url: '', message: 'Still loading. It may not arrive on its own.', local: true },
+      );
+    }, PAGE_LOAD_STALLED_HINT_MS);
+    stalledHintRef.current = escalate;
 
     let timer = 0;
     timer = window.setTimeout(() => {
@@ -5267,6 +5271,9 @@ export function SimulatorWindow(): JSX.Element {
       if (owned.timer !== timer || owned.target !== target) return;
       loadWatchdogRef.current = { timer: null, target, expired: true };
       setPageLoading(false);
+      // T-15 — the deadline is the ladder's last rung: retire the local copy so the
+      // fallback below is what shows (a box-sourced advisory still outranks it).
+      setPageLoadStalled((prev) => (prev?.local === true ? null : prev));
       setPageLoadTimeout({
         // `target` is normalized for identity matching (and intentionally lossy:
         // fragments removed, case folded). Retry falls back to liveUrl so the
@@ -5357,6 +5364,9 @@ export function SimulatorWindow(): JSX.Element {
     // #135 — untrack the nav target on a switch; the new tab's next box 'loading' frame
     // sets it (until then '' ⇒ don't over-suppress its first real failure).
     currentNavTargetRef.current = '';
+    // T-23 — a switch supersedes a typed navigation: the frames that follow describe
+    // the switched-to tab, and holding them would pin the wrong url.
+    pendingNavRef.current = null;
     clearLoadWatchdog();
   }, []);
   useEffect(() => {
@@ -5734,47 +5744,47 @@ export function SimulatorWindow(): JSX.Element {
             }
           }
         }
-        // #6 — focus is renderer/tab-scoped. A recognised ACTIVE tab may update the
-        // keyboard immediately (including during a switch); a recognised BACKGROUND
+        // #6 / T-25 — focus is renderer/tab-scoped. A recognised ACTIVE tab may update
+        // the keyboard immediately (including during a switch); a recognised BACKGROUND
         // tab and an unknown non-empty id are not authoritative for foreground chrome.
         // Older boxes omit tabId, so retain their signal only outside the short switch
         // grace, after late focus from the page we just left can no longer reopen the
         // keyboard. Frames without inputFocused remain no-ops, and AI mode stays gated
-        // because that focus belongs to the agent rather than the founder.
-        if (
-          typeof msg.inputFocused === 'boolean' &&
-          manualInputAuthorityCheckRef.current(
-            listenerSessionId,
-            listenerRoom,
-            listenerAuthorityEpoch,
-          )
-        ) {
-          const isLegacyTablessFrame = msg.tabId === undefined || msg.tabId === null;
-          const inTablessSwitchGrace =
-            isLegacyTablessFrame && Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS;
-          const focusIsAuthoritative =
-            pageStateTargetId === activeTabIdRef.current && !inTablessSwitchGrace;
-          if (focusIsAuthoritative) {
-            if (msg.inputFocused === false) {
-              if (keyboardFocusSuppressedTabRef.current === activeTabIdRef.current) {
-                keyboardFocusSuppressedTabRef.current = null;
-              }
-              keyboardVisibleRef.current = false;
-              keyboardOverlayRef.current = false;
-              setKeyboardVisible(false);
-            } else if (keyboardFocusSuppressedTabRef.current !== activeTabIdRef.current) {
-              keyboardVisibleRef.current = true;
-              keyboardOverlayRef.current = true;
-              setKeyboardVisible(true);
-            }
-          }
-        }
+        // (the authority check requires confirmed manual mode) because that focus belongs
+        // to the agent rather than the founder. The SAME rule drives the CP poll path
+        // below, via the shared helper, so the two transports cannot drift.
+        applyInputFocusFromPageState(
+          { inputFocused: msg.inputFocused, tabId: msg.tabId },
+          {
+            targetId: pageStateTargetId,
+            activeTabId: activeTabIdRef.current,
+            hasManualAuthority: manualInputAuthorityCheckRef.current(
+              listenerSessionId,
+              listenerRoom,
+              listenerAuthorityEpoch,
+            ),
+            withinSwitchGrace: Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS,
+          },
+          keyboardFocusActuatorRef.current,
+        );
         // Box is the ONLY writer of a tab's stored url/title (live-state accuracy
         // refactor). Route a recognised tabId exactly, retain the active fallback only
         // for legacy null/omitted tags, and reject unknown ownership above. A title-only
         // frame (no url) still refreshes the label. The derived effect re-mirrors the
         // active tab into liveUrl/liveTitle, so the address bar + window title follow
         // automatically when the written tab is the active one.
+        // T-23 — while a GUI-issued navigation is pending on this tab, a frame carrying
+        // the PRE-navigation url describes the page the box is still on, not where it
+        // was sent: hold its url/title (the switch bookkeeping inside still runs) and
+        // keep the load chrome below from reading it as the new page having finished.
+        const pendingVerdict = judgePendingNavigationFrame(
+          pendingNavRef.current,
+          { tabId: pageStateTargetId, url: msg.url, state: msg.state },
+          Date.now(),
+          normalizeNavUrl,
+        );
+        if (pendingVerdict === 'resolve') pendingNavRef.current = null;
+        const heldByPendingNav = pendingVerdict === 'hold';
         if (
           (typeof msg.url === 'string' && msg.url !== '') ||
           (typeof msg.title === 'string' && msg.title !== '')
@@ -5782,7 +5792,12 @@ export function SimulatorWindow(): JSX.Element {
           // Data-channel page_state is authoritative for the switch — it's the box's
           // live push for the page it's actually showing.
           writeTabPageState(
-            { tabId: msg.tabId, url: msg.url, title: msg.title, state: msg.state },
+            {
+              tabId: msg.tabId,
+              url: heldByPendingNav ? null : msg.url,
+              title: heldByPendingNav ? null : msg.title,
+              state: msg.state,
+            },
             true,
             listenerAuthorityEpoch,
           );
@@ -5890,7 +5905,10 @@ export function SimulatorWindow(): JSX.Element {
               prev?.url === nextStall.url && prev.message === nextStall.message ? prev : nextStall,
             );
           } else {
-            setPageLoadStalled(null);
+            // T-15 — the box's advisory yields to any other harness state (its
+            // contract). The GUI's own ladder does not: it is retired by the watchdog
+            // (page arrived / target changed / deadline), never by a frame.
+            setPageLoadStalled((prev) => (prev?.local === true ? prev : null));
           }
         }
         // #135 — the box committing to a 'loading' of a url IS the current nav target
@@ -5902,7 +5920,8 @@ export function SimulatorWindow(): JSX.Element {
           msg.state === 'loading' &&
           typeof msg.url === 'string' &&
           msg.url.length > 0 &&
-          !isNewTabLoadError(msg.url)
+          !isNewTabLoadError(msg.url) &&
+          !heldByPendingNav // T-23 — a held frame is the OLD page; the typed target stays
         ) {
           const norm = normalizeNavUrl(msg.url);
           if (norm !== currentNavTargetRef.current) {
@@ -5939,7 +5958,9 @@ export function SimulatorWindow(): JSX.Element {
           // fast new-page load, which SHOULD clear the spinner immediately). loading=true
           // always applies (escalate), and past the grace window we always apply.
           const staleClear =
-            !loading && !navTargetOk && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
+            !loading &&
+            !navTargetOk &&
+            (heldByPendingNav || Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS);
           if (!staleClear) {
             if (loading) {
               setPageLoading(armLoadWatchdog());
@@ -6054,6 +6075,18 @@ export function SimulatorWindow(): JSX.Element {
             Date.now() - lastSwitchAtRef.current < PAGE_STATE_GRACE_MS ||
             Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS;
           const suppress = !hasTabId && inGrace;
+          // T-23 — the poll is the frame that actually reverted the bar: current nodes
+          // stamp tabId, so the grace suppression above never applied, and the store
+          // keeps reporting the OLD page until the new load commits. Hold that url
+          // while the typed navigation is pending (mirrors the data-channel path).
+          const pendingVerdict = judgePendingNavigationFrame(
+            pendingNavRef.current,
+            { tabId: pollTargetId, url: ps.url, state: ps.state },
+            Date.now(),
+            normalizeNavUrl,
+          );
+          if (pendingVerdict === 'resolve') pendingNavRef.current = null;
+          const heldByPendingNav = pendingVerdict === 'hold';
           // Authoritative for the SWITCH iff it routes by tabId OR it arrived outside
           // the post-switch grace window — a tabId-less in-grace poll still carries the
           // PRIOR tab's page, so it must NOT resolve the switch (keep the retry net up).
@@ -6061,12 +6094,33 @@ export function SimulatorWindow(): JSX.Element {
           writeTabPageState(
             {
               tabId: ps.tabId,
-              url: suppress ? null : ps.url,
-              title: suppress ? null : ps.title,
+              url: suppress || heldByPendingNav ? null : ps.url,
+              title: suppress || heldByPendingNav ? null : ps.title,
               state: ps.state,
             },
             hasTabId || !inSwitchGrace,
             pollAuthorityEpoch,
+          );
+          // T-25 — apply the box's editable-input focus from the POLL with EXACTLY the
+          // data-channel handler's rules (same tab-target check, same tabId-less switch
+          // grace, same manual-dismissal suppression, same AI-mode gate via the authority
+          // check), through the shared helper so the two paths cannot drift. This is the
+          // path that keeps the keyboard following focus after a LiveKit data-channel
+          // loss; a poll frame without input_focused is a no-op. Inert until the harness
+          // emits inputFocused on the CP-bound pageState frame (see the schema comment).
+          applyInputFocusFromPageState(
+            { inputFocused: ps.input_focused, tabId: ps.tabId },
+            {
+              targetId: pollTargetId,
+              activeTabId: activeTabIdRef.current,
+              hasManualAuthority: manualInputAuthorityCheckRef.current(
+                pollSessionId,
+                pollRoom,
+                pollAuthorityEpoch,
+              ),
+              withinSwitchGrace: inSwitchGrace,
+            },
+            keyboardFocusActuatorRef.current,
           );
           // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
           // page chrome below (freeze badge / error overlay / load-stall advisory / loading
@@ -6100,7 +6154,8 @@ export function SimulatorWindow(): JSX.Element {
             ps.state === 'loading' &&
             typeof ps.url === 'string' &&
             ps.url.length > 0 &&
-            !isNewTabLoadError(ps.url)
+            !isNewTabLoadError(ps.url) &&
+            !heldByPendingNav // T-23 — a held frame is the OLD page; the typed target stays
           ) {
             const pnorm = normalizeNavUrl(ps.url);
             if (pnorm !== currentNavTargetRef.current) {
@@ -6163,7 +6218,13 @@ export function SimulatorWindow(): JSX.Element {
           // navigate yet) kill the optimistic spinner. Within the grace window after
           // a navigate, only ESCALATE to loading; the target-owned fallback still
           // bounds it and turns a dropped terminal frame into an explicit Retry.
-          if (!loading && Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS) return;
+          // T-23 — a held frame (the OLD page, typed navigation pending) must not turn
+          // the spinner off either; the ceiling bounds the hold as it bounds the wait.
+          if (
+            !loading &&
+            (heldByPendingNav || Date.now() - lastNavAtRef.current < PAGE_STATE_GRACE_MS)
+          )
+            return;
           if (loading) {
             setPageLoading(armLoadWatchdog());
           } else {
@@ -7090,6 +7151,7 @@ export function SimulatorWindow(): JSX.Element {
     // would be SUPPRESSED as a "late sub-resource error" → reads as a blank success.
     pageReachedLoadedRef.current = false;
     currentNavTargetRef.current = ''; // #135 — untrack; the new session's first box frame sets it
+    pendingNavRef.current = null; // T-23 — a prior session's typed navigation holds nothing here
     // Drop the prior session's cookies/downloads so the new session doesn't briefly
     // render the OLD session's jar (the retain-refs would otherwise hold them through
     // the new session's first transient tick).
@@ -7685,6 +7747,24 @@ export function SimulatorWindow(): JSX.Element {
         // (it carries the PRIOR tab's page); mirrors the poll path so a wrong title
         // can't leak onto the just-switched tab.
         const suppress = !hasTabId && inGrace;
+        // T-23 — the reconcile reads the same store as the poll; the same hold applies.
+        const reconcileTargetId = resolvePageStateTabTarget(
+          ps.tabId,
+          tabsRef.current,
+          activeTabIdRef.current,
+          tabSpaceEstablishedRef.current,
+        );
+        const pendingVerdict =
+          reconcileTargetId === null
+            ? 'pass'
+            : judgePendingNavigationFrame(
+                pendingNavRef.current,
+                { tabId: reconcileTargetId, url: ps.url, state: ps.state },
+                Date.now(),
+                normalizeNavUrl,
+              );
+        if (pendingVerdict === 'resolve') pendingNavRef.current = null;
+        const heldByPendingNav = pendingVerdict === 'hold';
         // Same switch-resolution gating as the poll: a tabId-less reconcile result that
         // lands inside the switch grace window reflects the PRIOR page and must NOT
         // resolve the switch (the box hasn't re-reported the switched page yet).
@@ -7692,8 +7772,8 @@ export function SimulatorWindow(): JSX.Element {
         writeTabPageState(
           {
             tabId: ps.tabId,
-            url: suppress ? null : ps.url,
-            title: suppress ? null : ps.title,
+            url: suppress || heldByPendingNav ? null : ps.url,
+            title: suppress || heldByPendingNav ? null : ps.title,
             state: ps.state,
           },
           hasTabId || !inSwitchGrace,
@@ -8325,6 +8405,7 @@ export function SimulatorWindow(): JSX.Element {
       reachedLoaded: pageReachedLoadedRef.current,
       navTarget: currentNavTargetRef.current,
       lastNavAt: lastNavAtRef.current,
+      pendingNav: pendingNavRef.current,
     };
     // A fresh navigate supersedes a prior failed-send banner (incl. our own Retry).
     setNavSendFailed(null);
@@ -8365,6 +8446,21 @@ export function SimulatorWindow(): JSX.Element {
     // #135 — this typed url is the new current nav target; a stale 'errored' for the
     // page we just left will no longer match → no false "PAGE FAILED TO LOAD".
     currentNavTargetRef.current = normalizeNavUrl(url);
+    // T-23 — remember where the box was sent AND what it was showing, so the next
+    // poll/data frame that still carries the OLD page cannot write it back over the
+    // typed address. A re-navigate while one is pending keeps the box-confirmed
+    // `fromUrl`: the box is still on THAT page (the superseded target was only ever
+    // optimistic here), so that is the url that must stay recognisable as stale.
+    const supersededNav = pendingNavRef.current;
+    pendingNavRef.current = {
+      target: currentNavTargetRef.current,
+      fromUrl:
+        supersededNav !== null && supersededNav.tabId === activeTabId
+          ? supersededNav.fromUrl
+          : previousNavigation.tabUrl,
+      tabId: activeTabId,
+      startedAt: Date.now(),
+    };
     lastNavAtRef.current = Date.now();
     setPageLoading(armLoadWatchdog(true));
     if (!ownsManualInputAuthority(sessionId, room, authorityEpoch)) return;
@@ -8379,6 +8475,7 @@ export function SimulatorWindow(): JSX.Element {
         setPageError(previousNavigation.pageError);
         pageReachedLoadedRef.current = previousNavigation.reachedLoaded;
         currentNavTargetRef.current = previousNavigation.navTarget;
+        pendingNavRef.current = previousNavigation.pendingNav; // T-23 — nothing was sent
         lastNavAtRef.current = previousNavigation.lastNavAt;
         clearLoadWatchdog();
         if (previousNavigation.pageLoading) {
@@ -8395,6 +8492,10 @@ export function SimulatorWindow(): JSX.Element {
       // Persistent + actionable rather than a 3s auto-toast — the send can fail on a
       // congested/dropped data channel and the user should be able to Retry (M5).
       setNavSendFailed(url);
+      // T-23 — the navigate never reached the box, so the old page IS the truth: let
+      // the next frame write it back rather than holding a destination nobody is
+      // loading.
+      pendingNavRef.current = null;
       setPageLoading(false);
       clearLoadWatchdog();
     });
@@ -8421,6 +8522,7 @@ export function SimulatorWindow(): JSX.Element {
     // #135 — history nav's target is box-determined; untrack, the box's next 'loading'
     // frame for the resulting page sets it.
     currentNavTargetRef.current = '';
+    pendingNavRef.current = null; // T-23 — the GUI does not know a history step's url
     lastNavAtRef.current = Date.now();
     // Finding #2 — back/forward is enabled (BACK_FORWARD_ENABLED) but gave zero loading
     // feedback, so a click read as a dead button (and a cached/instant step never lit
@@ -9362,7 +9464,15 @@ export function SimulatorWindow(): JSX.Element {
                                 }
                               </LiveLatencySubscriber>
                               {proxyLabel !== '' && (
-                                <span className="text-white/60"> · 🌍 {proxyLabel}</span>
+                                <span className="text-white/60">
+                                  {' · 🌍 '}
+                                  {proxyLabel}
+                                  {/* T-17 — the exit's timezone, when the launch handed
+                                      one over (it also drives the device clock). */}
+                                  {timezone !== '' && (
+                                    <span data-component="sim-proxy-timezone"> · {timezone}</span>
+                                  )}
+                                </span>
                               )}
                             </div>
                           </div>
@@ -9750,7 +9860,15 @@ export function SimulatorWindow(): JSX.Element {
                                     <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
                                       Egress
                                     </div>
-                                    <div className="mt-0.5 truncate">🌍 {proxyLabel}</div>
+                                    <div className="mt-0.5 truncate">
+                                      🌍 {proxyLabel}
+                                      {timezone !== '' && (
+                                        <span data-component="sim-proxy-timezone">
+                                          {' · '}
+                                          {timezone}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 )}
 

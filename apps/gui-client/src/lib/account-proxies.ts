@@ -99,6 +99,70 @@ function authHeaders(apiKey: string): Record<string, string> {
   return { authorization: `Bearer ${apiKey}`, accept: 'application/json' };
 }
 
+/** The RFC-7807 members a refused create/update carries back. */
+interface ProblemFields {
+  type?: string;
+  title?: string;
+  detail?: string;
+}
+
+/** T-20 — a non-2xx answer to a proxy create/update, CARRYING the server's
+ *  problem details. The transport used to dispose the body and throw
+ *  `proxy create failed: 400`, which destroyed the one sentence that said why —
+ *  e.g. which line of a pasted .ovpn the server refused — so the launch dialog
+ *  could only guess ("Check the proxy and try again"). `message` keeps that
+ *  historical prefix (a caller that only logs it sees no change); `status` is
+ *  what the stale-id self-heal reads; `detail` is what the owner is shown. */
+export class AccountProxyRequestError extends Error {
+  readonly status: number;
+  readonly type: string | undefined;
+  readonly title: string | undefined;
+  readonly detail: string | undefined;
+
+  constructor(operation: 'create' | 'update', status: number, problem?: ProblemFields) {
+    const base = `proxy ${operation} failed: ${status.toString()}`;
+    super(problem?.detail === undefined ? base : `${base} — ${problem.detail}`);
+    this.name = 'AccountProxyRequestError';
+    this.status = status;
+    this.type = problem?.type;
+    this.title = problem?.title;
+    this.detail = problem?.detail;
+  }
+}
+
+/** The problem members of a decoded body, or nothing when it is not a
+ *  problem+json object (an HTML 502 from something in front of the API, `{}`). */
+function problemFields(body: unknown): ProblemFields | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const record = body as Record<string, unknown>;
+  const pick = (key: 'type' | 'title' | 'detail'): string | undefined => {
+    const value = record[key];
+    return typeof value === 'string' && value.length > 0 ? value : undefined;
+  };
+  const fields = { type: pick('type'), title: pick('title'), detail: pick('detail') };
+  const empty =
+    fields.type === undefined && fields.title === undefined && fields.detail === undefined;
+  return empty ? undefined : fields;
+}
+
+/** The error for a non-2xx create/update: the body is read once, bounded, and
+ *  the status-only message is the fallback when it is absent or not JSON. A
+ *  success response never comes through here — the caller reads that body. */
+async function failedProxyRequest(
+  res: Response,
+  operation: 'create' | 'update',
+): Promise<AccountProxyRequestError> {
+  const status = res.status;
+  let problem: ProblemFields | undefined;
+  try {
+    problem = problemFields(await readBoundedApiJson<unknown>(res));
+  } catch {
+    // Empty, non-JSON or over the cap — the status is all that is known.
+  }
+  await disposeResponseBody(res);
+  return new AccountProxyRequestError(operation, status, problem);
+}
+
 /** GET the account's proxies. Throws on non-2xx / network error (caller falls
  *  back to the local cache when offline). */
 export async function listProxies(baseUrl: string, apiKey: string): Promise<AccountProxyMeta[]> {
@@ -125,11 +189,7 @@ export async function createProxy(
     headers: { ...authHeaders(apiKey), 'content-type': 'application/json' },
     body: JSON.stringify(input),
   });
-  if (!res.ok) {
-    const status = res.status;
-    await disposeResponseBody(res);
-    throw new Error(`proxy create failed: ${status.toString()}`);
-  }
+  if (!res.ok) throw await failedProxyRequest(res, 'create');
   return readBoundedApiJson<AccountProxyMeta>(res);
 }
 
@@ -145,15 +205,9 @@ export async function updateProxy(
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
-    const status = res.status;
-    await disposeResponseBody(res);
-    // Attach the status so callers can distinguish a stale-id 404 (the row was
-    // deleted server-side) from other failures and self-heal by re-creating.
-    const err = new Error(`proxy update failed: ${status.toString()}`) as Error & {
-      status?: number;
-    };
-    err.status = status;
-    throw err;
+    // The status lets callers distinguish a stale-id 404 (the row was deleted
+    // server-side) from other failures and self-heal by re-creating.
+    throw await failedProxyRequest(res, 'update');
   }
   return readBoundedApiJson<AccountProxyMeta>(res);
 }

@@ -30,11 +30,14 @@ describe('auto-update never relaunches mid-session', () => {
     expect(shouldAutoInstall({ autoUpdate: false, sessionRunning: true })).toBe(false);
   });
 
-  it('ships OFF by default, so the default experience is being ASKED before a restart', () => {
-    // Installing ends in relaunch(). Deciding on the customer's behalf that now
-    // is a good moment to restart a browser-automation tool is the one thing an
-    // updater should not do unprompted, so the banner — new version, current
-    // version, Install & restart or Later — is what happens by default.
-    expect(DEFAULT_SETTINGS.autoUpdate).toBe(false);
+  it('ships ON by default (T-14) — OFF left the owner four releases behind, because a banner nobody acts on is the same as no update', () => {
+    // It shipped OFF from 2026-08-23 on the argument that the updater should
+    // not decide when to restart. Measured 2026-09-07: the owner's Mac was on
+    // 0.1.15 with 0.1.19 served, "Later" persisting per version. The running
+    // session veto above is what protects the restart moment; the default is
+    // to install. The three loader cases (absent → on, stored false stays off,
+    // stored true stays on) live in
+    // auto-update-is-on-unless-the-customer-turned-it-off.test.ts.
+    expect(DEFAULT_SETTINGS.autoUpdate).toBe(true);
   });
 });

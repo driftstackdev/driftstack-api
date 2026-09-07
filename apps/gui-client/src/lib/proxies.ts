@@ -995,22 +995,32 @@ export interface ProxyTestResult {
 export interface ProxyExitProbeResult {
   ip: string;
   country: string | null;
-  // Geo enrichment (2026-06-15): best-effort city/region/timezone/ASN org
-  // from lumtest.com/myip.json fetched THROUGH the proxy (the exit's geo as a
-  // site would infer it). All null when lumtest is unreachable/blocked — the
-  // ip/country baseline is unaffected.
+  // T-17 — city/region/timezone come from the SAME /v1/egress/echo response as
+  // ip/country (the server resolves the zone per exit IP and falls back to the
+  // country's zone). Before 2026-09-07 they came from a second request through
+  // the proxy to a third-party IP-echo host, and any failure of that hop left
+  // `timezone` null — the simulator clock then fell back to this Mac's time.
+  // null now means the echo itself could not answer (or, for timezone, sent a
+  // value the native side did not trust as a zone). No compatibility branch
+  // for the old shape: a Tauri bundle ships its Rust and its JS together, so
+  // an old binary never talks to this parser.
   city?: string | null;
   region?: string | null;
   timezone?: string | null;
+  /** Not produced since T-17 — the echo carries no ASN and the third-party hop
+   *  that did is gone, so this is always absent (→ null via `?? null`). Stays
+   *  optional only because ProfilesView/ProxiesView still copy it into the
+   *  probe cache as `exitAsnOrg`; remove with them. */
   asn_org?: string | null;
 }
 
-/** Exit-geo probe: native Rust fetches /v1/egress/echo THROUGH the proxy
- *  (design doc build-order 2). The catch is deliberately bare, so null means
- *  the invoke failed for ANY reason. Both dependencies this contract used to
- *  name as the cause shipped on 2026-06-12 (V-857); in the packaged app a null
- *  therefore means the echo round-trip did not complete through the proxy.
- *  Callers must render that, and must not attribute it to a pending release. */
+/** Exit-geo probe: native Rust makes ONE request, GET /v1/egress/echo THROUGH
+ *  the proxy (design doc build-order 2; T-17 removed the second hop). The
+ *  catch is deliberately bare, so null means the invoke failed for ANY reason.
+ *  Both dependencies this contract used to name as the cause shipped on
+ *  2026-06-12 (V-857); in the packaged app a null therefore means the echo
+ *  round-trip did not complete through the proxy. Callers must render that,
+ *  and must not attribute it to a pending release. */
 export async function probeProxyExit(input: {
   host: string;
   port: number;

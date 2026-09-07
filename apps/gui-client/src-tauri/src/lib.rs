@@ -403,6 +403,25 @@ pub fn run() {
                     }
                 }
             }
+            // T-14 — MAIN app only, on macOS: bring the companion in /Applications
+            // level with the one this build carries. After an update the updater
+            // has swapped the main bundle and nothing has touched the companion,
+            // so without this the pair drifts (measured: 0.1.15 main over a 0.1.14
+            // companion). Off the main thread — it is a ditto plus a codesign —
+            // and every outcome is a log line, never a failed start-up. Gated on
+            // the identifier: the companion runs this same binary and must never
+            // try to reinstall itself (pinned: `repairs_companion_at_startup`).
+            #[cfg(target_os = "macos")]
+            {
+                if repairs_companion_at_startup(&app.config().identifier) {
+                    std::thread::spawn(|| match ensure_simulator_installed() {
+                        Ok(outcome) => eprintln!("[simulator] companion at start-up: {outcome}"),
+                        Err(error) => {
+                            eprintln!("[simulator] companion check at start-up failed: {error}")
+                        }
+                    });
+                }
+            }
             // Separate Driftstack Simulator app ONLY: it is single-window, so quit
             // the process when its window is destroyed. Otherwise macOS keeps the
             // app alive with no window and its Dock icon lingers (apps don't
@@ -1178,6 +1197,20 @@ fn launch_simulator(
             return Err("invalid or oversized simulator session payload".to_string());
         }
         let app_path = SIMULATOR_INSTALL_PATH;
+        // T-14 — a companion left stale at start-up because it was running is
+        // brought level here, on the first launch after it has closed. Only the
+        // version-skew case does work (a stale, idle bundle is one ditto away);
+        // a MISSING companion keeps the existing error so the front end's own
+        // repair-and-retry path stays the one that handles it, and a failure
+        // here launches the companion that is there rather than nothing.
+        if std::path::Path::new(app_path).exists() {
+            match ensure_simulator_installed() {
+                Ok(outcome) => eprintln!("[simulator] companion before launch: {outcome}"),
+                Err(error) => {
+                    eprintln!("[simulator] companion refresh before launch failed: {error}")
+                }
+            }
+        }
         if !std::path::Path::new(app_path).exists() {
             return Err("Driftstack Simulator.app is not installed".to_string());
         }
@@ -1274,64 +1307,328 @@ fn pick_simulator_repair_source(
     candidates.iter().find(|c| exists(c)).cloned()
 }
 
+/// T-14 — what to do about the installed companion, given what is installed
+/// and what this build carries.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SimulatorInstallAction {
+    /// No companion at the install path: copy the shipped one in.
+    Install,
+    /// A companion is installed and there is no reason to touch it.
+    Keep,
+    /// A companion is installed but it is not the version this build ships.
+    Reinstall,
+}
+
+/// The decision, pure so it can be pinned without a filesystem.
+///
+/// ⛔ `Reinstall` on ANY difference, not only when the embedded one is newer.
+/// The main app and its companion are cut together and talk over a per-release
+/// control protocol, so the pair has to match; a main app rolled back to an
+/// older build wants its companion rolled back with it.
+///
+/// `Keep` whenever either version cannot be read: an unreadable Info.plist is
+/// not evidence of skew, and replacing a working companion on a guess is worse
+/// than leaving a stale one — the stale one at least launches.
+///
+/// Measured 2026-09-07: the owner's Mac had the main app at 0.1.15 with its
+/// embedded companion at 0.1.15, and "Driftstack Simulator.app" in /Applications
+/// at 0.1.14. `repair_simulator_install` only ever acted on a MISSING bundle, so
+/// the companion was never brought forward by an update.
+fn simulator_install_action(
+    installed_present: bool,
+    installed_version: Option<&str>,
+    embedded_version: Option<&str>,
+) -> SimulatorInstallAction {
+    if !installed_present {
+        return SimulatorInstallAction::Install;
+    }
+    match (installed_version, embedded_version) {
+        (Some(have), Some(want)) if have.trim() != want.trim() => SimulatorInstallAction::Reinstall,
+        _ => SimulatorInstallAction::Keep,
+    }
+}
+
+/// `CFBundleShortVersionString` out of an XML `Info.plist`, or `None`.
+///
+/// A plist is `<key>K</key>` followed by its value element; the value we want is
+/// the `<string>` that comes right after OUR key — not the first `<string>` in
+/// the file (that is usually CFBundleDevelopmentRegion) and not the one after
+/// `CFBundleVersion`, which is a different number. Pure so the selection is
+/// pinned; the callers feed it the file, or `plutil`'s XML conversion of it.
+fn plist_short_version(xml: &str) -> Option<String> {
+    const KEY: &str = "<key>CFBundleShortVersionString</key>";
+    let after_key = &xml[xml.find(KEY)? + KEY.len()..];
+    let open = after_key.find("<string>")?;
+    // Another key before the value means OUR key had a non-string value (or
+    // none) and this string belongs to someone else.
+    if after_key[..open].contains("<key>") {
+        return None;
+    }
+    let value_at = open + "<string>".len();
+    let close = after_key[value_at..].find("</string>")? + value_at;
+    let value = after_key[value_at..close].trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+/// T-14 — whether THIS process is the one that keeps the companion in
+/// /Applications level with the build it carries, at start-up.
+///
+/// Only the main app. The companion is this same binary under its own
+/// identifier, so without the gate it would try to reinstall itself on every
+/// start (over its own running bundle) and the main app — the one an update
+/// actually replaces — would be the one process that never does. Pure so the
+/// gate is pinned; `setup` feeds it `app.config().identifier`.
+fn repairs_companion_at_startup(app_identifier: &str) -> bool {
+    app_identifier == MAIN_GUI_IDENTIFIER
+}
+
+/// Serialises every writer of the companion's install path — the repair command,
+/// the start-up check, and a launch that finds the companion stale — so two of
+/// them cannot ditto into /Applications at once, and a launch that arrives
+/// mid-swap waits for the swap rather than seeing a half-moved bundle.
+#[cfg(target_os = "macos")]
+static SIMULATOR_INSTALL_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// The bytes of an Info.plist as XML text. Tauri writes XML, and `ditto`
+/// preserves it, so the direct read is the normal path; a binary plist (which
+/// starts with `bplist`) is converted by `plutil` so the parser above still
+/// applies.
+#[cfg(target_os = "macos")]
+fn plist_bytes_as_xml(bytes: Vec<u8>) -> Option<String> {
+    if !bytes.starts_with(b"bplist") {
+        return String::from_utf8(bytes).ok();
+    }
+    let mut child = std::process::Command::new("/usr/bin/plutil")
+        .args(["-convert", "xml1", "-o", "-", "-"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .ok()?;
+    child.stdin.take()?.write_all(&bytes).ok()?;
+    let out = child.wait_with_output().ok()?;
+    out.status
+        .success()
+        .then(|| String::from_utf8(out.stdout).ok())
+        .flatten()
+}
+
+/// The version of the companion bundle at `app`, read from its Info.plist.
+#[cfg(target_os = "macos")]
+fn installed_simulator_version(app: &std::path::Path) -> Option<String> {
+    let bytes = std::fs::read(app.join("Contents").join("Info.plist")).ok()?;
+    plist_short_version(&plist_bytes_as_xml(bytes)?)
+}
+
+/// The version of the companion a repair source carries: one entry pulled out
+/// of the archive with `unzip -p` (no extraction), or the bundle directory's own
+/// Info.plist.
+#[cfg(target_os = "macos")]
+fn embedded_simulator_version(source: &std::path::Path) -> Option<String> {
+    if !simulator_source_is_archive(source) {
+        return installed_simulator_version(source);
+    }
+    let entry = format!("{SIMULATOR_APP_FILE_NAME}/Contents/Info.plist");
+    let out = std::process::Command::new("/usr/bin/unzip")
+        .arg("-p")
+        .arg(source)
+        .arg(&entry)
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    plist_short_version(&plist_bytes_as_xml(out.stdout)?)
+}
+
+/// Whether the companion is running right now. Replacing the bundle under a
+/// running process would pull its resources out from under live sessions, so a
+/// stale-but-running companion is left alone and picked up by a later check.
+/// A `pgrep` that cannot run reads as "running": unknown must not read as safe.
+#[cfg(target_os = "macos")]
+fn simulator_is_running() -> bool {
+    std::process::Command::new("/usr/bin/pgrep")
+        .arg("-f")
+        .arg(format!("{SIMULATOR_APP_FILE_NAME}/Contents/MacOS/"))
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(true)
+}
+
+/// Unpack (or copy) the companion from `source` into `dest_dir`, producing
+/// `<dest_dir>/Driftstack Simulator.app`, and re-sign it ad-hoc.
+///
+/// `ditto -x -k <zip> <dir>` unpacks INTO a directory, restoring the exec bits
+/// and symlinks a plain copy loses; a directory source is a straight
+/// bundle-to-bundle ditto. A ditto-copied bundle's seal is broken, so the
+/// re-sign (no keychain, so this never prompts) is what stops "cant open ap".
+#[cfg(target_os = "macos")]
+fn materialise_simulator(
+    source: &std::path::Path,
+    dest_dir: &std::path::Path,
+) -> Result<std::path::PathBuf, String> {
+    let app = dest_dir.join(SIMULATOR_APP_FILE_NAME);
+    let copied = if simulator_source_is_archive(source) {
+        std::process::Command::new("/usr/bin/ditto")
+            .args(["-x", "-k"])
+            .arg(source)
+            .arg(dest_dir)
+            .status()
+            .map_err(|e| e.to_string())?
+    } else {
+        std::process::Command::new("/usr/bin/ditto")
+            .arg(source)
+            .arg(&app)
+            .status()
+            .map_err(|e| e.to_string())?
+    };
+    if !copied.success() {
+        return Err(format!("ditto failed with status {copied}"));
+    }
+    let _ = std::process::Command::new("/usr/bin/codesign")
+        .args(["--force", "--deep", "--sign", "-"])
+        .arg(&app)
+        .status();
+    if app.exists() {
+        Ok(app)
+    } else {
+        Err("the Simulator was copied but is not present afterwards".to_string())
+    }
+}
+
+/// Bring `/Applications/Driftstack Simulator.app` to the version this build
+/// carries: install it when missing, replace it when its version differs, leave
+/// it alone otherwise (T-14). The string names what was done, for the log.
+///
+/// A replacement is staged next to the target and swapped in with two renames,
+/// so a failed unpack leaves the working companion in place, and the target is
+/// never a half-written bundle. Skipped while the companion is running.
+#[cfg(target_os = "macos")]
+fn ensure_simulator_installed() -> Result<String, String> {
+    let _guard = SIMULATOR_INSTALL_LOCK
+        .lock()
+        .map_err(|_| "the Simulator install lock is poisoned".to_string())?;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let candidates = simulator_repair_sources(&exe);
+    let source = pick_simulator_repair_source(&candidates, |p| p.exists());
+    bring_simulator_level(
+        std::path::Path::new(SIMULATOR_INSTALL_PATH),
+        source.as_deref(),
+        simulator_is_running,
+    )
+}
+
+/// The decision and the swap for ONE target, with the repair source and the
+/// running-probe injected. `ensure_simulator_installed` hands it /Applications,
+/// the picked source and `simulator_is_running`, under the install lock; the
+/// tests hand it a directory of their own, an archive they built with `ditto
+/// -c -k`, and a closure — so the unzip, the ditto, the codesign and the two
+/// renames run for real against a target that is not the customer's companion
+/// (T-14; the swap had never been executed before it was pinned this way).
+#[cfg(target_os = "macos")]
+fn bring_simulator_level(
+    target: &std::path::Path,
+    source: Option<&std::path::Path>,
+    running: impl FnOnce() -> bool,
+) -> Result<String, String> {
+    let installed_present = target.exists();
+    // Versions are read only when there is something to compare, so a launch
+    // with a missing source is not charged for an unzip.
+    let installed_version = if installed_present {
+        installed_simulator_version(target)
+    } else {
+        None
+    };
+    let embedded_version = if installed_present {
+        source.and_then(embedded_simulator_version)
+    } else {
+        None
+    };
+    let action = simulator_install_action(
+        installed_present,
+        installed_version.as_deref(),
+        embedded_version.as_deref(),
+    );
+    match action {
+        SimulatorInstallAction::Keep => {
+            return Ok(format!(
+                "already-installed ({})",
+                installed_version.as_deref().unwrap_or("version unreadable")
+            ))
+        }
+        SimulatorInstallAction::Reinstall if running() => {
+            return Ok(format!(
+                "stale ({} installed, {} shipped) but running; left for a later check",
+                installed_version.as_deref().unwrap_or("?"),
+                embedded_version.as_deref().unwrap_or("?"),
+            ))
+        }
+        SimulatorInstallAction::Install | SimulatorInstallAction::Reinstall => {}
+    }
+    let source = source
+        .ok_or_else(|| "no Simulator bundle is available to install from this build".to_string())?;
+    let parent = target
+        .parent()
+        .unwrap_or(std::path::Path::new("/Applications"));
+    if action == SimulatorInstallAction::Install {
+        materialise_simulator(source, parent)?;
+        return Ok(format!("installed from {}", source.display()));
+    }
+    // Reinstall: stage, then swap. Dot-prefixed so Finder never shows either
+    // transient directory as an app.
+    let pid = std::process::id();
+    let staging = parent.join(format!(".{SIMULATOR_APP_FILE_NAME}.staging-{pid}"));
+    let previous = parent.join(format!(".{SIMULATOR_APP_FILE_NAME}.previous-{pid}"));
+    let _ = std::fs::remove_dir_all(&staging);
+    let staged = match materialise_simulator(source, &staging) {
+        Ok(app) => app,
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return Err(error);
+        }
+    };
+    std::fs::rename(target, &previous)
+        .map_err(|e| format!("could not move the old Simulator aside: {e}"))?;
+    if let Err(error) = std::fs::rename(&staged, target) {
+        // Put the old one back rather than leave nothing at the launch path.
+        let _ = std::fs::rename(&previous, target);
+        let _ = std::fs::remove_dir_all(&staging);
+        return Err(format!(
+            "could not move the new Simulator into place: {e}",
+            e = error
+        ));
+    }
+    let _ = std::fs::remove_dir_all(&previous);
+    let _ = std::fs::remove_dir_all(&staging);
+    Ok(format!(
+        "replaced {} with {} from {}",
+        installed_version.as_deref().unwrap_or("?"),
+        embedded_version.as_deref().unwrap_or("?"),
+        source.display()
+    ))
+}
+
 /// Install the Simulator into /Applications from a copy this build already
 /// carries, so a missing Simulator self-heals instead of dead-ending the
 /// customer at "Install the Driftstack Simulator app, then try again" — an
 /// instruction that names an app the macOS DMG does not ship.
 ///
-/// Idempotent: an already-installed Simulator returns Ok without copying.
-/// The copy is `ditto` (bundle-aware) followed by an ad-hoc re-sign, because a
-/// copied bundle's seal reads "code has no resources but signature indicates
-/// they must be present" and macOS then refuses to open it.
+/// T-14 — and REPLACE it when the installed one is a different version than
+/// this build ships, which an update otherwise never does: the updater swaps
+/// the main bundle, and the companion in /Applications is a separate copy that
+/// nothing touched. The same routine runs at start-up (see `setup`) and before
+/// a launch, so the pair is brought level without the customer asking.
+///
+/// Idempotent: an installed, current Simulator returns Ok without copying.
 #[tauri::command]
 fn repair_simulator_install(window: tauri::WebviewWindow) -> Result<String, String> {
     ensure_main_gui_command(&window)?;
     #[cfg(target_os = "macos")]
     {
-        let target = std::path::Path::new(SIMULATOR_INSTALL_PATH);
-        if target.exists() {
-            return Ok("already-installed".to_string());
-        }
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let candidates = simulator_repair_sources(&exe);
-        let source =
-            pick_simulator_repair_source(&candidates, |p| p.exists()).ok_or_else(|| {
-                "no Simulator bundle is available to install from this build".to_string()
-            })?;
-        // `ditto -x -k <zip> <dir>` unpacks INTO a directory, restoring the
-        // exec bits and symlinks a plain copy loses; a directory source is a
-        // straight bundle-to-bundle ditto as before.
-        let copied = if simulator_source_is_archive(&source) {
-            let parent = target
-                .parent()
-                .unwrap_or(std::path::Path::new("/Applications"));
-            std::process::Command::new("/usr/bin/ditto")
-                .args(["-x", "-k"])
-                .arg(&source)
-                .arg(parent)
-                .status()
-                .map_err(|e| e.to_string())?
-        } else {
-            std::process::Command::new("/usr/bin/ditto")
-                .arg(&source)
-                .arg(target)
-                .status()
-                .map_err(|e| e.to_string())?
-        };
-        if !copied.success() {
-            return Err(format!("ditto failed with status {copied}"));
-        }
-        // A ditto-copied bundle's seal is broken; re-sign ad-hoc (no keychain,
-        // so this never prompts) or the customer gets "cant open ap".
-        let _ = std::process::Command::new("/usr/bin/codesign")
-            .args(["--force", "--deep", "--sign", "-"])
-            .arg(target)
-            .status();
-        if target.exists() {
-            Ok(format!("installed from {}", source.display()))
-        } else {
-            Err("the Simulator was copied but is not present afterwards".to_string())
-        }
+        ensure_simulator_installed()
     }
     #[cfg(not(target_os = "macos"))]
     {
@@ -2236,58 +2533,98 @@ async fn endpoint_resolve(
 struct ProxyExitProbeResult {
     ip: String,
     country: Option<String>,
-    // Geo enrichment (2026-06-15): the platform echo only carries the
-    // country (cf-ipcountry). For city/region we make a best-effort second
-    // hop THROUGH THE SAME PROXY to lumtest.com/myip.json — it reports geo
-    // for the CALLER's IP, so through the proxy that's the EXIT's location
-    // (exactly what a site would infer). Any failure leaves these None; the
-    // ip/country from the echo stay the reliable baseline so the probe never
-    // regresses when lumtest is slow/blocked.
+    // T-17 — city/region/timezone come from the SAME echo response as
+    // ip/country: apps/server/src/routes/egress-echo.ts resolves the zone per
+    // exit IP and falls back to the country's zone, so a reachable echo
+    // answers the zone whenever it answers the country. Until 2026-09-07 these
+    // rode a SECOND request through the customer's proxy to a third-party
+    // IP-echo host, and any failure of that hop (host blocked by the proxy,
+    // slow, rate-limited) left `timezone` None — the simulator clock then fell
+    // back to the operator's Mac time, which is the owner's "the time above the
+    // simulator does not match the proxy". One request, to our own host, is
+    // the only path now: None here means the echo itself could not answer,
+    // never that a side trip failed.
     city: Option<String>,
     region: Option<String>,
     timezone: Option<String>,
-    asn_org: Option<String>,
 }
 
-/// Best-effort exit-geo enrichment via lumtest.com/myip.json over the same
-/// SOCKS5 agent. Returns (city, region, timezone, asn_org); all None on any
-/// failure so the caller degrades to the echo's country only.
-fn lumtest_geo(
-    agent: &ureq::Agent,
-) -> (
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-) {
-    let none = (None, None, None, None);
-    let resp = match agent.get("https://lumtest.com/myip.json").call() {
-        Ok(r) => r,
-        Err(_) => return none,
-    };
-    let body: serde_json::Value = match resp.into_json() {
-        Ok(b) => b,
-        Err(_) => return none,
-    };
-    let str_at = |v: &serde_json::Value, k: &str| {
-        v.get(k)
-            .and_then(|x| x.as_str())
-            .map(|s| s.to_string())
+/// T-17 — accept the echo's `timezone` only when it is shaped like a zone the
+/// simulator can hand to `Intl.DateTimeFormat`: an IANA `Area/Location` path
+/// under one of the eleven IANA areas (`Europe/Amsterdam`,
+/// `America/Argentina/Buenos_Aires`, `Etc/GMT+5`) or one of the two bare fixed
+/// zones (`UTC`, `GMT`). Location segments are non-empty ASCII
+/// `[A-Za-z0-9_+-]`, at most two of them, whole string ≤ 64 bytes. Anything
+/// else is None ON PURPOSE: a malformed upstream value must not become the
+/// session's clock, and None keeps the simulator on its documented host-time
+/// fallback. This is a shape check, not a zone-table lookup (the crate ships
+/// no tz database); the route already validated the value against Intl, so
+/// the check here only has to stop transport garbage and a future upstream
+/// format change from reaching the status bar.
+fn valid_exit_timezone(raw: &str) -> Option<String> {
+    const AREAS: [&str; 11] = [
+        "Africa",
+        "America",
+        "Antarctica",
+        "Arctic",
+        "Asia",
+        "Atlantic",
+        "Australia",
+        "Europe",
+        "Indian",
+        "Pacific",
+        "Etc",
+    ];
+    if raw == "UTC" || raw == "GMT" {
+        return Some(raw.to_string());
+    }
+    if raw.is_empty() || raw.len() > 64 {
+        return None;
+    }
+    let mut segments = raw.split('/');
+    let area = segments.next()?;
+    if !AREAS.contains(&area) {
+        return None;
+    }
+    let mut locations = 0usize;
+    for segment in segments {
+        locations += 1;
+        let well_formed = !segment.is_empty()
+            && segment
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '+' | '-'));
+        if !well_formed {
+            return None;
+        }
+    }
+    if locations == 0 || locations > 2 {
+        return None;
+    }
+    Some(raw.to_string())
+}
+
+/// T-17 — what the probe reads off the ONE echo response body. Pure, so the
+/// contract with the echo route is unit-testable without a proxy: `ip` is
+/// required (a body without one is a failed probe, never a fabricated exit —
+/// the wrapper maps the Err to null and callers render "unknown");
+/// `country`/`city`/`region` are best-effort strings (absent, null or blank →
+/// None); `timezone` must additionally pass `valid_exit_timezone`.
+fn parse_exit_echo(body: &serde_json::Value) -> Result<ProxyExitProbeResult, String> {
+    let str_at = |key: &str| {
+        body.get(key)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
             .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
     };
-    let geo = body.get("geo").cloned().unwrap_or(serde_json::Value::Null);
-    let city = str_at(&geo, "city");
-    // Prefer the human-readable region name ("South Holland"), fall back to
-    // the short code ("ZH") when the name is absent.
-    let region = str_at(&geo, "region_name").or_else(|| str_at(&geo, "region"));
-    let timezone = str_at(&geo, "tz");
-    let asn_org = body
-        .get("asn")
-        .and_then(|a| a.get("org_name"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string())
-        .filter(|s| !s.is_empty());
-    (city, region, timezone, asn_org)
+    let ip = str_at("ip").ok_or_else(|| "echo response missing ip".to_string())?;
+    Ok(ProxyExitProbeResult {
+        ip,
+        country: str_at("country"),
+        city: str_at("city"),
+        region: str_at("region"),
+        timezone: str_at("timezone").and_then(|tz| valid_exit_timezone(&tz)),
+    })
 }
 
 #[tauri::command]
@@ -2299,10 +2636,11 @@ async fn proxy_exit_probe(
     password: Option<String>,
 ) -> Result<ProxyExitProbeResult, String> {
     ensure_main_gui_command(&window)?;
-    // Two blocking HTTP round-trips THROUGH the proxy (echo + lumtest geo) with
-    // an 8s timeout each — the worst offender for freezing the WebView when run
-    // on the main thread. Push the whole thing to a blocking thread so the UI
-    // (and the "Testing…" state) stays live while the exit is probed.
+    // One blocking HTTPS round-trip THROUGH the proxy with an 8s timeout (T-17:
+    // the echo alone — the former second hop to a third-party IP-echo host is
+    // gone, see ProxyExitProbeResult). Still the worst offender for freezing
+    // the WebView when run on the main thread, so push it to a blocking thread
+    // so the UI (and the "Testing…" state) stays live while the exit is probed.
     tauri::async_runtime::spawn_blocking(move || -> Result<ProxyExitProbeResult, String> {
         let auth = match (username.as_deref(), password.as_deref()) {
             (Some(u), Some(p)) if !u.is_empty() => format!("{u}:{p}@"),
@@ -2320,24 +2658,7 @@ async fn proxy_exit_probe(
             .call()
             .map_err(|e| e.to_string())?;
         let body: serde_json::Value = resp.into_json().map_err(|e| e.to_string())?;
-        let ip = body
-            .get("ip")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| "echo response missing ip".to_string())?
-            .to_string();
-        let country = body
-            .get("country")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-        let (city, region, timezone, asn_org) = lumtest_geo(&agent);
-        Ok(ProxyExitProbeResult {
-            ip,
-            country,
-            city,
-            region,
-            timezone,
-            asn_org,
-        })
+        parse_exit_echo(&body)
     })
     .await
     .map_err(|_| "Exit probe could not be scheduled — please retry.".to_string())?
@@ -3230,6 +3551,116 @@ mod tests {
         assert_eq!(pick_simulator_repair_source(&candidates, |_| false), None);
     }
 
+    // T-14 — the companion skew. Measured 2026-09-07 on the owner's Mac: main
+    // app 0.1.15, embedded companion 0.1.15, installed companion 0.1.14. The
+    // repair only ever acted on a MISSING bundle, so no update ever moved it.
+    #[test]
+    fn a_stale_companion_is_reinstalled_the_owners_measured_case() {
+        assert_eq!(
+            simulator_install_action(true, Some("0.1.14"), Some("0.1.15")),
+            SimulatorInstallAction::Reinstall,
+            "an installed companion older than the one this build ships is replaced"
+        );
+        // ANY difference, not only "embedded is newer": the pair is cut together
+        // and a rolled-back main app wants its companion rolled back with it.
+        assert_eq!(
+            simulator_install_action(true, Some("0.1.16"), Some("0.1.15")),
+            SimulatorInstallAction::Reinstall
+        );
+    }
+
+    #[test]
+    fn a_current_companion_is_kept_and_a_missing_one_is_installed() {
+        // The two decisions that already existed, so the new one cannot have
+        // widened into "always reinstall" (the control for the arm above).
+        assert_eq!(
+            simulator_install_action(true, Some("0.1.15"), Some("0.1.15")),
+            SimulatorInstallAction::Keep
+        );
+        assert_eq!(
+            simulator_install_action(true, Some(" 0.1.15\n"), Some("0.1.15")),
+            SimulatorInstallAction::Keep,
+            "surrounding whitespace is not a version difference"
+        );
+        assert_eq!(
+            simulator_install_action(false, None, None),
+            SimulatorInstallAction::Install
+        );
+        assert_eq!(
+            simulator_install_action(false, None, Some("0.1.15")),
+            SimulatorInstallAction::Install,
+            "missing is missing whatever the build carries"
+        );
+    }
+
+    #[test]
+    fn an_unreadable_version_never_triggers_a_reinstall() {
+        // Fail safe: an Info.plist that cannot be read is not evidence of skew,
+        // and the stale companion at least launches. Both sides.
+        assert_eq!(
+            simulator_install_action(true, None, Some("0.1.15")),
+            SimulatorInstallAction::Keep
+        );
+        assert_eq!(
+            simulator_install_action(true, Some("0.1.14"), None),
+            SimulatorInstallAction::Keep
+        );
+        assert_eq!(
+            simulator_install_action(true, None, None),
+            SimulatorInstallAction::Keep
+        );
+    }
+
+    /// The shape tauri writes, with the decoys a naive "first <string>" or
+    /// "the string after CFBundleVersion" parser would pick instead.
+    const INFO_PLIST: &str = r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.driftstack.simulator</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.15</string>
+	<key>CFBundleVersion</key>
+	<string>9.9.9</string>
+</dict>
+</plist>
+"#;
+
+    #[test]
+    fn plist_short_version_reads_the_string_that_belongs_to_the_key() {
+        assert_eq!(plist_short_version(INFO_PLIST).as_deref(), Some("0.1.15"));
+        // Vacuity control: the decoys are real strings in the same file, so a
+        // parser that picked the first <string>, or the last, would not read
+        // 0.1.15 — this arm cannot pass on "found some version".
+        assert!(INFO_PLIST.contains("<string>English</string>"));
+        assert!(INFO_PLIST.contains("<string>9.9.9</string>"));
+    }
+
+    #[test]
+    fn plist_short_version_is_none_when_the_key_is_absent_or_has_no_string_value() {
+        assert_eq!(
+            plist_short_version(
+                &INFO_PLIST.replace("CFBundleShortVersionString", "CFBundleShortVersion")
+            ),
+            None
+        );
+        // The key present but followed by ANOTHER key: the next <string> is not ours.
+        let other_keys_value = INFO_PLIST.replace(
+            "<key>CFBundleShortVersionString</key>\n\t<string>0.1.15</string>",
+            "<key>CFBundleShortVersionString</key>\n\t<key>CFBundleVersion</key>\n\t<string>9.9.9</string>",
+        );
+        assert_eq!(plist_short_version(&other_keys_value), None);
+        assert_eq!(plist_short_version(""), None);
+        assert_eq!(
+            plist_short_version("<key>CFBundleShortVersionString</key><string>  </string>"),
+            None,
+            "an empty version is no version"
+        );
+    }
+
     #[test]
     fn the_repair_target_is_the_exact_path_launch_checks() {
         // A drifted constant would install the Simulator somewhere `launch_simulator`
@@ -3319,5 +3750,184 @@ mod tests {
             links.last().map(String::as_str),
             Some("driftstack://session/open?session_id=agt_7")
         );
+    }
+
+    // T-17 — the exit probe reads the zone from the ONE echo response, and the
+    // simulator status-bar clock renders whatever lands in `timezone`. The
+    // parser is pinned on both sides: a real zone comes through under its own
+    // key, and nothing else — absent, null, blank, malformed — ever does.
+    fn echo_body(json: &str) -> serde_json::Value {
+        serde_json::from_str(json).expect("test fixture is valid JSON")
+    }
+
+    #[test]
+    fn exit_echo_timezone_is_read_from_the_echo_timezone_key() {
+        // A decoy under the retired third-party key (`tz`) carries a DIFFERENT
+        // valid zone, so this is green only when the parser reads `timezone`
+        // specifically — never merely "some zone-shaped string in the body".
+        let parsed = parse_exit_echo(&echo_body(
+            r#"{"ip":"203.0.113.7","country":"NL","region":"South Holland","city":"Rotterdam","timezone":"Europe/Amsterdam","tz":"Asia/Tokyo","lat":51.9,"lon":4.5,"accuracy_hint":"city"}"#,
+        ))
+        .expect("a body with an ip parses");
+        assert_eq!(parsed.ip, "203.0.113.7");
+        assert_eq!(parsed.country.as_deref(), Some("NL"));
+        assert_eq!(parsed.region.as_deref(), Some("South Holland"));
+        assert_eq!(parsed.city.as_deref(), Some("Rotterdam"));
+        assert_eq!(parsed.timezone.as_deref(), Some("Europe/Amsterdam"));
+    }
+
+    #[test]
+    fn exit_echo_without_a_timezone_reports_none_not_a_guess() {
+        // null is the route's "neither the edge nor the country table could
+        // answer"; an absent key is a route without the field at all. Both
+        // leave the clock on its documented host-time fallback rather than on
+        // an invented zone, while ip/country stay the baseline.
+        for body in [
+            r#"{"ip":"203.0.113.7","country":"NL","region":null,"city":null,"timezone":null}"#,
+            r#"{"ip":"203.0.113.7","country":"NL"}"#,
+            r#"{"ip":"203.0.113.7","country":"NL","timezone":""}"#,
+            r#"{"ip":"203.0.113.7","country":"NL","timezone":"   "}"#,
+            r#"{"ip":"203.0.113.7","country":"NL","timezone":7}"#,
+        ] {
+            let parsed = parse_exit_echo(&echo_body(body)).expect("a body with an ip parses");
+            assert_eq!(parsed.timezone, None, "body: {body}");
+            assert_eq!(parsed.ip, "203.0.113.7", "body: {body}");
+            assert_eq!(parsed.country.as_deref(), Some("NL"), "body: {body}");
+        }
+    }
+
+    #[test]
+    fn exit_echo_malformed_timezone_is_dropped_but_the_probe_still_succeeds() {
+        for tz in [
+            "garbage",
+            "Europe",
+            "Europe/",
+            "/Amsterdam",
+            "Mars/Olympus_Mons",
+            "europe/amsterdam",
+            "Europe/\nAmsterdam",
+            "Europe/Amster dam",
+            "../../etc/passwd",
+            "Europe/Amsterdam;drop",
+            "<script>alert(1)</script>",
+            "America/Argentina/Buenos_Aires/Extra",
+            "Europe/Amsterdam//",
+            "utc",
+            "GMT+2",
+            "+02:00",
+        ] {
+            let parsed = parse_exit_echo(&serde_json::json!({
+                "ip": "203.0.113.7",
+                "country": "NL",
+                "timezone": tz,
+            }))
+            .expect("a malformed zone is dropped, not a failed probe");
+            assert_eq!(parsed.timezone, None, "tz: {tz:?}");
+            assert_eq!(parsed.ip, "203.0.113.7", "tz: {tz:?}");
+        }
+        // Vacuity control: the same body with a real zone is Some. The loop
+        // above is red for the right reason only while this arm is green — a
+        // parser that dropped EVERY zone would pass the loop on its own.
+        let accepted = parse_exit_echo(&serde_json::json!({
+            "ip": "203.0.113.7",
+            "country": "NL",
+            "timezone": "Europe/Amsterdam",
+        }))
+        .expect("a body with an ip parses");
+        assert_eq!(accepted.timezone.as_deref(), Some("Europe/Amsterdam"));
+    }
+
+    #[test]
+    fn valid_exit_timezone_accepts_the_shapes_the_echo_can_emit() {
+        // Every zone in the route's country table plus the edge's per-IP
+        // values are `Area/Location[/Sublocation]`; the fixed zones are the
+        // only bare names. Each must round-trip unchanged.
+        for tz in [
+            "Europe/Amsterdam",
+            "America/New_York",
+            "America/Argentina/Buenos_Aires",
+            "America/Port-au-Prince",
+            "Asia/Ho_Chi_Minh",
+            "Africa/Dar_es_Salaam",
+            "Pacific/Port_Moresby",
+            "Antarctica/DumontDUrville",
+            "Etc/GMT+5",
+            "Etc/GMT-14",
+            "Etc/UTC",
+            "UTC",
+            "GMT",
+        ] {
+            assert_eq!(valid_exit_timezone(tz).as_deref(), Some(tz), "tz: {tz:?}");
+        }
+        // Surrounding whitespace is transport noise, not a different zone: the
+        // parser trims before validating and hands the simulator the clean id.
+        // The validator itself stays strict — it never sees untrimmed input.
+        let padded = parse_exit_echo(&serde_json::json!({
+            "ip": "203.0.113.7",
+            "timezone": " Europe/Amsterdam\n",
+        }))
+        .expect("a body with an ip parses");
+        assert_eq!(padded.timezone.as_deref(), Some("Europe/Amsterdam"));
+        assert_eq!(valid_exit_timezone(" Europe/Amsterdam\n"), None);
+    }
+
+    #[test]
+    fn valid_exit_timezone_caps_the_whole_string_at_64_bytes() {
+        // T-17 — the doc comment promises "whole string <= 64 bytes", and a
+        // cap with no arm can be loosened, removed or tightened without a
+        // red. Both sides of the boundary are pinned with a zone that is
+        // well-formed in every OTHER respect (real area, ASCII segment), so
+        // the only thing separating Some from None below is the length.
+        let area = "Europe/";
+        let at_cap = format!("{area}{}", "A".repeat(64 - area.len()));
+        let over_cap = format!("{area}{}", "A".repeat(65 - area.len()));
+        assert_eq!(at_cap.len(), 64);
+        assert_eq!(over_cap.len(), 65);
+        // Vacuity control: exactly at the cap is Some. Without this arm a
+        // validator that rejected every long-ish zone (or `>= 64`) would pass
+        // the None arm for the wrong reason.
+        assert_eq!(
+            valid_exit_timezone(&at_cap).as_deref(),
+            Some(at_cap.as_str())
+        );
+        assert_eq!(valid_exit_timezone(&over_cap), None);
+        // Through the production path: the parser trims BEFORE validating, so
+        // a padded at-cap zone still lands (the cap measures the zone, not the
+        // transport noise around it), while an over-cap zone is dropped and
+        // the probe itself still succeeds with its ip.
+        let padded = parse_exit_echo(&serde_json::json!({
+            "ip": "203.0.113.7",
+            "timezone": format!("  {at_cap}\n"),
+        }))
+        .expect("a body with an ip parses");
+        assert_eq!(padded.timezone.as_deref(), Some(at_cap.as_str()));
+        let dropped = parse_exit_echo(&serde_json::json!({
+            "ip": "203.0.113.7",
+            "country": "NL",
+            "timezone": over_cap,
+        }))
+        .expect("an over-long zone is dropped, not a failed probe");
+        assert_eq!(dropped.timezone, None);
+        assert_eq!(dropped.ip, "203.0.113.7");
+        assert_eq!(dropped.country.as_deref(), Some("NL"));
+    }
+
+    #[test]
+    fn exit_echo_without_an_ip_is_a_failed_probe_not_a_fabricated_exit() {
+        // The wrapper maps Err → null and callers render "unknown". A body that
+        // carries a zone but no exit ip must NOT surface that zone: a probe that
+        // failed to identify the exit has nothing to say about its clock.
+        for body in [
+            r#"{"timezone":"Europe/Amsterdam","country":"NL"}"#,
+            r#"{"ip":null,"timezone":"Europe/Amsterdam"}"#,
+            r#"{"ip":"","timezone":"Europe/Amsterdam"}"#,
+            r#"{"ip":7,"timezone":"Europe/Amsterdam"}"#,
+            r#"{"error":"rate limited"}"#,
+            r#"[]"#,
+            r#""Europe/Amsterdam""#,
+            r#"null"#,
+        ] {
+            assert!(parse_exit_echo(&echo_body(body)).is_err(), "body: {body}");
+        }
     }
 }

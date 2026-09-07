@@ -34,8 +34,6 @@ import {
   subscribeProbeCache,
   saveExitResult,
   saveProbeResult,
-  saveOsFingerprint,
-  saveServerProbeResult,
   type CachedOsFingerprint,
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
@@ -48,9 +46,10 @@ import {
   deleteProxy as deleteAccountProxy,
   type AccountProxyScheme,
   type MeasuredQuic,
-  testAccountProxy,
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
+import { isSocks5Probeable } from '../lib/proxy-scheme';
+import { persistServerProbe, testProxyOnServer } from '../lib/proxy-server-test';
 import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { humanizeError } from '../lib/humanize-error';
@@ -86,13 +85,9 @@ function schemeLabel(scheme: AccountProxyScheme | undefined): { icon: string; te
   }
 }
 
-/** Whether the saved-proxy card's Test button can honestly run the native SOCKS5
- *  probe. Only a SOCKS5 (or legacy-undefined) proxy is socks5-probeable; a VPN/HTTP
- *  endpoint has no honest SOCKS5 reachability/auth check (the create flow already
- *  gates Test the same way — VPN does an endpoint DNS resolve, not a SOCKS5 probe). */
-function isSocks5Probeable(scheme: AccountProxyScheme | undefined): boolean {
-  return scheme === undefined || scheme === 'socks5';
-}
+// T-20 — `isSocks5Probeable` used to be defined here (and re-spelled in the
+// sweeper and the profile hub's inline form); the pre-launch gate had no copy at
+// all. One definition now, in lib/proxy-scheme.
 
 function formatTestAllSummary(results: ProxyTestResult[]): string {
   if (results.length === 0) {
@@ -545,70 +540,45 @@ export function ProxiesView(): JSX.Element {
           // result measured above.
           // T-1 — ask for the FLEET vantage: the Mac that will run the profile
           // measures it; the server says so (or says it fell back) in the reply.
-          const serverTest = await testAccountProxy(settings.baseUrl, settings.apiKey, p.serverId, {
-            vantage: 'fleet',
-          }).catch(() => null);
+          // T-27 — the fetch, the parse of the verdicts and the cache write are
+          // ONE shared step (lib/proxy-server-test) with the profile card's Test,
+          // so the two cannot drift again; only the grid's own state is applied
+          // here. The QUIC stamp inside it is the SERVER's `quic_measured_at`
+          // (drop 5) — not this Mac's clock at reply time.
+          const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
           if (stale()) return null;
-          if (serverTest !== null && serverTest.ok) {
-            const now = Date.now();
-            const fp = serverTest.os_fingerprint;
+          if (outcome.kind === 'ok') {
+            const fp = outcome.osFingerprint;
             if (fp !== undefined) {
-              const rec: CachedOsFingerprint = { ...fp, at: now };
+              const rec: CachedOsFingerprint = { ...fp, at: outcome.at };
               setOsFingerprints((m) => ({ ...m, [p.id]: rec }));
-              void saveOsFingerprint(p.id, fp, now).catch(() => undefined);
             }
-            // T-1 — prefer the server-measured latency (closer to the fleet
-            // vantage than this Mac). T-6 — a measured 'h3'/'h2-only' lets the
-            // chip leave the inferred state; a value outside the closed set is
-            // dropped, never rendered green.
-            const quic =
-              serverTest.quic_measured === 'h3' || serverTest.quic_measured === 'h2-only'
-                ? serverTest.quic_measured
-                : undefined;
             // T-1 — a fleet result can be ok with NO timing. The old number must
             // then GO: left in place beside a fresh vantage label it reads as "the
             // Mac just measured this", which is the opposite of what happened.
-            const measured = serverTest.latency_ms;
+            const measured = outcome.latencyMs;
             setServerLatency((m) =>
               measured !== null ? { ...m, [p.id]: measured } : dropKey(m, p.id),
             );
+            const quic = outcome.quicMeasured;
             if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [p.id]: quic }));
             // T-1 — where that number was measured travels WITH it: a fleet Mac
             // (named) or, when none was free, the server — replaced on every
             // result, so a fleet label never outlives its measurement and the
-            // fallback is visible. The fleet QUIC-relay verdict is its own chip;
-            // it never becomes a quicMeasured value.
-            const vantage: ServerVantage | undefined =
-              serverTest.measured_from !== undefined
-                ? {
-                    measuredFrom: serverTest.measured_from,
-                    ...(serverTest.node_id !== undefined ? { nodeId: serverTest.node_id } : {}),
-                  }
-                : undefined;
-            // The label describes a NUMBER — where it was measured. With no number
+            // fallback is visible. The label describes a NUMBER; with no number
             // it describes nothing, so it travels with the latency, not beside it.
+            const vantage = outcome.vantage;
             setServerVantage((m) =>
               vantage !== undefined && measured !== null
                 ? { ...m, [p.id]: vantage }
                 : dropKey(m, p.id),
             );
-            const relay = serverTest.quic_probe;
+            // The fleet QUIC-relay verdict is its own chip; it never becomes a
+            // quicMeasured value.
+            const relay = outcome.quicProbe;
             setQuicProbe((m) => (relay !== undefined ? { ...m, [p.id]: relay } : dropKey(m, p.id)));
-            void saveServerProbeResult(
-              p.id,
-              {
-                // null CLEARS the persisted number — without this the card would
-                // reload the stale one on next launch, after the in-memory drop.
-                latencyMs: measured,
-                quicMeasured: quic,
-                quicMeasuredAt: now,
-                measuredFrom: serverTest.measured_from,
-                nodeId: serverTest.node_id,
-                quicProbe: relay,
-              },
-              now,
-            ).catch(() => undefined);
-          } else if (serverTest !== null) {
+            void persistServerProbe(p.id, outcome);
+          } else if (outcome.kind === 'failed') {
             // ⛔ The server says this proxy is NOT usable, while the native probe
             // from this Mac said it was. That disagreement is real information —
             // the servers are what run the profile — so the server-measured values

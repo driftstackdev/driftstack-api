@@ -23,6 +23,7 @@
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
+import { parseH3Observation } from './session-h3-observation';
 import { loadBaseUrl, loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
@@ -65,6 +66,17 @@ export interface AgentSessionCapabilityReport {
   manual_input_available: boolean | null;
   streaming_state: 'provisioning' | 'live' | 'blank' | 'failed' | null;
   egress_state: 'live' | 'dead_proxy' | null;
+  /** T-27 — the live QUIC signal, present ONLY when the report carried one:
+   *  `true` once a real HTTP/3 connection completed this session (latched
+   *  node-side — it never returns to false, so it answers "ever", not "now").
+   *  Absent = the report did not say, which must never read as "no HTTP/3". */
+  h3_connection_observed?: true;
+  /** T-27 — the monotone HTTP/3 connection count when the report carried one;
+   *  its rate is the liveness the latched boolean cannot carry (W-29). */
+  h3_connection_count?: number;
+  /** The report's own `timestamp` (server time, epoch ms) when parseable —
+   *  the stamp a verdict derived from this report carries. */
+  reported_at?: number;
 }
 
 export interface AgentSessionErrorEvent {
@@ -171,6 +183,10 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   const report = value as Record<string, unknown>;
   const streaming = report.streaming_state;
   const egress = report.egress_state;
+  // T-27 — the live h3 signal rides the same envelope; keys are added ONLY when
+  // the report carried them, so a report without them is byte-identical to
+  // before and an absent signal never collapses into a false negative.
+  const h3 = parseH3Observation(report);
   return {
     manual_input_available:
       typeof report.manual_input_available === 'boolean' ? report.manual_input_available : null,
@@ -182,6 +198,9 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
         ? streaming
         : null,
     egress_state: egress === 'live' || egress === 'dead_proxy' ? egress : null,
+    ...(h3 !== null ? { h3_connection_observed: true as const } : {}),
+    ...(h3?.count !== undefined ? { h3_connection_count: h3.count } : {}),
+    ...(h3?.at !== undefined ? { reported_at: h3.at } : {}),
   };
 }
 
@@ -420,6 +439,12 @@ export interface AgentPageState {
   // absent today → the GUI falls back to the active tab; once the box sends it,
   // per-tab routing activates automatically with no GUI change.
   tabId?: string | null;
+  // T-25 (owner: on-screen keyboard auto-opens on text-input focus) — the box's
+  // editable-input focus state, mirrored from the LiveKit data channel onto the
+  // CP-bound page-state so the ~2s poll can drive the keyboard after a
+  // data-channel loss. true on focus, false on blur; null when the box has not
+  // reported (or on an older box build that omits it → the poll path is a no-op).
+  input_focused: boolean | null;
   error: { kind?: string; message?: string } | null;
 }
 export async function getAgentSessionPageState(

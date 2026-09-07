@@ -109,6 +109,9 @@ let pageStateValue: {
   url: string | null;
   title: string | null;
   tabId?: string | null;
+  // T-25 — the box's editable-input focus, mirrored onto the CP page-state so the
+  // ~2s poll can drive the on-screen keyboard after a data-channel loss.
+  input_focused?: boolean | null;
   error: { kind?: string; message?: string } | null;
 } | null = null;
 const getAgentSessionPageState = vi.fn(() => Promise.resolve(pageStateValue));
@@ -373,6 +376,68 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(keyboardPressed(container)).toBe('false');
     pushPageState({ tabId: tabAId, state: 'loaded', inputFocused: true });
     expect(keyboardPressed(container)).toBe('true');
+  });
+
+  // T-25 (owner: on-screen keyboard auto-opens on text-input focus) — the ~2s
+  // control-plane page-state POLL must drive the keyboard with the SAME authority
+  // the data-channel handler uses (both go through applyInputFocusFromPageState),
+  // so the keyboard keeps following focus after a LiveKit data-channel loss. This
+  // exercises the poll path end-to-end: `input_focused:true` for the ACTIVE tab
+  // opens it, an other/closed-tab poll frame does NOT, and `false` closes it.
+  it('T-25 the ~2s page-state POLL opens the keyboard for the active tab, ignores an other-tab poll frame, and false closes it', async () => {
+    vi.useFakeTimers();
+    try {
+      const { container } = renderSim();
+      // Flush the control read so manual-input authority is established (the poll's
+      // focus application is gated on it, the same as the toggle button's enablement).
+      await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      // Give the window a real tab space so an unknown-tagged frame is fenced out
+      // (rather than falling back to the seed tab). Open+close leaves the active
+      // (seed) tab's inherited focus SUPPRESSED, exactly as a live switch would.
+      establishOwnedTabSpace(container);
+      const activeId = lastTabListCall().activeTabId;
+
+      // Drive one poll tick per frame: set the poll's return value, advance 2s, flush.
+      const poll = async (frame: NonNullable<typeof pageStateValue>): Promise<void> => {
+        pageStateValue = frame;
+        await act(async () => {
+          vi.advanceTimersByTime(2000);
+          await Promise.resolve();
+          await Promise.resolve();
+        });
+      };
+      const base = { url: 'https://active.example/', title: 'Active', error: null } as const;
+
+      // A blur on the active tab clears the post-switch suppression; keyboard stays hidden.
+      await poll({ ...base, state: 'loaded', tabId: activeId, input_focused: false });
+      expect(keyboardPressed(container)).toBe('false');
+
+      // An other/closed-tab poll frame (unknown renderer id, fenced out) must NOT open it.
+      await poll({
+        ...base,
+        state: 'loaded',
+        tabId: 'renderer-no-longer-owned',
+        input_focused: true,
+      });
+      expect(keyboardPressed(container)).toBe('false');
+
+      // The ACTIVE tab's focus edge opens the keyboard from the poll path.
+      await poll({ ...base, state: 'loaded', tabId: activeId, input_focused: true });
+      expect(keyboardPressed(container)).toBe('true');
+
+      // A frame carrying no input_focused is a no-op — the keyboard stays open.
+      await poll({ ...base, state: 'loaded', tabId: activeId });
+      expect(keyboardPressed(container)).toBe('true');
+
+      // false on the active tab closes it.
+      await poll({ ...base, state: 'loaded', tabId: activeId, input_focused: false });
+      expect(keyboardPressed(container)).toBe('false');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // workflow w58dcbhxt #4: opening a new tab (+) supersedes an in-flight switch, so a

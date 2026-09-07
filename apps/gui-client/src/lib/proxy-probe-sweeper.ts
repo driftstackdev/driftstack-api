@@ -12,6 +12,7 @@
 
 import type { ProxyConfig, ProxyTestResult } from './proxies';
 import { isProbeStale, type ProbeCacheMap } from './proxy-probe-cache';
+import { isSocks5Probeable } from './proxy-scheme';
 
 /** Proxies re-probed per sweep. Each is a real TCP + SOCKS5 handshake against
  *  someone else's infrastructure, so a sweep is deliberately a trickle rather
@@ -82,7 +83,7 @@ export function planSweep(
     .filter(([id, c]) => {
       const p = byId.get(id);
       if (p === undefined) return false; // deleted proxy, lingering entry
-      if (p.scheme !== undefined && p.scheme !== 'socks5') return false; // not SOCKS5-probeable
+      if (!isSocks5Probeable(p.scheme)) return false; // T-20 — the one shared predicate
       // A failing verdict is retried after SWEEP_FAILURE_RETRY_MS instead of
       // waiting out the full positive TTL — see the constant above. Display
       // freshness is untouched: the badge keeps showing the failure until a

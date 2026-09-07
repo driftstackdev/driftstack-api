@@ -67,15 +67,21 @@ export interface DriftstackSettings {
   /**
    * Install signed updates without asking each time.
    *
-   * Default OFF, so the DEFAULT experience is being asked: the update banner
-   * names the new version and the current one and offers Install & restart or
-   * Later. Installing ends in a relaunch, and this is a browser-automation
-   * tool — deciding for the customer that now is a good moment to restart is
-   * the one thing an updater should not do on its own.
+   * Default ON (T-14). It was OFF from 2026-08-23, so the default experience was
+   * the banner — and the owner's own Mac then sat on 0.1.15 through four
+   * releases: "Later" persists per version, the app stays open for days, and a
+   * banner nobody acts on is indistinguishable from no update at all. A desktop
+   * client months behind a moving server API is how version skew becomes a
+   * support ticket, so the default is to install.
    *
-   * Turning it ON means "stop asking", and even then the install is vetoed
-   * while a session is running, because that is the case where a relaunch
-   * destroys state the customer cannot get back.
+   * The install is still vetoed while a session is running, because that is the
+   * case where a relaunch destroys state the customer cannot get back; the
+   * banner is what happens then, and the customer picks the moment.
+   *
+   * Turning it OFF is the customer's choice and is kept: `loadSettings` reads a
+   * stored `false` written under `SETTINGS_VERSION` as false. A file older than
+   * that marker takes this default whatever it says, because the OFF default
+   * used to be echoed into it by every save (see `SETTINGS_VERSION`).
    */
   autoUpdate: boolean;
   /**
@@ -103,8 +109,42 @@ export const DEFAULT_SETTINGS: DriftstackSettings = {
   themeAccent: 'oxblood',
   telemetryOptIn: null,
   startUrl: 'https://driftstack.io/newtab/',
-  autoUpdate: false,
+  // T-14 — ON. Guard: auto-update-is-on-unless-the-customer-turned-it-off.test.ts.
+  autoUpdate: true,
 };
+
+/**
+ * The layout version every whole-object write stamps into settings.json, so a
+ * later build can tell which build's DEFAULTS a stored value inherited.
+ *
+ * T-14 — the marker exists because a stored boolean cannot say whether it was
+ * chosen. `saveSettingsUnlocked` rewrites the whole object, so from 2026-08-23
+ * (default OFF) up to 0.1.19, ANY save — a theme change is enough — wrote
+ * `autoUpdate: false` for a customer who never opened the switch. Measured
+ * 2026-09-07 on the owner's Mac: `autoUpdate: false` in a settings.json the
+ * running 0.1.15 had rewritten that morning, switch never touched — and the
+ * loader read it as a choice, so the ON default alone would not have reached
+ * the one machine the row was measured on.
+ *
+ *   (absent) — written by a build up to 0.1.19. Its `autoUpdate` is an echo of
+ *              whatever the default was at the time of the write, so it does NOT
+ *              count as a choice: the loader applies the current default.
+ *   2        — written by this build or later, whose default is ON. A stored
+ *              `false` under this marker can only have come from the switch and
+ *              is kept.
+ *
+ * The migration is keyed on the marker, never on the boolean, and it is
+ * one-time by construction: the first save from this build stamps the marker,
+ * and everything saved after that is a choice. The honest cost: a customer who
+ * DID turn it off on 0.1.16–0.1.19 gets one unattended install (still vetoed
+ * while a session runs) before their next flip of the switch sticks. A default
+ * that favours delivery accepts that over leaving every unchosen `false` on a
+ * banner nobody acts on.
+ *
+ * Bump this only with a migration that names what the previous layout means.
+ * Guard: auto-update-is-on-unless-the-customer-turned-it-off.test.ts.
+ */
+export const SETTINGS_VERSION = 2;
 
 const STORE_FILE = 'settings.json';
 const SETTINGS_KEY = 'driftstack';
@@ -146,6 +186,8 @@ interface PersistedSettings {
   telemetryOptIn?: unknown;
   startUrl?: unknown;
   autoUpdate?: unknown;
+  /** T-14 — see `SETTINGS_VERSION`; absent on every file written before it. */
+  settingsVersion?: unknown;
   simulatorWindowSize?: unknown;
   /** Legacy plaintext map; read only for one-shot keychain migration + purge. */
   apiKeys?: unknown;
@@ -344,11 +386,24 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       ? DEFAULT_SETTINGS.startUrl
       : persistedStartUrl;
 
-  // Only an explicit stored boolean overrides the default, so a settings.json
-  // written before this field existed keeps auto-update ON rather than being
-  // read as "the customer switched it off".
+  // T-14 — a stored value counts as the customer's choice ONLY under a settings
+  // layout that could not have echoed it (`SETTINGS_VERSION`); anything older,
+  // and an absent or non-boolean value, takes the default. So a settings.json
+  // from before the marker migrates to ON whatever it says — including the
+  // `false` the OFF default wrote into the owner's file — and a `false` saved by
+  // this build, which can only have come from the switch, stays false.
+  //
+  // Keyed on the marker, not on the boolean: the boolean cannot tell an echoed
+  // `false` from a chosen one; the marker records which build's default the
+  // write inherited. The read itself stamps nothing — only a save that carries
+  // the customer's own value may claim the marker (`saveSettingsUnlocked`),
+  // which is what makes the migration one-time.
+  const persistedSettingsVersion =
+    persisted && typeof persisted.settingsVersion === 'number' ? persisted.settingsVersion : 0;
   const autoUpdate =
-    persisted && typeof persisted.autoUpdate === 'boolean'
+    persisted &&
+    typeof persisted.autoUpdate === 'boolean' &&
+    persistedSettingsVersion >= SETTINGS_VERSION
       ? persisted.autoUpdate
       : DEFAULT_SETTINGS.autoUpdate;
 
@@ -412,6 +467,9 @@ export async function loadSettings(): Promise<DriftstackSettings> {
       // so every persisted field has to be listed or it is dropped. The return
       // below carries it, which is why the loss was invisible until relaunch.
       autoUpdate,
+      // T-14 — this write carries the RESOLVED autoUpdate, so it is a layout-2
+      // record: without the marker the next load would migrate it again.
+      settingsVersion: SETTINGS_VERSION,
       // Same lesson: the remembered window sizes are persisted state too.
       ...windowSizesField(simulatorWindowSize),
     });
@@ -520,6 +578,10 @@ async function saveSettingsUnlocked(
     telemetryOptIn: s.telemetryOptIn,
     startUrl: s.startUrl,
     autoUpdate: s.autoUpdate,
+    // T-14 — the marker that makes `autoUpdate` above a choice on the next
+    // load. Every whole-object writer must stamp it, or a chosen `false` is
+    // read as an echo and migrated back to ON.
+    settingsVersion: SETTINGS_VERSION,
     ...windowSizesField(simulatorWindowSize),
   });
   await getStore().save();

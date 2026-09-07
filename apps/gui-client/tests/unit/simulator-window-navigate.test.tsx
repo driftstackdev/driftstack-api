@@ -245,7 +245,15 @@ describe('SimulatorWindow — address bar navigate', () => {
       });
       vi.advanceTimersByTime(4_999);
     });
-    expect(container.querySelector('[data-component="page-load-stalled-banner"]')).toBeNull();
+    // T-15 — at 44.999s the ladder's 25s rung is up (a same-target `loading` frame
+    // does not erase the GUI's own elapsed-time notice); what must NOT be up yet is
+    // the deadline's fallback copy.
+    expect(
+      container.querySelector('[data-component="page-load-stalled-banner"]'),
+    ).toHaveTextContent(/may not arrive on its own/i);
+    expect(
+      container.querySelector('[data-component="page-load-stalled-banner"]'),
+    ).not.toHaveTextContent(/taking longer than usual/i);
     expect(container.querySelector('[data-component="simulator-loadbar"]')).not.toBeNull();
 
     act(() => {
@@ -270,6 +278,99 @@ describe('SimulatorWindow — address bar navigate', () => {
     });
     expect(container.querySelector('[data-component="page-load-stalled-banner"]')).not.toBeNull();
     expect(container.querySelector('[data-component="simulator-loadbar"]')).toBeNull();
+  });
+
+  // T-15 — owner #1: two "still loading" notices stacked on a slow proxy (the bar's own
+  // 8s/25s pill under the address field + the advisory over the video at 9s/45s) — "1
+  // should be enough". One ladder, ONE element: 9s "on its way" → 25s "may not arrive"
+  // + Retry → 45s fallback. Matches are counted as INNERMOST elements so a wrapper that
+  // merely contains the banner is not a second hit, while a second banner is.
+  const stillLoadingLeaves = (container: HTMLElement): Element[] =>
+    Array.from(container.querySelectorAll('*')).filter(
+      (el) =>
+        /still loading/i.test(el.textContent ?? '') &&
+        !Array.from(el.children).some((c) => /still loading/i.test(c.textContent ?? '')),
+    );
+
+  it('T-15 — a pending load says "still loading" from exactly ONE element, escalating at 25s with a Retry (vacuity: nothing at 5s)', () => {
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'slow.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+
+    // VACUITY CONTROL — 5s is an ordinary load: no notice at all. Without this arm the
+    // "exactly one" below would also pass on a notice that is simply always rendered.
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(stillLoadingLeaves(container)).toHaveLength(0);
+    expect(container.querySelector('[data-component="simulator-loadbar"]')).not.toBeNull();
+
+    // 10s: the first rung — from ONE element. Two would be the owner's screenshot.
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    const at10 = stillLoadingLeaves(container);
+    expect(at10).toHaveLength(1);
+    expect(at10[0]?.closest('[data-component="page-load-stalled-banner"]')).not.toBeNull();
+    expect(container.querySelector('[data-component="simulator-slow-nav"]')).toBeNull();
+
+    // 26s: the copy has escalated, still ONE element, and the Retry is right there.
+    act(() => {
+      vi.advanceTimersByTime(16_000);
+    });
+    const at26 = stillLoadingLeaves(container);
+    expect(at26).toHaveLength(1);
+    expect(at26[0]?.textContent).toMatch(/may not arrive on its own/i);
+    const retry = container.querySelector(
+      '[data-component="page-load-stalled-banner"] [data-action="retry-stalled-navigate"]',
+    );
+    expect(retry).not.toBeNull();
+    expect(retry?.textContent).toMatch(/retry/i);
+    // …and it re-issues the same navigation (the customer would otherwise reach for
+    // the reload blindly).
+    sendNavigate.mockClear();
+    fireEvent.click(retry as Element);
+    expect(sendNavigate).toHaveBeenCalledWith(fakeRoom, 'https://slow.example.com/');
+  });
+
+  it('T-15 — the ladder survives a same-target `loading` frame that lands after 9s (the slow-proxy shape the bar pill used to cover)', () => {
+    // On a proxy slow enough that the box's own `loading` frame for the typed url
+    // lands 12s in, that frame supersedes a BOX advisory by contract — but it must not
+    // blank the GUI's elapsed-time ladder, or the customer is back to a silent bar.
+    vi.useFakeTimers();
+    const { container } = renderSim();
+    const addressInput = container.querySelector('[aria-label="Address bar"]') as HTMLInputElement;
+    fireEvent.change(addressInput, { target: { value: 'slow.example.com' } });
+    fireEvent.submit(addressInput.closest('form') as HTMLFormElement);
+    act(() => {
+      vi.advanceTimersByTime(12_000);
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loading',
+        url: 'https://slow.example.com/',
+        progress: 0,
+      });
+      vi.advanceTimersByTime(100);
+    });
+    expect(stillLoadingLeaves(container)).toHaveLength(1);
+    act(() => {
+      vi.advanceTimersByTime(14_000);
+    });
+    const at26 = stillLoadingLeaves(container);
+    expect(at26).toHaveLength(1);
+    expect(at26[0]?.textContent).toMatch(/may not arrive on its own/i);
+    // A page that ARRIVES retires the whole ladder — the notice is never sticky.
+    act(() => {
+      fireDataFrame({
+        type: 'page_state',
+        state: 'loaded',
+        url: 'https://slow.example.com/',
+        progress: 1,
+      });
+    });
+    expect(stillLoadingLeaves(container)).toHaveLength(0);
   });
 
   it('gives a changed box target its own load deadline', () => {

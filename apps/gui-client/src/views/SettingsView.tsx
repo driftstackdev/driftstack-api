@@ -1158,10 +1158,11 @@ export function SettingsView(): JSX.Element {
               <span className="text-sm text-ink-secondary">Install updates without asking</span>
             </label>
             <span className="mt-2.5 block text-2xs text-ink-muted">
-              Off by default: when an update is available you get a prompt naming the new version,
-              and you choose when to install. Installing restarts the app, so even with this on an
-              update is never applied while a session is running — a relaunch mid-session would lose
-              live browser state.
+              On by default: the app checks for updates when it opens and every few hours after
+              that, and installs a new version as soon as it finds one. Installing restarts the app,
+              so an update is never applied while a session is running — a relaunch mid-session
+              would lose live browser state; you get a prompt naming the new version instead and
+              choose when to install. Turn this off to always be asked.
             </span>
           </Field>
 

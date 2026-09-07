@@ -20,6 +20,12 @@ import {
   type OsFingerprint,
 } from './os-fingerprint-verdict';
 import { cleanServerVantage, type ProxyVantage, type ServerVantage } from './proxy-vantage';
+import {
+  attributeSessionProxy,
+  makeH3ObservationLedger,
+  parseH3Observation,
+  type H3BindingLike,
+} from './session-h3-observation';
 
 /** N-2 — the control plane's passive OS fingerprint of the proxy's own stack,
  *  with when it was recorded. */
@@ -27,13 +33,33 @@ export interface CachedOsFingerprint extends OsFingerprint {
   at: number;
 }
 
+/** T-20 — the verdict of a VPN/HTTP row's pre-flight, which is a DNS resolve of
+ *  the endpoint (`endpoint_resolve`), not a SOCKS5 handshake. Field names match
+ *  the native `EndpointResolveResult`. */
+export interface CachedEndpointVerdict {
+  resolved: boolean;
+  ip: string;
+  message: string;
+}
+
 export interface CachedProbe {
   result: ProxyTestResult;
   /** Epoch ms when the probe ran. */
   at: number;
+  /** T-20 — present when the row's last check was an endpoint resolve rather
+   *  than a SOCKS5 probe. `result` is then the fail-closed placeholder (never
+   *  usable — see `ENDPOINT_PLACEHOLDER_RESULT`), so every derivation that reads
+   *  `result` treats the entry as "not a SOCKS5 verdict", and a surface that
+   *  wants to describe the check reads THIS. */
+  endpoint?: CachedEndpointVerdict;
   /** E-2 exit-geo (optional — absent until the echo probe succeeds). */
   exitIp?: string;
   exitCountry?: string | null;
+  /** T-17 — epoch ms when the exit-geo below was measured. `at` moves on every
+   *  native re-test while the geo is preserved across them, so `at` cannot say
+   *  how old the exit identity is. Absent on entries written before this field
+   *  existed, which `isExitIdentityFresh` reads as NOT fresh. */
+  exitAt?: number;
   /** Geo enrichment (2026-06-15) from lumtest through the proxy — best-effort,
    *  absent when lumtest was unreachable. exitCountry stays the baseline. */
   exitCity?: string | null;
@@ -150,6 +176,61 @@ export const QUIC_VERDICT_TTL_MS = 30 * 60 * 1000;
 export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
   if (typeof atMs !== 'number') return false;
   return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+}
+
+/**
+ * T-17 — how long a probed EXIT IDENTITY (ip / country / timezone) stays current.
+ *
+ * ⛔ `exitTimezone` never expired. The simulator's status-bar clock is set from
+ * it at launch, so a residential exit that rotated to another zone since the
+ * last probe put the wrong time on the device for the whole session — the
+ * owner's #3. Thirty minutes matches `QUIC_VERDICT_TTL_MS` above: both describe
+ * something measured THROUGH the proxy that the proxy can change underneath us,
+ * and a launch is the one moment the value is acted on. Not shorter: every
+ * re-probe is a real request through the proxy at the customer's cost.
+ */
+export const EXIT_IDENTITY_TTL_MS = 30 * 60 * 1000;
+
+/** Is a probed exit identity still current? Same rule as the QUIC verdict: an
+ *  ABSENT timestamp is not fresh — we cannot say when it was taken — and the
+ *  launch path then re-probes once, which stamps one. */
+export function isExitIdentityFresh(atMs: number | undefined, nowMs: number): boolean {
+  if (typeof atMs !== 'number') return false;
+  return nowMs - atMs < EXIT_IDENTITY_TTL_MS;
+}
+
+/**
+ * T-20 — the `result` stored beside an endpoint verdict.
+ *
+ * Every field that could read as a SOCKS5 pass is false, so `isProxyUsable`
+ * is false, no exit-geo / fingerprint / QUIC verdict is surfaced for it, and
+ * a cache reader that predates `endpoint` sees a proxy that is not usable
+ * rather than one that is. The message is the resolve's own sentence.
+ */
+export function endpointPlaceholderResult(endpoint: CachedEndpointVerdict): ProxyTestResult {
+  return {
+    reachable: false,
+    auth_ok: false,
+    udp_associate: false,
+    can_route: false,
+    connect_reply: 0xff,
+    latency_ms: 0,
+    message: endpoint.message,
+  };
+}
+
+/**
+ * T-20 — does a cached entry hold a verdict of the kind THIS row can earn?
+ *
+ * A SOCKS5 verdict on a VPN row is what the un-gated probe wrote before the
+ * fix: a handshake the endpoint never speaks, recorded as "unreachable". It is
+ * evidence about the probe, not the proxy, so a surface must read it as
+ * untested and the auto-probe must run the right check in its place. The
+ * reverse holds too: a row switched from VPN to SOCKS5 keeps an endpoint
+ * verdict that says nothing about the listener it now is.
+ */
+export function verdictMatchesScheme(socks5Probeable: boolean, entry: CachedProbe): boolean {
+  return socks5Probeable ? entry.endpoint === undefined : entry.endpoint !== undefined;
 }
 
 export function deriveProbeViewState(
@@ -315,6 +396,16 @@ function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
   return { os: f.os, confidence: f.confidence, reason: f.reason, at: f.at };
 }
 
+/** T-20 — a stored endpoint verdict is kept only when every field is present
+ *  and typed; anything else is undefined, never a half-verdict. */
+function cleanEndpointVerdict(raw: unknown): CachedEndpointVerdict | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const e = raw as Record<string, unknown>;
+  if (typeof e.resolved !== 'boolean' || typeof e.ip !== 'string' || typeof e.message !== 'string')
+    return undefined;
+  return { resolved: e.resolved, ip: e.ip, message: e.message };
+}
+
 function cleanEntry(raw: unknown): CachedProbe | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
@@ -353,9 +444,17 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   // is kept only as a boolean — a string "true" is not a measurement.
   const vantage = cleanServerVantage(r.measuredFrom, r.nodeId);
   const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
+  // T-17 — the exit identity's own stamp; absent reads as "not fresh".
+  const exitAt = typeof r.exitAt === 'number' ? r.exitAt : undefined;
+  // T-20 — an endpoint verdict is kept only whole; a partial one is dropped and
+  // the entry then reads as a (non-usable) SOCKS5 verdict, which is the
+  // conservative reading for both kinds of row.
+  const endpoint = cleanEndpointVerdict(r.endpoint);
   return {
+    ...(endpoint !== undefined ? { endpoint } : {}),
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
+    ...(exitAt !== undefined ? { exitAt } : {}),
     ...(exitCity !== undefined ? { exitCity } : {}),
     ...(exitRegion !== undefined ? { exitRegion } : {}),
     ...(exitTimezone !== undefined ? { exitTimezone } : {}),
@@ -384,6 +483,42 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   };
 }
 
+/**
+ * T-27 / W-30 — the persisted cache's schema version, and the one migration.
+ *
+ * ⛔ `quicMeasuredAt` was added in 3e4de3a36 together with the rule that an
+ * ABSENT timestamp is NOT fresh. Every measured verdict persisted before that
+ * commit has no timestamp, so on every install that had ever seen a green chip
+ * the fix turned it into `~` and nothing would ever restore it: the stamp is
+ * only written by a NEW server result or a NEW live observation, and the owner
+ * item (#13, "QUIC never green") is exactly the customer who had one stored.
+ *
+ * The backfill stamps such an entry with its own `at` — the last time anything
+ * was measured for that proxy — so it ages from a time we actually recorded
+ * rather than being discarded. It runs ONCE, keyed on this version in the same
+ * store: after the migration, an entry with a verdict and no stamp is once more
+ * "we could not tell", and the not-fresh rule stands for it. A read-time
+ * default would have weakened that rule for every entry forever.
+ */
+export const PROBE_CACHE_SCHEMA_VERSION = 2;
+const SCHEMA_KEY = 'probes_schema';
+
+/** The one-time W-30 backfill, pure over a cleaned map. Returns the entries
+ *  it changed (by id) so the caller can persist exactly those. Exported for
+ *  the guard; production reaches it only through `loadProbeCache`. */
+export function backfillQuicMeasuredAt(cache: ProbeCacheMap, loadTimeMs: number): string[] {
+  const changed: string[] = [];
+  for (const [id, c] of Object.entries(cache)) {
+    if (c.quicMeasured === undefined || c.quicMeasuredAt !== undefined) continue;
+    // `at` is the entry's own last-measured time; a non-finite one (a NaN that
+    // survived `typeof === 'number'`) falls back to the load time rather than
+    // stamping a value that no arithmetic can age.
+    c.quicMeasuredAt = Number.isFinite(c.at) ? c.at : loadTimeMs;
+    changed.push(id);
+  }
+  return changed;
+}
+
 export async function loadProbeCache(): Promise<ProbeCacheMap> {
   try {
     const raw = await getStore().get<Record<string, unknown>>(KEY);
@@ -393,9 +528,38 @@ export async function loadProbeCache(): Promise<ProbeCacheMap> {
       const clean = cleanEntry(entry);
       if (id.length > 0 && clean !== null) out[id] = clean;
     }
+    await migrateOnce(out);
     return out;
   } catch {
     return {};
+  }
+}
+
+/** Run the schema migration exactly once per store. Deliberately NOT under the
+ *  write lock: every locked mutation calls `loadProbeCache` while holding it and
+ *  the lock is not re-entrant. The write is idempotent, so the unlocked mount
+ *  read racing a locked save can only write the same backfilled content twice.
+ *  A store that refuses the write leaves the version unset; the migration then
+ *  simply runs again on the next load, still producing the same result. */
+async function migrateOnce(cache: ProbeCacheMap): Promise<void> {
+  const store = getStore();
+  const version = await store.get<unknown>(SCHEMA_KEY);
+  if (typeof version === 'number' && version >= PROBE_CACHE_SCHEMA_VERSION) return;
+  const changed = backfillQuicMeasuredAt(cache, Date.now());
+  try {
+    // Only the migrated entries are written back — an unrelated entry the
+    // cleaner dropped is left in the store exactly as every load before this
+    // one left it.
+    if (changed.length > 0) {
+      const raw = (await store.get<Record<string, unknown>>(KEY)) ?? {};
+      for (const id of changed) raw[id] = cache[id];
+      await store.set(KEY, raw);
+    }
+    await store.set(SCHEMA_KEY, PROBE_CACHE_SCHEMA_VERSION);
+    await store.save();
+  } catch {
+    /* the in-memory map is already backfilled; the version stays unset and the
+       migration retries on the next load */
   }
 }
 
@@ -420,6 +584,8 @@ export function saveProbeResult(
       ...(prior?.exitRegion !== undefined ? { exitRegion: prior.exitRegion } : {}),
       ...(prior?.exitTimezone !== undefined ? { exitTimezone: prior.exitTimezone } : {}),
       ...(prior?.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
+      // T-17 — the exit identity's own stamp travels with the geo it dates.
+      ...(prior?.exitAt !== undefined ? { exitAt: prior.exitAt } : {}),
       ...(prior?.osFingerprint !== undefined ? { osFingerprint: prior.osFingerprint } : {}),
       // T-1/T-6 — the server latency and measured QUIC ride a separate call (the
       // control plane /test), so a native capability re-test must not erase them,
@@ -453,6 +619,8 @@ export function saveExitResult(
     timezone?: string | null;
     asnOrg?: string | null;
   } = {},
+  /** T-17 — when the exit was measured. Defaults to now; injected by tests. */
+  at: number = Date.now(),
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
     const all = await loadProbeCache();
@@ -466,6 +634,7 @@ export function saveExitResult(
       exitRegion: geo.region ?? null,
       exitTimezone: geo.timezone ?? null,
       exitAsnOrg: geo.asnOrg ?? null,
+      exitAt: at,
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -555,6 +724,120 @@ export function saveServerProbeResult(
     emitProbeCache(all);
     return all;
   });
+}
+
+/**
+ * T-20 — record a VPN/HTTP row's endpoint pre-flight.
+ *
+ * Stored as an `endpoint` verdict beside the fail-closed placeholder `result`,
+ * so `isProxyUsable` and every derivation built on it read "not a SOCKS5
+ * verdict" — never a fake pass, and never the un-gated probe's false
+ * "unreachable" either. Replaces any SOCKS5 verdict the row held (that verdict
+ * was the bug); exit-geo and the server-side fields are NOT carried over,
+ * because they were measured through a SOCKS5 listener this row does not have.
+ */
+export function saveEndpointResult(
+  proxyId: string,
+  endpoint: CachedEndpointVerdict,
+  at: number,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    all[proxyId] = {
+      result: endpointPlaceholderResult(endpoint),
+      at,
+      endpoint: { resolved: endpoint.resolved, ip: endpoint.ip, message: endpoint.message },
+    };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/**
+ * T-27 — record a QUIC verdict OBSERVED in a live session (the session's
+ * capability report said an HTTP/3 connection completed through this proxy).
+ *
+ * Touches only the verdict and its stamp. `saveServerProbeResult` is the wrong
+ * tool here on purpose: it REPLACES the vantage, node and relay verdict with
+ * every call (present → stored, absent → removed), and a live observation
+ * carries none of them — routing it through there would strip the fleet label
+ * off a latency it did not re-measure. Monotone: a stamp older than the one
+ * stored is ignored, so a late-arriving poll cannot rewind a fresher verdict.
+ * Rides on an existing entry like every other enrichment; none is invented.
+ */
+export function saveObservedQuic(
+  proxyId: string,
+  quic: MeasuredQuic,
+  at: number,
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    if (prior.quicMeasuredAt !== undefined && prior.quicMeasuredAt > at) return all;
+    all[proxyId] = { ...prior, quicMeasured: quic, quicMeasuredAt: at };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+// T-27 — one ledger per process: a latched `h3_connection_observed` is stamped
+// once per session; a rising `h3_connection_count` re-stamps.
+const h3Ledger = makeH3ObservationLedger();
+
+/** The slice of a listed agent session the live-h3 consumer reads. The SDK
+ *  types `capability_report` without the h3 fields; it is parsed as `unknown`. */
+export interface LiveSessionLike {
+  id: string;
+  capability_report?: unknown;
+}
+
+/**
+ * T-27 (drop 2) — turn the live sessions' capability reports into stored QUIC
+ * verdicts on the proxies they launched through.
+ *
+ * Called from the profile hub's agent-session list poll — the MAIN app, on
+ * purpose. The simulator is a separate macOS bundle (`dev.driftstack.simulator`)
+ * with its own store directory, so a cache write from SimulatorWindow would
+ * land in a file the profile cards never read; the hub's poll already carries
+ * every live session's `capability_report` and is the one consumer whose store
+ * IS the cards' store. Best-effort per session: a proxy with no cache entry
+ * attaches nothing (and stays un-committed in the ledger, so the next poll
+ * after a probe writes it), and one failed write does not stop the others.
+ * Returns the proxy ids written, for the guard.
+ */
+export async function recordLiveH3Observations(
+  sessions: ReadonlyArray<LiveSessionLike>,
+  bindings: ReadonlyArray<H3BindingLike>,
+  proxies: ReadonlyArray<{ id: string }>,
+  nowMs: number = Date.now(),
+): Promise<string[]> {
+  const written: string[] = [];
+  for (const s of sessions) {
+    const obs = parseH3Observation(s.capability_report);
+    if (obs === null) continue;
+    const proxyId = attributeSessionProxy(s.id, bindings, proxies);
+    if (proxyId === null) continue;
+    const at = h3Ledger.plan(s.id, obs, nowMs);
+    if (at === null) continue;
+    try {
+      const cache = await saveObservedQuic(proxyId, 'h3', at);
+      const stored = cache[proxyId];
+      // Committed only when the verdict is actually on the entry: no entry, or
+      // a fresher stamp already there, leaves the session to be re-read later.
+      if (stored?.quicMeasured === 'h3' && (stored.quicMeasuredAt ?? -1) >= at) {
+        h3Ledger.commit(s.id, obs);
+        written.push(proxyId);
+      }
+    } catch {
+      /* best-effort — the next poll retries */
+    }
+  }
+  return written;
 }
 
 /** Drop a proxy's cached probe (capability + exit-geo). Called when the

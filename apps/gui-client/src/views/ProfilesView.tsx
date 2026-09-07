@@ -44,10 +44,16 @@ import {
   type AccountOrganization,
 } from '../lib/account-organization';
 import {
+  deriveProbeViewState,
+  isExitIdentityFresh,
   loadProbeCache,
+  recordLiveH3Observations,
   subscribeProbeCache,
+  saveEndpointResult,
   saveProbeResult,
   saveExitResult,
+  verdictMatchesScheme,
+  type CachedProbe,
   type ProbeCacheMap,
 } from '../lib/proxy-probe-cache';
 import { downloadJson, timestampedFilename } from '../lib/download';
@@ -118,11 +124,14 @@ import {
   setProxyServerId,
   testProxy,
   probeProxyExit,
+  resolveEndpoint,
   type ProxyConfig as LocalProxyConfig,
   type ProxyDraft,
   type ProxyTestResult,
 } from '../lib/proxies';
 import { ProxyHostWarning } from '../components/ProxyHostWarning';
+import { endpointUnresolvedCopy, isSocks5Probeable } from '../lib/proxy-scheme';
+import { persistServerProbe, testProxyOnServer } from '../lib/proxy-server-test';
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
@@ -149,6 +158,19 @@ export function chooseAutoProbeTarget(
   return resolved ?? first;
 }
 
+/** T-20 — the cached entry for a proxy, ONLY when it is a verdict of the kind
+ *  this row can earn. A SOCKS5 "unreachable" on a VPN row is what the un-gated
+ *  probe wrote before the fix — a fact about the probe, not the proxy — so every
+ *  surface reads it as untested and the auto-probe runs the right check. */
+export function matchingProbe(
+  px: LocalProxyConfig,
+  probeCache: ProbeCacheMap,
+): CachedProbe | undefined {
+  const entry = probeCache[px.id];
+  if (entry === undefined) return undefined;
+  return verdictMatchesScheme(isSocks5Probeable(px.scheme), entry) ? entry : undefined;
+}
+
 /** Probe only when nothing is cached for this proxy and no test is already in
  *  flight for it — handleTestProxy itself has no single-flight. */
 export function shouldAutoProbe(
@@ -156,7 +178,7 @@ export function shouldAutoProbe(
   probeCache: ProbeCacheMap,
   testingProxyId: string | null,
 ): boolean {
-  if (probeCache[px.id] !== undefined) return false;
+  if (matchingProbe(px, probeCache) !== undefined) return false;
   if (testingProxyId === px.id) return false;
   return true;
 }
@@ -737,6 +759,13 @@ export function ProfilesView({
   // tab's Test actions) — cards render the UDP badge from it; absent =
   // honest 'untested'.
   const [probeCache, setProbeCache] = useState<ProbeCacheMap>({});
+  // T-27 (drop 4) — the cards read the DERIVED view for everything the control
+  // plane measured (server latency + vantage, QUIC verdict, relay verdict, OS
+  // fingerprint), not the raw entry: the derivation is where the usable-only
+  // rule and the W-30 QUIC expiry live, and reading `probeCache[id].quicMeasured`
+  // directly meant the TTL never ran on the profile hub — a verdict aged out on
+  // the Proxies grid stayed green here.
+  const probeView = useMemo(() => deriveProbeViewState(probeCache), [probeCache]);
   // S3 — per-card proxy "Test" in flight (proxy id), so the card can show
   // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
@@ -1273,6 +1302,15 @@ export function ProfilesView({
                 })),
               );
               setAgentSessionsLoaded(true);
+              // T-27 (drop 2) — the same list carries each live session's
+              // capability_report, and with it the ONLY honest "this proxy
+              // carried HTTP/3" signal (h3_connection_observed). This poll is the
+              // main app's — the store the profile cards read — which is why the
+              // write lives here and not in the separate simulator bundle.
+              // Best-effort; a write failure never touches the refresh.
+              void recordLiveH3Observations(page.data, currentBindings, currentProxies).catch(
+                () => undefined,
+              );
             })
             .catch(() => undefined);
         }
@@ -1885,13 +1923,15 @@ export function ProfilesView({
       // Open the floating-iPhone simulator window (the only experience now).
       const reopened = state.profiles.find((p) => p.id === profileId);
       const reopenProxy = pickProxy(profileId);
-      const reopenCountry =
-        reopenProxy !== null ? (probeCache[reopenProxy.id]?.exitCountry ?? null) : null;
       // The probe already stored the exit's IANA zone right beside its country; it was
       // simply never handed over, so the device clock showed the host Mac's time
-      // (owner 2026-08-30).
-      const reopenTimezone =
-        reopenProxy !== null ? (probeCache[reopenProxy.id]?.exitTimezone ?? null) : null;
+      // (owner 2026-08-30). T-17 — re-probed when older than the exit TTL.
+      const reopenExit =
+        reopenProxy !== null
+          ? await freshExitIdentity(reopenProxy)
+          : { country: null, timezone: null };
+      const reopenCountry = reopenExit.country;
+      const reopenTimezone = reopenExit.timezone;
       const sim = await openSimulatorWindow({
         sessionId: agentSessionId,
         info,
@@ -2279,7 +2319,7 @@ export function ProfilesView({
     // Country matches what the table would have shown.
     const exitCountryOf = (p: Profile): string => {
       const px = pickProxy(p.id);
-      const probe = px !== null ? probeCache[px.id] : undefined;
+      const probe = px !== null ? matchingProbe(px, probeCache) : undefined;
       // 'zz' sinks the unknowns to the end of an ascending sort.
       return probe?.exitCountry ?? 'zz';
     };
@@ -2417,6 +2457,17 @@ export function ProfilesView({
   async function handleTestProxy(px: LocalProxyConfig): Promise<void> {
     setTestingProxyId(px.id);
     try {
+      // T-20 — a VPN/HTTP row has no honest SOCKS5 handshake: the native probe
+      // sends a SOCKS5 greeting to an OpenVPN remote (a UDP endpoint) and can
+      // only ever answer "unreachable" — the false verdict this card used to
+      // write on mount. The honest client-side check is a DNS resolve of the
+      // endpoint; the tunnel itself is verified at launch. Stored as an
+      // endpoint verdict, which nothing reads as a SOCKS5 pass.
+      if (!isSocks5Probeable(px.scheme)) {
+        const res = await resolveEndpoint(px.host, px.port);
+        setProbeCache(await saveEndpointResult(px.id, res, Date.now()));
+        return;
+      }
       const result = await testProxy({
         host: px.host,
         port: px.port,
@@ -2444,11 +2495,72 @@ export function ProfilesView({
             }),
           );
         }
+        // T-27 (drop 1) — the control plane's own test from the FLEET vantage is
+        // the only source of the measured QUIC verdict, the relay verdict, the
+        // server latency and the OS fingerprint. The Proxies grid ran it; this
+        // card never did, so a card Test could not turn the QUIC chip green no
+        // matter how many times it was pressed. Same shared step as the grid
+        // (lib/proxy-server-test), same preconditions: a proxy stored on the
+        // account, an API key, and a native verdict that says usable.
+        if (px.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
+          try {
+            const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
+            const next = await persistServerProbe(px.id, outcome);
+            if (next !== null) setProbeCache(next);
+          } catch {
+            /* best-effort — the native verdict above stands */
+          }
+        }
       }
     } catch {
       /* best-effort — the card keeps its prior probe state on failure */
     } finally {
       setTestingProxyId(null);
+    }
+  }
+
+  /**
+   * T-17 — the exit identity (country + IANA zone) a launch hands the simulator.
+   *
+   * The simulator's status-bar clock is set from `exitTimezone` at launch, and
+   * that value never expired: a residential exit that had rotated to another
+   * zone since the last probe put the wrong time on the device for the whole
+   * session. Re-probe the exit when the stored identity is older than
+   * `EXIT_IDENTITY_TTL_MS` (or undated), for a proxy the native probe last
+   * found usable; a VPN row is never exit-probed (the probe is a SOCKS5 request
+   * through the proxy). Best-effort: a probe that fails hands over what is
+   * cached rather than blocking the launch.
+   */
+  async function freshExitIdentity(
+    px: LocalProxyConfig,
+  ): Promise<{ country: string | null; timezone: string | null }> {
+    const cached = probeCache[px.id];
+    const fromCache = {
+      country: cached?.exitCountry ?? null,
+      timezone: cached?.exitTimezone ?? null,
+    };
+    if (cached === undefined || !isSocks5Probeable(px.scheme) || !isProxyUsable(cached.result))
+      return fromCache;
+    if (isExitIdentityFresh(cached.exitAt, Date.now())) return fromCache;
+    try {
+      const exit = await probeProxyExit({
+        host: px.host,
+        port: px.port,
+        username: px.username,
+        password: px.password,
+      });
+      if (exit === null) return fromCache;
+      setProbeCache(
+        await saveExitResult(px.id, exit.ip, exit.country, {
+          city: exit.city ?? null,
+          region: exit.region ?? null,
+          timezone: exit.timezone ?? null,
+          asnOrg: exit.asn_org ?? null,
+        }),
+      );
+      return { country: exit.country, timezone: exit.timezone ?? null };
+    } catch {
+      return fromCache;
     }
   }
 
@@ -2601,8 +2713,20 @@ export function ProfilesView({
       // Deliberately NOT read back out of storage after saving: a cache write that
       // drops or reshapes the entry would silently discard a verdict we just
       // measured, and a launch would proceed on no evidence at all.
-      let verdict: ProxyTestResult | undefined = probeCache[proxy.id]?.result;
-      if (!opts.skipProxyDownConfirm) {
+      //
+      // T-20 — SCHEME-AWARE. The SOCKS5 probe below was run for every scheme, so
+      // an OpenVPN/WireGuard row (host/port = the config's UDP endpoint) got a
+      // SOCKS5 greeting that can never succeed → `reachable:false` forever → the
+      // "was unreachable … Launch anyway?" confirm on EVERY launch (owner #6).
+      // A non-SOCKS5 row gets the honest pre-flight instead — a DNS resolve of
+      // the endpoint — and its only possible confirm says the endpoint did not
+      // resolve; it must never be shown the SOCKS5 ladder, so `verdict` stays
+      // undefined for it no matter what the cache holds.
+      const socks5Gate = isSocks5Probeable(proxy.scheme);
+      let verdict: ProxyTestResult | undefined = socks5Gate
+        ? matchingProbe(proxy, probeCache)?.result
+        : undefined;
+      if (!opts.skipProxyDownConfirm && socks5Gate) {
         try {
           const fresh = await testProxy({
             host: proxy.host,
@@ -2617,6 +2741,25 @@ export function ProfilesView({
           // A probe that could not RUN is not a verdict. Fall through to whatever
           // the cache holds rather than blocking a launch on our own failure.
           console.warn('pre-launch proxy re-test failed; using the cached verdict', err);
+        }
+      } else if (!opts.skipProxyDownConfirm) {
+        let endpointResolved = true;
+        try {
+          const res = await resolveEndpoint(proxy.host, proxy.port);
+          endpointResolved = res.resolved;
+          setProbeCache(await saveEndpointResult(proxy.id, res, Date.now()));
+        } catch (err) {
+          // A resolve that could not RUN is not a verdict either.
+          console.warn('pre-launch endpoint resolve failed; launching on no verdict', err);
+        }
+        if (!endpointResolved) {
+          const proceed = await confirm(
+            `${endpointUnresolvedCopy(proxy.scheme, proxy.host)} Launch anyway?`,
+            { confirmLabel: 'Launch anyway' },
+          );
+          if (!proceed) return; // finally resets busyId
+          // The operator accepted the risk → the server must not re-block on its probe.
+          skipProxyProbe = true;
         }
       }
       const lastProbe = verdict === undefined ? undefined : { result: verdict };
@@ -2674,24 +2817,37 @@ export function ProfilesView({
           await confirm(leakMsg, { confirmLabel: 'OK' });
         }
       };
+      // T-20 — one sentence for every egress block, with the server's own reason in
+      // place of the guess when the sync failure carried one. A provider .ovpn is
+      // refused for a NAMED line (`Line 8: "up …" — Driftstack does not run scripts
+      // from VPN configs…`); the transport used to dispose that body, so the dialog
+      // could only say "Check the proxy". The reason is read structurally — the way
+      // the 404 self-heal in ensureServerProxy reads `status` — so this view does not
+      // depend on the transport's error class (the launch suites double that module).
+      const egressBlockCopy = (fallbackRemedy: string, serverDetail?: unknown): string =>
+        `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
+        `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
+        `proxy. ` +
+        (typeof serverDetail === 'string' && serverDetail.length > 0
+          ? `Driftstack said: ${serverDetail}`
+          : fallbackRemedy);
       let proxyIdForLaunch: string | undefined;
       try {
         proxyIdForLaunch = await ensureServerProxy(proxy);
       } catch (err) {
         console.warn('proxy account-sync failed; aborting launch to avoid an egress leak', err);
         await reportEgressBlock(
-          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
-            `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
-            `proxy. Check the proxy and try again.`,
+          egressBlockCopy(
+            'Check the proxy and try again.',
+            err instanceof Error ? (err as Error & { detail?: unknown }).detail : undefined,
+          ),
         );
         return; // finally resets busyId; NO proxy-less create body is built
       }
       if (proxyIdForLaunch === undefined) {
         console.warn('proxy account-sync returned no id; aborting launch to avoid an egress leak');
         await reportEgressBlock(
-          `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
-            `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
-            `proxy. Reconnect your API key in Settings and try again.`,
+          egressBlockCopy('Reconnect your API key in Settings and try again.'),
         );
         return; // finally resets busyId; NO proxy-less create body is built
       }
@@ -2778,11 +2934,15 @@ export function ProfilesView({
         // Open the floating-iPhone simulator window (the only experience now).
         // The proxy's exit country (from its probe) rides through so the
         // separate simulator app's macOS Dock tile reflects the egress country.
+        // T-17 — re-probed when the stored exit identity is older than the TTL,
+        // so the device clock is set from the exit's CURRENT zone.
         const launchProxy = pickProxy(profile.id);
-        const launchCountry =
-          launchProxy !== null ? (probeCache[launchProxy.id]?.exitCountry ?? null) : null;
-        const launchTimezone =
-          launchProxy !== null ? (probeCache[launchProxy.id]?.exitTimezone ?? null) : null;
+        const launchExit =
+          launchProxy !== null
+            ? await freshExitIdentity(launchProxy)
+            : { country: null, timezone: null };
+        const launchCountry = launchExit.country;
+        const launchTimezone = launchExit.timezone;
         const sim = await openSimulatorWindow({
           sessionId: created.id,
           info: created.livekit,
@@ -4233,8 +4393,15 @@ export function ProfilesView({
                     // S5 (GUI-rework 2026-06-14) — card-level derived display
                     // values from the REAL probe cache (no invented data). The
                     // proxy row + latency meter + health pill all read these.
+                    // T-20 — a verdict of the wrong kind for the row (a SOCKS5
+                    // "unreachable" on a VPN row) reads as untested.
                     const px = pickProxy(profile.id);
-                    const probe = px !== null ? probeCache[px.id] : undefined;
+                    const probe = px !== null ? matchingProbe(px, probeCache) : undefined;
+                    // T-20 — an endpoint verdict carries no SOCKS5 capabilities;
+                    // the chips and the health pill would describe a handshake
+                    // that never ran.
+                    const socks5Result =
+                      probe !== undefined && probe.endpoint === undefined ? probe.result : null;
                     // Only surface the cached exit IP / country / flag when the LAST
                     // capability probe was actually healthy. saveProbeResult preserves
                     // a proxy's prior exit-geo across a FAILED capability re-test
@@ -4248,8 +4415,10 @@ export function ProfilesView({
                     // the fleet that runs the profile) over the native probe from
                     // this Mac, and only while the proxy is usable; the card labels
                     // whichever it shows. Falls back to the native number.
-                    const serverLat = exitOk ? probe?.serverLatencyMs : undefined;
-                    const lat = serverLat ?? probe?.result.latency_ms;
+                    // T-27 (drop 4) — from the derived view, which already applies
+                    // the usable-only rule (no reading the raw entry here).
+                    const serverLat = px !== null ? probeView.serverLatency[px.id] : undefined;
+                    const lat = serverLat ?? socks5Result?.latency_ms;
                     const latFromServer = serverLat !== undefined;
                     // latency meter fill: 0–250ms mapped to 0–100% (clamped).
                     const latFill =
@@ -4283,9 +4452,14 @@ export function ProfilesView({
                           latencyGood={latGood}
                           latencyFromServer={latFromServer}
                           probed={probe !== undefined}
-                          capabilities={probe?.result ?? null}
-                          quicMeasured={exitOk ? probe?.quicMeasured : undefined}
-                          osFingerprint={exitOk ? probe?.osFingerprint : undefined}
+                          capabilities={socks5Result}
+                          // T-27 (drops 3+4) — the derived view ages the QUIC
+                          // verdict (W-30) and gates every server value on usable;
+                          // the fleet relay verdict now reaches the card too.
+                          quicMeasured={px !== null ? probeView.quicMeasured[px.id] : undefined}
+                          quicProbe={px !== null ? probeView.quicProbe[px.id] : undefined}
+                          latencyVantage={px !== null ? probeView.serverVantage[px.id] : undefined}
+                          osFingerprint={px !== null ? probeView.osFingerprints[px.id] : undefined}
                           checkedAtIso={
                             probe?.at !== undefined ? new Date(probe.at).toISOString() : null
                           }
@@ -4346,13 +4520,23 @@ export function ProfilesView({
                   const rows: ProfileTableRow[] = filteredProfiles.map((profile) => {
                     const bound = boundSession(profile.id);
                     const px = pickProxy(profile.id);
-                    const probe = px !== null ? probeCache[px.id] : undefined;
+                    // T-20 — same as the grid: a wrong-kind verdict reads as untested.
+                    const probe = px !== null ? matchingProbe(px, probeCache) : undefined;
                     // Gate the exit IP / country / location on the last capability
                     // probe being healthy — saveProbeResult preserves prior exit-geo
                     // across a failed re-test, so a down proxy must NOT keep showing a
                     // stale "exits from US 1.2.3.4". Matches the grid card + ProxiesView.
                     const exitOk = probe !== undefined && isProxyUsable(probe.result);
-                    const caps = probe !== undefined ? proxyCapabilities(probe.result) : null;
+                    // T-20 — an endpoint verdict has no SOCKS5 capabilities to derive.
+                    // T-27 (drop 4) — the QUIC verdict comes from the derived view.
+                    const caps =
+                      probe !== undefined && probe.endpoint === undefined
+                        ? proxyCapabilities(
+                            probe.result,
+                            px !== null ? probeView.quicMeasured[px.id] : undefined,
+                            px !== null ? probeView.quicProbe[px.id] : undefined,
+                          )
+                        : null;
                     const udp: 'ok' | 'fail' | 'unknown' =
                       caps === null
                         ? 'unknown'
@@ -4796,7 +4980,7 @@ function CreateProfileModal({
   // meaningful for socks5 proxies. For an HTTP proxy it would always fail the
   // handshake → a valid HTTP proxy showed "Not reachable". Gate the Test button
   // to socks5 (VPN schemes already hide it via newProxyIsVpn).
-  const newProxyCanTest = newProxy.scheme === 'socks5';
+  const newProxyCanTest = isSocks5Probeable(newProxy.scheme); // T-20 — the shared predicate
   // Native proxy probe (SOCKS5 reachability + UDP-associate detection).
   // Runs against the inline create-new draft so the customer can confirm
   // the proxy works — and whether UDP/QUIC/WebRTC will tunnel — before

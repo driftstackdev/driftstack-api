@@ -39,7 +39,12 @@ describe('disposeResponseBody', () => {
 
   it('guards every shared-fetch status-only or stale exit', () => {
     for (const [relative, expectedCalls] of [
-      ['../../src/lib/account-proxies.ts', 5],
+      // T-20 — 5 → 4: the create and update error paths were unified into the
+      // shared `failedProxyRequest`, which reads the RFC-7807 problem body and
+      // then disposes it once (one call now serves both). Every non-ok/stale
+      // exit still disposes — verified: the four calls cover failedProxyRequest,
+      // the stale-key read, the delete accept/404 path, and the org read.
+      ['../../src/lib/account-proxies.ts', 4],
       ['../../src/lib/account-organization.ts', 2],
       ['../../src/components/SettingsAccountCard.tsx', 2],
       ['../../src/lib/browser-sign-in.ts', 2],

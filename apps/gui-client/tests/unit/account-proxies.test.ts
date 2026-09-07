@@ -1,7 +1,13 @@
 // ARC A slice 5 transport — /v1/account/me/proxies CRUD (raw authed fetch).
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createProxy, deleteProxy, listProxies, updateProxy } from '../../src/lib/account-proxies';
+import {
+  AccountProxyRequestError,
+  createProxy,
+  deleteProxy,
+  listProxies,
+  updateProxy,
+} from '../../src/lib/account-proxies';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -95,6 +101,96 @@ describe('createProxy', () => {
     expect(init.method).toBe('POST');
     expect((JSON.parse(init.body as string) as { password?: string }).password).toBe('pw');
     expect(out.id).toBe('p1');
+  });
+});
+
+// T-20 — a refusal keeps its reason. The server answers a rejected OpenVPN
+// config with `Line 8: "up …" — Driftstack does not run scripts from VPN
+// configs…`; this transport used to dispose that body and throw the status
+// alone, so the launch dialog had nothing to show but a guess.
+describe('createProxy / updateProxy — a refusal keeps its reason (T-20)', () => {
+  const PROBLEM = {
+    type: 'https://errors.driftstack.dev/bad-request',
+    title: 'Bad Request',
+    status: 400,
+    detail:
+      'Line 8: "up /etc/openvpn/update-resolv-conf" — Driftstack does not run scripts from VPN ' +
+      'configs. Remove this line and try again.',
+  };
+  const INPUT = { label: 'ovpn', host: 'vpn.example.com', port: 1194 };
+
+  it('CRITICAL a 400 with a problem+json body throws an error carrying status, type, title and detail verbatim — the detail is the sentence the owner is shown, so it must survive the wire untouched.', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify(PROBLEM), {
+            status: 400,
+            headers: { 'content-type': 'application/problem+json' },
+          }),
+        ),
+      ),
+    );
+    const err: unknown = await createProxy('https://api.driftstack.dev', 'ds_key', INPUT).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AccountProxyRequestError);
+    expect(err).toMatchObject({
+      status: 400,
+      type: PROBLEM.type,
+      title: PROBLEM.title,
+      detail: PROBLEM.detail,
+    });
+    expect((err as Error).message).toBe(`proxy create failed: 400 — ${PROBLEM.detail}`);
+  });
+
+  it('CONTROL a body-less 500 falls back to today’s status-only message with no detail. This is the vacuity arm: a transport that invented a detail for every failure would satisfy the arm above and put words in the server’s mouth.', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 500 }))),
+    );
+    const err: unknown = await createProxy('https://api.driftstack.dev', 'ds_key', INPUT).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(AccountProxyRequestError);
+    expect(err).toMatchObject({
+      status: 500,
+      type: undefined,
+      title: undefined,
+      detail: undefined,
+    });
+    expect((err as Error).message).toBe('proxy create failed: 500');
+  });
+
+  it('a non-JSON body (an HTML 502 from something in front of the API) falls back the same way instead of throwing a parse error at the caller', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response('<html>bad gateway</html>', { status: 502 }))),
+    );
+    const err: unknown = await createProxy('https://api.driftstack.dev', 'ds_key', INPUT).catch(
+      (e: unknown) => e,
+    );
+    expect(err).toMatchObject({ status: 502, detail: undefined });
+    expect((err as Error).message).toBe('proxy update failed: 502'.replace('update', 'create'));
+  });
+
+  it('CRITICAL updateProxy carries the same fields and still exposes `status`, which the stale-id self-heal in ProfilesView reads to tell a deleted row (404) from a refusal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(JSON.stringify({ ...PROBLEM, status: 404, title: 'Not Found' }), {
+            status: 404,
+          }),
+        ),
+      ),
+    );
+    const err: unknown = await updateProxy('https://api.driftstack.dev', 'ds_key', 'p1', {
+      label: 'x',
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(AccountProxyRequestError);
+    expect(err).toMatchObject({ status: 404, title: 'Not Found', detail: PROBLEM.detail });
+    expect((err as Error).message).toMatch(/^proxy update failed: 404 — Line 8/);
   });
 });
 

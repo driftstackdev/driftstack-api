@@ -10,9 +10,12 @@
 // installs the signed bundle and relaunches into the new version.
 //
 // Design ("best way" for a developer-tool desktop app):
-//   - Check ONCE on startup, silently. A check failure (offline, no
-//     endpoint, not a Tauri context / dev mode) resolves to `null` and
-//     NEVER blocks or errors the app — update checks are best-effort.
+//   - Check on startup, silently, and again every UPDATE_RECHECK_INTERVAL_MS
+//     while the app stays open (T-14 — it used to be once, and an app left
+//     running for days never saw a release cut after it started). A check
+//     failure (offline, no endpoint, not a Tauri context / dev mode) resolves
+//     to `null` and NEVER blocks or errors the app — update checks are
+//     best-effort.
 //   - If an update is available, surface a NON-blocking banner (the UI
 //     layer) so the customer decides when to install — predictable for
 //     a tool they may be mid-session with — rather than a surprise
@@ -323,6 +326,124 @@ export async function isSessionRunning(): Promise<boolean> {
   } catch {
     return true;
   }
+}
+
+/**
+ * T-14 — how often an app that stays open re-asks the endpoint.
+ *
+ * The check used to run ONCE, on mount. The owner's app process had been running
+ * continuously since 2026-09-05 (measured with ps), and every release since was
+ * cut while it was open — so no check ever saw 0.1.16 through 0.1.19, and the
+ * installed app sat four versions behind an endpoint that served the newest one
+ * for its platform and key. Six hours is short enough that a release lands the
+ * same working day and long enough that an offline laptop is not polling.
+ */
+export const UPDATE_RECHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/** What one pass of the update decision did. */
+export type UpdateOutcome = 'none' | 'installed' | 'banner';
+
+/**
+ * The decision path's inputs, injected so the mount-time check and every later
+ * re-check go through ONE function — and so a test can drive the whole path
+ * without a Tauri runtime. Production wires `checkForUpdate`, the customer's
+ * live `autoUpdate` preference, `isSessionRunning`, and the banner's setter.
+ */
+export interface UpdateCycleDeps {
+  /** `checkForUpdate` — the offered update, or null when up to date. Never throws. */
+  check: () => Promise<AvailableUpdate | null>;
+  /** The customer's CURRENT preference, read at decision time, never captured earlier. */
+  autoUpdate: () => boolean;
+  /** `isSessionRunning` — the not-while-a-session-runs veto. */
+  sessionRunning: () => Promise<boolean>;
+  /**
+   * Surface the offered update — the banner. Called only for a real update that
+   * was NOT installed, so a null result and a successful unattended install both
+   * leave whatever is on screen alone.
+   */
+  onOffered: (update: AvailableUpdate) => void;
+}
+
+/**
+ * ONE pass of the decision: `check` → `shouldAutoInstall` (with the
+ * not-while-a-session-runs guard) → install, else banner.
+ *
+ * T-14 — extracted from the App-shell mount effect so the periodic re-check
+ * cannot drift from it: there is exactly one place that decides, and the effect
+ * only says when to run it. A failed unattended install degrades into the
+ * banner rather than into a dead end, and nothing here throws, because an
+ * update check must never be able to break the app it is checking.
+ */
+export async function runUpdateCycle(deps: UpdateCycleDeps): Promise<UpdateOutcome> {
+  const update = await deps.check();
+  if (update === null) return 'none';
+  if (
+    shouldAutoInstall({
+      autoUpdate: deps.autoUpdate(),
+      sessionRunning: await deps.sessionRunning(),
+    })
+  ) {
+    try {
+      await update.install();
+      return 'installed';
+    } catch {
+      /* fall through to the banner */
+    }
+  }
+  deps.onOffered(update);
+  return 'banner';
+}
+
+/** The timer pair, injectable so a test can drive the loop with fake time. */
+export interface UpdateLoopTimers {
+  setInterval: (callback: () => void, ms: number) => unknown;
+  clearInterval: (handle: unknown) => void;
+}
+
+/**
+ * Run the decision once now and again every `intervalMs` until the returned
+ * stop function is called (the effect's cleanup).
+ *
+ * Single-flight: a tick that arrives while a pass is still in flight — a slow
+ * endpoint, or an install download — is a no-op rather than a second download
+ * stacked on the first. And once a pass has INSTALLED, the loop stops: the app
+ * is on its way to a relaunch, and a later tick would compare the endpoint
+ * against the version still in memory and offer the same update again.
+ */
+export function startUpdateChecks(
+  deps: UpdateCycleDeps,
+  options: { intervalMs?: number; timers?: UpdateLoopTimers } = {},
+): () => void {
+  const intervalMs = options.intervalMs ?? UPDATE_RECHECK_INTERVAL_MS;
+  // Resolved at call time, so fake timers installed before the loop starts are
+  // the ones it uses.
+  const timers: UpdateLoopTimers = options.timers ?? {
+    setInterval: (callback, ms) => globalThis.setInterval(callback, ms),
+    clearInterval: (handle) => globalThis.clearInterval(handle as ReturnType<typeof setInterval>),
+  };
+  let inFlight = false;
+  let stopped = false;
+  let handle: unknown = null;
+  const stop = (): void => {
+    stopped = true;
+    if (handle !== null) timers.clearInterval(handle);
+    handle = null;
+  };
+  const tick = (): void => {
+    if (stopped || inFlight) return;
+    inFlight = true;
+    void runUpdateCycle(deps)
+      .then((outcome) => {
+        if (outcome === 'installed') stop();
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        inFlight = false;
+      });
+  };
+  tick();
+  handle = timers.setInterval(tick, intervalMs);
+  return stop;
 }
 
 /**

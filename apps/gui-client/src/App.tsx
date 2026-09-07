@@ -58,7 +58,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import {
   checkForUpdate,
   isSessionRunning,
-  shouldAutoInstall,
+  startUpdateChecks,
   type AvailableUpdate,
 } from './lib/updater';
 import { buildClient } from './lib/client';
@@ -694,34 +694,51 @@ function Shell(): JSX.Element {
     return () => window.clearInterval(id);
   }, []);
 
+  // T-14 — the decision is read at decision time, not captured at mount. The
+  // old effect closed over `kbSettings.autoUpdate` from the first render, which
+  // is DEFAULT_SETTINGS until the store has loaded — so a stored preference was
+  // never what decided the mount-time check, and a switch flipped later was
+  // never seen by a re-check. A ref carries the live value into the loop.
+  const autoUpdateRef = useRef(kbSettings.autoUpdate);
+  autoUpdateRef.current = kbSettings.autoUpdate;
+  // The version the banner last showed, so a re-check that finds the SAME one
+  // keeps a session-only "Later", while a NEWER one surfaces again.
+  const lastOfferedVersionRef = useRef<string | null>(null);
   useEffect(() => {
-    void checkForUpdate().then(async (u) => {
-      setUpdate(u);
-      // Auto-install when the customer has left it on AND nothing is running.
-      // A failure here is deliberately silent: the banner below is still
-      // rendered, so a failed auto-install degrades into the manual path
-      // rather than into a dead end.
-      if (u !== null && kbSettings.autoUpdate) {
-        if (shouldAutoInstall({ autoUpdate: true, sessionRunning: await isSessionRunning() })) {
-          try {
-            await u.install();
-            return;
-          } catch {
-            /* fall through to the banner */
-          }
-        }
-      }
-      // M16 — "Later" persists per-version so the banner doesn't re-nag on EVERY launch;
-      // a genuinely newer version (different string) still surfaces (audit 2026-07-08).
-      if (u !== null) {
+    // Not before the store has loaded: the loop's first pass would otherwise
+    // decide on DEFAULT_SETTINGS and could install against a stored `false`.
+    // `loading` flips false exactly once, so this starts exactly one loop.
+    if (loading) return;
+    // Once now, then every UPDATE_RECHECK_INTERVAL_MS (T-14): the app stays
+    // open for days, and a check that ran only on mount never saw a release cut
+    // after it started. Mount and re-check share ONE decision path —
+    // `runUpdateCycle`: checkForUpdate → shouldAutoInstall (vetoed while a
+    // session runs) → install, else the banner below. A failed unattended
+    // install degrades into the banner rather than into a dead end.
+    return startUpdateChecks({
+      check: checkForUpdate,
+      autoUpdate: () => autoUpdateRef.current,
+      sessionRunning: isSessionRunning,
+      onOffered: (u) => {
+        setUpdate(u);
+        // M16 — "Later" persists per-version so the banner doesn't re-nag on
+        // EVERY launch; a genuinely newer version (different string) still
+        // surfaces (audit 2026-07-08). T-14 — the same holds across the 6h
+        // re-check, and the newer-version re-surface is what makes a re-check
+        // useful after a "Later". Guard, through the mounted shell:
+        // the-app-shell-keeps-checking-for-updates.test.tsx.
+        let dismissedVersion: string | null = null;
         try {
-          if (localStorage.getItem('ds_update_dismissed') === u.version) setUpdateDismissed(true);
+          dismissedVersion = localStorage.getItem('ds_update_dismissed');
         } catch {
           /* storage unavailable — fall back to session-only dismissal */
         }
-      }
+        if (dismissedVersion === u.version) setUpdateDismissed(true);
+        else if (u.version !== lastOfferedVersionRef.current) setUpdateDismissed(false);
+        lastOfferedVersionRef.current = u.version;
+      },
     });
-  }, []);
+  }, [loading]);
 
   // Global always-on deep-link listener (the dashboard's "Open in desktop
   // client" emits `driftstack://session/open?session_id=…`). The browser-

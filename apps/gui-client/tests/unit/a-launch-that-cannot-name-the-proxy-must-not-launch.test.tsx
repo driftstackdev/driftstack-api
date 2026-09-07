@@ -30,6 +30,13 @@
 //
 // AgentChatView.resolveProfileProxyId already treats `undefined` as `blocked` for
 // exactly this reason. These two mirrored launch paths now agree.
+//
+// T-20 (2026-09-07) — the thrown case has a second promise: when the server's
+// refusal carried a reason, the owner sees THAT reason. Owner #6 pasted a
+// provider .ovpn, the server refused it for a named line, and the transport
+// disposed the body — so the dialog said "Check the proxy and try again" about a
+// file with nothing visibly wrong. The arms at the bottom pin both halves: a
+// refusal with a detail is quoted verbatim, and a body-less 500 keeps the guess.
 
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -161,13 +168,21 @@ vi.mock('../../src/lib/proxies', () => ({
 }));
 
 // Per-arm control over the account-proxies sync. `updateProxy` is the call
-// ensureServerProxy makes for an already-synced proxy.
+// ensureServerProxy makes for an already-synced proxy. `syncDetail` turns the
+// failure into a 400 that carries the server's sentence (T-20); null keeps it a
+// body-less 500, which is the control for the detail arm.
 let syncFails = false;
+let syncDetail: string | null = null;
 vi.mock('../../src/lib/account-proxies', () => ({
   createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
   updateProxy: vi.fn(() =>
     syncFails
-      ? Promise.reject(Object.assign(new Error('sync down'), { status: 500 }))
+      ? Promise.reject(
+          Object.assign(new Error('sync down'), {
+            status: syncDetail === null ? 500 : 400,
+            ...(syncDetail === null ? {} : { detail: syncDetail }),
+          }),
+        )
       : Promise.resolve({ id: 'aprx_1' }),
   ),
   buildWireGuardProxyInput: vi.fn(),
@@ -215,6 +230,7 @@ describe('a launch that cannot name the proxy must not launch', () => {
     confirmMock.mockResolvedValue(true);
     apiKeyValue = 'ds_test_x';
     syncFails = false;
+    syncDetail = null;
   });
 
   it('CONTROL a healthy sync launches, and the create body names the proxy. A guard that only ever refuses proves nothing; this is the arm that fails if the fail-closed check is inverted or over-broad.', async () => {
@@ -258,5 +274,25 @@ describe('a launch that cannot name the proxy must not launch', () => {
     const msg = String(confirmMock.mock.calls[0]?.[0] ?? '');
     expect(msg, 'the customer must be told the launch did not happen, and why').toMatch(LEAK_COPY);
     expect(msg, 'the remedy here is the proxy, not the API key').toMatch(/Check the proxy/i);
+    // T-20 CONTROL — a failure that carried no reason must not have one invented.
+    expect(msg, 'a body-less 500 keeps today’s copy').not.toMatch(/Driftstack said:/);
+  });
+
+  it('T-20 CRITICAL a refusal that names the line reaches the owner verbatim. The server now answers a provider .ovpn with `Line 8: "up …" — Driftstack does not run scripts from VPN configs…`; the transport used to dispose that body and the dialog said "Check the proxy", which for that file is advice with nothing to act on.', async () => {
+    syncFails = true;
+    syncDetail =
+      'Line 8: "up /etc/openvpn/update-resolv-conf" — Driftstack does not run scripts from VPN ' +
+      'configs. Remove this line and try again.';
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+
+    await waitFor(() => expect(confirmMock).toHaveBeenCalled());
+    expect(agentCreate, 'a refused sync still never launches').not.toHaveBeenCalled();
+    const msg = String(confirmMock.mock.calls[0]?.[0] ?? '');
+    expect(msg, 'the egress promise is unchanged').toMatch(LEAK_COPY);
+    expect(msg, 'the server’s sentence, verbatim').toContain(`Driftstack said: ${syncDetail}`);
+    expect(msg, 'the sentence replaces the guess rather than stacking under it').not.toMatch(
+      /Check the proxy/i,
+    );
   });
 });

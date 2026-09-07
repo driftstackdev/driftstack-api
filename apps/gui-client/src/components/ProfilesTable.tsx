@@ -13,6 +13,11 @@
 //  - Overflow fixed: auto layout + overflow-x-auto, so action buttons never
 //    spill outside the table; wide content scrolls within the bordered box.
 //  - More useful columns: Tags, Created, Last used, Notes.
+//
+// T-19 (2026-09-07, owner #5 "it should be able to select easier"): a visible
+// selected state (accent left rail + tint), a hover tint, a tooltip that says
+// what a click does, and stopPropagation only on REAL controls — never on a
+// cell. See the <tr> in Row for the reasoning.
 
 import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
@@ -176,6 +181,12 @@ export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
 const OTHER_BUSY_HINT = 'Another profile is busy — wait for it to finish';
 
 function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Element {
+  // T-19 — stop() belongs on REAL controls only (the buttons below and the
+  // checkbox), never on a container cell: the whole row is the select target,
+  // and a cell that swallows clicks shrinks that target below what the row
+  // visibly promises. Audited 2026-09-07: every stop() site is a <button>, the
+  // checkbox, or the OPEN note editor's wrapper — a control while it is open,
+  // never the cell; the one td-level stop (Notes) moved there.
   const stop = (fn: () => void) => (e: React.MouseEvent) => {
     e.stopPropagation();
     fn();
@@ -210,10 +221,22 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
   };
   const exitHover = [r.proxyAddress, r.locationLabel].filter((x) => x !== null).join(' · ');
   return (
+    // T-19 — the owner (#5) asked for selection to be "easier" than the small
+    // checkbox. Whole-row click has selected since 0.1.0; what was missing was
+    // anything SAYING so, and a selected state you could see beyond a faint
+    // wash. The read is DISCOVERABILITY: an accent left rail + tinted background
+    // when selected, a hover tint otherwise, a tooltip on the name cell. A
+    // single-select-to-launch model was deliberately NOT introduced — selection
+    // is a Set feeding ProfilesActionBar and every bulk action.
+    // `last:border-b-0`, not `last:border-0`: the latter erased the rail on the
+    // last row. `border-l-transparent` reserves the rail's 2px so selecting a
+    // row shifts nothing.
     <tr
       onClick={() => p.onToggleSelect(r.id)}
-      className={`cursor-pointer border-b border-surface-divider/60 align-top transition-colors last:border-0 ${
-        r.selected ? 'bg-accent-subtle' : 'hover:bg-surface-elevated'
+      className={`cursor-pointer border-b border-l-2 border-surface-divider/60 align-top transition-colors last:border-b-0 ${
+        r.selected
+          ? 'border-l-accent bg-accent-subtle'
+          : 'border-l-transparent hover:bg-surface-elevated'
       }`}
     >
       {/* select checkbox — keyboard path; stopPropagation so it doesn't double-
@@ -226,10 +249,17 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           onClick={(e) => e.stopPropagation()}
           onChange={() => p.onToggleSelect(r.id)}
           aria-label={`Select ${r.name}`}
+          title={r.selected ? 'Selected' : 'Select'}
         />
       </td>
-      {/* Profile: status dot + icon + name + device subtitle + folder */}
-      <td className="px-3 py-2">
+      {/* Profile: status dot + icon + name + device subtitle + folder. T-19 —
+          the select tooltip lives here, not on the <tr>: a row-level title would
+          leak onto the untitled action buttons (Edit, Live view) as their hover
+          text. */}
+      <td
+        className="px-3 py-2"
+        title={r.selected ? 'Selected — click to deselect' : 'Click to select'}
+      >
         <div className="flex items-start gap-2">
           <span
             aria-hidden="true"
@@ -376,11 +406,23 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       >
         {r.sizeLabel}
       </td>
-      {/* Notes — click to edit inline (founder batch #2 "Add note"). The cell
-          stops click propagation so editing never toggles row selection. */}
-      <td className={`px-3 py-2 ${HIDE_SMALL}`} onClick={(e) => e.stopPropagation()}>
+      {/* Notes — click to edit inline (founder batch #2 "Add note"). T-19 — the
+          CELL no longer stops propagation: it swallowed every click across the
+          whole column, so the row's real select target was narrower than the row
+          it painted. Only the open editor and the two buttons stop. The stop
+          sits on the editor's WRAPPER (input, "Saving…", error text) — the same
+          container stop the card's note overlay uses — because a click on the
+          text beside the input blurs it (commits the note) and, with only the
+          input stopped, ALSO reached the row and flipped selection in one
+          gesture. A click beside the note still selects the row like anywhere
+          else. */}
+      <td className={`px-3 py-2 ${HIDE_SMALL}`}>
         {editingNote ? (
-          <div aria-busy={noteSaving} className="flex max-w-[16rem] flex-col gap-1">
+          <div
+            aria-busy={noteSaving}
+            className="flex max-w-[16rem] flex-col gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
             <input
               autoFocus
               aria-label={`Note for ${r.name}`}
@@ -410,7 +452,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
         ) : r.note.trim() !== '' ? (
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setNoteDraft(r.note);
               setNoteError(null);
               setEditingNote(true);
@@ -423,7 +466,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
         ) : (
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               setNoteDraft('');
               setNoteError(null);
               setEditingNote(true);

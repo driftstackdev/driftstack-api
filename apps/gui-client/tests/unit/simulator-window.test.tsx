@@ -192,6 +192,63 @@ describe('SimulatorWindow — floating iPhone', () => {
     }
   });
 
+  it('(T-17) the drawer names the exit timezone beside the proxy label when the launch handed one over — and nothing when it did not', () => {
+    // The status strip already showed "label · host:port"; the zone that drives the
+    // device clock (V-2156) rides the same handoff as `tz`, so the operator can read
+    // which zone the session is presenting without opening a probe.
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&proxy=Amsterdam%20residential&tz=Europe%2FAmsterdam',
+    );
+    const withZone = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    // The drawer mounts lazily on a rail click. Opening Diagnostics shows BOTH sites:
+    // the pinned status strip (any pane) and that pane's Egress card.
+    fireEvent.click(
+      withZone.container.querySelector('[data-component="sim-rail-diagnostics"]') as Element,
+    );
+    const strip = withZone.container.querySelector('[data-component="sim-drawer-status"]');
+    expect(strip, 'the drawer status strip renders').not.toBeNull();
+    expect(strip?.textContent).toContain('Amsterdam residential');
+    const suffix = strip?.querySelector('[data-component="sim-proxy-timezone"]');
+    expect(suffix?.textContent).toBe(' · Europe/Amsterdam');
+    // The suffix sits INSIDE the proxy label's own span — beside it, not a new line.
+    expect(suffix?.parentElement?.textContent).toBe(
+      ' · 🌍 Amsterdam residential · Europe/Amsterdam',
+    );
+    // …and the Egress card in the pane says the same thing beside the same label.
+    const suffixes = withZone.container.querySelectorAll('[data-component="sim-proxy-timezone"]');
+    expect(suffixes).toHaveLength(2);
+    expect(suffixes[1]?.parentElement?.textContent).toBe(
+      '🌍 Amsterdam residential · Europe/Amsterdam',
+    );
+    withZone.unmount();
+
+    // VACUITY CONTROL — the same proxy label with no `tz`: no suffix, no separator.
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&proxy=Amsterdam%20residential',
+    );
+    const withoutZone = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    fireEvent.click(
+      withoutZone.container.querySelector('[data-component="sim-rail-diagnostics"]') as Element,
+    );
+    const bare = withoutZone.container.querySelector('[data-component="sim-drawer-status"]');
+    expect(bare?.textContent).toContain('Amsterdam residential');
+    expect(withoutZone.container.querySelector('[data-component="sim-proxy-timezone"]')).toBeNull();
+    expect(bare?.textContent).not.toMatch(/Europe|Amsterdam residential ·/);
+    withoutZone.unmount();
+  });
+
   it('renders the iOS status bar as a dedicated strip ABOVE the content (never overlapping the page)', () => {
     window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok');
     const { container } = render(

@@ -90,6 +90,10 @@ export interface ProfilePhoneCardProps {
   /** T-6 — the QUIC verdict measured in a live session: 'h3' lets the QUIC chip
    *  go green, 'h2-only' is a measured negative, null/undefined stays inferred. */
   quicMeasured?: MeasuredQuic | null;
+  /** T-27 — the fleet Mac's standalone QUIC-relay verdict (proxyCapabilities'
+   *  `quic-relay` chip): true/false is a measurement, undefined = no chip. Never
+   *  merged with quicMeasured — when the two disagree, that is the finding. */
+  quicProbe?: boolean;
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
   osFingerprint?: OsFingerprint;
@@ -200,7 +204,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // T-1 — the words beside a server-measured latency name the machine that
   // measured it; a number without a vantage keeps the plain "server" marker.
   const latVantage = p.latencyVantage !== undefined ? vantageLabel(p.latencyVantage) : undefined;
-  const caps = p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured) : null;
+  const caps =
+    p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe) : null;
+  // T-27 — the fleet relay verdict is its own chip (undefined = none).
+  const relayCap = caps?.find((c) => c.key === 'quic-relay');
   const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
   // T-6 — read the QUIC chip's ok AND inferred: a green ✓ is only for a MEASURED
   // 'h3'. An inferred chip (UDP relays but HTTP/3 was never measured) renders a
@@ -336,15 +343,26 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           className="absolute left-1/2 top-2 z-30 h-[12px] w-[42px] -translate-x-1/2 rounded-[8px] bg-[#05070b]"
         />
 
-        {/* selection marker — the whole card toggles selection on click, so this
-            is just a non-interactive indicator: accent check when selected, a
-            faint hint ring on hover. */}
+        {/* T-19 — selection marker. The whole card toggles selection on click
+            (the article), so this is only an indicator — but it must be visible
+            BEFORE hover: the owner (#5) read the old opacity-0-until-hover ring
+            as no way to select at all. Hollow ring when unselected, filled accent
+            check when selected, never opacity-0. Its tooltip is the one place on
+            the card that says what a click does; it takes pointer events so the
+            tooltip shows, and its click bubbles to the article like any other
+            spot. Not on the article itself: a card-level title would leak onto
+            the untitled Launch button as its hover text. The read of the ask is
+            DISCOVERABILITY — a single-select-to-launch model was deliberately not
+            introduced, because selection is a Set that every bulk action reads
+            (ProfilesView toggleSelected). */}
         <span
+          data-component="select-indicator"
           aria-hidden="true"
-          className={`pointer-events-none absolute left-1.5 top-[7px] z-30 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
+          title={p.selected ? 'Selected — click to deselect' : 'Click to select'}
+          className={`absolute left-1.5 top-[7px] z-30 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
             p.selected
-              ? 'bg-accent text-white opacity-100'
-              : 'border border-white/45 text-transparent opacity-0 group-hover:opacity-100'
+              ? 'bg-accent text-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] group-hover:bg-accent-hover'
+              : 'border-[1.5px] border-white/70 bg-black/35 text-transparent group-hover:border-white group-hover:bg-white/15'
           }`}
         >
           ✓
@@ -574,6 +592,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     >
                       QUIC {quicInferred ? '~' : quicOk ? '✓' : '✗'}
                     </span>
+                    {/* T-27 — the fleet Mac's relay verdict, when one was measured.
+                        A separate chip from QUIC above: one is a browser session's
+                        HTTP/3, the other a cold handshake through the proxy. */}
+                    {relayCap !== undefined && (
+                      <span
+                        data-capability="quic-relay"
+                        data-ok={relayCap.ok ? 'true' : 'false'}
+                        title={relayCap.hint}
+                        className={`rounded px-1 text-[8.5px] ${relayCap.ok ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
+                      >
+                        {relayCap.label} {relayCap.ok ? '✓' : '✗'}
+                      </span>
+                    )}
                   </div>
                 )}
               </>
