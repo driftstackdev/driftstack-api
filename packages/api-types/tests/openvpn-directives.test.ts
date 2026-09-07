@@ -69,6 +69,22 @@ describe('findUnsupportedOpenvpnLines', () => {
     expect(hits).toMatchObject([{ line: 2, directive: 'down', text: 'DOWN\t/tmp/x' }]);
   });
 
+  it('CRITICAL a leading `--` is stripped before matching — OpenVPN honors `--plugin`/`--up`/`--script-security 2`, so they must be flagged (a one-character RCE bypass otherwise).', () => {
+    // OpenVPN's bypass_doubledash strips one leading `--` (token len >= 3) from
+    // config-file directives, so these run exactly like their bare forms.
+    expect(findUnsupportedOpenvpnLines('--plugin /tmp/evil.so\n')).toMatchObject([
+      { line: 1, directive: 'plugin', text: '--plugin /tmp/evil.so' },
+    ]);
+    expect(findUnsupportedOpenvpnLines('  --UP\t/x\n')[0]?.directive).toBe('up');
+    expect(findUnsupportedOpenvpnLines('--script-security 2\n')[0]?.directive).toBe(
+      'script-security',
+    );
+    // Vacuity: a `--`-prefixed benign directive is not flagged, and a bare `--`
+    // (len 2, which OpenVPN does NOT strip) stays inert.
+    expect(findUnsupportedOpenvpnLines('--verb 3\n')).toEqual([]);
+    expect(findUnsupportedOpenvpnLines('--\n')).toEqual([]);
+  });
+
   it('CRITICAL every directive in the set is reported, and the set is the fourteen the man page names. Iterated rather than hand-listed so a directive added later is covered the moment it lands.', () => {
     expect(DANGEROUS_OPENVPN_DIRECTIVES.size).toBeGreaterThanOrEqual(14);
     for (const d of ['plugin', 'dns-updown', 'client-crresponse', 'auth-user-pass-verify']) {

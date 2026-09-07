@@ -92,7 +92,14 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
     const text = (lines[i] ?? '').trim();
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
     const tokens = text.split(/\s+/);
-    const keyword = (tokens[0] ?? '').toLowerCase();
+    // OpenVPN's own config parser strips a leading `--` from every directive
+    // (bypass_doubledash in options.c, applied to config-file lines when the token
+    // is >= 3 chars), so `--plugin`/`--script-security`/`--up` are honored exactly
+    // like their bare forms. Match the same normalization or the refusal is a
+    // one-character bypass (a `--plugin` line loads a native module as root on the
+    // shared egress host — the P0 root-RCE class this guard exists to stop).
+    let keyword = (tokens[0] ?? '').toLowerCase();
+    if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
     if (DANGEROUS_OPENVPN_DIRECTIVES.has(keyword)) {
       hits.push({
         line: i + 1,

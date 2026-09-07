@@ -193,7 +193,11 @@ function vpnEndpointHost(endpoint: string): string {
 export function openvpnRemoteHosts(configBlob: string): string[] {
   const hosts: string[] = [];
   for (const line of configBlob.split(/\r?\n/)) {
-    const m = line.trim().match(/^remote\s+(\S+)/i);
+    // `(?:--)?` — OpenVPN strips a leading `--` from config-file directives
+    // (bypass_doubledash), so `--remote 169.254.169.254 80` is honored as a real
+    // remote yet would evade an un-prefixed match: a metadata/internal target
+    // smuggled past this SSRF guard. Match both forms.
+    const m = line.trim().match(/^(?:--)?remote\s+(\S+)/i);
     if (m) hosts.push(m[1]!);
   }
   return hosts;
@@ -210,7 +214,9 @@ export function openvpnRemoteHosts(configBlob: string): string[] {
 export function openvpnProxyHosts(configBlob: string): string[] {
   const hosts: string[] = [];
   for (const line of configBlob.split(/\r?\n/)) {
-    const m = line.trim().match(/^(?:http-proxy|socks-proxy)\s+(\S+)/i);
+    // `(?:--)?` — see openvpnRemoteHosts: `--http-proxy 169.254.169.254 80` is
+    // honored by OpenVPN (it strips the `--`) and must not evade the SSRF guard.
+    const m = line.trim().match(/^(?:--)?(?:http-proxy|socks-proxy)\s+(\S+)/i);
     if (m) hosts.push(m[1]!);
   }
   return hosts;

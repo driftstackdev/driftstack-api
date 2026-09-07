@@ -332,6 +332,55 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     );
     expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 1\n' })).toBeNull();
   });
+
+  it('CRITICAL a leading `--` on a directive does NOT bypass the refusal — OpenVPN strips it (bypass_doubledash), so `--plugin`/`--up`/`--script-security 2` are honored and must be refused', () => {
+    // The one-character RCE bypass: OpenVPN's config parser strips a leading `--`
+    // from every directive, so these run exactly like their bare forms — a
+    // `--plugin` line loads a native module as root on the shared egress host.
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\n--plugin /tmp/evil.so arg\n',
+      }),
+    ).toBe('unsafe-directive');
+    expect(classifyUnsafeVpnTargets({ configBlob: '--up /bin/sh\n' })).toBe('unsafe-directive');
+    expect(classifyUnsafeVpnTargets({ configBlob: '--script-security 2\n' })).toBe(
+      'unsafe-directive',
+    );
+    expect(classifyUnsafeVpnTargets({ configBlob: '  --DOWN\t/tmp/x\n' })).toBe('unsafe-directive');
+    // Vacuity: a `--`-prefixed BENIGN directive is not over-flagged (the strip does
+    // not turn every `--foo` into a hit), and a bare `--` alone (len 2, not stripped) is inert.
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\n--verb 3\n' }),
+    ).toBeNull();
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: 'client\nremote vpn.example.com 1194\n--\n' }),
+    ).toBeNull();
+  });
+
+  it('CRITICAL a `--`-prefixed SSRF host (`--http-proxy`/`--remote`/`--socks-proxy`) is still classified — OpenVPN honors it, so it must not evade host extraction', () => {
+    // `--http-proxy 169.254.169.254 80` reaches cloud metadata from the egress
+    // infra; a benign bare `remote` is present so this is the ONLY smuggled host.
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\n--http-proxy 169.254.169.254 80\n',
+      }),
+    ).not.toBeNull();
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: '--remote 169.254.169.254 80\n' }),
+    ).not.toBeNull();
+    expect(
+      classifyUnsafeVpnTargets({ configBlob: '--socks-proxy 10.0.0.5 1080\n' }),
+    ).not.toBeNull();
+    // Unit level: the extractors themselves see the `--` forms.
+    expect(openvpnRemoteHosts('--remote 1.2.3.4 80\n')).toEqual(['1.2.3.4']);
+    expect(openvpnProxyHosts('--http-proxy 5.6.7.8 80\n')).toEqual(['5.6.7.8']);
+    // Vacuity: a benign public `--http-proxy` is extracted but classified safe.
+    expect(
+      classifyUnsafeVpnTargets({
+        configBlob: 'client\nremote vpn.example.com 1194\n--http-proxy 8.8.8.8 80\n',
+      }),
+    ).toBeNull();
+  });
   // EVERY member of the rejection set, read from the set itself rather than
   // hand-listed. The arm above names ten directives; the set holds fourteen, so
   // route-pre-down, ipchange, learn-address, client-connect, client-disconnect,
