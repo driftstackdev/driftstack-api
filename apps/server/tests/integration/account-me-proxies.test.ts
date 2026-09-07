@@ -669,6 +669,45 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     );
   });
 
+  it('CRITICAL the UPDATE path re-validates the VPN config — a clean proxy cannot be EDITED into a weaponized one, and the `--`-prefixed directive bypass is caught here too (T-29 gap / T-32 fix; create-time is not the only door, and the dispatch guard must not be the only backstop)', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-update-revalidate',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: { config_blob: OVPN_BLOB },
+      },
+    });
+    expect(create.statusCode, 'the clean config is accepted at create').toBe(201);
+    const id = create.json<{ id: string }>().id;
+    const upd = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${id}`,
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-update-revalidate',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        // `--plugin` — the RCE-class directive OpenVPN honors after stripping `--`.
+        openvpn: {
+          config_blob: 'client\nremote vpn.example.com 1194 udp\n--plugin /tmp/evil.so\n',
+        },
+      },
+    });
+    expect(
+      upd.statusCode,
+      'the update re-runs the directive guard through buildVpnSecretAndConfig',
+    ).toBe(400);
+    expect(upd.json<{ detail: string }>().detail).toBe(
+      'Line 3: "--plugin /tmp/evil.so" — Driftstack does not run scripts from VPN configs. ' +
+        'Remove this line and try again.',
+    );
+  });
+
   it('CRITICAL `script-security 1` is NOT refused — the guard bounds the dangerous level rather than banning the keyword. Level 1 permits only built-ins and the box floors there anyway; refusing it would reject working configurations and teach customers the validator is arbitrary.', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
