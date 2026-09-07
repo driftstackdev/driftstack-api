@@ -50,9 +50,11 @@ describe('apps/gui-client/src/views/CommandCenterView.tsx content parity', () =>
     expect(body).toContain(
       '// Actionable launchpad (founder 2026-06-19: the passive overview was "pretty',
     );
-    expect(body).toContain(
-      '// lives in Profiles — the home navigates there, it never duplicates that path.',
-    );
+    // T-18 — the rule survived the redesign and is stated more strongly now: the
+    // header comment records that the duplicating "Jump to" trio was REMOVED. The
+    // sentence reflowed across two comment lines, so pin each line.
+    expect(body).toContain('Real launch lives in Profiles — the home navigates there, it');
+    expect(body).toContain('// never duplicates that path.');
   });
 
   it('exported pure helpers pinned (unit-tested independently of the fetches): computeCapAlerts / summarizeSessions / formatAuditAction / sortRecentProfiles / profileMonogram', () => {
