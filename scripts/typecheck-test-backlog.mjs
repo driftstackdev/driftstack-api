@@ -43,7 +43,10 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const BACKLOG = [
   // 94 → 91 on 2026-09-05: log-buffer-crash-trail's writeTextFile mock typed to its real
   // signature, which removed three `[]` → [string, string] casts (P-25 storm arm landed clean).
-  { project: 'apps/gui-client/tsconfig.test.json', pinned: 91, minTestFiles: 200 },
+  // 91 → 88 on 2026-09-07 (T-14/T-19/T-20/T-23): the owner-list test files were type-cleaned
+  // as they landed — mock-call tuples narrowed, getByLabelText<HTMLInputElement>, and the
+  // clipboard teardown via Reflect.deleteProperty — so no new debt entered the backlog.
+  { project: 'apps/gui-client/tsconfig.test.json', pinned: 88, minTestFiles: 200 },
   // W-12, 2026-08-26 — every `packages/*` suite was transpiled by vitest and
   // typechecked by NOTHING: each package's `tsconfig.json` includes only
   // `src/**/*`, and five of them additionally `exclude` tests. Measured at 50
