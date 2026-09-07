@@ -271,8 +271,8 @@ describe('ProfilesTable — the whole row is the select target, and says so (T-1
     // erased the rail on the last row.
     expect(second.className).not.toMatch(/(^|\s)last:border-0(\s|$)/);
     expect(second.className).toMatch(/(^|\s)last:border-b-0(\s|$)/);
-    expect(screen.getByLabelText('Select first').checked).toBe(true);
-    expect(screen.getByLabelText('Select second').checked).toBe(false);
+    expect(screen.getByLabelText<HTMLInputElement>('Select first').checked).toBe(true);
+    expect(screen.getByLabelText<HTMLInputElement>('Select second').checked).toBe(false);
   });
 
   it('vacuity: with nothing selected no row carries the rail — the class is earned by selection, not painted on every row', () => {

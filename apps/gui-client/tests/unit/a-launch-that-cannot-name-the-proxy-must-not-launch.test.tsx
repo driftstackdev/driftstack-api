@@ -253,7 +253,8 @@ describe('a launch that cannot name the proxy must not launch', () => {
       agentCreate,
       'no session may be created when the proxy id is unknown — an unproxied create is the leak, not a fallback',
     ).not.toHaveBeenCalled();
-    const msg = String(confirmMock.mock.calls[0]?.[0] ?? '');
+    const msg =
+      ((confirmMock.mock.calls[0] as unknown[] | undefined)?.[0] as string | undefined) ?? '';
     expect(msg, 'the customer must be told the launch did not happen, and why').toMatch(LEAK_COPY);
     expect(
       msg,
@@ -271,7 +272,8 @@ describe('a launch that cannot name the proxy must not launch', () => {
       agentCreate,
       'a failed sync must not fall through to an unproxied create',
     ).not.toHaveBeenCalled();
-    const msg = String(confirmMock.mock.calls[0]?.[0] ?? '');
+    const msg =
+      ((confirmMock.mock.calls[0] as unknown[] | undefined)?.[0] as string | undefined) ?? '';
     expect(msg, 'the customer must be told the launch did not happen, and why').toMatch(LEAK_COPY);
     expect(msg, 'the remedy here is the proxy, not the API key').toMatch(/Check the proxy/i);
     // T-20 CONTROL — a failure that carried no reason must not have one invented.
@@ -288,7 +290,8 @@ describe('a launch that cannot name the proxy must not launch', () => {
 
     await waitFor(() => expect(confirmMock).toHaveBeenCalled());
     expect(agentCreate, 'a refused sync still never launches').not.toHaveBeenCalled();
-    const msg = String(confirmMock.mock.calls[0]?.[0] ?? '');
+    const msg =
+      ((confirmMock.mock.calls[0] as unknown[] | undefined)?.[0] as string | undefined) ?? '';
     expect(msg, 'the egress promise is unchanged').toMatch(LEAK_COPY);
     expect(msg, 'the server’s sentence, verbatim').toContain(`Driftstack said: ${syncDetail}`);
     expect(msg, 'the sentence replaces the guess rather than stacking under it').not.toMatch(

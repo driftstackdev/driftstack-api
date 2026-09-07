@@ -478,7 +478,7 @@ describe('SimulatorWindow — address bar navigate', () => {
       expect(writeText).toHaveBeenCalledWith('https://live.example.com/');
     } finally {
       if (orig) Object.defineProperty(navigator, 'clipboard', orig);
-      else delete (navigator as Partial<Navigator>).clipboard;
+      else Reflect.deleteProperty(navigator, 'clipboard');
     }
   });
 
@@ -526,7 +526,7 @@ describe('SimulatorWindow — address bar navigate', () => {
       });
     } finally {
       if (orig) Object.defineProperty(navigator, 'clipboard', orig);
-      else delete (navigator as Partial<Navigator>).clipboard;
+      else Reflect.deleteProperty(navigator, 'clipboard');
     }
   });
 });

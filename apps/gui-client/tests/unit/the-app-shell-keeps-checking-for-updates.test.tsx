@@ -137,7 +137,6 @@ beforeEach(() => {
     telemetryOptIn: null,
   });
   invokeStore.set('api_key:api.example.test', 'ds_live_test_existing_key');
-  // @ts-expect-error vitest mocks
   window.fetch = vi.fn(() => Promise.resolve(new Response(JSON.stringify({}), { status: 200 })));
   // Fake time is installed BEFORE render so the interval the shell registers
   // is a fake one; `shouldAdvanceTime` keeps waitFor's real polling alive.

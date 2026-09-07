@@ -59,7 +59,15 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 
 // The transport diagnostic hook reads a live RTCStatsReport; in jsdom there's no
 // real track, so drive it with a controllable stub for the fallback-badge test.
-const EMPTY_CONN = {
+const EMPTY_CONN: {
+  transport: string | null;
+  relayed: boolean | null;
+  rttMs: number | null;
+  packetLossPct: number | null;
+  jitterMs: number | null;
+  decodeFps: number | null;
+  freezeCount: number | null;
+} = {
   transport: null,
   relayed: null,
   rttMs: null,
@@ -468,7 +476,7 @@ describe('SimulatorWindow — floating iPhone', () => {
 
       await waitFor(() => expect(copyButton.textContent).toContain("Couldn't copy"));
       expect(throwingWrite).toHaveBeenCalledTimes(1);
-      const attemptedSnapshot = throwingWrite.mock.calls[0]?.[0];
+      const attemptedSnapshot = (throwingWrite.mock.calls[0] as unknown[] | undefined)?.[0];
       expect(attemptedSnapshot).toContain('session: agt_diagnostics');
 
       const recoveredWrite = vi.fn(() => Promise.resolve());
@@ -483,7 +491,7 @@ describe('SimulatorWindow — floating iPhone', () => {
       await waitFor(() => expect(copyButton.textContent).toContain('Copied ✓'));
     } finally {
       if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
-      else delete (navigator as Partial<Navigator>).clipboard;
+      else Reflect.deleteProperty(navigator, 'clipboard');
     }
   });
 
