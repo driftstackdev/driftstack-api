@@ -116,7 +116,46 @@ export interface ProbeViewState {
  * flag beside a red "unreachable" pill — "exits from US 1.2.3.4" for a dead
  * proxy. This is the one rule in the derivation that is not a transcription.
  */
-export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
+/**
+ * W-30 — how long a MEASURED QUIC verdict stays current.
+ *
+ * ⛔ The verdict is written when a live session observes an HTTP/3 handshake, and
+ * it never expired. The signal underneath it could not expire either: the node's
+ * `h3ConnectionObserved` is backed by an insert-only set and can never return to
+ * false, so "this proxy did h3 once" was being rendered as the MEASURED chip —
+ * the strongest mark this UI makes, deliberately distinguished from the inferred
+ * `~`. A relay that dies keeps its green tick for the life of the install.
+ *
+ * 1800s = SIX re-emit cadences. The fleet re-emits a capability report every 300s
+ * ±20%, so the worst-case honest gap is 360s and six leaves five clear intervals
+ * of slack. ⚠️ Deliberately generous, because the two errors are not symmetric:
+ * downgrading a LIVE proxy to inferred is a visible wrong answer on a working
+ * setup, while holding a stale verdict a few minutes longer is the state that
+ * shipped for months. Better slow to weaken a claim than quick to make a false one.
+ *
+ * ⚠️ Derived from the BUILD cadence, not from observed arrival times: arrival
+ * carries queue and `lsof` jitter the sweep's own gate never controls, and gaps of
+ * 236s have been measured below the 240s build floor for that reason.
+ */
+export const QUIC_VERDICT_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Is a measured QUIC verdict still current?
+ *
+ * ⛔ An ABSENT timestamp is NOT fresh. We cannot establish when it was taken, and
+ * "we could not tell" must render as the inferred `~` rather than as a pass —
+ * the same rule the chip already applies to a never-measured proxy. It self-heals:
+ * the next observation stamps a time.
+ */
+export function isQuicVerdictFresh(atMs: number | undefined, nowMs: number): boolean {
+  if (typeof atMs !== 'number') return false;
+  return nowMs - atMs < QUIC_VERDICT_TTL_MS;
+}
+
+export function deriveProbeViewState(
+  cache: ProbeCacheMap,
+  nowMs: number = Date.now(),
+): ProbeViewState {
   const testResults: Record<string, ProxyTestResult> = {};
   const exitResults: Record<string, ProxyExitProbeResult | null> = {};
   const testedAt: Record<string, number> = {};
@@ -132,7 +171,16 @@ export function deriveProbeViewState(cache: ProbeCacheMap): ProbeViewState {
       osFingerprints[id] = c.osFingerprint;
     if (c.serverLatencyMs !== undefined && isProxyUsable(c.result))
       serverLatency[id] = c.serverLatencyMs;
-    if (c.quicMeasured !== undefined && isProxyUsable(c.result)) quicMeasured[id] = c.quicMeasured;
+    // W-30 — a verdict older than its TTL is dropped here rather than at the chip,
+    // so every consumer ages identically: the Proxies grid, the profile card, and
+    // anything added later. Falling out of this map is exactly "never measured",
+    // which the chip already renders as the inferred `~`.
+    if (
+      c.quicMeasured !== undefined &&
+      isProxyUsable(c.result) &&
+      isQuicVerdictFresh(c.quicMeasuredAt, nowMs)
+    )
+      quicMeasured[id] = c.quicMeasured;
     // T-1 — the vantage only means something beside the server number it
     // labels, so it follows the same usable-only rule; the node id rides with it.
     if (c.measuredFrom !== undefined && isProxyUsable(c.result))

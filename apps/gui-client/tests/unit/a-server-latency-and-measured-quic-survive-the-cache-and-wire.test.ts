@@ -55,6 +55,8 @@ import {
   loadProbeCache,
   saveProbeResult,
   saveServerProbeResult,
+  QUIC_VERDICT_TTL_MS,
+  isQuicVerdictFresh,
 } from '../../src/lib/proxy-probe-cache';
 import { cleanMeasuredQuic, testAccountProxy } from '../../src/lib/account-proxies';
 
@@ -148,6 +150,48 @@ describe('the wire (testAccountProxy)', () => {
   });
 });
 
+describe('a measured QUIC verdict expires', () => {
+  // ⛔ The verdict was written when a live session observed an h3 handshake, and it
+  // NEVER expired — while the signal underneath it could not expire either: the
+  // node's `h3ConnectionObserved` is an insert-only set that can never return to
+  // false. So "this proxy did h3 once" was rendered as the MEASURED chip, the
+  // strongest mark this UI makes and the one deliberately distinguished from the
+  // inferred `~`. A relay that died kept its green tick for the life of the install.
+  it('CRITICAL a verdict older than the TTL drops out of the view — back to inferred', async () => {
+    const now = 1_000_000_000;
+    await saveProbeResult('p1', OK, now);
+    await saveServerProbeResult('p1', { quicMeasured: 'h3', quicMeasuredAt: now }, now);
+    const fresh = deriveProbeViewState(await loadProbeCache(), now + 60_000);
+    expect(fresh.quicMeasured.p1, 'still current a minute later').toBe('h3');
+    const stale = deriveProbeViewState(await loadProbeCache(), now + QUIC_VERDICT_TTL_MS + 1);
+    expect(stale.quicMeasured.p1, 'past its TTL it is no longer a measurement').toBeUndefined();
+  });
+
+  it('CRITICAL a verdict with NO timestamp is not fresh — we cannot say when it was taken', () => {
+    // "Could not establish" must render as the inferred `~`, never as a pass — the
+    // same rule the chip already applies to a proxy nobody has measured. It
+    // self-heals: the next observation stamps a time.
+    expect(isQuicVerdictFresh(undefined, Date.now())).toBe(false);
+  });
+
+  it('VACUITY CONTROL — the freshness helper is not simply always false', () => {
+    // Without this, a helper that returned false unconditionally would satisfy both
+    // arms above while silently removing every measured chip in the product.
+    const now = 2_000_000_000;
+    expect(isQuicVerdictFresh(now, now + 1_000)).toBe(true);
+    expect(isQuicVerdictFresh(now, now + QUIC_VERDICT_TTL_MS - 1)).toBe(true);
+  });
+
+  it('the TTL is comfortably above the fleet re-emit cadence it is derived from', () => {
+    // 300s ±20% → a worst-case honest gap of 360s. A TTL near that would flicker a
+    // healthy proxy to inferred for merely not having reported recently; six
+    // cadences leaves five clear intervals of slack. The asymmetry is deliberate —
+    // downgrading a LIVE proxy is a visible wrong answer, holding a stale verdict a
+    // few minutes longer is the state that already shipped.
+    expect(QUIC_VERDICT_TTL_MS).toBeGreaterThanOrEqual(6 * 300_000);
+  });
+});
+
 describe('the cache', () => {
   it('attaches server latency + measured QUIC to an existing entry, and invents nothing without one', async () => {
     // No capability entry yet: nothing to attach to, and none is invented.
@@ -220,13 +264,18 @@ describe('the cache', () => {
   it('exposes both to the views only while the proxy is usable', async () => {
     await saveProbeResult('p1', OK, 1);
     await saveServerProbeResult('p1', { latencyMs: 9, quicMeasured: 'h3', quicMeasuredAt: 2 }, 2);
-    let view = deriveProbeViewState(await loadProbeCache());
+    // ⛔ `now` is passed explicitly because this fixture's timestamps are synthetic
+    // (1, 2, 3) and the QUIC verdict now EXPIRES — against a real clock these would
+    // be decades stale and the arm would pass for the wrong reason. This test is
+    // about the usable-only rule, not about freshness, so it pins its own clock.
+    const now = 4;
+    let view = deriveProbeViewState(await loadProbeCache(), now);
     expect(view.serverLatency.p1).toBe(9);
     expect(view.quicMeasured.p1).toBe('h3');
     // A proxy that went DOWN keeps the record in the store but must not surface a
     // server latency or a green QUIC beside a red "unreachable" pill.
     await saveProbeResult('p1', DOWN, 3);
-    view = deriveProbeViewState(await loadProbeCache());
+    view = deriveProbeViewState(await loadProbeCache(), now);
     expect(view.serverLatency).toEqual({});
     expect(view.quicMeasured).toEqual({});
   });
