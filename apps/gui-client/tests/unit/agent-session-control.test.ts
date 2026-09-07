@@ -19,6 +19,8 @@ import {
   endAgentSession,
   mintGuiControlKey,
   getAgentSessionCookies,
+  cleanCookieJar,
+  COOKIE_JAR_CAP,
   fetchAgentSessionDownload,
   reportTransport,
   AgentSessionControlError,
@@ -755,5 +757,68 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     // One null and one present is a change (the first report arriving).
     expect(capabilityReportsEqual(null, base)).toBe(false);
     expect(capabilityReportsEqual(base, null)).toBe(false);
+  });
+});
+
+describe('cleanCookieJar — the jar is untrusted (page/node-supplied); sanitize at the boundary', () => {
+  it('POSITIVE CONTROL a well-formed jar passes through unchanged (a sanitizer that dropped everything would satisfy the crash arms while breaking the pane)', () => {
+    const jar = [
+      {
+        domain: '.example.com',
+        name: 'sid',
+        value: 'abc',
+        httpOnly: true,
+        sameSite: 'Lax' as const,
+      },
+      { domain: 'x.test', name: 'k', value: 'v', path: '/', expires: 123, secure: false },
+    ];
+    expect(cleanCookieJar(jar)).toEqual(jar);
+  });
+
+  it('CRITICAL drops an entry whose domain/name/value is not a string — the render calls charAt/toLowerCase/display on them, so a non-string CRASHES the Cookies pane (audit #4)', () => {
+    // The exact crash inputs a compromised/buggy node can send.
+    expect(cleanCookieJar([{ domain: null, name: 'a', value: 'b' }])).toEqual([]);
+    expect(cleanCookieJar([{ domain: 123, name: 'a', value: 'b' }])).toEqual([]);
+    expect(cleanCookieJar([{ domain: 'x', name: 456, value: 'b' }])).toEqual([]);
+    expect(cleanCookieJar([{ domain: 'x', name: 'a', value: {} }])).toEqual([]);
+    expect(cleanCookieJar([null, 'not-an-object', 42])).toEqual([]);
+    // A good entry alongside bad ones survives; only the malformed are dropped.
+    expect(
+      cleanCookieJar([
+        { domain: 123, name: 'a', value: 'b' },
+        { domain: 'ok.test', name: 'n', value: 'v' },
+      ]),
+    ).toEqual([{ domain: 'ok.test', name: 'n', value: 'v' }]);
+  });
+
+  it('keeps optional fields only when well-typed — a wrong-typed optional is dropped, not carried', () => {
+    const [c] = cleanCookieJar([
+      {
+        domain: 'x',
+        name: 'n',
+        value: 'v',
+        path: 5,
+        expires: 'soon',
+        httpOnly: 'yes',
+        sameSite: 'Bogus',
+      },
+    ])!;
+    expect(c).toEqual({ domain: 'x', name: 'n', value: 'v' });
+  });
+
+  it('CRITICAL caps the jar at COOKIE_JAR_CAP so an unbounded node response cannot hang the pane (audit #4 DoS)', () => {
+    const huge = Array.from({ length: COOKIE_JAR_CAP + 500 }, (_, i) => ({
+      domain: 'x.test',
+      name: `c${i}`,
+      value: 'v',
+    }));
+    expect(cleanCookieJar(huge)).toHaveLength(COOKIE_JAR_CAP);
+  });
+
+  it('returns null for a non-array (the "no jar" state), distinct from an empty array', () => {
+    expect(cleanCookieJar(null)).toBeNull();
+    expect(cleanCookieJar(undefined)).toBeNull();
+    expect(cleanCookieJar('nope')).toBeNull();
+    expect(cleanCookieJar([])).toEqual([]);
   });
 });

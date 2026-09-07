@@ -523,6 +523,53 @@ export interface SessionCookiesResult {
   reason?: string;
 }
 
+/** The jar is UNTRUSTED — it originates in the remote page the customer browses
+ *  and is relayed by a fleet node that could be compromised or simply buggy — so
+ *  it must be sanitized at this boundary, the way the network pane cleans its
+ *  entries (NETWORK_RING_CAP + per-field types). Before this, `Array.isArray`
+ *  alone let a `domain`/`name` of the wrong type through, and the Cookies pane
+ *  then called `g.domain.charAt`/`c.name.toLowerCase` on it — a TypeError that
+ *  crashed the whole simulator subtree the instant the drawer opened (or on the
+ *  first filter keystroke). An unbounded jar could also hang the pane. */
+export const COOKIE_JAR_CAP = 2000;
+function cleanCookie(raw: unknown): SessionCookie | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const c = raw as Record<string, unknown>;
+  // The three the render reads unconditionally (charAt/toLowerCase/display) MUST
+  // be strings; an entry missing any is dropped rather than coerced, so a garbage
+  // cookie never appears as `"123"`.
+  if (typeof c.domain !== 'string' || typeof c.name !== 'string' || typeof c.value !== 'string') {
+    return null;
+  }
+  const cookie: SessionCookie = { domain: c.domain, name: c.name, value: c.value };
+  if (typeof c.path === 'string') cookie.path = c.path;
+  if (typeof c.expires === 'number' || c.expires === null) cookie.expires = c.expires;
+  if (typeof c.httpOnly === 'boolean') cookie.httpOnly = c.httpOnly;
+  if (typeof c.secure === 'boolean') cookie.secure = c.secure;
+  if (
+    c.sameSite === 'Strict' ||
+    c.sameSite === 'Lax' ||
+    c.sameSite === 'None' ||
+    c.sameSite === null
+  ) {
+    cookie.sameSite = c.sameSite;
+  }
+  return cookie;
+}
+/** Sanitize a raw cookie jar: drop malformed entries, keep optional fields only
+ *  when well-typed, and bound the count. Returns null when the input is not an
+ *  array (the "no jar / unavailable" state), an array (possibly empty) otherwise. */
+export function cleanCookieJar(raw: unknown): SessionCookie[] | null {
+  if (!Array.isArray(raw)) return null;
+  const out: SessionCookie[] = [];
+  for (const r of raw) {
+    if (out.length >= COOKIE_JAR_CAP) break;
+    const c = cleanCookie(r);
+    if (c !== null) out.push(c);
+  }
+  return out;
+}
+
 /** Pull the running session's live cookie jar (founder #48). Throws (via
  *  authedFetch) on a non-2xx — e.g. the gated 503 or a 404 — so the caller's
  *  poll `.catch()` maps that to the "pending data source" state, exactly like
@@ -538,7 +585,7 @@ export async function getAgentSessionCookies(
   )) as Partial<SessionCookiesResult>;
   return {
     status: body.status ?? 'error',
-    cookies: Array.isArray(body.cookies) ? body.cookies : null,
+    cookies: cleanCookieJar(body.cookies),
     ...(body.reason !== undefined ? { reason: body.reason } : {}),
   };
 }
