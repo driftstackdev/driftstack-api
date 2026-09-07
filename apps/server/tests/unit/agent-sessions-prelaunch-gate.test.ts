@@ -221,18 +221,33 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
 
   // ── retry policy ────────────────────────────────────────────────
   //
-  // The gate retries a failed probe exactly once, and only for `unreachable`.
-  // The source explains both halves: rotating residential exits drop a dial and
-  // stream fine on the next one, so a single transient miss must not fail a
-  // launch; `auth_failed` means wrong credentials, where a retry cannot help and
-  // repeated attempts risk the provider locking the account.
+  // The gate samples a failed probe up to THREE times, and only for `unreachable`.
+  // The source explains each half: rotating residential exits drop a dial and
+  // stream fine on the next one, so a transient miss must not fail a launch;
+  // `auth_failed` means wrong credentials, where a retry cannot help and repeated
+  // attempts risk the provider locking the account.
+  //
+  // ⛔ IT WAS TWO, AND TWO WAS MEASURABLY NOT ENOUGH. A customer-used upstream was
+  // measured at 4 failed connects in 15 (27%) from the fleet node against a
+  // matched control at 0 in 15, so both of two attempts failing is ~7% — a 1-in-14
+  // launch REFUSAL on a proxy that carries sessions and delivers frames. Three
+  // takes it to ~2%, and matches the node's own K-consecutive dead-proxy
+  // threshold, which is the standard the rest of this path already follows.
+  //
+  // ⭐ The OLD pin's rationale — "more than one turns a dead proxy into a slow
+  // create" — was right, and is answered rather than ignored: a wall-clock budget
+  // gates the THIRD attempt only. A blackholed proxy fails by timeout and gets the
+  // historical two dials; a flapping one refuses fast (RST) and gets all three in
+  // under a second. The budget must never gate the SECOND attempt — doing so
+  // regressed the very case the retry exists for, since a rotating exit fails by
+  // TIMEOUT and attempt 1 alone can outlast the budget.
   //
   // That policy was previously guarded only by accident. Widening the condition
   // to retry EVERY failure did red the suite — but via the injection-detail case
   // below, which happens to count probe calls. A property nothing states is a
   // property that survives only as long as an unrelated fixture keeps its shape.
 
-  it('CRITICAL retries ONCE on a transient unreachable, then blocks if it fails again', async () => {
+  it('CRITICAL retries up to TWICE on a transient unreachable, then blocks if it still fails', async () => {
     const probeFn = vi.fn().mockResolvedValue({ ok: false, reason: 'unreachable' });
     const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
     const { service } = makeService({ host: '203.0.113.7', port: 1080 });
@@ -249,8 +264,37 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     ).rejects.toBeInstanceOf(ProxyValidationFailedError);
     expect(
       probeFn.mock.calls.length,
-      'a transient unreachable must be retried exactly once — no retry fails launches on rotating ' +
-        'residential exits, more than one turns a dead proxy into a slow create',
+      'a transient unreachable is sampled three times — one dial fails ~1 launch in 4 on a ' +
+        'measured-flaky upstream, and two still fails ~1 in 14; the wall-clock budget is what ' +
+        'keeps a genuinely dead proxy from becoming a slow create',
+    ).toBe(3);
+  });
+
+  it('CRITICAL the wall-clock budget NEVER gates the second attempt', async () => {
+    // ⛔ THE REGRESSION THIS EXISTS TO STOP, and it was live for one gate run. The
+    // budget originally guarded every retry, so a rotating residential exit —
+    // which fails by TIMEOUT — could spend the whole budget on attempt 1 and get
+    // FEWER dials than before the change. The retry exists precisely for that
+    // case. A budget of 0 is the sharpest version: even with nothing left, the
+    // second attempt must still happen.
+    const probeFn = vi.fn().mockResolvedValue({ ok: false, reason: 'unreachable' });
+    const probe = { probe: probeFn } as unknown as ProxyConnectivityProbe;
+    const { service } = makeService({ host: '203.0.113.7', port: 1080 });
+    await expect(
+      runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_flaky',
+        accountId: 'acc_1',
+        logger: logger(),
+        retryBudgetMs: 0,
+      }),
+    ).rejects.toBeInstanceOf(ProxyValidationFailedError);
+    expect(
+      probeFn.mock.calls.length,
+      'the historical one-retry guarantee is unconditional; only the THIRD dial is budgeted',
     ).toBe(2);
   });
 

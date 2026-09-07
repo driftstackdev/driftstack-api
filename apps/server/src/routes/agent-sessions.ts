@@ -1535,6 +1535,17 @@ async function closeUnresolvedEgressSession(
   }
 }
 
+/** W-33 — how many times the pre-launch gate may sample a TRANSIENT failure before
+ *  refusing the launch. Three, matching the node's own K-consecutive dead-proxy
+ *  threshold; see the reasoning at the retry loop. */
+export const PRELAUNCH_PROBE_MAX_ATTEMPTS = 3;
+/** Wall-clock ceiling on the retry budget. A blackholed proxy fails by TIMEOUT, and
+ *  a customer with a genuinely dead proxy should be told quickly. */
+export const PRELAUNCH_RETRY_BUDGET_MS = 8_000;
+/** Pause between attempts — back-to-back dials at a flapping endpoint are
+ *  correlated, and a retry that samples the same moment samples nothing new. */
+export const PRELAUNCH_RETRY_BACKOFF_MS = 250;
+
 /**
  * Founder directive #63 — FAIL-CLOSED pre-launch proxy gate. Runs at session
  * CREATE, after ownership + scheme validation, BEFORE the session row is created
@@ -1572,6 +1583,10 @@ export async function runProxyPrelaunchGate(args: {
   /** #128 — cache the probe's observed exit identity (keyed by accountId+proxyId) so
    *  the dispatch build can emit the exit_identity block for the box new-tab IP panel. */
   exitIdentityCache?: ExitIdentityStore;
+  /** W-33 — test seam ONLY. The wall-clock ceiling on the retry budget, so a suite
+   *  can prove the SECOND attempt is unconditional without waiting 8 real seconds.
+   *  Production never passes it; the default is the exported constant. */
+  retryBudgetMs?: number;
 }): Promise<void> {
   const {
     probe,
@@ -1618,20 +1633,65 @@ export async function runProxyPrelaunchGate(args: {
     ...(resolved.password !== undefined ? { password: resolved.password } : {}),
   };
 
+  const startedAt = Date.now();
   let result = await probe.probe(descriptor);
-  // Single retry on a TRANSIENT failure only. Rotating residential exits (e.g.
-  // NodeMaven, with many A-records) can momentarily route the dial to a dead exit
-  // IP → a `unreachable` timeout, while a second attempt lands on a live exit and
-  // streams fine. We do NOT retry `auth_failed` (wrong creds — a retry can't help
-  // and just doubles latency) or `egress_blocked` (the proxy tunneled but the
-  // target refused — not a transient connect issue). This narrows the residual
-  // false-block window A3 flagged (W2949) without weakening the gate's intent.
-  if (!result.ok && result.reason === 'unreachable') {
+  let attempts = 1;
+  // Retry a TRANSIENT failure only. Rotating residential exits (e.g. NodeMaven,
+  // with many A-records) can momentarily route the dial to a dead exit IP → an
+  // `unreachable` timeout, while another attempt lands on a live exit and streams
+  // fine. We do NOT retry `auth_failed` (wrong creds — a retry cannot help and
+  // just doubles latency) or `egress_blocked` (the proxy tunnelled but the target
+  // refused — not a transient connect issue).
+  //
+  // ⛔ THE BUDGET WAS ONE RETRY AND THAT IS NOT ENOUGH — the number comes from a
+  // measurement, not from taste. A customer-used upstream was measured at 4 failed
+  // connects in 15 (27%) from the fleet node, against a matched control at 0 in 15
+  // in the same window. With two attempts, both failing is 0.27² ≈ 7%: a 1-in-14
+  // launch REFUSAL on a proxy that demonstrably carries sessions. A third takes it
+  // to ~2%.
+  //
+  // ⭐ And K-consecutive is not a new idea here, which is the point: the node
+  // already applies it on this exact path — `throughProxyDeadConfirmed`, whose own
+  // comment reads "a single transient failure … is NOT enough — this is the
+  // dominant guard against a flaky probe killing a healthy session mid-flight" —
+  // alongside three other sites that refuse to call one sample a verdict. The
+  // principle was standard everywhere on this path EXCEPT the one gate that
+  // refuses a customer. This aligns it.
+  //
+  // ⚠️ Bounded by WALL-CLOCK as well as count, because the two failure shapes cost
+  // differently. A flapping proxy refuses fast (RST), so three attempts land in
+  // well under a second. A genuinely blackholed proxy TIMES OUT, and a third full
+  // probe timeout would just make an honest rejection slower for the customer who
+  // most needs it promptly. So: at most three attempts, and no new attempt once
+  // the budget is spent.
+  while (
+    !result.ok &&
+    result.reason === 'unreachable' &&
+    attempts < PRELAUNCH_PROBE_MAX_ATTEMPTS &&
+    // ⛔ THE BUDGET GATES THE THIRD ATTEMPT ONLY, NEVER THE SECOND. The first
+    // version of this checked elapsed time before every retry, and that silently
+    // REGRESSED the case the original retry was built for: a rotating residential
+    // exit fails by TIMEOUT, so attempt 1 alone can exceed the budget and the
+    // proxy would have got fewer dials than before this change. The existing
+    // one-retry guarantee is preserved unconditionally; the budget only decides
+    // whether a THIRD is worth a customer's wait.
+    (attempts < 2 || Date.now() - startedAt < (args.retryBudgetMs ?? PRELAUNCH_RETRY_BUDGET_MS))
+  ) {
     logger?.info(
-      { component: 'proxy-prelaunch-probe', proxyId, host: descriptor.host, reason: result.reason },
-      'pre-launch proxy probe transient-unreachable; retrying once',
+      {
+        component: 'proxy-prelaunch-probe',
+        proxyId,
+        host: descriptor.host,
+        reason: result.reason,
+        attempt: attempts,
+      },
+      'pre-launch proxy probe transient-unreachable; retrying',
     );
+    // Back-to-back dials at a flapping endpoint are correlated; the whole point of
+    // a retry is to sample a DIFFERENT moment, so pause before re-dialling.
+    await new Promise((resolve) => setTimeout(resolve, PRELAUNCH_RETRY_BACKOFF_MS));
     result = await probe.probe(descriptor);
+    attempts += 1;
   }
   if (!result.ok) {
     // Log the host (NOT credentials) for ops triage; the customer gets the typed

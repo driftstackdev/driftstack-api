@@ -558,6 +558,55 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(calls).toBe(2); // first attempt transient-unreachable, retried, second passed
   });
 
+  it('CRITICAL W-33 two transient failures then ok → 201 — a flapping proxy is not a lockout', async () => {
+    // ⛔ The budget was ONE retry, and a customer-used upstream was measured at 4
+    // failed connects in 15 (27%) from the fleet node against a matched control at
+    // 0 in 15. Two attempts both failing is 0.27² ≈ 7% — a 1-in-14 launch REFUSAL
+    // on a proxy that demonstrably carries sessions and delivers frames. The node
+    // already refuses to call one sample a verdict on this exact path; the gate
+    // that refuses a CUSTOMER was the only place the principle was missing.
+    let calls = 0;
+    const flappy = {
+      probe: () => {
+        calls += 1;
+        return Promise.resolve(calls <= 2 ? { ok: false, reason: 'unreachable' } : { ok: true });
+      },
+    } as unknown as ProxyConnectivityProbe;
+    fx = await buildTestApp({ enableAgentRuntime: true, proxyConnectivityProbe: flappy });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode, 'a proxy that answers on the third dial must launch').toBe(201);
+    expect(calls).toBe(3);
+  });
+
+  it('CRITICAL the retry budget is BOUNDED — a permanently unreachable proxy still 422s', async () => {
+    // The vacuity control for the arm above: raising the budget must not turn the
+    // gate into "eventually allow". A proxy that never answers is still refused,
+    // and after a bounded number of dials rather than an open-ended loop.
+    let calls = 0;
+    const dead = {
+      probe: () => {
+        calls += 1;
+        return Promise.resolve({ ok: false, reason: 'unreachable' as const });
+      },
+    } as unknown as ProxyConnectivityProbe;
+    fx = await buildTestApp({ enableAgentRuntime: true, proxyConnectivityProbe: dead });
+    const proxyId = await seedOwnSocks5Proxy(fx);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/agent-sessions',
+      headers: { authorization: `Bearer ${fx.plaintext}` },
+      payload: { token_budget: 50_000, proxy_id: proxyId },
+    });
+    expect(res.statusCode).toBe(422);
+    expect(calls, 'bounded, not open-ended').toBe(3);
+  });
+
   it('#63 auth_failed is NOT retried (wrong creds cannot self-heal) → 422 after exactly ONE probe', async () => {
     let calls = 0;
     const authProbe = {
