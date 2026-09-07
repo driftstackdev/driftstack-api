@@ -1,8 +1,14 @@
 // Command Center home — the overview the app leads with. Redesigned 2026-06-15
-// (founder: the old version "looks cheap/ugly"): a gradient hero with an
-// identity glow, a richer icon-led KPI strip (now the home for the fleet stats
-// that used to sit on Profiles), and cleaner session-health / activity /
-// quick-link sections.
+// (founder: the old version "looks cheap/ugly"), then tightened under ledger
+// row T-18 (founder: the page "looks boring/cluttered", the Plan label overflows
+// its box). The layout now leads with a compact HEADER BAND — greeting eyebrow,
+// the Automate prompt, a one-line status summary built from the live counts, and
+// the two primary actions — with the icon-led KPI strip (the fleet stats that
+// used to sit on Profiles) sitting directly beneath it as one glance region.
+// The gradient hero's identity glow was dropped for a utilitarian look, and the
+// old "Jump to" quick-link trio was removed because it duplicated the left
+// sidebar's Profiles/Proxies/Sessions nav. Session-health and recent-activity
+// strips follow, all on one shared card chrome.
 //
 // Composes from the already-loaded accountMe (SettingsContext, no extra fetch)
 // plus four independent, gracefully-degrading loads (recent profiles, session
@@ -12,10 +18,11 @@
 // independently of the fetches.
 //
 // Actionable launchpad (founder 2026-06-19: the passive overview was "pretty
-// useless"): a "Jump back in" recent-profiles strip sits right under the hero so
-// the core action (get into a profile to launch it) is one click away, and the
-// live "Running" affordances jump straight to the Sessions surface. Real launch
-// lives in Profiles — the home navigates there, it never duplicates that path.
+// useless"): a "Jump back in" recent-profiles strip sits high (just below the
+// header band + KPI glance) so the core action (get into a profile to launch it)
+// is one click away, and the live "Running" affordances jump straight to the
+// Sessions surface. Real launch lives in Profiles — the home navigates there, it
+// never duplicates that path.
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
@@ -28,6 +35,7 @@ import {
 } from '../lib/use-onboarding-steps';
 import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
+import { TIER_LABEL } from '../components/TierBadge';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions' | 'settings';
 
@@ -474,6 +482,19 @@ export function CommandCenterView({
   // jump to — a 0 (or unloaded) count stays a passive stat.
   const liveNowAction = liveNow !== null && liveNow > 0 ? () => onNavigate('sessions') : undefined;
 
+  // One-line status summary for the header band (T-18) — a plain-language
+  // restatement of the live counts the KPI cards below show in detail. Built
+  // from the SAME already-fetched data (no extra load), and each half is
+  // omitted when its count is unknown so absent data never reads as "0" (the
+  // same honesty rule the Active KPI enforces). The account TIER is
+  // deliberately NOT included here — it is shown once, in the Plan KPI, so the
+  // two surfaces don't duplicate it.
+  const statusBits: string[] = [];
+  if (profileCount !== null)
+    statusBits.push(`${String(profileCount)} ${profileCount === 1 ? 'profile' : 'profiles'}`);
+  if (liveNow !== null) statusBits.push(`${String(liveNow)}${liveNowExact ? '' : '+'} active`);
+  const statusSummary = statusBits.length > 0 ? statusBits.join(' · ') : null;
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
       {/* Cap alerts — proactive, only when near/over a limit. */}
@@ -505,42 +526,90 @@ export function CommandCenterView({
         </div>
       )}
 
-      {/* Hero — gradient + identity glow; leads with Automate. */}
-      <section className="relative overflow-hidden rounded-2xl border border-surface-divider bg-surface-raised p-6">
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-40 blur-3xl"
-          style={{
-            background: 'radial-gradient(circle, rgb(var(--accent-rgb)/0.55), transparent 70%)',
-          }}
-        />
-        <div className="relative flex flex-col gap-4">
-          <div className="flex flex-col gap-1">
-            <span className="section-label text-accent">{hello}</span>
-            <h1 className="text-2xl font-semibold tracking-tight text-ink-primary">
-              What do you want to automate?
-            </h1>
-            <p className="max-w-xl text-sm text-ink-secondary">
-              Describe a task in plain language and Driftstack plans &amp; runs it on a real iPhone
-              profile — or replay one you saved.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white shadow-[0_3px_10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.18)] transition-colors hover:bg-accent-hover"
-              onClick={() => onNavigate('ai')}
-            >
-              <IconSparkle /> Ask Driftstack AI
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-lg border border-surface-divider bg-surface-elevated px-4 py-2 text-sm font-medium text-ink-primary transition-colors hover:bg-surface-divider"
-              onClick={() => onNavigate('recipes')}
-            >
-              <IconBook /> Saved tasks
-            </button>
-          </div>
+      {/* Header band (T-18) — greeting, the Automate prompt, a one-line status
+          summary from the live counts, and the two primary actions. Compact by
+          design: the old full-bleed gradient hero read as flashy and pushed the
+          actionable strips below the fold. Glow dropped for a utilitarian look;
+          card chrome + the shared .btn-primary/.btn-secondary CTAs match every
+          other strip. */}
+      <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
+        <div className="flex flex-col gap-1">
+          <span className="section-label text-accent">{hello}</span>
+          <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
+            What do you want to automate?
+          </h1>
+          {statusSummary !== null && <p className="text-sm text-ink-secondary">{statusSummary}</p>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="btn-primary gap-2" onClick={() => onNavigate('ai')}>
+            <IconSparkle /> Ask Driftstack AI
+          </button>
+          <button
+            type="button"
+            className="btn-secondary gap-2"
+            onClick={() => onNavigate('recipes')}
+          >
+            <IconBook /> Saved tasks
+          </button>
+        </div>
+      </section>
+
+      {/* Fleet KPI strip — icon-led cards (moved here from Profiles), sitting
+          directly under the header band so the glance stats and the one-line
+          summary read as one region. The Profiles/Active counts + the Plan tile
+          come from account.me(), which (per the Sidebar contract) IGNORES the
+          active-workspace header and so always reflects the PERSONAL account's
+          caps — whereas the strips below ("Jump back in", "Session health") DO
+          honor it. While viewing a team workspace those two scopes describe
+          different numbers, so label this strip "Your account" to stop the
+          personal caps reading as this team's counts (caps are per-account by
+          design; there is no workspace-scoped authoritative count endpoint to
+          swap in). */}
+      <section className="flex flex-col gap-2">
+        {activeWorkspace !== null && (
+          <span className="section-label" data-component="account-kpi-label">
+            Your account
+          </span>
+        )}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi
+            icon={<IconLayers />}
+            label="Profiles"
+            value={ratio(profileCount, profileCap)}
+            title={
+              activeWorkspace !== null
+                ? 'Profile cap is per your account, not per workspace.'
+                : undefined
+            }
+          />
+          <Kpi
+            icon={<IconBolt />}
+            // "Active" (not "Live now") matches the server's
+            // concurrent_session_active semantics: ALL non-destroyed sessions
+            // (creating + ready + busy + errored). The Session-health "Running"
+            // tile below counts ready+busy only, so the two are different measures
+            // by design — labeling this "Active" stops them reading as the same
+            // number and visibly contradicting (audit: liveNow=3 vs Running=1).
+            label="Active"
+            value={liveNow !== null ? `${String(liveNow)}${liveNowExact ? '' : '+'}` : '—'}
+            // ⛔ Conditional, not unconditional. This was a bare `accent`, so a
+            // count of ZERO rendered in the live/ready colour — the page's
+            // most-read number saying "running" while nothing was. Accent now
+            // means there IS something live; nothing live reads neutral.
+            accent={liveNow !== null && liveNow > 0}
+            onClick={liveNowAction}
+            title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
+          />
+          <Kpi
+            icon={<IconGlobe />}
+            label="Proxies"
+            value={proxyCount !== null ? String(proxyCount) : '—'}
+          />
+          <Kpi
+            icon={<IconBadge />}
+            label="Plan"
+            value={tier !== null ? (TIER_LABEL[tier] ?? tier) : '—'}
+          />
         </div>
       </section>
 
@@ -610,59 +679,6 @@ export function CommandCenterView({
         </div>
       </section>
 
-      {/* Fleet KPI strip — icon-led cards (moved here from Profiles). The
-          Profiles/Active counts + the Plan tile come from account.me(), which
-          (per the Sidebar contract) IGNORES the active-workspace header and so
-          always reflects the PERSONAL account's caps — whereas the strips below
-          ("Jump back in", "Session health") DO honor it. While viewing a team
-          workspace those two scopes describe different numbers, so label this
-          strip "Your account" to stop the personal caps reading as this team's
-          counts (caps are per-account by design; there is no workspace-scoped
-          authoritative count endpoint to swap in). */}
-      <section className="flex flex-col gap-2">
-        {activeWorkspace !== null && (
-          <span className="section-label" data-component="account-kpi-label">
-            Your account
-          </span>
-        )}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi
-            icon={<IconLayers />}
-            label="Profiles"
-            value={ratio(profileCount, profileCap)}
-            title={
-              activeWorkspace !== null
-                ? 'Profile cap is per your account, not per workspace.'
-                : undefined
-            }
-          />
-          <Kpi
-            icon={<IconBolt />}
-            // "Active" (not "Live now") matches the server's
-            // concurrent_session_active semantics: ALL non-destroyed sessions
-            // (creating + ready + busy + errored). The Session-health "Running"
-            // tile below counts ready+busy only, so the two are different measures
-            // by design — labeling this "Active" stops them reading as the same
-            // number and visibly contradicting (audit: liveNow=3 vs Running=1).
-            label="Active"
-            value={liveNow !== null ? `${String(liveNow)}${liveNowExact ? '' : '+'}` : '—'}
-            // ⛔ Conditional, not unconditional. This was a bare `accent`, so a
-            // count of ZERO rendered in the live/ready colour — the page's
-            // most-read number saying "running" while nothing was. Accent now
-            // means there IS something live; nothing live reads neutral.
-            accent={liveNow !== null && liveNow > 0}
-            onClick={liveNowAction}
-            title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
-          />
-          <Kpi
-            icon={<IconGlobe />}
-            label="Proxies"
-            value={proxyCount !== null ? String(proxyCount) : '—'}
-          />
-          <Kpi icon={<IconBadge />} label="Plan" value={tier !== null ? titleCase(tier) : '—'} />
-        </div>
-      </section>
-
       {/* Live session health — loads independently; degrades gracefully. */}
       <section className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
@@ -694,31 +710,6 @@ export function CommandCenterView({
         {/* aria-live so SR users hear the loading → ready/error/empty transition. */}
         <div aria-live="polite">
           <ActivityFeed state={activity} />
-        </div>
-      </section>
-
-      {/* Quick links into the rest of the app. */}
-      <section className="flex flex-col gap-2">
-        <span className="section-label">Jump to</span>
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
-          <QuickLink
-            icon={<IconLayers />}
-            label="Profiles"
-            desc="Browse &amp; launch identities"
-            onClick={() => onNavigate('profiles')}
-          />
-          <QuickLink
-            icon={<IconGlobe />}
-            label="Proxies"
-            desc="SOCKS5 exits &amp; health"
-            onClick={() => onNavigate('proxies')}
-          />
-          <QuickLink
-            icon={<IconActivity />}
-            label="Sessions"
-            desc="Live &amp; recent runs"
-            onClick={() => onNavigate('sessions')}
-          />
         </div>
       </section>
     </div>
@@ -1021,9 +1012,15 @@ function Kpi({
         <span className="section-label">{label}</span>
         {/* The value, not the label, is what this card exists to show. It was
             `text-xl` — barely above body copy — so a strip of four KPIs read as
-            four labels with footnotes. Owner: the page "looks too boring". */}
+            four labels with footnotes. Owner: the page "looks too boring".
+            `truncate` (T-18): the value sits in a ~147px 4-up grid slot with no
+            width guard, so a long value (e.g. "API Builder") escaped the rounded
+            card border. Clip with an ellipsis and expose the full value via
+            `title` so it stays available on hover. Protects EVERY value, not
+            just Plan. */}
         <span
-          className={`mono text-3xl font-semibold leading-none tabular-nums ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
+          title={String(value)}
+          className={`mono text-3xl font-semibold leading-none tabular-nums truncate ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
         >
           {value}
         </span>
@@ -1036,7 +1033,7 @@ function Kpi({
         type="button"
         onClick={onClick}
         title={title}
-        className="flex cursor-pointer items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
+        className="flex cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated hover:ring-1 hover:ring-accent/30"
       >
         {inner}
       </button>
@@ -1045,41 +1042,10 @@ function Kpi({
   return (
     <div
       title={title}
-      className="flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3"
+      className="flex items-center gap-3 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised px-4 py-3"
     >
       {inner}
     </div>
-  );
-}
-
-function QuickLink({
-  icon,
-  label,
-  desc,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  desc: string;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group flex items-center gap-3 rounded-xl border border-surface-divider bg-surface-raised px-4 py-3 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
-    >
-      <span
-        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-ink-secondary transition-colors group-hover:text-accent"
-        aria-hidden="true"
-      >
-        {icon}
-      </span>
-      <span className="flex min-w-0 flex-col">
-        <span className="text-sm font-medium text-ink-primary">{label}</span>
-        <span className="truncate text-xs text-ink-muted">{desc}</span>
-      </span>
-    </button>
   );
 }
 
@@ -1087,10 +1053,6 @@ function ratio(value: number | null, cap: number | null): string {
   if (value === null) return '—';
   if (cap === null) return String(value);
   return `${value} / ${cap}`;
-}
-
-function titleCase(s: string): string {
-  return s.length === 0 ? s : (s[0] ?? '').toUpperCase() + s.slice(1);
 }
 
 // ─── icons (Lucide-shape, inline, no dependency) ──────────────────
@@ -1131,13 +1093,6 @@ function IconGlobe(): JSX.Element {
       <circle cx="8" cy="8" r="5.75" />
       <path d="M2.25 8h11.5" />
       <path d="M8 2.25c1.7 2 2.5 4 2.5 5.75S9.7 12 8 13.75C6.3 11.75 5.5 9.75 5.5 8s.8-3.75 2.5-5.75Z" />
-    </svg>
-  );
-}
-function IconActivity(): JSX.Element {
-  return (
-    <svg viewBox="0 0 16 16" width="15" height="15" {...stroke}>
-      <path d="M1.5 8h2.75l1.5-4.5 3 9 1.5-4.5h4.25" />
     </svg>
   );
 }

@@ -1,11 +1,12 @@
 // Command Center home (G4/G4b) — the Automate-led launchpad + live session-health
-// + recent-activity + "Jump back in" recent profiles. Asserts the hero CTAs route
-// to ai/recipes, the KPI strip (from accountMe, "—" when null), the quick links,
-// the pure summarizeSessions / formatAuditAction / sortRecentProfiles /
+// + recent-activity + "Jump back in" recent profiles. Asserts the header-band
+// CTAs route to ai/recipes, the KPI strip (from accountMe, "—" when null), the
+// pure summarizeSessions / formatAuditAction / sortRecentProfiles /
 // profileMonogram helpers, the actionable Live-now KPI + Running tile (jump to
 // sessions), the recent-profiles strip, and that every async strip (health /
 // activity / recent profiles) loads and degrades gracefully. Controllable
 // useSettings mock so it runs without the Tauri/SDK chain.
+// (T-18 removed the redundant "Jump to" quick-link trio; see the note below.)
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
@@ -198,14 +199,17 @@ describe('CommandCenterView', () => {
 
   it('renders the KPI strip from accountMe (Plan + Profiles ratio)', () => {
     accountMe = {
-      tier: 'builder',
+      // A real tier key: the Plan tile resolves it through the canonical
+      // TIER_LABEL map (T-18), so 'api_builder' → 'API Builder', not the
+      // old titleCase output 'Api_builder'.
+      tier: 'api_builder',
       concurrent_session_active: 2,
       concurrent_session_cap: 4,
       profile_count: 7,
       profile_cap: 25,
     };
     render(<CommandCenterView onNavigate={nav()} />);
-    expect(screen.getByText('Builder')).toBeTruthy();
+    expect(screen.getByText('API Builder')).toBeTruthy();
     expect(screen.getByText('7 / 25')).toBeTruthy(); // Profiles KPI
   });
 
@@ -230,7 +234,10 @@ describe('CommandCenterView', () => {
     accountMe = { ...ACC, tier: 'builder', profile_count: 2, profile_cap: 50 };
     activeWorkspace = 'acct_team_owner_1';
     render(<CommandCenterView onNavigate={nav()} />);
-    const profilesTile = screen.getByText('2 / 50').closest('[title]');
+    // The card wrapper (a div) carries the per-account title. The value span
+    // now carries its own `title` (the full value, for the T-18 truncate fix),
+    // so scope the ancestor walk to the div to reach the card, not the span.
+    const profilesTile = screen.getByText('2 / 50').closest('div[title]');
     expect(profilesTile?.getAttribute('title')).toMatch(/per your account/i);
   });
 
@@ -257,16 +264,10 @@ describe('CommandCenterView', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3);
   });
 
-  it('quick links navigate to profiles / proxies / sessions', () => {
-    const onNavigate = nav();
-    render(<CommandCenterView onNavigate={onNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /Profiles/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Proxies/ }));
-    fireEvent.click(screen.getByRole('button', { name: /^Sessions/ }));
-    expect(onNavigate).toHaveBeenCalledWith('profiles');
-    expect(onNavigate).toHaveBeenCalledWith('proxies');
-    expect(onNavigate).toHaveBeenCalledWith('sessions');
-  });
+  // T-18 removed the redundant "Jump to" quick-link trio (Profiles / Proxies /
+  // Sessions) — it duplicated the left sidebar's nav. Navigation into those
+  // surfaces is still covered elsewhere (the "Jump back in" card → profiles, the
+  // Running tile / Active KPI → sessions, cap-alert CTAs → sessions/profiles).
 
   it('without a client, every strip prompts to connect', () => {
     client = null;

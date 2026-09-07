@@ -109,6 +109,31 @@ objc2-app-kit = { version = "0.3", features = [
     "NSAttributedString",
 ] }
 
+# T-22 (owner #8) — Windows taskbar identity for the in-process simulator
+# window. On Windows the simulator opens as a WebviewWindow in THIS process (no
+# separate app bundle, unlike macOS), so Windows groups its taskbar button under
+# the MAIN app's button behind the main icon. `claim_simulator_taskbar_identity`
+# (lib.rs, #[cfg(windows)]) gives ONLY that window a distinct AppUserModelID via
+# its window property store (SHGetPropertyStoreForWindow + PKEY_AppUserModel_ID),
+# which is what Windows groups taskbar buttons by — so it ungroups into its own
+# button, the owner's core ask. Windows-only; the cfg gate excludes it from the
+# macOS/Linux builds entirely.
+#
+# Version pinned to 0.61 to MATCH the `windows` crate Tauri 2.11 already resolves
+# in Cargo.lock (0.61.3, transitive via tauri / tao 0.35 / wry 0.55): the HWND
+# handed back by `WebviewWindow::hwnd()` is that crate's `HWND` type, so a
+# different major would not interoperate with SHGetPropertyStoreForWindow. (The
+# feature-set is additive on the same already-resolved version — no new crate
+# tree, no version churn.)
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_UI_Shell",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
+
 [features]
 # Customer-facing build defaults to no devtools; opens up by passing
 # `--features devtools` during `cargo tauri dev`.

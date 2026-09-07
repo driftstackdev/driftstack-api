@@ -26,7 +26,10 @@ export interface TierBadgeProps {
   size?: 'sm' | 'md';
 }
 
-const TIER_LABEL: Record<string, string> = {
+// Exported so consumers that show a tier as bare text (not the badge chip) —
+// e.g. the Command Center Plan KPI — resolve the same canonical label instead
+// of re-deriving one (T-18: a local title-caser rendered "Agency_manual").
+export const TIER_LABEL: Record<string, string> = {
   free: 'Free',
   solo_manual: 'Personal',
   team_manual: 'Team',
