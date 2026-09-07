@@ -54,6 +54,16 @@ describe('the pre-push CI check reports and never blocks', () => {
     expect(BLOCK).toMatch(/verify-suite/);
   });
 
+  it('CRITICAL the verdict carries the RUN it read', () => {
+    // ⛔ The first time this fired for real it said `failure`, and the state was
+    // not reproducible a minute later. A verdict with no subject cannot be
+    // audited: there is no way to tell a stale read, a race, or a real red apart.
+    // Reporting the sha is what makes the warning checkable rather than one more
+    // thing to believe.
+    expect(BLOCK).toContain('headSha');
+    expect(BLOCK).toMatch(/\$ci_sha/);
+  });
+
   it('VACUITY CONTROL — the hook is the real file and the block was located', () => {
     expect(HOOK).toContain('refs/tags/gui-v*');
     expect(BLOCK).toContain('gh run list');

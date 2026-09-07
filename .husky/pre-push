@@ -170,11 +170,19 @@ if [ "${DRIFTSTACK_SKIP_CI_CHECK:-}" != "1" ]; then
   # means, and each of the other readings would have been a distinct state wearing
   # this one's label.
   ci_state=$(gh run list --repo driftstackdev/driftstack-api --workflow CI --branch main \
-    --limit 8 --json status,conclusion \
+    --limit 8 --json status,conclusion,headSha \
     --jq 'map(select(.conclusion == "success" or .conclusion == "failure"
-                     or .conclusion == "timed_out")) | .[0].conclusion // "none"' 2>/dev/null) || ci_state=""
+                     or .conclusion == "timed_out"))
+          | if length == 0 then "none"
+            else "\(.[0].conclusion) \(.[0].headSha[0:9])" end' 2>/dev/null) || ci_state=""
+  # ⛔ The sha rides with the verdict. The first time this check fired for real it
+  # reported `failure` and the state was not reproducible a minute later — because a
+  # verdict with no subject cannot be audited at all. Which run it read is the only
+  # thing that makes the warning checkable rather than another thing to believe.
+  ci_sha="${ci_state#* }"
+  ci_state="${ci_state%% *}"
   case "$ci_state" in
-    success) echo "→ CI on origin/main: green (last completed run)" ;;
+    success) echo "→ CI on origin/main: green ($ci_sha)" ;;
     "" | none)
       echo "→ CI on origin/main: COULD NOT CHECK (gh unavailable, unauthenticated, or offline)"
       echo "    Not a green. Check manually if this push matters:"
@@ -182,7 +190,7 @@ if [ "${DRIFTSTACK_SKIP_CI_CHECK:-}" != "1" ]; then
       ;;
     *)
       echo ""
-      echo "⛔ CI on origin/main is currently: $ci_state"
+      echo "⛔ CI on origin/main is currently: $ci_state (run for $ci_sha)"
       echo "   You are pushing on top of a RED CI. Deploys do not depend on CI, so"
       echo "   nothing else will tell you. The jobs this gate does not run are listed"
       echo "   at the end of every verify-suite run, each with a command you can paste."
