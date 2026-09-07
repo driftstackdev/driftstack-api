@@ -292,21 +292,7 @@ async function openInProcessSimulatorWindow(
     result = await attempt(buildWindow());
   }
 
-  if (result.opened) {
-    // T-22 (owner #8) — this in-process window shares the main app's process and
-    // so its default Windows AppUserModelID, which makes Windows group its
-    // taskbar button under the MAIN app's button. Hand ONLY this window a
-    // distinct AUMID so Windows ungroups it into its own taskbar button, the way
-    // macOS's separate Simulator.app gets its own Dock icon. Best-effort: the
-    // window is already open and the command is a no-op off Windows, so the
-    // result is discarded and any rejection is swallowed by `.catch(() => {})` —
-    // a taskbar-cosmetic failure must never turn a successful launch into a
-    // failure. Awaited only so the claim is dispatched (and its rejection
-    // caught) before returning.
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('claim_simulator_taskbar_identity', { label }).catch(() => {});
-    return { opened: true };
-  }
+  if (result.opened) return { opened: true };
   return { opened: false, ...(result.reason !== undefined ? { reason: result.reason } : {}) };
 }
 

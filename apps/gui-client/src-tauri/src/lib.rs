@@ -459,7 +459,6 @@ pub fn run() {
             proxy_exit_probe,
             endpoint_resolve,
             simulator_app_supported,
-            claim_simulator_taskbar_identity,
             launch_simulator,
             repair_simulator_install,
             set_dock_tile,
@@ -1180,121 +1179,6 @@ fn ping() -> &'static str {
 #[tauri::command]
 fn simulator_app_supported() -> bool {
     cfg!(target_os = "macos")
-}
-
-/// T-22 (owner #8) — give the in-process simulator window its OWN Windows
-/// taskbar button, the way macOS gets one for free from the separate
-/// "Driftstack Simulator" app bundle (its own Dock icon).
-///
-/// On Windows/Linux there is no separate bundle: `openInProcessSimulatorWindow`
-/// opens the phone as a `WebviewWindow` inside THIS process. Because it shares
-/// the process — and therefore the default AppUserModelID (AUMID) — Windows
-/// groups the simulator's taskbar button UNDER the main app's button, behind the
-/// main icon. Windows groups taskbar buttons BY AUMID, so assigning ONLY the
-/// simulator window a distinct AUMID (`dev.driftstack.simulator`, the identity
-/// the macOS companion already uses) splits it into its own button. The MAIN
-/// window is deliberately left on the default AUMID, so its own grouping and
-/// pinning are untouched.
-///
-/// The caller is the MAIN GUI window (it owns the simulator lifecycle), so the
-/// injected `window` is the main window and is only used for the origin gate;
-/// the window to retarget is looked up by `label` (Tauri IPC injects the CALLER
-/// window, never an arbitrary one, so the label is how the main window names its
-/// child). The AUMID is written to that window's HWND property store on the main
-/// thread, where the WebView2 STA already holds an initialized COM apartment.
-///
-/// BEST-EFFORT by contract: every fallible native step logs via `eprintln` and
-/// returns `Ok`, so a taskbar-cosmetic failure can NEVER break the already-open
-/// window (the window is created and shown before this is ever called).
-///
-/// A distinct simulator ICON is intentionally NOT set here: the AUMID alone
-/// delivers the owner's core ask (a separate button), and loading a distinct
-/// icon at runtime needs tauri's `image-ico`/`image-png` feature (not enabled;
-/// only `tauri-codegen` pulls `ico`, at build time) plus resource-path
-/// resolution — neither compile-verifiable on the macOS build box. The button
-/// falls back to the app icon until a distinct icon is wired on a Windows box.
-#[cfg(windows)]
-#[tauri::command]
-fn claim_simulator_taskbar_identity(
-    window: tauri::WebviewWindow,
-    label: String,
-) -> Result<(), String> {
-    use tauri::Manager as _;
-    ensure_main_gui_command(&window)?;
-
-    let Some(target) = window.app_handle().get_webview_window(&label) else {
-        // A stale/closed label is not an error worth surfacing — the window this
-        // was meant to brand is simply gone. Log and succeed.
-        eprintln!("[simulator] taskbar identity: no window labelled '{label}'");
-        return Ok(());
-    };
-
-    // SHGetPropertyStoreForWindow needs an initialized COM apartment; the main
-    // thread (the WebView2 host STA) has one. Scheduling failure is logged, not
-    // fatal. The closure owns a clone so `target` never crosses the thread by
-    // reference.
-    let target_for_thread = target.clone();
-    if let Err(err) = target.run_on_main_thread(move || {
-        if let Err(step) = set_window_aumid(&target_for_thread, SIMULATOR_IDENTIFIER) {
-            eprintln!("[simulator] taskbar identity: {step}");
-        }
-    }) {
-        eprintln!("[simulator] taskbar identity: could not reach the main thread: {err}");
-    }
-    Ok(())
-}
-
-/// Set `aumid` as the AppUserModelID on `window`'s taskbar button via its window
-/// property store (T-22). Windows groups taskbar buttons by AUMID, so a distinct
-/// value on one window ungroups it. MUST run on the main (COM STA) thread. On
-/// failure returns the failing step as a string; the caller downgrades that to a
-/// log because this is best-effort cosmetics that must not break the window.
-#[cfg(windows)]
-fn set_window_aumid(window: &tauri::WebviewWindow, aumid: &str) -> Result<(), String> {
-    use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
-    use windows::Win32::UI::Shell::PropertiesSystem::{
-        IPropertyStore, InitPropVariantFromString, PKEY_AppUserModel_ID,
-        SHGetPropertyStoreForWindow,
-    };
-
-    let hwnd = window.hwnd().map_err(|e| format!("hwnd() failed: {e}"))?;
-
-    // A wide, NUL-terminated UTF-16 buffer for the AUMID. `windows::core::w!`
-    // needs a string literal, but the AUMID is a runtime `&str` (the shared
-    // bundle-id constant), so encode it explicitly and keep it alive across the
-    // InitPropVariantFromString read below.
-    let wide: Vec<u16> = aumid.encode_utf16().chain(std::iter::once(0)).collect();
-    let value_str = windows::core::PCWSTR(wide.as_ptr());
-
-    // SAFETY: `hwnd` is a live top-level window handle from Tauri; the property
-    // store and the PROPVARIANT are created, used, and dropped entirely within
-    // this call on the COM STA thread (PROPVARIANT clears itself on Drop);
-    // `wide` outlives the InitPropVariantFromString read that borrows it.
-    unsafe {
-        let store: IPropertyStore =
-            SHGetPropertyStoreForWindow(hwnd).map_err(|e| format!("property store: {e}"))?;
-        let value: PROPVARIANT =
-            InitPropVariantFromString(value_str).map_err(|e| format!("propvariant: {e}"))?;
-        store
-            .SetValue(&PKEY_AppUserModel_ID, &value)
-            .map_err(|e| format!("set AUMID: {e}"))?;
-        store.Commit().map_err(|e| format!("commit: {e}"))?;
-    }
-    Ok(())
-}
-
-/// Non-Windows twin so the command registers on EVERY platform (the JS invoke
-/// resolves rather than rejecting). There is no taskbar grouping to fix off
-/// Windows: macOS ships the separate app bundle (its own Dock icon) and Linux is
-/// out of scope for T-22.
-#[cfg(not(windows))]
-#[tauri::command]
-fn claim_simulator_taskbar_identity(
-    window: tauri::WebviewWindow,
-    label: String,
-) -> Result<(), String> {
-    let _ = (window, label);
-    Ok(())
 }
 
 #[tauri::command]
