@@ -151,7 +151,18 @@ test('an operation that declares a bearer token refuses a caller without one', a
   // Re-measured 2026-09-05 on the first CI run of this job (build-test had never been
   // green, so this spec had never run there): 28. The 28th is POST /v1/sessions/{id}/proxy,
   // a deployment-gated route that landed after the bound was measured at 27.
-  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(28);
+  //
+  // ⛔ 29 since 2026-09-06: the 29th is POST /v1/agent-sessions/{id}/egress, which is
+  // deployment-gated (its handler refuses before any relay while the feature flag is
+  // off). So the growth is the bound doing its job, not a regression — this number
+  // must only ever be raised for a route that is GENUINELY gated, because the whole
+  // point is to notice the covered share shrinking.
+  //
+  // ⚠️ It took ~22 hours to see. This spec runs in the e2e CI job, which the local
+  // `verify-suite` gate explicitly does NOT run — its verdict line says so — and the
+  // deploy workflow is independent of CI, so production shipped green while this was
+  // red. A census guard outside the gate you actually run is a guard on paper.
+  expect(gated.length, 'the gate-before-auth set stays bounded').toBeLessThanOrEqual(29);
   // Measured for THIS population, not borrowed. The sibling id-sweep bounds its
   // unrouted set at twelve, but that sweep walks the 106 single-parameter
   // operations and this one walks all 201 that declare a bearer requirement, so

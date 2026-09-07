@@ -685,10 +685,14 @@ test('no id-shaped body field turns a malformed value into a server error', asyn
   // nothing about validation. Stated and bounded rather than folded into the
   // pass: if the gated share grows, the two assertions below quietly cover less
   // while still reporting green.
+  // ⛔ 10 since 2026-09-06: POST /v1/agent-sessions/{id}/egress adds one id-shaped
+  // body field behind a deployment flag. Raised only because that route is GENUINELY
+  // gated — the bound exists to notice this sweep quietly covering less, so a number
+  // moved for an ungated route would be hiding the thing it was written to catch.
   expect(
     gated.length,
     'the deployment-gated share of body fields stays bounded',
-  ).toBeLessThanOrEqual(9);
+  ).toBeLessThanOrEqual(10);
 
   expect(
     serverErrors,
