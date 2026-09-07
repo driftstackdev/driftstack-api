@@ -127,6 +127,14 @@ describe('a probe verdict is not a pass', () => {
         /JSON\.stringify\(frame\)|\.\.\.frame|frame\.exit_ip|frame\.quic_detail|frame\.proxyUpstream|frame\.archetypeId/,
       );
     }
+    // ⛔ THE ONE EXEMPTION, asserted rather than left as an absence in the list
+    // above. `h3ConnectionCount` is logged BY VALUE on purpose: presence answers
+    // "does the node send it", and the question that matters is whether it MOVES,
+    // which a key set cannot show. Pinning it means removing the value REDS this
+    // arm — so the instrument cannot quietly lose the ability to answer the
+    // question it exists for. It is a small non-negative integer: it identifies no
+    // customer, names no endpoint, and correlates to no person.
+    expect(src).toContain('h3ConnectionCount: frame.h3ConnectionCount,');
   });
 
   it('CRITICAL h3ConnectionCount is accepted — a latched boolean cannot carry liveness', () => {

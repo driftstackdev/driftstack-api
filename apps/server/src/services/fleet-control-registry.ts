@@ -838,9 +838,23 @@ export class FleetControlConnection {
           // carry liveness, and the customer-safe projection strips the count — so
           // WITHOUT this line there is no instrument anywhere that can see whether
           // the node is sending it. Names only, never values: these frames carry
-          // an archetype id, a fork build string and safeguard detail.
+          // an archetype id, a fork build string, safeguard detail and the
+          // customer's upstream endpoint.
+          //
+          // ⛔ ONE DELIBERATE EXCEPTION, and it is narrow. `h3ConnectionCount` is
+          // logged BY VALUE because the key's presence answers "does the node send
+          // it" and nothing else — and the question that actually matters is
+          // whether it MOVES. A monotone count is the liveness signal precisely
+          // because its rate carries what the latched `h3ConnectionObserved`
+          // cannot, and a rate is unobservable from a key set. It is a small
+          // non-negative integer: it identifies no customer, names no endpoint,
+          // and cannot be correlated back to a person. Every other field stays out.
           this.logger?.info(
-            { nodeId: this.nodeId, frameKeys: Object.keys(frame).sort().join(',') },
+            {
+              nodeId: this.nodeId,
+              frameKeys: Object.keys(frame).sort().join(','),
+              h3ConnectionCount: frame.h3ConnectionCount,
+            },
             'capabilityReport accepted: key set',
           );
           this.onCapabilityReport?.(frame, this.nodeId);
