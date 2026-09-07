@@ -29,7 +29,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 
 /** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 3133;
+export const EXPECTED_TEST_FILES = 3134;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
@@ -59,7 +59,7 @@ export const EXPECTED_TEST_FILES = 3133;
  * scope; this note exists so "five jobs" is not read as "everything that can
  * fail a PR".
  */
-export const EXPECTED_TEST_FILES_ALL = 3334;
+export const EXPECTED_TEST_FILES_ALL = 3335;
 
 /**
  * The CI jobs this gate does NOT run, with how to run each locally.
@@ -142,19 +142,27 @@ export const NOT_COVERED_BY_THIS_GATE = [
   {
     job: 'e2e',
     what: '233 Playwright tests — the only ones hitting real Postgres + Redis',
-    local: 'DATABASE_URL=<disposable db> REDIS_URL=<unused index> node scripts/e2e-local.mjs',
+    // ⛔ RUNNABLE AS WRITTEN, and that is the whole point. This line used to read
+    // `DATABASE_URL=<disposable db> REDIS_URL=<unused index> …` — accurate, printed
+    // on every green run, and never once acted on, because a command with
+    // placeholders is a description of a command. The reader still has to invent a
+    // database name and pick a Redis index, and at the moment they are reading this
+    // they have just been told everything passed. Measured cost of that friction:
+    // CI sat red for 22 hours on two route-census bounds this job holds, while the
+    // deploy workflow — which does not depend on CI — kept shipping green.
+    local: 'npm run test:e2e:disposable   # ~55s, creates its own throwaway db',
   },
   {
     job: 'python-sdk',
     // V-1094: read 362 while the comment above already said 365. The re-run
     // that corrected the prose did not reach the string the operator sees.
     what: '365 pytest tests + ruff/mypy',
-    local: 'packages/sdk-python && ./.venv/bin/python -m pytest -q',
+    local: 'cd packages/sdk-python && ./.venv/bin/python -m pytest -q',
   },
   {
     job: 'go-sdk',
     what: 'go vet, go test, and the examples build',
-    local: 'packages/sdk-go && go vet ./... && go test ./...',
+    local: 'cd packages/sdk-go && go vet ./... && go test ./...',
   },
   {
     job: 'bench-regression',

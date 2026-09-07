@@ -36,6 +36,7 @@
     "test:e2e": "npm run test:e2e --workspace apps/server",
     "test:e2e:setup": "docker compose up -d --wait",
     "test:e2e:local": "node scripts/e2e-local.mjs",
+    "test:e2e:disposable": "createdb driftstack_e2e_local 2>/dev/null || true; TMPDIR=/private/tmp/ds-e2e DATABASE_URL=postgres://driftstack:driftstack@localhost:5432/driftstack_e2e_local REDIS_URL=redis://localhost:6379/12 node scripts/e2e-local.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint . && node scripts/check-subprocessor-mirror.mjs",
     "format": "node --max-old-space-size=8192 ./node_modules/prettier/bin/prettier.cjs --write .",
