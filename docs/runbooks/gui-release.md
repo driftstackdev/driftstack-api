@@ -11,15 +11,34 @@ non-obvious.
 #    apps/gui-client/src-tauri/tauri.conf.json
 #    apps/gui-client/src-tauri/Cargo.toml
 
-# 2. Tag it. The tag MUST be gui-v<that exact version> — the workflow refuses otherwise.
+# 2. Tag it, ANNOTATED. The tag MUST be gui-v<that exact version> — the workflow
+#    refuses otherwise — and it must be `-a`; policy forbids lightweight tags.
 git tag -a gui-v0.1.1 -m "Driftstack GUI v0.1.1 — <what changed>"
 
-# 3. Create the release BEFORE or immediately after pushing the tag (see "Why" below).
-gh release create gui-v0.1.1 --title "Driftstack GUI gui-v0.1.1" --notes "..."
-
-# 4. Push the tag. This fires .github/workflows/gui-release.yml.
+# 3. ⛔ PUSH THE TAG FIRST. This order is load-bearing, not a preference — see
+#    "Why step 3 comes first" below. It also fires .github/workflows/gui-release.yml.
 git push origin gui-v0.1.1
+
+# 4. Create the release AGAINST THE TAG THAT NOW EXISTS. Because the tag is already
+#    on origin, `gh` attaches to it instead of creating one of its own.
+gh release create gui-v0.1.1 --title "Driftstack GUI gui-v0.1.1" --notes "..."
 ```
+
+## ⛔ Why step 3 comes first: `gh release create` makes a LIGHTWEIGHT tag
+
+If the tag is not already on origin, `gh release create <tag>` **creates it** — via the
+GitHub REST API, as a **lightweight** ref. Policy forbids lightweight release tags, and
+the build refuses them, so the cut fails after the tag is published — and a published tag
+cannot be replaced, so the version number is burnt and the next cut has to skip it.
+
+⛔ **The `.husky/pre-push` guard cannot save you here.** It inspects refs being pushed, and
+`gh release create` never pushes: it calls the API. So the one check that exists is blind
+to precisely this path. Pushing the annotated tag first is what puts the guard back in the
+loop — and is why the order is written as a step rather than a note.
+
+This is not hypothetical. `gui-v0.1.3`, `gui-v0.1.13`, `gui-v0.1.14` and `gui-v0.1.18` all
+shipped lightweight, and 0.1.18 produced no artifacts at all. Every one of them followed
+this runbook when it listed `gh release create` ahead of the push.
 
 Artifacts land on the release: `.exe` + `.msi` (Windows), `.dmg` (macOS), `.AppImage` +
 `.deb` (Linux), each with a `.sig`, plus `latest.json` for the updater.
