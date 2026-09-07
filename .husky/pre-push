@@ -144,4 +144,51 @@ node scripts/typecheck-test-backlog.mjs
 echo "→ tests"
 npm test
 
+# W-34 — say whether CI is currently RED on origin/main, because nothing else does.
+#
+# ⛔ CI sat red for 22 hours while every deploy shipped green. Two things made that
+# possible and both are by design: this gate runs only the `build-test` job (its own
+# notice says so), and the Deploy workflow does not depend on CI. So a failing e2e
+# or SDK job produces no signal anywhere a person looks. This is the last moment
+# before more work lands on top of it.
+#
+# ⚠️ ADVISORY, never blocking. Blocking here would put a network call on the push
+# path and hand CI a veto over an urgent fix, which is the opposite of the
+# continuous-deploy design. It reports; the human decides.
+#
+# ⛔ THREE STATES, and the third is the point. A check that goes quiet when it
+# cannot run is indistinguishable from a green one — the exact defect this whole
+# family of guards keeps producing. So "could not check" SAYS SO.
+if [ "${DRIFTSTACK_SKIP_CI_CHECK:-}" != "1" ]; then
+  # ⛔ Two states masquerade as an answer here and both had to be excluded by
+  # measurement rather than guessed. (1) The most recent run is often IN PROGRESS,
+  # and an in-flight run has an EMPTY conclusion — not null — so a `// "none"`
+  # default never fires and it reads as "could not check". (2) The most recent
+  # COMPLETED run is frequently `cancelled`, because a newer push supersedes an
+  # in-flight one; a cancelled run says nothing about whether main is broken.
+  # So: the most recent run carrying a real VERDICT. That is what "is main red"
+  # means, and each of the other readings would have been a distinct state wearing
+  # this one's label.
+  ci_state=$(gh run list --repo driftstackdev/driftstack-api --workflow CI --branch main \
+    --limit 8 --json status,conclusion \
+    --jq 'map(select(.conclusion == "success" or .conclusion == "failure"
+                     or .conclusion == "timed_out")) | .[0].conclusion // "none"' 2>/dev/null) || ci_state=""
+  case "$ci_state" in
+    success) echo "→ CI on origin/main: green (last completed run)" ;;
+    "" | none)
+      echo "→ CI on origin/main: COULD NOT CHECK (gh unavailable, unauthenticated, or offline)"
+      echo "    Not a green. Check manually if this push matters:"
+      echo "    gh run list --repo driftstackdev/driftstack-api --workflow CI --limit 3"
+      ;;
+    *)
+      echo ""
+      echo "⛔ CI on origin/main is currently: $ci_state"
+      echo "   You are pushing on top of a RED CI. Deploys do not depend on CI, so"
+      echo "   nothing else will tell you. The jobs this gate does not run are listed"
+      echo "   at the end of every verify-suite run, each with a command you can paste."
+      echo ""
+      ;;
+  esac
+fi
+
 echo "✓ pre-push gate clean"
