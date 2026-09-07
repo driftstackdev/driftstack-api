@@ -338,7 +338,10 @@ describe('W573.B /docs/gui-client/audit-current-state.md content parity', () => 
     expect(settings, 'the OS-keychain load path is gone').toMatch(/async function keychainLoad\(/);
     expect(settings, 'the OS-keychain save path is gone').toMatch(/async function keychainSave\(/);
     expect(settings, 'the plaintext purge on load is gone').toMatch(
-      /Purge BOTH historical plaintext shapes/,
+      // T-14 BUG 1 reworded this comment ("purges BOTH plaintext shapes and stamps
+      // settingsVersion") when the load-time migration write was added; the purge —
+      // the security property this guard protects — still fires on every such write.
+      /purges BOTH plaintext shapes/,
     );
   });
 });

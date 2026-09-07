@@ -65,10 +65,12 @@ describe('GUI settings protected API-key storage invariant', () => {
   });
 
   it('purges both historical plaintext shapes after the migration attempt', () => {
-    expect(body).toMatch(
-      /if \(persisted && \('apiKey' in persisted \|\| 'apiKeys' in persisted\)\) \{/,
-    );
-    expect(body).toMatch(/Purge BOTH historical plaintext shapes/);
+    // T-14 BUG 1 — the migration write now fires on `hasLegacyPlaintext ||
+    // needsLayoutMarker` (stamp the marker on first load, not only on a purge),
+    // so the plaintext check moved into `hasLegacyPlaintext`. Both halves pinned.
+    expect(body).toMatch(/'apiKey' in persisted \|\| 'apiKeys' in persisted/);
+    expect(body).toMatch(/if \(hasLegacyPlaintext \|\| needsLayoutMarker\) \{/);
+    expect(body).toMatch(/purges BOTH plaintext shapes/);
     // ⛔ V-1611 — this pin used to REQUIRE the list without `autoUpdate`, which
     // froze a real defect in place. The purge rewrites the WHOLE settings object,
     // so an omitted field is dropped: a customer who enabled auto-update and then
