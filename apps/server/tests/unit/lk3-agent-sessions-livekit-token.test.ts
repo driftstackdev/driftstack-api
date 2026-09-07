@@ -37,6 +37,8 @@ function makeSession(overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
     accountId: ACCOUNT_ID,
     driftstackSessionId: null,
     proxyId: null,
+    stopOnExitIpChange: false,
+    firstExitIp: null,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

@@ -32,7 +32,7 @@ describe('agent-session response schema parity', () => {
     const ifaceFields = [...ifaceBody.matchAll(/^ {2}(\w+)\??:/gm)]
       .map((x) => x[1])
       .filter((f): f is string => f !== undefined);
-    expect(ifaceFields.length).toBe(19);
+    expect(ifaceFields.length).toBe(20);
     expect(new Set(Object.keys(AgentSessionSchema.shape))).toEqual(new Set(ifaceFields));
   });
 
@@ -55,6 +55,7 @@ describe('agent-session response schema parity', () => {
       created_by_user_id: null,
       mode: 'manual',
       model: 'claude-opus-4-8',
+      stop_on_exit_ip_change: false,
       pair_mode_state: null,
       created_at: '2026-07-13T06:00:00.000Z',
       updated_at: '2026-07-13T06:00:00.000Z',
@@ -73,6 +74,13 @@ describe('agent-session response schema parity', () => {
       // completed QUIC handshake, so absent stays NOT-OBSERVED. The internal
       // interpose diagnostic is deliberately not here.
       h3_connection_observed: null,
+      // T-26 — the live exit identity + WebRTC candidate IPs. Required-nullable,
+      // like h3_connection_observed: null = NOT OBSERVED.
+      exit_ip: null,
+      exit_country: null,
+      exit_timezone: null,
+      webrtc_candidate_ips: null,
+      observed_at: null,
     };
     expect(
       AgentSessionSchema.safeParse({ ...base, capability_report: capabilityReport }).success,

@@ -217,6 +217,11 @@ class CapabilityReport(BaseModel):
     transport_mode_active: Literal["h2-only", "h2-and-h3"]
     safeguards_passed: bool
     h3_connection_observed: bool | None
+    exit_ip: str | None
+    exit_country: str | None
+    exit_timezone: str | None
+    webrtc_candidate_ips: list[str] | None
+    observed_at: str | None
 
 
 class ErrorEvent(BaseModel):
@@ -262,6 +267,7 @@ class AgentSession(BaseModel):
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ]
+    stop_on_exit_ip_change: bool
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str
@@ -1717,6 +1723,7 @@ class Session1(BaseModel):
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ]
+    stop_on_exit_ip_change: bool
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str
@@ -1927,6 +1934,7 @@ class Session2(BaseModel):
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ]
+    stop_on_exit_ip_change: bool
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str
@@ -1966,6 +1974,7 @@ class Session3(BaseModel):
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ]
+    stop_on_exit_ip_change: bool
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str
@@ -2005,6 +2014,7 @@ class Session4(BaseModel):
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ]
+    stop_on_exit_ip_change: bool
     pair_mode_state: PairModeState | None
     created_at: str
     updated_at: str

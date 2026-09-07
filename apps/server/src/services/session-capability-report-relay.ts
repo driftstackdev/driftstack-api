@@ -20,7 +20,32 @@ interface CapabilityReportAgentSessions {
     // proxyId is NULL when the session used an operator-default egress.
     accountId: string;
     proxyId: string | null;
+    // T-26 — the stop-on-exit-IP-change policy and the remembered first exit IP.
+    // Optional here so older test fakes (and any caller that predates the policy)
+    // read as "no policy": undefined stopOnExitIpChange never triggers enforcement.
+    stopOnExitIpChange?: boolean;
+    firstExitIp?: string | null;
   } | null>;
+  // T-26 — record the FIRST exit IP once, close the session on a change, and
+  // stamp the customer-visible from/to. The full repo satisfies these.
+  setFirstExitIpIfUnset(id: string, exitIp: string): Promise<unknown>;
+  closeWithReasonOutcome(
+    id: string,
+    reason: string,
+  ): Promise<{ kind: 'closed' | 'already_closed' }>;
+  recordErrorEvent(
+    id: string,
+    reportingNodeId: string,
+    event: {
+      timestamp: string;
+      code: string;
+      severity: 'info' | 'warn' | 'error' | 'fatal';
+      summary: string;
+      detail: string | null;
+      customerActionable: boolean;
+      retryable: boolean;
+    },
+  ): Promise<unknown>;
 }
 
 // T-6 — the owner-scoped account_proxies update the back-fill needs. The real
@@ -98,6 +123,55 @@ export function makeSessionCapabilityReportRelay(
     }
 
     store.set(frame);
+
+    // T-26 — stop-on-exit-IP-change enforcement, control-plane side only: the
+    // harness already emits the exit IP on the capabilityReport it sends, so no
+    // harness change is needed. Fires only when the customer PINNED the session
+    // AND the frame carries a PARSED exit IP — a malformed one was dropped by the
+    // schema (`.catch(undefined)`), so `exitIp` is undefined and enforcement can
+    // never act on garbage.
+    if (frame.exitIp !== undefined && session.stopOnExitIpChange === true) {
+      const firstExitIp = session.firstExitIp ?? null;
+      if (firstExitIp === null) {
+        // Remember the FIRST observed exit IP on the SESSION ROW — it survives a
+        // control-plane restart, which the in-memory capability store above does
+        // NOT. Only-if-unset so a race between two reports records one baseline.
+        await agentSessions.setFirstExitIpIfUnset(frame.sessionId, frame.exitIp);
+      } else if (firstExitIp !== frame.exitIp) {
+        // The exit IP moved under a pinned session. END it through the SAME
+        // atomic terminal close the DELETE route and worker-terminal-close use —
+        // no second teardown invented. The reporting box is still connected, so
+        // the next heartbeat's worker-orphan reconcile re-issues sessionEnd for a
+        // CP-terminal session the worker still reports active, tearing the box
+        // session down through the existing path too.
+        const outcome = await agentSessions.closeWithReasonOutcome(
+          frame.sessionId,
+          'exit_ip_changed',
+        );
+        if (outcome.kind === 'closed') {
+          // Customer-visible from/to on the durable errorEvent the GET response
+          // already surfaces (the existing terminal-reason mechanism), so the GUI
+          // can render "Stopped: exit IP changed from A to B". Owner-matched (we
+          // verified session.nodeId === reportingNodeId above) and deliberately
+          // NOT run through the node-diagnostic scrubber: these are the customer's
+          // OWN egress IPs, not fleet-node IPs.
+          await agentSessions.recordErrorEvent(frame.sessionId, reportingNodeId, {
+            timestamp: frame.observedAt ?? frame.timestamp,
+            code: 'exit_ip_changed',
+            severity: 'warn',
+            summary: `Session stopped: exit IP changed from ${firstExitIp} to ${frame.exitIp}.`,
+            detail: null,
+            customerActionable: true,
+            retryable: false,
+          });
+        }
+        // Evict the live capability state for a now-terminal session (mirrors the
+        // DELETE route). The session is ending — skip the QUIC back-fill and
+        // egress-persistence below.
+        store.delete(frame.sessionId);
+        return;
+      }
+    }
 
     // T-6 — the MEASURED signal: present-and-true only once a real QUIC handshake
     // completed this session (fork marker). Absent on any harness that has not

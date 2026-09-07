@@ -448,6 +448,9 @@
               "claude-haiku-4-5"
             ]
           },
+          "stop_on_exit_ip_change": {
+            "type": "boolean"
+          },
           "pair_mode_state": {
             "type": ["object", "null"],
             "properties": {
@@ -535,6 +538,24 @@
               },
               "h3_connection_observed": {
                 "type": ["boolean", "null"]
+              },
+              "exit_ip": {
+                "type": ["string", "null"]
+              },
+              "exit_country": {
+                "type": ["string", "null"]
+              },
+              "exit_timezone": {
+                "type": ["string", "null"]
+              },
+              "webrtc_candidate_ips": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "string"
+                }
+              },
+              "observed_at": {
+                "type": ["string", "null"]
               }
             },
             "required": [
@@ -547,7 +568,12 @@
               "transport_mode_requested",
               "transport_mode_active",
               "safeguards_passed",
-              "h3_connection_observed"
+              "h3_connection_observed",
+              "exit_ip",
+              "exit_country",
+              "exit_timezone",
+              "webrtc_candidate_ips",
+              "observed_at"
             ]
           },
           "error_event": {
@@ -609,6 +635,7 @@
           "created_by_user_id",
           "mode",
           "model",
+          "stop_on_exit_ip_change",
           "pair_mode_state",
           "created_at",
           "updated_at"
@@ -3878,6 +3905,9 @@
                       "claude-haiku-4-5"
                     ]
                   },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
                   "pair_mode_state": {
                     "type": ["object", "null"],
                     "properties": {
@@ -3965,6 +3995,24 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "exit_ip": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_country": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_timezone": {
+                        "type": ["string", "null"]
+                      },
+                      "webrtc_candidate_ips": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "observed_at": {
+                        "type": ["string", "null"]
                       }
                     },
                     "required": [
@@ -3977,7 +4025,12 @@
                       "transport_mode_requested",
                       "transport_mode_active",
                       "safeguards_passed",
-                      "h3_connection_observed"
+                      "h3_connection_observed",
+                      "exit_ip",
+                      "exit_country",
+                      "exit_timezone",
+                      "webrtc_candidate_ips",
+                      "observed_at"
                     ]
                   },
                   "error_event": {
@@ -4039,6 +4092,7 @@
                   "created_by_user_id",
                   "mode",
                   "model",
+                  "stop_on_exit_ip_change",
                   "pair_mode_state",
                   "created_at",
                   "updated_at"
@@ -4632,6 +4686,9 @@
                       "claude-haiku-4-5"
                     ]
                   },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
                   "pair_mode_state": {
                     "type": ["object", "null"],
                     "properties": {
@@ -4719,6 +4776,24 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "exit_ip": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_country": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_timezone": {
+                        "type": ["string", "null"]
+                      },
+                      "webrtc_candidate_ips": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "observed_at": {
+                        "type": ["string", "null"]
                       }
                     },
                     "required": [
@@ -4731,7 +4806,12 @@
                       "transport_mode_requested",
                       "transport_mode_active",
                       "safeguards_passed",
-                      "h3_connection_observed"
+                      "h3_connection_observed",
+                      "exit_ip",
+                      "exit_country",
+                      "exit_timezone",
+                      "webrtc_candidate_ips",
+                      "observed_at"
                     ]
                   },
                   "error_event": {
@@ -4793,6 +4873,7 @@
                   "created_by_user_id",
                   "mode",
                   "model",
+                  "stop_on_exit_ip_change",
                   "pair_mode_state",
                   "created_at",
                   "updated_at"
@@ -4862,6 +4943,9 @@
                       "claude-haiku-4-5"
                     ]
                   },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
                   "pair_mode_state": {
                     "type": ["object", "null"],
                     "properties": {
@@ -4949,6 +5033,24 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "exit_ip": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_country": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_timezone": {
+                        "type": ["string", "null"]
+                      },
+                      "webrtc_candidate_ips": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "observed_at": {
+                        "type": ["string", "null"]
                       }
                     },
                     "required": [
@@ -4961,7 +5063,12 @@
                       "transport_mode_requested",
                       "transport_mode_active",
                       "safeguards_passed",
-                      "h3_connection_observed"
+                      "h3_connection_observed",
+                      "exit_ip",
+                      "exit_country",
+                      "exit_timezone",
+                      "webrtc_candidate_ips",
+                      "observed_at"
                     ]
                   },
                   "error_event": {
@@ -5023,6 +5130,7 @@
                   "created_by_user_id",
                   "mode",
                   "model",
+                  "stop_on_exit_ip_change",
                   "pair_mode_state",
                   "created_at",
                   "updated_at"
@@ -5092,6 +5200,9 @@
                       "claude-haiku-4-5"
                     ]
                   },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
                   "pair_mode_state": {
                     "type": ["object", "null"],
                     "properties": {
@@ -5179,6 +5290,24 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "exit_ip": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_country": {
+                        "type": ["string", "null"]
+                      },
+                      "exit_timezone": {
+                        "type": ["string", "null"]
+                      },
+                      "webrtc_candidate_ips": {
+                        "type": ["array", "null"],
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "observed_at": {
+                        "type": ["string", "null"]
                       }
                     },
                     "required": [
@@ -5191,7 +5320,12 @@
                       "transport_mode_requested",
                       "transport_mode_active",
                       "safeguards_passed",
-                      "h3_connection_observed"
+                      "h3_connection_observed",
+                      "exit_ip",
+                      "exit_country",
+                      "exit_timezone",
+                      "webrtc_candidate_ips",
+                      "observed_at"
                     ]
                   },
                   "error_event": {
@@ -5253,6 +5387,7 @@
                   "created_by_user_id",
                   "mode",
                   "model",
+                  "stop_on_exit_ip_change",
                   "pair_mode_state",
                   "created_at",
                   "updated_at"
@@ -34997,6 +35132,9 @@
                   "skip_proxy_probe": {
                     "type": "boolean"
                   },
+                  "stop_on_exit_ip_change": {
+                    "type": "boolean"
+                  },
                   "initial_url": {
                     "type": "string",
                     "minLength": 1,
@@ -35080,6 +35218,9 @@
                         "claude-sonnet-4-6",
                         "claude-haiku-4-5"
                       ]
+                    },
+                    "stop_on_exit_ip_change": {
+                      "type": "boolean"
                     },
                     "pair_mode_state": {
                       "type": ["object", "null"],
@@ -35168,6 +35309,24 @@
                         },
                         "h3_connection_observed": {
                           "type": ["boolean", "null"]
+                        },
+                        "exit_ip": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_country": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_timezone": {
+                          "type": ["string", "null"]
+                        },
+                        "webrtc_candidate_ips": {
+                          "type": ["array", "null"],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "observed_at": {
+                          "type": ["string", "null"]
                         }
                       },
                       "required": [
@@ -35180,7 +35339,12 @@
                         "transport_mode_requested",
                         "transport_mode_active",
                         "safeguards_passed",
-                        "h3_connection_observed"
+                        "h3_connection_observed",
+                        "exit_ip",
+                        "exit_country",
+                        "exit_timezone",
+                        "webrtc_candidate_ips",
+                        "observed_at"
                       ]
                     },
                     "error_event": {
@@ -35242,6 +35406,7 @@
                     "created_by_user_id",
                     "mode",
                     "model",
+                    "stop_on_exit_ip_change",
                     "pair_mode_state",
                     "created_at",
                     "updated_at"
@@ -35491,6 +35656,9 @@
                               "claude-haiku-4-5"
                             ]
                           },
+                          "stop_on_exit_ip_change": {
+                            "type": "boolean"
+                          },
                           "pair_mode_state": {
                             "type": ["object", "null"],
                             "properties": {
@@ -35584,6 +35752,24 @@
                               },
                               "h3_connection_observed": {
                                 "type": ["boolean", "null"]
+                              },
+                              "exit_ip": {
+                                "type": ["string", "null"]
+                              },
+                              "exit_country": {
+                                "type": ["string", "null"]
+                              },
+                              "exit_timezone": {
+                                "type": ["string", "null"]
+                              },
+                              "webrtc_candidate_ips": {
+                                "type": ["array", "null"],
+                                "items": {
+                                  "type": "string"
+                                }
+                              },
+                              "observed_at": {
+                                "type": ["string", "null"]
                               }
                             },
                             "required": [
@@ -35596,7 +35782,12 @@
                               "transport_mode_requested",
                               "transport_mode_active",
                               "safeguards_passed",
-                              "h3_connection_observed"
+                              "h3_connection_observed",
+                              "exit_ip",
+                              "exit_country",
+                              "exit_timezone",
+                              "webrtc_candidate_ips",
+                              "observed_at"
                             ]
                           },
                           "error_event": {
@@ -35658,6 +35849,7 @@
                           "created_by_user_id",
                           "mode",
                           "model",
+                          "stop_on_exit_ip_change",
                           "pair_mode_state",
                           "created_at",
                           "updated_at"
@@ -35896,6 +36088,9 @@
                         "claude-haiku-4-5"
                       ]
                     },
+                    "stop_on_exit_ip_change": {
+                      "type": "boolean"
+                    },
                     "pair_mode_state": {
                       "type": ["object", "null"],
                       "properties": {
@@ -35983,6 +36178,24 @@
                         },
                         "h3_connection_observed": {
                           "type": ["boolean", "null"]
+                        },
+                        "exit_ip": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_country": {
+                          "type": ["string", "null"]
+                        },
+                        "exit_timezone": {
+                          "type": ["string", "null"]
+                        },
+                        "webrtc_candidate_ips": {
+                          "type": ["array", "null"],
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "observed_at": {
+                          "type": ["string", "null"]
                         }
                       },
                       "required": [
@@ -35995,7 +36208,12 @@
                         "transport_mode_requested",
                         "transport_mode_active",
                         "safeguards_passed",
-                        "h3_connection_observed"
+                        "h3_connection_observed",
+                        "exit_ip",
+                        "exit_country",
+                        "exit_timezone",
+                        "webrtc_candidate_ips",
+                        "observed_at"
                       ]
                     },
                     "error_event": {
@@ -36057,6 +36275,7 @@
                     "created_by_user_id",
                     "mode",
                     "model",
+                    "stop_on_exit_ip_change",
                     "pair_mode_state",
                     "created_at",
                     "updated_at"
@@ -38134,6 +38353,9 @@
                         "tabId": {
                           "type": ["string", "null"]
                         },
+                        "input_focused": {
+                          "type": ["boolean", "null"]
+                        },
                         "error": {
                           "type": ["object", "null"],
                           "properties": {
@@ -38147,7 +38369,7 @@
                           "required": ["kind", "message"]
                         }
                       },
-                      "required": ["state", "url", "title", "tabId", "error"]
+                      "required": ["state", "url", "title", "tabId", "input_focused", "error"]
                     }
                   },
                   "required": ["page_state"]

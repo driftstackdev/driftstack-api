@@ -35,6 +35,17 @@ function logger() {
   } as unknown as Logger;
 }
 
+// T-26 — the stop-on-exit-IP repo methods the relay depends on. Default stubs
+// so the existing (no-policy) fakes satisfy the interface without exercising
+// enforcement; the T-26 suite below supplies its own.
+function stopPolicyStubs() {
+  return {
+    setFirstExitIpIfUnset: vi.fn(() => Promise.resolve(null)),
+    closeWithReasonOutcome: vi.fn(() => Promise.resolve({ kind: 'already_closed' as const })),
+    recordErrorEvent: vi.fn(() => Promise.resolve(null)),
+  };
+}
+
 describe('makeSessionCapabilityReportRelay', () => {
   it('requires an exact authenticated node owner, stores live GUI state, and persists derived egress state', async () => {
     const store = new SessionCapabilityReportStore();
@@ -50,6 +61,7 @@ describe('makeSessionCapabilityReportRelay', () => {
             status: 'active',
           }),
         ),
+        ...stopPolicyStubs(),
       },
       { ingestEgressCapabilityReport: ingest },
       store,
@@ -111,7 +123,7 @@ describe('makeSessionCapabilityReportRelay', () => {
       const ingest = vi.fn((_args: unknown) => Promise.resolve());
       const log = logger();
       const relay = makeSessionCapabilityReportRelay(
-        { get: vi.fn(() => Promise.resolve(owned)) },
+        { get: vi.fn(() => Promise.resolve(owned)), ...stopPolicyStubs() },
         { ingestEgressCapabilityReport: ingest },
         store,
         log,
@@ -144,6 +156,7 @@ describe('makeSessionCapabilityReportRelay', () => {
             status: 'active',
           };
         }),
+        ...stopPolicyStubs(),
       },
       { ingestEgressCapabilityReport: ingest },
       store,
@@ -174,6 +187,7 @@ describe('makeSessionCapabilityReportRelay', () => {
             status: 'active',
           }),
         ),
+        ...stopPolicyStubs(),
       },
       { ingestEgressCapabilityReport: ingest },
       store,
@@ -204,6 +218,7 @@ describe('makeSessionCapabilityReportRelay', () => {
             status: 'active',
           }),
         ),
+        ...stopPolicyStubs(),
       },
       { ingestEgressCapabilityReport: ingest as unknown as (a: unknown) => Promise<unknown> },
       new SessionCapabilityReportStore(),
@@ -280,5 +295,98 @@ describe('makeSessionCapabilityReportRelay', () => {
     expect(derived.warnings, 'blank and failed are distinct states').not.toContain(
       'streaming_blank',
     );
+  });
+});
+
+describe('T-26 stop-on-exit-IP-change enforcement', () => {
+  // A relay whose owned, driver-linked session carries a configurable
+  // stop-on-exit-IP policy + remembered first exit IP, with spies for the three
+  // repo methods the enforcement drives.
+  function make(overrides: { stopOnExitIpChange?: boolean; firstExitIp?: string | null }) {
+    const store = new SessionCapabilityReportStore();
+    const ingest = vi.fn((_a: unknown) => Promise.resolve());
+    const setFirstExitIpIfUnset = vi.fn(() => Promise.resolve(null));
+    const closeWithReasonOutcome = vi.fn(() => Promise.resolve({ kind: 'closed' as const }));
+    const recordErrorEvent = vi.fn(() => Promise.resolve(null));
+    const relay = makeSessionCapabilityReportRelay(
+      {
+        get: vi.fn(() =>
+          Promise.resolve({
+            nodeId: 'node-1',
+            driftstackSessionId: 'ses_driver_1',
+            accountId: 'acc_1',
+            proxyId: null,
+            status: 'active',
+            stopOnExitIpChange: overrides.stopOnExitIpChange ?? false,
+            firstExitIp: overrides.firstExitIp ?? null,
+          }),
+        ),
+        setFirstExitIpIfUnset,
+        closeWithReasonOutcome,
+        recordErrorEvent,
+      },
+      { ingestEgressCapabilityReport: ingest },
+      store,
+      logger(),
+    );
+    return {
+      relay,
+      store,
+      ingest,
+      setFirstExitIpIfUnset,
+      closeWithReasonOutcome,
+      recordErrorEvent,
+    };
+  }
+
+  it('CRITICAL flag ON + first observation records the baseline exit IP and does NOT end the session', async () => {
+    const h = make({ stopOnExitIpChange: true, firstExitIp: null });
+    h.relay(report('agt_1', { exitIp: '203.0.113.7' }), 'node-1');
+    await vi.waitFor(() =>
+      expect(h.setFirstExitIpIfUnset).toHaveBeenCalledWith('agt_1', '203.0.113.7'),
+    );
+    expect(h.closeWithReasonOutcome).not.toHaveBeenCalled();
+    // Still live: the egress-persistence path still ran (driftstackSessionId set).
+    await vi.waitFor(() => expect(h.ingest).toHaveBeenCalledTimes(1));
+  });
+
+  it('CRITICAL flag ON + a DIFFERENT exit IP ends the session (reason exit_ip_changed) and records the customer-visible from/to', async () => {
+    const h = make({ stopOnExitIpChange: true, firstExitIp: '203.0.113.7' });
+    h.relay(report('agt_1', { exitIp: '198.51.100.9' }), 'node-1');
+    await vi.waitFor(() =>
+      expect(h.closeWithReasonOutcome).toHaveBeenCalledWith('agt_1', 'exit_ip_changed'),
+    );
+    await vi.waitFor(() => expect(h.recordErrorEvent).toHaveBeenCalledTimes(1));
+    const event = (h.recordErrorEvent.mock.calls[0] as unknown[] | undefined)?.[2] as
+      | { code: string; summary: string; customerActionable: boolean }
+      | undefined;
+    expect(event?.code).toBe('exit_ip_changed');
+    // The from/to the GUI renders: both the old and new exit IP appear.
+    expect(event?.summary).toContain('203.0.113.7');
+    expect(event?.summary).toContain('198.51.100.9');
+    expect(event?.customerActionable).toBe(true);
+    // The session ended: the egress-persistence path is skipped and the live
+    // capability state is evicted for the now-terminal session.
+    expect(h.ingest).not.toHaveBeenCalled();
+    expect(h.store.get('agt_1')).toBeNull();
+    // The baseline is never re-stamped once it already differs.
+    expect(h.setFirstExitIpIfUnset).not.toHaveBeenCalled();
+  });
+
+  it('VACUITY flag OFF + a different exit IP does NOT end the session. This is the arm the planted mutation reddens: inverting the relay flag check (`stopOnExitIpChange === true` → `!== true`) makes a flag-off session close on a change, so this expectation fails.', async () => {
+    const h = make({ stopOnExitIpChange: false, firstExitIp: '203.0.113.7' });
+    h.relay(report('agt_1', { exitIp: '198.51.100.9' }), 'node-1');
+    await vi.waitFor(() => expect(h.ingest).toHaveBeenCalledTimes(1));
+    expect(h.closeWithReasonOutcome).not.toHaveBeenCalled();
+    expect(h.recordErrorEvent).not.toHaveBeenCalled();
+    expect(h.setFirstExitIpIfUnset).not.toHaveBeenCalled();
+  });
+
+  it('VACUITY flag ON + the SAME exit IP repeated continues the session (no baseline rewrite, no close)', async () => {
+    const h = make({ stopOnExitIpChange: true, firstExitIp: '203.0.113.7' });
+    h.relay(report('agt_1', { exitIp: '203.0.113.7' }), 'node-1');
+    await vi.waitFor(() => expect(h.ingest).toHaveBeenCalledTimes(1));
+    expect(h.closeWithReasonOutcome).not.toHaveBeenCalled();
+    expect(h.setFirstExitIpIfUnset).not.toHaveBeenCalled();
   });
 });

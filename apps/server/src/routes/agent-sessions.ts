@@ -267,6 +267,13 @@ const CreateAgentSessionRequestSchema = z.object({
   // probe gate for THIS launch (the dispatch path's own resolve + SSRF re-guard
   // still apply as defense-in-depth). Booleans only; absent → probe runs as normal.
   skip_proxy_probe: z.boolean().optional(),
+  // T-26 — end the session if its exit IP changes mid-run. When true, the
+  // control plane remembers the first exit IP the box reports on the per-session
+  // capabilityReport and ends the session (reason `exit_ip_changed`) the moment a
+  // later report shows a different one — a proxy that silently rotates its exit
+  // under a running session stops it rather than carrying on from a new apparent
+  // location. Booleans only; absent → default false (unchanged behaviour).
+  stop_on_exit_ip_change: z.boolean().optional(),
   // Customer-settable start URL — the URL the remote browser opens on launch.
   // When supplied, overrides the operator-default sessionDispatch.initialUrl.
   // http(s)-only (file:/javascript:/data: rejected here → 400 at the route, not a
@@ -373,6 +380,10 @@ interface PublicAgentSession {
   mode: 'manual' | 'ai' | 'pair';
   // 6.c / #15 — the Claude 4.x model the AI agent runs for this session.
   model: AgentModel;
+  // T-26 — the per-session "stop if the exit IP changes" policy, set at
+  // create-time. Always a real boolean (column default false), so it reads the
+  // same on every historical row and every session that did not ask for it.
+  stop_on_exit_ip_change: boolean;
   // Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
   // discriminator. NULL when mode != 'pair'; populated with the
   // initialPairModeState() shape on transition INTO pair mode; the
@@ -464,6 +475,8 @@ function publicAgentSession(
     created_by_user_id: rec.createdByUserId,
     mode: rec.mode,
     model: rec.model,
+    // T-26 — surface the persisted stop-on-exit-IP-change policy.
+    stop_on_exit_ip_change: rec.stopOnExitIpChange,
     pair_mode_state:
       rec.pairModeState !== null &&
       typeof rec.pairModeState === 'object' &&
@@ -2592,6 +2605,11 @@ export function registerAgentSessionsRoutes(
             // out-of-session trim can refuse a trim against a profile bound to a
             // live session (avoids a two-writer R2 lost-update on the sealed blob).
             ...(profileBareId !== undefined ? { profileId: profileBareId } : {}),
+            // T-26 (migration 0118) — persist the stop-on-exit-IP-change policy so
+            // the capabilityReport relay can enforce it for this session.
+            ...(parsed.data.stop_on_exit_ip_change !== undefined
+              ? { stopOnExitIpChange: parsed.data.stop_on_exit_ip_change }
+              : {}),
             // #13 — the continued chat's history, re-sealed under the NEW session id by
             // the repo (the envelope's AAD binds {accountId, sessionId}, so ciphertext
             // cannot be carried across).

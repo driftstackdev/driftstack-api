@@ -66,10 +66,10 @@ describe('W432.A packages/api-types/src/index.ts content parity', () => {
     }
   });
 
-  it('Barrel is re-exports only (no inline declarations); 23 export-star lines (one per module, including the public archetype catalog)', () => {
+  it('Barrel is re-exports only (no inline declarations); 24 export-star lines (one per module, including the public archetype catalog and the T-20 OpenVPN directive helpers)', () => {
     const exportStarMatches = body.match(/^export \* from '\.\/[a-z-]+\.js';$/gm);
     expect(exportStarMatches).not.toBeNull();
-    expect((exportStarMatches ?? []).length).toBe(23);
+    expect((exportStarMatches ?? []).length).toBe(24);
   });
 
   it('agent-tab-ops barrel export pinned (doc-150 §7 — TabDescriptor / tabListUpdate / activateTab(Request|Result) / tabListRestore; GUI↔box DataChannel-only, NOT SDK-exposed)', () => {

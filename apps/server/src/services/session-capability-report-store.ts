@@ -38,6 +38,19 @@ export interface SessionCapabilityReport {
    *  not carried), so it is deliberately NOT in the customer subset below. */
   interpose_image_loaded: boolean | null;
   /**
+   * T-26 — the LIVE exit identity this session's traffic leaves through, and the
+   * IPs its WebRTC candidates surface. `null` means NOT OBSERVED (a pre-T-26
+   * harness, or a session that has not yet reported one) and must never be read
+   * as "no exit" — the same absent-until-measured contract as
+   * `h3_connection_observed` above. Customer-safe (the customer's own egress),
+   * so these ARE in the subset below.
+   */
+  exit_ip: string | null;
+  exit_country: string | null;
+  exit_timezone: string | null;
+  webrtc_candidate_ips: string[] | null;
+  observed_at: string | null;
+  /**
    * Per-session streaming degradation counters, when the node reported them.
    *
    * ⛔ `null` means UNKNOWN — the node never sent them (older build, or the
@@ -88,6 +101,15 @@ export function customerSafeCapabilityReport(
     // transport_mode_active beside it. The internal interpose diagnostic is NOT
     // included.
     h3_connection_observed: report.h3_connection_observed,
+    // T-26 — the live exit identity + WebRTC candidate IPs are the customer's
+    // OWN egress facts (T-26 ledger row: live exit IP + WebRTC IP in the
+    // simulator), so they cross to the customer. Added deliberately to the
+    // allowlist, not spread — the same rule the header states.
+    exit_ip: report.exit_ip,
+    exit_country: report.exit_country,
+    exit_timezone: report.exit_timezone,
+    webrtc_candidate_ips: report.webrtc_candidate_ips,
+    observed_at: report.observed_at,
   };
 }
 
@@ -112,6 +134,14 @@ export class SessionCapabilityReportStore {
       // stays NOT-OBSERVED and never collapses into a false "no HTTP/3".
       h3_connection_observed: frame.h3ConnectionObserved ?? null,
       interpose_image_loaded: frame.interposeImageLoaded ?? null,
+      // T-26 — `?? null` preserves the node's absent-until-observed semantics
+      // exactly: a key the schema dropped (malformed value) or an older harness
+      // never sent stays NOT-OBSERVED and never collapses into a false answer.
+      exit_ip: frame.exitIp ?? null,
+      exit_country: frame.exitCountry ?? null,
+      exit_timezone: frame.exitTimezone ?? null,
+      webrtc_candidate_ips: frame.webrtcCandidateIps ?? null,
+      observed_at: frame.observedAt ?? null,
       // `every` on an EMPTY array is true, so a frame carrying no safeguard
       // checks previously reported `safeguards_passed: true` — a positive
       // safety claim asserted from no evidence, indistinguishable to a customer

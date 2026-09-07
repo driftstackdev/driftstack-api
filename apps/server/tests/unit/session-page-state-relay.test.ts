@@ -43,6 +43,7 @@ describe('audit-M1 makeSessionPageStateRelay', () => {
       url: 'https://example.com',
       title: null,
       tabId: null,
+      input_focused: null,
       error: null,
     });
   });

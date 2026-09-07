@@ -22,6 +22,8 @@ function makeRecord(id: string, overrides: Partial<AgentSessionRecord> = {}): Ag
     accountId: ACC,
     driftstackSessionId: null,
     proxyId: null,
+    stopOnExitIpChange: false,
+    firstExitIp: null,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,
@@ -169,6 +171,13 @@ describe('agent-sessions read shape — capability_report', () => {
       // completed QUIC handshake, so absent stays NOT-OBSERVED. The internal
       // interpose diagnostic is deliberately not here.
       h3_connection_observed: null,
+      // T-26 — null, not empty: this frame carries no exit identity, so the
+      // live-exit fields stay NOT-OBSERVED. They ARE customer-safe.
+      exit_ip: null,
+      exit_country: null,
+      exit_timezone: null,
+      webrtc_candidate_ips: null,
+      observed_at: null,
     });
     await app.close();
   });

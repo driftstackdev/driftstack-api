@@ -662,6 +662,11 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     });
     expect(res.statusCode, 'level 2 is refused on its own').toBe(400);
     expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
+    // T-20 — and the level refusal names its own line, quoting the level.
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'Line 3: "script-security 2" — Driftstack does not run scripts from VPN configs. ' +
+        'Remove this line and try again.',
+    );
   });
 
   it('CRITICAL `script-security 1` is NOT refused — the guard bounds the dangerous level rather than banning the keyword. Level 1 permits only built-ins and the box floors there anyway; refusing it would reject working configurations and teach customers the validator is arbitrary.', async () => {
@@ -678,6 +683,70 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
       },
     });
     expect(res.statusCode, 'accepted — level 1 is safe').toBe(201);
+  });
+
+  // ─── T-20: the refusal names the line ────────────────────────────────
+  //
+  // Owner #6 pasted a commercial provider's .ovpn and got "must not … use a
+  // script-executing directive (up/down/route-up/tls-verify/… or script-security
+  // 2+)". The file has forty lines; two of them are the `up` / `down` resolv-conf
+  // hooks every Linux-oriented provider ships. Nothing in the 400 said WHICH
+  // lines — and the desktop client then discarded the sentence anyway (T-20's
+  // other half, in apps/gui-client). The detail now quotes the first offending
+  // line with its number and lists the rest, so one edit clears the file.
+  const PROVIDER_OVPN = [
+    'client',
+    'dev tun',
+    'proto udp',
+    '# resolv-conf hooks — shipped by the provider, refused by Driftstack',
+    '',
+    'remote vpn.example.com 1194 udp',
+    'resolv-retry infinite',
+    'up /etc/openvpn/update-resolv-conf',
+    'down /etc/openvpn/update-resolv-conf',
+    'verb 3',
+    '',
+  ].join('\n');
+
+  it('T-20 CRITICAL the directive refusal names the LINE NUMBER and quotes the line. The provider file is refused for line 8 (comment and blank lines count, so the number matches the editor); saying so, and that line 9 has the same problem, turns a man-page search into two deletions.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-provider',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: { config_blob: PROVIDER_OVPN },
+      },
+    });
+    expect(res.statusCode, 'refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'Line 8: "up /etc/openvpn/update-resolv-conf" — Driftstack does not run scripts from ' +
+        'VPN configs. Remove this line and try again. Line 9 has the same problem.',
+    );
+  });
+
+  it('T-20 CONTROL the same provider file with those two lines removed is accepted (201), so the arm above is about those lines and not about the file. A route that refused every OpenVPN config would satisfy the refusal arms and look correct.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    // Filtered by hand rather than with the shared stripper, so this control does
+    // not inherit its verdict from the module the refusal arm is exercising.
+    const cleaned = PROVIDER_OVPN.split('\n')
+      .filter((l) => !l.startsWith('up ') && !l.startsWith('down '))
+      .join('\n');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-provider-cleaned',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: { config_blob: cleaned },
+      },
+    });
+    expect(res.statusCode, 'accepted once the two lines are gone').toBe(201);
   });
 
   it('CRITICAL a WireGuard endpoint on a private address is refused. The endpoint is the real egress; a 10.0.0.0/8 target reaches whatever sits on the fleet host’s own network segment.', async () => {

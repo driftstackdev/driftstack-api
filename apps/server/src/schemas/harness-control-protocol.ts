@@ -1351,6 +1351,36 @@ const CapabilityReportPayloadSchema = z.object({
   manualInputAvailable: z.boolean().optional(),
   streamingState: z.enum(['provisioning', 'live', 'blank', 'failed']).optional(),
   egressState: z.enum(['live', 'dead_proxy']).optional(),
+  // T-26 — the LIVE exit identity this session's traffic actually leaves
+  // through, plus the IPs a WebRTC handshake would surface, both OBSERVED on the
+  // box and OPTIONAL. A pre-T-26 harness omits every key; the projection reads
+  // absence as "not measured" and writes null, so there is no false-green window
+  // (the h3ConnectionObserved pattern above). Each value is validated
+  // conservatively and dropped WITHOUT losing the frame — `.catch(undefined)`
+  // mirrors this file's own leniency idiom (CookieErrorTokenSchema `.catch`,
+  // the upload-error `.catch` at :1525), so a node that emits a malformed exit
+  // IP still delivers its streaming/egress state; the bad field alone is
+  // discarded rather than the whole capability report. host only, never
+  // credentials: an IP is `.ip()`-validated and length-bounded.
+  /** The IPv4/IPv6 address this session's egress currently exits from. */
+  exitIp: z.string().max(45).ip().optional().catch(undefined),
+  /** 2-letter ISO-3166-1 country of that exit. */
+  exitCountry: z
+    .string()
+    .regex(/^[A-Za-z]{2}$/)
+    .optional()
+    .catch(undefined),
+  /** IANA timezone coherent with that exit (e.g. `America/New_York`). */
+  exitTimezone: z
+    .string()
+    .max(64)
+    .regex(/^[A-Za-z0-9_+\-/]+$/)
+    .optional()
+    .catch(undefined),
+  /** Distinct IPs the session's WebRTC candidates surface (host/srflx/relay). */
+  webrtcCandidateIps: z.array(z.string().max(45).ip()).max(32).optional().catch(undefined),
+  /** ISO-8601 instant the box observed the exit identity above. */
+  observedAt: z.string().min(1).max(64).optional().catch(undefined),
   /**
    * Per-session streaming degradation counters (A3 B-9, harness half
    * `d92f331ff` + `bc0b5a3ea`, gated on `DRIFTSTACK_STREAMING_HEALTH_REPORT=1`).
@@ -1584,6 +1614,20 @@ export const PageStateFrameSchema = z.object({
   url: z.string().max(PAGE_STATE_URL_MAX_LENGTH).nullable().optional(),
   title: z.string().max(PAGE_STATE_TEXT_MAX_LENGTH).nullable().optional(),
   tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
+  // T-25 (owner: on-screen keyboard auto-opens on text-input focus) — the
+  // CP-bound mirror of the field the harness already publishes on the LiveKit
+  // data channel (ControlClient.swift:904, `PageState.inputFocused: Bool?`):
+  // true on an editable-field focus, false on blur. Additive + lenient, exactly
+  // like `tabId` above: the frame is a plain (strip) object, so a boolean here
+  // is validated while an absent key stays absent — a frame that never carries
+  // it validates unchanged. `.nullable()` in addition to `.optional()` so a
+  // stray null can never take the whole frame down at safeParse (the http_status
+  // white-screen class this schema already carries a comment about). This path
+  // is INERT until the harness emits `inputFocused` on the CP-bound pageState
+  // encoder (drainPendingPageStates → main.swift `.pageState`), which as of this
+  // change it does NOT — the CP encoder omits it (see the report); the LiveKit
+  // data-channel path already carries it.
+  inputFocused: z.boolean().nullable().optional(),
   error: z
     .object({
       kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),

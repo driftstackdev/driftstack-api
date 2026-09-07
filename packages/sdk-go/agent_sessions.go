@@ -61,6 +61,9 @@ type AgentSession struct {
 	// 6.c — the Claude 4.x model the AI agent runs for this session
 	// (set at create-time; defaults to "claude-opus-5").
 	Model string `json:"model"`
+	// T-26 — the per-session "stop the session if its exit IP changes" policy,
+	// set at create-time. Always a real boolean (server default false).
+	StopOnExitIPChange bool `json:"stop_on_exit_ip_change"`
 	// Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
 	// discriminator. nil when mode != "pair". {kind: "ai-driving" |
 	// "takeover-pending" | ...} when mode == "pair"; see the
@@ -108,6 +111,14 @@ type AgentSessionCapabilityReport struct {
 	TransportModeRequested string `json:"transport_mode_requested"`
 	TransportModeActive    string `json:"transport_mode_active"`
 	SafeguardsPassed       bool   `json:"safeguards_passed"`
+	// T-26 — the live exit identity this session's traffic leaves through, and
+	// the IPs its WebRTC candidates surface. Pointer/slice fields are nil when
+	// NOT OBSERVED (the box has not reported them), distinct from a zero value.
+	ExitIP             *string  `json:"exit_ip"`
+	ExitCountry        *string  `json:"exit_country"`
+	ExitTimezone       *string  `json:"exit_timezone"`
+	WebRTCCandidateIPs []string `json:"webrtc_candidate_ips"`
+	ObservedAt         *string  `json:"observed_at"`
 }
 
 // AgentSessionErrorEvent is the structured failure report for a session.
@@ -169,6 +180,10 @@ type CreateAgentSessionRequest struct {
 	// than IP geolocation; coordinates diverging from the exit country make
 	// the fingerprint internally inconsistent (a detection signal).
 	Geolocation *SessionGeolocation `json:"geolocation,omitempty"`
+	// End the session if its exit IP changes mid-run. When true, the control
+	// plane remembers the first exit IP observed for the session and stops it the
+	// moment a later report shows a different one. Omit (false) → default.
+	StopOnExitIPChange bool `json:"stop_on_exit_ip_change,omitempty"`
 }
 
 // SessionGeolocation is the explicit per-session geolocation override.

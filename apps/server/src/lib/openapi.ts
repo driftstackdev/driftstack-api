@@ -4921,6 +4921,11 @@ function buildRegistry(): OpenAPIRegistry {
               // Skip the pre-launch live proxy probe for THIS launch (the
               // dispatch-side SSRF re-guard still applies).
               skip_proxy_probe: z.boolean().optional(),
+              // T-26 — end the session if its exit IP changes mid-run. The
+              // control plane remembers the first exit IP the box reports and
+              // stops the session (reason exit_ip_changed) on a later different
+              // one. Omit → false.
+              stop_on_exit_ip_change: z.boolean().optional(),
               // Start URL the remote browser opens on launch; absolute http(s)
               // only. Omit → operator default.
               initial_url: z.string().min(1).max(2048).optional(),
@@ -5527,6 +5532,11 @@ function buildRegistry(): OpenAPIRegistry {
                   url: z.string().nullable(),
                   title: z.string().nullable(),
                   tabId: z.string().nullable(),
+                  // T-25 — the box's editable-input focus state (true on focus,
+                  // false on blur); drives the GUI on-screen keyboard from the
+                  // poll path. Always present (the store normalizes an absent
+                  // wire field to null), nullable when the box has not reported.
+                  input_focused: z.boolean().nullable(),
                   error: z.object({ kind: z.string(), message: z.string() }).nullable(),
                 })
                 .nullable(),

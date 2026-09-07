@@ -219,12 +219,22 @@ def test_agent_session_capability_report_preserves_degraded_states() -> None:
             # box reports it only after a real QUIC handshake). A required-nullable
             # field, so the fixture must include it.
             "h3_connection_observed": None,
+            # T-26 — the live exit identity + WebRTC candidate IPs. Required-
+            # nullable, like h3_connection_observed: null = NOT OBSERVED.
+            "exit_ip": None,
+            "exit_country": None,
+            "exit_timezone": None,
+            "webrtc_candidate_ips": None,
+            "observed_at": None,
         }
     )
     assert report.manual_input_available is False
     # Regression: the measured-QUIC verdict round-trips as None when unobserved,
     # never dropped and never coerced to False.
     assert report.h3_connection_observed is None
+    # T-26 — the live exit fields round-trip as None when unobserved.
+    assert report.exit_ip is None
+    assert report.webrtc_candidate_ips is None
     assert report.streaming_state == "blank"
     assert report.egress_state == "dead_proxy"
 

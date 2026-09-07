@@ -203,6 +203,8 @@ function makeRecord(over: Partial<AgentSessionRecord> = {}): AgentSessionRecord 
     accountId: ACC,
     driftstackSessionId: null,
     proxyId: null,
+    stopOnExitIpChange: false,
+    firstExitIp: null,
     status: 'active',
     transcript: [],
     tokenBudgetTotal: 100_000,

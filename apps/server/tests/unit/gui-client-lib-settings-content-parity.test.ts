@@ -81,7 +81,10 @@ describe('GUI settings protected API-key storage invariant', () => {
     // before it lands. Both were locally satisfied, so neither could see that
     // they described different truths about the same object.
     expect(body).toMatch(
-      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl,\s*themeMode,\s*themeAccent,\s*telemetryOptIn,\s*startUrl,[\s\S]*?autoUpdate,\s*\.\.\.windowSizesField\(simulatorWindowSize\),\s*\}\);/,
+      // T-14 — the whole-object write now also stamps settingsVersion (the
+      // marker that makes a stored `autoUpdate` a choice on the next load); it
+      // sits between autoUpdate and the window-sizes spread in both writers.
+      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl,\s*themeMode,\s*themeAccent,\s*telemetryOptIn,\s*startUrl,[\s\S]*?autoUpdate,[\s\S]*?settingsVersion: SETTINGS_VERSION,[\s\S]*?\.\.\.windowSizesField\(simulatorWindowSize\),\s*\}\);/,
     );
   });
 
@@ -95,7 +98,7 @@ describe('GUI settings protected API-key storage invariant', () => {
     // REQUIRED here through the shared windowSizesField() helper so it cannot be
     // persisted by a path this pin does not see; apiKey still never appears.
     expect(body).toMatch(
-      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl: s\.baseUrl,\s*themeMode: s\.themeMode,\s*themeAccent: s\.themeAccent,\s*telemetryOptIn: s\.telemetryOptIn,\s*startUrl: s\.startUrl,\s*autoUpdate: s\.autoUpdate,\s*\.\.\.windowSizesField\(simulatorWindowSize\),\s*\}\);/,
+      /getStore\(\)\.set\(SETTINGS_KEY, \{\s*baseUrl: s\.baseUrl,\s*themeMode: s\.themeMode,\s*themeAccent: s\.themeAccent,\s*telemetryOptIn: s\.telemetryOptIn,\s*startUrl: s\.startUrl,\s*autoUpdate: s\.autoUpdate,[\s\S]*?settingsVersion: SETTINGS_VERSION,\s*\.\.\.windowSizesField\(simulatorWindowSize\),\s*\}\);/,
     );
     expect(body).not.toMatch(/\.\.\.\(!useKeychain && hasKey/);
     expect(body).toMatch(/if \(!\(await keychainSave\(scopedName, s\.apiKey\)\)\) \{/);

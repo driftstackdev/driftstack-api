@@ -129,6 +129,11 @@ export interface AgentSession {
     | 'claude-sonnet-4-6'
     | 'claude-haiku-4-5';
   /**
+   * T-26 — the per-session "stop the session if its exit IP changes" policy,
+   * set at create-time. Always a real boolean (server default false).
+   */
+  stop_on_exit_ip_change: boolean;
+  /**
    * Slice 3 (Wave 29-NNN ARC 3) — pair-mode state machine
    * discriminator. `null` when mode != 'pair'; carries the
    * `{kind: 'ai-driving' | 'takeover-pending' | ...}` shape (see
@@ -174,6 +179,16 @@ export interface AgentSession {
     transport_mode_requested: 'h2-only' | 'h2-and-h3';
     transport_mode_active: 'h2-only' | 'h2-and-h3';
     safeguards_passed: boolean;
+    /**
+     * T-26 — the live exit identity this session's traffic leaves through, and
+     * the IPs its WebRTC candidates surface. Each is `null` until the box
+     * reports it (NOT OBSERVED), never read as "no exit".
+     */
+    exit_ip: string | null;
+    exit_country: string | null;
+    exit_timezone: string | null;
+    webrtc_candidate_ips: string[] | null;
+    observed_at: string | null;
   };
   /** Latest ownership-validated harness launch/runtime failure. */
   error_event?: {
@@ -261,6 +276,14 @@ export interface CreateAgentSessionRequest {
    * device default).
    */
   geolocation?: { latitude: number; longitude: number; accuracy?: number };
+  /**
+   * End the session if its exit IP changes mid-run. When true, the control
+   * plane remembers the first exit IP observed for the session and stops it the
+   * moment a later report shows a different one — a proxy that silently rotates
+   * its exit under a running session stops it rather than carrying on from a new
+   * apparent location. Omit → false.
+   */
+  stop_on_exit_ip_change?: boolean;
 }
 
 export type AgentIntent =

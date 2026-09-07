@@ -4,9 +4,7 @@
 // every blocked range + public IPs are pinned so a typo'd CIDR (e.g. the
 // `::ffff:/96` trap that blocks all IPv4) is caught.
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { DANGEROUS_OPENVPN_DIRECTIVES } from '@driftstack/api-types';
 import { describe, expect, it } from 'vitest';
 import {
   unsafeWebhookTargetReason as reason,
@@ -334,7 +332,7 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     );
     expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 1\n' })).toBeNull();
   });
-  // EVERY member of the rejection set, read from the source rather than
+  // EVERY member of the rejection set, read from the set itself rather than
   // hand-listed. The arm above names ten directives; the set holds fourteen, so
   // route-pre-down, ipchange, learn-address, client-connect, client-disconnect,
   // auth-user-pass-verify and up-restart were in the set with nothing asserting
@@ -343,23 +341,16 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
   //
   // Reading the set means a directive added later is covered the moment it is
   // added, instead of relying on whoever adds it to also remember this file. The
-  // population assertion is what stops the whole check going vacuous if the
-  // constant is renamed or reshaped: an empty parse fails loudly rather than
-  // passing zero directives.
+  // set used to be parsed out of THIS lib's source text; T-20 moved it to
+  // @driftstack/api-types so the desktop client names the same lines, and the
+  // server's classifier is now built on the shared finder — so the set is
+  // imported here and the population assertion is what stops the whole check
+  // going vacuous if it is ever emptied or reshaped.
   it('CRITICAL every directive in the rejection set is actually rejected', () => {
-    const source = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), '../../src/lib/webhook-target-guard.ts'),
-      'utf8',
-    );
-    const block = /DANGEROUS_OPENVPN_DIRECTIVES = new Set\(\[([\s\S]*?)\]\)/.exec(source);
-    expect(
-      block,
-      'the rejection set could not be located — this check is looking at the wrong shape',
-    ).not.toBeNull();
-    const directives = [...(block?.[1] ?? '').matchAll(/'([a-z0-9-]+)'/g)].map((m) => m[1]!);
+    const directives = [...DANGEROUS_OPENVPN_DIRECTIVES];
     expect(
       directives.length,
-      'the parse found no directives, which would make every assertion below vacuous',
+      'the shared set holds no directives, which would make every assertion below vacuous',
     ).toBeGreaterThanOrEqual(14);
 
     const notRejected = directives.filter(

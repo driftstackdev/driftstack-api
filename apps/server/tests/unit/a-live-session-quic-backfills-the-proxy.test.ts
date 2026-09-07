@@ -71,6 +71,10 @@ function relayWith(
           status: 'active',
         }),
       ),
+      // T-26 — not exercised here (no stop-on-exit-IP policy on these sessions).
+      setFirstExitIpIfUnset: vi.fn(() => Promise.resolve(null)),
+      closeWithReasonOutcome: vi.fn(() => Promise.resolve({ kind: 'already_closed' as const })),
+      recordErrorEvent: vi.fn(() => Promise.resolve(null)),
     },
     { ingestEgressCapabilityReport: vi.fn(() => Promise.resolve()) },
     new SessionCapabilityReportStore(),

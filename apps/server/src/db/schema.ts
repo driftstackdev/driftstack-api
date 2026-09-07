@@ -2374,6 +2374,16 @@ export const agentSessions = pgTable(
     // uuid is allowed and simply matches no row. The capabilityReport relay
     // reads it to attribute a measured QUIC verdict back to the owned proxy.
     proxyId: uuid('proxy_id'),
+    // T-26 (migration 0118) — per-session policy: end the session if its exit IP
+    // changes mid-run. Set at create-time from the create body's
+    // stop_on_exit_ip_change; NOT NULL DEFAULT false so the response field is
+    // always a real boolean. The capabilityReport relay enforces it CP-side.
+    stopOnExitIpChange: boolean('stop_on_exit_ip_change').notNull().default(false),
+    // T-26 (migration 0118) — the FIRST exit IP a stop-on-change session was
+    // observed leaving through, remembered on the row so the "did it change"
+    // comparison survives a control-plane restart (the in-memory capability
+    // store does not). NULL until the first observation / on non-policy rows.
+    firstExitIp: text('first_exit_ip'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

@@ -128,6 +128,19 @@ export interface AgentSessionRecord {
    */
   proxyId: string | null;
   /**
+   * T-26 (migration 0118) — per-session policy: end the session if its exit IP
+   * changes mid-run. Set at create-time from the create body's
+   * `stop_on_exit_ip_change`; `false` on every row that did not ask for it. The
+   * capabilityReport relay enforces it control-plane-side.
+   */
+  stopOnExitIpChange: boolean;
+  /**
+   * T-26 (migration 0118) — the FIRST exit IP a stop-on-change session was
+   * observed leaving through, remembered on the row so the change comparison
+   * survives a control-plane restart. NULL until the first observation.
+   */
+  firstExitIp: string | null;
+  /**
    * Arc 2 sub-slice 8.2 (v2-#8) — pair-mode state machine discriminator
    * payload (sub-slice 8.7 will define the exact shape). NULL when
    * the session is not in pair mode, OR is in pair mode but no
@@ -214,6 +227,12 @@ export interface CreateAgentSessionArgs {
    * Lets the out-of-session profile trim detect a profile bound to a live session.
    */
   profileId?: string;
+  /**
+   * T-26 (migration 0118) — per-session "stop the session if its exit IP
+   * changes" policy, forwarded from the create body's `stop_on_exit_ip_change`.
+   * Omitted → the column default `false`.
+   */
+  stopOnExitIpChange?: boolean;
 }
 
 /**
@@ -396,6 +415,15 @@ export interface AgentSessionsRepo {
   ): Promise<AgentSessionRecord | null>;
 
   /**
+   * T-26 (migration 0118) — record the FIRST exit IP a stop-on-change session
+   * was observed leaving through, atomically only-if-unset so the baseline the
+   * change comparison uses is written exactly once even if two capabilityReports
+   * race. A no-op (returns the current row) once first_exit_ip is set. Returns
+   * null when the session is missing.
+   */
+  setFirstExitIpIfUnset(id: string, exitIp: string): Promise<AgentSessionRecord | null>;
+
+  /**
    * Worker-disconnect fix (2026-06-19, migration 0086) — bulk-close every
    * session still `status='active'` AND `node_id = nodeId`, stamping
    * `closed_reason=reason` + `closed_at=now`. Returns the number of rows
@@ -552,6 +580,10 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       profileId: args.profileId ?? null,
       // 0116 — set later by setNodeId at dispatch (NULL until then).
       proxyId: null,
+      // 0118 (T-26) — stop-on-exit-IP-change policy from the create body; the
+      // baseline exit IP fills in later via setFirstExitIpIfUnset.
+      stopOnExitIpChange: args.stopOnExitIpChange ?? false,
+      firstExitIp: null,
       pairModeState: null,
       lastErrorEvent: null,
       guiControlKeyExpiresAt: null,
@@ -1025,6 +1057,17 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       ...(proxyId !== undefined ? { proxyId } : {}),
       updatedAt: this.clock(),
     };
+    this.records.set(id, updated);
+    return Promise.resolve(updated);
+  }
+
+  setFirstExitIpIfUnset(id: string, exitIp: string): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (!rec) return Promise.resolve(null);
+    // Only-if-unset: the FIRST observation wins, mirroring the Drizzle impl's
+    // `WHERE first_exit_ip IS NULL`. A later call is a no-op read.
+    if (rec.firstExitIp !== null) return Promise.resolve(rec);
+    const updated: AgentSessionRecord = { ...rec, firstExitIp: exitIp, updatedAt: this.clock() };
     this.records.set(id, updated);
     return Promise.resolve(updated);
   }

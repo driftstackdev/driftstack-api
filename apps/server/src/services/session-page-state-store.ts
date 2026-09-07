@@ -72,6 +72,12 @@ export interface SessionPageState {
   // already landed. Same class as the four correlator comments; this one attributed
   // the delay to someone.
   tabId: string | null;
+  // T-25 — the box's editable-input focus state (true on focus, false on blur),
+  // surfaced on the GET response as `input_focused` so the polled page-state path
+  // can drive the on-screen keyboard after a LiveKit data-channel loss, with the
+  // same authority the data-channel handler uses. Normalized to null when the
+  // frame omits it (the wire field is optional), so the response key is stable.
+  input_focused: boolean | null;
   error: PageStateFrame['error'];
 }
 
@@ -118,14 +124,17 @@ export class SessionPageStateStore {
     // delete+set moves the key to newest in the Map's insertion order, so the
     // size-cap eviction below drops the genuinely-stalest session.
     this.map.delete(frame.sessionId);
-    // url/title/tabId/error are OMITTED on some frames (reload omits url; non-error
-    // states omit error; title/tabId only when the box sends them) → normalize the
-    // absent key to null for a stable customer-facing shape.
+    // url/title/tabId/inputFocused/error are OMITTED on some frames (reload omits
+    // url; non-error states omit error; title/tabId/inputFocused only when the box
+    // sends them) → normalize the absent key to null for a stable customer-facing shape.
     this.map.set(frame.sessionId, {
       state: frame.state,
       url: frame.url ?? null,
       title: frame.title ?? null,
       tabId: frame.tabId ?? null,
+      // T-25 — normalize the optional wire field to null so `input_focused` is a
+      // stable key on the GET response (absent frame → null → keyboard no-op).
+      input_focused: frame.inputFocused ?? null,
       error:
         frame.error === undefined || frame.error === null
           ? null

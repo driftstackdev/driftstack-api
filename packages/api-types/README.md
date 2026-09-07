@@ -40,6 +40,7 @@ function handle(session: Session) {
 - **Common shapes:** `Problem` (RFC 7807 error envelope), `PaginationQuery`, prefixed-id branded types (`AccountId`, `SessionId`, `ApiKeyId`, `ProfileId`, `WebhookEndpointId`, `WebhookDeliveryId`).
 - **Closed enums:** `AccountTier`, `AccountStatus`, `ApiKeyScope`, `SessionStatus`, `WebhookEventType`, `WebhookDeliveryStatus`, `SubscriptionStatus`.
 - **Stable problem-type URIs:** `PROBLEM_TYPES` (21 stable types as of V-079: BadRequest, Unauthorized, Forbidden, NotFound, Conflict, RateLimited, ConcurrencyLimit, TierLimit, RevokedKey, ExpiredKey, InvalidKey, SessionDestroyed, SessionTimeout, LegalAcceptanceRequired, DriverError, DriverNotIntegrated, ValidationFailed, Internal, EmailAlreadyRegistered, InvalidCredentials, InvalidAuthToken, EmailNotVerified).
+- **OpenVPN config helpers:** `DANGEROUS_OPENVPN_DIRECTIVES`, `findUnsupportedOpenvpnLines`, `stripUnsupportedOpenvpnLines` — the directive list the API refuses inside an OpenVPN `config_blob` (script-executing directives, `script-security` 2+) plus the line-level finder / stripper the server and the desktop client share, so a client can name the line the API will refuse before sending it.
 - **`*Input` variants** (per the `z.input` / `z.output` distinction) for shapes with server-side defaults — see the SDK README for the full pattern.
 
 ## Versioning

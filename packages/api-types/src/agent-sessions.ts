@@ -36,6 +36,9 @@ export const AgentSessionSchema = z.object({
   created_by_user_id: z.string().nullable(),
   mode: z.enum(['manual', 'ai', 'pair']),
   model: AgentModelSchema,
+  // T-26 — the per-session "stop the session if its exit IP changes" policy, set
+  // at create-time. Always present (server column default false).
+  stop_on_exit_ip_change: z.boolean(),
   pair_mode_state: z.object({ kind: z.string() }).passthrough().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
@@ -73,6 +76,14 @@ export const AgentSessionSchema = z.object({
        *  must not be read as "no HTTP/3" — the two modes above describe the
        *  transport that was CONFIGURED, not what carried. */
       h3_connection_observed: z.boolean().nullable(),
+      /** T-26 — the live exit identity this session's traffic leaves through,
+       *  and the IPs its WebRTC candidates surface. Each is `null` until the box
+       *  reports it (NOT OBSERVED), never read as "no exit". */
+      exit_ip: z.string().nullable(),
+      exit_country: z.string().nullable(),
+      exit_timezone: z.string().nullable(),
+      webrtc_candidate_ips: z.array(z.string()).nullable(),
+      observed_at: z.string().nullable(),
     })
     .optional(),
   /** Latest ownership-validated harness launch/runtime failure. */
@@ -127,6 +138,12 @@ export const AgentPageStateSchema = z.object({
   url: z.string().max(AGENT_PAGE_STATE_URL_MAX_LENGTH).nullable(),
   title: z.string().max(AGENT_PAGE_STATE_TEXT_MAX_LENGTH).nullable(),
   tabId: z.string().min(1).max(AGENT_PAGE_STATE_ID_MAX_LENGTH).nullable().optional(),
+  // T-25 — the box's editable-input focus state (true on focus, false on blur).
+  // The store always normalizes an absent wire field to null, so the response key
+  // is present; nullable when nothing has been reported. Drives the GUI on-screen
+  // keyboard from the polled page-state path with the data-channel handler's
+  // authority rules.
+  input_focused: z.boolean().nullable(),
   error: z
     .object({
       kind: z.string().min(1).max(AGENT_PAGE_STATE_ID_MAX_LENGTH),

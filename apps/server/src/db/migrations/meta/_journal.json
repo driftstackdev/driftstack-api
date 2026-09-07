@@ -827,6 +827,13 @@
       "when": 1786665600005,
       "tag": "0117_add_account_onboarding_completed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1786665600006,
+      "tag": "0118_add_agent_session_exit_ip_stop",
+      "breakpoints": true
     }
   ]
 }

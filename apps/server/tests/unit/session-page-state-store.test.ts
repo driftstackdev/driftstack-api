@@ -35,6 +35,7 @@ describe('SessionPageStateStore', () => {
       url: 'https://x.test',
       title: null,
       tabId: null,
+      input_focused: null,
       error: null,
     });
   });
@@ -49,8 +50,22 @@ describe('SessionPageStateStore', () => {
       url: null,
       title: 'New Title',
       tabId: 'tab_2',
+      input_focused: null,
       error: null,
     });
+  });
+
+  it('T-25 projects input_focused when the frame carries it (true/false) and null when it omits it', () => {
+    const store = new SessionPageStateStore();
+    // The GET route serves this slice verbatim, so this projection IS what the
+    // response exposes as `input_focused` — the signal that drives the GUI keyboard.
+    store.set(frame('agt_focus', { state: 'loaded', inputFocused: true }));
+    expect(store.get('agt_focus')?.input_focused).toBe(true);
+    store.set(frame('agt_focus', { state: 'loaded', inputFocused: false }));
+    expect(store.get('agt_focus')?.input_focused).toBe(false);
+    // A frame that omits the optional wire field → null (keyboard no-op downstream).
+    store.set(frame('agt_focus', { state: 'loaded' }));
+    expect(store.get('agt_focus')?.input_focused).toBeNull();
   });
 
   it('set overwrites with the latest per session', () => {
@@ -68,6 +83,7 @@ describe('SessionPageStateStore', () => {
       url: null,
       title: null,
       tabId: null,
+      input_focused: null,
       error: { kind: 'net', http_status: null, message: 'refused' },
     });
   });
@@ -152,6 +168,7 @@ describe('SessionPageStateStore', () => {
       url: 'https://example.com',
       title: 'Example',
       tabId: 'tab_1',
+      input_focused: null,
       error: null,
     } as const;
     for (const oversized of [
@@ -189,6 +206,7 @@ describe('SessionPageStateStore.getFresh (age-bounded read, audit 2026-07-01)', 
       url: null,
       title: null,
       tabId: null,
+      input_focused: null,
       error: null,
     });
   });

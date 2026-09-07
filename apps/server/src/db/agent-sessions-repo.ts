@@ -118,6 +118,11 @@ function rowToRecord(
     // operator-default egress). The capabilityReport relay attributes a measured
     // QUIC verdict to this proxy.
     proxyId: row.proxyId,
+    // 0118 (T-26) — stop-on-exit-IP-change policy + the remembered first exit IP.
+    // NOT NULL DEFAULT false backfilled the flag on every legacy row; first_exit_ip
+    // is NULL until the relay records the first observation.
+    stopOnExitIpChange: row.stopOnExitIpChange,
+    firstExitIp: row.firstExitIp,
     pairModeState: row.pairModeState,
     lastErrorEvent: readLastErrorEvent(row.lastErrorEvent),
     guiControlKeyExpiresAt: row.guiControlKeyExpiresAt,
@@ -321,6 +326,11 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         // 0089 — the profile this session runs, when the create carried a
         // profile_id; column defaults NULL (ephemeral session) when omitted.
         ...(args.profileId !== undefined ? { profileId: args.profileId } : {}),
+        // 0118 (T-26) — stop-on-exit-IP-change policy; column defaults false
+        // when omitted.
+        ...(args.stopOnExitIpChange !== undefined
+          ? { stopOnExitIpChange: args.stopOnExitIpChange }
+          : {}),
         createdAt: now,
         updatedAt: now,
       })
@@ -425,6 +435,10 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
           ...(args.mode !== undefined ? { mode: args.mode } : {}),
           ...(args.model !== undefined ? { model: args.model } : {}),
           ...(args.profileId !== undefined ? { profileId: args.profileId } : {}),
+          // 0118 (T-26) — stop-on-exit-IP-change policy; column defaults false.
+          ...(args.stopOnExitIpChange !== undefined
+            ? { stopOnExitIpChange: args.stopOnExitIpChange }
+            : {}),
           createdAt: now,
           updatedAt: now,
         })
@@ -901,6 +915,24 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
       .returning();
     const row = updated[0];
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
+  }
+
+  async setFirstExitIpIfUnset(id: string, exitIp: string): Promise<AgentSessionRecord | null> {
+    // T-26 — record the baseline exit IP exactly once. `WHERE first_exit_ip IS
+    // NULL` makes the FIRST observation win even if two capabilityReports race
+    // (the second UPDATE matches no row). A 0-row result means already-set OR an
+    // unknown id; re-read and return the current row (mirrors
+    // closeWithReasonOutcome's no-op read), so a redundant observation is a
+    // harmless read and never overwrites the baseline.
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ firstExitIp: exitIp, updatedAt: now })
+      .where(and(eq(agentSessions.id, id), isNull(agentSessions.firstExitIp)))
+      .returning();
+    const row = updated[0];
+    if (row) return rowToRecord(row, this.transcriptEncryptionKeyBase64);
+    return this.get(id);
   }
 
   async closeActiveByNode(nodeId: string, reason: string): Promise<number> {

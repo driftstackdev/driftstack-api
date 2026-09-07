@@ -787,6 +787,7 @@ Response (200):
     "url": "https://example.com | null",
     "title": "Example Domain | null",
     "tabId": "<tab id> | null",
+    "input_focused": true,
     "error": { "kind": "net", "message": "<human-readable>" }
   }
 }
@@ -795,7 +796,10 @@ Response (200):
 `state: "stalled"` means the harness detected a frozen-but-alive
 renderer (hung JS / compositor deadlock) — distinct from `errored`
 (a hard page error) and `loading` (a navigation in flight). `error`
-is `null` except on `errored` states. `page_state` is `null` when
+is `null` except on `errored` states. `input_focused` is `true` while
+an editable field on the page holds focus and `false` on blur (`null`
+until the session reports one) — a UI can use it to show or hide an
+on-screen keyboard. `page_state` is `null` when
 nothing has been reported yet, the last report is older than the
 freshness bound, the session is closed, or live fleet state is
 unavailable in the deployment.

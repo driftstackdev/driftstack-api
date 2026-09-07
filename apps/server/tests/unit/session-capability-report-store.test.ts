@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { CapabilityReport } from '../../src/schemas/harness-control-protocol.js';
-import { SessionCapabilityReportStore } from '../../src/services/session-capability-report-store.js';
+import {
+  SessionCapabilityReportStore,
+  customerSafeCapabilityReport,
+} from '../../src/services/session-capability-report-store.js';
 
 function report(sessionId: string, overrides: Partial<CapabilityReport> = {}): CapabilityReport {
   return {
@@ -45,6 +48,13 @@ describe('SessionCapabilityReportStore', () => {
       // the same defect shape as the streaming_health zeroes below.
       h3_connection_observed: null,
       interpose_image_loaded: null,
+      // T-26 — ⛔ null, not empty: absent means NOT OBSERVED (this frame carries
+      // no exit identity), never "no exit". Same absent-until-measured contract.
+      exit_ip: null,
+      exit_country: null,
+      exit_timezone: null,
+      webrtc_candidate_ips: null,
+      observed_at: null,
       // ⛔ null, not an object of zeroes: absent means the node never reported,
       // which must never render as a healthy stream (V-2188).
       streaming_health: null,
@@ -89,5 +99,37 @@ describe('SessionCapabilityReportStore', () => {
     expect(store.size).toBe(2);
     store.delete('agt_2');
     expect(store.get('agt_2')).toBeNull();
+  });
+
+  it('T-26 surfaces the live exit identity + WebRTC IPs and includes them in the customer-safe subset; absence stays null', () => {
+    const store = new SessionCapabilityReportStore();
+    store.set(
+      report('agt_1', {
+        exitIp: '203.0.113.7',
+        exitCountry: 'US',
+        exitTimezone: 'America/New_York',
+        webrtcCandidateIps: ['203.0.113.7'],
+        observedAt: '2026-09-07T00:00:00.000Z',
+      }),
+    );
+    const stored = store.get('agt_1');
+    expect(stored).not.toBeNull();
+    expect(stored?.exit_ip).toBe('203.0.113.7');
+    expect(stored?.exit_country).toBe('US');
+    expect(stored?.exit_timezone).toBe('America/New_York');
+    expect(stored?.webrtc_candidate_ips).toEqual(['203.0.113.7']);
+    expect(stored?.observed_at).toBe('2026-09-07T00:00:00.000Z');
+    // The GUI-facing subset carries them — they are the customer's OWN egress.
+    const safe = customerSafeCapabilityReport(stored!);
+    expect(safe.exit_ip).toBe('203.0.113.7');
+    expect(safe.exit_country).toBe('US');
+    expect(safe.webrtc_candidate_ips).toEqual(['203.0.113.7']);
+    expect(safe.observed_at).toBe('2026-09-07T00:00:00.000Z');
+    // ⛔ Vacuity: a frame WITHOUT the exit fields stores null, never a
+    // fabricated value — the same absent-until-measured contract as h3.
+    store.set(report('agt_2'));
+    expect(store.get('agt_2')?.exit_ip).toBeNull();
+    expect(store.get('agt_2')?.webrtc_candidate_ips).toBeNull();
+    expect(store.get('agt_2')?.observed_at).toBeNull();
   });
 });

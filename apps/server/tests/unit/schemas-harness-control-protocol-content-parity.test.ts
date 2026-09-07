@@ -649,6 +649,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     // Forward-compat per-tab attribution (A3 contract pending) — optional so a
     // frame without it still validates + is carried as null downstream.
     expect(body).toContain('tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),');
+    // T-25 — optional boolean editable-input focus (drives the GUI keyboard from
+    // the CP page-state poll). Additive + lenient like tabId; nullable so a stray
+    // null can never drop the whole frame at safeParse.
+    expect(body).toContain('inputFocused: z.boolean().nullable().optional(),');
     expect(body).toContain('kind: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),');
     expect(body).toContain(
       'http_status: z.number().int().min(100).max(599).nullable().optional(),',
@@ -785,6 +789,31 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
         url: 'https://example.com',
       }).success,
     ).toBe(true);
+    // T-25 — inputFocused: true/false/null all validate; a frame that OMITS it
+    // still validates (the "still accepts a frame without it" arm above already
+    // covers absence). The wrong-TYPE arm is the load-bearing one: because this
+    // frame is a strip object, an unmodelled key is silently dropped — so a
+    // non-boolean inputFocused is REJECTED only while the schema actually models
+    // the field. Remove `inputFocused` from PageStateFrameSchema and this arm
+    // flips to accepting (the key is stripped), which is the mutation this pins.
+    for (const focus of [true, false, null]) {
+      expect(
+        HarnessOutboundSchema.safeParse({
+          type: 'pageState',
+          sessionId: 'agt_1',
+          state: 'loaded',
+          inputFocused: focus,
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      HarnessOutboundSchema.safeParse({
+        type: 'pageState',
+        sessionId: 'agt_1',
+        state: 'loaded',
+        inputFocused: 'yes',
+      }).success,
+    ).toBe(false);
     for (const oversized of [
       { sessionId: 's'.repeat(HARNESS_FRAME_ID_MAX_LENGTH + 1) },
       { url: 'u'.repeat(PAGE_STATE_URL_MAX_LENGTH + 1) },
@@ -2584,5 +2613,72 @@ describe('harness→server frame strictness is pinned per frame', () => {
       HarnessOutboundSchema.safeParse(frame).success,
       'per-field valid, aggregate over budget — the backstop binds and that is the safe order',
     ).toBe(false);
+  });
+
+  it('T-26 capabilityReport carries the live exit identity + WebRTC IPs, omits them when absent, and DROPS a malformed value without losing the frame', () => {
+    const base = {
+      type: 'capabilityReport' as const,
+      sessionId: 'agt_1',
+      timestamp: '2026-09-07T00:00:00.000Z',
+      egressPhase: 'phase_1_socks5' as const,
+      proxyKind: 'socks5' as const,
+      proxyUdpSupported: true,
+      proxyIpv4Supported: true,
+      proxyIpv6Supported: false,
+      transportModeRequested: 'h2-only' as const,
+      transportModeActive: 'h2-only' as const,
+      h3InterposeLoaded: false,
+      httpsSkipActive: false,
+      safeguardChecks: [{ layer: 'dns', passed: true, timestamp: 't' }],
+      archetypeId: 'iphone16pro_ios18_6_safari18_6',
+    };
+    // Present + valid → carried through unchanged.
+    const withExit = HarnessOutboundSchema.safeParse({
+      ...base,
+      exitIp: '203.0.113.7',
+      exitCountry: 'US',
+      exitTimezone: 'America/New_York',
+      webrtcCandidateIps: ['203.0.113.7', '198.51.100.9'],
+      observedAt: '2026-09-07T00:00:00.000Z',
+    });
+    expect(withExit.success).toBe(true);
+    if (withExit.success && withExit.data.type === 'capabilityReport') {
+      expect(withExit.data.exitIp).toBe('203.0.113.7');
+      expect(withExit.data.exitCountry).toBe('US');
+      expect(withExit.data.exitTimezone).toBe('America/New_York');
+      expect(withExit.data.webrtcCandidateIps).toEqual(['203.0.113.7', '198.51.100.9']);
+      expect(withExit.data.observedAt).toBe('2026-09-07T00:00:00.000Z');
+    }
+    // Absent → parses, the fields stay undefined (self-synchronizing: absence is
+    // NOT-OBSERVED, never a fabricated value).
+    const omitted = HarnessOutboundSchema.safeParse(base);
+    expect(omitted.success).toBe(true);
+    if (omitted.success && omitted.data.type === 'capabilityReport') {
+      expect(omitted.data.exitIp).toBeUndefined();
+    }
+    // ⛔ Leniency (and this arm's vacuity control): a MALFORMED exitIp is DROPPED
+    // and the frame STILL parses with its other fields intact. Removing the
+    // `.catch(undefined)` from exitIp in the schema reddens this — the whole
+    // frame would be rejected instead of just the bad field.
+    const badIp = HarnessOutboundSchema.safeParse({
+      ...base,
+      exitIp: 'not-an-ip',
+      egressState: 'live',
+    });
+    expect(badIp.success, 'a malformed exit IP must not lose the frame').toBe(true);
+    if (badIp.success && badIp.data.type === 'capabilityReport') {
+      expect(badIp.data.exitIp, 'the bad value is dropped').toBeUndefined();
+      expect(badIp.data.egressState, 'the rest of the frame survives').toBe('live');
+    }
+    // A bad element inside webrtcCandidateIps drops the whole optional field,
+    // never the frame.
+    const badArr = HarnessOutboundSchema.safeParse({
+      ...base,
+      webrtcCandidateIps: ['203.0.113.7', 'nope'],
+    });
+    expect(badArr.success).toBe(true);
+    if (badArr.success && badArr.data.type === 'capabilityReport') {
+      expect(badArr.data.webrtcCandidateIps).toBeUndefined();
+    }
   });
 });

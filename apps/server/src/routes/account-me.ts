@@ -45,7 +45,11 @@ import {
   encryptAccountProxySecret,
   type AccountProxySecretSlot,
 } from '../lib/account-proxy-secret-encryption.js';
-import { classifyUnsafeHost, classifyUnsafeVpnTargets } from '../lib/webhook-target-guard.js';
+import {
+  classifyUnsafeHost,
+  classifyUnsafeVpnTargets,
+  unsupportedOpenvpnDirectiveDetail,
+} from '../lib/webhook-target-guard.js';
 import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
 import {
@@ -600,11 +604,16 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       }
       const { config_blob, username, password } = input.openvpn;
       // SSRF: the real egress is the embedded `remote <host>`, NOT the display host — guard it.
-      if (classifyUnsafeVpnTargets({ configBlob: config_blob }) !== null) {
+      const unsafeVpn = classifyUnsafeVpnTargets({ configBlob: config_blob });
+      if (unsafeVpn !== null) {
+        // T-20 — a provider .ovpn routinely carries `up /etc/openvpn/update-resolv-conf`,
+        // and one sentence for both refusals left the owner unable to tell which line
+        // to remove. The directive refusal now names the first offending line; the
+        // SSRF refusal keeps its address sentence (the target is the fix there).
         throw new BadRequestError(
-          'OpenVPN config must not target a private, loopback, link-local, or metadata ' +
-            'address, or use a script-executing directive (up/down/route-up/tls-verify/… ' +
-            'or script-security 2+).',
+          unsafeVpn === 'unsafe-directive'
+            ? unsupportedOpenvpnDirectiveDetail(config_blob)
+            : 'OpenVPN config must not target a private, loopback, link-local, or metadata address.',
         );
       }
       const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });

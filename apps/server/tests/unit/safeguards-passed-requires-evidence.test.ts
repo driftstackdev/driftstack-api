@@ -78,6 +78,10 @@ async function warningsFor(frame: CapabilityReport): Promise<string[]> {
           proxyId: null,
         }),
       ),
+      // T-26 — not exercised here (no stop-on-exit-IP policy on this session).
+      setFirstExitIpIfUnset: vi.fn(() => Promise.resolve(null)),
+      closeWithReasonOutcome: vi.fn(() => Promise.resolve({ kind: 'already_closed' as const })),
+      recordErrorEvent: vi.fn(() => Promise.resolve(null)),
     },
     { ingestEgressCapabilityReport: ingest },
     store,

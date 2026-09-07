@@ -22,6 +22,7 @@
 //     (Node checks v4 against v4-mapped ranges), blocking all IPv4. Instead
 //     reject any `::ffff:`-mapped host outright (no legit webhook uses it).
 
+import { findUnsupportedOpenvpnLines } from '@driftstack/api-types';
 import { BlockList, isIP } from 'node:net';
 
 const BLOCK = new BlockList();
@@ -216,70 +217,60 @@ export function openvpnProxyHosts(configBlob: string): string[] {
 }
 
 /**
- * OpenVPN config directives that invoke an external program when script-security
- * is >=2 — the class the P0 root-RCE (A3 118722821) exploited (a customer
- * `config_blob` with `up /path/script` ran as root on the userspace egress host).
- * The box now forces `--script-security 1` (user scripts disabled), but the CP
- * REJECTS a config carrying any of these at ingress so a weaponized blob is never
- * stored or dispatched — defense-in-depth, not sole line of defense. Lower-cased,
- * matched on the directive keyword at line start.
- */
-const DANGEROUS_OPENVPN_DIRECTIVES = new Set([
-  'up',
-  'down',
-  'route-up',
-  'route-pre-down',
-  'ipchange',
-  'tls-verify',
-  'learn-address',
-  'client-connect',
-  'client-disconnect',
-  'auth-user-pass-verify',
-  'up-restart',
-  // Derived from the shipped OpenVPN man page (2.7) rather than recalled: every
-  // directive whose own text says it runs a command. These three were absent.
-  //
-  // `client-crresponse cmd` — "Executed when the client sends a text based
-  // challenge response"; OpenVPN writes the response to a temp file and passes
-  // the filename to cmd. Same class as the eleven above.
-  'client-crresponse',
-  // `dns-updown` — runs a command to apply DNS settings ("use force as cmd to
-  // run the default command"). Same class.
-  'dns-updown',
-  // `plugin` loads a SHARED MODULE and hooks it into OpenVPN's callbacks, which
-  // is arbitrary native code rather than a script. Included because a customer
-  // config blob has no legitimate reason to load one.
-  //
-  // Stated honestly: the box forces `--script-security 1`, and that is what
-  // neuters the script directives above. Whether it also gates plugin LOADING
-  // could not be verified here — this machine's man page carries only a single
-  // passing mention of `--script-security` and no levels section. So treat the
-  // box mitigation as unconfirmed for this entry specifically, which is the
-  // reason to reject it at ingress rather than rely on the host.
-  'plugin',
-]);
-
-/**
  * True when an OpenVPN `config_blob` contains a script-executing directive
  * (up/down/route-up/…) or raises `script-security` to 2/3 (which is what ENABLES
- * those directives to run programs). Comment (`#`/`;`) and blank lines are
- * skipped; matched case-insensitively on the first whitespace-delimited token.
+ * those directives to run programs) — the class the P0 root-RCE (A3 118722821)
+ * exploited. The directive set and the line tokenizer live in
+ * @driftstack/api-types (T-20) so the desktop client can name the same lines
+ * before submitting; this side keeps ENFORCING — a hit here is still a refusal.
  */
 function hasUnsafeOpenvpnDirective(configBlob: string): boolean {
-  for (const raw of configBlob.split(/\r?\n/)) {
-    const line = raw.trim();
-    if (line === '' || line.startsWith('#') || line.startsWith(';')) continue;
-    const tokens = line.split(/\s+/);
-    const keyword = (tokens[0] ?? '').toLowerCase();
-    if (DANGEROUS_OPENVPN_DIRECTIVES.has(keyword)) return true;
-    // `script-security 2`/`3` is the switch that lets the above run programs;
-    // 0/1 are safe (1 = only built-ins; the box floors at 1 regardless).
-    if (keyword === 'script-security') {
-      const level = Number(tokens[1]);
-      if (Number.isFinite(level) && level >= 2) return true;
-    }
+  return findUnsupportedOpenvpnLines(configBlob).length > 0;
+}
+
+/** Longest offending line echoed back in a 400 detail. A `plugin` line can carry
+ *  a long argument list; the customer needs the line number more than its tail. */
+const MAX_ECHOED_OPENVPN_LINE = 100;
+
+/**
+ * T-20 — the 400 detail for an `unsafe-directive` refusal. Names the FIRST
+ * offending line, quoted, so the fix is a deletion rather than a search: a
+ * commercial provider's .ovpn carries `up /etc/openvpn/update-resolv-conf` on
+ * one line of forty, and the previous sentence ("must not use a script-executing
+ * directive") left the owner reading the man page. Further offending lines are
+ * listed by number so one edit clears the file.
+ */
+export function unsupportedOpenvpnDirectiveDetail(configBlob: string): string {
+  const hits = findUnsupportedOpenvpnLines(configBlob);
+  const first = hits[0];
+  if (first === undefined) {
+    // Reached only if a caller asks for a detail on a config the finder passes;
+    // a sentence rather than a throw, so a refusal can never become a 500.
+    return (
+      'OpenVPN config must not use a script-executing directive ' +
+      '(up/down/route-up/tls-verify/… or script-security 2+).'
+    );
   }
-  return false;
+  const text =
+    first.text.length > MAX_ECHOED_OPENVPN_LINE
+      ? `${first.text.slice(0, MAX_ECHOED_OPENVPN_LINE - 1)}…`
+      : first.text;
+  const others = hits.slice(1);
+  const listed = others
+    .slice(0, 10)
+    .map((h) => String(h.line))
+    .join(', ');
+  let more = '';
+  if (others.length === 1) more = ` Line ${listed} has the same problem.`;
+  else if (others.length > 1 && others.length <= 10)
+    more = ` Lines ${listed} have the same problem.`;
+  else if (others.length > 10) {
+    more = ` Lines ${listed} and ${String(others.length - 10)} more have the same problem.`;
+  }
+  return (
+    `Line ${String(first.line)}: "${text}" — Driftstack does not run scripts from VPN configs. ` +
+    `Remove this line and try again.${more}`
+  );
 }
 
 /**
