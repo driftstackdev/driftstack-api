@@ -1704,9 +1704,21 @@ export const NetworkRequestsFrameSchema = z.object({
   type: z.literal('networkRequests'),
   sessionId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH),
   tabId: z.string().min(1).max(HARNESS_FRAME_ID_MAX_LENGTH).optional(),
-  // Bounded at the HARD ceiling (> the relay's semantic per-frame cap) so an
-  // over-cap frame is truncated by the relay, not rejected at parse.
-  entries: z.array(NetworkRequestEntrySchema).max(NETWORK_LOG_FRAME_HARD_MAX_ENTRIES),
+  // ⛔ Entries are validated PER-ENTRY in the relay, NOT here, and that is
+  // deliberate (T-16, A1+A3 2026-09-08). `protocol` is a CLOSED enum, and empty/
+  // unrecognised protocol is the NORMAL steady state for a real page — error
+  // completions, cache hits, and pre-negotiation failures all legitimately carry
+  // protocol:"". If `entries` were `z.array(NetworkRequestEntrySchema)`, ONE such
+  // row would fail the array parse → the whole HarnessOutbound frame is dropped →
+  // the Network pane blanks, presenting as "the fork emits nothing" — the wrong
+  // diagnosis, and it discards every OTHER valid request in the frame to suppress
+  // one bad cell. So the frame accepts raw entries (still HARD-capped so an
+  // over-cap frame can't exhaust memory), and session-network-log-relay.ts
+  // validates each against NetworkRequestEntrySchema: valid rows are kept, invalid
+  // rows are DROPPED + COUNTED + logged (so a schema-drop is distinguishable from a
+  // legitimately-empty ring), and the intent — never present an unclassified
+  // protocol as verified — is preserved because the bad row never reaches the pane.
+  entries: z.array(z.unknown()).max(NETWORK_LOG_FRAME_HARD_MAX_ENTRIES),
 });
 export type NetworkRequestsFrame = z.infer<typeof NetworkRequestsFrameSchema>;
 

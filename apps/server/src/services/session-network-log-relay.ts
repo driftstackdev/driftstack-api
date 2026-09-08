@@ -22,6 +22,7 @@ import type {
 import {
   NETWORK_LOG_ENTRY_MAX_BYTES,
   NETWORK_LOG_MAX_ENTRIES_PER_FRAME,
+  NetworkRequestEntrySchema,
 } from '../schemas/harness-control-protocol.js';
 import { makeBoundedNodeLatestRelay } from './bounded-node-latest-relay.js';
 import type { SessionNetworkLogStore } from './session-network-log-store.js';
@@ -66,11 +67,55 @@ export function makeSessionNetworkLogRelay(
       );
       return;
     }
-    const kept: NetworkRequestEntry[] = frame.entries
+    // T-16 (A1+A3 2026-09-08) — PER-ENTRY validation. The frame schema accepts
+    // raw entries (z.array(z.unknown())) precisely so ONE malformed row cannot
+    // fail the array parse and drop the WHOLE frame (which would blank the pane
+    // and read as "the fork emits nothing"). Validate each row here against the
+    // canonical NetworkRequestEntrySchema: keep the valid, DROP + COUNT the
+    // invalid. `protocol:""` is the normal steady state (error completions, cache
+    // hits, pre-negotiation failures) so mixed frames are expected, not a fault.
+    const valid: NetworkRequestEntry[] = [];
+    let schemaDropped = 0;
+    let firstReject: string | undefined;
+    for (const raw of frame.entries) {
+      const parsed = NetworkRequestEntrySchema.safeParse(raw);
+      if (parsed.success) {
+        valid.push(parsed.data);
+      } else {
+        schemaDropped += 1;
+        if (firstReject === undefined) {
+          const issue = parsed.error.issues[0];
+          firstReject = issue ? `${issue.path.join('.') || '(root)'}:${issue.code}` : 'invalid';
+        }
+      }
+    }
+    // Existing defensive re-bounding on the VALID rows: drop over-byte entries and
+    // truncate to the semantic per-frame cap.
+    const kept: NetworkRequestEntry[] = valid
       .filter(
         (entry) => Buffer.byteLength(JSON.stringify(entry), 'utf8') <= NETWORK_LOG_ENTRY_MAX_BYTES,
       )
       .slice(0, NETWORK_LOG_MAX_ENTRIES_PER_FRAME);
+    const reboundDropped = valid.length - kept.length;
+    const droppedCount = schemaDropped + reboundDropped;
+    if (droppedCount > 0) {
+      // LOUD: a drop must be distinguishable downstream from a legitimately-empty
+      // ring — otherwise correct-empty and data-loss present identically (A3). Names
+      // the field:value of the first reject so "completing" a producer that emits an
+      // unmapped protocol (e.g. WebKit's `http/1.1` instead of `h1`) is diagnosable.
+      logger.warn(
+        {
+          component: 'session-network-log-relay',
+          sessionId: frame.sessionId,
+          droppedCount,
+          schemaDropped,
+          reboundDropped,
+          firstReject,
+          kept: kept.length,
+        },
+        'dropped malformed/over-cap networkRequests entries; kept the valid rows (a schema-drop is NOT a legitimately-empty ring)',
+      );
+    }
     store.append(frame.sessionId, kept);
   };
 

@@ -52,8 +52,16 @@ function makeEntry(i: number, over: Partial<NetworkRequestEntry> = {}): NetworkR
   };
 }
 
-function makeFrame(sessionId: string, entries: NetworkRequestEntry[]): NetworkRequestsFrame {
+// entries is `unknown[]` (matching the schema): the frame no longer validates
+// entries at parse — the relay does, per-entry — so tests can hand it malformed rows.
+function makeFrame(sessionId: string, entries: unknown[]): NetworkRequestsFrame {
   return { type: 'networkRequests', sessionId, entries };
+}
+
+/** A row that FAILS NetworkRequestEntrySchema — an unmapped protocol (WebKit's
+ *  `http/1.1`, which a naive producer would emit before mapping to `h1`). */
+function makeBadProtocolEntry(i: number): unknown {
+  return { ...makeEntry(i), protocol: 'http/1.1' };
 }
 
 // ── 1. STORE — the per-session ring is bounded + cursor-ordered ──────────────
@@ -191,6 +199,64 @@ describe('T-9 relay: networkRequests is appended only for an exact live owning n
     )(makeFrame('agt_1', [oversize, makeEntry(1)]), 'node-1');
     await flush();
     expect(store.get('agt_1').entries.map((e) => e.id)).toEqual(['req_1']);
+  });
+
+  // T-16 (A1+A3 2026-09-08) — PER-ENTRY leniency: one bad row must NOT drop the
+  // whole frame (which would blank the pane and read as "the fork emits nothing").
+  // ARM 1 is the POSITIVE CONTROL for the vacuity arm below: it proves a drop
+  // DOES fire a warn. ⛔ Do NOT split these into separate files or delete this arm
+  // — the "no log on a legitimately-empty frame" arm goes vacuous without it (a
+  // silently-broken logger also never logs), and the whole point of the fix is
+  // that a schema-drop is DISTINGUISHABLE from an honest-empty ring.
+  it('ARM1 keeps the valid rows and DROPS + LOGS an invalid-protocol row (never the whole frame)', async () => {
+    const store = new SessionNetworkLogStore();
+    vi.mocked(logger.warn).mockClear();
+    makeSessionNetworkLogRelay(
+      liveOwner,
+      store,
+      logger,
+    )(makeFrame('agt_1', [makeEntry(0), makeBadProtocolEntry(1), makeEntry(2)]), 'node-1');
+    await flush();
+    // The two valid rows survive; the bad-protocol row is dropped, not the frame.
+    expect(store.get('agt_1').entries.map((e) => e.id)).toEqual(['req_0', 'req_2']);
+    // And the drop is LOUD: a warn naming the count + the offending field.
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        droppedCount: 1,
+        schemaDropped: 1,
+        firstReject: expect.stringContaining('protocol'),
+      }),
+      expect.stringContaining('dropped malformed'),
+    );
+  });
+
+  it('ARM2 an all-invalid frame yields an empty ring but STILL logs the drop (not a silent empty)', async () => {
+    const store = new SessionNetworkLogStore();
+    vi.mocked(logger.warn).mockClear();
+    makeSessionNetworkLogRelay(
+      liveOwner,
+      store,
+      logger,
+    )(makeFrame('agt_1', [makeBadProtocolEntry(0), makeBadProtocolEntry(1)]), 'node-1');
+    await flush();
+    expect(store.get('agt_1').entries).toHaveLength(0);
+    expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+      expect.objectContaining({ droppedCount: 2 }),
+      expect.stringContaining('dropped malformed'),
+    );
+  });
+
+  it('ARM3 VACUITY: a legitimately-EMPTY frame appends nothing and logs NO drop (distinguishable from a schema-drop; relies on ARM1 as its positive control)', async () => {
+    const store = new SessionNetworkLogStore();
+    vi.mocked(logger.warn).mockClear();
+    makeSessionNetworkLogRelay(liveOwner, store, logger)(makeFrame('agt_1', []), 'node-1');
+    await flush();
+    expect(store.get('agt_1').entries).toHaveLength(0);
+    // No drop-log fired — an honest-empty ring, NOT data loss. ARM1 proves this
+    // assertion is non-vacuous (the logger does fire when there IS a drop).
+    expect(
+      vi.mocked(logger.warn).mock.calls.some((c) => String(c[1]).includes('dropped malformed')),
+    ).toBe(false);
   });
 });
 
