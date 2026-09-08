@@ -74,28 +74,23 @@ describe('request-id correlation end-to-end', () => {
     expect((reflected as string).length).toBeLessThanOrEqual(128);
   });
 
-  it('success responses also have a request-id, exposed via the response header (operators can correlate even on 2xx)', async () => {
+  it('a 2xx with NO inbound id still exposes a generated x-request-id (operators can correlate even on success)', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/me',
-      headers: { authorization: `Bearer ${fx.plaintext}` },
+      headers: { authorization: `Bearer ${fx.plaintext}` }, // deliberately NO x-request-id
     });
     expect(res.statusCode).toBe(200);
-    // Many setups expose request-id as either `x-request-id` or
-    // `x-correlation-id`; either way the response should permit
-    // log correlation
-    const hasRequestId =
-      'x-request-id' in res.headers ||
-      'request-id' in res.headers ||
-      'x-correlation-id' in res.headers;
-    // Either we have a request-id header OR the body carries one
-    // (some setups only emit on errors)
-    if (!hasRequestId) {
-      // Acceptable — no header convention enforced for 2xx
-      expect(true).toBe(true);
-    } else {
-      expect(hasRequestId).toBe(true);
-    }
+    // The response MUST carry a request-id even when the client sent none — the
+    // server generates one (genReqId) and exposes it, so a 2xx is correlatable to
+    // its log line. This was previously vacuous: both branches of an `if (!has)`
+    // asserted `true`, so it passed whether or not the header existed. Assert the
+    // header (the canonical `x-request-id` the sibling arms above use) is present
+    // and non-empty; the ONLY uncaught regression was exactly this — a generated
+    // id dropped from a 2xx that carried no inbound id.
+    const requestId = res.headers['x-request-id'];
+    expect(typeof requestId).toBe('string');
+    expect((requestId as string).length).toBeGreaterThan(0);
   });
 });

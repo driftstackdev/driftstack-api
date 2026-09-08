@@ -4424,7 +4424,11 @@ export function ProfilesView({
                     // T-27 (drop 4) — from the derived view, which already applies
                     // the usable-only rule (no reading the raw entry here).
                     const serverLat = px !== null ? probeView.serverLatency[px.id] : undefined;
-                    const lat = serverLat ?? socks5Result?.latency_ms;
+                    // Gate the native fallback on exitOk too (serverLat already is): the
+                    // raw socks5Result.latency_ms is 0 for an UNREACHABLE proxy, which would
+                    // render as a green "0ms" chip next to the red broken banner — a dead
+                    // proxy masquerading as the fastest exit. Same gate as the exit-geo above.
+                    const lat = serverLat ?? (exitOk ? socks5Result?.latency_ms : undefined);
                     const latFromServer = serverLat !== undefined;
                     // latency meter fill: 0–250ms mapped to 0–100% (clamped).
                     const latFill =
@@ -4576,7 +4580,11 @@ export function ProfilesView({
                             : null,
                       probed: probe !== undefined,
                       udp,
-                      latencyMs: probe?.result.latency_ms ?? null,
+                      // Gated on exitOk (like exitIp/locationLabel above): the native
+                      // probe returns latency_ms=0 for an UNREACHABLE proxy, which would
+                      // otherwise render as "0ms" — a dead proxy masquerading as the fastest
+                      // exit (the ProxiesView sibling guards this the same way).
+                      latencyMs: exitOk ? (probe?.result.latency_ms ?? null) : null,
                       folder: profilesMeta[profile.id]?.folder ?? '',
                       tags: profilesMeta[profile.id]?.tags ?? [],
                       note: profilesMeta[profile.id]?.note ?? '',

@@ -1044,9 +1044,15 @@ function ProxyTable({
         case 'scheme':
           return schemeLabel(p.scheme).text.toLowerCase();
         case 'latency':
-          // An unreachable proxy has no latency. Infinity parks it at the end
-          // ascending rather than letting a 0 masquerade as the fastest exit.
-          return r !== undefined && r.reachable ? (r.latency_ms ?? Infinity) : Infinity;
+          // Sort by the SAME value the row DISPLAYS (serverLatencyMs ?? native), not
+          // the native probe alone — otherwise the visible Latency column orders wrong
+          // (a row showing the server's 180ms could sort above one showing 40ms). An
+          // unreachable native has no latency; Infinity parks it at the end ascending
+          // rather than letting a 0 masquerade as the fastest exit.
+          return (
+            serverLatency[p.id] ??
+            (r !== undefined && r.reachable ? (r.latency_ms ?? Infinity) : Infinity)
+          );
         case 'tested':
           return testedAt[p.id] ?? 0;
         case 'status':
@@ -1068,7 +1074,7 @@ function ProxyTable({
       if (av > bv) return 1 * dir;
       return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
     });
-  }, [proxies, sort, testResults, testedAt]);
+  }, [proxies, sort, testResults, testedAt, serverLatency]);
 
   const attention = proxies.filter((p) => statusRank(testResults[p.id]) === 0).length;
   const selectedProxies = sorted.filter((p) => live.has(p.id));
@@ -1222,7 +1228,19 @@ function ProxyTable({
             <button
               type="button"
               className="rounded-md border border-surface-divider px-2.5 py-1 text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
-              disabled={testingAll || testingId !== null}
+              // Only SOCKS5/HTTP proxies have an honest probe; a selection of only
+              // OpenVPN/WireGuard/HTTP-unprobeable rows makes onTestMany a silent no-op
+              // (handleTestAll filters to isSocks5Probeable). Disable + say why.
+              disabled={
+                testingAll ||
+                testingId !== null ||
+                !selectedProxies.some((p) => isSocks5Probeable(p.scheme))
+              }
+              title={
+                selectedProxies.some((p) => isSocks5Probeable(p.scheme))
+                  ? undefined
+                  : 'Only SOCKS5/HTTP proxies can be tested; the selection has none.'
+              }
               onClick={() => onTestMany(selectedProxies)}
             >
               Test selected

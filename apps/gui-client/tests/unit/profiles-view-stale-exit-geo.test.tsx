@@ -209,6 +209,10 @@ describe('ProfilesView — exit-geo is gated on capability health', () => {
     expect(screen.queryByText('203.0.113.7')).toBeNull();
     expect(screen.queryByText('US')).toBeNull();
     expect(screen.getByText('no exit IP')).toBeTruthy();
+    // F1 (audit 2026-09-08): the native probe returns latency_ms=0 for a DOWN
+    // proxy; gated on exitOk, so it must NOT render as a green "0ms" chip — a dead
+    // proxy masquerading as the fastest exit.
+    expect(screen.queryByText('0ms')).toBeNull();
   });
 
   it('shows the exit IP / country when the last probe was healthy', async () => {
@@ -218,5 +222,8 @@ describe('ProfilesView — exit-geo is gated on capability health', () => {
     // A healthy proxy still surfaces its hydrated exit IP + country.
     expect(screen.getByText('203.0.113.7')).toBeTruthy();
     expect(screen.getByText('US')).toBeTruthy();
+    // F1 vacuity control: the exitOk gate must not suppress a REAL latency — a
+    // healthy proxy (latency_ms=42) still shows its number.
+    expect(screen.getByText('42ms')).toBeTruthy();
   });
 });
