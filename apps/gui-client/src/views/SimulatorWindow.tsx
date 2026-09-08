@@ -6103,27 +6103,19 @@ export function SimulatorWindow(): JSX.Element {
             hasTabId || !inSwitchGrace,
             pollAuthorityEpoch,
           );
-          // T-25 — apply the box's editable-input focus from the POLL with EXACTLY the
-          // data-channel handler's rules (same tab-target check, same tabId-less switch
-          // grace, same manual-dismissal suppression, same AI-mode gate via the authority
-          // check), through the shared helper so the two paths cannot drift. This is the
-          // path that keeps the keyboard following focus after a LiveKit data-channel
-          // loss; a poll frame without input_focused is a no-op. Inert until the harness
-          // emits inputFocused on the CP-bound pageState frame (see the schema comment).
-          applyInputFocusFromPageState(
-            { inputFocused: ps.input_focused, tabId: ps.tabId },
-            {
-              targetId: pollTargetId,
-              activeTabId: activeTabIdRef.current,
-              hasManualAuthority: manualInputAuthorityCheckRef.current(
-                pollSessionId,
-                pollRoom,
-                pollAuthorityEpoch,
-              ),
-              withinSwitchGrace: inSwitchGrace,
-            },
-            keyboardFocusActuatorRef.current,
-          );
+          // T-25 (2026-09-08) — the on-screen keyboard is driven ONLY by the LiveKit
+          // data-channel focus path above, NEVER by this ~2s CP poll. Focus is
+          // EDGE-triggered (a blur→focus event); the poll is LEVEL-REPLAYED (it re-serves
+          // the last page-state every ~2s), so applying focus from it would re-assert a
+          // stale inputFocused=true a couple of seconds AFTER a genuine blur and pop the
+          // keyboard back up, repeatedly. The harness keeps focus room-only for exactly
+          // this reason (publishInputFocus does NOT append to pageStateBuffer). On a
+          // data-channel loss the keyboard therefore stays as the user left it (focus
+          // UNKNOWN, not driven from a stale poll) and resumes edge-driven behaviour when
+          // the channel recovers. ⛔ Do NOT wire a poll consumer of ps.input_focused here
+          // — a level-replayed poll cannot carry an edge signal without reintroducing the
+          // pop-back. `ps.input_focused` stays on the wire (always null today) but is
+          // deliberately unconsumed by this path.
           // #116 warm-tabs pre-flight (mirrors the data-channel path): the window-global
           // page chrome below (freeze badge / error overlay / load-stall advisory / loading
           // bar + watchdog / nav-target gate) must be driven ONLY by a frame for the ACTIVE
