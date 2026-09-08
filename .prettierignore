@@ -40,3 +40,10 @@ docs/verification-log-archive-through-v1919.md
 # it, and its matcher is literal (`rel === p || rel.endsWith(p)`) — so a glob would
 # satisfy Prettier while leaving that guard red on a hook that was in fact fine.
 # One line per archive, added by hand at each split.
+
+# Byte-exact mirror of the driftstack OVPN file-reference contract. Prettier must
+# NOT touch it: the cross-source drift guard (packages/api-types/tests/
+# openvpn-file-reference-contract.test.ts) asserts it is byte-identical to the
+# driftstack canonical, and reformatting here breaks that parity with no real
+# drift. Regenerate via `npm run sync:ovpn-fixtures`.
+packages/api-types/tests/fixtures/openvpn-file-reference-fixtures.json
