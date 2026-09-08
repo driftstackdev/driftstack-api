@@ -155,8 +155,13 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
             </Row>
             <Row label="Server version">
               <span className="mono text-ink-secondary">
-                {serverInfo.version}
-                {serverInfo.git_sha !== 'unknown' ? ` · ${serverInfo.git_sha.slice(0, 7)}` : ''}
+                {typeof serverInfo.version === 'string' ? serverInfo.version : '—'}
+                {/* /version is parsed WITHOUT runtime validation, so a 200 with a
+                    missing/typeless git_sha must not `.slice` undefined and crash
+                    the whole Connectivity render (audit 2026-09-08). */}
+                {typeof serverInfo.git_sha === 'string' && serverInfo.git_sha !== 'unknown'
+                  ? ` · ${serverInfo.git_sha.slice(0, 7)}`
+                  : ''}
               </span>
             </Row>
           </>

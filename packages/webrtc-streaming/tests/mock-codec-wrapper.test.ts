@@ -19,6 +19,21 @@ describe('V-531.B-mock createMockEncodedStream', () => {
     await stream.stop();
   });
 
+  it('INFINITE mode (no durationFrames) is STOPPABLE — the loop yields a macrotask so stop() can run rather than busy-spinning the event loop (audit 2026-09-08)', async () => {
+    const stream = createMockEncodedStream({ targetFps: 30 }); // no durationFrames = infinite
+    const chunks: EncodedChunk[] = [];
+    stream.onChunk((c) => chunks.push(c));
+    await stream.start();
+    // If the pull loop busy-spun on microtasks (the bug), this macrotask setTimeout
+    // would never fire and the test would TIME OUT. Completing at all proves the yield.
+    await new Promise<void>((r) => setTimeout(r, 20));
+    await stream.stop();
+    expect(chunks.length).toBeGreaterThan(0);
+    const afterStop = chunks.length;
+    await new Promise<void>((r) => setTimeout(r, 20));
+    expect(chunks.length).toBe(afterStop); // truly stopped — no more frames after stop()
+  });
+
   it('marks chunk 1 as keyframe (initial IDR)', async () => {
     const stream = createMockEncodedStream({ durationFrames: 5 });
     const chunks: EncodedChunk[] = [];

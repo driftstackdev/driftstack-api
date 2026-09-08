@@ -143,6 +143,15 @@ export class MockFrameSource implements FrameSource {
 
     this.nextSequence += 1;
     this.nowMicros += Math.floor(1_000_000 / config.targetFps);
+    // INFINITE mode (no maxFrames) busy-spins the encode loop on a synchronously-
+    // resolved promise, enqueuing only microtasks and starving the timer/IO queue so
+    // the documented stop() (a macrotask) can never run (audit 2026-09-08). Yield a
+    // macrotask there so the loop is stoppable. Finite mode stays synchronous so
+    // bounded runs — and the tests that wait a fixed few ms for them — complete
+    // promptly; a real FrameSource paces on capture and never hits this path.
+    if (this.options.maxFrames === undefined) {
+      return new Promise((resolve) => setTimeout(() => resolve(frame), 0));
+    }
     return Promise.resolve(frame);
   }
 

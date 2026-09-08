@@ -171,7 +171,18 @@ export function FleetView(): JSX.Element {
     try {
       setActionError(null);
       if (form.editingId) {
-        await updateFleetMember(form.editingId, form.draft);
+        const editedId = form.editingId;
+        await updateFleetMember(editedId, form.draft);
+        // The edit may have changed baseUrl, which makes the cached ping
+        // (reachability / driver / version, keyed by member.id) stale and
+        // misleading. Drop it so the row shows un-pinged until re-checked,
+        // rather than the OLD URL's result (audit 2026-09-08).
+        setPings((prev) => {
+          if (prev[editedId] === undefined) return prev;
+          const next = { ...prev };
+          delete next[editedId];
+          return next;
+        });
       } else {
         await addFleetMember(form.draft);
       }

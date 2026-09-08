@@ -3228,6 +3228,7 @@ export function SimulatorWindow(): JSX.Element {
     deleteRecording,
     recordings,
     activeRecordingFor,
+    hydrateFrames,
   } = useRecordings();
   const recordingId = sessionId !== '' ? activeRecordingFor(sessionId) : null;
   const recordTimerRef = useRef<number | null>(null);
@@ -3300,16 +3301,29 @@ export function SimulatorWindow(): JSX.Element {
   }
   // SLICE 3 — export a saved recording as the portable JSON envelope (reuses the
   // #36 store: buildRecordingExport → downloadJson, the proven blob/anchor path).
-  function exportRecording(rec: Recording): void {
+  async function exportRecording(rec: Recording): Promise<void> {
     const now = new Date();
+    // A recording loaded from disk is a persisted STUB (hydrated===true marks frames
+    // not yet loaded: frames:[] but frameCount>0). Exporting it directly wrote an
+    // EMPTY envelope and STILL reported success (audit 2026-09-08). Load the frames
+    // first; if that fails, say so rather than claim a successful export of nothing.
+    let full = rec;
+    if (rec.hydrated && rec.frameCount > 0 && rec.frames.length === 0) {
+      const hydrated = await hydrateFrames(rec.id).catch(() => null);
+      if (hydrated === null || hydrated.frames.length === 0) {
+        showNotice("Couldn't load this recording's frames to export — try reopening it.");
+        return;
+      }
+      full = hydrated;
+    }
     // Finding #8 — AWAIT the write + surface a note (mirrors the cookie-export fix,
     // founder #3): downloadJson returns false when the Tauri fs write fails (e.g. the
     // $DOWNLOAD scope isn't granted) and true on a confirmed write. The old fire-and-
     // forget gave NO confirmation on success and silently swallowed a failed write, so
     // Export read as "does nothing / is broken".
-    const fn = recordingExportFilename(rec, now);
+    const fn = recordingExportFilename(full, now);
     const noticeSessionId = sessionIdRef.current;
-    void downloadJson(fn, buildRecordingExport(rec, now))
+    void downloadJson(fn, buildRecordingExport(full, now))
       .then((ok) => {
         if (sessionIdRef.current !== noticeSessionId) return;
         showNotice(
@@ -10192,7 +10206,7 @@ export function SimulatorWindow(): JSX.Element {
                         sessionAvailable={sessionId !== ''}
                         confirmingDeleteId={confirmingDeleteRecId}
                         onToggleRecording={toggleRecord}
-                        onExport={exportRecording}
+                        onExport={(rec) => void exportRecording(rec)}
                         onDelete={onDeleteRecording}
                       />
                     )}
