@@ -1,0 +1,173 @@
+{
+  "$comment": [
+    "SHARED CROSS-SOURCE FIXTURE — the OVPN 'unresolvable external file reference' rule.",
+    "",
+    "WHY THIS FILE EXISTS. Two implementations enforce this rule: A3's Swift parse-time reject",
+    "(harness/Sources/ProxyChain/VPNProxyConfig.swift :: openvpnExternalFileReference) and A2's TS",
+    "upload-time reject (driftstack-api packages/api-types/src/openvpn-directives.ts ::",
+    "findUnresolvableOpenvpnFileReferences). They were built to the same stated rule and reported to agree",
+    "'by construction'. They did not. A line-by-line diff on 2026-09-08 found three divergences, two of",
+    "which were silent bypasses in the Swift side (tab separator, '--' prefix). Two implementations in two",
+    "languages never agree by construction — they agree until they drift, and nothing was measuring it.",
+    "",
+    "THIS FILE IS THE MEASUREMENT. Both suites read these rows. A drift on EITHER side reds BOTH.",
+    "Add a row here, never only in one language's tests — a case that exists in one suite is exactly the",
+    "asymmetry this file replaces.",
+    "",
+    "THE RULE. A directive in inline_required_directives is an UNRESOLVABLE FILE REFERENCE when a",
+    "non-comment line's FIRST TOKEN equals it (after stripping a leading '--' of >=3 chars) AND the line has",
+    ">=2 tokens AND no '<directive>' inline block appears anywhere in the blob. Tokens split on space OR tab.",
+    "Lines split on LF, CRLF or lone CR. Comments are '#' and ';'. Comparison is CASE-SENSITIVE.",
+    "",
+    "WHY IT MATTERS. The node renders the blob into an isolated directory containing only client.ovpn and",
+    "auth.txt, so a referenced file will not exist and openvpn dies with an error naming neither the field",
+    "nor the cause. That silent class is what this rule guards. A config openvpn rejects at OPTION-PARSE",
+    "time instead fails loudly with a line number and is NOT this class — see failure_class per row."
+  ],
+  "version": 1,
+  "rule_id": "W3096/W3098",
+  "inline_required_directives": ["ca", "cert", "key", "tls-auth", "tls-crypt"],
+  "case_sensitive": true,
+  "token_separators": [" ", "\t"],
+  "line_separators": ["\n", "\r\n", "\r"],
+  "comment_prefixes": ["#", ";"],
+  "double_dash_strip_min_length": 3,
+  "evidence": {
+    "openvpn_version": "2.7.0",
+    "captured": "2026-09-08",
+    "method": "ran /opt/homebrew/sbin/openvpn --config <blob> --verb 0 and read the option parser's verdict",
+    "case_sensitivity": [
+      "<ca> ... </ca>  -> parsed OK (proceeds to 'No client-side authentication method is specified')",
+      "<CA> ... </CA>  -> 'Options error: Unrecognized option or missing or extra parameter(s) ...: CA'",
+      "ca ca.crt       -> parsed OK",
+      "CA ca.crt       -> 'Options error: Unrecognized option ...: CA'"
+    ],
+    "conclusion": "openvpn is case-sensitive for BOTH the inline tag and the keyword. Uppercase forms are rejected by openvpn's own parser with a line number, i.e. they fail LOUD, which is a different class from the silent unresolvable-file failure this rule guards."
+  },
+  "base": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n",
+  "cases": [
+    {
+      "name": "inline_ca_block_is_self_contained",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n<ca>\n-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n</ca>\n",
+      "expect": "accept",
+      "why": "the normal provider shape; flagging it would reject working configs"
+    },
+    {
+      "name": "bare_ca_file_reference",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca ca.crt\n",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
+      "why": "points at a file the node's isolated dir will not contain"
+    },
+    {
+      "name": "bare_cert_file_reference",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\ncert client.crt\n",
+      "expect": "reject",
+      "directive": "cert",
+      "failure_class": "silent"
+    },
+    {
+      "name": "crlf_config_must_still_split",
+      "blob": "client\r\ndev tun\r\nremote vpn.example.com 1194\r\nca ca.crt\r\n",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
+      "why": "most .ovpn files are Windows-authored. Swift treats \\r\\n as ONE Character, so split(separator:\"\\n\") does not split them at all — that exact defect already shipped once in this parser"
+    },
+    {
+      "name": "lone_cr_classic_mac_line_endings",
+      "blob": "client\rdev tun\rremote vpn.example.com 1194\rca ca.crt\r",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
+      "why": "what a truncated CRLF write also leaves behind"
+    },
+    {
+      "name": "hash_commented_reference_is_inert",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n# ca ca.crt\n",
+      "expect": "accept"
+    },
+    {
+      "name": "semicolon_commented_reference_is_inert",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n; ca ca.crt\n",
+      "expect": "accept",
+      "why": "openvpn accepts both comment forms"
+    },
+    {
+      "name": "inline_block_wins_over_stray_file_line",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca ca.crt\n<ca>\n-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n</ca>\n",
+      "expect": "accept",
+      "why": "openvpn uses the inline block and the stray line is inert; flagging this rejects valid provider configs — the expensive direction, because a gate that rejects valid input gets disabled"
+    },
+    {
+      "name": "bare_directive_without_argument",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca\n",
+      "expect": "accept",
+      "why": "no file argument, so it is not a reference"
+    },
+    {
+      "name": "tab_separated_reference_W3098",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca\tca.crt\n",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
+      "why": "SILENT BYPASS #1 in the Swift side: it split on the space literal, so this was one token and was accepted. openvpn's config lexer separates on space AND tab."
+    },
+    {
+      "name": "tab_separated_tls_auth_with_direction_arg",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\ntls-auth\tta.key 0\n",
+      "expect": "reject",
+      "directive": "tls-auth",
+      "failure_class": "silent",
+      "why": "hyphenated directive plus a trailing direction argument, tab-separated"
+    },
+    {
+      "name": "double_dash_prefixed_reference_W3098",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n--ca ca.crt\n",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
+      "why": "SILENT BYPASS #2: openvpn strips a leading '--' from a config-file directive, so this is honoured as 'ca ca.crt'. Unnormalised, the whole rule was a two-character bypass."
+    },
+    {
+      "name": "tab_padded_bare_directive_negative_control",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca\t\n",
+      "expect": "accept",
+      "why": "NEGATIVE CONTROL for the tab widening — still no file argument"
+    },
+    {
+      "name": "inline_wins_after_double_dash_normalisation",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n--ca ca.crt\n<ca>\nAAAA\n</ca>\n",
+      "expect": "accept",
+      "why": "NEGATIVE CONTROL for the '--' widening — inline must still win"
+    },
+    {
+      "name": "bare_double_dash_is_not_a_keyword",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n--\n",
+      "expect": "accept",
+      "why": "the '>=3' length guard exists so the bare '--' argument delimiter cannot normalise to an empty keyword"
+    },
+    {
+      "name": "prefix_is_not_equality",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\ncafile x.crt\n",
+      "expect": "accept",
+      "why": "token EQUALITY, not prefix — 'cafile' is a different directive"
+    },
+    {
+      "name": "uppercase_keyword_is_not_our_class",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nCA ca.crt\n",
+      "expect": "accept",
+      "failure_class": "loud",
+      "why": "VERIFIED against openvpn 2.7.0: 'CA' is an unrecognised option and openvpn refuses the config at parse time with a line number. It fails LOUD, so it is not the silent class this rule guards. Matching case-insensitively here makes an implementation over-broad and breaks set-equality with the other side."
+    },
+    {
+      "name": "uppercase_inline_tag_does_not_satisfy_the_reference",
+      "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n<CA>\nAAAA\n</CA>\nca ca.crt\n",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "loud",
+      "why": "VERIFIED against openvpn 2.7.0: '<CA>' is NOT recognised as an inline ca block ('Unrecognized option ...: CA'), so the 'ca ca.crt' reference is genuinely unresolved. Rejecting is correct AND the error text ('inline it as a <ca> block') is the right guidance. Note the class is LOUD, not silent — openvpn refuses this config itself — so this row is lower severity than the tab and '--' rows."
+    }
+  ]
+}
