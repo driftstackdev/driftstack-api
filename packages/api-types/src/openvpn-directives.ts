@@ -216,10 +216,14 @@ export function findUnresolvableOpenvpnFileReferences(
 ): OpenvpnUnsupportedLine[] {
   const lines = configBlob.split(/\r\n|\r|\n/);
   // First pass: which directives carry an inline `<directive>` block anywhere?
-  // Inline WINS, so a directive with a block is never flagged below.
+  // Inline WINS, so a directive with a block is never flagged below. CASE-SENSITIVE
+  // (no toLowerCase): OpenVPN matches inline tags against its case-sensitive option
+  // table, so `<CA>` is NOT the `ca` block — treating it as one would ACCEPT a config
+  // the node still can't resolve (the miss A3's cross-language diff caught). Matches
+  // the node parser (8a03a3929).
   const inlineBlocks = new Set<string>();
   for (const raw of lines) {
-    const text = raw.trim().toLowerCase();
+    const text = raw.trim();
     for (const dir of OPENVPN_INLINE_REQUIRED_DIRECTIVES) {
       // `</ca>` does not match `<ca>` (char after `<` is `/`), so a closing tag
       // is never mistaken for an opening one.
@@ -232,10 +236,14 @@ export function findUnresolvableOpenvpnFileReferences(
     const text = (lines[i] ?? '').trim();
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
     const tokens = text.split(/\s+/);
-    // Match findUnsupportedOpenvpnLines' `--` normalization: OpenVPN strips a
-    // leading `--` from a config-file directive (>=3 chars), so `--ca` is honoured
-    // as `ca`; without this the rule is a one-character bypass.
-    let keyword = (tokens[0] ?? '').toLowerCase();
+    // CASE-SENSITIVE keyword, matching the node parser (8a03a3929) and OpenVPN's
+    // own option table (streq against lowercase names — assumed from behaviour, not
+    // read from options.c this session): `CA ca.crt` is an unrecognised option that
+    // fails LOUD at openvpn startup, a DIFFERENT class from the SILENT file-not-found
+    // this guard exists to catch, so we deliberately only guard the lowercase form.
+    // `--` is still stripped (>=3 chars) so `--ca ca.crt` cannot bypass; a bare `--`
+    // (len 2, not stripped) normalises to nothing and is inert.
+    let keyword = tokens[0] ?? '';
     if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
     if (!OPENVPN_INLINE_REQUIRED_DIRECTIVES.has(keyword)) continue;
     if (tokens.length < 2) continue; // bare directive, no file argument — not a reference

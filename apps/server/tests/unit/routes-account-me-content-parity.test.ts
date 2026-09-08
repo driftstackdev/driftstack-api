@@ -249,7 +249,7 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     );
     expect(body).toMatch(/import \{ readClientIp \} from '\.\.\/lib\/client-ip\.js';/);
     expect(body).toMatch(
-      /import \{\s*AccountOrganizationSchema,\s*AccountProxyInputSchema,\s*AccountProxyUpdateSchema,\s*AVATAR_MAX_BYTES,\s*PROFILES_PER_TIER,\s*PROXIES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,\s*UpdateAccountMeRequestSchema,\s*UploadAvatarRequestSchema,\s*UuidSchema,\s*type AccountProxyMetadata,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
+      /import \{\s*AccountOrganizationSchema,\s*AccountProxyInputSchema,\s*AccountProxyUpdateSchema,\s*AVATAR_MAX_BYTES,\s*findUnresolvableOpenvpnFileReferences,\s*PROFILES_PER_TIER,\s*PROXIES_PER_TIER,\s*TIER_CONCURRENT_SESSION_LIMITS,\s*UpdateAccountMeRequestSchema,\s*UploadAvatarRequestSchema,\s*UuidSchema,\s*type AccountProxyMetadata,\s*type AccountTier,\s*\} from '@driftstack\/api-types';/,
     );
     expect(body).toMatch(
       /import \{ resolveEffectiveAccount, type AccountAuthRepo \} from '\.\.\/services\/auth\.js';/,

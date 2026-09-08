@@ -224,6 +224,18 @@ describe('findUnresolvableOpenvpnFileReferences', () => {
     expect(findUnresolvableOpenvpnFileReferences(both)).toEqual([]);
   });
 
+  it('CRITICAL CASE-SENSITIVE, matching the node parser (A3 diff): `CA ca.crt` (uppercase directive) is NOT flagged — openvpn rejects that LOUD at startup, a different class from the silent file-not-found we guard; and an uppercase `<CA>` block does NOT satisfy `ca ca.crt`, so the file reference IS still flagged (the accept-something-broken miss the cross-language diff caught).', () => {
+    // uppercase keyword → left to openvpn's loud "unrecognized option" reject
+    expect(findUnresolvableOpenvpnFileReferences('client\nCA ca.crt\n')).toEqual([]);
+    expect(findUnresolvableOpenvpnFileReferences('client\n--CA ca.crt\n')).toEqual([]);
+    // uppercase inline block does NOT count as the `ca` block → the lowercase file ref stays flagged
+    const upperBlock =
+      'client\nca ca.crt\n<CA>\n-----BEGIN CERTIFICATE-----\nx==\n-----END CERTIFICATE-----\n</CA>\n';
+    expect(findUnresolvableOpenvpnFileReferences(upperBlock).map((h) => h.directive)).toEqual([
+      'ca',
+    ]);
+  });
+
   it('CRITICAL does NOT require <ca> unconditionally: a config with no cert material at all (no ca/cert/key line, no block) is NOT flagged. The rule is "no unresolvable reference", not "must contain <ca>" — that genuine error openvpn names better than we would.', () => {
     expect(
       findUnresolvableOpenvpnFileReferences('client\nremote vpn.example.com 1194\ndev tun\n'),
