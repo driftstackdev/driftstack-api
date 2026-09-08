@@ -141,6 +141,40 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     updateProxy.mockResolvedValue({});
   });
 
+  // item 6c client half (audit follow-up 2026-09-08): the .ovpn paste handler now
+  // runs the SAME shared api-types finders the server enforces, so a config the
+  // server would reject is flagged INSTANTLY at paste rather than via a round-trip
+  // 400. Two classes: an external cert-file reference, and a script directive.
+  it('paste warns instantly on an external cert-file reference (server would reject it)', async () => {
+    stored = [];
+    render(<ProxiesView />);
+    fireEvent.click(await screen.findByRole('button', { name: 'New proxy' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'openvpn' } });
+    const textarea = await screen.findByPlaceholderText(/remote vpn\.example\.com/);
+    fireEvent.change(textarea, {
+      target: { value: 'client\nremote vpn.example.com 1194\nca ca.crt\ndev tun\n' },
+    });
+    expect(
+      await screen.findByText((c) => c.includes('points to a file') && c.includes('inline')),
+    ).toBeTruthy();
+  });
+
+  it('paste warns instantly on a script-executing directive (server would reject it)', async () => {
+    stored = [];
+    render(<ProxiesView />);
+    fireEvent.click(await screen.findByRole('button', { name: 'New proxy' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'openvpn' } });
+    const textarea = await screen.findByPlaceholderText(/remote vpn\.example\.com/);
+    fireEvent.change(textarea, {
+      target: { value: 'client\nremote vpn.example.com 1194\nup /etc/openvpn/up.sh\ndev tun\n' },
+    });
+    expect(
+      await screen.findByText(
+        (c) => c.includes('runs an external program') && c.includes('refuse this config'),
+      ),
+    ).toBeTruthy();
+  });
+
   it('single-flights Add, locks the draft, and keeps the busy state through refresh', async () => {
     stored = [];
     const pending = deferred<unknown>();

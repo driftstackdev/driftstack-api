@@ -41,6 +41,10 @@ import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import {
+  findUnsupportedOpenvpnLines,
+  findUnresolvableOpenvpnFileReferences,
+} from '@driftstack/api-types';
+import {
   buildWireGuardProxyInput,
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
@@ -1681,6 +1685,26 @@ export function ProxyForm({
       // must come FIRST so the NEW text wins — `{ config_blob: text, ...(d.openvpn) }`
       // let the stale `config_blob` inside d.openvpn override every keystroke (the
       // textarea reverted on each edit when invalid).
+      setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
+      return;
+    }
+    // Paste-time surface of the server's OVPN rejects (item 6c client half): the
+    // control plane refuses a config that runs scripts (findUnsupportedOpenvpnLines)
+    // or references an external cert/key FILE with no inline block
+    // (findUnresolvableOpenvpnFileReferences). Catch both here with the SAME shared
+    // api-types finders the server enforces, so the user fixes it instantly instead
+    // of a round-trip 400. Keep the blob so they can edit in place.
+    const dangerous = findUnsupportedOpenvpnLines(text);
+    if (dangerous[0] !== undefined) {
+      setVpnHint(
+        `Line ${dangerous[0].line.toString()}: ${dangerous[0].reason}. Driftstack will refuse this config.`,
+      );
+      setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
+      return;
+    }
+    const fileRef = findUnresolvableOpenvpnFileReferences(text);
+    if (fileRef[0] !== undefined) {
+      setVpnHint(`Line ${fileRef[0].line.toString()}: ${fileRef[0].reason}`);
       setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
       return;
     }
