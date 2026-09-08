@@ -61,9 +61,9 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     );
   });
 
-  it('Browser-isomorphic framing — 5 supported runtimes pinned per-line: Node.js 20+ + Modern browsers (Chrome 92+/Firefox 90+/Safari 15.4+/Edge 92+) + Tauri/Electron WebViews + Cloudflare Workers/Deno/Bun. Drift to dropping any runtime would silently exclude that environment from the support matrix.', () => {
+  it('Browser-isomorphic framing — supported runtimes pinned: Node.js 18+ (18 via the node:crypto fallback, 19+ via globalThis.crypto) + Modern browsers + Tauri/Electron + Cloudflare Workers/Deno/Bun. Drift to dropping a runtime, or back to "Node 20+ only", re-excludes Node 18 — which was silently dropping every webhook before the fallback (audit 2026-09-08).', () => {
     expect(body).toMatch(
-      /\/\/ Browser-isomorphic: uses `globalThis\.crypto\.subtle` \(Web Crypto API\)\s*\/\/ rather than Node's `crypto` module\. Works in:\s*\/\/\s*- Node\.js 20\+\s+\(subtle exposed on globalThis\.crypto\)\s*\/\/\s*- Modern browsers \(Chrome 92\+, Firefox 90\+, Safari 15\.4\+, Edge 92\+\)\s*\/\/\s*- Tauri \/ Electron WebViews\s*\/\/\s*- Cloudflare Workers \/ Deno \/ Bun/,
+      /uses `globalThis\.crypto\.subtle` \(Web Crypto API\) where[\s\S]*?falling back to node:crypto's webcrypto on Node 18\. Works in:[\s\S]*?- Node\.js 18\+[\s\S]*?- Modern browsers \(Chrome 92\+, Firefox 90\+, Safari 15\.4\+, Edge 92\+\)[\s\S]*?- Tauri \/ Electron WebViews[\s\S]*?- Cloudflare Workers \/ Deno \/ Bun/,
     );
   });
 
@@ -149,8 +149,10 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     );
   });
 
-  it('CRITICAL getSubtleCrypto defensive probe — `if (!subtle) return false` early-bail. Drift to throwing would break customers running on legacy Node 18 (still without subtle); drift to crashing would mask the failure mode behind an unhandled rejection.', () => {
-    expect(body).toMatch(/const subtle = getSubtleCrypto\(\);\s*if \(!subtle\) return false;/);
+  it('CRITICAL getSubtleCrypto is AWAITED then short-circuits — `const subtle = await getSubtleCrypto(); if (!subtle) return false`. Fail-closed (no crypto -> reject, never throw/accept-by-default); it became async to allow the node:crypto fallback (audit 2026-09-08).', () => {
+    expect(body).toMatch(
+      /const subtle = await getSubtleCrypto\(\);\s*if \(!subtle\) return false;/,
+    );
   });
 
   it('CRITICAL HMAC payload construction — `concatBytes(enc.encode(`${parsed.timestamp.toString()}.`), bodyBytes)`. The `.toString()` is load-bearing — Number gets coerced to string via template-literal but the explicit toString() makes the intent clear AND defends against future TS strict-mode complaints. The `${ts}.${body}` separator is the Stripe-style format; drift would break server-side verification.', () => {
@@ -233,9 +235,9 @@ describe('W424.B packages/sdk-typescript/src/webhook-signature.ts content parity
     );
   });
 
-  it('getSubtleCrypto helper — defensive probe rationale pinned: "`globalThis.crypto` exists in Node 20+ (still gated by Node-version policies) and every browser environment we ship into. Defensively probe rather than assume." Returns null on absence so verifyWebhookSignature can short-circuit to false without crashing.', () => {
+  it('getSubtleCrypto helper — async, prefers globalThis.crypto then FALLS BACK to node:crypto webcrypto (Node 18 support), wrapped in try/catch so it returns null and never throws. Null only when NO crypto exists, so verifyWebhookSignature fail-closes to false (audit 2026-09-08: the old globalThis-only version silently dropped every webhook on Node 18).', () => {
     expect(body).toMatch(
-      /function getSubtleCrypto\(\): SubtleCrypto \| null \{\s*\/\/ `globalThis\.crypto` exists in Node 20\+ \(still gated by Node-version\s*\/\/ policies\) and every browser environment we ship into\. Defensively\s*\/\/ probe rather than assume\.\s*const c = globalThis\.crypto;\s*if \(!c \|\| !c\.subtle\) return null;\s*return c\.subtle;\s*\}/,
+      /async function getSubtleCrypto\(\): Promise<SubtleCrypto \| null> \{[\s\S]*?const c = globalThis\.crypto;\s*if \(c\?\.subtle\) return c\.subtle;[\s\S]*?await import\('node:crypto'\)[\s\S]*?webcrypto\?\.subtle \?\? null;[\s\S]*?catch \{\s*return null;\s*\}\s*\}/,
     );
   });
 

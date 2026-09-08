@@ -94,12 +94,12 @@ describe('W816 cross-SDK webhook-signature parity', () => {
 
   // ─── TS browser-isomorphic Web Crypto framing ─────────────────
 
-  it("CRITICAL TS implementation pins browser-isomorphic Web Crypto API design. The 'uses globalThis.crypto.subtle (Web Crypto API) rather than Node's crypto module' framing is the load-bearing 'works in 6 runtimes' guarantee — Node 20+ + Modern browsers + Tauri + Cloudflare Workers + Deno + Bun.", () => {
+  it("CRITICAL TS implementation pins browser-isomorphic Web Crypto API design WITH a node:crypto fallback. The 'uses globalThis.crypto.subtle where available, falling back to node:crypto on Node 18' framing is the load-bearing runtime-support guarantee — Node 18+ + Modern browsers + Tauri + Cloudflare Workers + Deno + Bun (audit 2026-09-08: globalThis-only silently dropped every webhook on Node 18).", () => {
     const p = read(TS);
     expect(p).toMatch(
-      /Browser-isomorphic: uses `globalThis\.crypto\.subtle` \(Web Crypto API\)\s*\n\/\/ rather than Node's `crypto` module\./,
+      /Browser-isomorphic: uses `globalThis\.crypto\.subtle` \(Web Crypto API\) where\s*\n\/\/ available, falling back to node:crypto's webcrypto on Node 18\./,
     );
-    expect(p).toMatch(/Node\.js 20\+/);
+    expect(p).toMatch(/Node\.js 18\+/);
     expect(p).toMatch(/Modern browsers \(Chrome 92\+, Firefox 90\+, Safari 15\.4\+, Edge 92\+\)/);
     expect(p).toMatch(/Tauri \/ Electron WebViews/);
     expect(p).toMatch(/Cloudflare Workers \/ Deno \/ Bun/);
