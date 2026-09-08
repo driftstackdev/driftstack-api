@@ -17,6 +17,20 @@ import {
   type CostRates,
   type UsageInputs,
 } from '../lib/cost-estimator.js';
+import { PURCHASABLE_TIERS } from '@driftstack/api-types';
+
+/**
+ * The tiers that legitimately have NO cost-alert policy: every AccountTier
+ * that is NOT self-serve purchasable — `free` (perpetual, unbilled) and
+ * `enterprise` (negotiated, no price-derived threshold). Their thresholds are
+ * deliberately absent, so the single-account path fails closed on them. The
+ * batch `getOverview` path uses this set to SKIP them instead (see there);
+ * a *purchasable* tier missing its thresholds is a genuine misconfiguration
+ * and still throws. Derived from the invariant-locked PURCHASABLE_TIERS
+ * (see `the-purchasable-product-set-is-one-set`), so a future price-less tier
+ * is covered without editing this file.
+ */
+const PURCHASABLE_TIER_SET: ReadonlySet<string> = new Set<string>(PURCHASABLE_TIERS);
 
 /**
  * Canonical public billing-cycle grammar. Both customer and admin routes use
@@ -120,10 +134,32 @@ export class CostMonitoringService {
   }): Promise<readonly CostMonitoringAccountSummary[]> {
     const results: CostMonitoringAccountSummary[] = [];
     for (const id of args.accountIds) {
-      const summary = await this.getAccountSummary({
-        accountId: id,
-        billingCycle: args.billingCycle,
-      });
+      let summary: CostMonitoringAccountSummary | null;
+      try {
+        summary = await this.getAccountSummary({
+          accountId: id,
+          billingCycle: args.billingCycle,
+        });
+      } catch (err) {
+        // A tier that LEGITIMATELY has no cost-alert policy — the
+        // non-purchasable tiers `free` (unbilled) and `enterprise` (negotiated,
+        // no derived threshold) — throws CostThresholdConfigurationError from
+        // the fail-closed getAccountSummary path. In a BATCH overview that is
+        // NOT a fault: the account has no threshold to breach, so skip it and
+        // keep evaluating the rest. Before this, one such account aborted the
+        // whole overview — and, via the nightly CostAlertDispatcher, silently
+        // killed cost-alert recompute for the ENTIRE fleet every night (the
+        // fleet always contains a free account, so the tick threw before
+        // evaluating anyone). A *purchasable* tier missing its thresholds IS a
+        // genuine misconfiguration: re-throw so it stays loud (fail-closed)
+        // rather than silently never alerting a paying account. Single-account
+        // callers (customer + admin `/accounts/:id`) still fail closed — they
+        // call getAccountSummary directly and never reach this catch.
+        if (err instanceof CostThresholdConfigurationError && !PURCHASABLE_TIER_SET.has(err.tier)) {
+          continue;
+        }
+        throw err;
+      }
       if (summary !== null) results.push(summary);
     }
     // Sort by total cost descending so the admin's "who's expensive" eye

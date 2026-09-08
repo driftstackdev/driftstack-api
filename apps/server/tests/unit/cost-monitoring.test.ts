@@ -189,11 +189,50 @@ describe('V-541.B getOverview', () => {
     expect(aggregate).toHaveBeenCalledTimes(3);
   });
 
-  it('rejects the whole batch rather than returning partial summaries under a borrowed threshold', async () => {
+  it('rejects the whole batch when a PURCHASABLE tier is missing its thresholds (a genuine misconfiguration — never borrow another tier or return a partial)', async () => {
+    // A paid tier with no threshold entry is a config fault: fail closed for
+    // the whole batch rather than silently never-alerting a paying account.
     const aggregator = makeAggregator(
       new Map([
         ['acc_configured', { ...EMPTY, sessionMinutes: 100 }],
-        ['acc_unconfigured', { ...EMPTY, sessionMinutes: 200 }],
+        ['acc_misconfigured', { ...EMPTY, sessionMinutes: 200 }],
+      ]),
+    );
+    const svc = new CostMonitoringService({
+      aggregator,
+      rates: RATES,
+      tierThresholds: { api_builder: { softCents: 1000, hardCents: 2000 } },
+      // acc_misconfigured resolves to api_scale — a PURCHASABLE tier absent from
+      // the injected map. That is a real misconfiguration, not a no-policy tier.
+      resolveTier: (accountId) =>
+        Promise.resolve(accountId === 'acc_configured' ? 'api_builder' : 'api_scale'),
+    });
+
+    await expect(
+      svc.getOverview({
+        accountIds: ['acc_configured', 'acc_misconfigured'],
+        billingCycle: '2026-05',
+      }),
+    ).rejects.toMatchObject({ name: 'CostThresholdConfigurationError', tier: 'api_scale' });
+  });
+
+  it('SKIPS a non-purchasable no-policy tier (free / enterprise) instead of aborting the whole batch', async () => {
+    // The fleet always contains free + enterprise accounts (perpetual / negotiated,
+    // no price-derived threshold). Before this, one such account threw
+    // CostThresholdConfigurationError from getAccountSummary and aborted the
+    // entire overview — which, via the nightly CostAlertDispatcher, silently
+    // killed cost-alert recompute for the WHOLE fleet every night. These
+    // accounts have no threshold to breach, so the batch path skips them and
+    // still returns every threshold-configured account. (Single-account callers
+    // — customer + admin `/accounts/:id` — keep failing closed; they call
+    // getAccountSummary directly, verified in the getAccountSummary suite above.)
+    // Both no-policy accounts carry usage, so if the skip regressed the call
+    // would throw rather than merely omit an empty account.
+    const aggregator = makeAggregator(
+      new Map([
+        ['acc_paid', { ...EMPTY, sessionMinutes: 100 }],
+        ['acc_free', { ...EMPTY, sessionMinutes: 999 }],
+        ['acc_enterprise', { ...EMPTY, sessionMinutes: 999 }],
       ]),
     );
     const svc = new CostMonitoringService({
@@ -201,14 +240,21 @@ describe('V-541.B getOverview', () => {
       rates: RATES,
       tierThresholds: { api_builder: { softCents: 1000, hardCents: 2000 } },
       resolveTier: (accountId) =>
-        Promise.resolve(accountId === 'acc_configured' ? 'api_builder' : 'free'),
+        Promise.resolve(
+          accountId === 'acc_paid'
+            ? 'api_builder'
+            : accountId === 'acc_free'
+              ? 'free'
+              : 'enterprise',
+        ),
     });
 
-    await expect(
-      svc.getOverview({
-        accountIds: ['acc_configured', 'acc_unconfigured'],
-        billingCycle: '2026-05',
-      }),
-    ).rejects.toMatchObject({ name: 'CostThresholdConfigurationError', tier: 'free' });
+    const summaries = await svc.getOverview({
+      accountIds: ['acc_free', 'acc_paid', 'acc_enterprise'],
+      billingCycle: '2026-05',
+    });
+
+    // The one configured account survives; both no-policy accounts are skipped.
+    expect(summaries.map((s) => s.account_id)).toEqual(['acc_paid']);
   });
 });
