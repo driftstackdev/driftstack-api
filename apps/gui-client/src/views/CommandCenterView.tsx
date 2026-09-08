@@ -986,7 +986,9 @@ function RecentProfilesFreshness({
   );
 }
 
-function Kpi({
+// Exported for the visual-harness gallery (not a shipped bundle input) so the
+// T-18 Plan badge renders in the real Tailwind build for screenshot review.
+export function Kpi({
   icon,
   label,
   value,

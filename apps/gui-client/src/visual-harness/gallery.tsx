@@ -13,6 +13,8 @@ import { CostPanel } from '../components/CostPanel';
 import { SkeletonRows } from '../components/Skeleton';
 import { ProxyForm } from '../views/ProxiesView';
 import { DeviceToolbar } from '../views/SimulatorWindow';
+import { Kpi } from '../views/CommandCenterView';
+import { TierBadge } from '../components/TierBadge';
 
 const noop = (): void => undefined;
 
@@ -310,6 +312,36 @@ export function Gallery(): JSX.Element {
             onSave={noop}
           />
         </div>
+      </div>
+
+      <h1 className="mb-3 mt-10 text-lg font-semibold text-ink-primary">
+        Command Center — Plan KPI (T-18)
+      </h1>
+      <p className="mb-3 text-sm text-ink-secondary">
+        The plan tier is a category, so the Plan value is a TierBadge pill, not the big-number
+        treatment that clipped &ldquo;Enterprise&rdquo; to &ldquo;Enterpr…&rdquo; at the card edge.
+        A numeric KPI sits alongside for contrast.
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Kpi icon={<span>▦</span>} label="Profiles" value="3 / 10" />
+        <Kpi
+          icon={<span>✦</span>}
+          label="Plan"
+          value="Enterprise"
+          valueNode={<TierBadge tier="enterprise" size="md" />}
+        />
+        <Kpi
+          icon={<span>✦</span>}
+          label="Plan"
+          value="Agency"
+          valueNode={<TierBadge tier="agency_manual" size="md" />}
+        />
+        <Kpi
+          icon={<span>✦</span>}
+          label="Plan"
+          value="Free"
+          valueNode={<TierBadge tier="free" size="md" />}
+        />
       </div>
     </div>
   );
