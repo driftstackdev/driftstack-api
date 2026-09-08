@@ -22,7 +22,10 @@
 //     (Node checks v4 against v4-mapped ranges), blocking all IPv4. Instead
 //     reject any `::ffff:`-mapped host outright (no legit webhook uses it).
 
-import { findUnsupportedOpenvpnLines } from '@driftstack/api-types';
+import {
+  findUnsupportedOpenvpnLines,
+  findUnresolvableOpenvpnFileReferences,
+} from '@driftstack/api-types';
 import { BlockList, isIP } from 'node:net';
 
 const BLOCK = new BlockList();
@@ -276,6 +279,50 @@ export function unsupportedOpenvpnDirectiveDetail(configBlob: string): string {
   return (
     `Line ${String(first.line)}: "${text}" — Driftstack does not run scripts from VPN configs. ` +
     `Remove this line and try again.${more}`
+  );
+}
+
+/**
+ * The 400 detail for an unresolvable external cert/key file reference (a
+ * `ca`/`cert`/`key`/`tls-auth`/`tls-crypt` line pointing to a file, with no
+ * inline block). Mirrors unsupportedOpenvpnDirectiveDetail: names the FIRST
+ * offending line so the fix is to paste an inline block, not search. The echoed
+ * line is the DIRECTIVE + FILENAME only (never an inline PEM block), so no key
+ * material is quoted. Cross-source pin with the node's parse-reject (A3
+ * `8a03a3929`); both enforce the same rule from `findUnresolvableOpenvpnFileReferences`.
+ */
+export function unresolvableOpenvpnFileReferenceDetail(configBlob: string): string {
+  const hits = findUnresolvableOpenvpnFileReferences(configBlob);
+  const first = hits[0];
+  if (first === undefined) {
+    // Reached only if a caller asks for a detail on a config the finder passes;
+    // a sentence rather than a throw, so a refusal can never become a 500.
+    return (
+      'OpenVPN config references an external cert/key file the session cannot ' +
+      'provide; paste an inline <ca>/<cert>/<key> block instead.'
+    );
+  }
+  const text =
+    first.text.length > MAX_ECHOED_OPENVPN_LINE
+      ? `${first.text.slice(0, MAX_ECHOED_OPENVPN_LINE - 1)}…`
+      : first.text;
+  const others = hits.slice(1);
+  const listed = others
+    .slice(0, 10)
+    .map((h) => String(h.line))
+    .join(', ');
+  let more = '';
+  if (others.length === 1) more = ` Line ${listed} has the same problem.`;
+  else if (others.length > 1 && others.length <= 10)
+    more = ` Lines ${listed} have the same problem.`;
+  else if (others.length > 10) {
+    more = ` Lines ${listed} and ${String(others.length - 10)} more have the same problem.`;
+  }
+  return (
+    `Line ${String(first.line)}: "${text}" references a file the session cannot provide — ` +
+    `it renders only client.ovpn + auth.txt. Paste the inline ` +
+    `<${first.directive}>…</${first.directive}> block (the "inline" or "unified" .ovpn ` +
+    `your provider offers) and try again.${more}`
   );
 }
 

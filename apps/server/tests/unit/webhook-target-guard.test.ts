@@ -12,6 +12,7 @@ import {
   classifyUnsafeVpnTargets,
   openvpnRemoteHosts,
   openvpnProxyHosts,
+  unresolvableOpenvpnFileReferenceDetail,
 } from '../../src/lib/webhook-target-guard.js';
 
 describe('unsafeWebhookTargetReason — rejects internal/reserved targets', () => {
@@ -485,5 +486,33 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
         configBlob: 'client\nremote vpn.example.com 1194\nhttp-proxy proxy.example.com 8080\n',
       }),
     ).toBeNull();
+  });
+});
+
+describe('unresolvableOpenvpnFileReferenceDetail — the 400 for an external cert-file reference', () => {
+  it('names the FIRST offending line and points at the inline block the customer must paste — the whole reason to catch it here rather than let openvpn fail late with an opaque "Options error"', () => {
+    const detail = unresolvableOpenvpnFileReferenceDetail(
+      'client\nremote vpn.example.com 1194\nca ca.crt\ncert client.crt\n',
+    );
+    expect(detail).toContain('Line 3');
+    expect(detail).toContain('ca ca.crt');
+    expect(detail).toContain('<ca>');
+    expect(detail).toContain('Line 4 has the same problem.');
+  });
+
+  it('does not quote key material: the echoed line is the directive + filename, never an inline PEM block', () => {
+    // An inline <ca> block present alongside a stray `ca ca.crt` is ACCEPTED
+    // (inline wins), so the detail falls back to its generic sentence and never
+    // reaches into the block.
+    const withBlock =
+      'client\nca ca.crt\n<ca>\n-----BEGIN CERTIFICATE-----\nSECRETMATERIAL==\n-----END CERTIFICATE-----\n</ca>\n';
+    const detail = unresolvableOpenvpnFileReferenceDetail(withBlock);
+    expect(detail).not.toContain('SECRETMATERIAL');
+    expect(detail).not.toContain('BEGIN CERTIFICATE');
+  });
+
+  it('falls back to a sentence (never throws) on a config with no unresolvable reference', () => {
+    const detail = unresolvableOpenvpnFileReferenceDetail('client\nremote vpn.example.com 1194\n');
+    expect(detail.toLowerCase()).toContain('inline');
   });
 });

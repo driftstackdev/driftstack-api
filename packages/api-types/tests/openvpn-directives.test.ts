@@ -11,6 +11,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   DANGEROUS_OPENVPN_DIRECTIVES,
+  OPENVPN_INLINE_REQUIRED_DIRECTIVES,
+  findUnresolvableOpenvpnFileReferences,
   findUnsupportedOpenvpnLines,
   stripUnsupportedOpenvpnLines,
 } from '../src/openvpn-directives.js';
@@ -170,5 +172,107 @@ describe('stripUnsupportedOpenvpnLines', () => {
 
   it('removes an offending LAST line that has no trailing newline without leaving a dangling ending', () => {
     expect(stripUnsupportedOpenvpnLines('client\nup /x').config).toBe('client\n');
+  });
+});
+
+// The upload-side mirror of the node's external-file-reference reject (A3
+// `8a03a3929`). A config that references ca/cert/key FILES the isolated session
+// dir won't contain parses fine and dies late in openvpn as a generic "Options
+// error"; caught at upload it names the directive. These arms pin the rule to
+// the node's verbatim so upload-reject and parse-reject agree by construction.
+const INLINE = [
+  'client',
+  'remote vpn.example.com 1194 udp',
+  'dev tun',
+  '<ca>',
+  '-----BEGIN CERTIFICATE-----',
+  'MIIB...redactedbase64...==',
+  '-----END CERTIFICATE-----',
+  '</ca>',
+  '',
+].join('\n');
+
+const FILEREF = [
+  'client',
+  'remote vpn.example.com 1194',
+  'ca ca.crt',
+  'cert client.crt',
+  'key client.key',
+  '',
+].join('\n');
+
+describe('findUnresolvableOpenvpnFileReferences', () => {
+  it('POSITIVE CONTROL a config with inline cert blocks (and no bare file refs) reports nothing, as does an empty blob. Without this, a finder that flagged everything would pass every reject arm and look like security.', () => {
+    expect(findUnresolvableOpenvpnFileReferences(INLINE)).toEqual([]);
+    expect(findUnresolvableOpenvpnFileReferences('')).toEqual([]);
+  });
+
+  it('CRITICAL flags each ca/cert/key file reference by 1-based line, naming the directive and pointing at the inline block — this is the message the customer reads instead of a late opaque openvpn "Options error".', () => {
+    const hits = findUnresolvableOpenvpnFileReferences(FILEREF);
+    expect(hits.map((h) => [h.line, h.directive])).toEqual([
+      [3, 'ca'],
+      [4, 'cert'],
+      [5, 'key'],
+    ]);
+    expect(hits[0]?.text).toBe('ca ca.crt');
+    expect(hits[0]?.reason).toContain('<ca>');
+    expect(hits[0]?.reason.toLowerCase()).toContain('inline');
+  });
+
+  it('CRITICAL inline WINS: a stray `ca ca.crt` line is NOT flagged when an inline <ca> block is also present (openvpn uses the block; the line is inert). Flagging it would reject working configs.', () => {
+    const both = `client\nca ca.crt\n<ca>\n-----BEGIN CERTIFICATE-----\nx==\n-----END CERTIFICATE-----\n</ca>\n`;
+    expect(findUnresolvableOpenvpnFileReferences(both)).toEqual([]);
+  });
+
+  it('CRITICAL does NOT require <ca> unconditionally: a config with no cert material at all (no ca/cert/key line, no block) is NOT flagged. The rule is "no unresolvable reference", not "must contain <ca>" — that genuine error openvpn names better than we would.', () => {
+    expect(
+      findUnresolvableOpenvpnFileReferences('client\nremote vpn.example.com 1194\ndev tun\n'),
+    ).toEqual([]);
+  });
+
+  it('CRITICAL CRLF (Windows-authored) file references are still flagged — a CRLF-blind split would let every Windows config bypass silently and read clean, worse than no check.', () => {
+    const crlf = FILEREF.replace(/\n/g, '\r\n');
+    expect(findUnresolvableOpenvpnFileReferences(crlf).map((h) => h.directive)).toEqual([
+      'ca',
+      'cert',
+      'key',
+    ]);
+    // the trailing \r must not leak into the reported text
+    expect(findUnresolvableOpenvpnFileReferences(crlf)[0]?.text).toBe('ca ca.crt');
+  });
+
+  it('CRITICAL bare-CR (\\r-only) line endings still split — proves the split covers \\r, not just \\r\\n/\\n; a \\n-only split would treat the whole file as one line and miss the reference.', () => {
+    const cr = FILEREF.replace(/\n/g, '\r');
+    expect(findUnresolvableOpenvpnFileReferences(cr).map((h) => h.directive)).toEqual([
+      'ca',
+      'cert',
+      'key',
+    ]);
+  });
+
+  it('accepts comments, bare directives with no argument, and does not confuse `key-direction` with `key`; honours a leading `--` like OpenVPN (so `--ca ca.crt` is still a reference).', () => {
+    expect(findUnresolvableOpenvpnFileReferences('# ca ca.crt\n; cert x.crt\n')).toEqual([]);
+    expect(findUnresolvableOpenvpnFileReferences('client\nkey\n')).toEqual([]); // bare, no file arg
+    expect(findUnresolvableOpenvpnFileReferences('key-direction 1\n')).toEqual([]); // not `key`
+    expect(findUnresolvableOpenvpnFileReferences('--ca ca.crt\n')).toMatchObject([
+      { line: 1, directive: 'ca' },
+    ]);
+  });
+
+  it('tls-auth / tls-crypt with a file argument (and optional direction) are flagged without a block, accepted with one — same rule as ca/cert/key.', () => {
+    expect(
+      findUnresolvableOpenvpnFileReferences('tls-auth ta.key 1\n').map((h) => h.directive),
+    ).toEqual(['tls-auth']);
+    expect(
+      findUnresolvableOpenvpnFileReferences('tls-crypt tc.key\n<tls-crypt>\nk==\n</tls-crypt>\n'),
+    ).toEqual([]);
+    // the checked set is exactly the five inline-required directives
+    expect([...OPENVPN_INLINE_REQUIRED_DIRECTIVES].sort()).toEqual([
+      'ca',
+      'cert',
+      'key',
+      'tls-auth',
+      'tls-crypt',
+    ]);
   });
 });

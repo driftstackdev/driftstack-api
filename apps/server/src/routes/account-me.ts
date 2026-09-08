@@ -18,6 +18,7 @@ import {
   AccountProxyInputSchema,
   AccountProxyUpdateSchema,
   AVATAR_MAX_BYTES,
+  findUnresolvableOpenvpnFileReferences,
   PROFILES_PER_TIER,
   PROXIES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
@@ -49,6 +50,7 @@ import {
   classifyUnsafeHost,
   classifyUnsafeVpnTargets,
   unsupportedOpenvpnDirectiveDetail,
+  unresolvableOpenvpnFileReferenceDetail,
 } from '../lib/webhook-target-guard.js';
 import { defaultTcpProbe } from '../services/proxy-backends/socks5.js';
 import { avatarKey, type R2 } from '../lib/r2.js';
@@ -615,6 +617,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             ? unsupportedOpenvpnDirectiveDetail(config_blob)
             : 'OpenVPN config must not target a private, loopback, link-local, or metadata address.',
         );
+      }
+      // Reject a config that references EXTERNAL cert/key files (`ca ca.crt`) with
+      // no inline block: the session renders only client.ovpn + auth.txt, so such a
+      // file cannot exist and openvpn dies late as an opaque "Options error". Fail
+      // here naming the directive. Cross-source pin with the node's parse-reject
+      // (A3 8a03a3929) — both read findUnresolvableOpenvpnFileReferences.
+      if (findUnresolvableOpenvpnFileReferences(config_blob).length > 0) {
+        throw new BadRequestError(unresolvableOpenvpnFileReferenceDetail(config_blob));
       }
       const secret = JSON.stringify({ config_blob, ...(password ? { password } : {}) });
       return {

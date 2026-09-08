@@ -167,3 +167,88 @@ export function stripUnsupportedOpenvpnLines(configBlob: string): {
   }
   return { config, removed };
 }
+
+/**
+ * OpenVPN cert/key directives whose material must be INLINE (an
+ * `<directive>…</directive>` block), because the userspace-egress node renders
+ * the config into an isolated directory holding only `client.ovpn` + `auth.txt`:
+ * a bare file argument (`ca ca.crt`) names a path that cannot exist there.
+ * Matched on the first whitespace token, case-insensitively.
+ */
+export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
+  'ca',
+  'cert',
+  'key',
+  'tls-auth',
+  'tls-crypt',
+]);
+
+/**
+ * Lines that reference an EXTERNAL cert/key file the server cannot provide — a
+ * `ca`/`cert`/`key`/`tls-auth`/`tls-crypt` directive with a file argument and NO
+ * corresponding inline `<directive>` block anywhere in the blob. Such a config
+ * stores and dispatches fine, then dies late inside openvpn with a generic
+ * "Options error" that names neither the field nor the cause; caught here it
+ * fails at upload naming the directive, so the customer knows to paste the
+ * inline / "unified" .ovpn their provider offers.
+ *
+ * ⭐ CROSS-SOURCE PIN with the node-side reject (A3 `8a03a3929`,
+ * VPNProxyConfigParser.openvpnExternalFileReference). Upload-reject (here) and
+ * parse-reject (node) enforce the SAME rule so they agree by construction:
+ *   - REJECT: first token is one of the five AND the line has a file argument
+ *     (≥2 tokens), when NO `<directive>` opening tag exists anywhere in the blob.
+ *   - ACCEPT: an inline `<ca>`…`</ca>` block — inline WINS even if a stray
+ *     `ca ca.crt` line is also present (openvpn uses the block; the line is inert).
+ *   - ACCEPT: a comment (`#`/`;`) or a bare directive with no argument.
+ *   - DO NOT require `<ca>` unconditionally: the rule is "no UNRESOLVABLE file
+ *     reference", not "must contain <ca>". A config with no cert material at all
+ *     is a genuine error openvpn names better than a blanket requirement, and
+ *     rejecting valid provider configs is the expensive direction.
+ *
+ * ⛔ CRLF: most .ovpn files are Windows-authored. Split on \r\n / \r / \n and
+ * trim each line — the node shipped a CRLF-blind split that let every Windows
+ * config bypass this check silently (worse than no check: it reads clean).
+ *
+ * Pure, dependency-free and total (never throws): safe to run on every paste.
+ */
+export function findUnresolvableOpenvpnFileReferences(
+  configBlob: string,
+): OpenvpnUnsupportedLine[] {
+  const lines = configBlob.split(/\r\n|\r|\n/);
+  // First pass: which directives carry an inline `<directive>` block anywhere?
+  // Inline WINS, so a directive with a block is never flagged below.
+  const inlineBlocks = new Set<string>();
+  for (const raw of lines) {
+    const text = raw.trim().toLowerCase();
+    for (const dir of OPENVPN_INLINE_REQUIRED_DIRECTIVES) {
+      // `</ca>` does not match `<ca>` (char after `<` is `/`), so a closing tag
+      // is never mistaken for an opening one.
+      if (text.startsWith(`<${dir}>`)) inlineBlocks.add(dir);
+    }
+  }
+  // Second pass: a file-referencing directive with no inline block is unresolvable.
+  const hits: OpenvpnUnsupportedLine[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const text = (lines[i] ?? '').trim();
+    if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
+    const tokens = text.split(/\s+/);
+    // Match findUnsupportedOpenvpnLines' `--` normalization: OpenVPN strips a
+    // leading `--` from a config-file directive (>=3 chars), so `--ca` is honoured
+    // as `ca`; without this the rule is a one-character bypass.
+    let keyword = (tokens[0] ?? '').toLowerCase();
+    if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
+    if (!OPENVPN_INLINE_REQUIRED_DIRECTIVES.has(keyword)) continue;
+    if (tokens.length < 2) continue; // bare directive, no file argument — not a reference
+    if (inlineBlocks.has(keyword)) continue; // inline block present → openvpn uses it
+    hits.push({
+      line: i + 1,
+      directive: keyword,
+      text,
+      reason:
+        `\`${keyword} ${tokens[1] ?? ''}\` points to a file the server cannot provide — ` +
+        `a session renders only client.ovpn + auth.txt. Paste the inline ` +
+        `<${keyword}>…</${keyword}> block (the "inline" or "unified" .ovpn your provider offers).`,
+    });
+  }
+  return hits;
+}
