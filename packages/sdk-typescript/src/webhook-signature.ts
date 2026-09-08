@@ -3,9 +3,9 @@
 // Signature header format (Stripe-style): `t=<unix-seconds>,v1=<hex hmac>`.
 // HMAC = SHA256(`<unix-seconds>.<raw body>`, `<webhook secret>`).
 //
-// Browser-isomorphic: uses `globalThis.crypto.subtle` (Web Crypto API)
-// rather than Node's `crypto` module. Works in:
-//   - Node.js 20+    (subtle exposed on globalThis.crypto)
+// Browser-isomorphic: uses `globalThis.crypto.subtle` (Web Crypto API) where
+// available, falling back to node:crypto's webcrypto on Node 18. Works in:
+//   - Node.js 18+    (18 via the node:crypto fallback; 19+ via globalThis.crypto)
 //   - Modern browsers (Chrome 92+, Firefox 90+, Safari 15.4+, Edge 92+)
 //   - Tauri / Electron WebViews
 //   - Cloudflare Workers / Deno / Bun
@@ -103,7 +103,7 @@ async function verifySingleHeader(
     return false;
   }
 
-  const subtle = getSubtleCrypto();
+  const subtle = await getSubtleCrypto();
   if (!subtle) return false;
 
   const enc = new TextEncoder();
@@ -219,11 +219,24 @@ function constantTimeHexEq(a: string, b: string): boolean {
   return diff === 0;
 }
 
-function getSubtleCrypto(): SubtleCrypto | null {
-  // `globalThis.crypto` exists in Node 20+ (still gated by Node-version
-  // policies) and every browser environment we ship into. Defensively
-  // probe rather than assume.
+async function getSubtleCrypto(): Promise<SubtleCrypto | null> {
+  // Prefer the global Web Crypto — present in every browser, Deno, CF Workers,
+  // Bun, and Node 19+.
   const c = globalThis.crypto;
-  if (!c || !c.subtle) return null;
-  return c.subtle;
+  if (c?.subtle) return c.subtle;
+  // Node 18 (a declared-supported runtime: package.json engines "node": ">=18",
+  // tsup target node18) does NOT expose globalThis.crypto by default — it was
+  // gated behind --experimental-global-webcrypto until Node 19. Without this
+  // fallback verifyWebhookSignature returned false for EVERY genuine delivery on
+  // Node 18, silently dropping all webhooks. Fall back to node:crypto's webcrypto;
+  // the `node:` dynamic import is external to browser/edge bundles and never
+  // reached there (they have globalThis.crypto).
+  try {
+    const nodeCrypto = (await import('node:crypto')) as {
+      webcrypto?: { subtle?: SubtleCrypto };
+    };
+    return nodeCrypto.webcrypto?.subtle ?? null;
+  } catch {
+    return null;
+  }
 }

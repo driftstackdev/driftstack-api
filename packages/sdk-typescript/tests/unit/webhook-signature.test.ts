@@ -323,22 +323,37 @@ describe('verifyWebhookSignature — the header may arrive as an array, and cryp
     ).resolves.toBe(false);
   });
 
-  it('CRITICAL fails CLOSED when the runtime has no WebCrypto. The SDK ships into browsers and older Node, and the probe for `crypto.subtle` is deliberate — but an absent primitive must mean "cannot verify, reject", never a throw the customer catches into an accept-by-default, and never a silent true.', async () => {
+  it('CRITICAL Node 18 (no default globalThis.crypto) verifies via the node:crypto fallback and STILL REJECTS a bad signature — the old "globalThis.crypto absent -> false" pinned a silent-drop bug (audit 2026-09-08); the security property is no-accept-by-default, which the fallback preserves.', async () => {
     const now = Date.now();
     const t = Math.floor(now / 1000);
     const body = '{"event":"session.completed"}';
     const header = sign(body, t);
 
+    // Node 18's default: no global WebCrypto (it was gated behind a flag until
+    // Node 19). The SDK declares node>=18 and node:crypto.webcrypto is present, so
+    // a genuine delivery MUST verify — before the fallback this silently returned
+    // false and the customer dropped EVERY webhook.
     vi.stubGlobal('crypto', undefined);
     await expect(
       verifyWebhookSignature({ body, header, secret: SECRET, nowMs: now }),
+    ).resolves.toBe(true);
+    // ...and it genuinely verifies rather than accepting by default: a WRONG secret
+    // is still rejected. This is the security property the old arm guarded, kept.
+    await expect(
+      verifyWebhookSignature({ body, header, secret: 'not-the-secret', nowMs: now }),
+      'the node:crypto fallback must REJECT a mismatched secret, never accept-by-default',
     ).resolves.toBe(false);
 
+    // A crypto object present but without `subtle` takes the same fallback path.
     vi.stubGlobal('crypto', {});
     await expect(
       verifyWebhookSignature({ body, header, secret: SECRET, nowMs: now }),
-      'a crypto object without subtle is the same situation and must answer the same way',
-    ).resolves.toBe(false);
+    ).resolves.toBe(true);
+
+    vi.unstubAllGlobals();
+    // Genuinely-no-crypto (neither globalThis.crypto NOR node:crypto webcrypto) still
+    // fails CLOSED via the UNCHANGED `if (!subtle) return false` branch: getSubtleCrypto
+    // returns null and never throws (the dynamic node: import is wrapped in try/catch).
   });
   // V-2010 — an empty secret is the one input where all three SDKs answered
   // differently and all three were wrong: Python and Go hashed with a zero-length
