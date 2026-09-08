@@ -35,7 +35,7 @@ import {
 } from '../lib/use-onboarding-steps';
 import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
-import { TIER_LABEL } from '../components/TierBadge';
+import { TIER_LABEL, TierBadge } from '../components/TierBadge';
 
 export type HomeNavTarget = 'ai' | 'recipes' | 'profiles' | 'proxies' | 'sessions' | 'settings';
 
@@ -609,6 +609,7 @@ export function CommandCenterView({
             icon={<IconBadge />}
             label="Plan"
             value={tier !== null ? (TIER_LABEL[tier] ?? tier) : '—'}
+            valueNode={tier !== null ? <TierBadge tier={tier} size="md" /> : undefined}
           />
         </div>
       </section>
@@ -989,6 +990,7 @@ function Kpi({
   icon,
   label,
   value,
+  valueNode,
   accent,
   onClick,
   title,
@@ -996,6 +998,10 @@ function Kpi({
   icon: ReactNode;
   label: string;
   value: string;
+  /** When set, renders in place of the big-number `value` span — for a
+   *  categorical stat (e.g. the plan tier) that is a badge, not a number.
+   *  `value` is still required as the accessible/`title` fallback. */
+  valueNode?: ReactNode;
   accent?: boolean;
   onClick?: () => void;
   title?: string;
@@ -1018,12 +1024,24 @@ function Kpi({
             card border. Clip with an ellipsis and expose the full value via
             `title` so it stays available on hover. Protects EVERY value, not
             just Plan. */}
-        <span
-          title={String(value)}
-          className={`mono text-3xl font-semibold leading-none tabular-nums truncate ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
-        >
-          {value}
-        </span>
+        {valueNode !== undefined ? (
+          // T-18 (2026-09-08): a categorical value (the plan tier) is a BADGE, not a
+          // 30px `truncate` number. In the numeric treatment "Enterprise" is wider than
+          // the ~147px 4-up slot, so `truncate` clips it to "Enterpr…" — a word cut off
+          // at the card edge (verified by a faithful headless render of the 0.1.23
+          // structure; that clip is what reads as "the plan falls out of the box"). A
+          // content-sized pill shows the FULL label and cannot be clipped. The
+          // `flex min-w-0` wrapper keeps the pill at its content width (not stretched to
+          // the whole card by the column's align-items:stretch).
+          <div className="mt-0.5 flex min-w-0 items-center">{valueNode}</div>
+        ) : (
+          <span
+            title={String(value)}
+            className={`mono text-3xl font-semibold leading-none tabular-nums truncate ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
+          >
+            {value}
+          </span>
+        )}
       </div>
     </>
   );

@@ -7,22 +7,26 @@
 //       not a human label. The fix resolves the tier through the canonical
 //       TIER_LABEL map (the same one TierBadge uses): 'agency_manual' → "Agency".
 //
-//   (b) The Kpi value span had no width guard, so a long value escaped the
-//       rounded card border of its ~147px 4-up grid slot. The fix adds `truncate`
-//       (clip + ellipsis) and a `title` carrying the full value, protecting
-//       EVERY Kpi value, not just Plan.
+//   (b) The plan tier is a CATEGORY, not a number, and the numeric KPI treatment
+//       (`mono text-3xl … truncate`) clipped a long label like "Enterprise" to
+//       "Enterpr…" at the card edge — the cut-off word the owner reported as the
+//       plan "falling out of the box". The fix renders the Plan value as a
+//       <TierBadge> pill (a content-sized chip that shows the FULL label and
+//       cannot be clipped), while the numeric KPIs keep `truncate` for any long
+//       numeric value. Verified with a faithful headless render of the 0.1.23 vs
+//       fixed structure (scratchpad/kpi-render.png): 0.1.23 clips to "Enterpr…";
+//       the badge shows the whole word.
 //
 // Each mutation was planted at the production site and watched go red:
 //   (a) restoring the title-caser (Plan shows "Agency_manual") → the label arm reds.
-//   (b) removing `truncate` from the value span → the truncate arm reds.
-// The VACUITY CONTROL renders a short, agreeing value ("Free") that does NOT
-// discriminate the label bug (old title-caser and new map both produce "Free"),
-// proving the tile renders a value at all and that truncate/title leave a short
-// value's text intact — so the arms above are not vacuously green on an absent
-// tile.
+//   (b) dropping `valueNode` so Plan falls back to the big-number span → the badge
+//       arm reds (no role="status" chip; a `text-3xl` value reappears in the card).
+//   (b′) removing `truncate` from the numeric value span → the numeric-truncate arm reds.
+// The VACUITY CONTROL renders a short value ("Free") and asserts the badge still
+// renders it as a chip — so the arms above are not vacuously green on an absent tile.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import type { HomeNavTarget } from '../../src/views/CommandCenterView';
 
 let accountMe: unknown = null;
@@ -56,15 +60,15 @@ function nav() {
   return vi.fn<(k: HomeNavTarget) => void>();
 }
 
-/** The Plan KPI card — walked up from its "Plan" section label to the card
- *  wrapper (the ancestor carrying the shared `rounded-xl` card chrome). */
-function planCard(): HTMLElement {
-  const card = screen.getByText('Plan').closest('.rounded-xl');
-  if (card === null) throw new Error('Plan KPI card not found');
+/** A KPI card — walked up from its section label to the card wrapper (the
+ *  ancestor carrying the shared `rounded-xl` card chrome). */
+function cardFor(label: string): HTMLElement {
+  const card = screen.getByText(label).closest('.rounded-xl');
+  if (card === null) throw new Error(`${label} KPI card not found`);
   return card as HTMLElement;
 }
 
-describe('Command Center Plan label + KPI truncate (T-18)', () => {
+describe('Command Center Plan label + KPI treatment (T-18)', () => {
   beforeEach(() => {
     cleanup();
     accountMe = null;
@@ -75,35 +79,46 @@ describe('Command Center Plan label + KPI truncate (T-18)', () => {
   it('resolves the tier through the canonical label map — "agency_manual" → "Agency"', () => {
     accountMe = { ...ACC, tier: 'agency_manual' };
     render(<CommandCenterView onNavigate={nav()} />);
-    // The human label, not the raw enum key.
-    const planValue = screen.getByText('Agency');
-    expect(planValue).toBeInTheDocument();
+    // The human label, not the raw enum key — rendered inside the Plan tile.
+    expect(screen.getByText('Agency')).toBeInTheDocument();
     expect(screen.queryByText('Agency_manual')).toBeNull();
-    // …and it is the Plan tile that shows it.
-    expect(planCard().textContent).toContain('Agency');
-    expect(planCard().textContent).not.toContain('Agency_manual');
+    expect(cardFor('Plan').textContent).toContain('Agency');
+    expect(cardFor('Plan').textContent).not.toContain('Agency_manual');
   });
 
-  it('the Kpi value span carries `truncate`, with the full value on `title`', () => {
-    accountMe = { ...ACC, tier: 'agency_manual' };
+  it('renders the plan as a TierBadge chip, NOT the clippable big-number span', () => {
+    accountMe = { ...ACC, tier: 'enterprise' };
     render(<CommandCenterView onNavigate={nav()} />);
-    const planValue = screen.getByText('Agency');
-    // The width guard that keeps a long value inside the rounded card border.
-    expect(planValue.className).toContain('truncate');
-    // The full value stays available on hover after truncation.
-    expect(planValue).toHaveAttribute('title', 'Agency');
+    const plan = cardFor('Plan');
+    // The value is the badge (role="status", labelled by tier) showing the FULL word…
+    const badge = within(plan).getByRole('status', { name: 'Tier: Enterprise' });
+    expect(badge.textContent).toBe('Enterprise');
+    // …and the Plan card carries NO `text-3xl` value span — the numeric treatment
+    // that clips "Enterprise" to "Enterpr…" is gone from this tile. (Mutation:
+    // drop `valueNode` → Plan falls back to the big-number span → this reds.)
+    expect(plan.querySelector('.text-3xl')).toBeNull();
   });
 
-  it('VACUITY CONTROL — a short, agreeing value ("Free") renders intact and unaltered', () => {
+  it('the numeric KPIs keep `truncate` on their big-number value span', () => {
+    accountMe = { ...ACC, tier: 'enterprise', profile_count: 0, profile_cap: 10 };
+    render(<CommandCenterView onNavigate={nav()} />);
+    // Profiles is a numeric KPI (value from accountMe, rendered synchronously).
+    const profiles = cardFor('Profiles');
+    const valueSpan = profiles.querySelector('.text-3xl');
+    expect(valueSpan).not.toBeNull();
+    // The width guard that keeps a long numeric value inside the card border.
+    // (Mutation: remove `truncate` from the value span → this reds.)
+    expect(valueSpan?.className).toContain('truncate');
+  });
+
+  it('VACUITY CONTROL — a short tier ("Free") still renders as a chip', () => {
     accountMe = { ...ACC, tier: 'free' };
     render(<CommandCenterView onNavigate={nav()} />);
     // 'free' is a value where the OLD title-caser and the NEW map agree ("Free"),
     // so this arm does not discriminate the label bug. It proves the Plan tile
-    // renders a value at all, and that truncate/title leave a short value's text
-    // content untouched (only the CSS would clip, and only when it overflows).
-    const planValue = screen.getByText('Free');
-    expect(planValue).toBeInTheDocument();
-    expect(planValue.textContent).toBe('Free');
-    expect(planValue).toHaveAttribute('title', 'Free');
+    // renders its badge at all — the arms above are not vacuously green on an
+    // absent tile.
+    const badge = within(cardFor('Plan')).getByRole('status', { name: 'Tier: Free' });
+    expect(badge.textContent).toBe('Free');
   });
 });
