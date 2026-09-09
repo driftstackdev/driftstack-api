@@ -118,7 +118,7 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     expect(body).toMatch(/if c\.http == nil \{\s*\n\s*c\.timeout = d\s*\n\s*\}/);
   });
 
-  it('New() factory: api_key required + DefaultBaseURL + DefaultRetry() + timeout: DefaultTimeout + apply opts + default http.Client{} (no hard Timeout — per-request context deadline governs) + 15 resource wirings pinned', () => {
+  it('New() factory: api_key required + DefaultBaseURL + DefaultRetry() + timeout: DefaultTimeout + apply opts + default http.Client with a CheckRedirect that REFUSES redirects (audit 2026-09-08: prevents the cross-host BYOK-key/Idempotency-Key leak) + no hard Timeout (per-request context deadline governs) + 15 resource wirings pinned', () => {
     expect(body).toMatch(
       /^func New\(apiKey string, opts \.\.\.Option\) \*Client \{\s*\n\s*c := &Client\{\s*\n\s*apiKey: {2}apiKey,\s*\n\s*baseURL: DefaultBaseURL,\s*\n\s*retry: {3}DefaultRetry\(\),\s*\n\s*timeout: DefaultTimeout,\s*\n\s*\}/m,
     );
@@ -127,7 +127,7 @@ describe('W588.A packages/sdk-go/client.go content parity', () => {
     // in do() governs, so a body-declared long-running timeout can raise above
     // the base (DefaultTimeout / WithTimeout).
     expect(body).toMatch(
-      /if c\.http == nil \{\s*\n(\s*\/\/[^\n]*\n)*\s*c\.http = &http\.Client\{\}\s*\n\s*\}/,
+      /if c\.http == nil \{[\s\S]*?c\.http = &http\.Client\{[\s\S]*?CheckRedirect: func\([^)]*\) error \{[\s\S]*?return http\.ErrUseLastResponse/,
     );
     expect(body).toMatch(/c\.Sessions = &SessionsResource\{client: c\}/);
     expect(body).toMatch(/c\.APIKeys = &APIKeysResource\{client: c\}/);

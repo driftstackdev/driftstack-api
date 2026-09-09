@@ -179,7 +179,16 @@ func New(apiKey string, opts ...Option) *Client {
 		// No hard http.Client.Timeout — the per-request context deadline in
 		// do() governs instead, so a body-declared long-running timeout can
 		// raise above the base (DefaultTimeout / WithTimeout).
-		c.http = &http.Client{}
+		c.http = &http.Client{
+			// Do NOT follow redirects: an authenticated JSON API call has no
+			// legitimate 3xx, and Go copies custom headers across a cross-host
+			// redirect (only Authorization/Cookie are stripped), which would leak
+			// the customer's BYOK Anthropic key + Idempotency-Key to a foreign host
+			// (audit 2026-09-08). Return the 3xx as-is so do() surfaces it.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
 	}
 
 	c.Sessions = &SessionsResource{client: c}

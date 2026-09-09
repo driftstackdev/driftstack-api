@@ -91,6 +91,21 @@ func retryAfterFromErr(err error) time.Duration {
 }
 
 func nextDelay(cfg RetryConfig, bm float64, attempt int, retryAfter time.Duration) time.Duration {
+	// A partial RetryConfig (e.g. WithRetry setting only MaxRetries) leaves
+	// InitialDelay / MaxDelay / BackoffMultiplier at zero, which makes the backoff
+	// below return 0 for every attempt — zero-delay retry hammering. Floor each to
+	// the default so a partial config still backs off (audit 2026-09-08). cfg is by
+	// value, so this never mutates the caller's policy.
+	def := DefaultRetry()
+	if cfg.InitialDelay <= 0 {
+		cfg.InitialDelay = def.InitialDelay
+	}
+	if cfg.MaxDelay <= 0 {
+		cfg.MaxDelay = def.MaxDelay
+	}
+	if bm <= 0 {
+		bm = def.BackoffMultiplier
+	}
 	if retryAfter > 0 {
 		if retryAfter > cfg.MaxDelay {
 			return cfg.MaxDelay
