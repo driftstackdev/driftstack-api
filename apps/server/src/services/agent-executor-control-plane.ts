@@ -42,6 +42,18 @@ import type {
 import { consequentialHalt, executionMayContinue } from './agent-executor.js';
 import { agentIntentToDispatch } from './agent-intent-to-dispatch.js';
 import { intentReplayMayDuplicateEffect, intentResultToCustomer } from './agent-intent-result.js';
+import type { SessionCaptureStore } from './session-capture-store.js';
+
+/** #7 — pull a screenshot's inline bytes out of a capture intent's harness result
+ *  (ScreenshotResultSchema: { screenshot_b64, format }). Defensive: a malformed /
+ *  missing payload returns null and the capture just carries no fetchable image. */
+function readScreenshot(outputData: unknown): { b64: string; format: 'png' | 'jpeg' } | null {
+  if (typeof outputData !== 'object' || outputData === null) return null;
+  const o = outputData as Record<string, unknown>;
+  const b64 = o.screenshot_b64;
+  if (typeof b64 !== 'string' || b64.length === 0) return null;
+  return { b64, format: o.format === 'jpeg' ? 'jpeg' : 'png' };
+}
 import { serializeIntentDispatch, type ParsedIntentResult } from './harness-control-codec.js';
 import type { IntentDispatch, HarnessIntentName } from '../schemas/harness-control-protocol.js';
 
@@ -110,6 +122,10 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
     /** intentId generator — injectable for deterministic tests. */
     private readonly genIntentId: () => string = () => `int_${randomUUID()}`,
     opts: AutoRetryOptions = {},
+    /** #7 — where a screenshot capture's bytes are stashed (minting the captureId
+     *  put on the result). Optional: absent → captures still succeed, just with no
+     *  fetchable image (the pre-#7 behaviour), so existing callers/tests are intact. */
+    private readonly captureStore?: SessionCaptureStore,
   ) {
     this.maxRetries = Math.max(0, opts.maxRetries ?? DEFAULT_MAX_RETRIES);
     this.retryDelayMs = Math.max(0, opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS);
@@ -289,6 +305,24 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       // → a failure ParsedIntentResult).
       const parsed = await this.dispatcher.dispatch(dispatch);
       result = intentResultToCustomer(intent, parsed);
+      // #7 — a successful screenshot returns its bytes inline in parsed.outputData.
+      // Stash them in the capture store (kept OUT of the encrypted transcript) and
+      // put only the minted captureId on the result, so the GUI can fetch + show the
+      // image via GET .../captures/:id rather than the transcript carrying the bytes.
+      if (
+        result.kind === 'success' &&
+        intent.kind === 'capture' &&
+        intent.capture === 'screenshot' &&
+        this.captureStore !== undefined
+      ) {
+        const shot = readScreenshot(parsed.outputData);
+        if (shot !== null) {
+          result = {
+            ...result,
+            captureId: this.captureStore.put(sessionId, shot.b64, shot.format),
+          };
+        }
+      }
       if (!(await executionMayContinue(shouldContinue))) {
         return { result, authorityLost: true };
       }
