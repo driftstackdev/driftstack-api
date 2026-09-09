@@ -114,6 +114,13 @@ const AGENT_MAIN_ROUTES: readonly ExpectedRoute[] = [
     'agent-sessions.ts',
     'registerAgentSessionsRoutes',
     'get',
+    '/v1/agent-sessions/:id/captures/:captureId',
+    'global',
+  ),
+  route(
+    'agent-sessions.ts',
+    'registerAgentSessionsRoutes',
+    'get',
     '/v1/agent-sessions/:id/cookies',
     'global',
   ),
@@ -273,6 +280,10 @@ const EXPECTED_OWNER_AUTHORITY = new Map<string, string>([
   ],
   [
     'agent-sessions.ts#registerAgentSessionsRoutes GET /v1/agent-sessions/:id/network',
+    'rec.accountId',
+  ],
+  [
+    'agent-sessions.ts#registerAgentSessionsRoutes GET /v1/agent-sessions/:id/captures/:captureId',
     'rec.accountId',
   ],
   [
@@ -885,15 +896,15 @@ function fallbackConsumeCounts(source: string): {
 describe('session-route effective-owner rate-limit coverage invariant', () => {
   const sources = Object.fromEntries(SOURCE_FILES.map((file) => [file, sourceText(file)]));
 
-  // 21 main since P-17's `POST /v1/agent-sessions/:id/egress`, which consumes the
-  // effective-owner limiter against `rec.accountId` exactly as its siblings do.
-  it('pins exactly 14 direct routes and 23 live agent routes (21 main + 2 split)', () => {
+  // 22 main since #7's `GET /v1/agent-sessions/:id/captures/:captureId`, which consumes
+  // the effective-owner limiter against `rec.accountId` exactly as its siblings do.
+  it('pins exactly 14 direct routes and 24 live agent routes (22 main + 2 split)', () => {
     expect(DIRECT_ROUTES).toHaveLength(14);
-    expect(AGENT_MAIN_ROUTES).toHaveLength(21);
+    expect(AGENT_MAIN_ROUTES).toHaveLength(22);
     expect(AGENT_SPLIT_ROUTES).toHaveLength(2);
-    expect(EXPECTED_ROUTES).toHaveLength(37);
-    // 37 with P-17's egress route, whose owner authority is `rec.accountId`.
-    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(37);
+    expect(EXPECTED_ROUTES).toHaveLength(38);
+    // 38 with #7's captures route, whose owner authority is `rec.accountId`.
+    expect(EXPECTED_OWNER_AUTHORITY).toHaveLength(38);
     expect(audit(sources)).toEqual([]);
   });
 

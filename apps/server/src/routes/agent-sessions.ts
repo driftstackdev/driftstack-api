@@ -6165,6 +6165,9 @@ export function registerAgentSessionsDisabledRoutes(app: FastifyInstance): void 
   // T-9 — the network-log read is gated too (machine-readable 503, not a bare
   // 404) so the GUI Network pane's poll surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/network', stub);
+  // #7 — the screenshot-capture read's disabled twin (503, not a bare 404) so a gated
+  // deployment answers the documented activation state, like every sibling.
+  app.get('/v1/agent-sessions/:id/captures/:captureId', stub);
   // Founder #48 — the cookies read is gated too (machine-readable 503, not a bare
   // 404) so the GUI Cookies panel surfaces the documented activation state.
   app.get('/v1/agent-sessions/:id/cookies', stub);

@@ -285,6 +285,8 @@ const DISABLED_EXEMPTIONS: readonly RouteExemption[] = [
       ['get', '/v1/agent-sessions/:id/page-state'],
       // T-9 — the network-log read's disabled twin (503, not a bare 404).
       ['get', '/v1/agent-sessions/:id/network'],
+      // #7 — the screenshot-capture read (same read:sessions + owner gate as /network).
+      ['get', '/v1/agent-sessions/:id/captures/:captureId'],
       ['get', '/v1/agent-sessions/:id/cookies'],
       ['post', '/v1/agent-sessions/:id/cookies/set'],
       // P-17 — the egress swap's disabled twin (503, not a bare 404).
@@ -627,7 +629,10 @@ describe('all-route caller-authority invariant', () => {
     // 312 since P-17's DISABLED twin: the live route was +1 above, the 503 stub
     // is this one. A published route without its twin answers 404 on a gated
     // deployment, which reads as a wrong path rather than a disabled feature.
-    expect(routes).toHaveLength(312);
+    // #7 — 314 since GET /v1/agent-sessions/:id/captures/:captureId: +1 live route
+    // (controlKeyOrAccountAuth, owner-gated) + its disabled 503 twin. Authority arm
+    // below confirmed empty of violations at this count first.
+    expect(routes).toHaveLength(314);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -638,7 +643,8 @@ describe('all-route caller-authority invariant', () => {
     // callerCanAccessAgentSession on the account path). The count moving in
     // step with the total is the point of this arm — a route that shipped
     // ungated would move the total and leave this number where it was.
-    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(220);
+    // 221 since #7's captures read is structurally authorized (its disabled twin is a stub).
+    expect(routes.filter((route) => route.structurallyAuthorized)).toHaveLength(221);
   });
 
   it('every route has structural caller authority or one exact reviewed exemption', () => {
@@ -659,7 +665,8 @@ describe('all-route caller-authority invariant', () => {
     // T-9 — 55 since the agent-sessions disabled registrar gained the
     // network-log read's twin.
     // 56 since P-17's egress twin joined the disabled surface.
-    expect(DISABLED_EXEMPTIONS).toHaveLength(56);
+    // 57 since #7's captures-read twin joined it.
+    expect(DISABLED_EXEMPTIONS).toHaveLength(57);
     const exemptionKeys = EXEMPTIONS.map((exemption) =>
       [
         exemption.file,
