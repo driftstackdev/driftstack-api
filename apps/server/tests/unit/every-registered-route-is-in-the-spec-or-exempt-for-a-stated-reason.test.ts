@@ -70,6 +70,9 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
   ['POST /v1/sessions/{}/gui-input', 'gui-client only'],
   ['GET /v1/agent-sessions/{}/gui-control-key', 'gui-client only'],
   ['POST /v1/agent-sessions/{}/transport-report', 'gui-client only'],
+  // Raw media — serves screenshot bytes (image/png) for the GUI to display, not a
+  // JSON contract the SDK generates a client for. #7.
+  ['GET /v1/agent-sessions/{}/captures/{}', 'raw screenshot bytes for the GUI, not a JSON API'],
   // Public SSE — a stream, not a request/response the spec models.
   ['GET /v1/status/stream', 'public SSE stream'],
   // Customer-authenticated smoke endpoint. docs/reference/scopes.md mentions it,

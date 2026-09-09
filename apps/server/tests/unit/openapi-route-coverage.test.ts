@@ -214,6 +214,8 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'GET /openapi.json',
   'GET /ready',
   'GET /v1/agent-sessions/:p/gui-control-key',
+  // #7 — raw screenshot bytes for the GUI; not an SDK JSON contract.
+  'GET /v1/agent-sessions/:p/captures/:p',
   'GET /v1/auth/oauth-client/callback',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
@@ -265,7 +267,9 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // route + its disabled twin share one normalized method+path, so +1).
     // 258 since P-23 registered `GET /v1/profiles/:id/activity`.
     // 259 since P-17 registered `POST /v1/agent-sessions/:id/egress`.
-    expect(routeOperations.size).toBe(259);
+    // 260 since #7 registered `GET /v1/agent-sessions/:id/captures/:captureId` (live
+    // route + its disabled twin share one normalized method+path, so +1; unpublished).
+    expect(routeOperations.size).toBe(260);
   });
 
   it('documents the method-specific customer-core contract', () => {
