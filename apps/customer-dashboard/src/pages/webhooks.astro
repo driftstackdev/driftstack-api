@@ -1601,7 +1601,21 @@ const apiBaseUrl = resolveApiBaseUrl();
                 }
                 window.location.reload();
               })
-              .catch((err) => {
+              .catch(async (err) => {
+                // A timeout (AbortError) does NOT mean the DELETE failed — the request
+                // may have reached the server. Refresh and check: if the endpoint is
+                // gone, the delete completed; only report a flat failure for a real error.
+                if (err && err.name === 'AbortError') {
+                  const refreshed = await refreshEndpointList(false);
+                  const stillListed =
+                    refreshed && endpointSnapshot.some((e) => String(e.id) === String(id));
+                  showBanner(
+                    stillListed
+                      ? 'The request timed out and the endpoint is still listed — try deleting again.'
+                      : 'The request timed out, but the endpoint is no longer listed — the delete appears to have completed.',
+                  );
+                  return;
+                }
                 showBanner(
                   'Delete failed: ' +
                     window.driftstackRequestErrorMessage(

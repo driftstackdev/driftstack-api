@@ -340,8 +340,10 @@ const FILTER_OPTIONS = [
             <path d="M9 13h6M9 17h4" />
           </svg>
         </div>
-        <p class="text-tk-ink font-medium">No audit entries yet</p>
-        <p class="mt-1 text-tk-ink-3">Events appear here as you take actions on your account.</p>
+        <p class="text-tk-ink font-medium" data-empty-title>No audit entries yet</p>
+        <p class="mt-1 text-tk-ink-3" data-empty-body>
+          Events appear here as you take actions on your account.
+        </p>
       </div>
       <div class="hidden border-t border-tk-border px-6 py-3" data-load-more-row>
         <button
@@ -581,8 +583,21 @@ const FILTER_OPTIONS = [
               if (list) list.innerHTML = '';
             }
             if (entries.length === 0 && isFresh) {
+              // Filter-aware empty copy: a zero-result FILTER must not claim the account
+              // has no history (it contradicts the filtered count label and reads as if the
+              // whole log vanished). Reserve 'No audit entries yet' for the unfiltered case.
+              const filtered = !!(activeFilter || activeFrom || activeTo || activeActor || activeTarget);
+              if (empty) {
+                const t = empty.querySelector('[data-empty-title]');
+                const b = empty.querySelector('[data-empty-body]');
+                if (t) t.textContent = filtered ? 'No events match these filters' : 'No audit entries yet';
+                if (b)
+                  b.textContent = filtered
+                    ? 'Try widening or clearing the filters to see more.'
+                    : 'Events appear here as you take actions on your account.';
+                empty.classList.remove('hidden');
+              }
               if (list) list.classList.add('hidden');
-              if (empty) empty.classList.remove('hidden');
               setLoadMoreVisible(false);
               updateCount();
               return;

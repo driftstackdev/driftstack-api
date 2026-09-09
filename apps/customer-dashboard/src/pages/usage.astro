@@ -539,7 +539,10 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           clearChartBusy(initialChartVersion);
         });
 
-      Promise.all([summaryPromise, initialSeriesPromise])
+      // A series-only failure must NOT discard the successfully-fetched totals: catch
+      // initialSeriesPromise so tiles/tier/period still render (sparklines just go
+      // flat); only a summary (totals) failure reaches the .catch below.
+      Promise.all([summaryPromise, initialSeriesPromise.catch(() => ({ buckets: [] }))])
         .then(([summary, series]) => {
           // Update period + tier label.
           const tierName = tierLabel(summary.tier);

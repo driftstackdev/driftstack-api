@@ -81,7 +81,12 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
     expect(body).toMatch(
       /const initialSeriesPromise = boundedFetch\(apiBaseUrl \+ '\/v1\/usage\/series\?days=30', \{\s*headers,\s*credentials: 'include',\s*\}\)\.then\(readJsonResponse\);/,
     );
-    expect(body).toMatch(/Promise\.all\(\[summaryPromise, initialSeriesPromise\]\)/);
+    // The series promise is caught to `{ buckets: [] }` so a series-only failure does
+    // NOT reject the Promise.all and blank the successfully-fetched totals — only a
+    // summary (totals) failure reaches the .catch. Pin the decoupled form.
+    expect(body).toMatch(
+      /Promise\.all\(\[summaryPromise, initialSeriesPromise\.catch\(\(\) => \(\{ buckets: \[\] \}\)\)\]\)/,
+    );
   });
 
   it("Empty-data state: allZero → 'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.' — pinned so customers with newly-onboarded accounts (zero usage) see a positive 'data is loaded' message rather than confused by all-zero tiles (drift to silent zero would leave customers uncertain whether the fetch failed or they really have no activity)", () => {
