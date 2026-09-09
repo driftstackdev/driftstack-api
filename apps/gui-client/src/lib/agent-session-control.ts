@@ -590,6 +590,40 @@ export async function getAgentSessionCookies(
   };
 }
 
+/** #7 — fetch a stored AI screenshot capture as image bytes. Account-authed raw
+ *  fetch: this runs in the MAIN app, which holds the account API key (same shape
+ *  as mintGuiControlKey above), and the server route is controlKeyOrAccountAuth +
+ *  read:sessions. An `<img src>` cannot carry the Bearer header the route needs,
+ *  so the caller fetches the blob here and makes an object URL. Returns null on
+ *  any transport/HTTP failure (an evicted/unknown captureId 404s) so the caller
+ *  renders a calm fallback rather than a broken image. */
+export async function fetchAgentCapture(
+  baseUrl: string,
+  apiKey: string | null,
+  sessionId: string,
+  captureId: string,
+): Promise<Blob | null> {
+  if (apiKey === null || apiKey.length === 0 || sessionId.length === 0 || captureId.length === 0) {
+    return null;
+  }
+  try {
+    const url = `${baseUrl.replace(/\/+$/, '')}/v1/agent-sessions/${encodeURIComponent(
+      sessionId,
+    )}/captures/${encodeURIComponent(captureId)}`;
+    const res = await fetchWithDeadline(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${apiKey}`, accept: 'image/png,image/jpeg' },
+    });
+    if (!res.ok) {
+      await disposeResponseBody(res);
+      return null;
+    }
+    return await res.blob();
+  } catch {
+    return null;
+  }
+}
+
 /** Discriminated result of POST /v1/agent-sessions/:id/cookies/set (cookie-import —
  *  the write-twin of getAgentSessionCookies). `ok` → the jar was written; every
  *  other status is an inert/failure state the Import button surfaces calmly

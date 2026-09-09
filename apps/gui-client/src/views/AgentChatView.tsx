@@ -13,6 +13,7 @@
 // when the fleet path is wired (prod), 'simulated' only on a stub deployment.
 
 import { Fragment, memo, useCallback, useEffect, useRef, useState } from 'react';
+import { CaptureThumbnail, captureIdOf } from '../components/CaptureThumbnail';
 import {
   type AgentIntent,
   type AgentIntentResult,
@@ -856,7 +857,13 @@ export function AgentChatView({
             >
               {chat.turns.map((turn, i) => (
                 <Fragment key={turn.id}>
-                  <TurnRow turn={turn} denied={chat.deniedTurnIds.has(turn.id)} />
+                  <TurnRow
+                    turn={turn}
+                    denied={chat.deniedTurnIds.has(turn.id)}
+                    sessionId={chat.session?.id ?? null}
+                    baseUrl={settings.baseUrl}
+                    apiKey={settings.apiKey}
+                  />
                   {/* Honest history boundary: the turns above were restored from
                       saved history and are NOT in a live agent session. Continuing
                       the chat starts a fresh session that won't remember them — so
@@ -1728,9 +1735,15 @@ function RestoredHistoryDivider(): JSX.Element {
 const TurnRow = memo(function TurnRow({
   turn,
   denied,
+  sessionId,
+  baseUrl,
+  apiKey,
 }: {
   turn: ChatTurn;
   denied: boolean;
+  sessionId: string | null;
+  baseUrl: string;
+  apiKey: string | null;
 }): JSX.Element {
   if (turn.role === 'user') {
     return (
@@ -1745,7 +1758,13 @@ const TurnRow = memo(function TurnRow({
     <li className="flex justify-start">
       <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
         {turn.response !== undefined && (
-          <AgentResponseBody response={turn.response} denied={denied} />
+          <AgentResponseBody
+            response={turn.response}
+            denied={denied}
+            sessionId={sessionId}
+            baseUrl={baseUrl}
+            apiKey={apiKey}
+          />
         )}
       </div>
     </li>
@@ -1755,9 +1774,15 @@ const TurnRow = memo(function TurnRow({
 function AgentResponseBody({
   response,
   denied,
+  sessionId,
+  baseUrl,
+  apiKey,
 }: {
   response: AgentMessageResponse;
   denied: boolean;
+  sessionId: string | null;
+  baseUrl: string;
+  apiKey: string | null;
 }): JSX.Element {
   switch (response.kind) {
     case 'plan-executed':
@@ -1778,7 +1803,14 @@ function AgentResponseBody({
               <p className="section-label">Plan</p>
               <ol className="flex flex-col gap-1">
                 {response.results.map((r, i) => (
-                  <PlanStep key={i} result={r} denied={denied} />
+                  <PlanStep
+                    key={i}
+                    result={r}
+                    denied={denied}
+                    sessionId={sessionId}
+                    baseUrl={baseUrl}
+                    apiKey={apiKey}
+                  />
                 ))}
               </ol>
             </>
@@ -1842,24 +1874,48 @@ const COMPOSER_MAX_HEIGHT_PX = 420;
 /** Rows shown before any typing. */
 const COMPOSER_ROWS = 5;
 
-function PlanStep({ result, denied }: { result: AgentIntentResult; denied: boolean }): JSX.Element {
+function PlanStep({
+  result,
+  denied,
+  sessionId,
+  baseUrl,
+  apiKey,
+}: {
+  result: AgentIntentResult;
+  denied: boolean;
+  sessionId: string | null;
+  baseUrl: string;
+  apiKey: string | null;
+}): JSX.Element {
   const { glyph, cls, text } = describeResult(result, denied);
   // doc-132 §5.3 — the server's structured diagnosis (optional; older servers
   // omit it). Only the retryable hint is surfaced as a chip: the category's
   // human framing already lives in the reason text, but "worth retrying" vs
   // "change the request" is a real decision the customer makes per failed step.
   const retryable = result.kind === 'failure' && result.diagnosis?.retryable === true;
+  // #7 — the screenshot the agent captured on this step (captureIdOf returns one
+  // only for a successful capture on a store-wired server; a failure, a
+  // non-capture step, or an older server all yield undefined and render nothing).
+  const captureId = captureIdOf(result);
   return (
     <li className="flex items-start gap-1.5 text-xs">
       <span className={`mt-px shrink-0 ${cls}`} aria-hidden="true">
         {glyph}
       </span>
-      <span className="text-ink-secondary">
+      <span className="min-w-0 text-ink-secondary">
         {text}
         {retryable && (
           <span className="ml-1.5 rounded-full bg-status-busy/10 px-1.5 py-px text-2xs text-status-busy">
             worth retrying
           </span>
+        )}
+        {captureId !== undefined && (
+          <CaptureThumbnail
+            baseUrl={baseUrl}
+            apiKey={apiKey}
+            sessionId={sessionId}
+            captureId={captureId}
+          />
         )}
       </span>
     </li>
