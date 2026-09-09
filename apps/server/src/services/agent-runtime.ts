@@ -23,7 +23,7 @@ import {
   AgentDecomposerContinuationDeniedError,
   AgentDecomposerSettledError,
 } from './agent-decomposer.js';
-import type { AgentExecutor, ExecutorRunResult } from './agent-executor.js';
+import type { AgentExecutor, ExecutorRunResult, IntentResult } from './agent-executor.js';
 import { runResultToTranscriptEntry, sanitizeTranscriptText } from './agent-executor.js';
 import type {
   AgentSessionAuthoritySnapshot,
@@ -70,6 +70,15 @@ export interface RunTurnArgs {
    * to signatures via `consequentialSignature`.
    */
   approvedConsequentialActions?: ReadonlySet<string>;
+  /**
+   * Live-progress hook (step streaming). Forwarded verbatim to the executor's
+   * `onStep`, which fires it once per intent AS its result lands. The streaming
+   * POST /message handler passes one that writes an SSE `event: step` frame so a
+   * client sees steps arrive instead of only the final response. Optional and
+   * best-effort — omitted on the non-streaming path and by the idempotency
+   * replay (a replayed turn does no live execution, so no steps fire).
+   */
+  onStep?: (result: IntentResult, index: number) => void;
   /** Route-admitted control lane. Production captures this before any
    * credential, budget, or provider work so a mode change cannot reinterpret
    * the same request. Direct/test callers may omit it; the runtime then admits
@@ -1214,6 +1223,7 @@ export class AgentRuntime {
       ...(verifiedConsequentialApprovals !== undefined
         ? { approvedConsequentialActions: verifiedConsequentialApprovals }
         : {}),
+      ...(args.onStep !== undefined ? { onStep: args.onStep } : {}),
     });
 
     if (

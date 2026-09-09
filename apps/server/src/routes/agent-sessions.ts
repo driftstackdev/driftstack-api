@@ -5152,6 +5152,10 @@ export function registerAgentSessionsRoutes(
     req: FastifyRequest<{ Params: { id: string } }>,
     pre: AgentSessionRecord,
     admission: AgentTurnAdmission,
+    // Live-progress hook (step streaming) — the streaming POST /message handler
+    // passes one that writes an SSE `event: step` frame per intent as it lands.
+    // Undefined on the non-streaming path.
+    onStep?: (result: Parameters<typeof publicIntentResult>[0], index: number) => void,
   ) => {
     const parsed = RunTurnRequestSchema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(parsed.error.flatten());
@@ -5242,6 +5246,7 @@ export function registerAgentSessionsRoutes(
         agentSessionId: req.params.id,
         userMessage: parsed.data.user_message,
         admission,
+        ...(onStep !== undefined ? { onStep } : {}),
       });
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
@@ -5564,6 +5569,7 @@ export function registerAgentSessionsRoutes(
         admission,
         ...(resolvedByokKey !== undefined ? { byokApiKey: resolvedByokKey } : {}),
         ...(approvedConsequentialActions !== undefined ? { approvedConsequentialActions } : {}),
+        ...(onStep !== undefined ? { onStep } : {}),
         keySource,
       });
       if (result.kind === 'turn-in-progress') {
@@ -5715,6 +5721,10 @@ export function registerAgentSessionsRoutes(
   const handleAgentMessage = async (
     req: FastifyRequest<{ Params: { id: string } }>,
     pre: AgentSessionRecord,
+    // Live-progress hook (step streaming), forwarded to executeAgentMessage. The
+    // streaming branch passes one; the compatibility branch and the idempotency
+    // replay leave it undefined (a replayed turn does no live execution).
+    onStep?: (result: Parameters<typeof publicIntentResult>[0], index: number) => void,
   ): Promise<AgentMessageTerminal> => {
     // Authenticate ownership and validate the exact canonical body before
     // reserving a key. Invalid/foreign requests must not poison the account's
@@ -5732,7 +5742,7 @@ export function registerAgentSessionsRoutes(
 
     if (idempotency.kind === 'absent') {
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      return { status: 200, body: await executeAgentMessage(req, pre, admission) };
+      return { status: 200, body: await executeAgentMessage(req, pre, admission, onStep) };
     }
     if (agentTurnReceipts === undefined) {
       throw new FeatureUnavailableError(
@@ -5776,7 +5786,7 @@ export function registerAgentSessionsRoutes(
       // spend, or provider access. Existing receipts replay first, independent
       // of current authority or a transient authority-store read failure.
       const admission = await resolveAgentMessageAdmission(req.params.id, pre);
-      const body = await executeAgentMessage(req, pre, admission);
+      const body = await executeAgentMessage(req, pre, admission, onStep);
       terminal = { status: 200, body };
     } catch (error) {
       // Persist typed failures too. If browser work finished and a later
@@ -5962,6 +5972,22 @@ export function registerAgentSessionsRoutes(
       heartbeat.unref();
       reply.hijack();
 
+      // Stream each intent result as it lands (`event: step`) BEFORE the terminal
+      // `event: response`. Backward-compatible: the SDK's SSE parser skips any
+      // frame whose event is not `response`, so an older client ignores these.
+      // Same backpressure + viewer-closed discipline as the heartbeat above — a
+      // stalled viewer must not turn progress frames into an unbounded buffer.
+      const onStep = (result: Parameters<typeof publicIntentResult>[0], index: number): void => {
+        if (viewerClosed) return;
+        if (reply.raw.writableLength > MAX_SSE_HEARTBEAT_BUFFER_BYTES) {
+          viewerClosed = true;
+          reply.raw.end();
+          return;
+        }
+        const frame = JSON.stringify({ index, result: publicIntentResult(result) });
+        reply.raw.write(`event: step\ndata: ${frame}\n\n`);
+      };
+
       let status = 200;
       let body: unknown;
       try {
@@ -5975,7 +6001,7 @@ export function registerAgentSessionsRoutes(
         if (pre === undefined) {
           throw new InternalError('Agent message admission did not resolve.');
         }
-        const terminal = await handleAgentMessage(req, pre);
+        const terminal = await handleAgentMessage(req, pre, onStep);
         status = terminal.status;
         body = terminal.body;
         if (terminal.error !== undefined) {

@@ -193,6 +193,17 @@ export interface ExecuteArgs {
   /** Internal terminal fence. Executors await it immediately before each
    * intent dispatch; false/throw stops the undispatched suffix fail-closed. */
   shouldContinue?: () => boolean | Promise<boolean>;
+  /**
+   * Live-progress hook (step streaming). Called once per intent AS its result
+   * lands — BEFORE the whole run finishes — so a streaming caller can surface
+   * per-step progress instead of only the final ExecutorRunResult. `index` is
+   * the 0-based position of the result in `ExecutorRunResult.results`. It is
+   * best-effort and MUST NOT affect the run: executors call it inside a
+   * try/catch and a throwing/slow handler neither aborts nor blocks execution.
+   * Optional, so non-streaming callers and the stub/legacy executors are
+   * unaffected (they simply never call it).
+   */
+  onStep?: (result: IntentResult, index: number) => void;
 }
 
 export async function executionMayContinue(check: ExecuteArgs['shouldContinue']): Promise<boolean> {
@@ -241,6 +252,16 @@ export interface AgentExecutor {
 export class StubAgentExecutor implements AgentExecutor {
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
+    // Record + surface each result as live progress in one place, so the stub
+    // exercises the same step-streaming contract as the control-plane executor.
+    const emitStep = (r: IntentResult): void => {
+      results.push(r);
+      try {
+        args.onStep?.(r, results.length - 1);
+      } catch {
+        /* a broken progress handler must not affect execution */
+      }
+    };
     // Treat approvals as one-shot capabilities. Copy so execution consumes its
     // local grant without mutating the caller-owned set.
     const approved = new Set(args.approvedConsequentialActions ?? []);
@@ -250,10 +271,10 @@ export class StubAgentExecutor implements AgentExecutor {
       }
       const halt = consequentialHalt(intent, approved);
       if (halt) {
-        results.push(halt);
+        emitStep(halt);
         return Promise.resolve({ results, ok: false, awaitingConfirmation: true });
       }
-      results.push({
+      emitStep({
         kind: 'success',
         intent,
         summary: stubSummary(intent),

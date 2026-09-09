@@ -143,6 +143,18 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
 
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const results: IntentResult[] = [];
+    // Record a result AND surface it as live progress in one place, so every
+    // push (halt / unmappable / dispatched) streams to a subscribed caller as it
+    // lands rather than only in the final ExecutorRunResult. Best-effort: a
+    // throwing/slow onStep must never abort or block the run.
+    const emitStep = (r: IntentResult): void => {
+      results.push(r);
+      try {
+        args.onStep?.(r, results.length - 1);
+      } catch {
+        /* a broken progress handler must not affect execution */
+      }
+    };
     const approved = new Set(args.approvedConsequentialActions ?? []);
     // #139 — dispatch on the AGENT session id (the box + agent_sessions.node_id
     // routing key). Fall back to `sessionId` only if the runtime didn't thread it
@@ -160,14 +172,14 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
       //    approvedConsequentialActions.
       const halt = consequentialHalt(intent, approved);
       if (halt) {
-        results.push(halt);
+        emitStep(halt);
         return { results, ok: false, awaitingConfirmation: true };
       }
 
       // 1. Map the customer verb → harness intentName + params (or unsupported).
       const mapped = agentIntentToDispatch(intent);
       if (!mapped.ok) {
-        results.push({ kind: 'failure', intent, reason: mapped.reason });
+        emitStep({ kind: 'failure', intent, reason: mapped.reason });
         // #139 — a best-effort `wait` that can't even be MAPPED (e.g. the model
         // emits `selector_visible` with no selector) must NOT abort the plan and
         // lose the steps after it (the customer's screenshot), mirroring the
@@ -184,7 +196,7 @@ export class ControlPlaneAgentExecutor implements AgentExecutor {
         mapped.params,
         args.shouldContinue,
       );
-      if (result.result !== null) results.push(result.result);
+      if (result.result !== null) emitStep(result.result);
       if (result.authorityLost) return { results, ok: false, authorityLost: true };
       if (result.result === null) return { results, ok: false };
       // #139 — halt-on-first-failure, EXCEPT a `wait`: a wait is a best-effort

@@ -39,6 +39,36 @@ describe('AI-B2 StubAgentExecutor', () => {
     expect(result.results.every((r) => r.kind === 'success')).toBe(true);
   });
 
+  it('streams each result via onStep as it lands — one call per result, contiguous 0-based indices, same order (the step-streaming contract)', async () => {
+    const exec = new StubAgentExecutor();
+    const seen: Array<{ index: number; kind: string }> = [];
+    const result = await exec.execute({
+      sessionId: 'ses_stream',
+      plan: { kind: 'plan', intents: ALL_INTENT_KINDS, tokensConsumed: 1 },
+      onStep: (r, index) => seen.push({ index, kind: r.kind }),
+    });
+    expect(seen).toHaveLength(result.results.length);
+    expect(seen.map((s) => s.index)).toEqual(result.results.map((_r, i) => i));
+    expect(seen.map((s) => s.kind)).toEqual(result.results.map((r) => r.kind));
+  });
+
+  it('a throwing onStep never aborts or truncates the run (best-effort progress)', async () => {
+    const exec = new StubAgentExecutor();
+    let calls = 0;
+    const result = await exec.execute({
+      sessionId: 'ses_throw',
+      plan: { kind: 'plan', intents: ALL_INTENT_KINDS, tokensConsumed: 1 },
+      onStep: () => {
+        calls += 1;
+        throw new Error('boom');
+      },
+    });
+    // Every intent still ran and onStep was still called for each — the throw is swallowed.
+    expect(result.ok).toBe(true);
+    expect(result.results).toHaveLength(ALL_INTENT_KINDS.length);
+    expect(calls).toBe(ALL_INTENT_KINDS.length);
+  });
+
   it('stops an undispatched suffix before its consequential gate when shouldContinue turns false', async () => {
     const exec = new StubAgentExecutor();
     let checks = 0;
