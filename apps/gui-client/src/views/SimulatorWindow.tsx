@@ -8697,7 +8697,11 @@ export function SimulatorWindow(): JSX.Element {
               sessionId !== '' &&
               sessionEnded === null &&
               connState === 'connected' &&
-              publisherState === 'publishing'
+              publisherState === 'publishing' &&
+              // A blank/failed capture still publishes a track, so the transport
+              // signals above stay true while the screen shows "Video unavailable";
+              // require the capability verdict too so "Live" agrees with the overlay.
+              !streamingUnavailable
             }
             connecting={
               sessionId !== '' &&

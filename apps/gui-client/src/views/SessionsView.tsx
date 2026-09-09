@@ -481,7 +481,12 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
           <Stat
             icon={<IconBolt />}
             l="Active"
-            value={activeCount}
+            // "Active" beside "of N concurrent cap" must be the cap-consuming count
+            // (all non-destroyed + agents), matching the header, "Slots free", and
+            // the Command Center "Active" KPI — not ready+busy, which undercounts and
+            // contradicted them on the same screen. Falls back to the local running
+            // count until the server count loads.
+            value={concurrentActive ?? activeCount}
             sub={
               concurrentCap !== null
                 ? `of ${concurrentCap.toString()} concurrent cap`

@@ -635,7 +635,13 @@ export function CommandCenterView({
           steps={buildOnboardingSteps(
             {
               apiKeyPresent: settings.apiKey !== null,
-              hasProfile: (accountMe?.profile_count ?? 0) > 0,
+              // Count the active WORKSPACE's profiles too (a team workspace's set,
+              // or the just-created profile before account.me refetches), matching
+              // the Profiles-tab checklist — account.me() is personal-only, so a
+              // team member with team profiles read as "no profile" on Home alone.
+              hasProfile:
+                (accountMe?.profile_count ?? 0) > 0 ||
+                (recentProfiles.kind === 'ready' && recentProfiles.profiles.length > 0),
               // `activeAgentCount` is null while the agent-session count is
               // unloaded or its fetch failed. A driver session already running
               // settles the answer either way; otherwise an unknown count must
