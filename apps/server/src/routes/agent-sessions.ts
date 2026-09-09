@@ -3068,8 +3068,9 @@ export function registerAgentSessionsRoutes(
       }
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
       // A miss (no store on this deployment, an unknown or LRU/TTL-evicted captureId)
-      // is a 404, never a fabricated image. cap.captureId is the server-minted value
-      // (used for the filename so a URL param can never inject a response header).
+      // is a 404, never a fabricated image. The GUI fetches this as an authed blob and
+      // displays it inline, so no Content-Disposition/filename is sent (nothing reads
+      // it, and it would add a row to the V-941 attachment table for no benefit).
       const cap = sessionCaptureStore?.get(rec.id, req.params.captureId);
       if (cap === undefined) {
         throw new NotFoundError(`Capture ${req.params.captureId} not found.`);
@@ -3077,7 +3078,6 @@ export function registerAgentSessionsRoutes(
       const bytes = Buffer.from(cap.bytesB64, 'base64');
       reply.header('content-type', cap.format === 'jpeg' ? 'image/jpeg' : 'image/png');
       reply.header('cache-control', 'private, max-age=300, immutable');
-      reply.header('content-disposition', `inline; filename="${cap.captureId}.${cap.format}"`);
       return reply.send(bytes);
     },
   );

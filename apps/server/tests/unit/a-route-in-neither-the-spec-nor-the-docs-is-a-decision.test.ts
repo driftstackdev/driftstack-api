@@ -128,6 +128,10 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
   ['GET /openapi.json', 'infra — serves the spec; documenting it in the spec would be circular'],
   ['GET /ready', 'infra — readiness probe'],
   [
+    'GET /v1/agent-sessions/:p/captures/:p',
+    'CUSTOMER — #7, serves the screenshot bytes the AI captured; its controlKeyOrAccountAuth preHandler falls through to requireAuth + read:sessions, so an ordinary customer key reaches it. Unpublished because it returns raw image bytes, not a JSON contract',
+  ],
+  [
     'GET /v1/agent-sessions/:p/gui-control-key',
     'CUSTOMER — mints a control+read credential for the desktop client. Requires write + read:sessions on an ordinary key',
   ],
@@ -292,6 +296,7 @@ describe('a route in neither the spec nor the docs is a decision, not an oversig
       .map(([ep]) => ep)
       .sort();
     expect(derived, 'undocumented routes whose registration names a customer auth path:').toEqual([
+      'GET /v1/agent-sessions/:p/captures/:p',
       'GET /v1/agent-sessions/:p/gui-control-key',
       'POST /v1/agent-sessions/:p/transport-report',
       'POST /v1/sessions/:p/gui-input',
