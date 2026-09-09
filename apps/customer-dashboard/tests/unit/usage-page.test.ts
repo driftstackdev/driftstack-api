@@ -302,7 +302,7 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     expect(isHidden(window, '[data-daily-chart]')).toBe(true);
   });
 
-  it('daily chart: a series failure stays distinct from an honest zero-activity result', async () => {
+  it('daily chart: a series failure keeps the totals + shows the chart-specific error, distinct from an honest zero-activity result', async () => {
     const { window } = setUpDom(loadBuiltPage(), {
       token: 'tok',
       route: makeRouter({
@@ -317,8 +317,15 @@ describe('customer-dashboard Usage (usage.astro) behaviour', () => {
     });
     win = window;
     await flush();
+    // A series-only failure is the CHART's failure, not the whole page's: the
+    // successfully-fetched totals must STILL render (the /v1/usage fix — series is
+    // caught to empty buckets so Promise.all no longer rejects and blanks them), the
+    // daily chart shows its own "Couldn't load daily activity" error, and the honest
+    // zero-activity empty-state stays distinct/hidden.
     expect(isHidden(window, '[data-daily-empty]')).toBe(true);
-    expect(text(window, '[data-banner]')).toContain("Couldn't load live usage");
+    expect(text(window, '[data-stat="session_minute"]')).toBe((12345).toLocaleString('en-US'));
+    expect(text(window, '[data-banner]')).toContain("Couldn't load daily activity");
+    expect(text(window, '[data-banner]')).not.toContain("Couldn't load live usage");
   });
 
   it('daily chart: non-zero buckets sum every usage type into one bar per day + a first/last-day legend', async () => {

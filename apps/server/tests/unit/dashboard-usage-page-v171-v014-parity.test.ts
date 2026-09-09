@@ -92,7 +92,12 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     expect(p).toMatch(
       /return window\.driftstackFetchWithDeadline\(url, init, USAGE_TIMEOUT_MS, controller\);/,
     );
-    expect(p).toMatch(/Promise\.all\(\[summaryPromise, initialSeriesPromise\]\)/);
+    // The series promise is caught to `{ buckets: [] }` so a series-only failure does
+    // NOT reject Promise.all and blank the successfully-fetched totals — the daily chart
+    // still surfaces its own error via the separate chain. Pin the decoupled form.
+    expect(p).toMatch(
+      /Promise\.all\(\[summaryPromise, initialSeriesPromise\.catch\(\(\) => \(\{ buckets: \[\] \}\)\)\]\)/,
+    );
     expect(p).toMatch(/if \(chartRequestController\) chartRequestController\.abort\(\);/);
     expect(p).toMatch(/const version = \+\+chartRequestVersion;/);
     expect(p).toMatch(/if \(version === chartRequestVersion\) renderDailyChart\(series\);/);
