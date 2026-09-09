@@ -34,7 +34,26 @@ const apiBaseUrl = resolveApiBaseUrl();
         var t = localStorage.getItem('ds_web_session_token');
         if (!t || t.length === 0) return;
         var raw = new URLSearchParams(location.search).get('next') || '/';
-        var dest = raw.charAt(0) === '/' && raw.charAt(1) !== '/' && raw.charAt(1) !== '\\' ? raw : '/';
+        // Same-origin guard via the WHATWG URL parser (matches src/lib/safe-next.ts).
+        // A charAt check is bypassable by tab/newline/CR variants (e.g. `/%09/evil.com`,
+        // which URLSearchParams decodes to "/\t/evil.com") that the parser then
+        // normalises to "//evil.com"; parse `next` against the real origin, compare
+        // .origin, and reject `//` / `/\` pathnames.
+        var dest = '/';
+        try {
+          var u = new URL(raw, location.origin);
+          var path = u.pathname + u.search + u.hash;
+          if (
+            u.origin === location.origin &&
+            path.charAt(0) === '/' &&
+            !path.startsWith('//') &&
+            !path.startsWith('/\\')
+          ) {
+            dest = path;
+          }
+        } catch (_e) {
+          dest = '/';
+        }
         location.replace(dest);
       } catch (_) {
         /* localStorage blocked → fall through and show the form */

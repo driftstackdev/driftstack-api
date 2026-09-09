@@ -30,6 +30,12 @@ function read(p: string): string {
 describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', () => {
   const body = read(LIB);
 
+  it('open-redirect: the pre-paint already-signed-in guard resolves ?next through the WHATWG URL parser + same-origin check, NOT a bypassable charAt guard (a `/%09/evil.com` tab/newline variant escapes charAt but the parser normalises it to `//evil.com` and the origin check rejects it)', () => {
+    expect(body).toMatch(/var u = new URL\(raw, location\.origin\)/);
+    expect(body).toMatch(/u\.origin === location\.origin/);
+    expect(body).not.toMatch(/raw\.charAt\(1\) !== '\/'/);
+  });
+
   it("V-269 framing pinned: 'Sign-in page for returning customers. Pairs with the V-184a signup flow + the V-267 cli/authorize deep-link round-trip.' + 'POSTs to /v1/auth/login (V-079) which returns a web session token. The token lands in localStorage under ds_web_session_token — identical key to signup → verify-email so cross-page reads just work.' — pinned so the cross-page token-key contract + the V-269/V-267/V-184a/V-079 lineage stays documented", () => {
     expect(body).toMatch(
       /\/\/ V-269 — Sign-in page for returning customers\. Pairs with the V-184a\s*\/\/ signup flow \+ the V-267 cli\/authorize deep-link round-trip\./,

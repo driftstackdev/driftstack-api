@@ -29,6 +29,12 @@ function read(p: string): string {
 describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity', () => {
   const body = read(LIB);
 
+  it('open-redirect: the pre-paint already-signed-in guard resolves ?next through the WHATWG URL parser + same-origin check, NOT a bypassable charAt guard (a `/%09/evil.com` tab/newline variant escapes charAt but the parser normalises it to `//evil.com` and the origin check rejects it)', () => {
+    expect(body).toMatch(/var u = new URL\(raw, location\.origin\)/);
+    expect(body).toMatch(/u\.origin === location\.origin/);
+    expect(body).not.toMatch(/raw\.charAt\(1\) !== '\/'/);
+  });
+
   it('pins the canonical onboarding sequence and cross-page session-state contract', () => {
     expect(body).toMatch(/\/\/ Account onboarding flow\./);
     expect(body).toMatch(
