@@ -92,6 +92,10 @@ const AGENT_ROUTES: ReadonlyArray<{
   { method: 'GET', suffix: '/transcript' },
   { method: 'GET', suffix: '/page-state' },
   { method: 'GET', suffix: '/network' },
+  // #7 — the screenshot-capture read. A `:captureId` literal in the suffix drives
+  // account B against A's session (ownership 404s before the store is consulted)
+  // and, split-on-'?', matches the registered `:captureId` param in the coverage arm.
+  { method: 'GET', suffix: '/captures/:captureId' },
   { method: 'GET', suffix: '/cookies' },
   { method: 'GET', suffix: '/downloads' },
   { method: 'GET', suffix: '/gui-control-key' },

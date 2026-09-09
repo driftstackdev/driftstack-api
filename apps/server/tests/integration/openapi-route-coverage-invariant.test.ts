@@ -51,6 +51,8 @@ const NOT_PUBLIC_API: Record<string, string> = {
   '/v1/sessions/{id}/gui-input': 'Desktop-client input transport, authorized by GUI control key.',
   '/v1/agent-sessions/{id}/gui-control-key': 'Mints the desktop control key; desktop-only surface.',
   '/v1/agent-sessions/{id}/transport-report': 'Desktop client telemetry; desktop-only surface.',
+  '/v1/agent-sessions/{id}/captures/{captureId}':
+    'Raw screenshot bytes (image/png|jpeg) for the desktop client to display; not a JSON SDK method. #7.',
   '/v1/whoami':
     'Answers "which key am I holding and what can it do" for interactive/CLI debugging. ' +
     'Documented on the docs site; deliberately not an SDK method.',

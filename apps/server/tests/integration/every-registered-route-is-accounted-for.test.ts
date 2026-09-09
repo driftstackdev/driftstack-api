@@ -77,6 +77,10 @@ const NOT_IN_THE_CONTRACT: ReadonlyMap<string, string> = new Map([
     'desktop-client transport telemetry. Its own source notes it reveals nothing and mutates nothing, so it carries no write scope.',
   ],
   [
+    'GET /v1/agent-sessions/:id/captures/:captureId',
+    'serves the raw screenshot bytes (image/png|jpeg) the AI captured, for the desktop client to display inline. Not a JSON contract — deliberately uncontracted, like /network and /gui-control-key. #7.',
+  ],
+  [
     'POST /v1/sessions/:id/gui-input',
     'relays raw input into a live session for the desktop client; admin-only on team-scoped requests (V-326e3).',
   ],
@@ -275,7 +279,7 @@ describe('every registered route is accounted for', () => {
 
   it('CRITICAL every REACHABLE exempt /v1 route answers exactly 401 or 403 anonymously. Stated as an allowlist, not as "never 2xx": the first version of this assertion only forbade 2xx, and a 503 from an unwired route satisfied that having proved nothing. Four of the ten probes were exactly that. These routes are also the ones security-declaration-matches-enforcement cannot reach, because it reads the contract — and one of them mints a session control token while another relays raw input into a live browser session.', () => {
     const reachable = [...anonymousStatus.entries()].filter(([op]) => !UNWIRED_HERE.has(op));
-    expect(reachable.length, 'exempt /v1 routes actually reachable in this fixture').toBe(6);
+    expect(reachable.length, 'exempt /v1 routes actually reachable in this fixture').toBe(7);
     expect(
       reachable
         .filter(([, status]) => status !== 401 && status !== 403)
