@@ -1660,7 +1660,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect((await fx.agentSessionsRepo!.get(id))?.transcript).toHaveLength(0);
   });
 
-  it('message SSE representation opens immediately, emits bounded heartbeats, then one terminal success envelope', async () => {
+  it('message SSE representation opens immediately, STREAMS one step per intent as it lands, emits bounded heartbeats, then one terminal success envelope', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true });
     const create = await fx.app.inject({
       method: 'POST',
@@ -1703,9 +1703,40 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(response.body).toContain(': stream open\n\n');
     expect(response.body).toContain(': heartbeat ');
     expect(response.body.match(/event: response/g)).toHaveLength(1);
-    const dataLine = response.body.split('\n').find((line) => line.startsWith('data: {'));
-    expect(dataLine).toBeDefined();
-    const terminal = JSON.parse(dataLine!.slice('data: '.length)) as {
+
+    // The turn now STREAMS one `event: step` frame per intent AS it lands (live
+    // progress), then exactly one terminal `event: response`. Parse the SSE body
+    // into (event, data) frames and assert both — the previous "first data: line
+    // is the terminal" shortcut would now pick up a step frame instead.
+    const frames = response.body
+      .split(/\r?\n\r?\n/)
+      .map((block) => {
+        let event = 'message';
+        const data: string[] = [];
+        for (const line of block.split(/\r?\n/)) {
+          if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+          else if (line.startsWith('data:')) data.push(line.slice('data:'.length).trimStart());
+        }
+        return { event, data: data.join('\n') };
+      })
+      .filter((f) => f.data.length > 0);
+
+    // Live steps: at least one, indices contiguous from 0, and EVERY step frame
+    // arrives before the terminal response — the whole point of streaming.
+    const steps = frames
+      .filter((f) => f.event === 'step')
+      .map((f) => JSON.parse(f.data) as { index: number; result: unknown });
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps.map((s) => s.index)).toEqual(steps.map((_s, i) => i));
+    expect(steps.every((s) => typeof s.result === 'object' && s.result !== null)).toBe(true);
+    expect(response.body.indexOf('event: response')).toBeGreaterThan(
+      response.body.lastIndexOf('event: step'),
+    );
+
+    // Exactly one terminal response, carrying the final plan result.
+    const responseFrames = frames.filter((f) => f.event === 'response');
+    expect(responseFrames).toHaveLength(1);
+    const terminal = JSON.parse(responseFrames[0]?.data ?? '{}') as {
       status: number;
       body: { kind?: string; ok?: boolean };
     };
