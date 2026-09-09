@@ -327,6 +327,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     cancelGenRef.current += 1;
     activePostRef.current = null;
     setSending(false);
+    // Drop live steps now: cancel short-circuits the in-flight post()'s finally
+    // (it nulls activePostRef), so the settle-clear there won't run for this turn.
+    setLiveSteps([]);
     // P2 #9 — finalize the dangling user bubble NOW (don't wait for a possibly-
     // never-resolving post): remove the orphan so it isn't left on screen and isn't
     // persisted as an unanswered "complete" turn. A post that DOES later resolve
@@ -698,6 +701,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
     closeServerSession(sessionIdRef.current);
     setSending(false);
+    setLiveSteps([]);
     setTurns([]);
     setSession(null);
     setError(null);
@@ -719,6 +723,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
       setSending(false);
+      setLiveSteps([]);
       setTurns([...restoredTurns]);
       // Drop the live session: continuing a reopened chat starts a FRESH server
       // session (the prior one is gone / now closed) and the run-loop rebuilds

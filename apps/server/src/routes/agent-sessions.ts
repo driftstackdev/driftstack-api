@@ -5975,11 +5975,16 @@ export function registerAgentSessionsRoutes(
       // Stream each intent result as it lands (`event: step`) BEFORE the terminal
       // `event: response`. Backward-compatible: the SDK's SSE parser skips any
       // frame whose event is not `response`, so an older client ignores these.
-      // Same backpressure + viewer-closed discipline as the heartbeat above — a
-      // stalled viewer must not turn progress frames into an unbounded buffer.
+      // ⛔ Backpressure uses the PAYLOAD ceiling (MAX_SSE_BUFFER_BYTES, 4 MB), NOT
+      // the heartbeat's tiny 64 KB one: step frames carry real per-intent JSON, so
+      // tripping a 64 KB bound (a slow-but-alive viewer, or a tight-loop executor
+      // that emits several steps before the socket drains) would end the stream
+      // WITHOUT a terminal — which the client reads as a FAILED turn on one that
+      // actually succeeded and was billed. A viewer that cannot drain even 4 MB is
+      // effectively gone, which is the case this guard is really for.
       const onStep = (result: Parameters<typeof publicIntentResult>[0], index: number): void => {
         if (viewerClosed) return;
-        if (reply.raw.writableLength > MAX_SSE_HEARTBEAT_BUFFER_BYTES) {
+        if (reply.raw.writableLength > MAX_SSE_BUFFER_BYTES) {
           viewerClosed = true;
           reply.raw.end();
           return;

@@ -350,6 +350,14 @@ export interface RealAgentExecutorDeps {
 export class RealAgentExecutor implements AgentExecutor {
   constructor(private readonly deps: RealAgentExecutorDeps) {}
 
+  // ⛔ STEP STREAMING: this legacy driver-path executor does NOT call
+  // `args.onStep` — it predates step streaming and is not wired in production
+  // (bootstrap instantiates only ControlPlaneAgentExecutor or StubAgentExecutor,
+  // both of which route every push through an emitStep helper). If this class is
+  // ever re-wired, route every `results.push(...)` through an emitStep helper
+  // (mirror StubAgentExecutor above) or its live steps will silently never
+  // stream while the final result still lands. Kept as bare pushes to avoid
+  // churning a dead path.
   async execute(args: ExecuteArgs): Promise<ExecutorRunResult> {
     const account = args.account;
     if (!account) {

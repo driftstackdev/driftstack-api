@@ -167,6 +167,50 @@ describe('useAgentChat approve()', () => {
     expect(result.current.turns.filter((turn) => turn.role === 'agent')).toHaveLength(1);
   });
 
+  it('clears liveSteps immediately on soft-cancel — cancel short-circuits the post finally (audit fix)', async () => {
+    let finish: ((response: AgentMessageResponse) => void) | undefined;
+    message.mockImplementationOnce(
+      (
+        _sid: string,
+        _msg: string,
+        opts?: { onStep?: (step: { index: number; result: unknown }) => void },
+      ) =>
+        new Promise<AgentMessageResponse>((resolve) => {
+          opts?.onStep?.({
+            index: 0,
+            result: {
+              kind: 'success',
+              intent: { kind: 'navigate', url: 'https://x' },
+              summary: 'navigated',
+            },
+          });
+          finish = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAgentChat());
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = result.current.send('go');
+      await Promise.resolve();
+    });
+    expect(result.current.liveSteps).toHaveLength(1);
+
+    await act(async () => {
+      result.current.cancel();
+      await Promise.resolve();
+    });
+    // Cleared now, not left on screen until the (short-circuited) post finally.
+    expect(result.current.liveSteps).toHaveLength(0);
+    expect(result.current.sending).toBe(false);
+
+    // The abandoned turn resolving later must not resurrect steps.
+    await act(async () => {
+      finish?.(DONE);
+      await sendPromise;
+    });
+    expect(result.current.liveSteps).toHaveLength(0);
+  });
+
   it('joins rapid duplicate approvals to one approved message dispatch', async () => {
     let finishApproval: ((response: AgentMessageResponse) => void) | undefined;
     message.mockResolvedValueOnce(HALT).mockImplementationOnce(
