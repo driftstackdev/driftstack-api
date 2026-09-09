@@ -100,14 +100,18 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     expect(body).toContain("{p === 'pending' ? 'Pinging…' : 'Ping'}");
   });
 
-  it("Form lifecycle: startCreate / startEdit both setTimeout 0 focus to first input via formRef.current?.querySelector('input')?.focus(); submitForm: validateDraft + setForm errors if !ok + addFleetMember or updateFleetMember + reset via setForm({...EMPTY_DRAFT_FORM}) + refresh()", () => {
+  it('Form lifecycle: startCreate / startEdit both setTimeout 0 focus to first input; submitForm: validateDraft + setForm errors if !ok + addFleetMember or updateFleetMember(editedId) which DROPS the stale ping (audit 2026-09-08) + reset via setForm({...EMPTY_DRAFT_FORM}) + refresh()', () => {
     expect(body).toMatch(
       /setTimeout\(\(\) => formRef\.current\?\.querySelector\('input'\)\?\.focus\(\), 0\);/,
     );
     expect(body).toContain('async function submitForm(): Promise<void> {');
     expect(body).toContain('const v = validateDraft(form.draft);');
     expect(body).toContain('setForm({ ...form, errors: v.errors });');
-    expect(body).toContain('await updateFleetMember(form.editingId, form.draft);');
+    expect(body).toContain('await updateFleetMember(editedId, form.draft);');
+    // F4 (audit 2026-09-08): an edit may change baseUrl, so the cached ping
+    // (reachability/driver/version keyed by member.id) is dropped — else the row
+    // shows the OLD URL's result. Pin the stale-ping clear.
+    expect(body).toContain('delete next[editedId];');
     expect(body).toContain('await addFleetMember(form.draft);');
     expect(body).toContain('setForm({ ...EMPTY_DRAFT_FORM });');
     expect(body).toContain('await refresh();');

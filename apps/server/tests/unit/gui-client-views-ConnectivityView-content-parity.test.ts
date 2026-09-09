@@ -140,7 +140,7 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
   });
 
-  it("V-337 server-info rows: driver row 'playwright (chromium)' format when driver===playwright && playwright_browser truthy + version row 'X.Y.Z · gitsha7' format when git_sha !== 'unknown' (.slice(0,7) short-sha); both rows only render when serverInfo !== null", () => {
+  it("V-337 server-info rows: driver row 'playwright (chromium)' when driver===playwright && playwright_browser; version row 'X.Y.Z · gitsha7' with git_sha/version typeof-GUARDED so a 200 whose git_sha is missing/typeless does NOT .slice(0,7) undefined and crash the render (audit 2026-09-08); both rows only render when serverInfo !== null", () => {
     expect(body).toMatch(
       /\{serverInfo !== null && \([ \t]*(?:\r?\n[ \t]*)?<>[ \t]*(?:\r?\n[ \t]*)?<Row label="Server driver">/,
     );
@@ -148,7 +148,7 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
       /\{serverInfo\.driver\}[ \t]*(?:\r?\n[ \t]*)?\{serverInfo\.driver === 'playwright' && serverInfo\.playwright_browser[ \t]*(?:\r?\n[ \t]*)?\? ` \(\$\{serverInfo\.playwright_browser\}\)`[ \t]*(?:\r?\n[ \t]*)?: ''\}/,
     );
     expect(body).toMatch(
-      /\{serverInfo\.version\}[ \t]*(?:\r?\n[ \t]*)?\{serverInfo\.git_sha !== 'unknown' \? ` · \$\{serverInfo\.git_sha\.slice\(0, 7\)\}` : ''\}/,
+      /\{typeof serverInfo\.version === 'string' \? serverInfo\.version : '—'\}[\s\S]*?\{typeof serverInfo\.git_sha === 'string' && serverInfo\.git_sha !== 'unknown'[\s\S]*?serverInfo\.git_sha\.slice\(0, 7\)/,
     );
   });
 

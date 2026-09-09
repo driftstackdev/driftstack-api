@@ -3,7 +3,7 @@
 // a SPECIFIC, actionable message ("name must start and end with alphanumeric…")
 // instead of the opaque "Validation Failed" the server's 422 maps to.
 //
-// The gui-client doesn't depend on @driftstack/api-types (only @driftstack/sdk),
+// The gui-client uses @driftstack/api-types for a few shared pure helpers (the
 // so the rule is replicated here rather than imported. The
 // gui-client-profile-name-schema-parity test pins this regex + bounds to the
 // server schema so the two can't drift.
