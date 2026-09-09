@@ -99,6 +99,19 @@ describe('OVPN file-reference shared contract (cross-source pin with node 8a03a3
     expect(contract.case_sensitive).toBe(true);
     expect(contract.double_dash_strip_min_length).toBe(3);
     expect(contract.token_separators).toEqual([' ', '\t']);
+    // ⚠️ HONEST LABELLING (measured 2026-09-08, A2+A3). The contract also declares
+    // `comment_prefixes: ['#', ';']`, but no fixture exercises it and this block does
+    // not assert it against a constant — on purpose. The comment guard is SUBSUMED by
+    // token-equality: `# ca ca.crt` tokenises to ['#','ca','ca.crt'], so tokens[0] is
+    // '#', never the directive 'ca', and the line is accepted with OR without the guard.
+    // Proven by mutation: deleting the `startsWith('#')/startsWith(';')` branch from
+    // findUnresolvableOpenvpnFileReferences leaves this whole suite GREEN (A3 measured
+    // the same on the Swift parser). So the two `*_commented_reference_is_inert` rows
+    // pin the accept-OUTCOME (a restructure that REJECTED a commented line would red
+    // them) but pass via subsumption — they do NOT protect the `comment_prefixes`
+    // parameter or the guard. Do not read "18 rows, all passing" as covering comment
+    // handling. (Also: this block is not a full inventory of the rule — token-equality-
+    // not-prefix is a real clause the parameter set does not declare.)
   });
 
   it('DRIFT GUARD: mirror equals the driftstack canonical BYTE-FOR-BYTE when the sibling repo is present; LOUD "unverified" (never a silent skip) when absent', () => {
