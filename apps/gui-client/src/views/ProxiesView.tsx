@@ -695,7 +695,7 @@ export function ProxiesView(): JSX.Element {
   const tested = state.proxies.filter((p) => testResults[p.id] !== undefined);
   const healthy = tested.filter((p) => {
     const r = testResults[p.id];
-    return r !== undefined && r.reachable && r.auth_ok;
+    return r !== undefined && isProxyUsable(r);
   });
   const udpCapable = tested.filter((p) => {
     const r = testResults[p.id];
@@ -977,7 +977,7 @@ type SortKey = 'status' | 'label' | 'scheme' | 'latency' | 'tested';
  */
 function statusRank(result: ProxyTestResult | undefined): number {
   if (result === undefined) return 2;
-  if (!result.reachable || !result.auth_ok) return 0;
+  if (!result.reachable || !result.auth_ok || !result.can_route) return 0;
   return (result.latency_ms ?? 0) > 100 ? 1 : 3;
 }
 
@@ -1243,7 +1243,7 @@ function ProxyTable({
               title={
                 selectedProxies.some((p) => isSocks5Probeable(p.scheme))
                   ? undefined
-                  : 'Only SOCKS5/HTTP proxies can be tested; the selection has none.'
+                  : 'Only SOCKS5 proxies can be tested; the selection has none.'
               }
               onClick={() => onTestMany(selectedProxies)}
             >
@@ -1328,8 +1328,7 @@ function ProxyRow({
   onTest: () => void;
 }): JSX.Element {
   const reachable = result?.reachable ?? false;
-  const authOk = result?.auth_ok ?? false;
-  const healthy = reachable && authOk;
+  const healthy = result !== undefined && isProxyUsable(result);
   // T-1 — prefer the SERVER-measured latency (measured near the fleet that runs
   // the profile) over the native probe from this Mac; keep the native value as
   // the fallback so a proxy with no server row still shows a number.
@@ -1553,7 +1552,7 @@ function HealthPill({
     );
   }
   if (!healthy) {
-    const label = result.reachable ? 'auth fail' : 'unreachable';
+    const label = !result.reachable ? 'unreachable' : !result.auth_ok ? 'auth fail' : 'no route';
     return (
       <span className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error">
         {label}
