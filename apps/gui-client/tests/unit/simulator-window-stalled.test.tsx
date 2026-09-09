@@ -248,8 +248,9 @@ describe('SimulatorWindow — page-navigation error overlay (W616)', () => {
       },
       '[data-component="page-error-overlay"]',
     );
-    // DNS kind → the address-check copy (shared lib/page-error-copy).
-    expect(overlay?.textContent).toMatch(/find this site/i);
+    // DNS kind → the shared lib/page-error-copy dns line (neutral wording — a share of
+    // DNS failures are ours, so it states the fact, not "check the address").
+    expect(overlay?.textContent).toMatch(/resolve this site/i);
     expect(overlay?.textContent).toMatch(/page failed to load/i);
   });
 

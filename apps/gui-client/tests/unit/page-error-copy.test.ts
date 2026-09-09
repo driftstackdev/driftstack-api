@@ -9,7 +9,7 @@ import { pageErrorCopy, pageErrorInfoEqual } from '../../src/lib/page-error-copy
 
 describe('pageErrorCopy', () => {
   it('gives friendly per-kind copy for the known kinds', () => {
-    expect(pageErrorCopy({ kind: 'dns' })).toMatch(/couldn't find this site/i);
+    expect(pageErrorCopy({ kind: 'dns' })).toMatch(/couldn't resolve this site/i);
     expect(pageErrorCopy({ kind: 'tls' })).toMatch(/secure connection failed/i);
     expect(pageErrorCopy({ kind: 'timeout' })).toMatch(/too long to respond/i);
     expect(pageErrorCopy({ kind: 'net' })).toMatch(/network error/i);
