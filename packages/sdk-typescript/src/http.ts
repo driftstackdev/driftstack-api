@@ -165,7 +165,7 @@ export class HttpClient {
    * contract. Non-idempotent streams are never transparently retried — a dropped
    * connection may have already dispatched browser actions.
    */
-  async requestEventStream<T>(opts: RequestOptions): Promise<T> {
+  async requestEventStream<T>(opts: RequestOptions, onStep?: (event: unknown) => void): Promise<T> {
     const fetchImpl = this.config.fetch ?? fetch;
     const timeoutMs = this.resolveTimeoutMs(opts);
     const url = this.buildUrl(opts.path, opts.query);
@@ -196,9 +196,28 @@ export class HttpClient {
         throw new TransportError(transportMessage(err), 0, err);
       }
 
-      const text = await readBoundedResponseText(response);
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-      if (!response.ok || contentType.split(';', 1)[0]?.trim() !== 'text/event-stream') {
+      const isEventStream = contentType.split(';', 1)[0]?.trim() === 'text/event-stream';
+
+      // Live path: the caller wants per-step progress AND the server streamed.
+      // Read incrementally, invoking onStep per `event: step` frame as it lands;
+      // the terminal `event: response` becomes the return value. Every other
+      // caller (no onStep, a non-2xx, or a JSON downgrade) falls through to the
+      // buffered path below, unchanged.
+      if (onStep !== undefined && response.ok && isEventStream) {
+        const streamed = await readStreamingSseResponse(response, response.status, onStep);
+        if (streamed.status >= 200 && streamed.status < 300) return streamed.body as T;
+        if (!isProblem(streamed.body)) {
+          throw new TransportError(
+            `streamed non-2xx response (${streamed.status.toString()}) but body is not a Problem`,
+            streamed.status,
+          );
+        }
+        throw errorFromProblem(streamed.body, null);
+      }
+
+      const text = await readBoundedResponseText(response);
+      if (!response.ok || !isEventStream) {
         return decodeJsonResponse<T>(response.status, text, response.headers.get('retry-after'));
       }
 
@@ -263,6 +282,125 @@ interface TerminalSseResponse {
   body: unknown;
 }
 
+/** Decode + validate one terminal `event: response` data payload. Shared by the
+ *  buffered parser and the streaming reader so the two can never drift on what a
+ *  valid terminal envelope is. */
+function decodeTerminalFrame(payload: string, transportStatus: number): TerminalSseResponse {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(payload) as unknown;
+  } catch (err) {
+    throw new TransportError('failed to parse terminal agent turn event', transportStatus, err);
+  }
+  if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
+    throw new TransportError('terminal agent turn event was not an object', transportStatus);
+  }
+  const record = decoded as Record<string, unknown>;
+  if (
+    typeof record.status !== 'number' ||
+    !Number.isInteger(record.status) ||
+    record.status < 100 ||
+    record.status > 599 ||
+    !Object.prototype.hasOwnProperty.call(record, 'body')
+  ) {
+    throw new TransportError(
+      'terminal agent turn event had an invalid response envelope',
+      transportStatus,
+    );
+  }
+  return { status: record.status, body: record.body };
+}
+
+/**
+ * Read an agent-turn SSE stream INCREMENTALLY, invoking `onStep` for each
+ * `event: step` frame as it arrives (live progress) and returning the single
+ * terminal `event: response`. Same 8 MiB ceiling and multiple-terminal refusal
+ * as the buffered parser; a malformed step frame is skipped (the terminal
+ * response is the contract, progress is best-effort). Used only when a caller
+ * passes `onStep`; every other caller keeps the buffered path unchanged.
+ */
+async function readStreamingSseResponse(
+  response: Response,
+  transportStatus: number,
+  onStep: (event: unknown) => void,
+): Promise<TerminalSseResponse> {
+  if (response.body === null) {
+    throw new TransportError(
+      'agent turn stream ended without a terminal response',
+      transportStatus,
+    );
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let bytesRead = 0;
+  let terminal: TerminalSseResponse | null = null;
+
+  const consumeBlock = (block: string): void => {
+    let event = 'message';
+    const data: string[] = [];
+    for (const line of block.split(/\r?\n/)) {
+      if (line.startsWith(':')) continue;
+      if (line.startsWith('event:')) event = line.slice('event:'.length).trim();
+      else if (line.startsWith('data:')) data.push(line.slice('data:'.length).trimStart());
+    }
+    if (data.length === 0) return;
+    const payload = data.join('\n');
+    if (event === 'response') {
+      if (terminal !== null) {
+        throw new TransportError(
+          'agent turn stream contained multiple terminal responses',
+          transportStatus,
+        );
+      }
+      terminal = decodeTerminalFrame(payload, transportStatus);
+      return;
+    }
+    if (event === 'step') {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(payload);
+      } catch {
+        return; // a malformed progress frame is ignored, never fatal
+      }
+      onStep(parsed);
+    }
+  };
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytesRead += value.byteLength;
+      if (bytesRead > MAX_RESPONSE_BODY_BYTES) throw responseBodyTooLarge(transportStatus);
+      buffer += decoder.decode(value, { stream: true });
+      let idx = buffer.search(/\r?\n\r?\n/);
+      while (idx !== -1) {
+        const sepLen = (/\r?\n\r?\n/.exec(buffer.slice(idx))?.[0] ?? '\n\n').length;
+        consumeBlock(buffer.slice(0, idx));
+        buffer = buffer.slice(idx + sepLen);
+        idx = buffer.search(/\r?\n\r?\n/);
+      }
+    }
+    buffer += decoder.decode();
+    if (buffer.trim().length > 0) consumeBlock(buffer);
+  } catch (err) {
+    await reader.cancel().catch(() => undefined);
+    if (err instanceof TransportError) throw err;
+    throw new TransportError(transportMessage(err), transportStatus, err);
+  } finally {
+    reader.releaseLock();
+  }
+
+  if (terminal === null) {
+    throw new TransportError(
+      'agent turn stream ended without a terminal response',
+      transportStatus,
+    );
+  }
+  return terminal;
+}
+
 function parseTerminalSseResponse(text: string, transportStatus: number): TerminalSseResponse {
   let terminal: TerminalSseResponse | null = null;
   for (const block of text.split(/\r?\n\r?\n/)) {
@@ -280,29 +418,7 @@ function parseTerminalSseResponse(text: string, transportStatus: number): Termin
         transportStatus,
       );
     }
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(data.join('\n')) as unknown;
-    } catch (err) {
-      throw new TransportError('failed to parse terminal agent turn event', transportStatus, err);
-    }
-    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) {
-      throw new TransportError('terminal agent turn event was not an object', transportStatus);
-    }
-    const record = decoded as Record<string, unknown>;
-    if (
-      typeof record.status !== 'number' ||
-      !Number.isInteger(record.status) ||
-      record.status < 100 ||
-      record.status > 599 ||
-      !Object.prototype.hasOwnProperty.call(record, 'body')
-    ) {
-      throw new TransportError(
-        'terminal agent turn event had an invalid response envelope',
-        transportStatus,
-      );
-    }
-    terminal = { status: record.status, body: record.body };
+    terminal = decodeTerminalFrame(data.join('\n'), transportStatus);
   }
   if (terminal === null) {
     throw new TransportError(

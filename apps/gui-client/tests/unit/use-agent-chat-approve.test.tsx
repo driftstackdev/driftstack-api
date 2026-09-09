@@ -106,10 +106,65 @@ describe('useAgentChat approve()', () => {
     expect(message.mock.calls[1]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
+      onStep: expect.any(Function) as () => void,
     });
 
     // Gate cleared after approve.
     expect(result.current.pendingConfirmation).toBeNull();
+  });
+
+  it('streams live steps into `liveSteps` as they arrive, then clears them when the turn settles', async () => {
+    // The message() call receives an onStep; drive two steps through it while the
+    // turn is still pending, then settle. Mirrors the server streaming an
+    // `event: step` per intent before the terminal response.
+    let finish: ((response: AgentMessageResponse) => void) | undefined;
+    message.mockImplementationOnce(
+      (
+        _sid: string,
+        _msg: string,
+        opts?: { onStep?: (step: { index: number; result: unknown }) => void },
+      ) =>
+        new Promise<AgentMessageResponse>((resolve) => {
+          opts?.onStep?.({
+            index: 0,
+            result: {
+              kind: 'success',
+              intent: { kind: 'navigate', url: 'https://x' },
+              summary: 'navigated',
+            },
+          });
+          opts?.onStep?.({
+            index: 1,
+            result: {
+              kind: 'success',
+              intent: { kind: 'capture', capture: 'screenshot' },
+              summary: 'captured',
+            },
+          });
+          finish = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAgentChat());
+
+    let sendPromise!: Promise<boolean>;
+    await act(async () => {
+      sendPromise = result.current.send('go to x and capture');
+      await Promise.resolve();
+    });
+
+    // Mid-flight: both streamed steps are visible as live progress.
+    expect(result.current.sending).toBe(true);
+    expect(result.current.liveSteps).toHaveLength(2);
+    expect(result.current.liveSteps.map((s) => s.kind)).toEqual(['success', 'success']);
+
+    await act(async () => {
+      finish?.(DONE);
+      await sendPromise;
+    });
+
+    // Settled: the live steps are handed off to the final rendered turn, cleared.
+    expect(result.current.liveSteps).toHaveLength(0);
+    expect(result.current.turns.filter((turn) => turn.role === 'agent')).toHaveLength(1);
   });
 
   it('joins rapid duplicate approvals to one approved message dispatch', async () => {
@@ -189,9 +244,11 @@ describe('useAgentChat approve()', () => {
     expect(message.mock.calls[1]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
       approveConsequentialActions: [{ category: 'purchase', matchedText: 'place order' }],
+      onStep: expect.any(Function) as () => void,
     });
     expect(message.mock.calls[2]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
+      onStep: expect.any(Function) as () => void,
       approveConsequentialActions: [
         { category: 'purchase', matchedText: 'place order' },
         { category: 'payment', matchedText: 'confirm payment' },
@@ -215,6 +272,7 @@ describe('useAgentChat approve()', () => {
     });
     expect(message.mock.calls[2]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
+      onStep: expect.any(Function) as () => void,
     });
   });
 
@@ -229,6 +287,7 @@ describe('useAgentChat approve()', () => {
     // No approvals on a plain send.
     expect(message.mock.calls[0]?.[2]).toEqual({
       idempotencyKey: expect.any(String) as string,
+      onStep: expect.any(Function) as () => void,
     });
   });
 

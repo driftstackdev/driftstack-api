@@ -950,3 +950,70 @@ describe('HttpClient body-derived operation timeout', () => {
     ).resolves.toEqual({ ok: true });
   });
 });
+
+describe('HttpClient.requestEventStream — live step streaming (onStep)', () => {
+  const SSE_HEADERS = { 'content-type': 'text/event-stream; charset=utf-8' };
+  const streamOf = (chunks: string[]): typeof fetch =>
+    vi.fn(async () => {
+      await Promise.resolve();
+      const encoder = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const c of chunks) controller.enqueue(encoder.encode(c));
+          controller.close();
+        },
+      });
+      return new Response(stream, { status: 200, headers: SSE_HEADERS });
+    });
+  const STEP0 =
+    'event: step\ndata: {"index":0,"result":{"kind":"success","summary":"navigated"}}\n\n';
+  const STEP1 =
+    'event: step\ndata: {"index":1,"result":{"kind":"success","summary":"captured"}}\n\n';
+  const TERMINAL =
+    'event: response\ndata: {"status":200,"body":{"kind":"plan-executed","ok":true}}\n\n';
+  const REQ = {
+    method: 'POST',
+    path: '/v1/agent-sessions/agt_1/message',
+    retry: NEVER_RETRY,
+  } as const;
+
+  it('invokes onStep for each step frame as it arrives, then resolves the terminal body', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: streamOf([`: stream open\n\n${STEP0}${STEP1}${TERMINAL}`]),
+    });
+    const steps: Array<{ index: number }> = [];
+    const out = await http.requestEventStream<{ kind: string; ok: boolean }>(REQ, (event) =>
+      steps.push(event as { index: number }),
+    );
+    expect(steps.map((s) => s.index)).toEqual([0, 1]);
+    expect(out).toEqual({ kind: 'plan-executed', ok: true });
+  });
+
+  it('reassembles frames split ACROSS read chunks (the buffer-boundary case)', async () => {
+    const whole = `: stream open\n\n${STEP0}${STEP1}${TERMINAL}`;
+    // Deliberately cut mid-frame so a naive per-chunk parse would lose a step.
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: streamOf([whole.slice(0, 40), whole.slice(40, 130), whole.slice(130)]),
+    });
+    const steps: Array<{ index: number }> = [];
+    const out = await http.requestEventStream<{ ok: boolean }>(REQ, (event) =>
+      steps.push(event as { index: number }),
+    );
+    expect(steps.map((s) => s.index)).toEqual([0, 1]);
+    expect(out).toEqual({ kind: 'plan-executed', ok: true });
+  });
+
+  it('without onStep the buffered path still returns the terminal and ignores step frames', async () => {
+    const http = new HttpClient({
+      apiKey: 'ds_live_test',
+      baseUrl: 'http://api.test',
+      fetch: streamOf([`: stream open\n\n${STEP0}${TERMINAL}`]),
+    });
+    const out = await http.requestEventStream<{ kind: string }>(REQ);
+    expect(out).toEqual({ kind: 'plan-executed', ok: true });
+  });
+});

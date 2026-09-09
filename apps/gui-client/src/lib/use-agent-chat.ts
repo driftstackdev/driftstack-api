@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   BundledLlmBudgetExhaustedError,
   BundledLlmConsentRequiredError,
+  type AgentIntentResult,
   type AgentMessageResponse,
   type AgentSession,
   type ConsequentialActionCategory,
@@ -139,6 +140,10 @@ export interface UseAgentChatResult {
   turns: ReadonlyArray<ChatTurn>;
   session: AgentSession | null;
   sending: boolean;
+  /** Per-step results for the CURRENT in-flight turn, appended live as the
+   *  server streams them; empty when no turn is running. The view renders these
+   *  as progress while `sending`, then the settled turn's response replaces them. */
+  liveSteps: ReadonlyArray<AgentIntentResult>;
   error: ChatError | null;
   /** The consequential action the last turn halted on (Approve/Deny), or null. */
   pendingConfirmation: PendingConfirmation | null;
@@ -213,6 +218,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   const [turns, setTurns] = useState<ChatTurn[]>([]);
   const [session, setSession] = useState<AgentSession | null>(null);
   const [sending, setSending] = useState(false);
+  // Live per-step progress for the CURRENT in-flight turn — appended as the
+  // server streams `event: step` frames, cleared when the turn settles (the
+  // final turn's `response.results` then render in its place). #streaming.
+  const [liveSteps, setLiveSteps] = useState<AgentIntentResult[]>([]);
   const [error, setError] = useState<ChatError | null>(null);
   // Latest live session id, mirrored into a ref so the close-on-unmount cleanup
   // (which can't depend on `session` without re-subscribing every turn) and the
@@ -443,6 +452,8 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         inFlightUserTurnIdRef.current = uid;
       }
       setLastUserMessage(userMessage);
+      // Fresh turn → clear any steps left visible from a prior one.
+      setLiveSteps([]);
       // Drop the optimistic user bubble on any NON-success outcome (Stop / error)
       // so the transcript never persists an unanswered "complete" turn (#3) and the
       // composer draft that submit() restores on a falsey result isn't a duplicate
@@ -540,6 +551,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           ...(approvals !== undefined && approvals.length > 0
             ? { approveConsequentialActions: approvals }
             : {}),
+          // Live progress: reflect each step as it lands, but only for THIS send
+          // (a soft-Stop bumps the gen, and its late frames must not leak into a
+          // newer turn's view).
+          onStep: (step) => {
+            if (cancelGenRef.current === gen) setLiveSteps((prev) => [...prev, step.result]);
+          },
         });
         // A terminal success (fresh or replayed) removes the ambiguity. Only clear
         // this exact receipt: a different send may have started after a soft Stop.
@@ -569,7 +586,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         settleJoined(outcome);
         if (activePostRef.current?.token === ownerToken) {
           activePostRef.current = null;
-          if (cancelGenRef.current === gen) setSending(false);
+          if (cancelGenRef.current === gen) {
+            setSending(false);
+            // Hand off from the transient live steps to the settled turn (whose
+            // response.results now render) — or clear them on error/cancel.
+            setLiveSteps([]);
+          }
         }
       }
     },
@@ -737,6 +759,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     turns,
     session,
     sending,
+    liveSteps,
     error,
     pendingConfirmation,
     deniedTurnIds,

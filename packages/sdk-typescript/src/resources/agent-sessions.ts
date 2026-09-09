@@ -501,41 +501,59 @@ export class AgentSessionsResource {
         category: ConsequentialActionCategory;
         matchedText: string;
       }>;
+      /**
+       * Live-progress callback: invoked once per browser step AS it lands
+       * (streamed on the turn's SSE) — BEFORE this promise resolves with the
+       * final AgentMessageResponse. `index` is the step's 0-based position in the
+       * final `results`, and `result` is the same per-step shape those results
+       * carry. Best-effort: omit it and the turn still resolves normally with the
+       * complete result; an older server that does not stream steps simply never
+       * calls it.
+       */
+      onStep?: (step: { index: number; result: AgentIntentResult }) => void;
     },
   ): Promise<AgentMessageResponse> {
     const approvals = opts?.approveConsequentialActions;
-    return this.http.requestEventStream<AgentMessageResponse>({
-      method: 'POST',
-      path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
-      timeoutMs: opts?.timeoutMs ?? AGENT_MESSAGE_STREAM_TIMEOUT_MS,
-      body: {
-        user_message: userMessage,
-        // W443/W445 — re-send approved consequential actions in the wire's
-        // snake_case shape so the executor skips the confirmation halt. Omit
-        // the field entirely when there are none (matches the route's optional
-        // schema; avoids sending an empty array).
-        ...(approvals !== undefined && approvals.length > 0
-          ? {
-              approve_consequential_actions: approvals.map((a) => ({
-                category: a.category,
-                matched_text: a.matchedText,
-              })),
-            }
-          : {}),
+    const onStep = opts?.onStep;
+    return this.http.requestEventStream<AgentMessageResponse>(
+      {
+        method: 'POST',
+        path: `/v1/agent-sessions/${encodeURIComponent(id)}/message`,
+        timeoutMs: opts?.timeoutMs ?? AGENT_MESSAGE_STREAM_TIMEOUT_MS,
+        body: {
+          user_message: userMessage,
+          // W443/W445 — re-send approved consequential actions in the wire's
+          // snake_case shape so the executor skips the confirmation halt. Omit
+          // the field entirely when there are none (matches the route's optional
+          // schema; avoids sending an empty array).
+          ...(approvals !== undefined && approvals.length > 0
+            ? {
+                approve_consequential_actions: approvals.map((a) => ({
+                  category: a.category,
+                  matched_text: a.matchedText,
+                })),
+              }
+            : {}),
+        },
+        // Skip the header when byokApiKey is undefined OR empty string.
+        // Empty would send `x-byok-anthropic-api-key:` on the wire — the
+        // server normalises that to absent (slice 105 fix), but skipping
+        // client-side saves the round-trip header and matches the Go SDK's
+        // `opts != nil && opts.ByokAPIKey != ""` shape.
+        headers: {
+          accept: 'text/event-stream',
+          ...(opts?.idempotencyKey !== undefined ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
+          ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
+            ? { 'x-byok-anthropic-api-key': opts.byokApiKey }
+            : {}),
+        },
       },
-      // Skip the header when byokApiKey is undefined OR empty string.
-      // Empty would send `x-byok-anthropic-api-key:` on the wire — the
-      // server normalises that to absent (slice 105 fix), but skipping
-      // client-side saves the round-trip header and matches the Go SDK's
-      // `opts != nil && opts.ByokAPIKey != ""` shape.
-      headers: {
-        accept: 'text/event-stream',
-        ...(opts?.idempotencyKey !== undefined ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
-        ...(opts?.byokApiKey !== undefined && opts.byokApiKey.length > 0
-          ? { 'x-byok-anthropic-api-key': opts.byokApiKey }
-          : {}),
-      },
-    });
+      onStep === undefined
+        ? undefined
+        : (event) => {
+            onStep(event as { index: number; result: AgentIntentResult });
+          },
+    );
   }
 
   /**

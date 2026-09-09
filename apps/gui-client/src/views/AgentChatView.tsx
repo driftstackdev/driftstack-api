@@ -878,11 +878,41 @@ export function AgentChatView({
                     i === chat.restoredHistoryCount - 1 && <RestoredHistoryDivider />}
                 </Fragment>
               ))}
-              {chat.sending && (
-                <TypingRow
-                  label={chat.session === null ? 'Starting a session…' : 'Working on your request…'}
-                />
-              )}
+              {chat.sending &&
+                (chat.liveSteps.length > 0 ? (
+                  // Live progress: render each step as it streams in, so the
+                  // customer watches the agent work instead of waiting on a lone
+                  // spinner until everything is done. The settled turn's full
+                  // response replaces this the moment the turn resolves.
+                  <li className="flex justify-start" aria-live="polite">
+                    <div className="max-w-[85%] rounded-lg rounded-bl-sm border border-surface-divider bg-surface-raised px-3 py-2">
+                      <div className="flex flex-col gap-1.5">
+                        <p className="section-label flex items-center gap-1.5">
+                          Working…
+                          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-status-busy" />
+                        </p>
+                        <ol className="flex flex-col gap-1">
+                          {chat.liveSteps.map((r, i) => (
+                            <PlanStep
+                              key={i}
+                              result={r}
+                              denied={false}
+                              sessionId={chat.session?.id ?? null}
+                              baseUrl={settings.baseUrl}
+                              apiKey={settings.apiKey}
+                            />
+                          ))}
+                        </ol>
+                      </div>
+                    </div>
+                  </li>
+                ) : (
+                  <TypingRow
+                    label={
+                      chat.session === null ? 'Starting a session…' : 'Working on your request…'
+                    }
+                  />
+                ))}
             </ol>
           )}
         </div>

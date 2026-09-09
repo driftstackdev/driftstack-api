@@ -151,6 +151,42 @@ describe('AgentSessionsResource', () => {
     expect(out.kind).toBe('plan-executed');
   });
 
+  it('message forwards opts.onStep to requestEventStream, so a caller receives each live step as it lands', async () => {
+    // makeFakeHttp ignores the 2nd arg; capture it directly to prove message
+    // threads a wrapper that hands the caller each step frame.
+    let capturedOnStep: ((event: unknown) => void) | undefined;
+    const http = {
+      requestEventStream: (_opts: unknown, onStep?: (event: unknown) => void) => {
+        capturedOnStep = onStep;
+        return Promise.resolve({ kind: 'plan-executed' });
+      },
+    } as unknown as HttpClient;
+    const res = new AgentSessionsResource(http);
+    const seen: Array<{ index: number; result: unknown }> = [];
+    await res.message('agt_1', 'go', { onStep: (step) => seen.push(step) });
+    expect(capturedOnStep).toBeTypeOf('function');
+    // The wrapper hands the raw SSE step payload through to the caller's onStep.
+    capturedOnStep?.({ index: 0, result: { kind: 'success', summary: 'navigated' } });
+    capturedOnStep?.({ index: 1, result: { kind: 'success', summary: 'captured' } });
+    expect(seen).toEqual([
+      { index: 0, result: { kind: 'success', summary: 'navigated' } },
+      { index: 1, result: { kind: 'success', summary: 'captured' } },
+    ]);
+  });
+
+  it('message WITHOUT onStep does not pass one (no live-progress subscription)', async () => {
+    let capturedOnStep: unknown = 'unset';
+    const http = {
+      requestEventStream: (_opts: unknown, onStep?: (event: unknown) => void) => {
+        capturedOnStep = onStep;
+        return Promise.resolve({ kind: 'plan-executed' });
+      },
+    } as unknown as HttpClient;
+    const res = new AgentSessionsResource(http);
+    await res.message('agt_1', 'go');
+    expect(capturedOnStep).toBeUndefined();
+  });
+
   it('message with opts.byokApiKey sets the x-byok-anthropic-api-key header so callers do not have to construct the header by hand (BYOK convenience layer; matches the server-side header reading at apps/server/src/routes/agent-sessions.ts)', async () => {
     const reply = {
       kind: 'clarify' as const,
