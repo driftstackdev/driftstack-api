@@ -415,16 +415,26 @@ function setPkceCookie(reply: FastifyReply, verifier: string, nonce: string, sec
   const sig = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest('base64url');
   const value = `${verifier}.${nonce}.${sig}`;
   const cookieName = pkceCookieName(nonce);
+  // SameSite=None (was Lax) — 2026-09-09. The dashboard moved to app.driftstack.io
+  // while this cookie is issued by api.driftstack.dev; those are different
+  // registrable domains, so the SPA's credentialed callback fetch is now cross-site
+  // and a Lax cookie would NOT be sent (→ "PKCE verifier cookie missing", breaking
+  // BOTH Google and GitHub). None+Secure lets it ride the cross-site exchange. The
+  // CSRF surface None widens is already closed here by the HttpOnly+signed cookie,
+  // the state JWT, and the D2 verifier↔state-nonce binding checked at the callback.
+  // (Safari ITP still blocks 3rd-party cookies → the durable fix is to run the token
+  // exchange on the top-level /v1/auth/oauth/:provider/callback where the cookie is
+  // first-party; tracked as the OAuth follow-up.)
   reply.header(
     'set-cookie',
-    `${cookieName}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
+    `${cookieName}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
   );
 }
 
 function clearPkceCookie(reply: FastifyReply, nonce: string): void {
   reply.header(
     'set-cookie',
-    `${pkceCookieName(nonce)}=; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+    `${pkceCookieName(nonce)}=; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=0`,
   );
 }
 

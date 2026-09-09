@@ -117,11 +117,16 @@ describe('routes/auth-oauth-client content parity', () => {
       /function pkceCookieName\(nonce: string\): string \{\s*return `\$\{COOKIE_NAME_PREFIX\}\$\{createHash\('sha256'\)\.update\(nonce\)\.digest\('base64url'\)\}`;\s*\}/,
     );
     expect(body).toMatch(/const cookieName = pkceCookieName\(nonce\);/);
+    // SameSite=None (2026-09-09): the dashboard (app.driftstack.io) is cross-site to
+    // the API (api.driftstack.dev) after the .dev→.io move, so the credentialed
+    // callback fetch needs None to carry the cookie; the CSRF surface is closed by the
+    // HttpOnly+signed cookie + state JWT + the D2 nonce binding. Secure is mandatory
+    // with None (both attributes pinned here so neither can regress).
     expect(body).toMatch(
-      /`\$\{cookieName\}=\$\{value\}; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=\$\{COOKIE_TTL_SECONDS\.toString\(\)\}`/,
+      /`\$\{cookieName\}=\$\{value\}; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=\$\{COOKIE_TTL_SECONDS\.toString\(\)\}`/,
     );
     expect(body).toMatch(
-      /`\$\{pkceCookieName\(nonce\)\}=; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=Lax; Max-Age=0`/,
+      /`\$\{pkceCookieName\(nonce\)\}=; Path=\/v1\/auth\/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=0`/,
     );
     expect(body).toMatch(/const cookie = readPkceCookie\(req, deps\.signingSecret, stateNonce\);/);
     expect(body).toMatch(
