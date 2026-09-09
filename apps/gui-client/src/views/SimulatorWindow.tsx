@@ -58,6 +58,7 @@ import {
 } from '../lib/activation-tombstones';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { ExitIpChip } from '../components/ExitIpChip';
+import { QuicReadout } from '../components/QuicReadout';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
 import {
@@ -9886,6 +9887,11 @@ export function SimulatorWindow(): JSX.Element {
                                         read off the capabilityReport the simulator already holds.
                                         Degrades to "measuring…" until the harness emits it. */}
                                     <ExitIpChip report={sessionCapabilityReport} />
+                                    {/* Item 11 (owner) — live HTTP/3 (QUIC) verdict for
+                                        THIS session, off the same capabilityReport. Latched
+                                        node-side; degrades to "measuring…" until observed,
+                                        never a false "no HTTP/3". */}
+                                    <QuicReadout report={sessionCapabilityReport} />
                                   </div>
                                 )}
 
