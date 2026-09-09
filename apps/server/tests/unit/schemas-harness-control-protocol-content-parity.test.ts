@@ -16,7 +16,7 @@
 //   • Per-intent param shapes (navigate/click/send_keys/scroll/
 //     behavioral_pause/wait_for/execute_script + no-param intents).
 //   • intentName→schema map roster.
-//   • IntentDispatch + exclusive IntentResult envelopes + 12 live error codes.
+//   • IntentDispatch + exclusive IntentResult envelopes + 14 live error codes.
 //
 // Plus a behavioral block that exercises the schemas (accept/reject)
 // so the contract is enforced, not just pinned by regex.
@@ -1086,7 +1086,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     ).toBe(true);
   });
 
-  it('13 live error codes are pinned in canonical order', () => {
+  it('14 live error codes are pinned in canonical order', () => {
     // Exact .toEqual (not a source regex): order-sensitive + tolerant of the
     // inline rationale comments now interleaved in the source array.
     expect([...HARNESS_ERROR_CODES]).toEqual([
@@ -1100,6 +1100,10 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
       // after the code it was carved from, so the pair reads together.
       'intent_element_not_found',
       'intent_webdriver_failed',
+      // A3 #8 — navigate load-error code, ships before the harness emits it
+      // (gated behind DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE). Sits by the
+      // webdriver failure it splits the "load never happened" case out of.
+      'intent_page_load_failed',
       'intent_script_failed',
       'intent_dispatch_error',
       'intent_deadline_exceeded',
@@ -1114,7 +1118,7 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
 describe('harness-control-protocol behavioral contract', () => {
   it('intent vocab, strict schema maps, and error codes match canonical counts', () => {
     expect(HARNESS_INTENT_NAMES).toHaveLength(18);
-    expect(HARNESS_ERROR_CODES).toHaveLength(13);
+    expect(HARNESS_ERROR_CODES).toHaveLength(14);
     expect(Object.keys(HARNESS_INTENT_PARAM_SCHEMAS).sort()).toEqual(
       [...HARNESS_INTENT_NAMES].sort(),
     );

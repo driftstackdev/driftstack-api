@@ -186,6 +186,8 @@ const ERROR_BASE: Record<HarnessErrorCode, string> = {
   intent_invalid_parameter: 'a parameter was invalid',
   intent_element_not_found: 'no element on the page matched this selector',
   intent_webdriver_failed: 'the browser failed to perform this action',
+  intent_page_load_failed:
+    'the page failed to load — retry the URL; the browser session is still usable, so do not restart it',
   intent_script_failed: 'the browser script for this action was invalid',
   intent_dispatch_error: 'the action could not be dispatched',
   intent_deadline_exceeded:
@@ -265,6 +267,13 @@ function diagnose(intent: AgentIntent, code: HarnessErrorCode | undefined): Fail
       // genuinely matches nothing still fails after a fixed number of attempts
       // rather than looping.
       return { category: 'element_not_found', retryable: true };
+    case 'intent_page_load_failed':
+      // A3 #8 — the navigate reached the browser and the load ERRORED (proxy /
+      // DNS / TLS / HTTP). RETRYABLE: a load has no side effect to double-apply,
+      // so replaying the SAME url is safe, and the session stays usable — retry
+      // the URL, do NOT re-establish the session (that is what the old
+      // success-on-error path could never say).
+      return { category: 'page_load_failed', retryable: true };
     case 'intent_missing_parameter':
     case 'intent_invalid_parameter':
     case 'intent_not_implemented':

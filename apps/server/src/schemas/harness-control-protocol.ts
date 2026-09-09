@@ -1004,6 +1004,20 @@ export const HARNESS_ERROR_CODES = [
   // result_too_large above).
   'intent_element_not_found',
   'intent_webdriver_failed',
+  // A3 #8 — navigate resolved on a load that ERRORED (proxy / DNS / TLS / HTTP
+  // failure) yet returned success, so the step read "✓ navigated" on a page that
+  // never loaded. This code lets the harness report the load failure honestly.
+  // Maps to the public `page_load_failed` category, RETRYABLE: replaying the SAME
+  // url is safe (a load has no side effect to double-apply) and must NOT
+  // re-establish the session.
+  //
+  // ⚠️ ORDERING (same trap as intent_element_not_found above): this decode entry
+  // ships BEFORE the harness emits the code. A3 gates emission behind
+  // DRIFTSTACK_INTENT_PAGE_LOAD_FAILED_CODE and keeps the old code with a
+  // byte-identical message prefix until then, because an unknown code fails
+  // IntentResultEnvelopeSchema → the correlator drops the frame → the dispatch
+  // hangs to its timeout.
+  'intent_page_load_failed',
   'intent_script_failed',
   'intent_dispatch_error',
   // Producer-only whole-intent wall fence. Unlike capacity/transport dispatch
