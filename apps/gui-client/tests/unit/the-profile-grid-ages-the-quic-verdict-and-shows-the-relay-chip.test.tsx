@@ -272,7 +272,9 @@ describe('T-27 (drop 2) — the hub poll writes a live h3 observation onto the l
 
 describe('the profile card ages the measured QUIC verdict', () => {
   it('CRITICAL a verdict older than the TTL renders as INFERRED (~), never green', async () => {
-    seed(Date.now() - QUIC_VERDICT_TTL_MS - 60_000);
+    // No relay verdict here so this isolates the LIVE-h3 ageing: with quicProbe:true
+    // present the single chip would (correctly) go green from the fresher relay signal.
+    seed(Date.now() - QUIC_VERDICT_TTL_MS - 60_000, { quicProbe: undefined });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const chip = await quicChip(container);
     expect(chip.getAttribute('data-quic-inferred')).toBe('true');
@@ -290,7 +292,8 @@ describe('the profile card ages the measured QUIC verdict', () => {
   });
 
   it('CRITICAL a verdict with NO stamp (written after the one-time backfill) is not fresh', async () => {
-    seed(0, { quicMeasuredAt: undefined });
+    // Same isolation: no relay verdict, so an unstamped h3 falls to the inference.
+    seed(0, { quicMeasuredAt: undefined, quicProbe: undefined });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
     const chip = await quicChip(container);
     expect(chip.getAttribute('data-quic-inferred')).toBe('true');
@@ -298,23 +301,28 @@ describe('the profile card ages the measured QUIC verdict', () => {
 });
 
 describe('the fleet relay verdict reaches the card', () => {
-  it('CRITICAL a measured relay verdict renders its own chip, separate from QUIC', async () => {
-    seed(Date.now() - 5 * 60_000);
+  it('CRITICAL a measured relay verdict (quicProbe true, no live h3) turns the SINGLE QUIC chip green', async () => {
+    // 2026-09-09 — no separate "QUIC relayed" chip any more; the relay verdict feeds
+    // the one QUIC chip. Seed relay-only (no live h3) so the green comes from it.
+    seed(Date.now() - 5 * 60_000, { quicMeasured: undefined, quicMeasuredAt: undefined });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    await quicChip(container);
-    const relay = container.querySelector('[data-capability="quic-relay"]');
-    expect(relay, 'the quic-relay chip did not render on the card').not.toBeNull();
-    expect(relay?.getAttribute('data-ok')).toBe('true');
-    expect(relay?.textContent).toContain('QUIC relayed');
+    const chip = await quicChip(container);
+    expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
+    expect(chip.getAttribute('data-quic-inferred')).toBe('false');
+    expect(chip.className).toContain('status-ready');
   });
 
-  it('a measured NEGATIVE relay renders the not-relayed chip, not nothing', async () => {
-    seed(Date.now() - 5 * 60_000, { quicProbe: false });
+  it('a measured NEGATIVE relay (quicProbe false, no live h3) → the single QUIC chip is not green', async () => {
+    seed(Date.now() - 5 * 60_000, {
+      quicMeasured: undefined,
+      quicMeasuredAt: undefined,
+      quicProbe: false,
+    });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    await quicChip(container);
-    const relay = container.querySelector('[data-capability="quic-relay"]');
-    expect(relay?.getAttribute('data-ok')).toBe('false');
-    expect(relay?.textContent).toContain('QUIC not relayed');
+    const chip = await quicChip(container);
+    expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
+    expect(chip.getAttribute('data-quic-inferred')).toBe('false');
+    expect(chip.className).not.toContain('status-ready');
   });
 
   it('VACUITY CONTROL — with no relay verdict there is no relay chip', async () => {

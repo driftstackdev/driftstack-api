@@ -62,89 +62,59 @@ function chips(
   };
 }
 
-describe('the QUIC-relay chip is its own, measured chip', () => {
-  it('quicProbe true renders a relay chip', () => {
-    expect(chips(undefined, true).relay).not.toBeNull();
-  });
-
-  it('quicProbe true renders it GREEN (a measurement, not an inference)', () => {
-    const relay = chips(undefined, true).relay;
-    expect(relay?.className).toContain('status-ready');
-    expect(relay?.getAttribute('data-inferred')).toBe('false');
-  });
-
-  it('quicProbe true reads "QUIC relayed"', () => {
-    expect(chips(undefined, true).relay?.textContent).toContain('QUIC relayed');
-  });
-
-  it('quicProbe true says it was measured from a fleet Mac', () => {
-    expect(chips(undefined, true).relay?.getAttribute('title')).toContain(
-      'measured from a fleet Mac',
-    );
-  });
-
-  it('quicProbe false renders a measured NEGATIVE — not-ok, not inferred, no "~"', () => {
-    const relay = chips(undefined, false).relay;
-    expect(relay).not.toBeNull();
-    expect(relay?.getAttribute('data-ok')).toBe('false');
-    expect(relay?.getAttribute('data-inferred')).toBe('false');
-    expect(relay?.textContent).not.toContain('~');
-  });
-
-  it('quicProbe false reads "QUIC not relayed" and is not green', () => {
-    const relay = chips(undefined, false).relay;
-    expect(relay?.textContent).toContain('QUIC not relayed');
-    expect(relay?.className).not.toContain('status-ready');
-  });
-
-  it('quicProbe false also says it was measured from a fleet Mac', () => {
-    expect(chips(undefined, false).relay?.getAttribute('title')).toContain(
-      'measured from a fleet Mac',
-    );
-  });
-
-  it('VACUITY CONTROL — quicProbe undefined renders NO relay chip', () => {
-    expect(chips(undefined, undefined).relay).toBeNull();
-  });
-
-  it('VACUITY CONTROL — undefined leaves exactly the three chips of today', () => {
-    expect(proxyCapabilities(UDP_OK, undefined).map((c) => c.key)).toEqual([
-      'webrtc',
-      'quic',
-      'http2',
-    ]);
-  });
-});
-
-describe('the QUIC-relay chip NEVER alters the measured-QUIC chip', () => {
-  // The whole never-merge rule, across every combination: the QUIC chip's DOM
-  // is identical with and without a relay verdict. A merge in either direction
-  // (relay true → green session chip; relay false → measured negative) reds one
-  // of these cells.
-  for (const measured of [undefined, null, 'h3', 'h2-only'] as const) {
-    for (const probe of [true, false] as const) {
-      it(`quicMeasured=${String(measured)} renders the same QUIC chip with quicProbe=${String(probe)}`, () => {
-        const without = chips(measured, undefined).quic?.outerHTML;
-        const withProbe = chips(measured, probe).quic?.outerHTML;
-        expect(without).toBeDefined();
-        expect(withProbe).toBe(without);
-      });
+// 2026-09-09: the design changed. There is no longer a SEPARATE "QUIC relayed"
+// chip beside the QUIC chip — operators read the two as contradictory badges. QUIC
+// is now ONE verdict fed by the strongest evidence available: a live h3 > a live
+// h2-only > the fleet relay probe > the UDP inference. These arms pin that model
+// and, by asserting a single chip, guard against a regression to two badges.
+describe('QUIC is ONE verdict, strongest evidence first (no separate relay chip)', () => {
+  it('the capability keys are exactly webrtc, quic, http2 — never a quic-relay chip', () => {
+    for (const probe of [true, false, undefined] as const) {
+      expect(proxyCapabilities(UDP_OK, undefined, probe).map((c) => c.key)).toEqual([
+        'webrtc',
+        'quic',
+        'http2',
+      ]);
     }
-  }
+  });
 
-  it('an UNMEASURED session chip stays inferred "~" even when the fleet Mac relayed QUIC', () => {
-    // The sharpest cell: the mutation "quic_ok → quicMeasured='h3'" would turn
-    // this chip green from a probe that never ran a session.
-    const quic = chips(undefined, true).quic;
+  it('quicProbe true → the single QUIC chip is GREEN and measured (not inferred), no relay chip', () => {
+    const { quic, relay } = chips(undefined, true);
+    expect(relay).toBeNull();
+    expect(quic?.className).toContain('status-ready');
+    expect(quic?.getAttribute('data-inferred')).toBe('false');
+    expect(quic?.textContent).not.toContain('~');
+  });
+
+  it('quicProbe true names the fleet-Mac relay measurement in the hint', () => {
+    expect(chips(undefined, true).quic?.getAttribute('title')).toContain('fleet Mac');
+  });
+
+  it('quicProbe false → the single QUIC chip is a measured NEGATIVE (not green, not inferred, no "~")', () => {
+    const { quic } = chips(undefined, false);
+    expect(quic?.getAttribute('data-ok')).toBe('false');
+    expect(quic?.getAttribute('data-inferred')).toBe('false');
+    expect(quic?.className).not.toContain('status-ready');
+    expect(quic?.textContent).not.toContain('~');
+  });
+
+  it('a live h3 measurement OUTRANKS the relay probe — green either way', () => {
+    expect(chips('h3', false).quic?.className).toContain('status-ready');
+    expect(chips('h3', true).quic?.getAttribute('data-inferred')).toBe('false');
+  });
+
+  it('a live h2-only measurement OUTRANKS a relay-true — measured negative, not green', () => {
+    const { quic } = chips('h2-only', true);
+    expect(quic?.getAttribute('data-ok')).toBe('false');
+    expect(quic?.getAttribute('data-inferred')).toBe('false');
+    expect(quic?.className).not.toContain('status-ready');
+  });
+
+  it('VACUITY CONTROL — nothing measured on a UDP-relaying exit stays INFERRED "~", never green', () => {
+    const { quic } = chips(undefined, undefined);
     expect(quic?.getAttribute('data-inferred')).toBe('true');
     expect(quic?.className).not.toContain('status-ready');
     expect(quic?.textContent).toContain('~');
-  });
-
-  it('the two chips may disagree, and both verdicts are kept', () => {
-    const caps = proxyCapabilities(UDP_OK, 'h2-only', true);
-    expect(caps.find((c) => c.key === 'quic')?.ok).toBe(false); // the session saw no HTTP/3
-    expect(caps.find((c) => c.key === 'quic-relay')?.ok).toBe(true); // …yet the proxy relays QUIC
   });
 });
 
@@ -389,7 +359,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     expect(cell?.textContent).toContain('31ms');
   });
 
-  it('a fleet reply puts the relay chip on the row, and leaves the session QUIC chip inferred', async () => {
+  it('a fleet reply with quic_probe:true turns the SINGLE QUIC chip green (no separate relay chip)', async () => {
     testAccountProxy.mockResolvedValue({
       ok: true,
       latency_ms: 31,
@@ -400,10 +370,10 @@ describe('the Proxies grid labels the server latency with where it was measured'
     const { container } = render(<ProxiesView />);
     await testTheRow();
     await screen.findByText('from a fleet Mac');
-    expect(container.querySelector('[data-capability="quic-relay"]')).not.toBeNull();
-    expect(container.querySelector('[data-capability="quic"]')?.getAttribute('data-inferred')).toBe(
-      'true',
-    );
+    expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
+    const quic = container.querySelector('[data-capability="quic"]');
+    expect(quic?.getAttribute('data-inferred')).toBe('false');
+    expect(quic?.className).toContain('status-ready');
   });
 
   it('a control-plane fallback labels the latency "from the server" — visibly, never silently', async () => {

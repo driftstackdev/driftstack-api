@@ -4466,6 +4466,7 @@ export function ProfilesView({
                           flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                           countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
                           exitIp={exitOk ? (probe?.exitIp ?? null) : null}
+                          locationLabel={exitLocationLabel(exitOk, probe)}
                           latencyMs={lat ?? null}
                           latencyFillPct={latFill}
                           latencyGood={latGood}
@@ -4594,19 +4595,7 @@ export function ProfilesView({
                       countryCode: exitOk ? (probe?.exitCountry ?? null) : null,
                       exitIp: exitOk ? (probe?.exitIp ?? null) : null,
                       proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
-                      // Prefer the granular lumtest geo (city, region) when the
-                      // exit probe captured it; the flag already conveys the
-                      // country, so fall back to the country name otherwise. Gated on
-                      // exitOk so a down proxy doesn't show a stale location.
-                      locationLabel: !exitOk
-                        ? null
-                        : probe?.exitCity != null && probe.exitCity.length > 0
-                          ? [probe.exitCity, probe.exitRegion]
-                              .filter((s): s is string => typeof s === 'string' && s.length > 0)
-                              .join(', ')
-                          : probe?.exitCountry
-                            ? regionName(probe.exitCountry)
-                            : null,
+                      locationLabel: exitLocationLabel(exitOk, probe),
                       probed: probe !== undefined,
                       udp,
                       quic,
@@ -6599,6 +6588,28 @@ function EmptyConnect({
 function flagEmoji(cc: string): string {
   if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
   return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+// #6 — ONE definition of the exit's human location (city, region / country name),
+// used by BOTH the grid card and the list row so the two surfaces can't drift. Prefer
+// the granular city/region when the exit probe captured it; fall back to the country
+// name (the flag already conveys the country). Gated on exitOk so a down proxy doesn't
+// show a stale location.
+function exitLocationLabel(
+  exitOk: boolean,
+  probe:
+    | { exitCity?: string | null; exitRegion?: string | null; exitCountry?: string | null }
+    | undefined,
+): string | null {
+  if (!exitOk) return null;
+  if (probe?.exitCity != null && probe.exitCity.length > 0) {
+    return [probe.exitCity, probe.exitRegion]
+      .filter((s): s is string => typeof s === 'string' && s.length > 0)
+      .join(', ');
+  }
+  return probe?.exitCountry != null && probe.exitCountry.length > 0
+    ? regionName(probe.exitCountry)
+    : null;
 }
 
 // Country name for an ISO-3166 alpha-2 code via the platform's Intl region

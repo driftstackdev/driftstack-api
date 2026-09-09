@@ -34,6 +34,7 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
+    locationLabel: 'Amsterdam, North Holland',
     latencyMs: 42,
     latencyFillPct: 28,
     latencyGood: true,

@@ -43,6 +43,7 @@ import { validateOpenVpnConfig } from '../lib/parse-openvpn';
 import {
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
+  stripUnsupportedOpenvpnLines,
 } from '@driftstack/api-types';
 import {
   buildWireGuardProxyInput,
@@ -1090,13 +1091,32 @@ function ProxyTable({
     );
   }
 
-  function toggleOne(id: string): void {
+  // #4 — the anchor for shift-click range selection, in the current sorted display
+  // order. Mass-selecting proxies used to mean clicking each ~13px checkbox one by
+  // one; now a row click toggles, and shift+row-click selects the whole range.
+  const lastClickedIdRef = useRef<string | null>(null);
+  function toggleOne(id: string, shiftKey = false): void {
     setSelected((prev) => {
       const next = new Set(prev);
+      const anchor = lastClickedIdRef.current;
+      if (shiftKey && anchor !== null && anchor !== id) {
+        const order = sorted.map((p) => p.id);
+        const a = order.indexOf(anchor);
+        const b = order.indexOf(id);
+        if (a !== -1 && b !== -1) {
+          const [lo, hi] = a < b ? [a, b] : [b, a];
+          for (let i = lo; i <= hi; i += 1) {
+            const rid = order[i];
+            if (rid !== undefined) next.add(rid);
+          }
+          return next;
+        }
+      }
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+    lastClickedIdRef.current = id;
   }
 
   const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
@@ -1203,7 +1223,7 @@ function ProxyTable({
                 key={p.id}
                 proxy={p}
                 selected={live.has(p.id)}
-                onToggle={() => toggleOne(p.id)}
+                onToggle={(shiftKey) => toggleOne(p.id, shiftKey)}
                 busy={busyId === p.id}
                 testing={testingId === p.id}
                 testingAll={testingAll}
@@ -1301,7 +1321,7 @@ function ProxyRow({
 }: {
   proxy: ProxyConfig;
   selected: boolean;
-  onToggle: () => void;
+  onToggle: (shiftKey: boolean) => void;
   busy: boolean;
   testing: boolean;
   testingAll: boolean;
@@ -1348,7 +1368,20 @@ function ProxyRow({
 
   return (
     <tr
-      className={`border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
+      onClick={(e) => {
+        // #4 — a row click toggles selection; shift+click selects the range from the
+        // last-clicked row. Clicks on real controls (buttons, the checkbox, links,
+        // the row's inputs) keep their own behaviour, so this never eats a Test/Edit.
+        if (
+          (e.target as HTMLElement).closest(
+            'button, input, a, select, textarea, [contenteditable="true"]',
+          )
+        ) {
+          return;
+        }
+        onToggle(e.shiftKey);
+      }}
+      className={`cursor-pointer border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
         selected ? 'bg-[rgb(var(--accent-rgb)/0.07)]' : ''
       }`}
     >
@@ -1359,8 +1392,8 @@ function ProxyRow({
           type="checkbox"
           aria-label={`Select ${p.label}`}
           checked={selected}
-          onChange={onToggle}
-          className="accent-[rgb(var(--accent-rgb))]"
+          onChange={() => onToggle(false)}
+          className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
         />
       </td>
 
@@ -1401,6 +1434,22 @@ function ProxyRow({
           </span>
         ) : (
           <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
+        )}
+        {/* #6 — exit LOCATION (city, region). The flag already conveys the country;
+            city/region is the incremental detail, shown when the probe captured it.
+            Was not rendered anywhere on this tab before. */}
+        {exit?.city != null && exit.city.length > 0 && (
+          <div
+            data-component="exit-location"
+            className="mt-0.5 max-w-[180px] truncate text-[10px] font-normal text-ink-muted"
+            title={[exit.city, exit.region]
+              .filter((s): s is string => typeof s === 'string' && s.length > 0)
+              .join(', ')}
+          >
+            {[exit.city, exit.region]
+              .filter((s): s is string => typeof s === 'string' && s.length > 0)
+              .join(', ')}
+          </div>
         )}
       </td>
 
@@ -1473,7 +1522,7 @@ function ProxyRow({
           <HealthPill result={result} healthy={healthy} latGood={latGood} />
           {failed && result.message.length > 0 && (
             <span
-              className="max-w-[150px] truncate text-[10px] text-status-error"
+              className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-status-error"
               title={result.message}
             >
               {result.message}
@@ -1600,6 +1649,10 @@ export function ProxyForm({
   // parse-feedback hint.
   const [wgText, setWgText] = useState(initial.wireguard ? '(saved WireGuard config)' : '');
   const [vpnHint, setVpnHint] = useState<string | null>(null);
+  // #2 — when a pasted OVPN config has lines the server will refuse (e.g. a bare
+  // `script-security 2` with no script directives), hold the auto-fixed blob here so
+  // the hint can offer a one-click "Remove unsupported lines". Null = nothing to fix.
+  const [vpnFixable, setVpnFixable] = useState<string | null>(null);
   const submitInFlightRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const locked = saving || submitting;
@@ -1672,6 +1725,7 @@ export function ProxyForm({
   // .ovpn paste → validate + extract remote → fill host/port + the OVPN block
   // (config_blob = the pasted text; optional username/password ride alongside).
   function handleOvpnPaste(text: string): void {
+    setVpnFixable(null); // re-evaluated below; only the unsupported-lines branch sets it
     if (text.trim() === '') {
       setVpnHint(null);
       setDraft((d) => ({ ...d, openvpn: undefined }));
@@ -1695,9 +1749,17 @@ export function ProxyForm({
     // of a round-trip 400. Keep the blob so they can edit in place.
     const dangerous = findUnsupportedOpenvpnLines(text);
     if (dangerous[0] !== undefined) {
+      // #2 — offer a one-click fix: strip the unsupported lines (script-security ≥2 is
+      // lowered to 1, other script directives removed) so a config the server refuses
+      // becomes one it accepts. Common case: a bare `script-security 2` with no actual
+      // up/down/route scripts — inert, safe to lower. The button applies fixed.config.
+      const fixed = stripUnsupportedOpenvpnLines(text);
+      const n = dangerous.length;
       setVpnHint(
-        `Line ${dangerous[0].line.toString()}: ${dangerous[0].reason}. Driftstack will refuse this config.`,
+        `Line ${dangerous[0].line.toString()}: ${dangerous[0].reason}. Driftstack will refuse this config` +
+          `${n > 1 ? ` (and ${(n - 1).toString()} more line${n - 1 > 1 ? 's' : ''})` : ''}.`,
       );
+      setVpnFixable(fixed.config !== text ? fixed.config : null);
       setDraft((d) => ({ ...d, openvpn: { ...(d.openvpn ?? {}), config_blob: text } }));
       return;
     }
@@ -2060,6 +2122,19 @@ export function ProxyForm({
               />
             </label>
             {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
+            {vpnFixable !== null && (
+              <button
+                type="button"
+                data-action="strip-unsupported-ovpn"
+                onClick={() => {
+                  const fixed = vpnFixable;
+                  if (fixed !== null) handleOvpnPaste(fixed);
+                }}
+                className="mt-1 self-start rounded border border-accent/40 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent hover:bg-accent/20"
+              >
+                Remove unsupported lines (lower script-security to 1)
+              </button>
+            )}
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Auth username (optional)">

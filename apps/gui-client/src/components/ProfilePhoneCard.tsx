@@ -75,6 +75,7 @@ export interface ProfilePhoneCardProps {
   flag: string; // emoji or '🌍'
   countryCode: string | null; // exit country code (e.g. 'NL') for the badge
   exitIp: string | null; // real exit IP, or null = untested
+  locationLabel: string | null; // #6 — resolved "city, region" / country name for the exit
   latencyMs: number | null;
   latencyFillPct: number;
   latencyGood: boolean;
@@ -206,8 +207,6 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const latVantage = p.latencyVantage !== undefined ? vantageLabel(p.latencyVantage) : undefined;
   const caps =
     p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe) : null;
-  // T-27 — the fleet relay verdict is its own chip (undefined = none).
-  const relayCap = caps?.find((c) => c.key === 'quic-relay');
   const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
   // T-6 — read the QUIC chip's ok AND inferred: a green ✓ is only for a MEASURED
   // 'h3'. An inferred chip (UDP relays but HTTP/3 was never measured) renders a
@@ -449,6 +448,18 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     {p.exitIp ?? (p.probed ? 'no exit IP' : 'run Test')}
                   </span>
                 </div>
+                {/* #6 — exit LOCATION (city, region / country name). Previously shown
+                    only in the Profiles LIST view; the grid card had just the flag +
+                    2-letter code. Rendered when the exit probe resolved it. */}
+                {p.locationLabel !== null && p.locationLabel !== '' && (
+                  <div
+                    className="truncate text-[9.5px] text-ink-muted"
+                    title={p.locationLabel}
+                    data-component="exit-location"
+                  >
+                    {p.locationLabel}
+                  </div>
+                )}
                 {/* WHICH proxy. Its own row rather than squeezed beside the exit
                     IP: with several saved proxies the name is the thing that
                     tells two otherwise-identical cards apart. */}
@@ -525,8 +536,15 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   >
                     UDP {caps === null ? '?' : udpOk ? '✓' : '✗'}
                   </span>
-                  {p.hasProxy && <ProxyOsChip fingerprint={p.osFingerprint} size="xs" />}
                 </div>
+                {/* OS chip on its OWN row — on the 178px card it was the last child of
+                    the latency/UDP row and overflowed the card, clipped by the phone
+                    screen's overflow-hidden. Its own row keeps it fully visible. */}
+                {p.hasProxy && (
+                  <div className="flex items-center gap-1.5">
+                    <ProxyOsChip fingerprint={p.osFingerprint} size="xs" />
+                  </div>
+                )}
                 {/* A proxy that FAILED its last test says so, in place, with the
                     reason and a one-click retest.
                     Before this the card rendered a broken proxy almost exactly
@@ -538,10 +556,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <div
                     data-component="proxy-broken-banner"
                     role="status"
-                    className="flex items-center gap-1.5 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
+                    className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
                   >
                     <span
-                      className="text-[10px] font-semibold text-status-error"
+                      className="min-w-0 truncate text-[10px] font-semibold text-status-error"
                       title={p.capabilities?.message}
                     >
                       {proxyLabel}
@@ -587,10 +605,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     >
                       WebRTC {webrtc ? '✓' : '✗'}
                     </span>
-                    {/* T-6 — inferred renders muted '~' (never green); a measured
-                        'h3' is green ✓, a measured 'h2-only' is red ✗. */}
+                    {/* T-6/T-27 — ONE QUIC verdict (see proxyCapabilities): green ✓ for
+                        a live 'h3' or a fleet relay-verified proxy, red ✗ for a measured
+                        negative, muted '~' when only inferred from UDP. The hint says
+                        which. No separate "QUIC relayed" chip — it read as a second,
+                        contradictory QUIC badge. */}
                     <span
                       data-quic-inferred={quicInferred ? 'true' : 'false'}
+                      title={quicCap?.hint}
                       className={`rounded px-1 text-[8.5px] ${
                         quicInferred
                           ? 'bg-surface-inset text-ink-secondary'
@@ -601,19 +623,6 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     >
                       QUIC {quicInferred ? '~' : quicOk ? '✓' : '✗'}
                     </span>
-                    {/* T-27 — the fleet Mac's relay verdict, when one was measured.
-                        A separate chip from QUIC above: one is a browser session's
-                        HTTP/3, the other a cold handshake through the proxy. */}
-                    {relayCap !== undefined && (
-                      <span
-                        data-capability="quic-relay"
-                        data-ok={relayCap.ok ? 'true' : 'false'}
-                        title={relayCap.hint}
-                        className={`rounded px-1 text-[8.5px] ${relayCap.ok ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
-                      >
-                        {relayCap.label} {relayCap.ok ? '✓' : '✗'}
-                      </span>
-                    )}
                   </div>
                 )}
               </>

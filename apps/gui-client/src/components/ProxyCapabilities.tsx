@@ -51,18 +51,21 @@ export interface ProxyCapability {
 }
 
 /**
- * @param quicMeasured T-6 — the QUIC verdict MEASURED in a live session, when the
- *   control plane observed one: 'h3' → HTTP/3 verified (a real green ✓), 'h2-only'
- *   → measured NO HTTP/3 (a measured negative, not a guess), null/undefined → never
- *   measured, so the QUIC chip falls back to the INFERRED '~' the probe can offer
- *   and NEVER renders green. WebRTC and HTTP/2 are unchanged.
- * @param quicProbe T-1 — the fleet Mac's STANDALONE QUIC handshake through the
- *   proxy to a cold h3 origin (the server's `quic_ok`). It proves the PROXY relays
- *   QUIC, which is a different claim from `quicMeasured` (a live browser session
- *   saw HTTP/3). It gets its OWN chip: true → green "QUIC relayed", false → a
- *   measured "QUIC not relayed" (not the inferred '~'), undefined → no chip at
- *   all. ⛔ It never touches the QUIC chip above: when the two disagree, that
- *   disagreement is the finding, and merging them would erase it.
+ * ONE QUIC chip, strongest evidence wins (2026-09-09). Previously `quicProbe` got its
+ * OWN "QUIC relayed" chip beside the `quicMeasured`/inferred "QUIC" chip; when the relay
+ * probe was green and no live session had measured HTTP/3, operators saw a green "QUIC
+ * relayed" next to a muted "QUIC" and read them as two contradictory badges. They are
+ * not contradictory — relay-capable and live-h3-observed are different strengths of the
+ * same claim — so they now collapse into a single verdict.
+ * @param quicMeasured T-6 — the QUIC verdict MEASURED in a live session: 'h3' → HTTP/3
+ *   verified (green), 'h2-only' → measured NO HTTP/3 (measured negative), null/undefined
+ *   → never measured. A live measurement OUTRANKS the relay probe (it's what the browser
+ *   actually did).
+ * @param quicProbe T-1 — the fleet Mac's standalone QUIC handshake through the proxy
+ *   (the server's `quic_ok`): true → the proxy relays QUIC (green), false → it does not
+ *   (measured negative), undefined → no relay measurement. It FEEDS the single QUIC chip
+ *   below the live measurement; only when NEITHER was measured does the chip fall back to
+ *   the UDP inference ('~', never green). WebRTC and HTTP/2 are unchanged.
  */
 export function proxyCapabilities(
   result: ProxyTestResult,
@@ -73,25 +76,57 @@ export function proxyCapabilities(
   // that: a proxy can authenticate and refuse every CONNECT.
   const live = isProxyUsable(result);
   const udp = live && result.udp_associate;
-  // A measured verdict overrides the inference entirely. 'h3' is the ONLY green;
-  // 'h2-only' is a measured negative; anything else means we never measured it.
-  const quicIsMeasured = quicMeasured === 'h3' || quicMeasured === 'h2-only';
-  // T-1 — the relay probe is its own measured chip, appended after the QUIC chip
-  // and reading NOTHING from it. Only a boolean is a measurement.
-  const relayChip: ProxyCapability[] =
-    typeof quicProbe === 'boolean'
-      ? [
-          {
-            key: 'quic-relay',
-            label: quicProbe ? 'QUIC relayed' : 'QUIC not relayed',
-            ok: quicProbe,
+  // ONE QUIC verdict, strongest evidence first (2026-09-09). A live session's HTTP/3
+  // is green; a live session's h2-only is a measured negative; the fleet relay probe
+  // true is green / false is a measured negative; and only when NOTHING was measured
+  // do we fall back to the UDP inference ('~', never green). Collapsed into a single
+  // chip on purpose: a green "QUIC relayed" (relay probe) sitting next to a muted
+  // inferred "QUIC" read to operators as two contradictory QUIC badges. A live
+  // measurement outranks the relay probe because it is what the browser actually did.
+  const quicChip: ProxyCapability =
+    quicMeasured === 'h3'
+      ? {
+          key: 'quic',
+          label: 'QUIC',
+          ok: true,
+          inferred: false,
+          hint: 'HTTP/3 verified in a live session through this exit.',
+        }
+      : quicMeasured === 'h2-only'
+        ? {
+            key: 'quic',
+            label: 'QUIC',
+            ok: false,
             inferred: false,
-            hint: quicProbe
-              ? 'This proxy relays QUIC — measured from a fleet Mac, the kind that runs your profiles.'
-              : 'This proxy does not relay QUIC — measured from a fleet Mac, the kind that runs your profiles. HTTP/3 falls back to HTTP/2 over TCP there.',
-          },
-        ]
-      : [];
+            hint: 'No HTTP/3 — a live session used HTTP/2 over TCP through this exit.',
+          }
+        : quicProbe === true
+          ? {
+              key: 'quic',
+              label: 'QUIC',
+              ok: true,
+              inferred: false,
+              hint: 'This proxy relays QUIC — measured from a fleet Mac, the kind that runs your profiles. HTTP/3 works through this exit.',
+            }
+          : quicProbe === false
+            ? {
+                key: 'quic',
+                label: 'QUIC',
+                ok: false,
+                inferred: false,
+                hint: 'This proxy does not relay QUIC — measured from a fleet Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+              }
+            : {
+                key: 'quic',
+                label: 'QUIC',
+                // Nothing measured → the UDP inference: LIKELY when UDP relays,
+                // impossible when it does not. Never green (it's a guess).
+                ok: udp,
+                inferred: udp,
+                hint: udp
+                  ? 'UDP relay verified, so HTTP/3 is LIKELY — not tested. Some exits relay UDP yet still block UDP/443 or fragment the QUIC handshake, so run Test (or a session) to confirm.'
+                  : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
+              };
   return [
     {
       key: 'webrtc',
@@ -101,25 +136,7 @@ export function proxyCapabilities(
         ? 'UDP relay verified — WebRTC gathers host/srflx candidates and streams media through this exit.'
         : 'No UDP relay — WebRTC falls back to TURN-over-TCP (slower, more detectable).',
     },
-    {
-      key: 'quic',
-      label: 'QUIC',
-      // Measured: ok is exactly whether HTTP/3 was seen. Unmeasured: fall back to
-      // the UDP inference — LIKELY when UDP relays, impossible when it does not.
-      ok: quicIsMeasured ? quicMeasured === 'h3' : udp,
-      // Inferred ONLY when we did not measure and are claiming the positive. A
-      // measured verdict (either way) is not a guess; and with no UDP relay the
-      // negative is solid — QUIC cannot work without one.
-      inferred: quicIsMeasured ? false : udp,
-      hint: quicIsMeasured
-        ? quicMeasured === 'h3'
-          ? 'HTTP/3 verified in a live session through this exit.'
-          : 'No HTTP/3 — measured in a live session. Traffic falls back to HTTP/2 over TCP.'
-        : udp
-          ? 'UDP relay verified, so HTTP/3 is LIKELY — but not tested. Some exits relay UDP yet still block UDP/443, inspect the QUIC handshake, or fragment it. Run a session to confirm.'
-          : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
-    },
-    ...relayChip,
+    quicChip,
     {
       key: 'http2',
       label: 'HTTP/2',
