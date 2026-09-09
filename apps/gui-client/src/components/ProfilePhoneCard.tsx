@@ -75,7 +75,7 @@ export interface ProfilePhoneCardProps {
   flag: string; // emoji or '🌍'
   countryCode: string | null; // exit country code (e.g. 'NL') for the badge
   exitIp: string | null; // real exit IP, or null = untested
-  locationLabel: string | null; // #6 — resolved "city, region" / country name for the exit
+  locationLabel?: string | null; // #6 — resolved "city, region" / country name for the exit
   latencyMs: number | null;
   latencyFillPct: number;
   latencyGood: boolean;
@@ -91,9 +91,9 @@ export interface ProfilePhoneCardProps {
   /** T-6 — the QUIC verdict measured in a live session: 'h3' lets the QUIC chip
    *  go green, 'h2-only' is a measured negative, null/undefined stays inferred. */
   quicMeasured?: MeasuredQuic | null;
-  /** T-27 — the fleet Mac's standalone QUIC-relay verdict (proxyCapabilities'
-   *  `quic-relay` chip): true/false is a measurement, undefined = no chip. Never
-   *  merged with quicMeasured — when the two disagree, that is the finding. */
+  /** T-27 — the fleet Mac's standalone QUIC-relay verdict (`quic_ok`): true/false is a
+   *  measurement, undefined = none. As of 2026-09-09 it FEEDS the single QUIC chip (a
+   *  live h3/h2-only measurement outranks it) rather than rendering a separate chip. */
   quicProbe?: boolean;
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
@@ -451,7 +451,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 {/* #6 — exit LOCATION (city, region / country name). Previously shown
                     only in the Profiles LIST view; the grid card had just the flag +
                     2-letter code. Rendered when the exit probe resolved it. */}
-                {p.locationLabel !== null && p.locationLabel !== '' && (
+                {p.locationLabel != null && p.locationLabel !== '' && (
                   <div
                     className="truncate text-[9.5px] text-ink-muted"
                     title={p.locationLabel}
