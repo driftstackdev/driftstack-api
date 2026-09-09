@@ -26,11 +26,27 @@
   ],
   "version": 1,
   "rule_id": "W3096/W3098",
-  "inline_required_directives": ["ca", "cert", "key", "tls-auth", "tls-crypt"],
+  "inline_required_directives": [
+    "ca",
+    "cert",
+    "key",
+    "tls-auth",
+    "tls-crypt"
+  ],
   "case_sensitive": true,
-  "token_separators": [" ", "\t"],
-  "line_separators": ["\n", "\r\n", "\r"],
-  "comment_prefixes": ["#", ";"],
+  "token_separators": [
+    " ",
+    "\t"
+  ],
+  "line_separators": [
+    "\n",
+    "\r\n",
+    "\r"
+  ],
+  "comment_prefixes": [
+    "#",
+    ";"
+  ],
   "double_dash_strip_min_length": 3,
   "evidence": {
     "openvpn_version": "2.7.0",
@@ -55,24 +71,32 @@
     {
       "name": "bare_ca_file_reference",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca ca.crt\n",
-      "expect": "reject", "directive": "ca", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
       "why": "points at a file the node's isolated dir will not contain"
     },
     {
       "name": "bare_cert_file_reference",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\ncert client.crt\n",
-      "expect": "reject", "directive": "cert", "failure_class": "silent"
+      "expect": "reject",
+      "directive": "cert",
+      "failure_class": "silent"
     },
     {
       "name": "crlf_config_must_still_split",
       "blob": "client\r\ndev tun\r\nremote vpn.example.com 1194\r\nca ca.crt\r\n",
-      "expect": "reject", "directive": "ca", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
       "why": "most .ovpn files are Windows-authored. Swift treats \\r\\n as ONE Character, so split(separator:\"\\n\") does not split them at all — that exact defect already shipped once in this parser"
     },
     {
       "name": "lone_cr_classic_mac_line_endings",
       "blob": "client\rdev tun\rremote vpn.example.com 1194\rca ca.crt\r",
-      "expect": "reject", "directive": "ca", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
       "why": "what a truncated CRLF write also leaves behind"
     },
     {
@@ -101,19 +125,25 @@
     {
       "name": "tab_separated_reference_W3098",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nca\tca.crt\n",
-      "expect": "reject", "directive": "ca", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
       "why": "SILENT BYPASS #1 in the Swift side: it split on the space literal, so this was one token and was accepted. openvpn's config lexer separates on space AND tab."
     },
     {
       "name": "tab_separated_tls_auth_with_direction_arg",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\ntls-auth\tta.key 0\n",
-      "expect": "reject", "directive": "tls-auth", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "tls-auth",
+      "failure_class": "silent",
       "why": "hyphenated directive plus a trailing direction argument, tab-separated"
     },
     {
       "name": "double_dash_prefixed_reference_W3098",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n--ca ca.crt\n",
-      "expect": "reject", "directive": "ca", "failure_class": "silent",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "silent",
       "why": "SILENT BYPASS #2: openvpn strips a leading '--' from a config-file directive, so this is honoured as 'ca ca.crt'. Unnormalised, the whole rule was a two-character bypass."
     },
     {
@@ -143,14 +173,47 @@
     {
       "name": "uppercase_keyword_is_not_our_class",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\nCA ca.crt\n",
-      "expect": "accept", "failure_class": "loud",
+      "expect": "accept",
+      "failure_class": "loud",
       "why": "VERIFIED against openvpn 2.7.0: 'CA' is an unrecognised option and openvpn refuses the config at parse time with a line number. It fails LOUD, so it is not the silent class this rule guards. Matching case-insensitively here makes an implementation over-broad and breaks set-equality with the other side."
     },
     {
       "name": "uppercase_inline_tag_does_not_satisfy_the_reference",
       "blob": "client\ndev tun\nproto udp\nremote vpn.example.com 1194\n<CA>\nAAAA\n</CA>\nca ca.crt\n",
-      "expect": "reject", "directive": "ca", "failure_class": "loud",
+      "expect": "reject",
+      "directive": "ca",
+      "failure_class": "loud",
       "why": "VERIFIED against openvpn 2.7.0: '<CA>' is NOT recognised as an inline ca block ('Unrecognized option ...: CA'), so the 'ca ca.crt' reference is genuinely unresolved. Rejecting is correct AND the error text ('inline it as a <ca> block') is the right guidance. Note the class is LOUD, not silent — openvpn refuses this config itself — so this row is lower severity than the tab and '--' rows."
     }
-  ]
+  ],
+  "_parameter_coverage": {
+    "_why": [
+      "HONEST LABELLING (2026-09-08). Which declared parameters are actually LOAD-BEARING was measured by",
+      "mutating each implementation and seeing which rows red. Passing rows are not proof a parameter is",
+      "exercised: a row can pass for a reason other than the one its name claims.",
+      "⛔ Do NOT read '18 rows, all passing' as covering every parameter below."
+    ],
+    "method": "delete the CLAUSE from the implementation (not the fixture) and re-run the contract suite",
+    "proved_load_bearing": [
+      "token_separators            (Swift: tab removed -> 2 rows red)",
+      "double_dash_strip_min_length(Swift: -- normalisation removed -> 1 row red)",
+      "inline_required_directives  (Swift: inline-wins disabled -> 2 rows red)",
+      "line_separators             (Swift: LF-only split -> 2 rows red)",
+      "case_sensitive              (Swift: keyword lowercased -> 1 row red)"
+    ],
+    "declared_but_INERT": {
+      "parameter": "comment_prefixes",
+      "status": "SUBSUMED on BOTH sides — proven by mutation, independently, in Swift and TS",
+      "evidence_swift": "comment guard deleted from openvpnExternalFileReference -> contract suite stays GREEN",
+      "evidence_ts": "startsWith('#')/(';') branch deleted from findUnresolvableOpenvpnFileReferences -> suite stays GREEN (A2)",
+      "mechanism": "'# ca ca.crt' tokenises to ['#','ca','ca.crt'], so token[0] is '#', never the directive. A comment prefix either forms its own token or attaches to the directive, so token-equality on the first token already excludes every comment line.",
+      "what_the_comment_rows_DO_pin": "the accept-OUTCOME only: a restructure that REJECTED a commented line would red them. They do NOT exercise comment_prefixes or either guard.",
+      "action": "guards KEPT on both sides — defensive-but-inert is fine; the labelling was the gap. If either implementation is restructured so a comment line can reach the keyword test, these fixtures will NOT catch the guard going missing."
+    },
+    "parameter_list_is_NOT_a_full_inventory": [
+      "'token equality (not prefix)' is a real clause of this rule with a fixture (prefix_is_not_equality,",
+      "proved load-bearing) and is NOT declared as a parameter above. Do not generate assertions from the",
+      "parameter block and assume they cover the rule."
+    ]
+  }
 }
