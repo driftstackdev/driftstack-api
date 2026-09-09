@@ -648,6 +648,15 @@ export function ProfilesView({
   const [agentSessionsLoaded, setAgentSessionsLoaded] = useState(false);
   const [bindings, setBindings] = useState<ProfileBinding[]>([]);
   const [proxies, setProxies] = useState<LocalProxyConfig[]>([]);
+  // Perf (audit 2026-09-08): index bindings + proxies by id once per change so the
+  // per-profile pickProxy / proxyIsExplicit / bindingProxyMissing lookups — called
+  // ~once per profile in the list/sort/card render — are O(1) instead of
+  // O(bindings)/O(proxies) scans. The grid sort by Country was O(N log N × bindings).
+  const bindingByProfile = useMemo(
+    () => new Map(bindings.map((b) => [b.profileId, b])),
+    [bindings],
+  );
+  const proxyById = useMemo(() => new Map(proxies.map((p) => [p.id, p])), [proxies]);
   // V-239 — gate the New profile button at the tier cap (skip when
   // profile_cap === null which means enterprise / no fixed cap).
   const profileCap = accountMe?.profile_cap ?? null;
@@ -2572,9 +2581,9 @@ export function ProfilesView({
   }
 
   function pickProxy(profileId: string): LocalProxyConfig | null {
-    const binding = bindings.find((b) => b.profileId === profileId);
+    const binding = bindingByProfile.get(profileId);
     if (binding?.defaultProxyId !== undefined && binding?.defaultProxyId !== null) {
-      const explicit = proxies.find((p) => p.id === binding.defaultProxyId);
+      const explicit = proxyById.get(binding.defaultProxyId);
       // EXPLICIT binding to a now-missing proxy (the bound proxy was deleted):
       // do NOT silently fall back to proxies[0] — that would route this profile's
       // egress through a DIFFERENT IP/country than configured with no warning, a
@@ -2602,7 +2611,7 @@ export function ProfilesView({
    * customer having seen that coming.
    */
   function proxyIsExplicit(profileId: string): boolean {
-    const binding = bindings.find((b) => b.profileId === profileId);
+    const binding = bindingByProfile.get(profileId);
     return binding?.defaultProxyId !== undefined && binding.defaultProxyId !== null;
   }
 
@@ -2610,9 +2619,9 @@ export function ProfilesView({
    *  a proxy that no longer exists (it was deleted). Lets the launch path tell
    *  the "deleted proxy" case apart from the "no proxies saved at all" case. */
   function bindingProxyMissing(profileId: string): boolean {
-    const binding = bindings.find((b) => b.profileId === profileId);
+    const binding = bindingByProfile.get(profileId);
     if (binding?.defaultProxyId === undefined || binding.defaultProxyId === null) return false;
-    return !proxies.some((p) => p.id === binding.defaultProxyId);
+    return !proxyById.has(binding.defaultProxyId);
   }
 
   // ARC A — ensure the picked local proxy has a server-side account_proxies row
