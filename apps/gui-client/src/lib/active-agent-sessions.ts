@@ -19,14 +19,26 @@
 import type { DriftstackClient } from './client';
 
 /**
- * An agent session is "active" (consuming a concurrent slot) exactly when its
- * status is `'active'`. `'paused'` and `'closed'` do not. Pure + exported so
- * the rollup is unit-tested independently of the fetch.
+ * Count the account's LIVE agent sessions — the number shown as "Running" and
+ * folded into the concurrent-slot estimate. A session counts when its status is
+ * `'active'` AND its liveness beat is not present-but-stale: a `fresh:false` beat
+ * means the owning worker went silent, so the session is a zombie the per-profile
+ * badge (ProfilesView.boundSessionByProfileId) and the chat header
+ * (session-liveness.ts) already treat as idle. Counting it here made the Command
+ * Center claim "Running" for a crashed session the Profiles hub showed idle, and
+ * could grey out Launch ("cap reached") with no running session to stop. An
+ * ABSENT beat (prod has no fleet control plane, or no beat yet) still counts by
+ * status — "unknown -> trust the binding", never "dead". `'paused'`/`'closed'`
+ * never count. Pure + exported so the rollup is unit-tested independent of fetch.
  */
-export function countActiveAgentSessions(sessions: ReadonlyArray<{ status: string }>): number {
+export function countActiveAgentSessions(
+  sessions: ReadonlyArray<{ status: string; liveness?: { fresh: boolean } }>,
+): number {
   let n = 0;
   for (const s of sessions) {
-    if (s.status === 'active') n += 1;
+    if (s.status !== 'active') continue;
+    if (s.liveness !== undefined && !s.liveness.fresh) continue;
+    n += 1;
   }
   return n;
 }

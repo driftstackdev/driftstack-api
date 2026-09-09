@@ -222,11 +222,20 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const verdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
   const proxyOk = verdict === null || verdict.ok;
   const proxyLabel = verdict?.label ?? '';
+  // T-6 — the QUIC clause reads the CANONICAL quic chip verdict, never a
+  // guess from udp_associate: udp relaying does not prove HTTP/3 carries. Saying
+  // "QUIC ✓" here while the chip shows a muted "~" is exactly the contradiction
+  // that makes the owner read the QUIC indicator as broken ("never goes green").
+  const quicClause = quicInferred
+    ? 'QUIC likely (not yet measured)'
+    : quicOk
+      ? 'QUIC ✓'
+      : 'QUIC ✗ (HTTP/2 on last measure)';
   const udpTitle =
     caps === null
       ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
       : udpOk
-        ? 'UDP relay verified — WebRTC ✓ and QUIC ✓ tunnel through this exit.'
+        ? `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`
         : 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
 
   return (

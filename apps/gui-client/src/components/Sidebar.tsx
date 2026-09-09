@@ -18,6 +18,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useSettings } from '../lib/SettingsContext';
 import { useRecordings } from '../lib/recordings';
 import { isCloudBaseUrl } from '../lib/telemetry';
+import { tierLabelFor } from './TierBadge';
 import { listProxyMetadata } from '../lib/proxies';
 import { fetchActiveAgentSessionCount } from '../lib/active-agent-sessions';
 import { teamWorkspaceLabel } from '../lib/team-label';
@@ -119,10 +120,7 @@ export function Sidebar({
   const teamCapableTier =
     tier === 'team_manual' || tier === 'agency_manual' || tier === 'enterprise';
   const showTeam = teamCount > 0 || teamCapableTier;
-  const planLabel =
-    accountMe?.tier != null
-      ? accountMe.tier.charAt(0).toUpperCase() + accountMe.tier.slice(1)
-      : null;
+  const planLabel = accountMe?.tier != null ? tierLabelFor(accountMe.tier) : null;
   const recordingsCount = recordings.size;
 
   return (

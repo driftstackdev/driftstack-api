@@ -41,7 +41,13 @@ export interface ProfileTableRow {
   locationLabel: string | null; // resolved city · region · country (or country)
   probed: boolean;
   udp: 'ok' | 'fail' | 'unknown';
+  /** Canonical QUIC verdict (same source as the card's chip) for the UDP-column
+   *  tooltip, so the list never claims "QUIC ✓" while the card shows "~". */
+  quic?: 'ok' | 'inferred' | 'fail' | 'unknown';
   latencyMs: number | null;
+  /** True when latencyMs is the fleet/server number (matches the grid card),
+   *  false/absent when it is the native this-Mac probe. Drives the source hint. */
+  latencyFromServer?: boolean;
   folder: string;
   tags: ReadonlyArray<string>;
   note: string;
@@ -129,6 +135,16 @@ const COLS: ReadonlyArray<Col> = [
 // also collapse, leaving the essentials — select · Profile · Exit IP · Actions.
 const HIDE_SMALL = 'ds-col-l';
 const HIDE_MED = 'ds-col-m';
+
+// The QUIC clause of the UDP-column tooltip — the canonical verdict wording,
+// so the list agrees with the card's QUIC chip instead of asserting "QUIC ✓"
+// from UDP relay alone (which only means WebRTC, never that HTTP/3 carries).
+const QUIC_CLAUSE: Record<'ok' | 'inferred' | 'fail' | 'unknown', string> = {
+  ok: 'QUIC ✓',
+  inferred: 'QUIC likely (not yet measured)',
+  fail: 'QUIC ✗ (HTTP/2 on last measure)',
+  unknown: 'QUIC not tested',
+};
 
 export function ProfilesTable(p: ProfilesTableProps): JSX.Element {
   return (
@@ -352,7 +368,14 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             <div className="flex items-center gap-2 text-[10px] text-ink-muted">
               {r.locationLabel !== null && <span className="truncate">{r.locationLabel}</span>}
               {r.latencyMs !== null && (
-                <span className={`mono ${r.latencyMs <= 100 ? '' : 'text-status-busy'}`}>
+                <span
+                  className={`mono ${r.latencyMs <= 100 ? '' : 'text-status-busy'}`}
+                  title={
+                    r.latencyFromServer === true
+                      ? 'Measured from the fleet that runs the profile'
+                      : 'Measured from this Mac'
+                  }
+                >
                   {r.latencyMs}ms
                 </span>
               )}
@@ -375,7 +398,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             }`}
             title={
               r.udp === 'ok'
-                ? 'UDP relay verified (WebRTC + QUIC)'
+                ? `UDP relay verified — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
                 : 'No UDP relay — WebRTC/QUIC fall back to TCP'
             }
           >

@@ -57,9 +57,10 @@ describe('V-534.L SettingsAccountCard — fetch happy path', () => {
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
     expect(screen.getByText('acc_test123')).toBeTruthy();
     expect(screen.getByText('user@example.com')).toBeTruthy();
-    // Tier is humanized ('solo_manual' → 'Solo Manual') so the card never shows
-    // a raw lowercase database slug to the customer.
-    expect(screen.getByText('Solo Manual')).toBeTruthy();
+    // Tier renders the CANONICAL label from tierLabelFor ('solo_manual' →
+    // 'Personal') — the same map the Command Center KPI and the sidebar footer
+    // use, so all three agree instead of showing three spellings of one tier.
+    expect(screen.getByText('Personal')).toBeTruthy();
   });
 
   it('points the "Manage billing" link to the prod dashboard for prod baseUrls', () => {

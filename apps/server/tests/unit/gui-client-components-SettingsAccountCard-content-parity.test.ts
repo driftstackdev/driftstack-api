@@ -90,7 +90,7 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     );
   });
 
-  it("Render: <section aria-label='Account info'> (Panel-idiom rounded-xl shadow-sm) + 'Manage billing →' anchor with canonical `${dashboardUrl}/billing/` href + target='_blank' + rel='noreferrer'; loading state role='status'; error state is now a role='alert' <div> with the mapped {state.message} + a Retry button (bumps retryNonce); ready state dl with a click-to-copy Account id <button title='Copy account id'> + Email + humanizeTier(tier) rows", () => {
+  it("Render: <section aria-label='Account info'> (Panel-idiom rounded-xl shadow-sm) + 'Manage billing →' anchor with canonical `${dashboardUrl}/billing/` href + target='_blank' + rel='noreferrer'; loading state role='status'; error state is now a role='alert' <div> with the mapped {state.message} + a Retry button (bumps retryNonce); ready state dl with a click-to-copy Account id <button title='Copy account id'> + Email + tierLabelFor(tier) rows", () => {
     expect(body).toMatch(
       /<section\s*aria-label="Account info"\s*className="rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm space-y-2"\s*>/,
     );
@@ -108,12 +108,13 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
     expect(body).toMatch(
       /<button\s*type="button"\s*onClick=\{\(\) => void handleCopyId\(state\.account\.id\)\}\s*title="Copy account id"[\s\S]*?>\s*\{state\.account\.id\}\s*<\/button>/,
     );
-    // Tier is humanized (slug → Title Case) before display.
+    // Tier renders the CANONICAL label from TierBadge (tierLabelFor), not a local
+    // title-caser — one map for the Command Center KPI, the sidebar footer and this
+    // card, so the three can't show three spellings of one tier (the T-18 drift).
     expect(body).toMatch(
-      /<dd className="text-ink-primary">\{humanizeTier\(state\.account\.tier\)\}<\/dd>/,
+      /<dd className="text-ink-primary">\{tierLabelFor\(state\.account\.tier\)\}<\/dd>/,
     );
-    // humanizeTier turns a 'self_hosted'/'pay-as-you-go' slug into a human label.
-    expect(body).toMatch(/function humanizeTier\(tier: string\): string \{/);
+    expect(body).toMatch(/import \{ tierLabelFor \} from '\.\/TierBadge';/);
   });
 
   it('file exists at canonical path', () => {

@@ -4562,6 +4562,26 @@ export function ProfilesView({
                         : (caps.find((c) => c.key === 'webrtc')?.ok ?? false)
                           ? 'ok'
                           : 'fail';
+                    // T-27 — the QUIC verdict for the list tooltip comes from the SAME
+                    // caps the chip reads, so the list never claims "QUIC ✓" while the
+                    // card shows a muted "~".
+                    const quicCap = caps?.find((c) => c.key === 'quic');
+                    const quic: 'ok' | 'inferred' | 'fail' | 'unknown' =
+                      caps === null || quicCap === undefined
+                        ? 'unknown'
+                        : quicCap.inferred
+                          ? 'inferred'
+                          : quicCap.ok
+                            ? 'ok'
+                            : 'fail';
+                    // T-27 — prefer the SERVER/fleet latency (same source + gate as the
+                    // grid card and ProxiesView) so grid and list never show a different
+                    // number/colour for the same proxy; native probe is the fallback,
+                    // gated on exitOk (0ms on a dead proxy must not read as fastest).
+                    const rowServerLat = px !== null ? probeView.serverLatency[px.id] : undefined;
+                    const rowLat =
+                      rowServerLat ??
+                      (exitOk ? (probe?.result.latency_ms ?? undefined) : undefined);
                     return {
                       id: profile.id,
                       name: profile.name,
@@ -4589,11 +4609,12 @@ export function ProfilesView({
                             : null,
                       probed: probe !== undefined,
                       udp,
-                      // Gated on exitOk (like exitIp/locationLabel above): the native
-                      // probe returns latency_ms=0 for an UNREACHABLE proxy, which would
-                      // otherwise render as "0ms" — a dead proxy masquerading as the fastest
-                      // exit (the ProxiesView sibling guards this the same way).
-                      latencyMs: exitOk ? (probe?.result.latency_ms ?? null) : null,
+                      quic,
+                      // rowLat prefers the fleet number and falls back to the native
+                      // probe (gated on exitOk in the rowLat computation above, so a dead
+                      // proxy's 0ms never reads as the fastest exit).
+                      latencyMs: rowLat ?? null,
+                      latencyFromServer: rowServerLat !== undefined,
                       folder: profilesMeta[profile.id]?.folder ?? '',
                       tags: profilesMeta[profile.id]?.tags ?? [],
                       note: profilesMeta[profile.id]?.note ?? '',

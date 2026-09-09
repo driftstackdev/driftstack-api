@@ -22,6 +22,16 @@ describe('countActiveAgentSessions', () => {
     ).toBe(2);
   });
 
+  it('a present-but-STALE liveness beat (worker went silent) does not count; absent or fresh does', () => {
+    expect(
+      countActiveAgentSessions([
+        { status: 'active', liveness: { fresh: false } }, // zombie — worker silent
+        { status: 'active', liveness: { fresh: true } }, // genuinely live
+        { status: 'active' }, // no fleet control plane → trust the binding
+      ]),
+    ).toBe(2);
+  });
+
   it('empty list → 0', () => {
     expect(countActiveAgentSessions([])).toBe(0);
   });

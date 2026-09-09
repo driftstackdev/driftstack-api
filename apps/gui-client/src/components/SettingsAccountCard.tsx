@@ -18,6 +18,7 @@ import { readBoundedApiJson } from '../lib/read-bounded-json';
 import { useSettings } from '../lib/SettingsContext';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
+import { tierLabelFor } from './TierBadge';
 
 /**
  * The FLAT shape `GET /v1/account/me` actually returns
@@ -57,19 +58,6 @@ function dashboardUrlFor(baseUrl: string): string {
     return 'http://localhost:5173';
   }
   return 'https://app.driftstack.io';
-}
-
-/**
- * Turn a raw tier slug ('self_hosted', 'pay-as-you-go') into a human
- * label ('Self Hosted', 'Pay As You Go') so the card never shows a
- * lowercase database value to the customer.
- */
-function humanizeTier(tier: string): string {
-  return tier
-    .split(/[_-]+/)
-    .filter((part) => part.length > 0)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
 }
 
 /**
@@ -206,7 +194,7 @@ export function SettingsAccountCard(): JSX.Element | null {
           </div>
           <div className="flex items-baseline justify-between gap-3">
             <dt className="shrink-0 text-ink-secondary">Tier</dt>
-            <dd className="text-ink-primary">{humanizeTier(state.account.tier)}</dd>
+            <dd className="text-ink-primary">{tierLabelFor(state.account.tier)}</dd>
           </div>
         </dl>
       )}
