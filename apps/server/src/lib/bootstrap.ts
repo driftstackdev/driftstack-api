@@ -35,6 +35,7 @@ import { SessionPageStateStore } from '../services/session-page-state-store.js';
 import { SessionLivenessStore } from '../services/session-liveness-store.js';
 import { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
 import { SessionNetworkLogStore } from '../services/session-network-log-store.js';
+import { SessionCaptureStore } from '../services/session-capture-store.js';
 import { makeProfileSavedPersister } from '../services/profile-store.js';
 import { makeChallengeRelay } from '../services/challenge-relay.js';
 import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-relay.js';
@@ -1353,6 +1354,11 @@ export async function createProductionDeps(
   // pre-launch demo path + every existing decompose→execute test. The consequential-
   // action confirmation gate is preserved across the swap (ControlPlaneAgentExecutor
   // applies the SAME consequentialHalt as the stub).
+  // #7 — per-agent-session screenshot capture store: the control-plane executor
+  // stashes a screenshot's bytes here + mints a captureId; GET /v1/agent-sessions/
+  // :id/captures/:id serves them. Constructed here so the SAME instance is shared
+  // with the executor (writer) and the agent-sessions route (reader) below.
+  const sessionCaptureStore = new SessionCaptureStore();
   const agentExecutor: AgentExecutor = config.fleetControlPlaneEnabled
     ? new ControlPlaneAgentExecutor(
         new FleetSessionRoutingDispatcher(
@@ -1360,6 +1366,9 @@ export async function createProductionDeps(
           agentSessionsRepo,
           logger,
         ),
+        undefined,
+        {},
+        sessionCaptureStore,
       )
     : new StubAgentExecutor();
   const agentDecomposer = selectAgentDecomposer(config, logger);
@@ -2608,6 +2617,7 @@ export async function createProductionDeps(
           sessionLivenessStore,
           sessionCapabilityReportStore,
           sessionNetworkLogStore,
+          sessionCaptureStore,
           // Profile-backed session persistence (A3 W417): when R2 is configured,
           // a `profileSaved` frame from a node writes the customer's sealed store
           // to R2; without R2 the frame is accepted + ignored (stateless).

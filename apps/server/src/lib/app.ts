@@ -70,6 +70,7 @@ import type { SessionPageStateStore } from '../services/session-page-state-store
 import type { SessionLivenessStore } from '../services/session-liveness-store.js';
 import type { SessionCapabilityReportStore } from '../services/session-capability-report-store.js';
 import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
+import type { SessionCaptureStore } from '../services/session-capture-store.js';
 import type { SessionRepo } from '../services/sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { AccountProxiesRepo } from '../db/account-proxies-repo.js';
@@ -586,6 +587,10 @@ export interface AppDeps {
    * :id/network serves it (the simulator's Network pane). Absent in prod (no
    * fleet CP) → the route reports 'unavailable' with an empty list. */
   sessionNetworkLogStore?: SessionNetworkLogStore;
+  /** #7 — per-agent-session screenshot capture store; the control-plane executor
+   *  writes it and GET /v1/agent-sessions/:id/captures/:id reads it. Absent in prod
+   *  without the fleet CP → the route 404s. */
+  sessionCaptureStore?: SessionCaptureStore;
   /**
    * Local fleet-demo session-dispatch config. Present only when the fleet
    * control plane is enabled (bootstrap assembles it alongside the registry);

@@ -122,6 +122,7 @@ import type {
 } from '../services/session-capability-report-store.js';
 import { customerSafeCapabilityReport } from '../services/session-capability-report-store.js';
 import type { SessionNetworkLogStore } from '../services/session-network-log-store.js';
+import type { SessionCaptureStore } from '../services/session-capture-store.js';
 import type { AccountTier, SocksProxyConfig, InlineVpnProxyWire } from '@driftstack/api-types';
 import { archetypeAllowedForTier, defaultArchetypeIdForTier } from '@driftstack/api-types';
 import {
@@ -679,6 +680,9 @@ export interface AgentSessionsRoutesDeps {
    * reports status 'unavailable' with an empty list.
    */
   sessionNetworkLogStore?: SessionNetworkLogStore;
+  /** #7 — per-agent-session screenshot capture store; GET /v1/agent-sessions/:id/
+   *  captures/:id serves the stored image. Absent → the route 404s. */
+  sessionCaptureStore?: SessionCaptureStore;
   /**
    * Local fleet-demo dispatch config: the archetype / behavior profile /
    * landing URL / SOCKS5 proxy the dispatched session browses with. Wired
@@ -1993,6 +1997,7 @@ export function registerAgentSessionsRoutes(
     sessionLivenessStore,
     sessionCapabilityReportStore,
     sessionNetworkLogStore,
+    sessionCaptureStore,
     sessionDispatch,
     profilesService,
     authRepo,
@@ -3040,6 +3045,40 @@ export function registerAgentSessionsRoutes(
       const parsedAfter = Number(req.query.after);
       const after = Number.isNaN(parsedAfter) ? undefined : parsedAfter;
       return { status: 'ok' as const, ...sessionNetworkLogStore.get(rec.id, after) };
+    },
+  );
+
+  // #7 — serve a screenshot the AI captured during this session. The bytes are held
+  // in the per-session capture store (NOT the transcript); the executor minted the
+  // captureId. Same account-ownership gate as GET /:id/network — a capture is only
+  // ever served to a caller who can access the owning session.
+  app.get<{ Params: { id: string; captureId: string } }>(
+    '/v1/agent-sessions/:id/captures/:captureId',
+    { preHandler: [controlKeyOrAccountAuth('read:sessions'), app.rateLimit('global')] },
+    async (req, reply) => {
+      const rec = await sessions.get(req.params.id);
+      if (rec === null) {
+        throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+      }
+      if (req.guiControlKeyAuthorized !== true) {
+        const ctx = requireCtx(req);
+        if (!callerCanAccessAgentSession(ctx, rec.accountId)) {
+          throw new NotFoundError(`AgentSession ${req.params.id} not found.`);
+        }
+      }
+      await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
+      // A miss (no store on this deployment, an unknown or LRU/TTL-evicted captureId)
+      // is a 404, never a fabricated image. cap.captureId is the server-minted value
+      // (used for the filename so a URL param can never inject a response header).
+      const cap = sessionCaptureStore?.get(rec.id, req.params.captureId);
+      if (cap === undefined) {
+        throw new NotFoundError(`Capture ${req.params.captureId} not found.`);
+      }
+      const bytes = Buffer.from(cap.bytesB64, 'base64');
+      reply.header('content-type', cap.format === 'jpeg' ? 'image/jpeg' : 'image/png');
+      reply.header('cache-control', 'private, max-age=300, immutable');
+      reply.header('content-disposition', `inline; filename="${cap.captureId}.${cap.format}"`);
+      return reply.send(bytes);
     },
   );
 
