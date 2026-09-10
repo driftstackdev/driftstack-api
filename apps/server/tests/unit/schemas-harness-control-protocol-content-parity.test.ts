@@ -352,6 +352,50 @@ describe('apps/server/src/schemas/harness-control-protocol.ts content parity', (
     expect(body).toMatch(/\.superRefine\(\(frame, ctx\) => \{/);
   });
 
+  it('VPN exit parity — probeEgressResult carries the four exit geo keys, each nullable AND optional, bounded like exit_ip', () => {
+    // ⛔ Both modifiers are load-bearing (the W-28 lesson in the same schema):
+    // NULLABLE so a node's explicit "no answer" arrives as null rather than being
+    // refused; OPTIONAL so a node that does not yet emit the key still validates —
+    // deployable CP-first or node-first. Dropping either reopens a window in which
+    // one side speaks a dialect the other refuses.
+    for (const key of ['exit_country', 'exit_timezone', 'exit_region', 'exit_city']) {
+      expect(body).toContain(
+        `${key}: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),`,
+      );
+    }
+    // Behavioural: the un-migrated fixture (no keys) still parses; all-null parses.
+    const base = {
+      type: 'probeEgressResult',
+      requestId: 'rq_1',
+      node_id: 'mac-us-001',
+      ok: true,
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      latency_ms: 42,
+      h2_ok: true,
+      quic_ok: true,
+      quic_detail: null,
+      exit_ip: '203.0.113.7',
+      error: null,
+    };
+    expect(ProbeEgressResultSchema.safeParse(base).success).toBe(true);
+    expect(
+      ProbeEgressResultSchema.safeParse({
+        ...base,
+        exit_country: null,
+        exit_timezone: null,
+        exit_region: null,
+        exit_city: null,
+      }).success,
+    ).toBe(true);
+    // And an over-long value is refused (the vacuity control is the two parses above).
+    expect(ProbeEgressResultSchema.safeParse({ ...base, exit_city: 'x'.repeat(300) }).success).toBe(
+      false,
+    );
+  });
+
   it('behavioral: a valid probeEgress frame round-trips (the vacuity control for the strict-reject below)', () => {
     const validProbe = {
       type: 'probeEgress',

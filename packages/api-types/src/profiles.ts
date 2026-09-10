@@ -242,6 +242,20 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // null when never measured.
     quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
     quic_measured_at: z.string().nullable().optional(),
+    // VPN exit parity — the exit identity the measuring fleet node observed
+    // (vantage=fleet only; the only vantage that can see through an OpenVPN /
+    // WireGuard tunnel). Present exactly when the node saw an exit IP; the geo
+    // fields are null when the node could not resolve them. Absent on a
+    // control-plane result and on a probe that reached no exit.
+    exit_observed: z
+      .object({
+        ip: z.string(),
+        country: z.string().nullable(),
+        timezone: z.string().nullable(),
+        region: z.string().nullable(),
+        city: z.string().nullable(),
+      })
+      .optional(),
   }),
   z.object({ ok: z.literal(false), reason: z.string() }),
 ]);

@@ -2463,6 +2463,20 @@ function buildRegistry(): OpenAPIRegistry {
         quic_ok: z.boolean(),
         quic_detail: z.string().nullable(),
         exit_ip: z.string().nullable(),
+        // VPN exit parity — the exit identity the NODE observed, with the geo it
+        // resolved. Present exactly when `exit_ip` is non-null; each geo field is
+        // null when the node could not resolve it. The only vantage that can see
+        // through an OpenVPN / WireGuard tunnel, so this is the only source of a
+        // VPN proxy's location/timezone on a Test.
+        exit_observed: z
+          .object({
+            ip: z.string(),
+            country: z.string().nullable(),
+            timezone: z.string().nullable(),
+            region: z.string().nullable(),
+            city: z.string().nullable(),
+          })
+          .optional(),
         quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
         quic_measured_at: z.string().nullable().optional(),
         // N-2 — the fingerprint the CONTROL PLANE observed while the node measured

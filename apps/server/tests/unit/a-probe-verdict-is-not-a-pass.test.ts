@@ -292,3 +292,99 @@ describe('a probe verdict is not a pass', () => {
     }
   });
 });
+
+// VPN exit parity — the node now resolves the exit's geo beside `exit_ip`
+// (exit_country / exit_timezone / exit_region / exit_city). Each is
+// `.nullable().optional()`, BOTH, for the W-28 reason above: nullable so the
+// node's explicit "no answer" arrives as null; optional so a node that does not
+// yet emit the key still validates — deployable CP-first or node-first with no
+// window in which a frame is refused.
+describe('VPN exit parity — the four exit geo keys are nullable AND optional', () => {
+  const GEO = {
+    exit_country: 'DE',
+    exit_timezone: 'Europe/Berlin',
+    exit_region: 'Hesse',
+    exit_city: 'Frankfurt am Main',
+  };
+
+  it('CRITICAL a frame WITHOUT the four keys parses — every un-migrated node and every existing fixture', () => {
+    // DEAD carries none of the four keys, on purpose: it is the shape a node that
+    // predates this change sends.
+    expect('exit_country' in DEAD).toBe(false);
+    const parsed = ProbeEgressResultSchema.safeParse({ ...DEAD, exit_ip: '203.0.113.7' });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      // Absent stays ABSENT — not coerced to null, so a consumer can tell "the
+      // node did not say" from "the node said there is none".
+      expect('exit_country' in parsed.data).toBe(false);
+      expect('exit_timezone' in parsed.data).toBe(false);
+      expect('exit_region' in parsed.data).toBe(false);
+      expect('exit_city' in parsed.data).toBe(false);
+    }
+  });
+
+  it('CRITICAL a frame with all four EXPLICITLY null parses, and the nulls survive', () => {
+    const parsed = ProbeEgressResultSchema.safeParse({
+      ...DEAD,
+      exit_ip: '203.0.113.7',
+      exit_country: null,
+      exit_timezone: null,
+      exit_region: null,
+      exit_city: null,
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.exit_country).toBeNull();
+      expect(parsed.data.exit_timezone).toBeNull();
+      expect(parsed.data.exit_region).toBeNull();
+      expect(parsed.data.exit_city).toBeNull();
+    }
+  });
+
+  it('VACUITY CONTROL — real values round-trip, so the arms above are not passing on a schema that strips the keys', () => {
+    const parsed = ProbeEgressResultSchema.safeParse({ ...DEAD, exit_ip: '203.0.113.7', ...GEO });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.exit_country).toBe('DE');
+      expect(parsed.data.exit_timezone).toBe('Europe/Berlin');
+      expect(parsed.data.exit_region).toBe('Hesse');
+      expect(parsed.data.exit_city).toBe('Frankfurt am Main');
+    }
+  });
+
+  it('CRITICAL a 300-char exit_city is REFUSED — the same bound as exit_ip, at the path that names the field', () => {
+    const parsed = ProbeEgressResultSchema.safeParse({
+      ...DEAD,
+      exit_ip: '203.0.113.7',
+      ...GEO,
+      exit_city: 'x'.repeat(300),
+    });
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues.some((i) => i.path.join('.') === 'exit_city')).toBe(true);
+    }
+    // Boundary positive control: exactly the bound (256) still parses, so the
+    // refusal above is the bound and not a schema that refuses any long string.
+    expect(
+      ProbeEgressResultSchema.safeParse({
+        ...DEAD,
+        exit_ip: '203.0.113.7',
+        ...GEO,
+        exit_city: 'x'.repeat(256),
+      }).success,
+    ).toBe(true);
+    // And each of the other three carries the same bound — one assertion per key,
+    // so a key that quietly loses its `.max()` reds on its own name.
+    for (const key of ['exit_country', 'exit_timezone', 'exit_region'] as const) {
+      expect(
+        ProbeEgressResultSchema.safeParse({
+          ...DEAD,
+          exit_ip: '203.0.113.7',
+          ...GEO,
+          [key]: 'x'.repeat(300),
+        }).success,
+        key,
+      ).toBe(false);
+    }
+  });
+});

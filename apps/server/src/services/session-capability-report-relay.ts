@@ -62,7 +62,8 @@ interface CapabilityReportAccountProxies {
         ip: string;
         country: string | null;
         timezone: string | null;
-        observed_via: 'session';
+        // Mirrors the repo's union; this relay only ever writes 'session'.
+        observed_via: 'session' | 'probe';
       };
       exitObservedAt?: Date;
     };

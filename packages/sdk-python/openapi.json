@@ -3507,6 +3507,27 @@
               "exit_ip": {
                 "type": ["string", "null"]
               },
+              "exit_observed": {
+                "type": "object",
+                "properties": {
+                  "ip": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": ["string", "null"]
+                  },
+                  "timezone": {
+                    "type": ["string", "null"]
+                  },
+                  "region": {
+                    "type": ["string", "null"]
+                  },
+                  "city": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["ip", "country", "timezone", "region", "city"]
+              },
               "quic_measured": {
                 "type": ["string", "null"],
                 "enum": ["h3", "h2-only", null]

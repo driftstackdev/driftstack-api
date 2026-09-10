@@ -61,12 +61,13 @@ export interface AccountProxyRow {
   osFingerprintAt: Date | null;
   /** VPN parity (migration 0120) — the last exit identity a live session observed through
    *  this proxy (the ONLY source of a VPN proxy's location/timezone), or null when never
-   *  observed. Written by the capabilityReport relay, latest wins. */
+   *  observed. Written by the capabilityReport relay ('session') and by the
+   *  fleet-vantage proxy Test ('probe'), latest wins. */
   exitObserved: {
     ip: string;
     country: string | null;
     timezone: string | null;
-    observed_via: 'session';
+    observed_via: 'session' | 'probe';
   } | null;
   /** When {@link exitObserved} was recorded, or null when never observed. */
   exitObservedAt: Date | null;
@@ -114,12 +115,13 @@ export interface AccountProxyRowUpdates {
   } | null;
   /** N-2 — timestamp the OS fingerprint was observed. */
   osFingerprintAt?: Date | null;
-  /** VPN parity — the observed exit identity (relay back-fill, latest wins). */
+  /** VPN parity — the observed exit identity (relay back-fill 'session' or the
+   *  fleet-vantage Test 'probe'; latest wins). */
   exitObserved?: {
     ip: string;
     country: string | null;
     timezone: string | null;
-    observed_via: 'session';
+    observed_via: 'session' | 'probe';
   } | null;
   exitObservedAt?: Date | null;
 }

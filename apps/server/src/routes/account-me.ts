@@ -1087,11 +1087,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // node error/timeout, or any throw. Never lets an exception reach the client,
       // so vantage=fleet can never 500: it degrades to the cp probe instead.
       const runFleetProbe = async () => {
-        if (
-          fleetControlRegistry === undefined ||
-          accountProxiesService === undefined ||
-          row.scheme !== 'socks5'
-        ) {
+        // VPN exit parity — NO scheme guard here any more. An openvpn/wireguard row
+        // dispatches too: `resolveForDispatch` already returns the flat inline VPN
+        // wire for those schemes (and null for http, which falls back below), and
+        // the node is the ONLY vantage that can see through a tunnel. Before this a
+        // VPN row silently fell back to the control-plane TCP probe of the display
+        // host, which measures nothing about the tunnel.
+        if (fleetControlRegistry === undefined || accountProxiesService === undefined) {
           return null;
         }
         try {
@@ -1147,9 +1149,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // `osFingerprintFields`), so it rides ALONGSIDE the node's latency rather
           // than coming back from the node. Only on an `ok` result: a proxy the node
           // could not use has no stack worth fingerprinting and must not spend the
-          // observer's budget. The `'host' in resolved` narrowing is a type
-          // obligation — a VPN wire carries `type` and no host/port — and is
-          // unreachable in practice because the guard above refuses a non-socks5 row.
+          // observer's budget. The `'host' in resolved` narrowing IS REACHABLE: a
+          // VPN wire carries `type` and no host/port (there is no SOCKS5 endpoint to
+          // dial through), so an openvpn/wireguard row takes the `{}` arm and carries
+          // no fingerprint — absent means unobserved, never a placeholder.
           const osFields =
             usable && 'host' in resolved
               ? await osFingerprintFields(
@@ -1164,6 +1167,61 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 )
               : {};
           await persistOsFingerprintIfObserved(osFields);
+          // VPN exit parity — persist the exit the NODE observed onto the proxy row
+          // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest
+          // wins), so the /proxies list can show a VPN row's location and hand its
+          // timezone to the next launch before any session has run. ONLY when the
+          // node saw an exit: a null exit_ip writes NOTHING and never nulls a value a
+          // live session observed earlier. Best-effort, owner-scoped, logged at info
+          // — mirrors persistOsFingerprintIfObserved: a persistence failure must
+          // not throw, because a throw here is caught by this closure's handler and
+          // would RELABEL a node measurement as `control_plane`.
+          const exitObserved =
+            r.exit_ip === null
+              ? undefined
+              : {
+                  ip: r.exit_ip,
+                  country: r.exit_country ?? null,
+                  timezone: r.exit_timezone ?? null,
+                  region: r.exit_region ?? null,
+                  city: r.exit_city ?? null,
+                };
+          // Never DOWNGRADE a stored observation: a node that does not yet emit
+          // the exit_* keys sends the ip alone, and writing {country: null,
+          // timezone: null} over a live session's observation of the same exit
+          // would erase real geo. Same ip + no incoming geo + existing geo → keep.
+          const incomingHasGeo =
+            exitObserved !== undefined &&
+            (exitObserved.country !== null || exitObserved.timezone !== null);
+          const existingExit = row.exitObserved ?? null;
+          const wouldDowngrade =
+            exitObserved !== undefined &&
+            !incomingHasGeo &&
+            existingExit !== null &&
+            existingExit.ip === exitObserved.ip &&
+            (existingExit.country !== null || existingExit.timezone !== null);
+          if (exitObserved !== undefined && !wouldDowngrade) {
+            try {
+              await proxiesRepo.update({
+                id: row.id,
+                accountId: ctx.account.id,
+                updates: {
+                  exitObserved: {
+                    ip: exitObserved.ip,
+                    country: exitObserved.country,
+                    timezone: exitObserved.timezone,
+                    observed_via: 'probe',
+                  },
+                  exitObservedAt: new Date(),
+                },
+              });
+            } catch (err) {
+              request.log.info(
+                { proxyId: row.id, err },
+                'proxy test: failed to persist probe-observed exit',
+              );
+            }
+          }
           return {
             ok: usable,
             ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),
@@ -1178,6 +1236,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             quic_ok: r.quic_ok,
             quic_detail: r.quic_detail,
             exit_ip: r.exit_ip,
+            // Spread only when defined — never an `exit_observed: undefined` key.
+            ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
             node_id: r.node_id,
             measured_from: 'fleet' as const,
           };

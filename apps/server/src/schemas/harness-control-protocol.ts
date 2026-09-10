@@ -2313,6 +2313,21 @@ export const ProbeEgressResultSchema = z
     quic_ok: z.boolean(),
     quic_detail: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
     exit_ip: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable(),
+    /** VPN exit parity — the exit's geo/timezone as the NODE resolved it, beside
+     *  `exit_ip`. For a SOCKS5 the desktop client can probe the exit from the Mac;
+     *  for OpenVPN/WireGuard only the fleet can see through the tunnel, so this is
+     *  the only source of a VPN proxy's location/timezone on a Test.
+     *
+     *  ⛔ `.nullable().optional()`, BOTH, and the W-28 lesson in this same schema is
+     *  why: NULLABLE so a node's explicit "I looked and there is no answer" arrives
+     *  as null rather than being refused; OPTIONAL so a node that does not yet emit
+     *  the key still validates. That makes the change deployable in either order —
+     *  CP first or node first — with no window in which a frame is refused. A
+     *  fixture with none of the four keys (every existing one) must keep parsing. */
+    exit_country: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
+    exit_timezone: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
+    exit_region: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
+    exit_city: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
     error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
   })
   .superRefine((frame, ctx) => {

@@ -762,14 +762,16 @@ export const accountProxies = pgTable(
     // through THIS proxy, and when. For a SOCKS5 the desktop client probes the exit
     // from the Mac; for OpenVPN/WireGuard only the fleet can see through the tunnel,
     // so this is the ONLY source of a VPN proxy's location/timezone. Written
-    // best-effort by the capabilityReport relay (latest wins); read by the /proxies
-    // list so the client can show the location and hand the timezone to the next
-    // launch. NULL = never observed → render "measuring…", never a placeholder.
+    // best-effort by the capabilityReport relay (latest wins) AND by the fleet-vantage
+    // proxy Test (`observed_via: 'probe'` — the node probed the exit without a
+    // session); read by the /proxies list so the client can show the location and
+    // hand the timezone to the next launch. NULL = never observed → render
+    // "measuring…", never a placeholder.
     exitObserved: jsonb('exit_observed').$type<{
       ip: string;
       country: string | null;
       timezone: string | null;
-      observed_via: 'session';
+      observed_via: 'session' | 'probe';
     }>(),
     exitObservedAt: timestamp('exit_observed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })

@@ -327,3 +327,356 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     expect(res.statusCode).toBe(400);
   });
 });
+
+// VPN exit parity — an OpenVPN / WireGuard row now DISPATCHES to the fleet on
+// vantage=fleet. Before this the route's guard refused every non-socks5 row and
+// fell back to the control-plane TCP probe of the DISPLAY host, which measures
+// nothing about the tunnel. The node is the only vantage that can see through
+// one, so it is also the only source of a VPN row's exit IP / geo / timezone —
+// which the route now (a) returns as `exit_observed` and (b) persists onto the
+// row as `exit_observed` with `observed_via: 'probe'`, beside the relay's
+// 'session' writes.
+describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispatch, and the exit is persisted', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+  const OVPN_BLOB = 'client\nremote vpn.example.com 1194 udp\ndev tun\n';
+
+  async function makeWireGuardProxy(): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'wg',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  async function makeOpenVpnProxy(): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'ovpn',
+        scheme: 'openvpn',
+        host: 'vpn.example.com',
+        port: 1194,
+        openvpn: { config_blob: OVPN_BLOB },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  /** The exit geo a migrated node resolves beside `exit_ip`. */
+  const GEO = {
+    exit_ip: '198.51.100.44',
+    exit_country: 'DE',
+    exit_timezone: 'Europe/Berlin',
+    exit_region: 'Hesse',
+    exit_city: 'Frankfurt am Main',
+  };
+
+  /** Register a node that records every probeEgress frame it is handed and
+   *  answers with every leg true plus the given exit fields. */
+  function registerGeoNode(
+    nodeId: string,
+    exit: Record<string, unknown>,
+    frames: Array<{ type: string; requestId: string; inlineProxyConfig?: string }>,
+  ): void {
+    const conn: FleetControlConnection = fx.fleetControlRegistry.register(nodeId, (data) => {
+      const f = JSON.parse(data) as { type: string; requestId: string; inlineProxyConfig?: string };
+      if (f.type !== 'probeEgress') return;
+      frames.push(f);
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'probeEgressResult',
+          requestId: f.requestId,
+          node_id: nodeId,
+          ok: true,
+          reachable: true,
+          auth_ok: true,
+          udp_associate: true,
+          can_route: true,
+          latency_ms: 58,
+          h2_ok: true,
+          quic_ok: true,
+          quic_detail: null,
+          error: null,
+          ...exit,
+        }),
+      );
+    });
+  }
+
+  it('CRITICAL a wireguard row reaches fleetControlRegistry.probeEgress with the VPN inline wire, and the reply is measured_from:fleet with exit_observed', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const frames: Array<{ type: string; requestId: string; inlineProxyConfig?: string }> = [];
+    registerGeoNode('mac-eu-001', GEO, frames);
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    // (ii) The registry WAS asked — with the flat inline WireGuard wire, not a
+    // socks5 descriptor and not nothing. Before this change the route returned
+    // null before ever touching the registry, so a spy count of 1 is the change.
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+    const dispatched = probeSpy.mock.calls[0]?.[0]?.inlineProxyConfig as
+      | { type?: string; private_key?: string; endpoint?: string }
+      | undefined;
+    expect(dispatched?.type).toBe('wireguard');
+    expect(dispatched?.endpoint).toBe('vpn.example.com:51820');
+    expect(dispatched?.private_key).toBe(WG_PRIV);
+    // …and the node really received a probeEgress frame carrying that wire.
+    expect(frames).toHaveLength(1);
+    expect(typeof frames[0]?.inlineProxyConfig).toBe('string');
+    expect(frames[0]?.inlineProxyConfig?.length ?? 0).toBeGreaterThan(0);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-eu-001');
+    expect(body.ok).toBe(true);
+    expect(body.latency_ms).toBe(58);
+    expect(body.exit_ip).toBe('198.51.100.44');
+    expect(body.exit_observed).toEqual({
+      ip: '198.51.100.44',
+      country: 'DE',
+      timezone: 'Europe/Berlin',
+      region: 'Hesse',
+      city: 'Frankfurt am Main',
+    });
+    // A VPN wire has no SOCKS5 endpoint for the cp observer to dial, so no chip —
+    // absent, never a placeholder.
+    expect('os_fingerprint' in body).toBe(false);
+  });
+
+  it('CRITICAL an openvpn row dispatches too — the same path, the openvpn wire', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const frames: Array<{ type: string; requestId: string; inlineProxyConfig?: string }> = [];
+    registerGeoNode('mac-eu-002', GEO, frames);
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeOpenVpnProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+    const dispatched = probeSpy.mock.calls[0]?.[0]?.inlineProxyConfig as
+      | { type?: string; config_blob?: string }
+      | undefined;
+    expect(dispatched?.type).toBe('openvpn');
+    expect(dispatched?.config_blob).toBe(OVPN_BLOB);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-eu-002');
+    expect((body.exit_observed as { ip?: string })?.ip).toBe('198.51.100.44');
+  });
+
+  it('CRITICAL (iii) the probe-observed exit is PERSISTED onto the row with observed_via:probe', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerGeoNode('mac-eu-003', GEO, []);
+    const id = await makeWireGuardProxy();
+    const before = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(before?.exitObserved, 'a fresh row has never been observed').toBeNull();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual({
+      ip: '198.51.100.44',
+      country: 'DE',
+      timezone: 'Europe/Berlin',
+      observed_via: 'probe',
+    });
+    expect(after?.exitObservedAt).toBeInstanceOf(Date);
+  });
+
+  it('CRITICAL a node that saw NO exit persists NOTHING — a null exit_ip never nulls an earlier observation', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    // Seed an earlier (session-observed) exit the way the relay writes it.
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.9',
+          country: 'NL',
+          timezone: 'Europe/Amsterdam',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    });
+    registerDeadProxyNode('mac-eu-004'); // exit_ip: null, every leg false
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from, 'still a fleet measurement').toBe('fleet');
+    expect(body.ok).toBe(false);
+    expect('exit_observed' in body, 'no exit → no exit_observed key, not a null one').toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+    });
+    expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('a node that has NOT migrated (exit_ip only, no geo keys) still yields exit_observed with null geo — deployable CP-first', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerGeoNode('mac-eu-005', { exit_ip: '198.51.100.45' }, []);
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.exit_observed).toEqual({
+      ip: '198.51.100.45',
+      country: null,
+      timezone: null,
+      region: null,
+      city: null,
+    });
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual({
+      ip: '198.51.100.45',
+      country: null,
+      timezone: null,
+      observed_via: 'probe',
+    });
+  });
+
+  it('CRITICAL an un-migrated node (ip only) never DOWNGRADES a session observation of the same exit that has geo', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.9',
+          country: 'NL',
+          timezone: 'Europe/Amsterdam',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    });
+    registerGeoNode('mac-eu-007', { exit_ip: '203.0.113.9' }, []);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    // The measurement is still REPORTED (the node did see the exit) …
+    expect(body.exit_observed).toEqual({
+      ip: '203.0.113.9',
+      country: null,
+      timezone: null,
+      region: null,
+      city: null,
+    });
+    // … but the stored observation keeps its geo and its timestamp.
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+    });
+    expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+  });
+
+  it('a socks5 row carries exit_observed on the same path — parity is one implementation, not a VPN branch', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerGeoNode('mac-eu-006', GEO, []);
+    const id = await makeProxy('fleet-socks-geo.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect((body.exit_observed as { city?: string })?.city).toBe('Frankfurt am Main');
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved?.observed_via).toBe('probe');
+  });
+
+  it('VACUITY CONTROL — with NO node connected a wireguard row still falls back to the control plane, labelled honestly', async () => {
+    // Proves the arms above measure the dispatch and not a route that now always
+    // reports `fleet` for a VPN row.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(probeSpy).toHaveBeenCalledTimes(1); // asked, and told "no node"
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('control_plane');
+    expect('exit_observed' in body).toBe(false);
+    expect('node_id' in body).toBe(false);
+  });
+});
