@@ -139,14 +139,17 @@ describe('ProxiesView Test all completion summary', () => {
   });
 
   it('does not start or announce a zero-probe sweep', async () => {
-    stored = [proxy('vpn', 'wireguard')];
+    // (b) VPN exit parity — a VPN row is now SWEEPABLE (its endpoint check + the
+    // fleet test; see a-vpn-row-check-runs-the-fleet-test), so the zero-probe
+    // pool is an HTTP row, which has neither a native probe nor a fleet test.
+    stored = [proxy('http1', 'http')];
     render(<ProxiesView />);
 
     const button = await screen.findByRole('button', { name: 'Test all' });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute(
       'title',
-      'No SOCKS5 proxies to test — VPN/HTTP endpoints are verified at launch',
+      'No SOCKS5 or VPN proxies to test — HTTP endpoints are verified at launch',
     );
     expect(testProxy).not.toHaveBeenCalled();
     expect(document.querySelector('[data-component="proxy-test-all-summary"]')).toBeNull();

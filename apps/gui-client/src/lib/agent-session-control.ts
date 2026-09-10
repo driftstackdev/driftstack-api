@@ -100,6 +100,21 @@ export interface AgentSessionCapabilityReport {
    *  render as "measuring…", NEVER a placeholder OS. Parsed defensively — a null,
    *  a non-object, or a missing/empty os|confidence → omitted, never coerced. */
   os_fingerprint?: { os: string; confidence: string };
+  /** VPN exit parity (b) — WHAT KIND of egress the harness brought up for this
+   *  session, when the report said: a SOCKS5 proxy, or an OpenVPN/WireGuard
+   *  tunnel. Present ONLY for one of those three values; anything else (a newer
+   *  kind, a non-string, absent) is dropped, so a report without it stays
+   *  byte-identical to before. The cockpit reads it beside `exit_ip` to tell
+   *  "the tunnel is up, the browser has not attached" from a generic connect. */
+  proxy_kind?: AgentSessionProxyKind;
+}
+
+/** The closed set of egress kinds a capability report can name. */
+export type AgentSessionProxyKind = 'socks5' | 'openvpn' | 'wireguard';
+
+/** `proxy_kind` when it is one of the three kinds; undefined otherwise. */
+function parseProxyKind(v: unknown): AgentSessionProxyKind | undefined {
+  return v === 'socks5' || v === 'openvpn' || v === 'wireguard' ? v : undefined;
 }
 
 export interface AgentSessionErrorEvent {
@@ -245,6 +260,10 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   // report without it stays byte-identical to before and an absent fingerprint
   // renders "measuring…" rather than being coerced into a placeholder OS.
   const osFingerprint = parseOsFingerprint(report.os_fingerprint);
+  // VPN exit parity (b) — same additive rule: present only for a value in the
+  // closed set, so a report without it (or with a kind this build does not
+  // know) is byte-identical to before.
+  const proxyKind = parseProxyKind(report.proxy_kind);
   const webrtcIps = Array.isArray(report.webrtc_candidate_ips)
     ? report.webrtc_candidate_ips.filter((v): v is string => typeof v === 'string' && v.length > 0)
     : undefined;
@@ -268,6 +287,7 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
     ...(webrtcIps !== undefined ? { webrtc_candidate_ips: webrtcIps } : {}),
     ...(observedAt !== undefined ? { observed_at: observedAt } : {}),
     ...(osFingerprint !== undefined ? { os_fingerprint: osFingerprint } : {}),
+    ...(proxyKind !== undefined ? { proxy_kind: proxyKind } : {}),
   };
 }
 

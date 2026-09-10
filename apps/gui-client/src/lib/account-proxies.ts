@@ -356,8 +356,45 @@ export type AccountProxyTestResult =
       reachable?: boolean;
       udp_associate?: boolean;
       h2_ok?: boolean;
+      /** VPN exit parity (b) — the exit the fleet Mac OBSERVED through this
+       *  proxy/tunnel during the test, resolved to geo server-side. For an
+       *  OpenVPN/WireGuard row this is the ONLY exit identity a client can get:
+       *  the native exit probe is a SOCKS5 request from this Mac and cannot run
+       *  through a tunnel. `ip` is the one required member; each geo member is
+       *  null when the server could not say. Only beside 'fleet'. */
+      exit_observed?: AccountProxyExitObserved;
     }
   | { ok: false; reason: string; measured_from?: ProxyVantage };
+
+/** The fleet-observed exit on a /test reply. Field names match the wire. */
+export interface AccountProxyExitObserved {
+  ip: string;
+  country: string | null;
+  timezone: string | null;
+  region: string | null;
+  city: string | null;
+}
+
+/** A wire `exit_observed` is kept only when it is an object whose `ip` is a
+ *  non-empty string and whose geo members are each a string, null, or absent
+ *  (absent reads as null — the honest "not resolved"). Anything else — a bare
+ *  string, an array, a numeric `country` — drops the FIELD, never throws: a
+ *  malformed exit must not become a rendered location, and it must not turn a
+ *  reply the caller can otherwise use into `malformed response`. */
+export function cleanExitObserved(raw: unknown): AccountProxyExitObserved | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.ip !== 'string' || r.ip.length === 0) return undefined;
+  const geo = (v: unknown): string | null | undefined =>
+    v === null || v === undefined ? null : typeof v === 'string' ? v : undefined;
+  const country = geo(r.country);
+  const timezone = geo(r.timezone);
+  const region = geo(r.region);
+  const city = geo(r.city);
+  if (country === undefined || timezone === undefined || region === undefined || city === undefined)
+    return undefined;
+  return { ip: r.ip, country, timezone, region, city };
+}
 
 /** A wire fingerprint is kept only when every field is one the verdict can
  *  render. A value outside the closed set (a newer server, a proxy MITM-ing
@@ -435,6 +472,9 @@ export async function testAccountProxy(
     const reachable = fleet ? optBool(body.reachable) : undefined;
     const udpAssociate = fleet ? optBool(body.udp_associate) : undefined;
     const h2Ok = fleet ? optBool(body.h2_ok) : undefined;
+    // VPN exit parity (b) — the fleet-observed exit rides beside quic_probe under
+    // the same fleet-only rule; a malformed one drops the field, never the reply.
+    const exitObserved = fleet ? cleanExitObserved(body.exit_observed) : undefined;
     return {
       ok: true,
       latency_ms: latency,
@@ -454,6 +494,7 @@ export async function testAccountProxy(
       ...(reachable !== undefined ? { reachable } : {}),
       ...(udpAssociate !== undefined ? { udp_associate: udpAssociate } : {}),
       ...(h2Ok !== undefined ? { h2_ok: h2Ok } : {}),
+      ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
     };
   }
   if (body.ok === false && typeof body.reason === 'string')

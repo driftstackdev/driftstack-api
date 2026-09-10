@@ -407,3 +407,41 @@ describe('T-17 — a stale exit identity is re-probed at launch', () => {
     expect(openSimulatorWindow.mock.calls[0]?.[0]).toMatchObject({ timezone: 'Europe/Amsterdam' });
   });
 });
+
+describe('(b) — Test proxy on a VPN row asks the FLEET after the resolve', () => {
+  // The profile card's Test is the user-initiated place a VPN tunnel gets brought
+  // up on a fleet Mac and its real exit measured. Mutating runFleetTestForRow to
+  // `if (true || …) return null;` makes this red.
+  it('CRITICAL Test proxy → resolveEndpoint, then testAccountProxy(vantage fleet) for the stored row', async () => {
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
+    await waitFor(() =>
+      expect(AccountProxies.testAccountProxy).toHaveBeenCalledWith(
+        'http://localhost:3000',
+        'ds_test_x',
+        'aprx_vpn',
+        { vantage: 'fleet' },
+      ),
+    );
+    expect(testProxy).not.toHaveBeenCalled();
+  });
+});
+
+describe('(b) — a VPN LAUNCH never runs the fleet test', () => {
+  // A fleet probe brings the tunnel up on a node while the launching session brings
+  // up its own; most VPN accounts allow one connection, so the probe could break the
+  // launch — and it would add 30–45s before every VPN launch. Reverting the launch
+  // gate to "run the fleet test first" makes this red.
+  it('CRITICAL launching an OpenVPN profile resolves the endpoint and never calls testAccountProxy', async () => {
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    await launch();
+    await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(AccountProxies.testAccountProxy).not.toHaveBeenCalled();
+  });
+});

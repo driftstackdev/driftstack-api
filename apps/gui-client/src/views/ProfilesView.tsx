@@ -45,7 +45,6 @@ import {
   type AccountOrganization,
 } from '../lib/account-organization';
 import {
-  deriveProbeViewState,
   isExitIdentityFresh,
   loadProbeCache,
   recordLiveH3Observations,
@@ -134,8 +133,13 @@ import {
 // WireGuard credentials can be entered here identically. The three hand-rolled
 // mini-forms that used to live inline (and omitted the VPN auth fields) are gone.
 import { ProxyForm } from './ProxiesView';
-import { endpointUnresolvedCopy, isSocks5Probeable } from '../lib/proxy-scheme';
-import { persistServerProbe, testProxyOnServer } from '../lib/proxy-server-test';
+import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
+import {
+  deriveProbeViewWithEndpointRows,
+  persistServerProbe,
+  serverVerdictUsable,
+  testProxyOnServer,
+} from '../lib/proxy-server-test';
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
@@ -781,7 +785,10 @@ export function ProfilesView({
   // rule and the W-30 QUIC expiry live, and reading `probeCache[id].quicMeasured`
   // directly meant the TTL never ran on the profile hub — a verdict aged out on
   // the Proxies grid stayed green here.
-  const probeView = useMemo(() => deriveProbeViewState(probeCache), [probeCache]);
+  // VPN exit parity (b) — the endpoint-row overlay is the same shared step the
+  // Proxies grid reads, so a VPN row's fleet-measured latency and exit reach the
+  // card exactly as a SOCKS5 row's do.
+  const probeView = useMemo(() => deriveProbeViewWithEndpointRows(probeCache), [probeCache]);
   // S3 — per-card proxy "Test" in flight (proxy id), so the card can show
   // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
@@ -2482,6 +2489,12 @@ export function ProfilesView({
       if (!isSocks5Probeable(px.scheme)) {
         const res = await resolveEndpoint(px.host, px.port);
         setProbeCache(await saveEndpointResult(px.id, res, Date.now()));
+        // VPN exit parity (b) — a resolved VPN row stored on the account gets the
+        // SAME fleet test a SOCKS5 row gets below: a fleet Mac brings the tunnel
+        // up, measures latency and observes the exit, which is the only exit
+        // identity a VPN row can ever have (the native exit probe is a SOCKS5
+        // request from this Mac). Best-effort, after the pre-flight's write.
+        await runFleetTestForRow(px, res.resolved);
         return;
       }
       const result = await testProxy({
@@ -2536,6 +2549,32 @@ export function ProfilesView({
   }
 
   /**
+   * (b) — the fleet test for a VPN row, after its endpoint pre-flight. Runs only
+   * when the endpoint resolved and the row is stored on the account (the fleet
+   * can only test a proxy it can fetch); never throws. The outcome is persisted
+   * by the shared step (lib/proxy-server-test), which for a VPN row writes the
+   * observed exit into the same cache fields the native probe writes for a
+   * SOCKS5 row — so the launch's device-clock timezone below reads it too.
+   */
+  async function runFleetTestForRow(
+    px: LocalProxyConfig,
+    resolved: boolean,
+  ): Promise<ProbeCacheMap | null> {
+    if (!resolved || !isVpnScheme(px.scheme)) return null;
+    if (px.serverId === undefined || settings.apiKey === null || settings.apiKey.length === 0)
+      return null;
+    try {
+      const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
+      const next = await persistServerProbe(px.id, outcome);
+      if (next !== null) setProbeCache(next);
+      return next;
+    } catch {
+      /* best-effort — the endpoint verdict above stands */
+      return null;
+    }
+  }
+
+  /**
    * T-17 — the exit identity (country + IANA zone) a launch hands the simulator.
    *
    * The simulator's status-bar clock is set from `exitTimezone` at launch, and
@@ -2549,8 +2588,11 @@ export function ProfilesView({
    */
   async function freshExitIdentity(
     px: LocalProxyConfig,
+    /** (b) — a cache written EARLIER IN THE SAME LAUNCH (the VPN row's fleet
+     *  test); the `probeCache` state this closure holds predates that write. */
+    cacheOverride?: ProbeCacheMap,
   ): Promise<{ country: string | null; timezone: string | null }> {
-    const cached = probeCache[px.id];
+    const cached = (cacheOverride ?? probeCache)[px.id];
     const fromCache = {
       country: cached?.exitCountry ?? null,
       timezone: cached?.exitTimezone ?? null,
@@ -2720,6 +2762,8 @@ export function ProfilesView({
       // blocks the launch with a 422, silently nullifying the override (#12). The
       // server honors `skip_proxy_probe: true` to bypass the gate for this launch.
       let skipProxyProbe = false;
+      // (b) — the cache as written by a VPN row's pre-launch fleet test, so the
+      // device clock below reads THIS launch's observed exit, not last launch's.
       // Re-test the proxy NOW rather than trusting whatever the cache remembers.
       // A proxy's plan lapses, its ruleset changes, its endpoint rotates — and the
       // cached verdict may predate all of it. Bulk launch keeps using the cache
@@ -2764,6 +2808,12 @@ export function ProfilesView({
           const res = await resolveEndpoint(proxy.host, proxy.port);
           endpointResolved = res.resolved;
           setProbeCache(await saveEndpointResult(proxy.id, res, Date.now()));
+          // ⛔ NO fleet test here. A fleet probe brings the tunnel up on a node
+          // while the launching session brings up its own, and most VPN accounts
+          // allow one connection — the probe could break the launch, and it would
+          // add 30–45s before every VPN launch. The launch reads whatever exit a
+          // previous Check/Test cached; failing that, the session reports its own
+          // exit seconds after the tunnel is up and the simulator prefers it.
         } catch (err) {
           // A resolve that could not RUN is not a verdict either.
           console.warn('pre-launch endpoint resolve failed; launching on no verdict', err);
@@ -4433,7 +4483,9 @@ export function ProfilesView({
                     // would still show a misleading "exits from US 1.2.3.4" — for an
                     // anti-detect tool, a stale exit geo on a dead proxy is a real
                     // hazard. Matches the in-session/reload gate in ProxiesView.
-                    const exitOk = probe !== undefined && isProxyUsable(probe.result);
+                    // (b) — for a VPN row the predicate is the endpoint verdict + the
+                    // fleet's own write (serverVerdictUsable); a SOCKS5 row is unchanged.
+                    const exitOk = probe !== undefined && serverVerdictUsable(probe);
                     // T-1 — prefer the SERVER-measured latency (control plane, near
                     // the fleet that runs the profile) over the native probe from
                     // this Mac, and only while the proxy is usable; the card labels
@@ -4556,7 +4608,9 @@ export function ProfilesView({
                     // probe being healthy — saveProbeResult preserves prior exit-geo
                     // across a failed re-test, so a down proxy must NOT keep showing a
                     // stale "exits from US 1.2.3.4". Matches the grid card + ProxiesView.
-                    const exitOk = probe !== undefined && isProxyUsable(probe.result);
+                    // (b) — for a VPN row the predicate is the endpoint verdict + the
+                    // fleet's own write (serverVerdictUsable); a SOCKS5 row is unchanged.
+                    const exitOk = probe !== undefined && serverVerdictUsable(probe);
                     // T-20 — an endpoint verdict has no SOCKS5 capabilities to derive.
                     // T-27 (drop 4) — the QUIC verdict comes from the derived view.
                     const caps =

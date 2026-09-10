@@ -579,6 +579,60 @@ export function reportHasEgressReadout(report: AgentSessionCapabilityReport | nu
     report.os_fingerprint !== undefined
   );
 }
+
+/** VPN exit parity (b) — what the address bar can say instead of a generic
+ *  "connecting…" for a VPN session: the tunnel's observed exit. */
+export interface VpnTunnelUp {
+  ip: string;
+  timezone: string | null;
+}
+
+/**
+ * VPN exit parity (b) — the honest state of a VPN session whose stream is not
+ * live yet. The harness brings the OpenVPN/WireGuard tunnel up and reports its
+ * observed exit (`exit_ip`) on the capability report BEFORE the browser attaches
+ * to it, so for a while the cockpit holds a measured exit and no video. The
+ * generic "connecting…" under-describes that: the tunnel is up, the browser is
+ * what has not attached (today's harness behaviour, stated as such). Non-null
+ * ONLY when the report names a VPN kind AND carries an exit IP AND the stream is
+ * not live; a SOCKS5 session, a report without a kind, or a live stream all
+ * keep the generic caption — the socks5 path is unchanged. Pure.
+ */
+export function vpnTunnelUpNotice(
+  report: AgentSessionCapabilityReport | null,
+  state: {
+    /** connected + publishing right now. */
+    streamLive: boolean;
+    /** The stream WAS live at some point — a drop is "reconnecting", not
+     *  "the browser has not attached yet". */
+    everLive: boolean;
+    /** The session reached a terminal state — nothing is attaching any more. */
+    ended: boolean;
+  },
+): VpnTunnelUp | null {
+  if (report === null || state.streamLive || state.everLive || state.ended) return null;
+  if (report.proxy_kind !== 'openvpn' && report.proxy_kind !== 'wireguard') return null;
+  if (report.exit_ip === undefined) return null;
+  return { ip: report.exit_ip, timezone: report.exit_timezone ?? null };
+}
+
+/** The one sentence for that state. `tz` is omitted when the report had none. */
+export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
+  const where = t.timezone !== null ? `exit ${t.ip}, ${t.timezone}` : `exit ${t.ip}`;
+  return `VPN tunnel is up (${where}) — the browser has not attached yet`;
+}
+
+/** (b) — the small notice under the address bar for that state. */
+function VpnTunnelUpNotice({ tunnel }: { tunnel: VpnTunnelUp }): JSX.Element {
+  return (
+    <div
+      data-component="simulator-vpn-tunnel-up-notice"
+      className="mx-3 mb-1 rounded-md bg-status-ready/10 px-2 py-1 text-[10.5px] leading-snug text-status-ready ring-1 ring-status-ready/25"
+    >
+      {vpnTunnelUpCaption(tunnel)}
+    </div>
+  );
+}
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
 // "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
 // so the device renders at true iPhone-logical px, not whatever width the window
@@ -1557,12 +1611,16 @@ function NavigateAddressBar({
   canNavigate,
   onNavigate,
   liveUrl,
+  vpnTunnelUp = null,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
   /** The page the device is currently on — so Reload works on a loaded page without
    *  first typing (draftUrl starts empty). Mirrors BrowserBar's reload. */
   liveUrl: string;
+  /** (b) — non-null while a VPN session's tunnel is up but the browser has not
+   *  attached: the caption says that instead of the generic "connecting…". */
+  vpnTunnelUp?: VpnTunnelUp | null;
 }): JSX.Element {
   const [draftUrl, setDraftUrl] = useState('');
   // While the control channel is still connecting (the room can take up to ~30s
@@ -1570,27 +1628,49 @@ function NavigateAddressBar({
   // BROKEN. Surface an explicit "connecting…" affordance (placeholder + tooltip
   // + a caption) so the wait is legible and distinct from a real failure (which
   // surfaces separately as a navigate-error notice toast).
+  // (b) — a VPN session whose tunnel is up reads that, not "connecting…".
+  const tunnelUp = !canNavigate && vpnTunnelUp !== null ? vpnTunnelUp : null;
   const placeholder = canNavigate
     ? 'Search or enter address'
-    : 'connecting… — the address bar unlocks once the device is live';
-  const disabledTitle = 'Connecting to the device — the address bar unlocks once it is live';
+    : tunnelUp !== null
+      ? 'VPN tunnel is up — the address bar unlocks once the browser attaches'
+      : 'connecting… — the address bar unlocks once the device is live';
+  const disabledTitle =
+    tunnelUp !== null
+      ? vpnTunnelUpCaption(tunnelUp)
+      : 'Connecting to the device — the address bar unlocks once it is live';
   return (
     <div data-component="simulator-address" className="px-3 pb-1.5 pt-0.5">
       <div className="flex items-center justify-between px-0 pb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">
         <span>Address</span>
-        {!canNavigate && (
+        {tunnelUp !== null ? (
           <span
-            data-component="simulator-address-connecting"
+            data-component="simulator-address-vpn-tunnel-up"
             className="inline-flex items-center gap-1 font-medium normal-case tracking-normal text-ink-secondary"
+            title={vpnTunnelUpCaption(tunnelUp)}
           >
             <span
               aria-hidden="true"
-              className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
             />
-            connecting…
+            VPN tunnel up · exit {tunnelUp.ip}
           </span>
+        ) : (
+          !canNavigate && (
+            <span
+              data-component="simulator-address-connecting"
+              className="inline-flex items-center gap-1 font-medium normal-case tracking-normal text-ink-secondary"
+            >
+              <span
+                aria-hidden="true"
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+              />
+              connecting…
+            </span>
+          )
         )}
       </div>
+      {tunnelUp !== null && <VpnTunnelUpNotice tunnel={tunnelUp} />}
       <form
         className="flex items-center gap-1 rounded-lg bg-black/40 px-2 py-1 ring-1 ring-white/10"
         onSubmit={(e) => {
@@ -1691,9 +1771,13 @@ function BrowserBar({
   loadFailed,
   downloadsStore,
   onOpenDownloads,
+  vpnTunnelUp = null,
 }: {
   canNavigate: boolean;
   onNavigate: (url: string) => void;
+  /** (b) — non-null while a VPN session's tunnel is up but the browser has not
+   *  attached: the connecting cue says that instead of the generic "connecting…". */
+  vpnTunnelUp?: VpnTunnelUp | null;
   // Sim back/forward (A3 W2870) — steps the device's browser history via
   // navigateAgentSessionHistory. Rendered only when BACK_FORWARD_ENABLED (flag-off
   // until A3's daemon handler lands).
@@ -1937,17 +2021,33 @@ function BrowserBar({
           placeholder is hidden behind the already-loaded resting URL, so a "still
           connecting" state was invisible. An inline amber pulse dot + label makes it
           legible even when a page is showing. */}
-      {!canNavigate && (
+      {/* (b) — a VPN session whose tunnel is up (exit observed) but whose browser has
+          not attached reads THAT, not "connecting…": the honest state. */}
+      {!canNavigate && vpnTunnelUp !== null ? (
         <span
-          data-component="simulator-address-bar-connecting"
+          data-component="simulator-address-bar-vpn-tunnel-up"
           className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-medium text-white/55"
+          title={vpnTunnelUpCaption(vpnTunnelUp)}
         >
           <span
             aria-hidden="true"
-            className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+            className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
           />
-          connecting…
+          VPN tunnel up · exit {vpnTunnelUp.ip}
         </span>
+      ) : (
+        !canNavigate && (
+          <span
+            data-component="simulator-address-bar-connecting"
+            className="inline-flex shrink-0 items-center gap-1 text-[10.5px] font-medium text-white/55"
+          >
+            <span
+              aria-hidden="true"
+              className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400"
+            />
+            connecting…
+          </span>
+        )
       )}
       <form
         className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md bg-black/30 px-2.5 ring-1 ring-white/10 transition focus-within:bg-black/40 focus-within:ring-white/25"
@@ -7050,6 +7150,17 @@ export function SimulatorWindow(): JSX.Element {
   const controlMode = manualInputControl.mode;
   const controlModeConfirmed = manualInputControl.modeConfirmed;
   const sessionCapabilityReport = manualInputControl.capabilityReport;
+  // (b) — the toolbar's own "stream is live" predicate (connected + publishing); a
+  // VPN session with an observed exit and no live stream reads "tunnel up" instead
+  // of "connecting…" in the address bars.
+  const streamLiveNow = connState === 'connected' && publisherState === 'publishing';
+  const everLiveRef = useRef(false);
+  if (streamLiveNow) everLiveRef.current = true;
+  const vpnTunnelUp = vpnTunnelUpNotice(sessionCapabilityReport, {
+    streamLive: streamLiveNow,
+    everLive: everLiveRef.current,
+    ended: sessionEnded !== null,
+  });
   // VPN parity (owner: "starts with the right timezone") — the timezone the status-bar
   // clock shows. The launch hands over `tz` from the client's cached exit probe, which
   // only a SOCKS5 can produce (the Mac cannot probe through a VPN tunnel), so for an
@@ -8781,6 +8892,7 @@ export function SimulatorWindow(): JSX.Element {
           {browserMode && (
             <BrowserBar
               canNavigate={canNavigate}
+              vpnTunnelUp={vpnTunnelUp}
               onNavigate={onNavigate}
               onHistory={onHistory}
               liveUrl={liveUrl}
@@ -8794,6 +8906,11 @@ export function SimulatorWindow(): JSX.Element {
               downloadsStore={downloadsStore}
               onOpenDownloads={() => openPane('downloads')}
             />
+          )}
+          {/* (b) — the VPN tunnel-up notice sits under the browser bar (the bar is a
+              fixed-height row), only while the bar is still locked. */}
+          {browserMode && !canNavigate && vpnTunnelUp !== null && (
+            <VpnTunnelUpNotice tunnel={vpnTunnelUp} />
           )}
           {/* Option B body — the device and (when the drawer is open) the wide
               right control rail, side by side. The toolbar + browser bar stay
@@ -9601,6 +9718,7 @@ export function SimulatorWindow(): JSX.Element {
                             canNavigate={canNavigate}
                             onNavigate={onNavigate}
                             liveUrl={liveUrl}
+                            vpnTunnelUp={vpnTunnelUp}
                           />
                         )}
                         <LabeledControl
