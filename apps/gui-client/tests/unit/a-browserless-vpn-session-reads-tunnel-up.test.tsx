@@ -238,11 +238,13 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
       ip: null,
       timezone: null,
       source: 'detail',
+      step: 'vpn_egress_active',
     });
     expect(vpnTunnelUpNotice(vpn, { ...quiet, provisioningDetail: 'vpn_egress_active' })).toEqual({
       ip: '203.0.113.7',
       timezone: 'Europe/Amsterdam',
       source: 'detail',
+      step: 'vpn_egress_active',
     });
     // …but never after the stream was live, or once the session ended, and an
     // unrelated token does not fire it.
@@ -257,11 +259,53 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
       vpnTunnelUpNotice(null, { ...quiet, ended: true, provisioningDetail: 'vpn_egress_active' }),
     ).toBeNull();
     expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: 'dns_resolving' })).toBeNull();
-    expect(vpnTunnelUpCaption({ ip: null, timezone: null, source: 'detail' })).toBe(
-      'VPN tunnel connected — starting the browser…',
+    // (f) — the harness's three steps, each with its own caption; the browser step is
+    // announced by its OWN token (browser_spawning). Until the harness emits it,
+    // vpn_egress_active is the LAST thing a VPN session says before its launch timeout,
+    // so that caption states the limit instead of promising progress that is not coming.
+    for (const step of [
+      'vpn_egress_bringing_up',
+      'egress_geo_resolving',
+      'browser_spawning',
+    ] as const) {
+      expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: step })?.step, step).toBe(
+        step,
+      );
+    }
+    expect(
+      vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: 'vpn_egress_activex' }),
+    ).toBeNull();
+    expect(
+      vpnTunnelUpCaption({
+        ip: null,
+        timezone: null,
+        source: 'detail',
+        step: 'vpn_egress_bringing_up',
+      }),
+    ).toBe('Starting the VPN tunnel…');
+    expect(
+      vpnTunnelUpCaption({
+        ip: null,
+        timezone: null,
+        source: 'detail',
+        step: 'egress_geo_resolving',
+      }),
+    ).toBe('Resolving the exit location…');
+    expect(
+      vpnTunnelUpCaption({ ip: null, timezone: null, source: 'detail', step: 'browser_spawning' }),
+    ).toBe('VPN tunnel connected — starting the browser…');
+    expect(
+      vpnTunnelUpCaption({ ip: null, timezone: null, source: 'detail', step: 'vpn_egress_active' }),
+    ).toMatch(
+      /^VPN tunnel connected — browser attach for VPN sessions isn’t live yet; this session will time out$/,
     );
     expect(
-      vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: 'Europe/Amsterdam', source: 'detail' }),
+      vpnTunnelUpCaption({
+        ip: '203.0.113.7',
+        timezone: 'Europe/Amsterdam',
+        source: 'detail',
+        step: 'browser_spawning',
+      }),
     ).toBe('VPN tunnel connected (exit 203.0.113.7, Europe/Amsterdam) — starting the browser…');
     // A SOCKS5 session, an unknown kind, or no exit yet → generic "connecting…".
     expect(

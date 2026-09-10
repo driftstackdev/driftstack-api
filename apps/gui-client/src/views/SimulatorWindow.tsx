@@ -591,6 +591,27 @@ export interface VpnTunnelUp {
   timezone: string | null;
   /** 'detail' = the harness's provisioning_detail said so; 'report' = the (b) heuristic. */
   source: 'report' | 'detail';
+  /** The step token when source is 'detail' (vpn_egress_bringing_up | vpn_egress_active | egress_geo_resolving). */
+  step?: VpnProvisioningStep;
+}
+
+/** The harness's provisioning step tokens the simulator knows how to phrase. */
+export type VpnProvisioningStep =
+  | 'vpn_egress_bringing_up'
+  | 'vpn_egress_active'
+  | 'egress_geo_resolving'
+  | 'browser_spawning';
+const VPN_STEPS: ReadonlyArray<VpnProvisioningStep> = [
+  'vpn_egress_bringing_up',
+  'vpn_egress_active',
+  'egress_geo_resolving',
+  'browser_spawning',
+];
+function vpnStepOf(detail: string | null | undefined): VpnProvisioningStep | null {
+  if (typeof detail !== 'string') return null;
+  return (VPN_STEPS as ReadonlyArray<string>).includes(detail)
+    ? (detail as VpnProvisioningStep)
+    : null;
 }
 
 /**
@@ -622,11 +643,13 @@ export function vpnTunnelUpNotice(
   // (c) — the harness's own word (agent_sessions.provisioning_detail, set from its
   // `provisioning` frame) beats the (b) heuristic below, and needs no report at
   // all: the node said the tunnel is up and is not claiming active on purpose.
-  if (state.provisioningDetail?.startsWith('vpn_egress_active') === true) {
+  const step = vpnStepOf(state.provisioningDetail);
+  if (step !== null) {
     return {
       ip: report?.exit_ip ?? null,
       timezone: report?.exit_timezone ?? null,
       source: 'detail',
+      step,
     };
   }
   if (report === null) return null;
@@ -642,9 +665,25 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
   // (c) — the harness's own word: the node reported the tunnel up and is deliberately
   // not claiming the session active until the browser exists.
   if (t.source === 'detail') {
+    // (f) — the harness's step tokens, in the order a VPN session emits them. The
+    // browser step is announced by its OWN token (browser_spawning); until the
+    // harness emits it, `vpn_egress_active` is the LAST thing a VPN session says
+    // before its launch timeout, so that caption states the limit instead of
+    // promising progress that is not coming.
+    if (t.step === 'vpn_egress_bringing_up') return 'Starting the VPN tunnel…';
+    if (t.step === 'egress_geo_resolving') {
+      return where !== null
+        ? `Resolving the exit location (${where})…`
+        : 'Resolving the exit location…';
+    }
+    if (t.step === 'browser_spawning') {
+      return where !== null
+        ? `VPN tunnel connected (${where}) — starting the browser…`
+        : 'VPN tunnel connected — starting the browser…';
+    }
     return where !== null
-      ? `VPN tunnel connected (${where}) — starting the browser…`
-      : 'VPN tunnel connected — starting the browser…';
+      ? `VPN tunnel connected (${where}) — browser attach for VPN sessions isn’t live yet; this session will time out`
+      : 'VPN tunnel connected — browser attach for VPN sessions isn’t live yet; this session will time out';
   }
   return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
 }
