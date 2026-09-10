@@ -169,6 +169,32 @@ describe('the wire parse — exit_observed rides beside the fleet vantage', () =
     expect(r.ok && 'exit_observed' in r).toBe(false);
   });
 
+  it("(e) a QUIC leg the node SKIPPED never becomes quic_probe:false — the chip must not read 'does not relay QUIC'", async () => {
+    nextResponse = () =>
+      json({
+        ...FLEET_BODY,
+        quic_ok: false,
+        quic_detail: 'skipped: quic leg not probed on the vpn path',
+      });
+    const r = await testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
+    expect(r.ok && 'quic_probe' in r).toBe(false);
+    // …and a server that already OMITS quic_ok beside the detail parses the same way.
+    const { quic_ok: _omitted, ...withoutQuic } = {
+      ...FLEET_BODY,
+      quic_detail: 'skipped: endpoint_unreachable',
+    };
+    nextResponse = () => json(withoutQuic);
+    const r2 = await testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
+    expect(r2.ok && 'quic_probe' in r2).toBe(false);
+  });
+
+  it('(e) CONTROL — a MEASURED QUIC failure (no "skipped:" detail) still lands as quic_probe:false', async () => {
+    nextResponse = () =>
+      json({ ...FLEET_BODY, quic_ok: false, quic_detail: 'quic handshake failed' });
+    const r = await testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
+    expect(r.ok && r.quic_probe).toBe(false);
+  });
+
   it('FLEET-ONLY — an exit_observed beside a control-plane vantage is dropped like the other fleet fields', async () => {
     nextResponse = () => json({ ...FLEET_BODY, measured_from: 'control_plane' });
     const r = await testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });

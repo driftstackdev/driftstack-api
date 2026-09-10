@@ -468,7 +468,14 @@ export async function testAccountProxy(
     const nodeId = fleet ? optStr(body.node_id) : undefined;
     const exitIp = fleet ? optStr(body.exit_ip) : undefined;
     const quicDetail = fleet ? optStr(body.quic_detail) : undefined;
-    const quicProbe = fleet ? optBool(body.quic_ok) : undefined;
+    // (e) — a QUIC leg the node SKIPPED (VPN path; endpoint never answered) is not a
+    // measurement: never let it read as "does not relay QUIC". Older servers still send
+    // quic_ok:false beside such a detail; newer ones omit quic_ok — both land here.
+    const quicDetailRaw = fleet ? optStr(body.quic_detail) : undefined;
+    const quicProbe =
+      fleet && !(quicDetailRaw !== undefined && quicDetailRaw.startsWith('skipped:'))
+        ? optBool(body.quic_ok)
+        : undefined;
     const reachable = fleet ? optBool(body.reachable) : undefined;
     const udpAssociate = fleet ? optBool(body.udp_associate) : undefined;
     const h2Ok = fleet ? optBool(body.h2_ok) : undefined;
