@@ -41,6 +41,7 @@ import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
+import { openvpnRefusal } from '../lib/openvpn-refusal';
 import {
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
@@ -1723,6 +1724,16 @@ export function ProxyForm({
   const submitInFlightRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const locked = saving || submitting;
+  // N1 (owner: OVPN "still won't launch/save") — the OVPN config the control plane
+  // will REFUSE: a script directive / `script-security >= 2` or an unresolvable inline
+  // cert/key file reference (webhook-target-guard, enforced at proxy create/update).
+  // Computed with the SAME shared finders the server uses, on the CURRENT blob, so the
+  // form blocks exactly what a save would 400 on instead of a round-trip failure.
+  // null = acceptable; `.fixable` carries the one-click strip.
+  const vpnRefusal = useMemo(
+    () => openvpnRefusal(draft.scheme, draft.openvpn?.config_blob ?? ''),
+    [draft.scheme, draft.openvpn?.config_blob],
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   // React 18's DOM types do not expose the standard `inert` attribute yet.
@@ -1918,6 +1929,16 @@ export function ProxyForm({
     const v = validateDraft(draft);
     setValidation(v);
     if (!v.ok) return;
+    // N1 — a refusable OVPN config never leaves the form: surface the offending line
+    // and re-offer the one-click fix rather than posting it to a certain 400.
+    if (vpnRefusal !== null) {
+      setVpnHint(
+        `Line ${vpnRefusal.line.toString()}: ${vpnRefusal.reason}. Fix this before saving — ` +
+          `Driftstack will refuse this config.`,
+      );
+      setVpnFixable(vpnRefusal.fixable);
+      return;
+    }
     submitInFlightRef.current = true;
     setSubmitting(true);
     try {
@@ -2330,7 +2351,17 @@ export function ProxyForm({
           >
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={locked} aria-busy={locked}>
+          <button
+            type="submit"
+            className="btn-primary"
+            disabled={locked || vpnRefusal !== null}
+            aria-busy={locked}
+            title={
+              vpnRefusal !== null
+                ? `Line ${vpnRefusal.line.toString()}: ${vpnRefusal.reason} — fix it first`
+                : undefined
+            }
+          >
             {locked
               ? mode === 'add'
                 ? 'Adding…'
