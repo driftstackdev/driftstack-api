@@ -34,6 +34,7 @@ import {
   subscribeProbeCache,
   saveExitResult,
   saveProbeResult,
+  saveEndpointResult,
   type CachedOsFingerprint,
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
@@ -175,6 +176,8 @@ export function ProxiesView(): JSX.Element {
   // echo round-trip — a real fault on the customer's side, not pending work.
   const [exitResults, setExitResults] = useState<Record<string, ProxyExitProbeResult | null>>({});
   const [testResults, setTestResults] = useState<Record<string, ProxyTestResult>>({});
+  // N4 — per-VPN-row DNS pre-flight verdicts (endpoint_resolve), keyed by proxy id.
+  const [endpointResults, setEndpointResults] = useState<Record<string, EndpointResolveResult>>({});
   // Epoch-ms timestamp of each proxy's last probe (from the cache `at` field), so
   // the card can show "tested <relative>" — a green 'healthy' pill is meaningless
   // without knowing whether the test ran 30s or 30 days ago (audit).
@@ -491,6 +494,35 @@ export function ProxiesView(): JSX.Element {
       }
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
+  // check is a DNS pre-flight of its endpoint (endpoint_resolve), NOT a SOCKS5
+  // handshake (which a VPN endpoint never speaks — it always read "unreachable").
+  // Confirms the host resolves without claiming the tunnel works; the full tunnel
+  // still verifies at launch. Persisted so the profile cards + a reload show it.
+  async function handleCheckEndpoint(p: ProxyConfig): Promise<void> {
+    const epoch = ++testEpochRef.current;
+    const stale = (): boolean => testEpochRef.current !== epoch;
+    setTestingId(p.id);
+    try {
+      const r = await resolveEndpoint(p.host, p.port);
+      if (stale()) return;
+      setEndpointResults((m) => ({ ...m, [p.id]: r }));
+      void saveEndpointResult(
+        p.id,
+        { resolved: r.resolved, ip: r.ip, message: r.message },
+        Date.now(),
+      ).catch(() => undefined);
+    } catch {
+      if (stale()) return;
+      setEndpointResults((m) => ({
+        ...m,
+        [p.id]: { resolved: false, ip: '', message: 'Endpoint check failed' },
+      }));
+    } finally {
+      setTestingId((cur) => (cur === p.id ? null : cur));
     }
   }
 
@@ -876,6 +908,7 @@ export function ProxiesView(): JSX.Element {
           testingId={testingId}
           testingAll={testingAll}
           testResults={testResults}
+          endpointResults={endpointResults}
           exitResults={exitResults}
           testedAt={testedAt}
           osFingerprints={osFingerprints}
@@ -886,6 +919,7 @@ export function ProxiesView(): JSX.Element {
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
+          onCheckEndpoint={(p) => void handleCheckEndpoint(p)}
           onRemoveMany={(ids) => void handleRemoveMany(ids)}
           onTestMany={(ps) => void handleTestAll(ps)}
         />
@@ -998,9 +1032,11 @@ function ProxyTable({
   quicMeasured,
   serverVantage,
   quicProbe,
+  endpointResults,
   onEdit,
   onRemove,
   onTest,
+  onCheckEndpoint,
   onRemoveMany,
   onTestMany,
 }: {
@@ -1019,7 +1055,9 @@ function ProxyTable({
   quicProbe: Record<string, boolean>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
+  endpointResults: Record<string, EndpointResolveResult>;
   onTest: (p: ProxyConfig) => void;
+  onCheckEndpoint: (p: ProxyConfig) => void;
   onRemoveMany: (ids: string[]) => void;
   onTestMany: (ps: ProxyConfig[]) => void;
 }): JSX.Element {
@@ -1231,6 +1269,7 @@ function ProxyTable({
                 testing={testingId === p.id}
                 testingAll={testingAll}
                 result={testResults[p.id]}
+                endpointResult={endpointResults[p.id]}
                 exit={p.id in exitResults ? exitResults[p.id] : undefined}
                 testedAt={testedAt[p.id]}
                 osFingerprint={osFingerprints[p.id]}
@@ -1241,6 +1280,7 @@ function ProxyTable({
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
+                onCheckEndpoint={() => onCheckEndpoint(p)}
               />
             ))}
           </tbody>
@@ -1318,9 +1358,11 @@ function ProxyRow({
   quicMeasured,
   serverVantage,
   quicProbe,
+  endpointResult,
   onEdit,
   onRemove,
   onTest,
+  onCheckEndpoint,
 }: {
   proxy: ProxyConfig;
   selected: boolean;
@@ -1346,9 +1388,11 @@ function ProxyRow({
   serverVantage: ServerVantage | undefined;
   /** T-1 — the fleet Mac's QUIC-relay verdict, its own chip; never merged. */
   quicProbe: boolean | undefined;
+  endpointResult: EndpointResolveResult | undefined;
   onEdit: () => void;
   onRemove: () => void;
   onTest: () => void;
+  onCheckEndpoint: () => void;
 }): JSX.Element {
   const reachable = result?.reachable ?? false;
   const healthy = result !== undefined && isProxyUsable(result);
@@ -1557,12 +1601,32 @@ function ProxyRow({
               {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
             </button>
           ) : (
-            <span
-              className="text-[10px] italic text-ink-muted"
-              title="A VPN/HTTP endpoint has no SOCKS5 reachability probe — the tunnel verifies when a session launches."
-            >
-              Verified at launch
-            </span>
+            <div className="inline-flex items-center gap-1.5">
+              {/* N4 — a VPN row has no SOCKS5 probe, but its endpoint host CAN be
+                  DNS-resolved on demand (endpoint_resolve); the tunnel itself still
+                  verifies at launch. Mirrors the in-form endpoint check. */}
+              <button
+                type="button"
+                className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
+                onClick={onCheckEndpoint}
+                disabled={testing || testingAll}
+                title="DNS-resolve this VPN endpoint (the tunnel itself verifies at launch)."
+              >
+                {testing
+                  ? 'Checking…'
+                  : endpointResult !== undefined
+                    ? 'Re-check'
+                    : 'Check endpoint'}
+              </button>
+              {endpointResult !== undefined && (
+                <span
+                  className={`text-[10px] ${endpointResult.resolved ? 'text-status-ready' : 'text-status-error'}`}
+                  title={endpointResult.message}
+                >
+                  {endpointResult.resolved ? `endpoint ✓ ${endpointResult.ip}` : 'endpoint ✗'}
+                </span>
+              )}
+            </div>
           )}
           <button
             type="button"
