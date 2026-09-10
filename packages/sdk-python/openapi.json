@@ -3367,9 +3367,13 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9+/]{43}=$"
               },
+              "preshared_key": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9+/]{43}=$"
+              },
               "endpoint": {
                 "type": "string",
-                "pattern": "^([A-Za-z0-9.\\-:_]+):([0-9]{1,5})$"
+                "pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9.\\-:_]+):([0-9]{1,5})$"
               },
               "allowed_ips": {
                 "type": "string",
@@ -3388,7 +3392,7 @@
                 "pattern": "^[ \\t]*[0-9A-Fa-f:.]+(?:[ \\t]*,[ \\t]*[0-9A-Fa-f:.]+)*[ \\t]*$"
               }
             },
-            "required": ["private_key", "peer_public_key", "endpoint"]
+            "required": ["private_key", "peer_public_key", "endpoint", "address"]
           }
         },
         "required": ["label", "host", "port"]
@@ -34601,9 +34605,13 @@
                                 "type": "string",
                                 "pattern": "^[A-Za-z0-9+/]{43}=$"
                               },
+                              "preshared_key": {
+                                "type": "string",
+                                "pattern": "^[A-Za-z0-9+/]{43}=$"
+                              },
                               "endpoint": {
                                 "type": "string",
-                                "pattern": "^([A-Za-z0-9.\\-:_]+):([0-9]{1,5})$"
+                                "pattern": "^(\\[[0-9A-Fa-f:.]+\\]|[A-Za-z0-9.\\-:_]+):([0-9]{1,5})$"
                               },
                               "allowed_ips": {
                                 "type": "string",
@@ -34622,7 +34630,7 @@
                                 "pattern": "^[ \\t]*[0-9A-Fa-f:.]+(?:[ \\t]*,[ \\t]*[0-9A-Fa-f:.]+)*[ \\t]*$"
                               }
                             },
-                            "required": ["private_key", "peer_public_key", "endpoint"]
+                            "required": ["private_key", "peer_public_key", "endpoint", "address"]
                           }
                         },
                         "required": ["type", "wireguard"]

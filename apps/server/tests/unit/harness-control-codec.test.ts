@@ -577,6 +577,20 @@ describe('serializeSessionAssign (EG-API-1.6; A3 W136 shape)', () => {
     expect(decodeWireData(b.inlineProxyConfig as string)).toEqual(ovpn);
   });
 
+  it('inlineProxyConfig (WireGuard) keeps preshared_key on the wire. The codec re-parses through InlineVpnProxyWireSchema, and a zod object STRIPS keys it does not declare — a PSK the wire schema failed to name would leave the frame silently, and the peer would refuse the handshake with nothing naming the cause.', () => {
+    const wg = {
+      type: 'wireguard' as const,
+      private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+      preshared_key: 'P'.repeat(43) + '=',
+      endpoint: 'vpn.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.7.0.2/32',
+    };
+    const a = serializeSessionAssign({ ...base, inlineProxyConfig: wg });
+    expect(decodeWireData(a.inlineProxyConfig as string)).toEqual(wg);
+  });
+
   // V-1383 — `inlineProxyConfig` splits on `type`: openvpn|wireguard go through
   // `InlineVpnProxyWireSchema`, anything else through `SocksProxyConfigWireSchema`. Both
   // branches refuse a config that fails their contract, and coverage showed only the socks

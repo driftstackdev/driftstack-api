@@ -9,6 +9,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { InMemoryAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
+import {
+  ACCOUNT_PROXY_SECRET_V2_PREFIX,
+  readAccountProxySecret,
+} from '../../src/lib/account-proxy-secret-encryption.js';
+import { WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD } from '../../src/services/account-proxies.js';
 
 let fx: TestAppFixture;
 
@@ -492,6 +497,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
       {
@@ -552,6 +558,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });
@@ -803,6 +810,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: '10.0.0.5:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });
@@ -825,6 +833,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
           dns: '169.254.169.254',
         },
       },
@@ -899,6 +908,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });
@@ -922,6 +932,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });
@@ -1016,6 +1027,168 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     expect(create.body).not.toContain('remote vpn.example.com');
   });
 
+  // WireGuard parity with the OpenVPN "just works" arc: a real wg0.conf must
+  // save AND launch, with feedback that names the line. The three arms below
+  // are route-level on purpose — the schema arms in api-types-egress-content-
+  // parity prove what the schema does, not what the 400 detail says.
+  it('CRITICAL a WireGuard config with no [Interface] Address is refused at SAVE, naming the line. The dispatch wire has always required address, so a row saved without one passed the schema and then failed closed at every launch — the session ran without its proxy and nothing said why.', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-no-address',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    // Zod's own message for an absent key is the bare word "Required", which is
+    // what this route relays as the detail. The detail has to name the field and
+    // the wg0.conf line, or the customer is back to guessing which one.
+    const detail = res.json<{ detail: string }>().detail;
+    expect(detail).toMatch(/address is required/);
+    expect(detail).toContain('[Interface] Address');
+    const list = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(list.json<{ data: ProxyMeta[] }>().data, 'nothing persisted').toHaveLength(0);
+  });
+
+  it('a BRACKETED IPv6 endpoint — the form wg-quick writes — saves (201); the port bound and the SSRF classification both survive the brackets', async () => {
+    fx = await buildTestApp();
+    const post = (endpoint: string, label: string) =>
+      fx.app.inject({
+        method: 'POST',
+        url: '/v1/account/me/proxies',
+        headers: auth(fx),
+        payload: {
+          label,
+          scheme: 'wireguard',
+          host: 'vpn.example.com',
+          port: 51820,
+          wireguard: {
+            private_key: WG_PRIV,
+            peer_public_key: WG_PUB,
+            endpoint,
+            allowed_ips: '0.0.0.0/0',
+            address: '10.7.0.2/32',
+          },
+        },
+      });
+    // The GUI parser accepted this form and showed a check; the save then came
+    // back 400 because the schema's host class had no `[`.
+    const ok = await post('[2606:4700:4700::1111]:51820', 'wg-v6');
+    expect(ok.statusCode, ok.body).toBe(201);
+    // The port is the same regex group either way, so the 1-65535 bound still reads it.
+    const badPort = await post('[2606:4700:4700::1111]:0', 'wg-v6-port');
+    expect(badPort.statusCode, badPort.body).toBe(400);
+    expect(badPort.json<{ detail: string }>().detail).toMatch(/host:port/);
+    // vpnEndpointHost strips the brackets before classifying, so a ULA inside them
+    // is still the private target the SSRF guard exists for.
+    const ula = await post('[fd12:3456:789a::5]:51820', 'wg-v6-ula');
+    expect(ula.statusCode, ula.body).toBe(400);
+    expect(ula.json<{ detail: string }>().detail).toMatch(/private|loopback|metadata/i);
+  });
+
+  it('CRITICAL preshared_key is stored ENCRYPTED — its own envelope under the row’s slot, never the key in the config jsonb — is never echoed, and a PUT re-submit replaces it', async () => {
+    fx = await buildTestApp();
+    const PSK = 'P'.repeat(43) + '=';
+    const wgBody = (preshared_key: string) => ({
+      label: 'wg-psk',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      wireguard: {
+        private_key: WG_PRIV,
+        peer_public_key: WG_PUB,
+        preshared_key,
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+        address: '10.7.0.2/32',
+      },
+    });
+    const create = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: wgBody(PSK),
+    });
+    expect(create.statusCode, create.body).toBe(201);
+    expect(create.body).not.toContain(PSK);
+    const meta = create.json<ProxyMeta>();
+
+    const stored = await fx.accountProxiesRepo.findById({ id: meta.id, accountId: fx.accountId });
+    expect(stored, 'the row exists').not.toBeNull();
+    // The property: the key is not in the row in the clear — not in config, not
+    // in any column. A plaintext PSK in the jsonb would satisfy every arm above.
+    expect(JSON.stringify(stored)).not.toContain(PSK);
+    const envelope = stored?.config[WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD];
+    expect(typeof envelope, 'the PSK rides config as an envelope').toBe('string');
+    expect((envelope as string).startsWith(ACCOUNT_PROXY_SECRET_V2_PREFIX)).toBe(true);
+    // And it unwraps under THIS account + proxy to the key that was sent — under
+    // the fixed test master key build-test-app hands the route.
+    const unwrap = (value: string): string =>
+      readAccountProxySecret(
+        Buffer.alloc(32, 7),
+        { accountId: fx.accountId, proxyId: meta.id, slot: 'wireguard-preshared-key' },
+        value,
+      );
+    expect(unwrap(envelope as string)).toBe(PSK);
+
+    // PUT: re-submitting the matching VPN configuration is the only way to change
+    // a VPN secret, and the new PSK has to replace the old envelope, not sit beside it.
+    const PSK2 = 'Q'.repeat(43) + '=';
+    const put = await fx.app.inject({
+      method: 'PUT',
+      url: `/v1/account/me/proxies/${meta.id}`,
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: { scheme: 'wireguard', wireguard: wgBody(PSK2).wireguard },
+    });
+    expect(put.statusCode, put.body).toBe(200);
+    expect(put.body).not.toContain(PSK2);
+    const updated = await fx.accountProxiesRepo.findById({ id: meta.id, accountId: fx.accountId });
+    expect(JSON.stringify(updated)).not.toContain(PSK2);
+    expect(unwrap(updated?.config[WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD] as string)).toBe(PSK2);
+  });
+
+  it('a malformed preshared_key is refused at save with the message naming the shape — a mis-pasted PresharedKey line would otherwise save clean and never handshake', async () => {
+    fx = await buildTestApp();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'wg-bad-psk',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          preshared_key: 'not-a-key',
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(400);
+    expect(res.json<{ detail: string }>().detail).toBe(
+      'preshared_key must be a 44-char base64 key',
+    );
+  });
+
   it('scheme=wireguard WITHOUT a wireguard block → 400', async () => {
     fx = await buildTestApp();
     const res = await fx.app.inject({
@@ -1043,6 +1216,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
           peer_public_key: WG_PUB,
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });
@@ -1066,6 +1240,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
             peer_public_key: WG_PUB,
             endpoint: 'vpn.example.com:51820',
             allowed_ips: '0.0.0.0/0',
+            address: '10.7.0.2/32',
           },
         },
       })
@@ -1110,6 +1285,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
             peer_public_key: WG_PUB,
             endpoint: 'vpn.example.com:51820',
             allowed_ips: '0.0.0.0/0',
+            address: '10.7.0.2/32',
           },
         },
       })
@@ -1316,6 +1492,7 @@ describe('POST /v1/account/me/proxies with PROFILE_MASTER_KEY unset', () => {
           peer_public_key: 'AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=',
           endpoint: '1.2.3.4:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
     });

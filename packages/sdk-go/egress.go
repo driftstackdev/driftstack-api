@@ -15,7 +15,7 @@ import (
 // Mirrors the TypeScript + Python SDK egress resources.
 //
 // SECURITY: the secret-bearing fields (SOCKS5 password, OpenVPN
-// config_blob, WireGuard private_key) are write-only — wrapped
+// config_blob, WireGuard private_key and preshared_key) are write-only — wrapped
 // server-side under the account key, never echoed back. List/get return
 // metadata only (+ HasPassword / HasSecret).
 type EgressResource struct {

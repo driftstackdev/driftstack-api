@@ -157,6 +157,7 @@ describe('EgressResource', () => {
           peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
           endpoint: 'x.example:1',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       };
       // Same gap on the UPDATE side — switching an existing proxy's `scheme`
@@ -177,6 +178,7 @@ describe('EgressResource', () => {
           peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
           endpoint: 'vpn.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       };
       const validUpdate: AccountProxyUpdate = { label: 'renamed' };
@@ -203,6 +205,7 @@ describe('EgressResource', () => {
         peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
         endpoint: 'vpn.example.com:51820',
         allowed_ips: '0.0.0.0/0',
+        address: '10.7.0.2/32',
       },
     };
     const reply = {

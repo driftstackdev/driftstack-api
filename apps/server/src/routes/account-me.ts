@@ -41,7 +41,10 @@ import type {
   AccountProxyRow,
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
-import type { AccountProxiesService } from '../services/account-proxies.js';
+import {
+  WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD,
+  type AccountProxiesService,
+} from '../services/account-proxies.js';
 import {
   encryptAccountProxySecret,
   type AccountProxySecretSlot,
@@ -582,7 +585,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   // Resolve the encrypted-secret + non-secret config for a VPN scheme. Returns
   // null for socks5/http (the caller keeps the password path). For openvpn the
   // SECRET is {config_blob[,password]} (the blob embeds certs/keys); for
-  // wireguard it's the private_key. The non-secret structured fields ride
+  // wireguard it's the private_key, plus the preshared_key when the peer has
+  // one — wrapped as its own envelope under the same slot and carried in
+  // `config` (see WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD for why), so the key
+  // is never in the jsonb in the clear. The non-secret structured fields ride
   // `config` (jsonb) so the GUI/dispatch can read them without decrypting.
   function buildVpnSecretAndConfig(
     accountId: string,
@@ -593,9 +599,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       wireguard?: {
         private_key: string;
         peer_public_key: string;
+        preshared_key?: string;
         endpoint: string;
         allowed_ips: string;
-        address?: string;
+        address: string;
         dns?: string;
       };
     },
@@ -636,21 +643,34 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!input.wireguard) {
         throw new BadRequestError('A `wireguard` config is required for scheme "wireguard".');
       }
-      const { private_key, peer_public_key, endpoint, allowed_ips, address, dns } = input.wireguard;
+      const { private_key, peer_public_key, preshared_key, endpoint, allowed_ips, address, dns } =
+        input.wireguard;
       // SSRF: the real egress is the endpoint (+ dns), NOT the display host — guard them.
       if (classifyUnsafeVpnTargets({ endpoint, dns }) !== null) {
         throw new BadRequestError(
           'WireGuard endpoint/DNS must not target a private, loopback, link-local, or metadata address.',
         );
       }
+      // `address` is written unconditionally: the schema requires it now, because the
+      // dispatch wire always did and a row without one failed closed at every launch.
       return {
         wrappedSecret: wrapProxySecret(accountId, proxyId, 'wireguard-private-key', private_key),
         config: {
           peer_public_key,
           endpoint,
           allowed_ips,
-          ...(address ? { address } : {}),
+          address,
           ...(dns ? { dns } : {}),
+          ...(preshared_key !== undefined
+            ? {
+                [WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD]: wrapProxySecret(
+                  accountId,
+                  proxyId,
+                  'wireguard-preshared-key',
+                  preshared_key,
+                ),
+              }
+            : {}),
         },
       };
     }

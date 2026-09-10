@@ -83,6 +83,7 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'config_blob',
   'configblob',
   'private_key',
+  'preshared_key',
   'privatekey',
   // Arc 7 obs.2.b — v2-#8 BYOK + gui_control_key Sentry mirror of
   // the lib/logger.ts redact-paths extension. Match keys are

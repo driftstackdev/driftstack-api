@@ -214,6 +214,7 @@ describe('EG-API-1.6 SocksProxyBackend', () => {
           peer_public_key: 'B'.repeat(43) + '=',
           endpoint: 'wg.example.com:51820',
           allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
         },
       },
       egress_safeguard: SAFEGUARD,

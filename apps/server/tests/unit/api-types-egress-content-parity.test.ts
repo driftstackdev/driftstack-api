@@ -18,6 +18,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EgressCapabilitiesSchema,
   EgressSafeguardSchema,
+  InlineWireGuardWireSchema,
   OpenVpnProxyConfigSchema,
   ProxyConfigSchema,
   ProxyTypeSchema,
@@ -152,21 +153,24 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
     ).toBe(true);
   });
 
-  it('WireGuardProxyConfig fields: private_key + peer_public_key 44-char base64 curve25519 / endpoint host:port / allowed_ips default 0.0.0.0/0 / dns optional', () => {
+  it('WireGuardProxyConfig fields: private_key + peer_public_key 44-char base64 curve25519 / preshared_key optional 44-char base64 / endpoint host:port / allowed_ips default 0.0.0.0/0 / address REQUIRED / dns optional', () => {
     const validKey = 'A'.repeat(43) + '=';
     const parsed = WireGuardProxyConfigSchema.parse({
       private_key: validKey,
       peer_public_key: validKey,
       endpoint: 'wg.example.com:51820',
+      address: '10.7.0.2/32',
     });
     expect(parsed.allowed_ips).toBe('0.0.0.0/0');
     expect(parsed.dns).toBeUndefined();
+    expect(parsed.preshared_key).toBeUndefined();
     // Key length validation.
     expect(
       WireGuardProxyConfigSchema.safeParse({
         private_key: 'short',
         peer_public_key: validKey,
         endpoint: 'wg.example.com:51820',
+        address: '10.7.0.2/32',
       }).success,
     ).toBe(false);
     // Endpoint format validation.
@@ -175,13 +179,104 @@ describe('EG-API-1.1 packages/api-types/src/egress.ts content parity', () => {
         private_key: validKey,
         peer_public_key: validKey,
         endpoint: 'no-port',
+        address: '10.7.0.2/32',
       }).success,
     ).toBe(false);
   });
 
+  it('WireGuardProxyConfig.endpoint accepts the BRACKETED IPv6 form wg-quick writes (`[2001:db8::1]:51820`). The GUI parser accepted it and showed a check, then the save came back 400 because the host class had no `[`. The port is the same regex group either way, so the 1-65535 bound still reads it.', () => {
+    const validKey = 'A'.repeat(43) + '=';
+    const base = { private_key: validKey, peer_public_key: validKey, address: '10.7.0.2/32' };
+    const ok = WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: '[2001:db8::1]:51820' });
+    expect(ok.success, ok.success ? '' : JSON.stringify(ok.error.issues)).toBe(true);
+    // Verbatim — the server's SSRF classifier strips the brackets itself
+    // (vpnEndpointHost), so the schema must not rewrite what it accepted.
+    if (ok.success) expect(ok.data.endpoint).toBe('[2001:db8::1]:51820');
+    for (const endpoint of [
+      '[2001:db8::1]:0',
+      '[2001:db8::1]:65536',
+      '[2001:db8::1]:99999',
+      '[2001:db8::1]', // no port at all
+    ]) {
+      expect(WireGuardProxyConfigSchema.safeParse({ ...base, endpoint }).success, endpoint).toBe(
+        false,
+      );
+    }
+    // Control: the unbracketed forms this schema always accepted still do.
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: 'wg.example.com:51820' }).success,
+    ).toBe(true);
+    expect(
+      WireGuardProxyConfigSchema.safeParse({ ...base, endpoint: '198.51.100.7:51820' }).success,
+    ).toBe(true);
+  });
+
+  it('WireGuardProxyConfig.address is REQUIRED and the refusal names the wg0.conf line. The dispatch wire (InlineWireGuardWireSchema) has always required it, so a row saved without one passed this schema and then failed closed at every launch — the session ran without its proxy and nothing said why.', () => {
+    const validKey = 'A'.repeat(43) + '=';
+    const r = WireGuardProxyConfigSchema.safeParse({
+      private_key: validKey,
+      peer_public_key: validKey,
+      endpoint: 'wg.example.com:51820',
+    });
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      const issue = r.error.issues.find((i) => i.path.join('.') === 'address');
+      // Zod's default for an absent key is the bare word "Required", and the create
+      // route relays the first issue's message as the 400 detail.
+      expect(issue?.message).toMatch(/address is required/);
+      expect(issue?.message).toContain('[Interface] Address');
+    }
+    // The wire it feeds is the reason: the same omission is a wire refusal.
+    expect(
+      InlineWireGuardWireSchema.safeParse({
+        type: 'wireguard',
+        private_key: validKey,
+        peer_public_key: validKey,
+        endpoint: 'wg.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+      }).success,
+    ).toBe(false);
+  });
+
+  it('WireGuardProxyConfig.preshared_key: optional, accepted when a 44-char base64 key, refused with a message naming the shape otherwise — and InlineWireGuardWireSchema CARRIES it (a zod object strips undeclared keys, so an unnamed PSK would leave the dispatch wire silently and the peer would refuse the handshake)', () => {
+    const validKey = 'A'.repeat(43) + '=';
+    const psk = 'P'.repeat(43) + '=';
+    const base = {
+      private_key: validKey,
+      peer_public_key: validKey,
+      endpoint: 'wg.example.com:51820',
+      address: '10.7.0.2/32',
+    };
+    const ok = WireGuardProxyConfigSchema.safeParse({ ...base, preshared_key: psk });
+    expect(ok.success, ok.success ? '' : JSON.stringify(ok.error.issues)).toBe(true);
+    if (ok.success) expect(ok.data.preshared_key).toBe(psk);
+    for (const bad of ['short', 'P'.repeat(44), 'P'.repeat(42) + '-=', psk + '\n']) {
+      const r = WireGuardProxyConfigSchema.safeParse({ ...base, preshared_key: bad });
+      expect(r.success, JSON.stringify(bad)).toBe(false);
+      if (!r.success) {
+        expect(r.error.issues[0]?.message).toBe('preshared_key must be a 44-char base64 key');
+      }
+    }
+    const wire = {
+      type: 'wireguard' as const,
+      private_key: validKey,
+      peer_public_key: validKey,
+      endpoint: 'wg.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.7.0.2/32',
+    };
+    const carried = InlineWireGuardWireSchema.safeParse({ ...wire, preshared_key: psk });
+    expect(carried.success && carried.data.preshared_key).toBe(psk);
+    const without = InlineWireGuardWireSchema.safeParse(wire);
+    expect(without.success && 'preshared_key' in without.data).toBe(false);
+    expect(InlineWireGuardWireSchema.safeParse({ ...wire, preshared_key: 'short' }).success).toBe(
+      false,
+    );
+  });
+
   it('WireGuardProxyConfig.endpoint port bound: regression guard — a 1-5 digit port regex alone accepts out-of-range ports (0, 65536, 99999); the schema must numerically bound the port to 1-65535 like every other port field in this file', () => {
     const validKey = 'A'.repeat(43) + '=';
-    const base = { private_key: validKey, peer_public_key: validKey };
+    const base = { private_key: validKey, peer_public_key: validKey, address: '10.7.0.2/32' };
     // Out-of-range ports that a bare `[0-9]{1,5}` regex would wrongly
     // accept — MUST reject.
     expect(

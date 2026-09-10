@@ -218,6 +218,7 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.openvpn.config_blob',
         'body.openvpn.password',
         'body.wireguard.private_key',
+        'body.wireguard.preshared_key',
         // Arc 7 obs.2 — v2-#8 BYOK PUT body field. The PUT
         // /v1/account/me/byok-anthropic-key route accepts the key
         // as { api_key: 'sk-ant-...' }. Same defense-in-depth as

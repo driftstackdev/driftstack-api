@@ -102,18 +102,38 @@ describe('V-928 the proxy body publishes its real bounds', () => {
       components: {
         schemas: Record<
           string,
-          { properties?: Record<string, { properties?: Record<string, Published> }> }
+          {
+            properties?: Record<
+              string,
+              { properties?: Record<string, Published>; required?: string[] }
+            >;
+          }
         >;
       };
     };
-    const wg = spec.components.schemas['AccountProxyInput']?.properties?.['wireguard']?.properties;
+    const wgSchema = spec.components.schemas['AccountProxyInput']?.properties?.['wireguard'];
+    const wg = wgSchema?.properties;
     expect(wg?.['private_key']?.pattern, 'wireguard private_key format').toBe(
       '^[A-Za-z0-9+/]{43}=$',
     );
     expect(wg?.['peer_public_key']?.pattern, 'wireguard peer_public_key format').toBe(
       '^[A-Za-z0-9+/]{43}=$',
     );
+    expect(wg?.['preshared_key']?.pattern, 'wireguard preshared_key format').toBe(
+      '^[A-Za-z0-9+/]{43}=$',
+    );
     expect(wg?.['endpoint']?.pattern, 'wireguard endpoint format').toMatch(/A-Za-z0-9/);
+    // The bracketed IPv6 alternative wg-quick writes (`[2001:db8::1]:51820`) is
+    // published too, so a generated client validates the same endpoints the
+    // route accepts. The JSON string holds the regex source, brackets escaped.
+    expect(wg?.['endpoint']?.pattern, 'wireguard endpoint admits [ipv6]:port').toContain(
+      '\\[[0-9A-Fa-f:.]+\\]',
+    );
+    // `address` is required at the route (the dispatch wire always needed it);
+    // a document that still called it optional would let a generated client
+    // send a body the route refuses.
+    expect(wgSchema?.required, 'wireguard required fields').toContain('address');
+    expect(wgSchema?.required, 'preshared_key stays optional').not.toContain('preshared_key');
     const ovpn = spec.components.schemas['AccountProxyInput']?.properties?.['openvpn']?.properties;
     expect(ovpn?.['config_blob']?.maxLength, 'openvpn config_blob cap').toBe(256 * 1024);
   });

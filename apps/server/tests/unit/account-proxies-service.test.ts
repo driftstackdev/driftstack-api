@@ -10,7 +10,11 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import type { SocksProxyConfig } from '@driftstack/api-types';
 import { InMemoryAccountProxiesRepo } from '../../src/db/account-proxies-repo.js';
-import { AccountProxiesService, UnsafeProxyHostError } from '../../src/services/account-proxies.js';
+import {
+  AccountProxiesService,
+  UnsafeProxyHostError,
+  WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD,
+} from '../../src/services/account-proxies.js';
 import { encryptAccountProxySecret } from '../../src/lib/account-proxy-secret-encryption.js';
 
 const MASTER = Buffer.alloc(32, 7);
@@ -219,6 +223,82 @@ describe('AccountProxiesService.resolveForDispatch', () => {
       allowed_ips: '0.0.0.0/0',
       address: '10.7.0.2/32',
     });
+  });
+
+  // WireGuard PresharedKey: stored as its own envelope in `config` under the
+  // private-key slot (see WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD), unwrapped here
+  // and carried on the flat wire. A peer configured with a PSK refuses a
+  // handshake without it, so a row that stored it and a wire that dropped it
+  // would be a tunnel that never comes up with nothing naming the cause.
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+  const PSK = 'P'.repeat(43) + '=';
+  async function seedWireGuardWithPsk(
+    repo: InMemoryAccountProxiesRepo,
+    pskWrappedFor: { accountId: string; proxyId: string } | 'this-row',
+  ) {
+    const id = randomUUID();
+    const pskContext =
+      pskWrappedFor === 'this-row' ? { accountId: ACCT_A, proxyId: id } : pskWrappedFor;
+    return repo.create(ACCT_A, {
+      id,
+      label: 'wg-psk',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: encryptAccountProxySecret(
+        MASTER,
+        { accountId: ACCT_A, proxyId: id, slot: 'wireguard-private-key' },
+        WG_PRIV,
+      ),
+      config: {
+        peer_public_key: WG_PUB,
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+        address: '10.7.0.2/32',
+        [WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD]: encryptAccountProxySecret(
+          MASTER,
+          { ...pskContext, slot: 'wireguard-preshared-key' },
+          PSK,
+        ),
+      },
+    });
+  }
+
+  it('carries preshared_key on the wire when the row has one — unwrapped from its envelope in config, never read from the jsonb in the clear', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedWireGuardWithPsk(repo, 'this-row');
+    // Control on the fixture: the stored jsonb does not hold the key in the clear,
+    // so the value on the wire below can only have come from the unwrap.
+    expect(JSON.stringify(row.config)).not.toContain(PSK);
+    const cfg = await svc.resolveForDispatch({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(cfg).toEqual({
+      type: 'wireguard',
+      private_key: WG_PRIV,
+      peer_public_key: WG_PUB,
+      preshared_key: PSK,
+      endpoint: 'vpn.example.com:51820',
+      allowed_ips: '0.0.0.0/0',
+      address: '10.7.0.2/32',
+    });
+    // The envelope itself must not leak onto the wire beside the plaintext.
+    expect(JSON.stringify(cfg)).not.toContain(WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD);
+  });
+
+  it('FAIL-CLOSED: a preshared_key envelope that does not unwrap for this row (wrapped for another proxy) resolves to null. The private key alone is valid — the arm above proves it — so the null can only be the PSK unwrap; dispatching the row WITHOUT the key would be a tunnel the peer refuses.', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedWireGuardWithPsk(repo, { accountId: ACCT_A, proxyId: randomUUID() });
+    expect(
+      await svc.resolveForDispatch({ proxyId: row.id, accountId: ACCT_A, tier: 'api_builder' }),
+    ).toBeNull();
   });
 
   it('resolves an OpenVPN proxy to the FLAT wire (config_blob from the unwrapped secret)', async () => {

@@ -22,6 +22,28 @@ export class UnsafeProxyHostError extends Error {
   }
 }
 
+/**
+ * `config` jsonb key under which a WireGuard row carries its PresharedKey — as a
+ * record/slot-bound v2 ENVELOPE, never the key itself.
+ *
+ * Why an envelope in `config` and not a second secret column: the row has one
+ * VPN secret column (`wrapped_secret`) and its `wireguard-private-key` slot
+ * validates the plaintext as exactly one bare 44-char key, so the PSK cannot
+ * ride inside it, and a second column is a migration plus a new slot in the
+ * encryption module. A PSK has the same 32-byte base64 shape as the private key,
+ * so it wraps under the SAME slot and the same account + proxy AAD: it is never
+ * at rest in the clear, and an envelope lifted from another row or account fails
+ * GCM here exactly as the private key does. What that shares with the private
+ * key is the slot NAME in the AAD — the two envelopes of one row are
+ * interchangeable ciphertexts to someone who can already write the database,
+ * and swapping them yields a tunnel that fails its handshake, not a disclosure.
+ *
+ * Written by `buildVpnSecretAndConfig` (routes/account-me.ts); read only by
+ * `resolveVpnForDispatch` below. One symbol for both ends so the writer and the
+ * reader cannot disagree on the spelling.
+ */
+export const WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD = 'wrapped_preshared_key';
+
 /** 7-day TTL for a verified per-proxy UDP capability (A3 W2756). A proxy's
  *  UDP_ASSOCIATE support is stable, but a customer can reconfigure the exit, so a
  *  verified value older than this is treated as unknown (→ omit → the fork
@@ -197,10 +219,29 @@ export class AccountProxiesService {
       if (classifyUnsafeVpnTargets({ endpoint: str('endpoint'), dns: str('dns') }) !== null) {
         return null;
       }
+      // PresharedKey: stored as its own envelope under the private-key slot (see
+      // WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD). Unwrapped under the exact account +
+      // proxy, like the private key; a PSK the peer expects and we cannot recover
+      // is a tunnel that will never handshake, so an unwrap failure fails CLOSED
+      // (null) rather than dispatching the row without it.
+      const wrappedPresharedKey = str(WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD);
+      let presharedKey: string | undefined;
+      if (wrappedPresharedKey !== undefined) {
+        try {
+          presharedKey = readAccountProxySecret(
+            this.masterKey,
+            { accountId, proxyId: row.id, slot: 'wireguard-preshared-key' },
+            wrappedPresharedKey,
+          );
+        } catch {
+          return null; // wrong-account TMK / corrupted blob → fail-closed
+        }
+      }
       candidate = {
         type: 'wireguard',
         private_key: secret,
         peer_public_key: str('peer_public_key'),
+        ...(presharedKey !== undefined ? { preshared_key: presharedKey } : {}),
         endpoint: str('endpoint'),
         allowed_ips: str('allowed_ips'),
         address: str('address'),

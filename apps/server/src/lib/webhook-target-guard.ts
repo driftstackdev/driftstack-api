@@ -159,14 +159,14 @@ export function classifyUnsafeHost(
 }
 
 /** Strip the `:port` from a `host:port` endpoint, handling bracketed IPv6 (`[::1]:51820`),
- *  UNBRACKETED IPv6 (the WG schema's only-accepted IPv6 form), and bare hosts — returns
+ *  UNBRACKETED IPv6 (the WG schema accepts both forms), and bare hosts — returns
  *  the host portion for SSRF classification.
  *
  *  ⚠️ The naive last-colon heuristic is an SSRF bypass: an unbracketed IPv6 whose final
  *  hextet is decimal (`fc00::9999`, `fe80::443`) gets its tail mistaken for a port and
  *  chopped to `fc00:` / `fe80:`, which is not a valid IP literal → classifyUnsafeHost
  *  returns null → the guard PASSES and the internal IPv6 is reachable. The WG endpoint
- *  schema accepts unbracketed IPv6 but rejects the bracketed form, so this mishandled
+ *  schema accepts unbracketed IPv6 as well as the bracketed form, so this mishandled
  *  shape is exactly what a customer can submit. We therefore only strip a `:port` when the
  *  host portion is unambiguous (bracketed IPv6, or a head with no further colons / a valid
  *  bare IPv6); an unbracketed string that IS a valid IPv6 literal is returned whole. */

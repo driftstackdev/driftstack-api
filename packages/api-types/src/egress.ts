@@ -145,7 +145,17 @@ export type OpenVpnProxyConfig = z.infer<typeof OpenVpnProxyConfigSchema>;
 // group is separately bounded to the valid TCP/UDP port range (1-65535)
 // below — `[0-9]{1,5}` alone also matches syntactically-invalid ports like
 // `0` or `99999`.
-const WG_ENDPOINT_RE = /^([A-Za-z0-9.\-:_]+):([0-9]{1,5})$/;
+//
+// The host group is an alternation because wg-quick(8) writes an IPv6 endpoint
+// BRACKETED (`Endpoint = [2001:db8::1]:51820`) — the only unambiguous way to put
+// a port after an IPv6 literal. The first draft had no `[` in its class, so a
+// real wg0.conf pasted into the GUI (whose parser accepts the brackets) showed
+// a green check and then the save came back 400. The bracket alternative keeps
+// the port in group 2, so the numeric bound below reads the same group either
+// way. The server's SSRF classifier strips the brackets itself
+// (`vpnEndpointHost` in apps/server webhook-target-guard.ts), so what it
+// classifies is the address, not the punctuation.
+const WG_ENDPOINT_RE = /^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.\-:_]+):([0-9]{1,5})$/;
 /**
  * WireGuard value shapes, enforced because these three fields are the only ones
  * in the config that carried no format check — `private_key`, `peer_public_key`
@@ -179,6 +189,18 @@ export const WireGuardProxyConfigSchema = z.object({
   peer_public_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
     message: 'peer_public_key must be a 44-char base64 curve25519 key',
   }),
+  // [Peer] PresharedKey — the optional post-quantum symmetric key wg(8) mixes
+  // into the handshake. A provider that issues one REQUIRES it: a peer
+  // configured with a PSK refuses a handshake that omits it, so a config that
+  // dropped this line would save clean and never come up. Same 32-byte base64
+  // shape as the keys above. It is a SECRET like `private_key`: the server
+  // wraps it under the account key and never echoes it.
+  preshared_key: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, {
+      message: 'preshared_key must be a 44-char base64 key',
+    })
+    .optional(),
   endpoint: z
     .string()
     .regex(WG_ENDPOINT_RE, {
@@ -201,15 +223,23 @@ export const WireGuardProxyConfigSchema = z.object({
     })
     .default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
-  // ifconfig needs it to bring up the tunnel (A3 W2109). Optional in the schema
-  // for back-compat; the GUI's wg0.conf parser requires it before create.
+  // ifconfig needs it to bring up the tunnel (A3 W2109). REQUIRED: the dispatch
+  // wire (`InlineWireGuardWireSchema` below) has always required it, so a row
+  // saved without one passed this schema and then failed closed at EVERY
+  // dispatch — the session simply ran without its proxy and nothing told the
+  // customer why. Refusing it here moves that failure to the save, where the
+  // message can name the missing line. `required_error` because zod's default
+  // for an absent key is the bare word "Required", which the create route
+  // returns verbatim as the 400 detail.
   address: z
-    .string()
+    .string({
+      required_error:
+        'address is required — the [Interface] Address line of the wg0.conf (e.g. 10.7.0.2/32)',
+    })
     .max(128)
     .regex(WG_CIDR_LIST_RE, {
       message: 'address must be a comma-separated list of CIDRs (no newlines)',
-    })
-    .optional(),
+    }),
   dns: z
     .string()
     .max(256)
@@ -256,6 +286,17 @@ export const InlineWireGuardWireSchema = z.object({
   type: z.literal('wireguard'),
   private_key: z.string().min(1),
   peer_public_key: z.string().min(1),
+  // Present only when the stored row carries one; the server unwraps it at
+  // dispatch (it is stored encrypted, like private_key). The shape is checked
+  // again here because a zod object STRIPS keys it does not declare — an
+  // undeclared preshared_key would be silently dropped from the wire and the
+  // peer would refuse the handshake with nothing in any log naming the cause.
+  preshared_key: z
+    .string()
+    .regex(/^[A-Za-z0-9+/]{43}=$/, {
+      message: 'preshared_key must be a 44-char base64 key',
+    })
+    .optional(),
   endpoint: z.string().min(1),
   allowed_ips: z.string().min(1),
   address: z.string().min(1),

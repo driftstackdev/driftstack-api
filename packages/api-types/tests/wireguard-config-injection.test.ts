@@ -30,6 +30,9 @@ const VALID = {
   private_key: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0=',
   peer_public_key: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb0=',
   endpoint: 'vpn.example.com:51820',
+  // Required: the dispatch wire always was, so the schema now refuses a config
+  // without it at save instead of failing closed at every launch.
+  address: '10.7.0.2/32',
 };
 
 const parse = (over: Record<string, unknown>) =>
@@ -51,8 +54,17 @@ describe('WireGuard config values cannot inject a wg0.conf line', () => {
       expect(parse({ allowed_ips }).success, `allowed_ips=${allowed_ips}`).toBe(true);
     }
     expect(parse({ dns: '2606:4700:4700::1111, 1.1.1.1' }).success, 'IPv6 + IPv4 DNS').toBe(true);
-    // Omitted entirely — allowed_ips defaults, address and dns are optional.
-    expect(parse({}).success, 'all three omitted').toBe(true);
+    // Omitted entirely — allowed_ips defaults and dns is optional. address is
+    // not: VALID carries it, and dropping it is a refusal, not an omission.
+    expect(parse({}).success, 'allowed_ips and dns omitted').toBe(true);
+    expect(parse({ address: undefined }).success, 'address omitted').toBe(false);
+  });
+
+  it('CRITICAL preshared_key carrying a newline is rejected. It is the fourth right-hand side these values become (`PresharedKey = …`), and its key regex is anchored to one 44-char line — the same rule, stated once more because a fourth field with no check is the exception this file exists to remove.', () => {
+    const psk = 'cccccccccccccccccccccccccccccccccccccccccc0=';
+    expect(parse({ preshared_key: psk }).success, 'the plain key parses').toBe(true);
+    expect(parse({ preshared_key: `${psk}\nPostUp = x` }).success).toBe(false);
+    expect(parse({ preshared_key: `${psk}\n` }).success).toBe(false);
   });
 
   it('CRITICAL allowed_ips carrying a newline is rejected. `AllowedIPs = 0.0.0.0/0\\nPostUp = …` is one line in wg0.conf and one shell command in wg-quick.', () => {

@@ -260,7 +260,7 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     expect(classifyUnsafeVpnTargets({ endpoint: 'localhost:51820' })).toBe('localhost');
   });
   it('blocks UNBRACKETED IPv6 endpoints — the SSRF bypass the last-colon heuristic missed (fc00::9999→fc00:)', () => {
-    // The WG endpoint schema accepts unbracketed IPv6 (and rejects the bracketed form),
+    // The WG endpoint schema accepts unbracketed IPv6 (and, since VPN parity, the bracketed form too),
     // so these are exactly what a customer can submit. The decimal final hextet must NOT
     // be mistaken for a port + chopped to a non-IP that slips past the guard.
     expect(classifyUnsafeVpnTargets({ endpoint: 'fc00::9999' })).toBe('private'); // ULA

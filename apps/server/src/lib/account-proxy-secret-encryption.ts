@@ -15,7 +15,11 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const ACCOUNT_PROXY_SECRET_V2_PREFIX = 'driftstack:account-proxy-secret:v2:';
 
-export type AccountProxySecretSlot = 'password' | 'openvpn-config' | 'wireguard-private-key';
+export type AccountProxySecretSlot =
+  | 'password'
+  | 'openvpn-config'
+  | 'wireguard-private-key'
+  | 'wireguard-preshared-key';
 
 export interface AccountProxySecretContext {
   accountId: string;
@@ -29,7 +33,11 @@ function normalizeUuid(name: 'accountId' | 'proxyId', value: string): string {
 }
 
 function normalizeContext(context: AccountProxySecretContext): AccountProxySecretContext {
-  if (!['password', 'openvpn-config', 'wireguard-private-key'].includes(context.slot)) {
+  if (
+    !['password', 'openvpn-config', 'wireguard-private-key', 'wireguard-preshared-key'].includes(
+      context.slot,
+    )
+  ) {
     throw new Error('Account proxy secret slot is invalid.');
   }
   return {
@@ -55,6 +63,10 @@ function maximumPlaintextBytes(slot: AccountProxySecretSlot): number {
       return OPENVPN_MAX_UTF8_BYTES;
     case 'wireguard-private-key':
       return WIREGUARD_PRIVATE_KEY_UTF8_BYTES;
+    // Same 44-char shape as the private key; a distinct slot so the two envelopes on a
+    // row carry different AADs and can never be swapped for one another.
+    case 'wireguard-preshared-key':
+      return WIREGUARD_PRIVATE_KEY_UTF8_BYTES;
   }
 }
 
@@ -77,9 +89,18 @@ function validatePlaintext(value: string, slot: AccountProxySecretSlot): string 
     return value;
   }
 
-  if (slot === 'wireguard-private-key') {
+  if (slot === 'wireguard-private-key' || slot === 'wireguard-preshared-key') {
+    // Both WireGuard keys share the 44-char base64 shape; only the message names
+    // which one. Without this arm the pre-shared key fell through to the OpenVPN
+    // JSON branch below and every WireGuard-with-PSK create 500ed.
     const parsed = WireGuardProxyConfigSchema.shape.private_key.safeParse(value);
-    if (!parsed.success) throw new Error('Account proxy WireGuard private key is invalid.');
+    if (!parsed.success) {
+      throw new Error(
+        slot === 'wireguard-private-key'
+          ? 'Account proxy WireGuard private key is invalid.'
+          : 'Account proxy WireGuard pre-shared key is invalid.',
+      );
+    }
     return parsed.data;
   }
 

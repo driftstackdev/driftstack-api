@@ -22,7 +22,7 @@ ignored.
 
 Proxy **secrets are write-only**: passwords (SOCKS5/HTTP), the OpenVPN
 config blob (which embeds your certs/keys), and the WireGuard private
-key are accepted on create/update, encrypted at rest under your
+key and pre-shared key are accepted on create/update, encrypted at rest under your
 account's key, and **never returned** in any response. Responses expose
 `has_password` (a password is stored) and `has_secret` (a VPN secret is
 stored) instead. Every endpoint is scoped to the calling account — you
@@ -145,9 +145,11 @@ are the display endpoint (most clients fill them from the parsed config).
 ```
 
 **WireGuard** — the `private_key` and `peer_public_key` are 44-char
-base64 curve25519 keys; `endpoint` is `host:port`; `address` is the
-interface address (e.g. `10.7.0.2/32`); `allowed_ips` defaults to
-`0.0.0.0/0`; `dns` is optional:
+base64 curve25519 keys; `endpoint` is `host:port` (an IPv6 host may be
+bracketed, `[2001:db8::1]:51820`); `address` is the interface address
+(e.g. `10.7.0.2/32`) and is required; `allowed_ips` defaults to
+`0.0.0.0/0`; `dns` is optional; `preshared_key` (44-char base64) is
+optional and only needed when the peer requires a pre-shared key:
 
 ```json
 {
@@ -166,7 +168,7 @@ interface address (e.g. `10.7.0.2/32`); `allowed_ips` defaults to
 }
 ```
 
-The `config_blob` / `private_key` are write-only — the response returns
+The `config_blob` / `private_key` / `preshared_key` are write-only — the response returns
 `has_secret: true`, never the secret. VPN proxies require encryption to
 be configured server-side; if it isn't, create returns `503`.
 

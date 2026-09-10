@@ -1459,7 +1459,8 @@ class Openvpn(BaseModel):
 class Wireguard(BaseModel):
     private_key: constr(pattern=r"^[A-Za-z0-9+/]{43}=$")
     peer_public_key: constr(pattern=r"^[A-Za-z0-9+/]{43}=$")
-    endpoint: constr(pattern=r"^([A-Za-z0-9.\-:_]+):([0-9]{1,5})$")
+    preshared_key: constr(pattern=r"^[A-Za-z0-9+/]{43}=$") | None = None
+    endpoint: constr(pattern=r"^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.\-:_]+):([0-9]{1,5})$")
     allowed_ips: (
         constr(
             pattern=r"^[ \t]*[0-9A-Fa-f:.]+\/\d{1,3}(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+\/\d{1,3})*[ \t]*$",
@@ -1467,13 +1468,10 @@ class Wireguard(BaseModel):
         )
         | None
     ) = "0.0.0.0/0"
-    address: (
-        constr(
-            pattern=r"^[ \t]*[0-9A-Fa-f:.]+\/\d{1,3}(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+\/\d{1,3})*[ \t]*$",
-            max_length=128,
-        )
-        | None
-    ) = None
+    address: constr(
+        pattern=r"^[ \t]*[0-9A-Fa-f:.]+\/\d{1,3}(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+\/\d{1,3})*[ \t]*$",
+        max_length=128,
+    )
     dns: (
         constr(
             pattern=r"^[ \t]*[0-9A-Fa-f:.]+(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+)*[ \t]*$",
