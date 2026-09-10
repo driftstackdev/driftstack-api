@@ -273,16 +273,32 @@ describe('classifyUnsafeVpnTargets — guards the REAL VPN egress (endpoint/dns/
     expect(classifyUnsafeVpnTargets({ endpoint: '2606:4700::1111' })).toBeNull();
     expect(classifyUnsafeVpnTargets({ endpoint: '2606:4700::1111:51820' })).toBeNull();
   });
-  it('flags an unsafe WireGuard dns (incl. a list)', () => {
-    expect(classifyUnsafeVpnTargets({ endpoint: 'vpn.example.com:51820', dns: '10.0.0.1' })).toBe(
+  it("allows a WireGuard dns in private-unicast space — the TUNNEL resolver every provider hands out (Mullvad 10.64.0.1, ProtonVPN 10.2.0.1, IVPN 172.16.0.1); it is reached through the tunnel, not our network, and OpenVPN's pushed DNS was never classified", () => {
+    const ep = 'vpn.example.com:51820';
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '10.64.0.1' })).toBeNull(); // Mullvad
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '10.2.0.1' })).toBeNull(); // ProtonVPN
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '172.16.0.1' })).toBeNull(); // IVPN
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '192.168.100.1' })).toBeNull();
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '100.64.0.1' })).toBeNull(); // CGNAT
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: 'fd00:1::1' })).toBeNull(); // ULA
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '1.1.1.1, 10.64.0.1' })).toBeNull();
+  });
+
+  it('STILL refuses a WireGuard dns that is loopback, link-local/cloud-metadata, localhost, or a private IPv4 smuggled inside IPv6 / a numeric encoding — never a resolver, exactly what an SSRF is after; and the ENDPOINT keeps its full guard', () => {
+    const ep = 'vpn.example.com:51820';
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '169.254.169.254' })).toBe('private');
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '1.1.1.1, 169.254.169.254' })).toBe(
       'private',
     );
-    expect(
-      classifyUnsafeVpnTargets({
-        endpoint: 'vpn.example.com:51820',
-        dns: '1.1.1.1, 169.254.169.254',
-      }),
-    ).not.toBeNull();
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '127.0.0.1' })).toBe('private');
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '::1' })).not.toBeNull();
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: 'localhost' })).toBe('localhost');
+    // The allowance keys on the RAW literal: a mapped IPv6 or numeric encoding of a
+    // private IPv4 never matches it and falls through to the guard.
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '::ffff:10.64.0.1' })).toBe('private');
+    expect(classifyUnsafeVpnTargets({ endpoint: ep, dns: '0x0a400001' })).not.toBeNull();
+    // dns-only: a private ENDPOINT is still refused.
+    expect(classifyUnsafeVpnTargets({ endpoint: '10.64.0.1:51820' })).toBe('private');
   });
   it('flags an OpenVPN remote directive pointing internal', () => {
     expect(

@@ -131,8 +131,22 @@ describe('dispatch re-guards the embedded VPN egress target', () => {
     ).resolves.toBeNull();
   });
 
-  it('CRITICAL a stored WireGuard row whose DNS is a private address resolves to null. The endpoint alone is not the whole egress surface: DNS is resolved through the tunnel, so a guard that checked only the endpoint would leave it reachable.', async () => {
-    const svc = serviceFor(wireguardRow({ endpoint: 'vpn.example.com:51820', dns: '10.0.0.53' }));
+  it("a stored WireGuard row whose DNS is a PRIVATE-unicast address DISPATCHES — that is the tunnel resolver every commercial provider hands out (Mullvad 10.64.0.1, ProtonVPN 10.2.0.1), reached through the tunnel and never our network; refusing it made every such config fail at launch after saving clean. OpenVPN's pushed DNS was never classified, so this is parity.", async () => {
+    const svc = serviceFor(wireguardRow({ endpoint: 'vpn.example.com:51820', dns: '10.64.0.1' }));
+
+    const resolved = await svc.resolveForDispatch({
+      proxyId: randomUUID(),
+      accountId: ACCOUNT_ID,
+      tier: TIER,
+    });
+
+    expect(resolved, 'a private tunnel resolver must still dispatch').not.toBeNull();
+  });
+
+  it('CRITICAL a stored WireGuard row whose DNS is the cloud-metadata address STILL resolves to null — the allowance covers private-unicast resolvers only; a DNS packet aimed at 169.254.169.254 is the SSRF this guard exists for.', async () => {
+    const svc = serviceFor(
+      wireguardRow({ endpoint: 'vpn.example.com:51820', dns: '169.254.169.254' }),
+    );
 
     await expect(
       svc.resolveForDispatch({ proxyId: randomUUID(), accountId: ACCOUNT_ID, tier: TIER }),

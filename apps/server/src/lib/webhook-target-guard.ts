@@ -327,6 +327,44 @@ export function unresolvableOpenvpnFileReferenceDetail(configBlob: string): stri
 }
 
 /**
+ * WireGuard in-tunnel resolver allowance. A wg0.conf `DNS` value names the resolver
+ * the TUNNEL uses, and every commercial/self-hosted provider hands out a private one
+ * (Mullvad 10.64.0.1, ProtonVPN 10.2.0.1, wg-easy 10.8.0.1, IVPN 172.16.0.1) — the
+ * tunnel's own address space, reached through the tunnel, never our network.
+ * Classifying it with the general egress guard refused EVERY such config at dispatch
+ * after it had saved clean. This allows exactly the private-unicast ranges a tunnel
+ * resolver lives in (RFC1918, CGNAT, ULA). Loopback, link-local/cloud-metadata
+ * (169.254/16), the ::ffff:/::-embedded smuggling forms and numeric encodings stay
+ * refused: a DNS packet aimed at the metadata endpoint or a loopback service is never a
+ * legitimate resolver, and those are the targets an SSRF is after. OpenVPN's pushed
+ * dhcp-option DNS is not classified at all, so this brings WireGuard to parity, not
+ * below it. dns-ONLY: the endpoint keeps its full guard.
+ */
+const IN_TUNNEL_RESOLVER = new BlockList();
+IN_TUNNEL_RESOLVER.addSubnet('10.0.0.0', 8, 'ipv4'); // RFC1918
+IN_TUNNEL_RESOLVER.addSubnet('100.64.0.0', 10, 'ipv4'); // CGNAT (RFC6598)
+IN_TUNNEL_RESOLVER.addSubnet('172.16.0.0', 12, 'ipv4'); // RFC1918
+IN_TUNNEL_RESOLVER.addSubnet('192.168.0.0', 16, 'ipv4'); // RFC1918
+
+/** True for a plain, well-formed private-unicast literal a tunnel resolver legitimately
+ *  lives at. Deliberately NOT a general "is private" test: it keys on the RAW literal, so
+ *  an IPv4-mapped/compatible IPv6 (`::ffff:10.64.0.1`) or a numeric encoding of the same
+ *  address does not match and falls through to classifyUnsafeHost, which refuses it. */
+export function isInTunnelResolverAddress(raw: string): boolean {
+  let host = raw.toLowerCase();
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  const family = isIP(host);
+  if (family === 4) return IN_TUNNEL_RESOLVER.check(host, 'ipv4');
+  // IPv6: only a plain ULA literal (fc00::/7 → first hextet fc00–fdff), tested as a
+  // STRING. ⛔ Not BlockList.check: it matches an IPv4-MAPPED address (`::ffff:10.64.0.1`)
+  // against the ipv4 rules, which let the smuggled form ride the allowance — caught by
+  // the guard's own test. The ::ffff:/::-embedded forms start with `::`/`0:`, never
+  // `fc`/`fd`, so they fall through to classifyUnsafeHost and are refused.
+  if (family === 6) return /^f[cd][0-9a-f]{2}:/.test(host);
+  return false;
+}
+
+/**
  * Returns the unsafe reason for the FIRST private/loopback/metadata VPN egress target
  * OR a script-executing OpenVPN directive, or null when all are safe. Guards the REAL
  * connection destinations the cosmetic display `host` field does NOT cover: a WireGuard
@@ -345,6 +383,10 @@ export function classifyUnsafeVpnTargets(opts: {
   }
   if (opts.dns) {
     for (const d of opts.dns.split(/[,\s]+/).filter(Boolean)) {
+      // A resolver in private-unicast space is the TUNNEL's, not ours — see
+      // IN_TUNNEL_RESOLVER. Everything else (metadata, loopback, smuggled forms)
+      // still goes through the guard.
+      if (isInTunnelResolverAddress(d)) continue;
       const r = classifyUnsafeHost(d);
       if (r !== null) return r;
     }
