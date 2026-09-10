@@ -81,10 +81,23 @@ export interface SessionCapabilityReport {
 export type CustomerSafeCapabilityReport = Omit<
   SessionCapabilityReport,
   'streaming_health' | 'interpose_image_loaded'
->;
+> & {
+  /**
+   * N-2 — the customer-safe subset {os, confidence} of the exit proxy's cached
+   * passive TCP/IP OS fingerprint. NOT a harness fact: the CONTROL PLANE measures
+   * it (proxy /:id/test) and persists it on the proxy row, and the serve path
+   * reads it back here. `null` means NOT OBSERVED — never measured, or the session
+   * has no owned proxy to read — and must render as "measuring…", never a
+   * placeholder OS (the same absent-until-measured contract as exit_ip). The
+   * internal diagnostics (reason / observed_ip / observed_via) are deliberately
+   * NOT here.
+   */
+  os_fingerprint: { os: string; confidence: string } | null;
+};
 
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
+  osFingerprint?: { os: string; confidence: string } | null,
 ): CustomerSafeCapabilityReport {
   return {
     timestamp: report.timestamp,
@@ -110,6 +123,13 @@ export function customerSafeCapabilityReport(
     exit_timezone: report.exit_timezone,
     webrtc_candidate_ips: report.webrtc_candidate_ips,
     observed_at: report.observed_at,
+    // N-2 — a DELIBERATE allowlist addition (like exit_ip above), but sourced from
+    // the proxy row rather than the harness frame: the {os, confidence} subset of
+    // the exit's cached TCP/IP OS fingerprint. `?? null` keeps a miss a miss —
+    // NOT OBSERVED, rendered "measuring…", never a placeholder OS. The internal
+    // diagnostics (reason / observed_ip / observed_via) are NOT crossed to the
+    // customer.
+    os_fingerprint: osFingerprint ?? null,
   };
 }
 

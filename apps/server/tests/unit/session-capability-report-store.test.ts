@@ -132,4 +132,25 @@ describe('SessionCapabilityReportStore', () => {
     expect(store.get('agt_2')?.webrtc_candidate_ips).toBeNull();
     expect(store.get('agt_2')?.observed_at).toBeNull();
   });
+
+  it('N-2 the customer-safe subset carries the {os, confidence} OS-fingerprint arg, and is null without it — never a placeholder OS', () => {
+    const store = new SessionCapabilityReportStore();
+    store.set(report('agt_1'));
+    const stored = store.get('agt_1');
+    expect(stored).not.toBeNull();
+
+    // With the arg the control plane read from the proxy row, ONLY the {os,
+    // confidence} subset crosses — the internal reason/observed_ip/observed_via
+    // (which the arg deliberately does not carry) never appear.
+    const safe = customerSafeCapabilityReport(stored!, { os: 'windows', confidence: 'medium' });
+    expect(safe.os_fingerprint).toEqual({ os: 'windows', confidence: 'medium' });
+
+    // ⛔ Absent-is-not-a-negative: with NO arg (never measured, or no owned proxy)
+    // the field is null — NOT OBSERVED, rendered "measuring…" — never coerced to a
+    // placeholder OS. The key is always present so the wire shape is stable.
+    const safeNone = customerSafeCapabilityReport(stored!);
+    expect(safeNone.os_fingerprint).toBeNull();
+    // A null arg is treated the same as absent.
+    expect(customerSafeCapabilityReport(stored!, null).os_fingerprint).toBeNull();
+  });
 });

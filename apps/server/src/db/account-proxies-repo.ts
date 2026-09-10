@@ -44,6 +44,21 @@ export interface AccountProxyRow {
   quicMeasured: string | null;
   /** When {@link quicMeasured} was recorded, or null when never measured. */
   quicMeasuredAt: Date | null;
+  /**
+   * N-2 (migration 0119) — the last passive TCP/IP OS fingerprint the control
+   * plane observed for this proxy's own stack: the full structured measurement,
+   * or null (never measured). Null is NOT "no OS" — it is NOT OBSERVED, so a
+   * reader must render "measuring…", never a placeholder OS.
+   */
+  osFingerprint: {
+    os: string;
+    confidence: string;
+    reason: string;
+    observed_ip: string;
+    observed_via: 'proxy_host' | 'exit_ip';
+  } | null;
+  /** When {@link osFingerprint} was recorded, or null when never measured. */
+  osFingerprintAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -77,6 +92,17 @@ export interface AccountProxyRowUpdates {
   quicMeasured?: string | null;
   /** T-6 — timestamp the QUIC verdict was measured. */
   quicMeasuredAt?: Date | null;
+  /** N-2 — the passive OS fingerprint the /:id/test route observed, persisted
+   *  ONLY when a SYN was observed (a miss writes nothing). */
+  osFingerprint?: {
+    os: string;
+    confidence: string;
+    reason: string;
+    observed_ip: string;
+    observed_via: 'proxy_host' | 'exit_ip';
+  } | null;
+  /** N-2 — timestamp the OS fingerprint was observed. */
+  osFingerprintAt?: Date | null;
 }
 
 export interface AccountProxiesRepo {
@@ -157,6 +183,8 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     config: r.config,
     quicMeasured: r.quicMeasured,
     quicMeasuredAt: r.quicMeasuredAt,
+    osFingerprint: r.osFingerprint,
+    osFingerprintAt: r.osFingerprintAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -471,6 +499,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       config: input.config ?? {},
       quicMeasured: null,
       quicMeasuredAt: null,
+      osFingerprint: null,
+      osFingerprintAt: null,
       createdAt: now,
       updatedAt: now,
     };

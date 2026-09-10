@@ -38,12 +38,25 @@ function candidateIpsEqual(
   return true;
 }
 
+/** N-2 — value equality for the {os, confidence} OS-fingerprint subset. Two
+ *  `undefined`s are equal; one present and one absent is a change; otherwise both
+ *  fields must match. Kept here (not spread) so a fingerprint that genuinely moved
+ *  forces a snapshot bump and the cockpit's OS readout updates in steady state. */
+function osFingerprintEqual(
+  a: { os: string; confidence: string } | undefined,
+  b: { os: string; confidence: string } | undefined,
+): boolean {
+  if (a === b) return true;
+  if (a === undefined || b === undefined) return false;
+  return a.os === b.os && a.confidence === b.confidence;
+}
+
 /**
  * True iff `a` and `b` describe the SAME capability report. Same reference (or both
  * `null`) short-circuits to true; one `null` and one present is a change. Otherwise
  * every field on {@link AgentSessionCapabilityReport} must match — the health triple,
- * the T-26 exit-identity fields, the T-27 QUIC fields, `reported_at`, and an
- * element-wise `webrtc_candidate_ips`.
+ * the T-26 exit-identity fields, the T-27 QUIC fields, `reported_at`, an
+ * element-wise `webrtc_candidate_ips`, and the N-2 `os_fingerprint` subset.
  */
 export function capabilityReportsEqual(
   a: AgentSessionCapabilityReport | null,
@@ -62,6 +75,7 @@ export function capabilityReportsEqual(
     a.h3_connection_observed === b.h3_connection_observed &&
     a.h3_connection_count === b.h3_connection_count &&
     a.reported_at === b.reported_at &&
-    candidateIpsEqual(a.webrtc_candidate_ips, b.webrtc_candidate_ips)
+    candidateIpsEqual(a.webrtc_candidate_ips, b.webrtc_candidate_ips) &&
+    osFingerprintEqual(a.os_fingerprint, b.os_fingerprint)
   );
 }

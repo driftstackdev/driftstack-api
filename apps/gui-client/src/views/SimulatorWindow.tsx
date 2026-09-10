@@ -59,6 +59,7 @@ import {
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
 import { ExitIpChip } from '../components/ExitIpChip';
 import { QuicReadout } from '../components/QuicReadout';
+import { OsReadout } from '../components/OsReadout';
 import { IOSKeyboard } from '../components/IOSKeyboard';
 import { SimulatorRecordingPane } from '../components/SimulatorRecordingPane';
 import {
@@ -9892,6 +9893,12 @@ export function SimulatorWindow(): JSX.Element {
                                         node-side; degrades to "measuring…" until observed,
                                         never a false "no HTTP/3". */}
                                     <QuicReadout report={sessionCapabilityReport} />
+                                    {/* Item 11 (owner, N-2) — the exit's passive TCP/IP OS
+                                        fingerprint {os · confidence}, off the same
+                                        capabilityReport (control-plane measured, projected at
+                                        serve time). Degrades to "measuring…" until observed,
+                                        never a placeholder OS. */}
+                                    <OsReadout report={sessionCapabilityReport} />
                                   </div>
                                 )}
 

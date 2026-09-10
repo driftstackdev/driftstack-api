@@ -178,6 +178,10 @@ describe('agent-sessions read shape — capability_report', () => {
       exit_timezone: null,
       webrtc_candidate_ips: null,
       observed_at: null,
+      // N-2 — null, not a placeholder OS: this session has no owned proxy (no
+      // accountProxiesService wired here), so the exit-OS fingerprint stays NOT
+      // OBSERVED. Always present as a key in the customer-safe subset, value null.
+      os_fingerprint: null,
     });
     await app.close();
   });

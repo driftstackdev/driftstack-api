@@ -458,6 +458,13 @@ function publicAgentSession(
   livekit?: PublicLivekitInfo,
   livenessStore?: SessionLivenessStore,
   capabilityReportStore?: SessionCapabilityReportStore,
+  // N-2 — the customer-safe {os, confidence} subset of THIS session's exit-proxy
+  // OS fingerprint, read from the proxy row by the customer GET-session handlers
+  // and threaded onto the capability_report. `null`/undefined = NOT OBSERVED (no
+  // owned proxy, or never measured) → rendered "measuring…", never a placeholder.
+  // Every other callsite passes undefined; only the report-carrying customer reads
+  // surface it.
+  osFingerprint?: { os: string; confidence: string } | null,
 ): PublicAgentSession {
   const liveness = sessionLiveness(rec, livenessStore);
   const base: PublicAgentSession = {
@@ -508,7 +515,7 @@ function publicAgentSession(
     // ⛔ Projected, never spread — see customerSafeCapabilityReport. Assigning
     // the store record directly made every internal field a public one.
     if (capabilityReport !== null) {
-      base.capability_report = customerSafeCapabilityReport(capabilityReport);
+      base.capability_report = customerSafeCapabilityReport(capabilityReport, osFingerprint);
     }
   }
   return base;
@@ -2015,6 +2022,21 @@ export function registerAgentSessionsRoutes(
     uploadMaxFileBytes = UPLOAD_MAX_FILE_BYTES_DEFAULT,
   } = deps;
 
+  // N-2 — read the customer-safe {os, confidence} subset of a session's exit-proxy
+  // OS fingerprint off the proxy row, for the capability_report projection. Only a
+  // session with an owned proxy (proxyId set) and a wired accountProxiesService can
+  // have one; everything else is `null` = NOT OBSERVED (rendered "measuring…"). The
+  // read is owner-scoped (findOwned filters by accountId), so a foreign or deleted
+  // proxyId simply reads null. The internal diagnostics on the row never leave here.
+  const readSessionProxyOsFingerprint = async (
+    rec: AgentSessionRecord,
+  ): Promise<{ os: string; confidence: string } | null> => {
+    if (rec.proxyId === null || accountProxiesService === undefined) return null;
+    const proxyRow = await accountProxiesService.findOwned(rec.proxyId, rec.accountId);
+    const fp = proxyRow?.osFingerprint ?? null;
+    return fp === null ? null : { os: fp.os, confidence: fp.confidence };
+  };
+
   /** LK.4 — auto-mint a LiveKit token for the just-created (or
    *  replayed) agent session. Returns undefined when:
    *   - the fleet repo or encryption key isn't wired
@@ -2924,7 +2946,14 @@ export function registerAgentSessionsRoutes(
         }
       }
       await consumeEffectiveOwnerRateLimit(app, req, reply, rec.accountId, 'global');
-      return publicAgentSession(rec, undefined, sessionLivenessStore, sessionCapabilityReportStore);
+      const osFingerprint = await readSessionProxyOsFingerprint(rec);
+      return publicAgentSession(
+        rec,
+        undefined,
+        sessionLivenessStore,
+        sessionCapabilityReportStore,
+        osFingerprint,
+      );
     },
   );
 

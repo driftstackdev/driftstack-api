@@ -93,6 +93,13 @@ export interface AgentSessionCapabilityReport {
   webrtc_candidate_ips?: string[];
   /** The report's own exit-measurement stamp (ISO string) when it carried one. */
   observed_at?: string;
+  /** N-2 — the customer-safe {os, confidence} subset of the exit proxy's cached
+   *  passive TCP/IP OS fingerprint, projected onto `capability_report` by the
+   *  control plane. Present ONLY when the report carried a well-typed value; an
+   *  absent field means NOT OBSERVED (never measured, or no owned proxy) and must
+   *  render as "measuring…", NEVER a placeholder OS. Parsed defensively — a null,
+   *  a non-object, or a missing/empty os|confidence → omitted, never coerced. */
+  os_fingerprint?: { os: string; confidence: string };
 }
 
 export interface AgentSessionErrorEvent {
@@ -200,6 +207,20 @@ function optionalReportString(v: unknown): string | undefined {
   return typeof v === 'string' && v.length > 0 ? v : undefined;
 }
 
+/** N-2 — the customer-safe {os, confidence} OS-fingerprint subset when the report
+ *  carried a well-typed one; undefined otherwise. Present ONLY when BOTH os and
+ *  confidence are non-empty strings; a null, a non-object, an array, or a missing/
+ *  empty field → undefined, so an unmeasured exit renders as "measuring…" rather
+ *  than a coerced placeholder OS. Same defensive rule as the exit-identity fields:
+ *  wrong type → omitted, never coerced, never throws. */
+function parseOsFingerprint(v: unknown): { os: string; confidence: string } | undefined {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return undefined;
+  const rec = v as Record<string, unknown>;
+  const os = optionalReportString(rec.os);
+  const confidence = optionalReportString(rec.confidence);
+  return os !== undefined && confidence !== undefined ? { os, confidence } : undefined;
+}
+
 function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | undefined {
   const value = body.capability_report;
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
@@ -219,6 +240,11 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   const exitCountry = optionalReportString(report.exit_country);
   const exitTimezone = optionalReportString(report.exit_timezone);
   const observedAt = optionalReportString(report.observed_at);
+  // N-2 — the OS fingerprint rides the SAME envelope and follows the same additive
+  // rule: a key is present ONLY when the report carried a well-typed value, so a
+  // report without it stays byte-identical to before and an absent fingerprint
+  // renders "measuring…" rather than being coerced into a placeholder OS.
+  const osFingerprint = parseOsFingerprint(report.os_fingerprint);
   const webrtcIps = Array.isArray(report.webrtc_candidate_ips)
     ? report.webrtc_candidate_ips.filter((v): v is string => typeof v === 'string' && v.length > 0)
     : undefined;
@@ -241,6 +267,7 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
     ...(exitTimezone !== undefined ? { exit_timezone: exitTimezone } : {}),
     ...(webrtcIps !== undefined ? { webrtc_candidate_ips: webrtcIps } : {}),
     ...(observedAt !== undefined ? { observed_at: observedAt } : {}),
+    ...(osFingerprint !== undefined ? { os_fingerprint: osFingerprint } : {}),
   };
 }
 

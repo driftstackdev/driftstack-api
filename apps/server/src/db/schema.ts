@@ -742,6 +742,22 @@ export const accountProxies = pgTable(
     // capabilityReport relay; read by the /proxies list + the /:id/test result.
     quicMeasured: text('quic_measured'),
     quicMeasuredAt: timestamp('quic_measured_at', { withTimezone: true }),
+    // N-2 (migration 0119) — the last passive TCP/IP OS fingerprint the CONTROL
+    // PLANE observed for THIS proxy's own stack, and when. NULL = never measured,
+    // which is NOT the same as a measured "no OS": an absent fingerprint is NOT
+    // OBSERVED and must render as "measuring…", never a placeholder OS. The full
+    // structured measurement {os, confidence, reason, observed_ip, observed_via}
+    // is stored; only the {os, confidence} subset ever crosses to the customer.
+    // Written best-effort by the /:id/test route when a SYN was observed (a miss
+    // persists nothing); read once at serve time onto the session capability_report.
+    osFingerprint: jsonb('os_fingerprint').$type<{
+      os: string;
+      confidence: string;
+      reason: string;
+      observed_ip: string;
+      observed_via: 'proxy_host' | 'exit_ip';
+    }>(),
+    osFingerprintAt: timestamp('os_fingerprint_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

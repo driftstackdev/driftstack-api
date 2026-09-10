@@ -937,6 +937,40 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         }
       };
 
+      // N-2 — persist the observed fingerprint onto the proxy row so a live agent
+      // session can later project the exit's OS onto its capability_report. ONLY
+      // when a fingerprint was observed: a miss (os_fingerprint absent) writes
+      // NOTHING and leaves the column as-is — never coercing a miss to a value, and
+      // never nulling a value a previous test measured. Best-effort and owner-scoped
+      // (id + accountId): a failure is logged but never fails the customer's test.
+      // `accountProxiesRepo` is non-null here (checked at the top of the handler);
+      // the local binding carries that narrowing into this closure.
+      const proxiesRepo = accountProxiesRepo;
+      const persistOsFingerprintIfObserved = async (fields: {
+        os_fingerprint?: {
+          os: FingerprintedOs;
+          confidence: 'high' | 'medium' | 'low' | 'none';
+          reason: string;
+          observed_ip: string;
+          observed_via: 'proxy_host' | 'exit_ip';
+        };
+      }): Promise<void> => {
+        const fp = fields.os_fingerprint;
+        if (fp === undefined) return;
+        try {
+          await proxiesRepo.update({
+            id: row.id,
+            accountId: ctx.account.id,
+            updates: { osFingerprint: fp, osFingerprintAt: new Date() },
+          });
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: failed to persist os fingerprint',
+          );
+        }
+      };
+
       // The control-plane probe — today's behaviour, byte-for-byte. It is BOTH the
       // answer for vantage=cp and the fallback for vantage=fleet, so it lives in one
       // place rather than being duplicated and drifting.
@@ -987,11 +1021,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             // shared helper above. ONE implementation on purpose: this attachment
             // existed here and nowhere else, and the fleet branch shipped without
             // it for four days because a second copy was never written.
+            const osFields = await osFingerprintFields(descriptor, result.exitIdentity?.ip);
+            await persistOsFingerprintIfObserved(osFields);
             return {
               ok: true as const,
               latency_ms,
               ...quicFields,
-              ...(await osFingerprintFields(descriptor, result.exitIdentity?.ip)),
+              ...osFields,
             };
           }
           // The same four sentences the desktop client renders, so a customer who
@@ -1107,6 +1143,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                   r.exit_ip,
                 )
               : {};
+          await persistOsFingerprintIfObserved(osFields);
           return {
             ok: usable,
             ...(fleetFailure !== undefined ? { reason: fleetFailure } : {}),

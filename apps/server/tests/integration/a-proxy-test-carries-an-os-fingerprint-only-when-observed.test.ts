@@ -4,6 +4,12 @@
 // customer sees. These arms pin the wire contract: `os_fingerprint` is present
 // exactly when the probe observed one, and a miss leaves the field ABSENT —
 // not null, not a placeholder OS — so no client can colour a cell on it.
+//
+// N-2 (item 11) — the route ALSO PERSISTS the observed fingerprint on the proxy
+// row, so a live agent session can later project the exit's OS onto its
+// capability_report. The persist arms pin the other half: an observed test writes
+// the full structured measurement onto the row; a miss writes NOTHING (the column
+// stays as-is), never nulling a value and never coercing a miss to one.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
@@ -64,6 +70,18 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint', () => {
       observed_ip: '198.51.100.7',
       observed_via: 'proxy_host',
     });
+    // N-2 — and it is PERSISTED on the proxy row (the full structured measurement,
+    // not just the customer subset), with a stamp, so a live session can read it
+    // back at serve time.
+    const persisted = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(persisted?.osFingerprint).toEqual({
+      os: 'windows',
+      confidence: 'medium',
+      reason: 'initial TTL 128 with a Windows option layout',
+      observed_ip: '198.51.100.7',
+      observed_via: 'proxy_host',
+    });
+    expect(persisted?.osFingerprintAt).toBeInstanceOf(Date);
   });
 
   it('omits the field entirely when nothing was observed — a miss is not an OS', async () => {
@@ -84,5 +102,10 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint', () => {
     expect(body.ok).toBe(true);
     expect(typeof body.latency_ms).toBe('number');
     expect('os_fingerprint' in body).toBe(false);
+    // N-2 — a miss persists NOTHING: the row's fingerprint column stays null (never
+    // measured), never a placeholder and never a stale value from another test.
+    const persisted = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(persisted?.osFingerprint).toBeNull();
+    expect(persisted?.osFingerprintAt).toBeNull();
   });
 });

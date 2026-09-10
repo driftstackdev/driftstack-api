@@ -834,6 +834,13 @@
       "when": 1786665600006,
       "tag": "0118_add_agent_session_exit_ip_stop",
       "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1786665600007,
+      "tag": "0119_add_account_proxy_os_fingerprint",
+      "breakpoints": true
     }
   ]
 }

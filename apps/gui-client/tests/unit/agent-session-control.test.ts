@@ -696,6 +696,7 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     h3_connection_count: 3,
     reported_at: 1_700_000_000_000,
     webrtc_candidate_ips: ['203.0.113.7', '198.51.100.4'],
+    os_fingerprint: { os: 'macos-or-ios', confidence: 'high' },
   };
   const withField = (
     over: Partial<AgentSessionCapabilityReport>,
@@ -718,6 +719,23 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     ).toBe(false);
     expect(capabilityReportsEqual(base, withField({ h3_connection_count: 4 }))).toBe(false);
     expect(capabilityReportsEqual(base, withField({ reported_at: 1_700_000_000_001 }))).toBe(false);
+    // N-2 — a changed os OR confidence is CHANGED (nested value equality); and a
+    // fingerprint flipping to absent (never measured this read) is CHANGED too.
+    expect(
+      capabilityReportsEqual(
+        base,
+        withField({ os_fingerprint: { os: 'windows', confidence: 'high' } }),
+      ),
+    ).toBe(false);
+    expect(
+      capabilityReportsEqual(
+        base,
+        withField({ os_fingerprint: { os: 'macos-or-ios', confidence: 'low' } }),
+      ),
+    ).toBe(false);
+    const noOs = { ...base };
+    delete noOs.os_fingerprint;
+    expect(capabilityReportsEqual(base, noOs)).toBe(false);
     // h3 flips from observed → absent (the parser omits it when unset).
     const noH3 = { ...base };
     delete noH3.h3_connection_observed;
@@ -748,6 +766,7 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     const clone: AgentSessionCapabilityReport = {
       ...base,
       webrtc_candidate_ips: [...(base.webrtc_candidate_ips ?? [])],
+      os_fingerprint: base.os_fingerprint === undefined ? undefined : { ...base.os_fingerprint },
     };
     expect(base).not.toBe(clone);
     expect(capabilityReportsEqual(base, clone)).toBe(true);
