@@ -32,10 +32,12 @@ describe('Astro Pages toolchain parity', () => {
   it('all five Pages apps use the patched Astro 7 line and preserve legacy whitespace', () => {
     for (const app of ASTRO_APPS) {
       // Exact-pinned and identical across all five so a security bump moves them
-      // together. 7.1.6 closes the reflected-XSS via unescaped View Transition
+      // together. 7.1.6 closed the reflected-XSS via unescaped View Transition
       // animation properties, and carries the sharp/svgo ranges whose old
       // resolutions were the libvips CVEs and the SVGO removeScripts bypass.
-      expect(packageJson(app).dependencies.astro, app).toBe('7.1.6');
+      // 7.3.2 (2026-09-10) closes the AVIF image-optimization RCE and the base-path
+      // authorization bypass (npm audit: critical) — the pin moves with each advisory fix.
+      expect(packageJson(app).dependencies.astro, app).toBe('7.3.2');
       expect(read(`apps/${app}/astro.config.mjs`), app).toMatch(/compressHTML:\s*true/);
     }
   });
