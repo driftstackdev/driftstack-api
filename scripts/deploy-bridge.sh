@@ -198,15 +198,36 @@ if [ "${DEPLOY_VIA_BUNDLE:-0}" = "1" ]; then
     echo "[bridge] bundle create failed" >&2; git branch -D __deploy_bundle_tmp >/dev/null 2>&1; rm -f "$BUNDLE"; exit 1
   fi
   git branch -D __deploy_bundle_tmp >/dev/null 2>&1
-  if ! run_scp -q "$BUNDLE" "root@${HOST}:/tmp/ds-deploy.bundle"; then
+  # ⛔ UNIQUE remote name + content checksum (2026-09-10). Two deploys of the
+  # same sha — the continuous workflow and a hand-run of this script — once
+  # scp'd into one fixed /tmp/ds-deploy.bundle in the same minute, and the host
+  # read a SPLICE of the two (pack trailer mismatch, 263 objects stored twice,
+  # one crossover region); both clones died "pack has bad object at offset …"
+  # and the offset pointed at an innocent 3.8 MB PNG. `git bundle verify`
+  # PASSES such a file, so the only usable guard is a checksum of the bytes
+  # that landed against the bytes that were sent. The remote file is removed
+  # after a successful clone and kept on failure for forensics.
+  REMOTE_BUNDLE="/tmp/ds-deploy.bundle.$(date +%s).$$"
+  if ! run_scp -q "$BUNDLE" "root@${HOST}:${REMOTE_BUNDLE}"; then
     echo "[bridge] scp bundle failed" >&2; rm -f "$BUNDLE"; exit 1
   fi
+  if command -v sha256sum >/dev/null 2>&1; then
+    LOCAL_SUM=$(sha256sum "$BUNDLE" | cut -d' ' -f1)
+  else
+    LOCAL_SUM=$(shasum -a 256 "$BUNDLE" | cut -d' ' -f1)
+  fi
   rm -f "$BUNDLE"
+  REMOTE_SUM=$(run_ssh "root@${HOST}" "sha256sum ${REMOTE_BUNDLE} | cut -d' ' -f1" 2>/dev/null)
+  if [ -z "$LOCAL_SUM" ] || [ "$LOCAL_SUM" != "$REMOTE_SUM" ]; then
+    echo "[bridge] bundle checksum mismatch after scp (sent ${LOCAL_SUM:-?} got ${REMOTE_SUM:-?}) — refusing to clone" >&2
+    run_ssh "root@${HOST}" "rm -f ${REMOTE_BUNDLE}" >/dev/null 2>&1
+    exit 1
+  fi
   # ⛔ STDERR KEPT (`-q` quiets progress; the redirect is gone). This was
   # `> /dev/null 2>&1`, so a failing clone surfaced as a bare "exit code 128"
   # with no reason — the same defect that made the DB-isolation guard
   # unclearable for seven weeks, one layer down in the same script.
-  REMOTE_CLONE="git clone -q /tmp/ds-deploy.bundle ."
+  REMOTE_CLONE="git clone -q ${REMOTE_BUNDLE} . && rm -f ${REMOTE_BUNDLE}"
 else
   REMOTE_CLONE="git clone -q --depth 400 https://github.com/driftstackdev/driftstack-api.git ."
 fi

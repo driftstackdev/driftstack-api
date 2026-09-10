@@ -63,7 +63,19 @@ describe('deploy-bridge SSH/SCP transport liveness', () => {
     // a way to bypass the transport options this whole file exists to protect.
     expect(body).toMatch(/_db_host_of\(\)\s*\{\s*\n\s*run_ssh "root@\$1"/);
     expect(body).toMatch(/PREVIOUS_SHA=\$\(run_ssh "root@\$\{HOST\}"/);
-    expect(body).toMatch(/if ! run_scp -q "\$BUNDLE" "root@\$\{HOST\}:\/tmp\/ds-deploy\.bundle"/);
+    expect(body).toMatch(/if ! run_scp -q "\$BUNDLE" "root@\$\{HOST\}:\$\{REMOTE_BUNDLE\}"/);
+    // 2026-09-10 — the bundle lands under a UNIQUE remote name and is checksummed
+    // before the clone. A hand-run and the continuous deploy once wrote the one
+    // fixed /tmp/ds-deploy.bundle concurrently and the host cloned a SPLICE of the
+    // two ("pack has bad object at offset …", pointing at an innocent PNG);
+    // `git bundle verify` passes such a file, so the guard is the checksum.
+    expect(body).toMatch(/REMOTE_BUNDLE="\/tmp\/ds-deploy\.bundle\.\$\(date \+%s\)\.\$\$"/);
+    expect(body).toMatch(/REMOTE_SUM=\$\(run_ssh "root@\$\{HOST\}" "sha256sum \$\{REMOTE_BUNDLE\}/);
+    expect(body).toMatch(/\[ "\$LOCAL_SUM" != "\$REMOTE_SUM" \]/);
+    expect(body).toMatch(
+      /REMOTE_CLONE="git clone -q \$\{REMOTE_BUNDLE\} \. && rm -f \$\{REMOTE_BUNDLE\}"/,
+    );
+    expect(body).not.toMatch(/root@\$\{HOST\}:\/tmp\/ds-deploy\.bundle"/);
     expect(body).toMatch(/^run_ssh "root@\$\{HOST\}" "set -euo pipefail;/m);
     expect(body).toMatch(
       /run_ssh "root@\$\{HOST\}" "echo '\$EXPECTED_SHORT_SHA' > \/opt\/driftstack\/api\/\.last-good-sha/,
