@@ -32,6 +32,7 @@ import {
   loadProbeCache,
   saveEndpointResult,
   saveExitResult,
+  saveFleetFailure,
   saveOsFingerprint,
   saveServerProbeResult,
   type CachedEndpointVerdict,
@@ -169,19 +170,33 @@ export async function testProxyOnServer(
 }
 
 /**
- * Persist an `ok` outcome onto the proxy's cache entry. `failed` and
- * `unavailable` write nothing — the native probe's entry stands, and the views
- * decide what to drop from their own state. (d) A `not_run` outcome writes no
- * measurement either (there is none), but the live-session refusal's observed
- * exit IS adopted when the caller asks (`adoptExit`, VPN rows) — it is the exit
- * the row has right now, seen by the session that holds the tunnel. Returns the
- * cache after the last successful write, or null when nothing was written.
+ * Persist an `ok` outcome onto the proxy's cache entry. `unavailable` writes
+ * nothing — nothing was learned. (d) A `not_run` outcome writes no measurement
+ * either (there is none), but the live-session refusal's observed exit IS
+ * adopted when the caller asks (`adoptExit`, VPN rows) — it is the exit the row
+ * has right now, seen by the session that holds the tunnel.
+ *
+ * `failed`: for a SOCKS5 caller (no `adoptExit`) it writes nothing — the native
+ * probe's entry stands and the view drops what it holds. (h) For a VPN caller
+ * the fleet IS the row's verdict, and the entry still carries the PREVIOUS
+ * successful fleet fields (the pre-flight carried them over seconds earlier),
+ * so a failure that wrote nothing was re-hydrated onto the grid by the next
+ * cache emit from any writer: a fleet-labelled latency, an exit and a relay
+ * chip beside "tunnel down". `saveFleetFailure` drops them and marks the exit
+ * superseded, which the list adoption respects. Returns the cache after the
+ * last successful write, or null when nothing was written.
  */
 export async function persistServerProbe(
   proxyId: string,
   outcome: ServerProbeOutcome,
   opts: { adoptExit?: boolean } = {},
 ): Promise<ProbeCacheMap | null> {
+  if (outcome.kind === 'failed') {
+    if (opts.adoptExit !== true) return null;
+    // (h) finding 3 — the sentence is persisted with the stamp, so the card and
+    // a remounted grid render the same verdict the view that ran the check did.
+    return saveFleetFailure(proxyId, outcome.at, outcome.reason).catch(() => null);
+  }
   if (outcome.kind === 'not_run') {
     if (opts.adoptExit !== true || outcome.exitObserved === undefined) return null;
     let cache: ProbeCacheMap;
@@ -190,7 +205,19 @@ export async function persistServerProbe(
     } catch {
       return null;
     }
-    return adoptObservedExit(proxyId, cache[proxyId], outcome.exitObserved, outcome.at);
+    const existing = cache[proxyId];
+    if (existing === undefined) return null; // nothing to attach it to; none invented
+    // ⛔ (h) finding 1 — the exit on a refusal is the server's STORED one (what
+    // a session saw at `observed_at`), not something this reply measured, so it
+    // is dated by the OBSERVATION and passes the same never-rewind /
+    // never-resurrect / never-churn / never-downgrade rule the account-list
+    // adoption applies to the very same datum. Dating it at the reply time
+    // walked it straight past a fleet failure's superseded stamp: a `no_node`
+    // seconds after "tunnel down" put the contradicted exit back, stamped
+    // fresh enough for the launch to hand its timezone to the next session.
+    const at = storedExitStamp(outcome.exitObserved.observed_at, existing, outcome.at);
+    if (at === undefined || refusesStoredExit(existing, outcome.exitObserved, at)) return null;
+    return adoptObservedExit(proxyId, existing, outcome.exitObserved, at);
   }
   if (outcome.kind !== 'ok') return null;
   let latest: ProbeCacheMap | null = null;
@@ -279,6 +306,63 @@ function isExitDowngrade(
   return !incomingHasGeo && existingHasGeo;
 }
 
+/**
+ * (h) finding 1 — the stamp a STORED exit (the account list's `exit_observed`,
+ * or the one a `not_run` reply attaches) is adopted under: the observation's
+ * own date when the wire carries a parseable one. An UNDATED observation used
+ * to be stamped "now" — which is exactly what walks it past a fleet failure's
+ * superseded stamp, so while that stamp stands an undated observation cannot
+ * be shown to postdate the failure and is refused (`undefined`); with no
+ * stamp it is "now", as before. ONE rule for both paths, so the same datum
+ * cannot be refused by one and adopted by the other.
+ */
+function storedExitStamp(
+  observedAt: string | null | undefined,
+  existing: CachedProbe | undefined,
+  nowMs: number,
+): number | undefined {
+  const parsed = typeof observedAt === 'string' ? Date.parse(observedAt) : Number.NaN;
+  if (Number.isFinite(parsed)) return parsed;
+  if (existing?.exitSupersededAt !== undefined) return undefined;
+  return nowMs;
+}
+
+/**
+ * The ONE refusal rule for adopting a stored exit onto an existing entry, at
+ * `at` (from `storedExitStamp`). Shared by the `not_run` adoption and the
+ * account-list adoption — two paths, one decision.
+ */
+function refusesStoredExit(
+  existing: CachedProbe,
+  e: { ip: string; country: string | null; timezone: string | null },
+  at: number,
+): boolean {
+  const sameIp = existing.exitIp === e.ip;
+  // ⛔ Never REWIND, regardless of ip or geo: an observation OLDER than the
+  // exit already stored describes an earlier state of the tunnel, and the
+  // stored one (a fleet test's, or a fresher session's) already superseded
+  // it. The old rule only refused a rewind of the SAME ip/geo, so a list row
+  // still carrying last week's exit could overwrite the exit a fleet test
+  // measured minutes ago whenever the two ips differed.
+  const rewind = existing.exitAt !== undefined && at < existing.exitAt;
+  // (h) — …and never RESURRECT: a fleet test that could not bring the tunnel
+  // up dropped this row's exit and stamped when; the list (and the server's
+  // stored exit on a refusal) still carries the session exit from BEFORE that
+  // failure, and an observation dated at or before the stamp is the exit the
+  // fleet just contradicted. (The write refuses it too; this keeps the row
+  // out of `written` and the in-memory view honest.)
+  const superseded = existing.exitSupersededAt !== undefined && at <= existing.exitSupersededAt;
+  // …and never CHURN: the same identity at the same (or an older) stamp is
+  // a no-op, so a 15s poll does not rewrite the store every tick.
+  const unchanged =
+    sameIp &&
+    (existing.exitCountry ?? null) === e.country &&
+    (existing.exitTimezone ?? null) === e.timezone &&
+    existing.exitAt !== undefined &&
+    existing.exitAt >= at;
+  return rewind || superseded || unchanged || isExitDowngrade(existing, e);
+}
+
 /** The slice of a local proxy the list adoption reads: which server row it is,
  *  whether it is a tunnel, and the endpoint its pre-flight resolves. */
 export interface ListExitProxyLike {
@@ -359,25 +443,11 @@ export async function adoptListExitObserved(
       }
       if (existing === undefined) continue;
     }
-    const parsed = e.observed_at === null ? Number.NaN : Date.parse(e.observed_at);
-    const at = Number.isFinite(parsed) ? parsed : nowMs;
+    // (h) — dated by the observation, and the shared refusal rule (rewind /
+    // resurrect / churn / downgrade) decides — see `refusesStoredExit`.
+    const at = storedExitStamp(e.observed_at, existing, nowMs);
+    if (at === undefined || refusesStoredExit(existing, e, at)) continue;
     const sameIp = existing.exitIp === e.ip;
-    // ⛔ Never REWIND, regardless of ip or geo: an observation OLDER than the
-    // exit already stored describes an earlier state of the tunnel, and the
-    // stored one (a fleet test's, or a fresher session's) already superseded
-    // it. The old rule only refused a rewind of the SAME ip/geo, so a list row
-    // still carrying last week's exit could overwrite the exit a fleet test
-    // measured minutes ago whenever the two ips differed.
-    const rewind = existing.exitAt !== undefined && at < existing.exitAt;
-    // …and never CHURN: the same identity at the same (or an older) stamp is
-    // a no-op, so a 15s poll does not rewrite the store every tick.
-    const unchanged =
-      sameIp &&
-      (existing.exitCountry ?? null) === e.country &&
-      (existing.exitTimezone ?? null) === e.timezone &&
-      existing.exitAt !== undefined &&
-      existing.exitAt >= at;
-    if (rewind || unchanged || isExitDowngrade(existing, e)) continue;
     try {
       cache = await saveExitResult(
         p.id,
@@ -487,4 +557,52 @@ export function deriveProbeViewWithEndpointRows(
       };
   }
   return { ...view, endpointResults };
+}
+
+/**
+ * (h) — when each ENDPOINT row's server-measured fields were measured, for the
+ * grid's "Tested" column. `ProbeViewState.testedAt` is the entry's `at`, which
+ * for a VPN row is the DNS pre-flight — re-stamped before EVERY fleet test,
+ * including one the control plane then refused (`not_run`), so "Tested just
+ * now" sat beside a "tunnel up" pill and a fleet latency measured an hour
+ * earlier. Keyed only for rows that still hold a server field beside the
+ * stamp: after a failure drops them the pre-flight's own time is the honest
+ * date of what the row shows. SOCKS5 rows are not keyed — their `at` IS the
+ * native verdict's time.
+ */
+export function serverProbeStamps(cache: ProbeCacheMap): Record<string, number> {
+  const stamps: Record<string, number> = {};
+  for (const [id, c] of Object.entries(cache)) {
+    if (c.endpoint === undefined) continue;
+    if (
+      c.serverProbeAt !== undefined &&
+      (c.serverLatencyMs !== undefined || c.measuredFrom !== undefined)
+    ) {
+      stamps[id] = c.serverProbeAt;
+      continue;
+    }
+    // (h) finding 3/5 — a fleet FAILURE is a fleet answer too, and it is the
+    // one the row shows: "checked" dates it, not the pre-flight before it.
+    if (c.fleetFailureReason !== undefined && c.exitSupersededAt !== undefined) {
+      stamps[id] = c.exitSupersededAt;
+    }
+  }
+  return stamps;
+}
+
+/**
+ * (h) finding 3 — the fleet's failure sentence per VPN proxy id, read from the
+ * cache so EVERY surface that subscribes to it (the Proxies grid, the profile
+ * card) renders the same "tunnel down" whichever view ran the check, and a
+ * remounted grid does not forget a verdict the cache still holds. Present only
+ * for an endpoint entry whose last fleet answer was a failure; cleared by the
+ * cache writers that record a later verdict or a later exit.
+ */
+export function fleetFailureReasons(cache: ProbeCacheMap): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [id, c] of Object.entries(cache)) {
+    if (c.endpoint === undefined || c.fleetFailureReason === undefined) continue;
+    out[id] = c.fleetFailureReason;
+  }
+  return out;
 }

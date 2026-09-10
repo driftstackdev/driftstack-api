@@ -98,6 +98,21 @@ export interface ProfilePhoneCardProps {
   /** N-2 — passive OS fingerprint of the proxy's own stack, when the control
    *  plane observed one. Undefined = never measured. */
   osFingerprint?: OsFingerprint;
+  /** (h) — the bound proxy is an OpenVPN/WireGuard TUNNEL: its Test is a DNS
+   *  resolve + a fleet tunnel test (never a SOCKS5 probe), UDP is carried by the
+   *  tunnel rather than probed, and the menu row says so. */
+  vpn?: boolean;
+  /** (h) — the fleet's sentence when the last tunnel test FAILED to bring this
+   *  VPN up. Renders the broken-proxy banner (a VPN row has no SOCKS5 caps to
+   *  trip it); cleared by the next check. */
+  vpnFailure?: string;
+  /** (h) — the server's sentence when the last tunnel test was NOT RUN (a live
+   *  session holds the tunnel, no fleet Mac was free…). A muted notice, never
+   *  a failure; the card keeps its prior data beside it. */
+  vpnNotice?: string;
+  /** When the bound proxy was last checked (ISO), rendered as a relative
+   *  "checked" stamp beside the latency. (h) finding 5 — for a VPN row the
+   *  parent dates it from the fleet's own answer, never the pre-flight. */
   checkedAtIso: string | null;
   // actions
   busy: boolean;
@@ -230,12 +245,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
     : quicOk
       ? 'QUIC ✓'
       : 'QUIC ✗ (HTTP/2 on last measure)';
+  // (h) — a VPN card: nothing probes a UDP grant on a tunnel (the tunnel carries
+  // UDP), so the chip says that instead of a "?" and a Test that can never fill it.
   const udpTitle =
-    caps === null
-      ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
-      : udpOk
-        ? `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`
-        : 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
+    p.vpn === true
+      ? 'UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run Check VPN to measure QUIC through it.'
+      : caps === null
+        ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
+        : udpOk
+          ? `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`
+          : 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
 
   return (
     <article
@@ -450,7 +469,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     }`}
                     title={p.exitIp ?? undefined}
                   >
-                    {p.exitIp ?? (p.probed ? 'no exit IP' : 'run Test')}
+                    {p.exitIp ??
+                      (p.probed ? 'no exit IP' : p.vpn === true ? 'run Check VPN' : 'run Test')}
                   </span>
                 </div>
                 {/* #6 — exit LOCATION (city, region / country name). Previously shown
@@ -528,18 +548,36 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       <span className="mono opacity-60">{p.probed ? 'stale' : 'untested'}</span>
                     )}
                   </span>
+                  {/* (h) finding 5 — WHEN the proxy was last checked. For a VPN
+                      row the parent dates this from the fleet's own answer (a
+                      number or a failure), never from the DNS pre-flight that
+                      precedes a refused test; the prop existed and nothing
+                      rendered it, so an hour-old fleet result read as "just
+                      checked" or not at all. */}
+                  {p.checkedAtIso !== null && (
+                    <span
+                      data-component="proxy-checked-at"
+                      data-checked-at={p.checkedAtIso}
+                      className="flex items-center gap-1 text-[9px] text-ink-muted"
+                    >
+                      <span className="uppercase tracking-wide">checked</span>
+                      <RelativeTime iso={p.checkedAtIso} tooltipPrefix="Checked" />
+                    </span>
+                  )}
                   <span
                     title={udpTitle}
-                    data-udp={udpOk ? 'true' : 'false'}
+                    data-udp={p.vpn === true ? 'tunnel' : udpOk ? 'true' : 'false'}
                     className={`ml-auto inline-flex cursor-help items-center gap-0.5 rounded px-1.5 py-px text-[9.5px] font-bold ${
-                      caps === null
+                      p.vpn === true || caps === null
                         ? 'bg-surface-divider/60 text-ink-muted'
                         : udpOk
                           ? 'bg-status-ready/20 text-status-ready'
                           : 'bg-status-error/20 text-status-error'
                     }`}
                   >
-                    UDP {caps === null ? '?' : udpOk ? '✓' : '✗'}
+                    {p.vpn === true
+                      ? 'UDP via tunnel'
+                      : `UDP ${caps === null ? '?' : udpOk ? '✓' : '✗'}`}
                   </span>
                 </div>
                 {/* OS chip on its OWN row — on the 178px card it was the last child of
@@ -557,17 +595,21 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     which reads as "not checked yet", not "this will not work".
                     The only retest lived in the overflow menu, so the customer
                     had to already suspect the proxy to find out it was dead. */}
-                {caps !== null && !proxyOk && (
+                {/* (h) — a VPN row has no SOCKS5 caps to trip this banner, so a
+                    tunnel the fleet just could not bring up rendered exactly like
+                    a healthy one. The fleet's failure sentence drives it now. */}
+                {((caps !== null && !proxyOk) || p.vpnFailure !== undefined) && (
                   <div
                     data-component="proxy-broken-banner"
+                    data-vpn-failure={p.vpnFailure !== undefined ? 'true' : 'false'}
                     role="status"
                     className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
                   >
                     <span
                       className="min-w-0 truncate text-[10px] font-semibold text-status-error"
-                      title={p.capabilities?.message}
+                      title={p.vpnFailure ?? p.capabilities?.message}
                     >
-                      {proxyLabel}
+                      {p.vpnFailure !== undefined ? 'VPN tunnel down' : proxyLabel}
                     </span>
                     <button
                       type="button"
@@ -581,7 +623,13 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       }}
                       className="ml-auto rounded bg-status-error/20 px-1.5 py-px text-[9.5px] font-semibold text-status-error hover:bg-status-error/30 disabled:opacity-50"
                     >
-                      {p.testing ? 'Testing…' : 'Retest'}
+                      {p.testing
+                        ? p.vpn === true
+                          ? 'Checking…'
+                          : 'Testing…'
+                        : p.vpn === true
+                          ? 'Re-check'
+                          : 'Retest'}
                     </button>
                     {p.onEdit !== undefined && (
                       // Straight to the edit modal, which is where the proxy is
@@ -600,6 +648,30 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         Change
                       </button>
                     )}
+                  </div>
+                )}
+                {p.vpnFailure !== undefined && (
+                  <div
+                    data-component="proxy-vpn-failure"
+                    className="text-[9.5px] leading-tight text-status-error"
+                    title={p.vpnFailure}
+                  >
+                    {p.vpnFailure}
+                  </div>
+                )}
+                {/* (h) — the tunnel test was NOT RUN: a notice in muted ink beside
+                    whatever the card already holds, never the red banner. */}
+                {/* (h) finding 3 — beside a standing failure too: the failure
+                    is the LAST verdict (the cache's), the notice is what THIS
+                    check did not do; hiding one behind the other lost either. */}
+                {p.vpnNotice !== undefined && (
+                  <div
+                    data-component="proxy-vpn-notice"
+                    role="status"
+                    className="rounded-[8px] bg-surface-divider/40 px-1.5 py-1 text-[9.5px] leading-tight text-ink-muted"
+                    title={p.vpnNotice}
+                  >
+                    {p.vpnNotice}
                   </div>
                 )}
                 {/* WebRTC/QUIC detail — on hover (founder: hover shows them) */}
@@ -766,8 +838,12 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             {p.hasProxy ? (
               <MenuRow
                 glyph={p.testing ? '…' : '⟳'}
-                caption="Test proxy"
-                label="Test proxy from this Mac — reachability, latency, exit IP"
+                caption={p.vpn === true ? 'Check VPN' : 'Test proxy'}
+                label={
+                  p.vpn === true
+                    ? 'Check VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and reports latency + exit'
+                    : 'Test proxy from this Mac — reachability, latency, exit IP'
+                }
                 onClick={() => {
                   setActionsOpen(false);
                   p.onTest();

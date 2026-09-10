@@ -681,19 +681,75 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
         ? `VPN tunnel connected (${where}) — starting the browser…`
         : 'VPN tunnel connected — starting the browser…';
     }
+    // (h) — a STATE, not a prediction: the harness may emit browser_spawning
+    // next (fork-spawn on), or time out (fork-spawn off, the default), and the
+    // client cannot see which. Say what is true either way.
     return where !== null
-      ? `VPN tunnel connected (${where}) — browser attach for VPN sessions isn’t live yet; this session will time out`
-      : 'VPN tunnel connected — browser attach for VPN sessions isn’t live yet; this session will time out';
+      ? `VPN tunnel connected (${where}) — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout`
+      : 'VPN tunnel connected — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout';
   }
   return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
 }
 
-/** (b) — the small notice under the address bar for that state. */
+/**
+ * (h) — is the tunnel actually UP in this state? Only `vpn_egress_bringing_up`
+ * says it is not: every other step, and the (b) report heuristic (which needs
+ * an observed exit), describes a tunnel that came up. Every "tunnel up" word
+ * in the address bars is gated on this, so the bringing-up notice never sits
+ * under a chip claiming the opposite.
+ */
+export function vpnTunnelIsUp(t: VpnTunnelUp): boolean {
+  return t.step !== 'vpn_egress_bringing_up';
+}
+
+/** (h) — the short chip beside "Address" and in the browser bar, from the STEP
+ *  (never from `ip === null` alone, which read "starting the browser…" while
+ *  the tunnel was still coming up, and printed a dangling "· exit "). */
+export function vpnTunnelChipText(t: VpnTunnelUp): string {
+  if (!vpnTunnelIsUp(t)) return 'Starting the VPN tunnel…';
+  if (t.ip !== null) return `VPN tunnel up · exit ${t.ip}`;
+  if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser attach isn’t available yet';
+  if (t.step === 'egress_geo_resolving') return 'VPN tunnel up · resolving the exit…';
+  return 'VPN tunnel up · starting the browser…';
+}
+
+/** (h) — the locked address bar's placeholder for that state: promises only
+ *  what the step can deliver. */
+export function vpnAddressPlaceholder(t: VpnTunnelUp): string {
+  if (!vpnTunnelIsUp(t))
+    return 'Starting the VPN tunnel… — the address bar unlocks once the device is live';
+  if (t.step === 'vpn_egress_active')
+    return 'VPN tunnel is up — browser attach isn’t available for VPN sessions yet';
+  return 'VPN tunnel is up — the address bar unlocks once the browser attaches';
+}
+
+/** (h) — the "stream was live" latch is PER SESSION. An in-place relaunch
+ *  swaps sessionId without a remount, and a latch that never reset suppressed
+ *  every tunnel-up notice for the rest of the window's life. Pure. */
+export function nextEverLiveLatch(
+  prev: { sessionId: string; everLive: boolean },
+  sessionId: string,
+  streamLiveNow: boolean,
+): { sessionId: string; everLive: boolean } {
+  const base = prev.sessionId === sessionId ? prev : { sessionId, everLive: false };
+  return streamLiveNow && !base.everLive ? { sessionId, everLive: true } : base;
+}
+
+/** (b) — the small notice under the address bar for that state. (h) Green
+ *  only for a tunnel that IS up and a browser that is coming; bringing-up and
+ *  the browserless `vpn_egress_active` state are neutral — a session that will
+ *  stop after its timeout is not a success box. */
 function VpnTunnelUpNotice({ tunnel }: { tunnel: VpnTunnelUp }): JSX.Element {
+  const neutral = !vpnTunnelIsUp(tunnel) || tunnel.step === 'vpn_egress_active';
   return (
     <div
       data-component="simulator-vpn-tunnel-up-notice"
-      className="mx-3 mb-1 rounded-md bg-status-ready/10 px-2 py-1 text-[10.5px] leading-snug text-status-ready ring-1 ring-status-ready/25"
+      data-tone={neutral ? 'neutral' : 'ready'}
+      className={`mx-3 mb-1 rounded-md px-2 py-1 text-[10.5px] leading-snug ring-1 ${
+        neutral
+          ? 'bg-status-busy/10 text-status-busy ring-status-busy/25'
+          : 'bg-status-ready/10 text-status-ready ring-status-ready/25'
+      }`}
     >
       {vpnTunnelUpCaption(tunnel)}
     </div>
@@ -1699,7 +1755,7 @@ function NavigateAddressBar({
   const placeholder = canNavigate
     ? 'Search or enter address'
     : tunnelUp !== null
-      ? 'VPN tunnel is up — the address bar unlocks once the browser attaches'
+      ? vpnAddressPlaceholder(tunnelUp)
       : 'connecting… — the address bar unlocks once the device is live';
   const disabledTitle =
     tunnelUp !== null
@@ -1717,11 +1773,9 @@ function NavigateAddressBar({
           >
             <span
               aria-hidden="true"
-              className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
+              className={`h-1.5 w-1.5 animate-pulse rounded-full ${vpnTunnelIsUp(tunnelUp) ? 'bg-status-ready' : 'bg-amber-400'}`}
             />
-            {tunnelUp.ip !== null
-              ? `VPN tunnel up · exit ${tunnelUp.ip}`
-              : 'VPN tunnel up · starting the browser…'}
+            {vpnTunnelChipText(tunnelUp)}
           </span>
         ) : (
           !canNavigate && (
@@ -2099,9 +2153,9 @@ function BrowserBar({
         >
           <span
             aria-hidden="true"
-            className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
+            className={`h-1.5 w-1.5 animate-pulse rounded-full ${vpnTunnelIsUp(vpnTunnelUp) ? 'bg-status-ready' : 'bg-amber-400'}`}
           />
-          VPN tunnel up · exit {vpnTunnelUp.ip}
+          {vpnTunnelChipText(vpnTunnelUp)}
         </span>
       ) : (
         !canNavigate && (
@@ -6595,14 +6649,18 @@ export function SimulatorWindow(): JSX.Element {
           // blanks the latched egress readout; a transient/network/5xx blip PRESERVES
           // the measured exit identity (omitting capabilityReport keeps the current one)
           // so it does not flicker to "measuring…" every ~5s on a healthy session.
+          // (h) — the harness's step caption (provisioningDetail) is handled
+          // exactly like the report: a transient blip KEEPS the last confirmed
+          // step (else the VPN bring-up notice flickered to the generic
+          // "connecting…" for one tick on every 5xx); only an auth failure
+          // blanks it.
           const authFailure = isControlAuthFailure(err);
           updateManualInputControl({
             sessionId: reqSessionId,
             modeConfirmed: false,
             lifecycleConfirmed: false,
             lifecycleTerminal: false,
-            provisioningDetail: null,
-            ...(authFailure ? { capabilityReport: null } : {}),
+            ...(authFailure ? { capabilityReport: null, provisioningDetail: null } : {}),
           });
           setControlLinkUnreachable(true);
         });
@@ -7228,11 +7286,17 @@ export function SimulatorWindow(): JSX.Element {
   // VPN session with an observed exit and no live stream reads "tunnel up" instead
   // of "connecting…" in the address bars.
   const streamLiveNow = connState === 'connected' && publisherState === 'publishing';
-  const everLiveRef = useRef(false);
-  if (streamLiveNow) everLiveRef.current = true;
+  // (h) — keyed on the session: an in-place relaunch (ds-session) swaps
+  // sessionId without a remount, and a latch that never reset hid every
+  // tunnel-up caption for the relaunched VPN session.
+  const everLiveRef = useRef<{ sessionId: string; everLive: boolean }>({
+    sessionId,
+    everLive: false,
+  });
+  everLiveRef.current = nextEverLiveLatch(everLiveRef.current, sessionId, streamLiveNow);
   const vpnTunnelUp = vpnTunnelUpNotice(sessionCapabilityReport, {
     streamLive: streamLiveNow,
-    everLive: everLiveRef.current,
+    everLive: everLiveRef.current.everLive,
     ended: sessionEnded !== null,
     provisioningDetail: manualInputControl.provisioningDetail,
   });
@@ -7751,12 +7815,17 @@ export function SimulatorWindow(): JSX.Element {
   // no session (the standalone app launched empty) reset to the bundle icon.
   // Cleared on unmount so a closed simulator never leaves a stale icon on the
   // Dock. No-op outside Tauri/macOS — applyDockTile guards + swallows.
+  // (h) — the launch's `cc` is the CACHED exit (and for a VPN row may be
+  // absent, or last session's); the capability report's exit_country is the
+  // exit this session actually has. Prefer it the moment it lands, exactly as
+  // displayTimezone prefers the report's zone.
+  const dockCountry = sessionCapabilityReport?.exit_country ?? countryCode;
   useEffect(() => {
-    void applyDockTile(sessionId !== '' ? countryCode : null, profileName);
+    void applyDockTile(sessionId !== '' ? dockCountry : null, profileName);
     return () => {
       void applyDockTile(null, profileName);
     };
-  }, [sessionId, countryCode, profileName]);
+  }, [sessionId, dockCountry, profileName]);
   const onSetMode = (target: SessionMode): void => {
     if (sessionId === '' || target === controlMode) return;
     const request = beginControlAction({ kind: 'mode', target });

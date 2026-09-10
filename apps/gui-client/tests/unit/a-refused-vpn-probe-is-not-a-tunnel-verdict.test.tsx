@@ -118,7 +118,11 @@ import {
   saveOsFingerprint,
   saveServerProbeResult,
 } from '../../src/lib/proxy-probe-cache';
-import { persistServerProbe, serverProbeOutcome } from '../../src/lib/proxy-server-test';
+import {
+  adoptListExitObserved,
+  persistServerProbe,
+  serverProbeOutcome,
+} from '../../src/lib/proxy-server-test';
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 
 const json = (body: unknown): Response =>
@@ -473,10 +477,10 @@ describe('persistServerProbe — a refusal writes no measurement, adopts the ses
     expect(entry?.exitAt).toBe(NOW - 1);
   });
 
-  it('a proxy with no entry gets nothing invented', async () => {
+  it('a proxy with no entry gets nothing invented (and "nothing written" is null, not an empty map)', async () => {
     expect(
       await persistServerProbe('ghost', serverProbeOutcome(REFUSED, NOW), { adoptExit: true }),
-    ).toEqual({});
+    ).toBeNull();
     expect((await loadProbeCache()).ghost).toBeUndefined();
   });
 });
@@ -565,7 +569,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
     expect(
       await screen.findByText(
-        '1 VPN tunnel skipped (in use by a live session, or the measuring Mac was busy) — nothing was tested',
+        '1 VPN tunnel skipped (in use by a live session; end it to test the tunnel) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/0 VPN tunnels up/)).toBeNull();
@@ -577,8 +581,358 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
     expect(
       await screen.findByText(
-        'Tested 1 — 1 healthy, 1 VPN tunnel skipped (in use by a live session, or the measuring Mac was busy)',
+        'Tested 1 — 1 healthy, 1 VPN tunnel skipped (in use by a live session; end it to test the tunnel)',
       ),
     ).toBeInTheDocument();
+  });
+});
+
+// (h) VPN surfaces audit — findings 1, 12, 28: a fleet FAILURE is written, it
+// SUPERSEDES the exit the entry held, and nothing brings that exit back.
+const FLEET_DOWN = 'The Mac that runs your profiles could not bring this tunnel up.';
+const FLEET_FAILED: AccountProxiesModule.AccountProxyTestResult = {
+  ok: false,
+  reason: FLEET_DOWN,
+  measured_from: 'fleet',
+};
+const LIST_ROW = (observedAt: number) => [
+  {
+    id: 'aprx_vpn',
+    exit_observed: {
+      ip: '203.0.113.9',
+      country: 'NL' as string | null,
+      timezone: 'Europe/Amsterdam' as string | null,
+      observed_via: 'session' as const,
+      observed_at: new Date(observedAt).toISOString(),
+    },
+  },
+];
+
+async function seedMeasured(): Promise<void> {
+  await saveEndpointResult(
+    'vpn1',
+    { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+    NOW - 3,
+  );
+  await saveServerProbeResult(
+    'vpn1',
+    { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+    NOW - 2,
+  );
+  await saveOsFingerprint('vpn1', { os: 'linux', confidence: 'high', reason: 'ttl' }, NOW - 2);
+  await saveExitResult('vpn1', '203.0.113.9', 'NL', { timezone: 'Europe/Amsterdam' }, NOW - 2);
+}
+
+describe('(h) persistServerProbe — a fleet FAILURE on a VPN row supersedes the exit', () => {
+  it('CRITICAL every server-measured field goes, the exit is stamped superseded, and the verdict triple stays', async () => {
+    await seedMeasured();
+    const cache = await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), {
+      adoptExit: true,
+    });
+    const entry = cache?.vpn1;
+    expect(entry?.serverLatencyMs).toBeUndefined();
+    expect(entry?.measuredFrom).toBeUndefined();
+    expect(entry?.nodeId).toBeUndefined();
+    expect(entry?.quicProbe).toBeUndefined();
+    expect(entry?.osFingerprint).toBeUndefined();
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitCountry).toBeUndefined();
+    expect(entry?.exitTimezone).toBeUndefined();
+    expect(entry?.exitAt).toBeUndefined();
+    expect(entry?.serverProbeAt).toBeUndefined();
+    expect(entry?.exitSupersededAt).toBe(NOW);
+    // (h) finding 3 — the fleet's sentence is persisted WITH the stamp, so the
+    // card and a remounted grid render the same verdict.
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+    expect(entry?.at).toBe(NOW - 3);
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '198.51.100.1', message: 'Resolved' });
+    expect(Object.keys(entry ?? {}).sort()).toEqual([
+      'at',
+      'endpoint',
+      'exitSupersededAt',
+      'fleetFailureReason',
+      'result',
+    ]);
+  });
+
+  // MUTATION: drop the `superseded` predicate in adoptListExitObserved (or the
+  // `at <= exitSupersededAt` refusal in saveExitResult) and the old exit
+  // reappears here → red.
+  it('CRITICAL the account list cannot resurrect the exit the fleet just contradicted (observed BEFORE the failure)', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const written = await adoptListExitObserved(LIST_ROW(NOW - 1), [vpnRow()], NOW + 5);
+    expect(written).toEqual([]);
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitSupersededAt).toBe(NOW);
+  });
+
+  it('CONTROL — an observation dated AFTER the failure is a tunnel seen up again: adopted, and the stamp clears', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const written = await adoptListExitObserved(LIST_ROW(NOW + 1000), [vpnRow()], NOW + 5000);
+    expect(written).toEqual(['vpn1']);
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.exitIp).toBe('203.0.113.9');
+    expect(entry?.exitAt).toBe(NOW + 1000);
+    expect(entry?.exitSupersededAt).toBeUndefined();
+  });
+
+  it('the next pre-flight (same address) carries the superseded stamp forward, not an exit', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW + 1,
+    );
+    expect(cache.vpn1?.exitSupersededAt).toBe(NOW);
+    expect(cache.vpn1?.exitIp).toBeUndefined();
+    expect(cache.vpn1?.serverLatencyMs).toBeUndefined();
+  });
+
+  it('VACUITY CONTROL — a SOCKS5 caller (no adoptExit) still writes nothing on a failure', async () => {
+    await seedMeasured();
+    const before = JSON.stringify(await loadProbeCache());
+    expect(await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW))).toBeNull();
+    expect(JSON.stringify(await loadProbeCache())).toBe(before);
+  });
+});
+
+describe('(h) the Proxies grid — a failed tunnel stays failed across cache emits, and "Tested" dates the fleet number', () => {
+  it('CRITICAL after a fleet failure a later cache emit from ANY writer does not re-hydrate the old exit, latency or vantage', async () => {
+    await seedMeasured();
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    expect(screen.getByText('203.0.113.9')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.exitSupersededAt)).resolves.toEqual(
+        expect.any(Number),
+      ),
+    );
+    // Another writer emits the whole map (finding 1's exact trigger).
+    await saveEndpointResult('other', { resolved: true, ip: '1.2.3.4', message: 'ok' }, NOW);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText('tunnel down')).toBeInTheDocument();
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    expect(screen.queryByText('from a fleet Mac')).toBeNull();
+  });
+
+  // Finding 28 — after a refusal the Tested column read "just now" (the
+  // pre-flight's stamp) beside a carried-over fleet number. MUTATION: drop the
+  // serverProbeStamps merge in ProxiesView's cache hydration → red.
+  it('CRITICAL after a REFUSED test "Tested" still dates the fleet measurement the row shows, not the pre-flight', async () => {
+    await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW - 2,
+    );
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    testAccountProxy.mockResolvedValue(NODE_BUSY);
+    const { container } = render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText(BUSY)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.at)).resolves.not.toBe(NOW - 2),
+    );
+    expect(screen.getByText('42ms')).toBeInTheDocument();
+    const tested = container.querySelector('time[title^="Tested"]');
+    expect(tested?.getAttribute('title')).toBe(`Tested: ${new Date(NOW - 1).toLocaleString()}`);
+    expect((await loadProbeCache()).vpn1?.serverProbeAt).toBe(NOW - 1);
+  });
+});
+
+// (h) finding 1 — the superseded-exit rule was bypassed by the /test reply's
+// OWN exit_observed: a `no_node` / `live_session` refusal attaches the server's
+// STORED exit (which the server never clears on a failed probe), and the client
+// adopted it at the REPLY time — always after the failure stamp — so the stamp
+// was stripped and the pre-failure exit re-written with a fresh exitAt: back on
+// the grid and the card beside "No fleet Mac was free…", and fresh enough for
+// the launch's isExitIdentityFresh gate. The list adoption refused the SAME
+// datum (observed_at ≤ stamp): two paths, one datum, opposite decisions. The
+// reply now dates the stored exit (`observed_at`), and both paths run ONE rule.
+const NO_NODE_SENTENCE = 'No fleet Mac was free to test this VPN tunnel. Try again in a minute.';
+function noNodeWithStoredExit(
+  observedAt: string | null | undefined,
+): AccountProxiesModule.AccountProxyTestResult {
+  return {
+    ok: false,
+    reason: NO_NODE_SENTENCE,
+    measured_from: 'control_plane',
+    not_run: 'no_node',
+    exit_observed: {
+      ...SESSION_EXIT,
+      ...(observedAt === undefined ? {} : { observed_at: observedAt }),
+    },
+  };
+}
+
+describe('(h) finding 1 — a refusal’s STORED exit cannot walk past the superseded stamp', () => {
+  // MUTATION: date the not_run adoption at `outcome.at` again (drop
+  // storedExitStamp) → NOW + 10 > NOW → the exit is adopted and the stamp
+  // stripped → red.
+  it('CRITICAL persistServerProbe: a stored exit observed BEFORE the failure is refused, the stamp stands, no exit is written', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const written = await persistServerProbe(
+      'vpn1',
+      serverProbeOutcome(noNodeWithStoredExit(new Date(NOW - 2).toISOString()), NOW + 10),
+      { adoptExit: true },
+    );
+    expect(written).toBeNull();
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitAt).toBeUndefined();
+    expect(entry?.exitSupersededAt).toBe(NOW);
+  });
+
+  it('CONTROL — a stored exit observed AFTER the failure is the tunnel seen up again: adopted at the OBSERVATION’s time, and the stamp clears', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const written = await persistServerProbe(
+      'vpn1',
+      serverProbeOutcome(noNodeWithStoredExit(new Date(NOW + 5).toISOString()), NOW + 10),
+      { adoptExit: true },
+    );
+    expect(written?.vpn1?.exitIp).toBe('203.0.113.9');
+    expect(written?.vpn1?.exitAt).toBe(NOW + 5);
+    expect(written?.vpn1?.exitSupersededAt).toBeUndefined();
+  });
+
+  it('an UNDATED stored exit (observed_at null, or absent) is refused while the stamp stands — nothing shows it postdates the failure', async () => {
+    for (const undated of [null, undefined] as const) {
+      stores.clear();
+      await seedMeasured();
+      await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), {
+        adoptExit: true,
+      });
+      const written = await persistServerProbe(
+        'vpn1',
+        serverProbeOutcome(noNodeWithStoredExit(undated), NOW + 10),
+        { adoptExit: true },
+      );
+      expect(written, String(undated)).toBeNull();
+      expect((await loadProbeCache()).vpn1?.exitIp, String(undated)).toBeUndefined();
+    }
+  });
+
+  it('VACUITY CONTROL — undated with NO stamp is adopted at the reply time, as before', async () => {
+    await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW - 3,
+    );
+    const written = await persistServerProbe(
+      'vpn1',
+      serverProbeOutcome(noNodeWithStoredExit(null), NOW + 10),
+      { adoptExit: true },
+    );
+    expect(written?.vpn1?.exitIp).toBe('203.0.113.9');
+    expect(written?.vpn1?.exitAt).toBe(NOW + 10);
+  });
+
+  it('the account list runs the SAME rule: an undated list observation is refused while the stamp stands', async () => {
+    await seedMeasured();
+    await persistServerProbe('vpn1', serverProbeOutcome(FLEET_FAILED, NOW), { adoptExit: true });
+    const rows = [
+      {
+        id: 'aprx_vpn',
+        exit_observed: {
+          ip: '203.0.113.9',
+          country: 'NL' as string | null,
+          timezone: 'Europe/Amsterdam' as string | null,
+          observed_via: 'session' as const,
+          observed_at: null,
+        },
+      },
+    ];
+    expect(await adoptListExitObserved(rows, [vpnRow()], NOW + 5)).toEqual([]);
+    expect((await loadProbeCache()).vpn1?.exitIp).toBeUndefined();
+  });
+
+  it('CRITICAL the grid: after "tunnel down", a no_node that attaches the pre-failure exit leaves the exit cell EMPTY and the stamp intact', async () => {
+    // Real clock here: the grid stamps the failure at Date.now(), so the
+    // stored observation is dated a minute before the test starts.
+    const beforeFailure = new Date(Date.now() - 60_000).toISOString();
+    await seedMeasured();
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    render(<ProxiesView />);
+    expect(await screen.findByText('203.0.113.9')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.exitSupersededAt)).resolves.toEqual(
+        expect.any(Number),
+      ),
+    );
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    testAccountProxy.mockResolvedValue(noNodeWithStoredExit(beforeFailure));
+    await clickCheck();
+    expect(await screen.findByText(NO_NODE_SENTENCE)).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitSupersededAt).toEqual(expect.any(Number));
+    // (h) finding 3 — the not_run said nothing about the tunnel: the last
+    // verdict stands beside the notice, on this grid and in the cache.
+    expect(screen.getByText('tunnel down')).toBeInTheDocument();
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+  });
+});
+
+// (h) finding 3 — the "fleet down" state lived only in the view that ran the
+// check: the grid's in-memory vpnFailures was gone on remount even though the
+// cache still stamped the failure, and the profile card never saw it at all.
+// The sentence is persisted with the stamp and both views read it from there.
+describe('(h) finding 3 — the failure is the cache’s: a remounted grid still shows it', () => {
+  // MUTATION: drop `fleetFailureReasons` from the grid's hydration → after the
+  // remount the row reads "endpoint ok" with no sentence → red.
+  it('CRITICAL unmount after a fleet failure, render again → "tunnel down" + the sentence, from the cache alone', async () => {
+    await seedMeasured();
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    const first = render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.fleetFailureReason)).resolves.toBe(FLEET_DOWN),
+    );
+    first.unmount();
+    render(<ProxiesView />);
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    expect(screen.getByText(FLEET_DOWN)).toBeInTheDocument();
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    expect(testAccountProxy).toHaveBeenCalledTimes(1); // nothing re-ran; it was read
+  });
+
+  it('CONTROL — a fleet ok after the failure clears it everywhere: the cache drops the sentence and the row reads "tunnel up"', async () => {
+    await seedMeasured();
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    testAccountProxy.mockResolvedValue({
+      ok: true,
+      latency_ms: 31,
+      measured_from: 'fleet',
+      node_id: 'mac-07',
+    });
+    await clickCheck();
+    expect(await screen.findByText('tunnel up')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel down')).toBeNull();
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.fleetFailureReason)).resolves.toBeUndefined(),
+    );
   });
 });

@@ -52,13 +52,16 @@ import {
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
   type AccountProxyScheme,
+  type AccountProxyTestNotRun,
   type MeasuredQuic,
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
+  fleetFailureReasons,
   persistServerProbe,
+  serverProbeStamps,
   syncListExitObserved,
   testProxyOnServer,
   type ServerProbeOutcome,
@@ -110,39 +113,113 @@ function isSweepable(scheme: AccountProxyScheme | undefined): boolean {
 }
 
 /** The VPN half of a sweep's tally: rows whose tunnel got a verdict, how many
- *  of those the fleet brought up, and (d) rows whose test was NOT RUN — refused
- *  while a live session holds the tunnel, or the measuring Mac was busy. A
- *  skipped row is neither up nor down and is never counted as either. */
+ *  of those the fleet brought up, (d) rows whose test was NOT RUN — refused
+ *  while a live session holds the tunnel, or the measuring Mac was busy — and
+ *  (h) rows whose endpoint resolved but whose tunnel was NOT TESTED: no API
+ *  key, not stored on the account, no fleet Mac free, a control-plane fallback
+ *  (which cannot measure a tunnel), or a fleet answer with no measurement. A
+ *  skipped or untested row is neither up nor down and is never counted as
+ *  either. (h) A check that could not RUN (the resolver threw) is its own
+ *  bucket too: not a DNS verdict, not a tunnel verdict. */
 interface VpnSweepTally {
   checked: number;
   tunnelOk: number;
   skipped: number;
+  /** (d)/(h) — WHY each skipped row was not run, one phrase per row. */
+  skippedWhy: string[];
+  notTested: number;
+  /** (h) — WHY each resolved row's tunnel went untested, one phrase per row. */
+  notTestedWhy: string[];
+  checkFailed: number;
 }
 
-const EMPTY_VPN_TALLY: VpnSweepTally = { checked: 0, tunnelOk: 0, skipped: 0 };
+function emptyVpnTally(): VpnSweepTally {
+  return {
+    checked: 0,
+    tunnelOk: 0,
+    skipped: 0,
+    skippedWhy: [],
+    notTested: 0,
+    notTestedWhy: [],
+    checkFailed: 0,
+  };
+}
+
+/** (h) — the phrase a sweep gives for a not_run reason. Names the ACTUAL
+ *  reason the server sent (the discriminator, never its prose) and the next
+ *  step in the same breath, so "skipped" is never read as "failed" or as
+ *  "forgotten", and a busy Mac is never described as a live session. */
+function notRunPhrase(why: AccountProxyTestNotRun): string {
+  switch (why) {
+    case 'live_session':
+      return 'in use by a live session; end it to test the tunnel';
+    case 'node_busy':
+      return 'the fleet Mac was busy; try again in a minute';
+    case 'node_error':
+      return 'the fleet Mac could not complete the test; try again shortly';
+    case 'no_node':
+      return 'no fleet Mac free';
+  }
+}
+
+/** Distinct reasons, in first-seen order, joined for a parenthetical. */
+function reasonList(why: ReadonlyArray<string>): string {
+  return [...new Set(why)].join('; ');
+}
 
 /** (d) — the clause a sweep appends for tunnels it could not test. Says WHY in
  *  the same breath, so "skipped" is never read as "failed" or as "forgotten". */
-function skippedClause(skipped: number): string {
-  return `${String(skipped)} VPN tunnel${skipped === 1 ? '' : 's'} skipped (in use by a live session, or the measuring Mac was busy)`;
+function skippedClause(skipped: number, why: ReadonlyArray<string>): string {
+  return `${String(skipped)} VPN tunnel${skipped === 1 ? '' : 's'} skipped (${reasonList(why)})`;
+}
+
+/** (h) — the clause for rows whose endpoint resolved but whose tunnel nothing
+ *  measured. Distinct from "skipped" (a test the server refused to run) so a
+ *  customer with no API key is not told a live session is in the way. */
+function notTestedClause(
+  notTested: number,
+  why: ReadonlyArray<string>,
+  /** Bare ("1 not tested") when a "VPN tunnel" clause already precedes it. */
+  bare = false,
+): string {
+  const noun = bare ? '' : ` VPN tunnel${notTested === 1 ? '' : 's'}`;
+  return `${String(notTested)}${noun} not tested (${reasonList(why)})`;
+}
+
+function checkFailedClause(n: number): string {
+  return `${String(n)} VPN check${n === 1 ? '' : 's'} could not run (the endpoint resolver failed; try again)`;
 }
 
 function formatTestAllSummary(
   results: ProxyTestResult[],
-  vpn: VpnSweepTally = EMPTY_VPN_TALLY,
+  vpn: VpnSweepTally = emptyVpnTally(),
 ): string {
-  if (results.length === 0 && vpn.checked === 0 && vpn.skipped === 0) {
+  const vpnSwept = vpn.checked + vpn.notTested + vpn.checkFailed;
+  if (results.length === 0 && vpnSwept === 0 && vpn.skipped === 0) {
     return 'No proxy results landed — run Test all again.';
   }
-  // (d) — every VPN row was skipped: nothing was tested, and the sentence must
-  // not begin "Tested 0 — 0 VPN tunnels up", which reads as every tunnel down.
+  // (d)/(h) — the sentence must never begin "Tested 0 — 0 VPN tunnels up",
+  // which reads as every tunnel down, when nothing was actually measured.
+  const untestedParts = (bare: boolean): string[] => {
+    const parts: string[] = [];
+    if (vpn.skipped > 0) parts.push(skippedClause(vpn.skipped, vpn.skippedWhy));
+    if (vpn.notTested > 0) parts.push(notTestedClause(vpn.notTested, vpn.notTestedWhy, bare));
+    if (vpn.checkFailed > 0) parts.push(checkFailedClause(vpn.checkFailed));
+    return parts;
+  };
   if (results.length === 0 && vpn.checked === 0) {
-    return `${skippedClause(vpn.skipped)} — nothing was tested`;
+    return `${untestedParts(false).join(', ')} — nothing was tested`;
   }
   // VPN rows have no SOCKS5 buckets; they get their own clause so the sentence
-  // never counts a tunnel as "healthy" on a handshake it never made.
+  // never counts a tunnel as "healthy" on a handshake it never made. (h) A
+  // tunnel the fleet could not bring up is said as "down" — a count of "up"
+  // alone leaves the reader to subtract.
+  const tunnelDown = vpn.checked - vpn.tunnelOk;
   if (results.length === 0) {
-    return `Tested ${String(vpn.checked)} — ${String(vpn.tunnelOk)} VPN tunnel${vpn.tunnelOk === 1 ? '' : 's'} up${vpn.skipped > 0 ? `, ${skippedClause(vpn.skipped)}` : ''}`;
+    const parts = [`${String(vpn.tunnelOk)} VPN tunnel${vpn.tunnelOk === 1 ? '' : 's'} up`];
+    if (tunnelDown > 0) parts.push(`${String(tunnelDown)} down`);
+    parts.push(...untestedParts(true));
+    return `Tested ${String(vpnSwept)} — ${parts.join(', ')}`;
   }
   const healthy = results.filter((result) => isProxyUsable(result)).length;
   const unreachable = results.filter((result) => !result.reachable).length;
@@ -163,8 +240,8 @@ function formatTestAllSummary(
       `${String(vpn.tunnelOk)}/${String(vpn.checked)} VPN tunnel${vpn.checked === 1 ? '' : 's'} up`,
     );
   }
-  if (vpn.skipped > 0) parts.push(skippedClause(vpn.skipped));
-  return `Tested ${String(results.length + vpn.checked)} — ${parts.join(', ')}`;
+  parts.push(...untestedParts(false));
+  return `Tested ${String(results.length + vpnSwept)} — ${parts.join(', ')}`;
 }
 
 /**
@@ -245,9 +322,14 @@ export function ProxiesView(): JSX.Element {
   const [serverVantage, setServerVantage] = useState<Record<string, ServerVantage>>({});
   const [quicProbe, setQuicProbe] = useState<Record<string, boolean>>({});
   // VPN exit parity (b) — the fleet's failure sentence for a VPN row whose
-  // endpoint resolved but whose tunnel the fleet Mac could not bring up. Kept in
-  // memory only, like a SOCKS5 row's failed server outcome (the cache persists
-  // nothing on a failure); cleared by the next check.
+  // endpoint resolved but whose tunnel the fleet Mac could not bring up.
+  // (h) finding 3 — hydrated from the CACHE (`fleetFailureReasons`) on load
+  // and on every emit, like every other server-measured value: kept in memory
+  // only, a remount forgot a verdict the cache still stamped, and the profile
+  // card had no representation of a check that ran here. Set here the moment
+  // the fleet answers (the write is async) and cleared by the cache writers
+  // that record a later verdict or exit — never by a check that measured
+  // nothing.
   const [vpnFailures, setVpnFailures] = useState<Record<string, string>>({});
   // (d) — the server's sentence when a VPN row's test was NOT RUN (a live
   // session holds the tunnel; the measuring Mac was busy). A notice, never a
@@ -298,11 +380,15 @@ export function ProxiesView(): JSX.Element {
       // VPN exit parity (b) — the endpoint-row overlay lives in the same shared
       // step as the fleet test, so a VPN row's fleet-measured latency and exit
       // hydrate here exactly as a SOCKS5 row's do.
-      const view = deriveProbeViewWithEndpointRows(await loadProbeCache());
+      const cache = await loadProbeCache();
+      const view = deriveProbeViewWithEndpointRows(cache);
       setTestResults(view.testResults);
       setEndpointResults(view.endpointResults);
       setExitResults(view.exitResults);
-      setTestedAt(view.testedAt);
+      // (h) — a VPN row's "Tested" dates the fleet number it shows, not the
+      // DNS pre-flight that ran before a refused test.
+      setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
+      setVpnFailures(fleetFailureReasons(cache));
       setOsFingerprints(view.osFingerprints);
       setServerLatency(view.serverLatency);
       setQuicMeasured(view.quicMeasured);
@@ -328,7 +414,8 @@ export function ProxiesView(): JSX.Element {
         setTestResults(view.testResults);
         setEndpointResults(view.endpointResults);
         setExitResults(view.exitResults);
-        setTestedAt(view.testedAt);
+        setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
+        setVpnFailures(fleetFailureReasons(cache));
         setOsFingerprints(view.osFingerprints);
         setServerLatency(view.serverLatency);
         setQuicMeasured(view.quicMeasured);
@@ -569,6 +656,18 @@ export function ProxiesView(): JSX.Element {
     }
   }
 
+  /** What one VPN row's check contributed to a sweep's tally (h). `resolved`
+   *  null = the resolver did not run (not a DNS verdict); `tunnelOk` null = no
+   *  tunnel verdict, with `skipped` (the server refused to run it: why) or
+   *  `notTested` (nothing could measure it: why) naming the reason. */
+  type VpnCheckOutcome = {
+    resolved: boolean | null;
+    tunnelOk: boolean | null;
+    skipped?: string;
+    notTested?: string;
+    checkFailed?: true;
+  };
+
   // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
   // check is a DNS pre-flight of its endpoint (endpoint_resolve), NOT a SOCKS5
   // handshake (which a VPN endpoint never speaks — it always read "unreachable").
@@ -582,18 +681,26 @@ export function ProxiesView(): JSX.Element {
   // exit/geo like a SOCKS5 row instead of a bare "endpoint ✓". Returns the
   // pre-flight verdict and whether the tunnel came up, for the sweep's tally;
   // null when an edit/remove made the check stale.
-  async function handleCheckEndpoint(
-    p: ProxyConfig,
-  ): Promise<{ resolved: boolean; tunnelOk: boolean | null; skipped?: true } | null> {
+  async function handleCheckEndpoint(p: ProxyConfig): Promise<VpnCheckOutcome | null> {
     const epoch = ++testEpochRef.current;
     const stale = (): boolean => testEpochRef.current !== epoch;
     setTestingId(p.id);
+    // (h) — the previous failure/notice stays beside the row until THIS check
+    // lands its own answer: clearing it at the start left a "tunnel down" row
+    // reading "endpoint ok" for the whole 30-45 s fleet wait. Finding 3 — the
+    // FAILURE is the cache's (`fleetFailureReasons`): a check that measured
+    // nothing (not stored, no key, a refusal, no answer) leaves the last
+    // fleet verdict standing, on this grid and on the profile card alike; only
+    // a check that answers — a verdict, or an unresolved endpoint — moves it,
+    // and it does so through the cache write, mirrored here so the row does
+    // not wait for the emit.
+    const settle = (): void => {
+      setVpnNotices((m) => dropKey(m, p.id));
+    };
     try {
       const r = await resolveEndpoint(p.host, p.port);
       if (stale()) return null;
       setEndpointResults((m) => ({ ...m, [p.id]: r }));
-      setVpnFailures((m) => dropKey(m, p.id));
-      setVpnNotices((m) => dropKey(m, p.id));
       // Awaited (best-effort) so the pre-flight's cache write — which drops every
       // server field from the previous check — lands BEFORE the fleet result is
       // persisted on top of it; the two writes are serialised by the cache's
@@ -604,6 +711,10 @@ export function ProxiesView(): JSX.Element {
         Date.now(),
       ).catch(() => undefined);
       if (!r.resolved) {
+        settle();
+        // An unresolved endpoint is this check's answer: the pre-flight write
+        // above carried nothing over (the failure sentence included).
+        setVpnFailures((m) => dropKey(m, p.id));
         dropServerState(p.id);
         return { resolved: false, tunnelOk: false };
       }
@@ -611,19 +722,34 @@ export function ProxiesView(): JSX.Element {
       // pre-flight alone (the server's fallback for it is a bare TCP connect,
       // which must never read as "tunnel up"). A row the fleet cannot test — not
       // stored on the account, or no API key — is "not tested", not "down".
-      if (
-        !isVpnScheme(p.scheme) ||
-        p.serverId === undefined ||
-        settings.apiKey === null ||
-        settings.apiKey.length === 0
-      ) {
+      if (!isVpnScheme(p.scheme)) {
+        settle();
         return { resolved: true, tunnelOk: null };
+      }
+      if (p.serverId === undefined) {
+        settle();
+        return { resolved: true, tunnelOk: null, notTested: 'not stored on your account' };
+      }
+      if (settings.apiKey === null || settings.apiKey.length === 0) {
+        settle();
+        return { resolved: true, tunnelOk: null, notTested: 'no API key; sign in to test it' };
       }
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
       if (stale()) return null;
+      settle();
       applyServerProbeOutcome(p.id, outcome);
-      if (outcome.kind === 'failed') {
+      if (outcome.kind === 'ok') {
+        // A verdict replaces the last failure (the cache write below drops
+        // its sentence; this is the same change without waiting for the emit).
+        setVpnFailures((m) => dropKey(m, p.id));
+      } else if (outcome.kind === 'failed') {
         setVpnFailures((m) => ({ ...m, [p.id]: outcome.reason }));
+        // (h) — the fleet could not bring the tunnel up, so the exit it observed
+        // LAST time is not this row's exit now, and neither is a QUIC verdict a
+        // session measured through it. The shared drop keeps a SOCKS5 row's
+        // natively-measured exit; a tunnel has no other exit to keep.
+        setExitResults((m) => dropKey(m, p.id));
+        setQuicMeasured((m) => dropKey(m, p.id));
       } else if (outcome.kind === 'not_run') {
         // (d) — NOTHING RAN. The sentence is a notice beside the row, never the
         // red "tunnel down": a live session holding the tunnel is the opposite
@@ -631,22 +757,47 @@ export function ProxiesView(): JSX.Element {
         setVpnNotices((m) => ({ ...m, [p.id]: outcome.reason }));
       }
       void persistServerProbe(p.id, outcome, { adoptExit: true });
-      if (outcome.kind === 'not_run') return { resolved: true, tunnelOk: null, skipped: true };
+      if (outcome.kind === 'not_run') {
+        // (h) — `no_node` is "not tested" (no fleet Mac was free to bring the
+        // tunnel up), not a refusal: the row was never in anyone's hands.
+        return outcome.why === 'no_node'
+          ? { resolved: true, tunnelOk: null, notTested: notRunPhrase(outcome.why) }
+          : { resolved: true, tunnelOk: null, skipped: notRunPhrase(outcome.why) };
+      }
+      if (outcome.kind === 'failed') return { resolved: true, tunnelOk: false };
+      if (outcome.kind === 'unavailable') {
+        return { resolved: true, tunnelOk: null, notTested: 'the server did not answer' };
+      }
       // A verdict about the TUNNEL comes only from a fleet Mac that brought it
-      // up; a control-plane fallback measured the endpoint, not the tunnel.
-      const fleetMeasured = outcome.kind === 'ok' && outcome.vantage?.measuredFrom === 'fleet';
-      return {
-        resolved: true,
-        tunnelOk: outcome.kind === 'failed' ? false : fleetMeasured ? true : null,
-      };
+      // up AND measured it; a control-plane fallback measured the endpoint,
+      // not the tunnel, and (h) a fleet `ok` with no timing measured nothing
+      // the row can show — the pill reads "endpoint ok", and so must the tally.
+      if (outcome.vantage?.measuredFrom !== 'fleet') {
+        return {
+          resolved: true,
+          tunnelOk: null,
+          notTested: 'measured from the server, not a fleet Mac',
+        };
+      }
+      if (outcome.latencyMs === null) {
+        return {
+          resolved: true,
+          tunnelOk: null,
+          notTested: 'the fleet Mac reported no measurement',
+        };
+      }
+      return { resolved: true, tunnelOk: true };
     } catch {
       if (stale()) return null;
-      setEndpointResults((m) => ({
+      // (h) — the resolver itself failed to RUN (the native command threw).
+      // Not a DNS verdict: the name was never looked up, so no "unresolved"
+      // pill; the row keeps what it holds and says the check did not run.
+      settle();
+      setVpnNotices((m) => ({
         ...m,
-        [p.id]: { resolved: false, ip: '', message: 'Endpoint check failed' },
+        [p.id]: 'The endpoint check could not run on this Mac. Try again.',
       }));
-      dropServerState(p.id);
-      return { resolved: false, tunnelOk: false };
+      return { resolved: null, tunnelOk: null, checkFailed: true };
     } finally {
       setTestingId((cur) => (cur === p.id ? null : cur));
     }
@@ -715,22 +866,13 @@ export function ProxiesView(): JSX.Element {
       }
     } else if (outcome.kind === 'not_run') {
       // (d) — nothing was measured, so nothing here changes: the row keeps
-      // whatever it holds. The one thing the reply CAN carry is the exit the
-      // live session sees through the tunnel, which is the row's exit right
-      // now and lands in the same cell a measured one does.
-      const exit = outcome.exitObserved;
-      if (exit !== undefined) {
-        setExitResults((r) => ({
-          ...r,
-          [id]: {
-            ip: exit.ip,
-            country: exit.country,
-            city: exit.city,
-            region: exit.region,
-            timezone: exit.timezone,
-          },
-        }));
-      }
+      // whatever it holds. The one thing the reply CAN carry is the server's
+      // STORED exit (what a session saw through the tunnel at `observed_at`).
+      // ⛔ (h) finding 1 — it is NOT adopted here. It reaches the exit cell
+      // through the cache write (`persistServerProbe` → the emit above), which
+      // dates it by the observation and refuses one the fleet has since
+      // contradicted; adopting it here at reply time put "tunnel down"'s
+      // dropped exit straight back on the grid beside "No fleet Mac was free".
     } else if (outcome.kind === 'failed') {
       // ⛔ The server says this proxy is NOT usable, while the native probe
       // from this Mac said it was. That disagreement is real information —
@@ -884,7 +1026,7 @@ export function ProxiesView(): JSX.Element {
     setTestAllSummary(null);
     setTestingAll(true);
     const results: ProxyTestResult[] = [];
-    const vpn: VpnSweepTally = { ...EMPTY_VPN_TALLY };
+    const vpn = emptyVpnTally();
     try {
       // Only SOCKS5 (or legacy-undefined) proxies have an honest native SOCKS5
       // probe. Running it against a VPN/HTTP endpoint always returns a false
@@ -894,11 +1036,19 @@ export function ProxiesView(): JSX.Element {
       for (const p of targets) {
         if (!isSocks5Probeable(p.scheme)) {
           const check = await handleCheckEndpoint(p);
-          // (d) — a skipped row (test not run) is its own bucket: never a
-          // checked tunnel that is "not up".
-          if (check?.skipped === true) {
+          // (d)/(h) — a skipped row (test refused), an untested row (nothing
+          // could measure the tunnel) and a check that could not run are each
+          // their own bucket: never a checked tunnel that is "not up".
+          if (check === null) continue;
+          if (check.checkFailed === true) {
+            vpn.checkFailed += 1;
+          } else if (check.skipped !== undefined) {
             vpn.skipped += 1;
-          } else if (check !== null && check.tunnelOk !== null) {
+            vpn.skippedWhy.push(check.skipped);
+          } else if (check.notTested !== undefined) {
+            vpn.notTested += 1;
+            vpn.notTestedWhy.push(check.notTested);
+          } else if (check.tunnelOk !== null) {
             vpn.checked += 1;
             if (check.tunnelOk) vpn.tunnelOk += 1;
           }
@@ -1693,7 +1843,9 @@ function ProxyRow({
             exit geo unavailable — the probe did not complete
           </span>
         ) : (
-          <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
+          <span className="italic text-[10.5px] text-ink-muted">
+            {isSocks5Probeable(p.scheme) ? 'run Test for exit IP' : 'run Check for the exit'}
+          </span>
         )}
         {/* #6 — exit LOCATION (city, region). The flag already conveys the country;
             city/region is the incremental detail, shown when the probe captured it.
@@ -1755,7 +1907,14 @@ function ProxyRow({
       </td>
 
       <td className="px-3 py-2">
-        {result !== undefined && reachable ? (
+        {isVpnScheme(p.scheme) ? (
+          // (h) — a VPN row has no SOCKS5 `result` (its placeholder is deleted
+          // from testResults by design), so the chip set below was unreachable
+          // and the cell read a permanent "untested" naming a Test button the
+          // row does not have. A tunnel carries UDP; the one protocol probed
+          // through it is QUIC (the fleet's relay leg, or a live session's h3).
+          <VpnQuicChip quicMeasured={quicMeasured} quicProbe={quicProbe} />
+        ) : result !== undefined && reachable ? (
           <ProxyCapabilityChips
             result={result}
             quicMeasured={quicMeasured}
@@ -1801,7 +1960,10 @@ function ProxyRow({
               {vpnFailure}
             </span>
           )}
-          {vpnNotice !== undefined && vpnFailure === undefined && !isSocks5Probeable(p.scheme) && (
+          {/* (h) finding 3 — the notice sits beside a standing failure too: the
+              failure is the LAST verdict (the cache's), the notice is what THIS
+              check did not do; hiding one behind the other lost either. */}
+          {vpnNotice !== undefined && !isSocks5Probeable(p.scheme) && (
             <span
               className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-ink-muted"
               title={vpnNotice}
@@ -1852,7 +2014,7 @@ function ProxyRow({
                 className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
                 onClick={onCheckEndpoint}
                 disabled={testing || testingAll}
-                title="DNS-resolve this VPN endpoint (the tunnel itself verifies at launch)."
+                title="Check this VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and measures its exit."
               >
                 {testing
                   ? 'Checking…'
@@ -1937,6 +2099,65 @@ function HealthPill({
  * only the DNS resolve has run; `tunnel down` when the fleet said so. Never
  * "healthy from this Mac" — this Mac never made a connection.
  */
+/**
+ * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
+ * first (a live session's HTTP/3 verdict outranks the fleet relay leg), and
+ * an honest "not measured" that names the button this row HAS. Never a WebRTC
+ * or UDP chip: UDP is not a probed grant on a tunnel — the tunnel carries it.
+ */
+function VpnQuicChip({
+  quicMeasured,
+  quicProbe,
+}: {
+  quicMeasured: MeasuredQuic | undefined;
+  quicProbe: boolean | undefined;
+}): JSX.Element {
+  const verdict: { ok: boolean; hint: string } | null =
+    quicMeasured === 'h3'
+      ? { ok: true, hint: 'HTTP/3 verified in a live session through this tunnel.' }
+      : quicMeasured === 'h2-only'
+        ? {
+            ok: false,
+            hint: 'No HTTP/3 — a live session used HTTP/2 over TCP through this tunnel.',
+          }
+        : quicProbe === true
+          ? {
+              ok: true,
+              hint: 'QUIC relays through this tunnel — measured from a fleet Mac, the kind that runs your profiles.',
+            }
+          : quicProbe === false
+            ? {
+                ok: false,
+                hint: 'QUIC does not relay through this tunnel — measured from a fleet Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+              }
+            : null;
+  if (verdict === null) {
+    return (
+      <span
+        className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
+        data-component="vpn-quic-chip"
+        data-ok="unmeasured"
+        title="Not measured yet — run Check: a fleet Mac brings the tunnel up and probes QUIC through it."
+      >
+        QUIC untested
+      </span>
+    );
+  }
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px text-[9px] ${
+        verdict.ok ? 'bg-status-ready/15 text-status-ready' : 'bg-surface-inset text-ink-muted'
+      }`}
+      data-component="vpn-quic-chip"
+      data-ok={verdict.ok ? 'true' : 'false'}
+      title={verdict.hint}
+    >
+      <span aria-hidden="true">{verdict.ok ? '✓' : '⤵'}</span>
+      QUIC
+    </span>
+  );
+}
+
 function EndpointHealthPill({
   endpoint,
   tunnelUp,

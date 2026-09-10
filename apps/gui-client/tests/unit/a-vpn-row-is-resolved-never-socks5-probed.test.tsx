@@ -335,10 +335,10 @@ describe('a VPN profile launches through the endpoint resolve, never the SOCKS5 
 });
 
 describe("the card's Test on a VPN row runs the resolve, not the SOCKS5 probe", () => {
-  it('CRITICAL Test proxy → resolveEndpoint, never proxy_test', async () => {
+  it('CRITICAL Check VPN → resolveEndpoint, never proxy_test', async () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
-    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    fireEvent.click(await screen.findByLabelText(/^Check VPN/));
     await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
     expect(testProxy).not.toHaveBeenCalled();
     await waitFor(() => expect(storedProbe('vpn1')?.endpoint).toBeDefined());
@@ -412,12 +412,12 @@ describe('(b) — Test proxy on a VPN row asks the FLEET after the resolve', () 
   // The profile card's Test is the user-initiated place a VPN tunnel gets brought
   // up on a fleet Mac and its real exit measured. Mutating runFleetTestForRow to
   // `if (true || …) return null;` makes this red.
-  it('CRITICAL Test proxy → resolveEndpoint, then testAccountProxy(vantage fleet) for the stored row', async () => {
+  it('CRITICAL Check VPN → resolveEndpoint, then testAccountProxy(vantage fleet) for the stored row', async () => {
     const AccountProxies = await import('../../src/lib/account-proxies');
     vi.mocked(AccountProxies.testAccountProxy).mockClear();
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
-    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    fireEvent.click(await screen.findByLabelText(/^Check VPN/));
     await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
     await waitFor(() =>
       expect(AccountProxies.testAccountProxy).toHaveBeenCalledWith(
@@ -452,7 +452,7 @@ describe('(b) — Test proxy on a VPN row asks the FLEET after the resolve', () 
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
-    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    fireEvent.click(await screen.findByLabelText(/^Check VPN/));
     await waitFor(() => expect(AccountProxies.testAccountProxy).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(storedProbe('vpn1')?.serverLatencyMs).toBe(31));
     await waitFor(() => expect(storedProbe('vpn1')?.exitIp).toBe('203.0.113.9'));
@@ -478,5 +478,298 @@ describe('(b) — a VPN LAUNCH never runs the fleet test', () => {
     await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
     await new Promise((r) => setTimeout(r, 30));
     expect(AccountProxies.testAccountProxy).not.toHaveBeenCalled();
+  });
+});
+
+// (h) VPN surfaces audit — findings 2, 5, 11, 16, 20, 27: the card carries the
+// fleet's verdict, a stale VPN exit is not handed to the launch, and the UDP
+// chip / menu row describe a tunnel.
+const ENDPOINT_PLACEHOLDER = {
+  reachable: false,
+  auth_ok: false,
+  udp_associate: false,
+  can_route: false,
+  connect_reply: 0xff,
+  latency_ms: 0,
+  message: 'Resolved',
+};
+const FLEET_DOWN = 'The Mac that runs your profiles could not bring this tunnel up.';
+const BUSY =
+  'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.';
+/** A VPN entry the fleet measured `ageMs` ago: resolved pre-flight (same
+ *  address the mock resolves to, so the carry-over applies) + fleet latency +
+ *  an observed exit. */
+function measuredVpnEntry(ageMs: number): Record<string, unknown> {
+  const at = Date.now() - ageMs;
+  return {
+    result: ENDPOINT_PLACEHOLDER,
+    at,
+    endpoint: { resolved: true, ip: '203.0.113.9', message: 'Resolved' },
+    serverLatencyMs: 42,
+    measuredFrom: 'fleet',
+    nodeId: 'mac-07',
+    quicProbe: true,
+    serverProbeAt: at,
+    exitIp: '198.51.100.9',
+    exitCountry: 'NL',
+    exitTimezone: 'Europe/Amsterdam',
+    exitAt: at,
+  };
+}
+async function clickCheckVpn(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+  fireEvent.click(await screen.findByLabelText(/^Check VPN/));
+}
+
+describe('(h) — the profile card carries the VPN fleet outcome', () => {
+  it('CRITICAL a fleet FAILURE shows the VPN broken banner with the fleet’s sentence and drops the exit + latency it showed', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: false,
+      reason: FLEET_DOWN,
+      measured_from: 'fleet',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    expect(screen.getByText('42ms')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-component="proxy-broken-banner"][data-vpn-failure="true"]'),
+      ).not.toBeNull(),
+    );
+    expect(screen.getByText('VPN tunnel down')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
+      FLEET_DOWN,
+    );
+    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(screen.queryByText('42ms')).toBeNull();
+    // Written, and superseding the exit (the list adoption respects the stamp).
+    await waitFor(() => expect(storedProbe('vpn1')?.exitSupersededAt).toEqual(expect.any(Number)));
+    expect(storedProbe('vpn1')?.exitIp).toBeUndefined();
+    expect(storedProbe('vpn1')?.serverLatencyMs).toBeUndefined();
+    // The banner's action is the VPN check, not a SOCKS5 retest.
+    expect(screen.getByText('Re-check')).toBeTruthy();
+  });
+
+  it('CRITICAL a NOT-RUN keeps the card’s exit and latency and shows the sentence as a muted notice, never the banner', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: false,
+      reason: BUSY,
+      measured_from: 'fleet',
+      not_run: 'node_busy',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(BUSY),
+    );
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    expect(screen.getByText('42ms')).toBeTruthy();
+    expect(storedProbe('vpn1')?.serverLatencyMs).toBe(42);
+    expect(storedProbe('vpn1')?.exitIp).toBe('198.51.100.9');
+  });
+
+  it('CONTROL — the next fleet ok clears both', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy)
+      .mockResolvedValueOnce({ ok: false, reason: FLEET_DOWN, measured_from: 'fleet' })
+      .mockResolvedValueOnce({
+        ok: true,
+        latency_ms: 31,
+        measured_from: 'fleet',
+        node_id: 'mac-07',
+      });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull(),
+    );
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull(),
+    );
+    expect(await screen.findByText('31ms')).toBeTruthy();
+  });
+
+  it('the UDP chip on a VPN card says "UDP via tunnel" (not a probed grant, not "?"); a SOCKS5 card keeps "UDP ?"', async () => {
+    const first = render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const chip = await waitFor(() => {
+      const el = document.querySelector('[data-udp="tunnel"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(chip.textContent).toBe('UDP via tunnel');
+    expect(chip.getAttribute('title')).toMatch(/not a probed grant/);
+    expect(screen.queryByText('UDP ?')).toBeNull();
+    first.unmount();
+    state.boundProxyId = 'p1';
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('UDP ?')).toBeTruthy();
+    expect(document.querySelector('[data-udp="tunnel"]')).toBeNull();
+  });
+});
+
+describe('(h) — a VPN launch never hands a STALE cached exit to the simulator', () => {
+  const THIRTY_ONE_MIN = 31 * 60 * 1000;
+
+  // MUTATION: drop the VPN branch of freshExitIdentity (back to `return
+  // fromCache`) → the 31-minute-old NL/Amsterdam reaches the simulator → red.
+  it('CRITICAL an exit older than the SOCKS5 TTL is not handed over as timezone/country (the session reports its own)', async () => {
+    seedCache({ vpn1: measuredVpnEntry(THIRTY_ONE_MIN) });
+    await launch();
+    await waitFor(() => expect(openSimulatorWindow).toHaveBeenCalledTimes(1));
+    expect(openSimulatorWindow.mock.calls[0]?.[0]).toMatchObject({
+      countryCode: null,
+      timezone: null,
+    });
+    // …and it is NOT re-probed either: the exit probe is a SOCKS5 request.
+    expect(probeProxyExit).not.toHaveBeenCalled();
+  });
+
+  it('VACUITY CONTROL — a fresh VPN exit is handed over as cached', async () => {
+    seedCache({ vpn1: measuredVpnEntry(1000) });
+    await launch();
+    await waitFor(() => expect(openSimulatorWindow).toHaveBeenCalledTimes(1));
+    expect(openSimulatorWindow.mock.calls[0]?.[0]).toMatchObject({
+      countryCode: 'NL',
+      timezone: 'Europe/Amsterdam',
+    });
+    expect(probeProxyExit).not.toHaveBeenCalled();
+  });
+});
+
+// (h) findings 3 / 4 / 5 — the card's "fleet down" state was carried only by
+// the view that ran the check (a grid Check that failed left this card with no
+// banner, "no exit IP" and a pre-flight "checked"); a stale outcome outlived
+// the next card Test when that Test returned early; and the "checked" stamp
+// the parent computed from the fleet result was a prop the card never
+// rendered.
+const checkedAt = (): string | null =>
+  document.querySelector('[data-component="proxy-checked-at"]')?.getAttribute('data-checked-at') ??
+  null;
+
+describe('(h) findings 3/4/5 — the card reads the failure from the cache, clears a stale notice, and dates "checked"', () => {
+  // MUTATION: drop `fleetFailureReasons` from the card's props (back to the
+  // in-memory vpnOutcomes) → no banner for a failure this card did not run → red.
+  it('CRITICAL a failure the Proxies GRID wrote (the stamp + sentence, no exit) renders the banner HERE with the sentence, no exit, and "checked" dated at the failure', async () => {
+    const failedAt = Date.now() - 90_000;
+    seedCache({
+      vpn1: {
+        result: ENDPOINT_PLACEHOLDER,
+        at: failedAt - 5,
+        endpoint: { resolved: true, ip: '203.0.113.9', message: 'Resolved' },
+        exitSupersededAt: failedAt,
+        fleetFailureReason: FLEET_DOWN,
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-component="proxy-broken-banner"][data-vpn-failure="true"]'),
+      ).not.toBeNull(),
+    );
+    expect(screen.getByText('VPN tunnel down')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
+      FLEET_DOWN,
+    );
+    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(screen.getByText('no exit IP')).toBeTruthy();
+    expect(checkedAt()).toBe(new Date(failedAt).toISOString());
+  });
+
+  it('CRITICAL after a fleet failure, a card Test whose DNS pre-flight FAILS clears the banner — it is not carried beside an unresolved endpoint', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: false,
+      reason: FLEET_DOWN,
+      measured_from: 'fleet',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull(),
+    );
+    resolveEndpoint.mockResolvedValue({
+      resolved: false,
+      ip: '',
+      message: 'The endpoint host could not be resolved.',
+    });
+    // The mock is module-level (not reset per test), so count the delta.
+    const fleetCalls = vi.mocked(AccountProxies.testAccountProxy).mock.calls.length;
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull(),
+    );
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
+    expect(storedProbe('vpn1')?.fleetFailureReason).toBeUndefined();
+    expect(storedProbe('vpn1')?.exitSupersededAt).toBeUndefined();
+    // The fleet was never asked the second time: the pre-flight answered.
+    expect(vi.mocked(AccountProxies.testAccountProxy).mock.calls.length).toBe(fleetCalls);
+  });
+
+  // MUTATION: drop the setVpnNotices clear at the top of handleTestProxy's VPN
+  // path → the previous notice is still rendered after the unresolved Test → red.
+  it('CRITICAL a stale NOT-RUN notice goes the moment the next Test starts, even when the fleet is never asked again', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: false,
+      reason: BUSY,
+      measured_from: 'fleet',
+      not_run: 'node_busy',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(BUSY),
+    );
+    resolveEndpoint.mockResolvedValue({
+      resolved: false,
+      ip: '',
+      message: 'The endpoint host could not be resolved.',
+    });
+    const fleetCalls = vi.mocked(AccountProxies.testAccountProxy).mock.calls.length;
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')).toBeNull(),
+    );
+    expect(vi.mocked(AccountProxies.testAccountProxy).mock.calls.length).toBe(fleetCalls);
+  });
+
+  // MUTATION: revert the parent's checkedAtIso to `probe?.at` → the fresh
+  // pre-flight's time renders instead of the hour-old fleet stamp → red.
+  it('CRITICAL "checked" dates the fleet result, not the pre-flight: an hour-old fleet number beside a fresh pre-flight reads an hour old', async () => {
+    const now = Date.now();
+    const fleetAt = now - 3_600_000;
+    seedCache({
+      vpn1: {
+        ...measuredVpnEntry(0),
+        at: now, // the pre-flight, re-stamped seconds ago
+        serverProbeAt: fleetAt, // the fleet's answer, an hour ago
+        exitAt: fleetAt,
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    expect(checkedAt()).toBe(new Date(fleetAt).toISOString());
+    expect(checkedAt()).not.toBe(new Date(now).toISOString());
+  });
+
+  it('VACUITY CONTROL — a SOCKS5 card’s "checked" is the probe’s own stamp', async () => {
+    state.boundProxyId = 'p1';
+    const at = Date.now() - 120_000;
+    seedCache({ p1: { result: HEALTHY, at } });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() => expect(checkedAt()).toBe(new Date(at).toISOString()));
   });
 });

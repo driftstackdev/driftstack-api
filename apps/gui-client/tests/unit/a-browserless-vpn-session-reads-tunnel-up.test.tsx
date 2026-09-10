@@ -30,6 +30,7 @@ type ControlState = {
   terminal: false;
   status: 'active';
   closedReason: null;
+  provisioningDetail?: string | null;
   capabilityReport: Partial<AgentSessionCapabilityReport>;
 };
 let manualControlState: ControlState = {
@@ -126,6 +127,20 @@ vi.mock('../../src/lib/settings', async (importOriginal) => ({
   loadBaseUrl: vi.fn(() => Promise.resolve('https://api.test')),
 }));
 
+// (h) — the in-place relaunch listener and the Dock tile are Tauri-only; both
+// are captured here so the swap and the flag source can be driven in jsdom.
+const tauriListeners = new Map<string, (event: { payload: string }) => void>();
+const invoke = vi.fn((_cmd: string, _args?: unknown) => Promise.resolve());
+vi.mock('@tauri-apps/api/event', () => ({
+  listen: (name: string, cb: (event: { payload: string }) => void) => {
+    tauriListeners.set(name, cb);
+    return Promise.resolve(() => tauriListeners.delete(name));
+  },
+}));
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: (cmd: string, args?: unknown) => invoke(cmd, args),
+}));
+
 vi.mock('../../src/lib/agent-session-control', () => ({
   uploadAgentSessionFile: vi.fn(() => Promise.resolve({ status: 'unavailable', handle: null })),
   listAgentSessionDownloads: vi.fn(() => Promise.resolve({ status: 'unavailable', files: null })),
@@ -138,11 +153,21 @@ vi.mock('../../src/lib/agent-session-control', () => ({
   handbackSession: vi.fn(),
   sendAgentMessage: vi.fn(),
   endAgentSession: vi.fn(),
-  AgentSessionControlError: class extends Error {},
+  AgentSessionControlError: class extends Error {
+    status?: number;
+  },
 }));
 
-const { SimulatorWindow, vpnTunnelUpNotice, vpnTunnelUpCaption } =
-  await import('../../src/views/SimulatorWindow');
+const {
+  SimulatorWindow,
+  vpnTunnelUpNotice,
+  vpnTunnelUpCaption,
+  vpnTunnelIsUp,
+  vpnTunnelChipText,
+  vpnAddressPlaceholder,
+  nextEverLiveLatch,
+} = await import('../../src/views/SimulatorWindow');
+const { AgentSessionControlError } = await import('../../src/lib/agent-session-control');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 const TUNNEL_UP_SENTENCE =
@@ -296,8 +321,8 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
     ).toBe('VPN tunnel connected — starting the browser…');
     expect(
       vpnTunnelUpCaption({ ip: null, timezone: null, source: 'detail', step: 'vpn_egress_active' }),
-    ).toMatch(
-      /^VPN tunnel connected — browser attach for VPN sessions isn’t live yet; this session will time out$/,
+    ).toBe(
+      'VPN tunnel connected — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout',
     );
     expect(
       vpnTunnelUpCaption({
@@ -444,5 +469,310 @@ describe('SimulatorWindow — a VPN session with an observed exit and no stream 
     expect(
       container.querySelector('[data-component="simulator-address-connecting"]'),
     ).not.toBeNull();
+  });
+});
+
+// (h) VPN surfaces audit — findings 3, 7, 8, 14, 18, 29.
+const STEP = (step: string, extra: Partial<AgentSessionCapabilityReport> = {}): ControlState => ({
+  mode: 'manual',
+  pairKind: null,
+  terminal: false,
+  status: 'active',
+  closedReason: null,
+  provisioningDetail: step,
+  capabilityReport: { manual_input_available: true, proxy_kind: 'openvpn', ...extra },
+});
+const detail = (
+  step:
+    | 'vpn_egress_bringing_up'
+    | 'vpn_egress_active'
+    | 'egress_geo_resolving'
+    | 'browser_spawning',
+  ip: string | null = null,
+) => ({ ip, timezone: null, source: 'detail' as const, step });
+const q = (container: HTMLElement, sel: string): Element | null => container.querySelector(sel);
+const addressText = (container: HTMLElement): string =>
+  q(container, '[data-component="simulator-address"]')?.textContent ?? '';
+
+describe('(h) the pure step helpers — "tunnel up" is never said while the tunnel is coming up', () => {
+  it('vpnTunnelIsUp is false ONLY for vpn_egress_bringing_up', () => {
+    expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up'))).toBe(false);
+    expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up', '203.0.113.7'))).toBe(false);
+    for (const step of ['vpn_egress_active', 'egress_geo_resolving', 'browser_spawning'] as const)
+      expect(vpnTunnelIsUp(detail(step)), step).toBe(true);
+    expect(vpnTunnelIsUp({ ip: '203.0.113.7', timezone: null, source: 'report' })).toBe(true);
+  });
+
+  it('the chip text follows the STEP, handles ip === null, and never dangles "· exit "', () => {
+    expect(vpnTunnelChipText(detail('vpn_egress_bringing_up'))).toBe('Starting the VPN tunnel…');
+    // Even with an exit already observed on the report, bringing-up is not up.
+    expect(vpnTunnelChipText(detail('vpn_egress_bringing_up', '203.0.113.7'))).toBe(
+      'Starting the VPN tunnel…',
+    );
+    expect(vpnTunnelChipText(detail('vpn_egress_active'))).toBe(
+      'VPN tunnel up · browser attach isn’t available yet',
+    );
+    expect(vpnTunnelChipText(detail('vpn_egress_active', '203.0.113.7'))).toBe(
+      'VPN tunnel up · exit 203.0.113.7',
+    );
+    expect(vpnTunnelChipText(detail('egress_geo_resolving'))).toBe(
+      'VPN tunnel up · resolving the exit…',
+    );
+    expect(vpnTunnelChipText(detail('browser_spawning'))).toBe(
+      'VPN tunnel up · starting the browser…',
+    );
+    expect(vpnTunnelChipText({ ip: '203.0.113.7', timezone: null, source: 'report' })).toBe(
+      'VPN tunnel up · exit 203.0.113.7',
+    );
+    for (const t of [
+      detail('vpn_egress_bringing_up'),
+      detail('vpn_egress_active'),
+      detail('egress_geo_resolving'),
+      detail('browser_spawning'),
+    ])
+      expect(vpnTunnelChipText(t)).not.toMatch(/exit\s*$/);
+  });
+
+  it('the placeholder promises only what the step can deliver', () => {
+    expect(vpnAddressPlaceholder(detail('vpn_egress_bringing_up'))).toBe(
+      'Starting the VPN tunnel… — the address bar unlocks once the device is live',
+    );
+    expect(vpnAddressPlaceholder(detail('vpn_egress_active'))).toBe(
+      'VPN tunnel is up — browser attach isn’t available for VPN sessions yet',
+    );
+    expect(vpnAddressPlaceholder(detail('browser_spawning'))).toBe(
+      'VPN tunnel is up — the address bar unlocks once the browser attaches',
+    );
+    expect(vpnAddressPlaceholder({ ip: '203.0.113.7', timezone: null, source: 'report' })).toBe(
+      'VPN tunnel is up — the address bar unlocks once the browser attaches',
+    );
+  });
+
+  it('the vpn_egress_active caption states the limit as a state, not a prediction of a timeout the client cannot see', () => {
+    expect(vpnTunnelUpCaption(detail('vpn_egress_active', '203.0.113.7'))).toBe(
+      'VPN tunnel connected (exit 203.0.113.7) — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout',
+    );
+    expect(vpnTunnelUpCaption(detail('vpn_egress_active'))).not.toMatch(/will time out$/);
+  });
+
+  it('nextEverLiveLatch is per session: latches, holds, and resets on a swap', () => {
+    const a0 = { sessionId: 'agt_a', everLive: false };
+    const a1 = nextEverLiveLatch(a0, 'agt_a', true);
+    expect(a1).toEqual({ sessionId: 'agt_a', everLive: true });
+    // Holds after the stream drops (a drop is "reconnecting").
+    expect(nextEverLiveLatch(a1, 'agt_a', false)).toBe(a1);
+    // A new session starts un-latched — MUTATION: return `prev` regardless of
+    // sessionId (the old `useRef(false)`) and this reds.
+    expect(nextEverLiveLatch(a1, 'agt_b', false)).toEqual({ sessionId: 'agt_b', everLive: false });
+    expect(nextEverLiveLatch(a1, 'agt_b', true)).toEqual({ sessionId: 'agt_b', everLive: true });
+  });
+});
+
+describe('(h) SimulatorWindow — the address bars during bring-up and the browserless active state', () => {
+  it('CRITICAL while the harness is bringing the tunnel up, nothing says "tunnel up": chip, placeholder and notice all say "Starting the VPN tunnel…"', () => {
+    manualControlState = STEP('vpn_egress_bringing_up');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    const chip = q(container, '[data-component="simulator-address-vpn-tunnel-up"]');
+    expect(chip?.textContent).toContain('Starting the VPN tunnel…');
+    expect(addressText(container)).not.toMatch(/tunnel up/i);
+    expect(addressText(container)).not.toMatch(/tunnel is up/i);
+    const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
+    expect(input.getAttribute('placeholder')).toMatch(/^Starting the VPN tunnel…/);
+    const notice = q(container, '[data-component="simulator-vpn-tunnel-up-notice"]');
+    expect(notice?.textContent).toBe('Starting the VPN tunnel…');
+    expect(notice?.getAttribute('data-tone')).toBe('neutral');
+  });
+
+  it('the browser-mode bar during bring-up: no "tunnel up", no dangling "· exit "', () => {
+    localStore.set('ds-sim-browser-mode', '1');
+    manualControlState = STEP('vpn_egress_bringing_up');
+    const { container } = renderSim();
+    const cue = q(container, '[data-component="simulator-address-bar-vpn-tunnel-up"]');
+    expect(cue?.textContent?.trim()).toBe('Starting the VPN tunnel…');
+    expect(cue?.textContent).not.toMatch(/exit/);
+  });
+
+  it('CRITICAL at vpn_egress_active with no browser step, nothing promises the browser: chip and placeholder say attach isn’t available, the notice is not a green success box', () => {
+    manualControlState = STEP('vpn_egress_active');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    const chip = q(container, '[data-component="simulator-address-vpn-tunnel-up"]');
+    expect(chip?.textContent).toContain('browser attach isn’t available yet');
+    expect(addressText(container)).not.toMatch(/starting the browser/i);
+    expect(addressText(container)).not.toMatch(/unlocks once the browser attaches/i);
+    const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
+    expect(input.getAttribute('placeholder')).toBe(
+      'VPN tunnel is up — browser attach isn’t available for VPN sessions yet',
+    );
+    const notice = q(container, '[data-component="simulator-vpn-tunnel-up-notice"]');
+    expect(notice?.textContent).toBe(
+      'VPN tunnel connected — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout',
+    );
+    expect(notice?.getAttribute('data-tone')).toBe('neutral');
+  });
+
+  it('CONTROL — browser_spawning keeps the green tone and the "starting the browser…" chip', () => {
+    manualControlState = STEP('browser_spawning');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(
+      q(container, '[data-component="simulator-address-vpn-tunnel-up"]')?.textContent,
+    ).toContain('starting the browser…');
+    expect(
+      q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')?.getAttribute('data-tone'),
+    ).toBe('ready');
+  });
+});
+
+describe('(h) SimulatorWindow — the control poll’s transient errors keep the harness step', () => {
+  // Finding 18: the error path nulled provisioningDetail on ANY error, so one
+  // 5xx flipped the notice from "Starting the VPN tunnel…" to the generic
+  // "connecting…" for a tick. MUTATION: put `provisioningDetail: null` back in
+  // the transient patch → the CRITICAL arm reds; the auth CONTROL stays green.
+  async function pollThenFail(err: Error): Promise<{ container: HTMLElement }> {
+    let failing = false;
+    getAgentSession.mockImplementation(() =>
+      failing ? Promise.reject(err) : immediateControl(STEP('vpn_egress_bringing_up')),
+    );
+    const rendered = renderSim();
+    fireEvent.click(q(rendered.container, '[data-component="sim-rail-controls"]') as Element);
+    expect(
+      q(rendered.container, '[data-component="simulator-vpn-tunnel-up-notice"]')?.textContent,
+    ).toBe('Starting the VPN tunnel…');
+    failing = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5100);
+    });
+    return rendered;
+  }
+
+  it('CRITICAL a non-auth error (5xx / network) keeps the previous step caption', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { container } = await pollThenFail(new Error('502 Bad Gateway'));
+      expect(getAgentSession.mock.calls.length).toBeGreaterThan(1);
+      expect(q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')?.textContent).toBe(
+        'Starting the VPN tunnel…',
+      );
+      expect(q(container, '[data-component="simulator-address-connecting"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CONTROL — an auth failure (401) blanks it: the generic "connecting…" returns', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      // The mocked class takes only a message; the predicate reads `.status`.
+      const err = new (AgentSessionControlError as unknown as new (m: string) => Error)(
+        'expired',
+      ) as Error & { status?: number };
+      err.status = 401;
+      const { container } = await pollThenFail(err);
+      expect(q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')).toBeNull();
+      expect(q(container, '[data-component="simulator-address-connecting"]')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('(h) SimulatorWindow — Tauri-only: the in-place session swap and the Dock flag', () => {
+  beforeEach(() => {
+    // The real `@tauri-apps/api/core` reaches `window.__TAURI_INTERNALS__.invoke`;
+    // the same spy sits behind both the module mock and the internals, so every
+    // Dock-tile call is seen whichever path the dynamic import resolves to.
+    (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = {
+      invoke: (cmd: string, args?: unknown) => invoke(cmd, args),
+    };
+    tauriListeners.clear();
+    invoke.mockClear();
+  });
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__;
+  });
+
+  // Finding 3: everLiveRef was never reset on a ds-session relaunch, so after any
+  // session that once streamed, the relaunched VPN session never showed its
+  // tunnel-up captions. MUTATION: replace nextEverLiveLatch with the old
+  // `if (streamLiveNow) ref.current = true` → the notice stays null after the
+  // swap → red.
+  it('CRITICAL after a session that streamed, a relaunched VPN session in the same window shows its tunnel-up notice again', async () => {
+    manualControlState = STEP('vpn_egress_active', { exit_ip: '203.0.113.7' });
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')).not.toBeNull();
+    goLive();
+    expect(q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')).toBeNull();
+    // The stream drops: with the latch held this is "reconnecting", no notice.
+    act(() => {
+      panelCbs.onStateChange?.({ kind: 'reconnecting' }, fakeRoom);
+    });
+    expect(q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')).toBeNull();
+    // In-place relaunch to another session (the Rust side emits ds-session).
+    const onSession = await vi.waitFor(() => {
+      const cb = tauriListeners.get('ds-session');
+      expect(cb).toBeDefined();
+      return cb as (event: { payload: string }) => void;
+    });
+    await act(async () => {
+      onSession({ payload: btoa('?window=simulator&ws=wss://lk&token=tok2&session=agt_y') });
+      await Promise.resolve();
+    });
+    await vi.waitFor(() =>
+      expect(
+        q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')?.textContent,
+      ).toContain('VPN tunnel connected'),
+    );
+  });
+
+  // Finding 16 (Dock half): the flag keyed only on the launch's cached `cc`.
+  // The mount resets the control state after the first poll applied it, so the
+  // report is re-read by the next 5s tick — advance past it before reading.
+  async function renderWithCcAndPoll(): Promise<Array<{ countryCode: string }>> {
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&session=agt_x&cc=US',
+    );
+    render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5100);
+    });
+    return invoke.mock.calls
+      .filter((c) => c[0] === 'set_dock_tile')
+      .map((c) => c[1] as { countryCode: string });
+  }
+
+  it('CRITICAL the Dock flag follows the capability report’s exit_country when it arrives; the launch cc is only the fallback', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      manualControlState = STEP('vpn_egress_active', {
+        exit_ip: '203.0.113.7',
+        exit_country: 'NL',
+      });
+      const tiles = await renderWithCcAndPoll();
+      expect(tiles.length).toBeGreaterThan(0);
+      expect(tiles[tiles.length - 1]).toMatchObject({ countryCode: 'NL' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CONTROL — without exit_country on the report the launch cc drives the flag', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      manualControlState = STEP('vpn_egress_active', { exit_ip: '203.0.113.7' });
+      const tiles = await renderWithCcAndPoll();
+      expect(tiles.length).toBeGreaterThan(0);
+      expect(tiles[tiles.length - 1]).toMatchObject({ countryCode: 'US' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -36,6 +36,9 @@ const saveExitResult = vi.fn<(...a: unknown[]) => Promise<Record<string, never>>
 const saveServerProbeResult = vi.fn<(...a: unknown[]) => Promise<Record<string, never>>>(() =>
   Promise.resolve({}),
 );
+const saveFleetFailure = vi.fn<(...a: unknown[]) => Promise<Record<string, never>>>(() =>
+  Promise.resolve({}),
+);
 const { testAccountProxy } = vi.hoisted(() => ({
   testAccountProxy:
     vi.fn<
@@ -94,6 +97,7 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
   saveOsFingerprint: vi.fn(() => Promise.resolve({})),
   saveServerProbeResult: (...a: unknown[]) => saveServerProbeResult(...a),
   saveEndpointResult: (...a: unknown[]) => saveEndpointResult(...a),
+  saveFleetFailure: (...a: unknown[]) => saveFleetFailure(...a),
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -170,6 +174,7 @@ beforeEach(() => {
   saveEndpointResult.mockClear();
   saveExitResult.mockClear();
   saveServerProbeResult.mockClear();
+  saveFleetFailure.mockClear();
   callOrder.length = 0;
   settingsStub.settings.apiKey = 'ds_test_x';
   stored = [vpnRow()];
@@ -313,5 +318,202 @@ describe('(b) — Test all sweeps the VPN row through its own path', () => {
     expect(btn).not.toBeDisabled();
     fireEvent.click(btn);
     expect(await screen.findByText('Tested 1 — 1 VPN tunnel up')).toBeInTheDocument();
+  });
+});
+
+// (h) VPN surfaces audit — findings 1, 6, 9, 12, 13, 15, 19, 22, 23, 25, 26.
+const NO_NODE: AccountProxiesModule.AccountProxyTestResult = {
+  ok: false,
+  reason: 'No fleet Mac was free to test this VPN tunnel. Try again in a minute.',
+  measured_from: 'control_plane',
+  not_run: 'no_node',
+};
+const FLEET_FAILED: AccountProxiesModule.AccountProxyTestResult = {
+  ok: false,
+  reason: 'The Mac that runs your profiles could not bring this tunnel up.',
+  measured_from: 'fleet',
+};
+const quicChip = (): HTMLElement | null =>
+  document.querySelector('[data-component="vpn-quic-chip"]');
+
+async function clickTestAll(): Promise<void> {
+  fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
+}
+
+describe('(h) — the VPN row says what its check does, and renders what the fleet measured', () => {
+  it('CRITICAL the button title, the exit placeholder and the Protocols cell name the CHECK, not a Test the row lacks', async () => {
+    render(<ProxiesView />);
+    const btn = await screen.findByRole('button', { name: /check endpoint/i });
+    expect(btn.getAttribute('title')).toBe(
+      'Check this VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and measures its exit.',
+    );
+    expect(btn.getAttribute('title')).not.toMatch(/DNS-resolve|verifies at launch/);
+    expect(screen.getByText('run Check for the exit')).toBeInTheDocument();
+    expect(screen.queryByText('run Test for exit IP')).toBeNull();
+    // The Protocols cell is a QUIC-only chip (UDP is carried by the tunnel, not
+    // probed), honest about not having measured yet and naming Check.
+    const chip = quicChip();
+    expect(chip?.getAttribute('data-ok')).toBe('unmeasured');
+    expect(chip?.getAttribute('title')).toMatch(/run Check/);
+    expect(chip?.getAttribute('title')).not.toMatch(/click Test/);
+    expect(document.querySelector('[data-component="proxy-capabilities"]')).toBeNull();
+  });
+
+  it('CRITICAL after a fleet ok the Protocols cell shows the fleet relay verdict (was a permanent "untested")', async () => {
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('true');
+    testAccountProxy.mockResolvedValue({ ...FLEET_OK, quic_probe: false });
+    await clickCheck();
+    await waitFor(() => expect(quicChip()?.getAttribute('data-ok')).toBe('false'));
+  });
+
+  // Finding 12 — the failed branch dropped latency/vantage/relay/fingerprint but
+  // NOT the exit, so the earlier successful test's exit IP, flag and city stayed
+  // beside the red "tunnel down". Mutation: drop the exitResults dropKey in the
+  // failed branch and this arm reds.
+  it('CRITICAL a fleet FAILURE drops the exit and the QUIC verdict the previous ok had shown, and persists the failure', async () => {
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('203.0.113.9')).toBeInTheDocument();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('true');
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    expect(screen.queryByText('Amsterdam, North Holland')).toBeNull();
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('unmeasured');
+    // The failure is WRITTEN (finding 1): the cache must not keep carrying the
+    // superseded ok fields for the next emit to re-hydrate.
+    await waitFor(() => expect(saveFleetFailure).toHaveBeenCalledTimes(1));
+    expect(saveFleetFailure.mock.calls[0]?.[0]).toBe('vpn1');
+    expect(saveServerProbeResult).toHaveBeenCalledTimes(1);
+  });
+
+  it('the previous verdict stays on the row for the whole fleet wait, until THIS check answers', async () => {
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    let release: (r: AccountProxiesModule.AccountProxyTestResult) => void = () => undefined;
+    testAccountProxy.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await clickCheck();
+    await waitFor(() => expect(testAccountProxy).toHaveBeenCalledTimes(2));
+    // Still "tunnel down" while the fleet is working — not a flash of "endpoint ok".
+    expect(screen.getByText('tunnel down')).toBeInTheDocument();
+    release(FLEET_OK);
+    expect(await screen.findByText('tunnel up')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel down')).toBeNull();
+  });
+});
+
+describe('(h) — a resolved row whose tunnel nothing measured is "not tested", never "up", "down" or "unresolved"', () => {
+  it('CRITICAL no_node is a muted notice on the row and a "not tested (no fleet Mac free)" in the sweep', async () => {
+    testAccountProxy.mockResolvedValue(NO_NODE);
+    render(<ProxiesView />);
+    await clickTestAll();
+    const notice = await screen.findByText(NO_NODE.reason);
+    expect(notice.className).toContain('text-ink-muted');
+    expect(screen.queryByText('tunnel down')).toBeNull();
+    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(
+      await screen.findByText('1 VPN tunnel not tested (no fleet Mac free) — nothing was tested'),
+    ).toBeInTheDocument();
+  });
+
+  it('CRITICAL the mixed sentence: up, down and not tested, each counted once', async () => {
+    stored = [
+      vpnRow(),
+      { ...vpnRow(), id: 'vpn2', label: 'ResVPN 2', serverId: 'aprx_vpn2' },
+      { ...vpnRow(), id: 'vpn3', label: 'ResVPN 3', serverId: 'aprx_vpn3' },
+    ];
+    testAccountProxy.mockImplementation((_b, _k, id) =>
+      Promise.resolve(id === 'aprx_vpn' ? FLEET_OK : id === 'aprx_vpn2' ? FLEET_FAILED : NO_NODE),
+    );
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        'Tested 3 — 1 VPN tunnel up, 1 down, 1 not tested (no fleet Mac free)',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('a fleet ok with NO timing is not "tunnel up": the pill reads "endpoint ok" and the tally agrees', async () => {
+    testAccountProxy.mockResolvedValue({ ...FLEET_OK, latency_ms: null });
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel not tested (the fleet Mac reported no measurement) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel up')).toBeNull();
+  });
+
+  it('a control-plane fallback ok, and a row with no API key, are "not tested" with their own reason (finding 6/15: no more "No proxy results landed")', async () => {
+    const { node_id: _dropped, ...cp } = FLEET_OK;
+    testAccountProxy.mockResolvedValue({ ...cp, measured_from: 'control_plane' });
+    const first = render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel not tested (measured from the server, not a fleet Mac) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    first.unmount();
+    settingsStub.settings.apiKey = null;
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel not tested (no API key; sign in to test it) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No proxy results landed — run Test all again.')).toBeNull();
+  });
+
+  it('the skipped clause names the ACTUAL not_run reason (a busy Mac is not a live session)', async () => {
+    testAccountProxy.mockResolvedValue({
+      ok: false,
+      reason: 'The Mac that runs your profiles is busy with another tunnel or test.',
+      measured_from: 'fleet',
+      not_run: 'node_busy',
+    });
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel skipped (the fleet Mac was busy; try again in a minute) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/live session/)).toBeNull();
+  });
+
+  // Finding 25 — the resolver THROWING was stored as an unresolved DNS verdict
+  // and counted as a checked tunnel that is not up.
+  it('CRITICAL a resolver that fails to RUN is "could not run", not "unresolved", and no tunnel verdict', async () => {
+    resolveEndpoint.mockRejectedValue(new Error('native command failed'));
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText(
+        '1 VPN check could not run (the endpoint resolver failed; try again) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('unresolved')).toBeNull();
+    expect(screen.queryByText('endpoint ✗')).toBeNull();
+    const notice = screen.getByText('The endpoint check could not run on this Mac. Try again.');
+    expect(notice.className).toContain('text-ink-muted');
+    expect(testAccountProxy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/VPN tunnels? up/)).toBeNull();
   });
 });

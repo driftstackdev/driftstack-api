@@ -136,7 +136,9 @@ import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
+  fleetFailureReasons,
   persistServerProbe,
+  serverProbeStamps,
   serverVerdictUsable,
   syncListExitObserved,
   testProxyOnServer,
@@ -790,6 +792,22 @@ export function ProfilesView({
   // Proxies grid reads, so a VPN row's fleet-measured latency and exit reach the
   // card exactly as a SOCKS5 row's do.
   const probeView = useMemo(() => deriveProbeViewWithEndpointRows(probeCache), [probeCache]);
+  // (h) — when each VPN row's fleet fields were measured, for the card's
+  // "checked" stamp: the entry's `at` is the DNS pre-flight, re-stamped before
+  // every fleet test including a refused one.
+  const fleetStamps = useMemo(() => serverProbeStamps(probeCache), [probeCache]);
+  // (h) — the fleet's FAILURE sentence per VPN proxy id (the tunnel did not
+  // come up). Finding 3 — read from the CACHE, which the Proxies grid writes
+  // too: a Check that failed in the grid used to leave this card with no
+  // banner, "no exit IP" and a pre-flight "checked" stamp for the same proxy
+  // at the same moment. Cleared by the cache writers that record a later
+  // verdict or a later exit — a `not_run` clears nothing, it said nothing.
+  const vpnFailures = useMemo(() => fleetFailureReasons(probeCache), [probeCache]);
+  // (h) — the server's NOT-RUN sentence per VPN proxy id (refused / no fleet
+  // Mac free): transient, this card's own, and cleared the moment the next
+  // card Test STARTS (finding 4 — an early return after the pre-flight used to
+  // leave the previous notice/banner standing beside an unresolved endpoint).
+  const [vpnNotices, setVpnNotices] = useState<Record<string, string>>({});
   // S3 — per-card proxy "Test" in flight (proxy id), so the card can show
   // "Testing…" + disable the button while the native SOCKS5 + exit-geo probe runs.
   const [testingProxyId, setTestingProxyId] = useState<string | null>(null);
@@ -2496,6 +2514,18 @@ export function ProfilesView({
       // endpoint; the tunnel itself is verified at launch. Stored as an
       // endpoint verdict, which nothing reads as a SOCKS5 pass.
       if (!isSocks5Probeable(px.scheme)) {
+        // (h) finding 4 — the previous check's notice belongs to the previous
+        // check: it goes the moment this one starts, whatever this one does
+        // next (an unresolved endpoint, a row the fleet cannot test…). The
+        // failure banner is the cache's and moves only with a cache write —
+        // the unresolved pre-flight below carries nothing over, a verdict
+        // replaces it — so the card and the grid always agree on it.
+        setVpnNotices((m) => {
+          if (!(px.id in m)) return m;
+          const rest = { ...m };
+          delete rest[px.id];
+          return rest;
+        });
         const res = await resolveEndpoint(px.host, px.port);
         setProbeCache(await saveEndpointResult(px.id, res, Date.now()));
         // VPN exit parity (b) — a resolved VPN row stored on the account gets the
@@ -2580,6 +2610,13 @@ export function ProfilesView({
       // after a card Test. Same flag the Proxies grid passes for its VPN rows.
       const next = await persistServerProbe(px.id, outcome, { adoptExit: true });
       if (next !== null) setProbeCache(next);
+      // (h) — carry the fleet's own word into card state. A `failed` write
+      // above dropped the exit/latency from the cache AND persisted the
+      // sentence (finding 3), so the banner comes from the cache like the
+      // grid's; `not_run` keeps everything and adds this card's notice.
+      if (outcome.kind === 'not_run') {
+        setVpnNotices((m) => ({ ...m, [px.id]: outcome.reason }));
+      }
       return next;
     } catch {
       /* best-effort — the endpoint verdict above stands */
@@ -2610,8 +2647,19 @@ export function ProfilesView({
       country: cached?.exitCountry ?? null,
       timezone: cached?.exitTimezone ?? null,
     };
-    if (cached === undefined || !isSocks5Probeable(px.scheme) || !isProxyUsable(cached.result))
-      return fromCache;
+    if (cached === undefined) return fromCache;
+    // (h) — a VPN row is never exit-probed from this Mac, so its cached exit
+    // had NO freshness gate: a list-adopted session exit weeks old was handed
+    // to the launch as the device clock's zone and the Dock flag's country. The
+    // same TTL a SOCKS5 exit gets applies; past it, hand NOTHING — the session
+    // reports its own exit seconds after the tunnel is up and the simulator
+    // prefers the report (displayTimezone / the Dock flag).
+    if (!isSocks5Probeable(px.scheme)) {
+      return isExitIdentityFresh(cached.exitAt, Date.now())
+        ? fromCache
+        : { country: null, timezone: null };
+    }
+    if (!isProxyUsable(cached.result)) return fromCache;
     if (isExitIdentityFresh(cached.exitAt, Date.now())) return fromCache;
     try {
       const exit = await probeProxyExit({
@@ -4553,8 +4601,17 @@ export function ProfilesView({
                           quicProbe={px !== null ? probeView.quicProbe[px.id] : undefined}
                           latencyVantage={px !== null ? probeView.serverVantage[px.id] : undefined}
                           osFingerprint={px !== null ? probeView.osFingerprints[px.id] : undefined}
+                          vpn={px !== null && isVpnScheme(px.scheme)}
+                          vpnFailure={px !== null ? vpnFailures[px.id] : undefined}
+                          vpnNotice={px !== null ? vpnNotices[px.id] : undefined}
+                          // (h) — a VPN row's "checked" dates the fleet number it
+                          // shows, not the pre-flight that preceded a refusal.
                           checkedAtIso={
-                            probe?.at !== undefined ? new Date(probe.at).toISOString() : null
+                            px !== null && fleetStamps[px.id] !== undefined
+                              ? new Date(fleetStamps[px.id] ?? 0).toISOString()
+                              : probe?.at !== undefined
+                                ? new Date(probe.at).toISOString()
+                                : null
                           }
                           busy={busyId === profile.id}
                           launching={launchingId === profile.id}

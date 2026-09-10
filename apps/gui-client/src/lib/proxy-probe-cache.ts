@@ -90,6 +90,31 @@ export interface CachedProbe {
   /** T-1 — the fleet Mac's standalone QUIC-relay verdict (true/false), separate
    *  from quicMeasured (a live session's HTTP/3) and never merged with it. */
   quicProbe?: boolean;
+  /** (h) — epoch ms when the SERVER test that wrote serverLatencyMs / the
+   *  vantage / quicProbe ran. `at` is the row's LAST check (for a VPN row the
+   *  DNS pre-flight, which runs before every fleet test and is re-stamped even
+   *  when the fleet then REFUSES to measure), so `at` beside a carried-over
+   *  fleet number dated a measurement that never happened. Travels with the
+   *  server fields: written with them, carried with them, dropped with them. */
+  serverProbeAt?: number;
+  /** (h) — epoch ms when a fleet test FAILED to bring this VPN tunnel up and
+   *  so contradicted the exit the entry held. The exit fields are dropped at
+   *  that moment; this stamp survives the next pre-flight and refuses any
+   *  observation dated at or before it (the account list's `exit_observed`
+   *  still carries the pre-failure session exit), so a dropped exit cannot
+   *  be resurrected by a later cache emit. Cleared by the next exit write
+   *  dated after it. */
+  exitSupersededAt?: number;
+  /** (h) finding 3 — the fleet's sentence for that failure ("The proxy did
+   *  not answer…"), persisted beside the stamp so EVERY surface that reads
+   *  the cache — the Proxies grid after a remount, the profile card for a
+   *  Check that ran in the grid — renders the same "tunnel down", not only the
+   *  view that happened to run the check. Written with `exitSupersededAt`,
+   *  carried by the pre-flight with it, and cleared by the next fleet answer
+   *  that is a verdict (`saveServerProbeResult`) or by an exit seen after the
+   *  failure (`saveExitResult`); a `not_run` clears neither, because it said
+   *  nothing about the tunnel. */
+  fleetFailureReason?: string;
 }
 
 export type ProbeCacheMap = Record<string, CachedProbe>;
@@ -446,6 +471,16 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
   // T-17 — the exit identity's own stamp; absent reads as "not fresh".
   const exitAt = typeof r.exitAt === 'number' ? r.exitAt : undefined;
+  // (h) — the server test's own stamp, and the fleet-failure stamp that keeps
+  // a dropped exit from being adopted back. ⛔ This allowlist is the ONLY way a
+  // field survives a load: a field written but not read here is gone on the
+  // next emit, which is exactly a superseded exit coming back.
+  const serverProbeAt = typeof r.serverProbeAt === 'number' ? r.serverProbeAt : undefined;
+  const exitSupersededAt = typeof r.exitSupersededAt === 'number' ? r.exitSupersededAt : undefined;
+  const fleetFailureReason =
+    typeof r.fleetFailureReason === 'string' && r.fleetFailureReason.length > 0
+      ? r.fleetFailureReason
+      : undefined;
   // T-20 — an endpoint verdict is kept only whole; a partial one is dropped and
   // the entry then reads as a (non-usable) SOCKS5 verdict, which is the
   // conservative reading for both kinds of row.
@@ -466,6 +501,9 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
     ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
     ...(quicProbe !== undefined ? { quicProbe } : {}),
+    ...(serverProbeAt !== undefined ? { serverProbeAt } : {}),
+    ...(exitSupersededAt !== undefined ? { exitSupersededAt } : {}),
+    ...(fleetFailureReason !== undefined ? { fleetFailureReason } : {}),
     at: r.at,
     result: {
       reachable: res.reachable,
@@ -598,6 +636,7 @@ export function saveProbeResult(
       ...(prior?.measuredFrom !== undefined ? { measuredFrom: prior.measuredFrom } : {}),
       ...(prior?.nodeId !== undefined ? { nodeId: prior.nodeId } : {}),
       ...(prior?.quicProbe !== undefined ? { quicProbe: prior.quicProbe } : {}),
+      ...(prior?.serverProbeAt !== undefined ? { serverProbeAt: prior.serverProbeAt } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -626,8 +665,16 @@ export function saveExitResult(
     const all = await loadProbeCache();
     const prior = all[proxyId];
     if (prior === undefined) return all; // exit probe only runs after a capability probe
+    // (h) — an observation dated at or before the fleet failure that dropped
+    // this row's exit describes the tunnel BEFORE it went down; it is not
+    // adopted, whoever offers it. A later one clears the stamp: the tunnel
+    // was seen up again.
+    if (prior.exitSupersededAt !== undefined && at <= prior.exitSupersededAt) return all;
+    // …and an exit seen AFTER the failure is the tunnel seen up: the failure
+    // verdict goes with the stamp (finding 3 — the sentence lives here now).
+    const { exitSupersededAt: _superseded, fleetFailureReason: _failure, ...kept } = prior;
     all[proxyId] = {
-      ...prior,
+      ...kept,
       exitIp,
       exitCountry,
       exitCity: geo.city ?? null,
@@ -705,7 +752,15 @@ export function saveServerProbeResult(
     if (prior === undefined) return all;
     const quic = cleanMeasuredQuic(server.quicMeasured) ?? undefined;
     const vantage = cleanServerVantage(server.measuredFrom, server.nodeId);
-    const { measuredFrom: _m, nodeId: _n, quicProbe: _q, ...kept } = prior;
+    // (h) finding 3 — a server VERDICT replaces the fleet-failure sentence
+    // too: this is the "next fleet answer" that clears it.
+    const {
+      measuredFrom: _m,
+      nodeId: _n,
+      quicProbe: _q,
+      fleetFailureReason: _failure,
+      ...kept
+    } = prior;
     // An explicit null erases the stored number so it cannot outlive the
     // measurement that failed to produce one. `undefined` deliberately does not.
     if (server.latencyMs === null) delete kept.serverLatencyMs;
@@ -718,6 +773,56 @@ export function saveServerProbeResult(
       ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
       ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
       ...(typeof server.quicProbe === 'boolean' ? { quicProbe: server.quicProbe } : {}),
+      // (h) — when THIS server test ran, so a VPN row's "Tested" can date the
+      // fleet number it shows rather than the pre-flight that preceded a
+      // refusal.
+      serverProbeAt: at,
+    };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/**
+ * (h) — record that a fleet test FAILED to bring a VPN row's tunnel up.
+ *
+ * ⛔ A failed fleet verdict used to write NOTHING, on the theory that the
+ * native probe's entry stands and the views drop what they hold. For a VPN row
+ * the fleet IS the verdict, and the entry still held the previous SUCCESSFUL
+ * fleet fields (carried over by the pre-flight that ran seconds earlier), so
+ * the very next cache emit from ANY writer — a SOCKS5 row's Test, the
+ * background sweeper — re-hydrated the grid with a fleet-labelled latency, an
+ * exit IP and a relay chip beside the red "tunnel down"; and a Re-check of the
+ * failed row flashed "tunnel up" for the whole fleet wait.
+ *
+ * Every server-measured field goes (latency, vantage, node, relay verdict, OS
+ * fingerprint, the live session's QUIC verdict, the exit and its geo) and the
+ * exit is marked SUPERSEDED at `at`: the account list still carries the exit
+ * the last session saw through this tunnel, and the list adoption must not
+ * put it back. The verdict triple (`result` / `at` / `endpoint`) is untouched —
+ * the endpoint DID resolve; what failed is the tunnel behind it. Rides on an
+ * existing entry; none is invented.
+ */
+export function saveFleetFailure(
+  proxyId: string,
+  at: number,
+  /** (h) finding 3 — the fleet's sentence, persisted so every surface that
+   *  reads this entry (the grid after a remount, the profile card for a check
+   *  the grid ran) renders the same "tunnel down". Empty = no sentence. */
+  reason = '',
+): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    all[proxyId] = {
+      result: prior.result,
+      at: prior.at,
+      ...(prior.endpoint !== undefined ? { endpoint: prior.endpoint } : {}),
+      exitSupersededAt: at,
+      ...(reason.length > 0 ? { fleetFailureReason: reason } : {}),
     };
     await getStore().set(KEY, all);
     await getStore().save();
@@ -779,6 +884,9 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    serverProbeAt,
+    exitSupersededAt,
+    fleetFailureReason,
   } = prior;
   const kept = {
     exitIp,
@@ -795,6 +903,13 @@ function serverMeasuredFields(
     measuredFrom,
     nodeId,
     quicProbe,
+    serverProbeAt,
+    // (h) — the superseded stamp is itself a fleet verdict about this row's
+    // exit and must outlive the pre-flight that precedes the next test — and
+    // so must its sentence (finding 3): "tunnel down" stays on every surface
+    // until THIS check answers, exactly as the grid's in-memory copy did.
+    exitSupersededAt,
+    fleetFailureReason,
   };
   // Absent stays absent: an `undefined` member would still be a key in the
   // stored object (and in a toEqual), where the entry never had one.

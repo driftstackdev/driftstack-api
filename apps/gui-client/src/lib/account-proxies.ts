@@ -424,19 +424,24 @@ export type AccountProxyTestResult =
        *  never on the `reason` prose — to keep the row's last verdict and show
        *  the sentence as a notice, not as "tunnel down". */
       not_run?: AccountProxyTestNotRun;
-      /** (d) — beside `not_run: 'live_session'` only: the exit the live session
-       *  observed through the tunnel (the server's stored observation, no
-       *  region/city), so the row still shows where it exits. */
+      /** (d) — beside `not_run: 'live_session'` (and (h) `'no_node'`) only: the
+       *  exit a session observed through the tunnel (the server's stored
+       *  observation, no region/city), so the row still shows where it exits. */
       exit_observed?: AccountProxyExitObserved;
     };
 
 /** (d) — why a /test produced no measurement. A closed set: a value outside it
  *  is dropped (the reply then reads as a plain failure, never as a refusal it
  *  did not earn). */
-export type AccountProxyTestNotRun = 'live_session' | 'node_busy' | 'node_error';
+export type AccountProxyTestNotRun = 'live_session' | 'node_busy' | 'node_error' | 'no_node';
 
 export function cleanTestNotRun(raw: unknown): AccountProxyTestNotRun | undefined {
-  return raw === 'live_session' || raw === 'node_busy' || raw === 'node_error' ? raw : undefined;
+  // (h) `no_node` — no fleet Mac was free to bring a VPN tunnel up, and the
+  // control plane cannot measure a tunnel itself (it never falls back to a
+  // TCP connect for a VPN row). Not a verdict; the row is "not tested".
+  return raw === 'live_session' || raw === 'node_busy' || raw === 'node_error' || raw === 'no_node'
+    ? raw
+    : undefined;
 }
 
 /** The fleet-observed exit on a /test reply. Field names match the wire. */
@@ -446,6 +451,13 @@ export interface AccountProxyExitObserved {
   timezone: string | null;
   region: string | null;
   city: string | null;
+  /** (h) — beside a `not_run` reply only: WHEN the server's STORED exit was
+   *  observed (ISO 8601), null when the observation predates the column, absent
+   *  on a measured (ok) exit, which the reply itself dates. A stored exit is
+   *  older than the reply that carries it — the consumer that dates exits
+   *  (`persistServerProbe`) dates this one by the observation, never by the
+   *  reply, or a fleet failure's "superseded" stamp could be walked past. */
+  observed_at?: string | null;
 }
 
 /** A wire `exit_observed` is kept only when it is an object whose `ip` is a
@@ -466,7 +478,18 @@ export function cleanExitObserved(raw: unknown): AccountProxyExitObserved | unde
   const city = geo(r.city);
   if (country === undefined || timezone === undefined || region === undefined || city === undefined)
     return undefined;
-  return { ip: r.ip, country, timezone, region, city };
+  // (h) — the observation's own date rides along when the wire carries one; a
+  // non-string value drops the DATE (the exit then reads as undated), never the
+  // exit. Absent stays absent so an `ok` exit is not stamped with a null date.
+  const observedAt = r.observed_at;
+  return {
+    ip: r.ip,
+    country,
+    timezone,
+    region,
+    city,
+    ...(observedAt === null || typeof observedAt === 'string' ? { observed_at: observedAt } : {}),
+  };
 }
 
 /** A wire fingerprint is kept only when every field is one the verdict can
@@ -583,7 +606,9 @@ export async function testAccountProxy(
     // documented case); on any other failure an exit_observed is not a claim
     // this reply can make, and it is dropped. Malformed → dropped, never thrown.
     const refusedExit =
-      notRun === 'live_session' ? cleanExitObserved(body.exit_observed) : undefined;
+      notRun === 'live_session' || notRun === 'no_node'
+        ? cleanExitObserved(body.exit_observed)
+        : undefined;
     return {
       ok: false,
       reason: body.reason,
