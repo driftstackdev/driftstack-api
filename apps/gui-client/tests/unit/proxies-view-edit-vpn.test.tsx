@@ -270,7 +270,9 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
   // P2 #3 — the saved-proxy card used to hardcode "🔒 SOCKS5" and always offer a
   // SOCKS5 probe Test, so a VPN/HTTP proxy was mislabeled AND its Test always read
   // "unreachable". The card now labels by the actual scheme and gates the SOCKS5 Test.
-  it('labels a VPN proxy by its scheme (not SOCKS5) + replaces the SOCKS5 Test with a launch note', async () => {
+  // N4 — the static "Verified at launch" note became an on-demand "Check endpoint"
+  // button (a DNS pre-flight; the tunnel still verifies at launch, per its tooltip).
+  it('labels a VPN proxy by its scheme (not SOCKS5) + replaces the SOCKS5 Test with an endpoint check', async () => {
     stored = [WIREGUARD_PROXY];
     render(<ProxiesView />);
     await screen.findByText('wg-london');
@@ -279,7 +281,9 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     expect(screen.queryByText('SOCKS5')).toBeNull();
     // No SOCKS5 Test/Re-test button — the tunnel verifies at launch.
     expect(screen.queryByRole('button', { name: /^(Test|Re-test)$/ })).toBeNull();
-    expect(screen.getByText('Verified at launch')).toBeInTheDocument();
+    // N4 — instead it offers an on-demand DNS endpoint check (the tunnel verifies at launch).
+    expect(screen.getByRole('button', { name: /check endpoint/i })).toBeInTheDocument();
+    expect(screen.queryByText('Verified at launch')).toBeNull();
   });
 
   it('keeps the SOCKS5 label + Test button for a SOCKS5 proxy', async () => {
