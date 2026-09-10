@@ -1020,12 +1020,26 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
       closed.proxyId,
       'the closed row still names the proxy — status is the discriminator',
     ).toBe(id);
+    // (g) G1 — the guard reads ONLY the open sessions: the closed row is never
+    // fetched (its transcript never decrypted), and the whole-history read is
+    // not consulted at all.
+    const openSpy = vi.spyOn(repo, 'listOpenByAccount');
+    const historySpy = vi.spyOn(repo, 'listByAccount');
     const res = await fx.app.inject({
       method: 'POST',
       url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
       headers: auth(fx),
     });
     expect(res.statusCode, res.body).toBe(200);
+    expect(historySpy, 'the whole-history read is not the guard’s read').not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(openSpy).toHaveBeenCalledWith(fx.accountId);
+    const fetched = (await openSpy.mock.results[0]!.value) as ReadonlyArray<{
+      id: string;
+      proxyId: string | null;
+      status: string;
+    }>;
+    expect(fetched, 'the closed session was not even fetched').toEqual([]);
     expect(probeSpy).toHaveBeenCalledTimes(1);
     expect(seen.frames).toBe(1);
     const body = res.json<Record<string, unknown>>();
@@ -1033,6 +1047,60 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
     expect(body.node_id).toBe('mac-eu-032');
     expect(body.ok).toBe(true);
     expect(body.reason).toBeUndefined();
+  });
+
+  it('(g) G1 a MIXED history (many closed + one open on the proxy) refuses in ONE open-sessions read that carries only the open row — closed history is never fetched per VPN test', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const seen = registerCountingNode('mac-eu-036');
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    const repo = fx.agentSessionsRepo;
+    if (repo === undefined) throw new Error('enableAgentRuntime must be set for this arm');
+    // Five closed sessions on this proxy, then one live one — the shape of a
+    // customer who has used the VPN for a while.
+    for (let i = 0; i < 5; i += 1) {
+      const closedId = await startSessionOn(id, `mac-history-${i}`);
+      const closed = await repo.closeWithReason(closedId, 'customer_closed');
+      expect(closed.status).toBe('closed');
+    }
+    const liveId = await startSessionOn(id);
+    // POSITIVE CONTROL: the history really has six rows on this proxy, so a
+    // one-row open read below is the filter and not a thin fixture.
+    expect((await repo.listByAccount(fx.accountId)).filter((s) => s.proxyId === id)).toHaveLength(
+      6,
+    );
+    const openSpy = vi.spyOn(repo, 'listOpenByAccount');
+    const historySpy = vi.spyOn(repo, 'listByAccount');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(historySpy).not.toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const fetched = (await openSpy.mock.results[0]!.value) as ReadonlyArray<{
+      id: string;
+      proxyId: string | null;
+      status: string;
+    }>;
+    expect(
+      fetched.map((s) => s.id),
+      'exactly the one open session came back — none of the closed five',
+    ).toEqual([liveId]);
+    expect(fetched.every((s) => s.status !== 'closed')).toBe(true);
+    // …and the guard refused on it: nothing dispatched, the refusal shape.
+    expect(probeSpy).not.toHaveBeenCalled();
+    expect(seen.frames).toBe(0);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(REFUSAL);
+    expect(body.not_run).toBe('live_session');
+    expect(body.measured_from).toBe('control_plane');
   });
 
   it('CRITICAL (iii) a socks5 row is untouched — the probe runs even with a live session on it (a socks5 test is a plain CONNECT, not a second tunnel)', async () => {

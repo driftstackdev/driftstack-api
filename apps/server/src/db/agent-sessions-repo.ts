@@ -502,6 +502,22 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
     return rows.map((row) => rowToRecord(row, this.transcriptEncryptionKeyBase64));
   }
 
+  async listOpenByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>> {
+    // (g) G1 — the live-tunnel guard's read: `WHERE account_id = $1 AND
+    // status <> 'closed'`. The predicate is pushed to the DB so a busy
+    // account's closed history is never fetched (nor its transcripts
+    // decrypted) on every VPN fleet test; `paused` rows are open (they still
+    // hold the tunnel). Same order as listByAccount.
+    const rows = await this.database.db
+      .select()
+      .from(agentSessions)
+      .where(
+        and(eq(agentSessions.accountId, accountId), notInArray(agentSessions.status, ['closed'])),
+      )
+      .orderBy(desc(agentSessions.createdAt), desc(agentSessions.id));
+    return rows.map((row) => rowToRecord(row, this.transcriptEncryptionKeyBase64));
+  }
+
   async listPageByAccount(
     accountId: string,
     opts: { limit: number; cursor?: string },

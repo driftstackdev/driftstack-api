@@ -81,6 +81,33 @@ describe('AI-A InMemoryAgentSessionsRepo', () => {
     expect(top2.map((r) => r.id)).toEqual([c.id, b.id]);
   });
 
+  it('(g) G1 listOpenByAccount: excludes closed rows, keeps the account boundary and the newest-first order — the filter is the repo contract, not the caller', async () => {
+    let now = new Date('2026-09-10T00:00:00Z');
+    const repo = new InMemoryAgentSessionsRepo(() => now);
+    const oldOpen = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    now = new Date('2026-09-10T00:01:00Z');
+    const closed = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    now = new Date('2026-09-10T00:02:00Z');
+    const newOpen = await repo.create({ accountId: 'acc_1', tokenBudgetTotal: 1 });
+    const foreign = await repo.create({ accountId: 'acc_2', tokenBudgetTotal: 1 });
+    await repo.closeWithReason(closed.id, 'customer_closed');
+    // POSITIVE CONTROL in the same breath: the full history still has all three,
+    // so an empty/short open list below is the filter, not an empty repo.
+    expect((await repo.listByAccount('acc_1')).map((r) => r.id)).toEqual([
+      newOpen.id,
+      closed.id,
+      oldOpen.id,
+    ]);
+    const open = await repo.listOpenByAccount('acc_1');
+    expect(open.map((r) => r.id)).toEqual([newOpen.id, oldOpen.id]);
+    expect(open.every((r) => r.status !== 'closed')).toBe(true);
+    expect(
+      open.some((r) => r.id === foreign.id),
+      'another account never leaks in',
+    ).toBe(false);
+    expect(await repo.listOpenByAccount('acc_3')).toEqual([]);
+  });
+
   it('appendTranscript: append-only, ordered, bumps updatedAt; previous transcript array is NOT mutated', async () => {
     let now = new Date('2026-05-16T00:00:00Z');
     const repo = new InMemoryAgentSessionsRepo(() => now);

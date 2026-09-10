@@ -291,6 +291,18 @@ export interface AgentSessionsRepo {
     opts?: { limit?: number },
   ): Promise<ReadonlyArray<AgentSessionRecord>>;
   /**
+   * (g) G1 — only the account's NON-TERMINAL sessions (`status <> 'closed'`,
+   * so `active` AND `paused`: a paused session still holds its tunnel). The
+   * proxy-test live-tunnel guard needs exactly "is anything open on this
+   * proxy?", and `listByAccount` answered it by fetching the account's WHOLE
+   * history and decrypting every transcript per VPN fleet test. The filter is
+   * the repo's contract, not the caller's: a closed row is never returned, so a
+   * caller that trusts the result reads a closed session as "not blocking"
+   * without re-checking `status`. Same (created_at, id) desc order as
+   * `listByAccount`.
+   */
+  listOpenByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>>;
+  /**
    * Cursor-paginated list for GET /v1/agent-sessions — keyset on
    * (created_at, id) desc, so a busy account can page its full AI-session
    * history (the old `listByAccount({ limit: 100 })` capped it at 100 with no
@@ -722,6 +734,23 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
     });
     return Promise.resolve(opts?.limit !== undefined ? out.slice(0, opts.limit) : out);
+  }
+
+  listOpenByAccount(accountId: string): Promise<ReadonlyArray<AgentSessionRecord>> {
+    // Mirror the Drizzle `WHERE account_id = $1 AND status <> 'closed'`: a
+    // closed row is filtered HERE, never by the caller, so the fleet-probe
+    // guard's "does a closed session block?" arm exercises this filter.
+    const out: AgentSessionRecord[] = [];
+    for (const rec of this.records.values()) {
+      if (rec.accountId === accountId && rec.status !== 'closed') out.push(rec);
+    }
+    out.sort((a, b) => {
+      const at = a.createdAt instanceof Date ? a.createdAt.getTime() : 0;
+      const bt = b.createdAt instanceof Date ? b.createdAt.getTime() : 0;
+      if (bt !== at) return bt - at;
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+    return Promise.resolve(out);
   }
 
   listPageByAccount(

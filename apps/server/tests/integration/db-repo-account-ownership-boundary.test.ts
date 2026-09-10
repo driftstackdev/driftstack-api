@@ -197,6 +197,27 @@ describe.skipIf(!process.env.CI && !process.env.DATABASE_URL)(
       expect(page.items, 'the attacker’s page is empty').toEqual([]);
     });
 
+    it('CRITICAL (g) G1 the open-session read enforces the same boundary AND drops closed rows in SQL. It is the read behind the VPN live-tunnel refusal: a leak across accounts would refuse a customer’s test for a stranger’s session, and a closed row leaking through would refuse forever.', async () => {
+      const victim = await seedAccount();
+      const attacker = await seedAccount();
+      const openId = await seedSession(victim);
+      const closedId = await seedSession(victim);
+      await sessions!.closeWithReason(closedId, 'customer_closed');
+
+      // Positive control first: the unfiltered read still shows both rows, so
+      // the shorter list below is the status predicate and not a thin fixture.
+      expect((await sessions!.listByAccount(victim)).map((s) => s.id).sort()).toEqual(
+        [openId, closedId].sort(),
+      );
+      const open = await sessions!.listOpenByAccount(victim);
+      expect(
+        open.map((s) => s.id),
+        'only the open row comes back',
+      ).toEqual([openId]);
+      expect(open[0]?.status).toBe('active');
+      expect(await sessions!.listOpenByAccount(attacker), 'the attacker sees nothing').toEqual([]);
+    });
+
     it('CRITICAL the active-session count is per account. It feeds the concurrency cap, so a count that leaks across accounts lets one customer’s usage exhaust another’s quota.', async () => {
       const victim = await seedAccount();
       const attacker = await seedAccount();

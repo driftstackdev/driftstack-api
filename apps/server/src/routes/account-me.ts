@@ -161,7 +161,7 @@ export interface AccountMeRoutesOptions {
    * composition is unchanged). Typed as a Pick of the real repo so the method
    * cannot drift from the one the session routes use.
    */
-  agentSessions?: Pick<AgentSessionsRepo, 'listByAccount'>;
+  agentSessions?: Pick<AgentSessionsRepo, 'listOpenByAccount'>;
 }
 
 /** T-1 — the vantage a proxy test is measured from. `cp` (default) keeps the
@@ -1138,12 +1138,18 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // of the tunnel — rides along so the GUI still shows where it exits.
           // A closed session holds no tunnel and does not block. A socks5/http
           // row is untouched: its test is a plain CONNECT, not a second tunnel.
+          // (g) G1 — `listOpenByAccount` returns only NON-closed rows (the
+          // filter is the repo's contract, pushed to SQL), so the account's
+          // closed history is never fetched — nor its transcripts decrypted —
+          // per VPN fleet test. Trust that contract here rather than
+          // re-checking `status`: a repo that leaked closed rows would then
+          // refuse, and the "closed session does not block" arm would catch it.
           if (
             agentSessions !== undefined &&
             (row.scheme === 'openvpn' || row.scheme === 'wireguard')
           ) {
-            const sessions = await agentSessions.listByAccount(ctx.account.id);
-            const live = sessions.find((s) => s.status !== 'closed' && s.proxyId === row.id);
+            const open = await agentSessions.listOpenByAccount(ctx.account.id);
+            const live = open.find((s) => s.proxyId === row.id);
             if (live !== undefined) {
               request.log.info(
                 { proxyId: row.id, agentSessionId: live.id, status: live.status },
