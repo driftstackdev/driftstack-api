@@ -36,7 +36,7 @@ import { maskApiKey } from '../components/ApiKeyMaskedSpan';
 import { SettingsAccountCard } from '../components/SettingsAccountCard';
 import { useToasts } from '../lib/toasts';
 import { useAppVersion } from '../lib/app-version';
-import { checkForUpdate, type AvailableUpdate } from '../lib/updater';
+import { checkForUpdateVerbose, type AvailableUpdate } from '../lib/updater';
 
 const CLOUD_URL = 'https://api.driftstack.dev';
 const SELF_HOSTED_DEFAULT = 'http://localhost:3000';
@@ -85,11 +85,14 @@ export function SettingsView(): JSX.Element {
     setFoundUpdate(null);
     setInstallState('idle');
     try {
-      const u = await checkForUpdate();
-      setFoundUpdate(u);
-      setUpdateCheck(u === null ? 'none' : 'found');
+      // #6 — the VERBOSE check distinguishes "up to date" (none) from "could not reach
+      // the update server" (unreachable). The old checkForUpdate collapsed both to null,
+      // so an offline/failed manual check falsely reported "You are on the latest version."
+      const r = await checkForUpdateVerbose();
+      setFoundUpdate(r.update ?? null);
+      setUpdateCheck(r.status === 'unreachable' ? 'error' : r.status);
     } catch {
-      // checkForUpdate is documented not to throw, but a manual check must not
+      // checkForUpdateVerbose is documented not to throw, but a manual check must not
       // be able to strand the button on "Checking…" if that ever changes.
       setUpdateCheck('error');
     }

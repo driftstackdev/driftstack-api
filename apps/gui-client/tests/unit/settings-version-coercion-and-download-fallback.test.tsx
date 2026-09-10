@@ -41,12 +41,16 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => useSettingsMock(),
 }));
 
-// The offered update, swapped per test. SettingsView only calls checkForUpdate
-// from the "Check for updates" button — never on mount — so this is inert for
+// The offered update, swapped per test. SettingsView calls checkForUpdateVerbose
+// from the "Check for updates" button (#6) — never on mount — so this is inert for
 // the connection-test case below.
 let available: unknown = null;
 vi.mock('../../src/lib/updater', () => ({
   checkForUpdate: () => Promise.resolve(available),
+  checkForUpdateVerbose: () =>
+    Promise.resolve(
+      available === null ? { status: 'none' } : { status: 'found', update: available },
+    ),
 }));
 
 vi.mock('../../src/lib/browser-sign-in', () => ({

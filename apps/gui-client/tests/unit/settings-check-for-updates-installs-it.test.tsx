@@ -113,6 +113,12 @@ const install = vi.fn(() => Promise.resolve());
 let available: unknown = null;
 vi.mock('../../src/lib/updater', () => ({
   checkForUpdate: () => Promise.resolve(available),
+  // #6 — Settings now calls the VERBOSE variant; mirror it so `available` still drives
+  // the found/none case (a real result carries the same install()-bearing update).
+  checkForUpdateVerbose: () =>
+    Promise.resolve(
+      available === null ? { status: 'none' } : { status: 'found', update: available },
+    ),
 }));
 
 vi.mock('../../src/lib/browser-sign-in', () => ({

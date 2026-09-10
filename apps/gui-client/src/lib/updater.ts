@@ -196,19 +196,38 @@ export function isNewerVersion(offered: string, current: string): boolean {
   return false; // equal core → not newer
 }
 
+/** #6 — a discriminated update-check result. `checkForUpdate` collapses it to
+ *  AvailableUpdate | null for the auto-update loop, but the MANUAL Settings check needs
+ *  to tell "you are up to date" (none) apart from "the check could not reach the update
+ *  server" (unreachable) — collapsing both to null made a failed manual check read as
+ *  "You are on the latest version." (owner-adjacent audit finding). */
+export interface UpdateCheckResult {
+  status: 'none' | 'found' | 'unreachable';
+  update?: AvailableUpdate;
+}
+
+/** Back-compat wrapper preserving the never-throws, null-on-no-update contract every
+ *  existing caller (incl. the App.tsx auto-update loop) relies on. */
 export async function checkForUpdate(
   deps: UpdaterDeps = defaultDeps,
 ): Promise<AvailableUpdate | null> {
+  const result = await checkForUpdateVerbose(deps);
+  return result.status === 'found' ? (result.update ?? null) : null;
+}
+
+export async function checkForUpdateVerbose(
+  deps: UpdaterDeps = defaultDeps,
+): Promise<UpdateCheckResult> {
   let update: Update | null;
   try {
     update = await deps.check();
   } catch {
     // The plugin is not permitted here (macOS) or the check genuinely failed.
-    // Fall back to READING the manifest, which needs no updater capability, so
-    // the customer at least learns a new version exists.
-    return checkManifestOnly(deps);
+    // Fall back to READING the manifest, which needs no updater capability, so the
+    // customer at least learns a new version exists AND whether the server was reachable.
+    return checkManifestVerbose(deps);
   }
-  if (!update) return null;
+  if (!update) return { status: 'none' };
 
   const offered = update;
   // ⭐ WHY THIS FUNCTION EXISTS IN THIS SHAPE — historical, and the history is
@@ -233,10 +252,10 @@ export async function checkForUpdate(
   // guard a same/older manifest would render an "Update X available (current X)"
   // banner whose Install reinstalls the same build. Only offer a strictly NEWER
   // version. (audit)
-  if (!isNewerVersion(offered.version, offered.currentVersion)) return null;
+  if (!isNewerVersion(offered.version, offered.currentVersion)) return { status: 'none' };
 
   if (!canInstall) {
-    return {
+    const downloadOnlyUpdate: AvailableUpdate = {
       version: offered.version,
       currentVersion: offered.currentVersion,
       notes: offered.body ?? null,
@@ -249,9 +268,10 @@ export async function checkForUpdate(
           new Error('This platform installs updates manually — open the releases page.'),
         ),
     };
+    return { status: 'found', update: downloadOnlyUpdate };
   }
 
-  return {
+  const installableUpdate: AvailableUpdate = {
     version: offered.version,
     currentVersion: offered.currentVersion,
     notes: offered.body ?? null,
@@ -287,6 +307,7 @@ export async function checkForUpdate(
       if (deps.needsManualRelaunch?.() ?? true) await deps.relaunch();
     },
   };
+  return { status: 'found', update: installableUpdate };
 }
 
 /**
@@ -512,12 +533,12 @@ export function startUpdateChecks(
  * than throwing into the shell. An update check must never be able to break
  * the app it is checking.
  */
-async function checkManifestOnly(deps: UpdaterDeps): Promise<AvailableUpdate | null> {
+async function checkManifestVerbose(deps: UpdaterDeps): Promise<UpdateCheckResult> {
   try {
     const currentVersion = await deps.currentVersion();
-    if (currentVersion === null) return null;
+    if (currentVersion === null) return { status: 'none' };
     const res = await fetch(MANIFEST_URL, { redirect: 'follow' });
-    if (!res.ok) return null;
+    if (!res.ok) return { status: 'unreachable' };
     const body: unknown = await res.json();
     const version =
       typeof body === 'object' &&
@@ -525,14 +546,14 @@ async function checkManifestOnly(deps: UpdaterDeps): Promise<AvailableUpdate | n
       typeof (body as { version?: unknown }).version === 'string'
         ? (body as { version: string }).version
         : null;
-    if (version === null || !isNewerVersion(version, currentVersion)) return null;
+    if (version === null || !isNewerVersion(version, currentVersion)) return { status: 'none' };
     const notes =
       typeof body === 'object' &&
       body !== null &&
       typeof (body as { notes?: unknown }).notes === 'string'
         ? (body as { notes: string }).notes
         : null;
-    return {
+    const manifestUpdate: AvailableUpdate = {
       version,
       currentVersion,
       notes,
@@ -545,7 +566,9 @@ async function checkManifestOnly(deps: UpdaterDeps): Promise<AvailableUpdate | n
           new Error('This platform installs updates manually — open the releases page.'),
         ),
     };
+    return { status: 'found', update: manifestUpdate };
   } catch {
-    return null;
+    // A thrown fetch/json is the manifest fallback's own "could not reach" signal.
+    return { status: 'unreachable' };
   }
 }
