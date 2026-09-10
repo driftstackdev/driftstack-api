@@ -214,9 +214,13 @@ describe('W360.C admin-panel /webhook-dlq page content parity', () => {
   });
 
   it('reconciles ambiguous requeue/discard row removals before any retry', () => {
-    expect(body).toContain('Requeue outcome is unknown after the request timed out.');
+    expect(body).toContain(
+      'Requeue outcome is unknown after the request timed out or returned a server error.',
+    );
     expect(body).toContain('it was likely re-enqueued; do not submit it again.');
-    expect(body).toContain('Discard outcome is unknown after the request timed out.');
+    expect(body).toContain(
+      'Discard outcome is unknown after the request timed out or returned a server error.',
+    );
     expect(body).toContain('only its audit trace remains; do not submit it again.');
     expect(body).toMatch(/const refreshed = await load\(\)/);
   });

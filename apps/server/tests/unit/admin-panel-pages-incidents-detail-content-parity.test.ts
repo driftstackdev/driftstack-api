@@ -36,7 +36,7 @@ function read(p: string): string {
 // unchanged and now linear.
 function hasSafeMutationErrorBoundary(source: string): boolean {
   return (
-    /return r\s*\.json\(\)\s*\.catch\(function \(\) \{\s*return \{\};\s*\}\)\s*\.then\(function \(b\) \{\s*return Promise\.reject\(window\.driftstackResponseError\(r, b\)\);\s*\}\);/.test(
+    /return r\s*\.json\(\)\s*\.catch\(function \(\) \{\s*return \{\};\s*\}\)\s*\.then\(function \(b\) \{\s*const responseError = window\.driftstackResponseError\(r, b\);\s*responseError\.httpStatus = r\.status;\s*return Promise\.reject\(responseError\);\s*\}\);/.test(
       source,
     ) && !/new Error\(b\.(?:detail|title)/.test(source)
   );

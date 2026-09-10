@@ -308,6 +308,19 @@ const isResolved = incident.status === 'resolved';
         return window.driftstackRequestErrorMessage(err, fallback);
       }
 
+      // Canonical unknown-outcome predicate — mirrors
+      // status-subscribers.astro / incidents/index.astro. A 5xx or a dropped
+      // connection (AbortError from the deadline) means the mutation may have
+      // committed server-side even though we saw no confirmation, so a naive
+      // retry could duplicate a public timeline entry.
+      function mutationOutcomeIsUnknown(err) {
+        if (err && err.name === 'AbortError') return true;
+        const explicitStatus = Number(err && err.httpStatus);
+        if (Number.isInteger(explicitStatus)) return explicitStatus >= 500;
+        const match = String((err && err.message) || '').match(/^HTTP\s+(\d{3})$/i);
+        return Boolean(match && Number(match[1]) >= 500);
+      }
+
       // Branded inline banner — replaces native alert() (2026-05-29
       // "no alert boxes everywhere"). Matches the showBanner pattern used
       // across the admin panel (status-subscribers / leads): role="status"
@@ -440,16 +453,40 @@ const isResolved = incident.status === 'resolved';
         }
       }
 
+      // A failed load must not leave the static shell's fabricated
+      // 'minor / investigating' placeholder badges or the live mutation forms
+      // on screen — an operator could act on stale/fake state. Reset the header
+      // to a neutral 'unavailable' treatment (no fabricated severity/status)
+      // and hide both mutation form groups.
+      function applyIncidentUnavailable() {
+        const sevBadge = document.querySelector('[data-field="severity-badge"]');
+        if (sevBadge) sevBadge.classList.add('hidden');
+        const statusBadge = document.querySelector('[data-field="status-badge"]');
+        if (statusBadge) {
+          statusBadge.textContent = 'unavailable';
+          statusBadge.className =
+            'inline-flex rounded-full bg-tk-hover px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-ink-2';
+        }
+        const privBadge = document.querySelector('[data-field="private-badge"]');
+        if (privBadge) privBadge.classList.add('hidden');
+        const activeGroup = document.querySelector('[data-form-group="active"]');
+        if (activeGroup) activeGroup.classList.add('hidden');
+        const resolvedGroup = document.querySelector('[data-form-group="resolved"]');
+        if (resolvedGroup) resolvedGroup.classList.add('hidden');
+      }
+
       function loadIncident() {
         if (loadController) loadController.abort();
         const generation = ++loadGeneration;
         const token = getToken();
         if (!incidentId) {
+          applyIncidentUnavailable();
           showBanner('Invalid incident link.', true);
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
         }
         if (!token) {
+          applyIncidentUnavailable();
           showBanner('Sign in with a staff admin account to see this incident.', true);
           if (typeof window.dashboardHydrated === 'function') window.dashboardHydrated();
           return Promise.resolve(false);
@@ -476,6 +513,7 @@ const isResolved = incident.status === 'resolved';
           })
           .catch(function (err) {
             if (generation !== loadGeneration) return;
+            applyIncidentUnavailable();
             const msg = requestErrorMessage(err, 'network error');
             if (msg === 'forbidden') {
               showBanner(
@@ -595,7 +633,9 @@ const isResolved = incident.status === 'resolved';
                     return {};
                   })
                   .then(function (b) {
-                    return Promise.reject(window.driftstackResponseError(r, b));
+                    const responseError = window.driftstackResponseError(r, b);
+                    responseError.httpStatus = r.status;
+                    return Promise.reject(responseError);
                   });
               }
               // Update/resolve/reopen success bodies are unused. Once accepted,
@@ -606,7 +646,7 @@ const isResolved = incident.status === 'resolved';
               window.location.reload();
             })
             .catch(async function (err) {
-              if (err && err.name === 'AbortError') {
+              if (mutationOutcomeIsUnknown(err)) {
                 const refreshed = await loadIncident();
                 const completed =
                   refreshed &&
@@ -630,27 +670,45 @@ const isResolved = incident.status === 'resolved';
                   incidentMutationBlockReason = 'completed';
                   showBanner(
                     urlSuffix === '/updates'
-                      ? 'The request timed out, but the refreshed timeline contains a new exact message and status. It was not posted again.'
+                      ? 'The request timed out or the server errored, but the refreshed timeline contains a new exact message and status. It was not posted again.'
                       : urlSuffix === '/resolve'
-                        ? 'The request timed out, but the refreshed incident is resolved. Resolve was not submitted again.'
-                        : 'The request timed out, but the refreshed incident is active again. Reopen was not submitted again.',
+                        ? 'The request timed out or the server errored, but the refreshed incident is resolved. Resolve was not submitted again.'
+                        : 'The request timed out or the server errored, but the refreshed incident is active again. Reopen was not submitted again.',
                     true,
                   );
                 } else if (refreshed) {
+                  incidentMutationBlocked = true;
+                  incidentMutationBlockReason = 'unverified';
                   showBanner(
-                    'The request timed out, but the refreshed incident does not contain the submitted change. You can retry if it is still needed.',
+                    'The outcome is unknown (the request timed out or the server returned an error); the update may have posted — check the timeline before retrying. The incident was refreshed and does not yet show the change, but that is not proof it failed. Reload this page before retrying.',
                     true,
                   );
                 } else {
                   incidentMutationBlocked = true;
                   incidentMutationBlockReason = 'unverified';
                   showBanner(
-                    "The mutation request timed out and we couldn't refresh the incident. Reload and verify it before retrying; another submission could duplicate a timeline entry or repeat a state transition.",
+                    "The outcome is unknown (the request timed out or the server returned an error) and we couldn't refresh the incident; the update may have posted — check the timeline before retrying. Reload and verify it before retrying; another submission could duplicate a timeline entry or repeat a state transition.",
                     true,
                   );
                 }
                 return;
               }
+              if (err && Number(err.httpStatus) === 409) {
+                // A 409 is a definitive conflict (the incident changed under
+                // this action), not a fresh-submit case. Block until the
+                // operator reloads and inspects it — mirrors the 409 latch in
+                // incidents/index.astro.
+                incidentMutationBlocked = true;
+                incidentMutationBlockReason = 'conflict';
+                showBanner(
+                  'The incident changed under this action (409 conflict). Reload and inspect it before retrying.',
+                  true,
+                );
+                return;
+              }
+              // Any other definitive 4xx rejection means the mutation never
+              // applied, so re-enabling the form for a corrected fresh submit
+              // is safe (endIncidentMutation re-enables when not blocked).
               showBanner(
                 'Post failed: ' + requestErrorMessage(err, 'network error'),
                 true,

@@ -482,6 +482,7 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       function load(options) {
         const append = !!(options && options.append);
+        const preserveOnError = !!(options && options.preserveOnError);
         if (!token) return Promise.resolve(emptyLoadResult());
         const requestedCursor = append ? nextCursor : null;
         if (append && (!requestedCursor || appendInFlight || refusedCursor === requestedCursor)) {
@@ -565,7 +566,9 @@ const apiBaseUrl = resolveApiBaseUrl();
                   '). Existing rows and the retry cursor are unchanged.',
               );
             } else {
-              renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.');
+              if (!preserveOnError) {
+                renderAccountsUnavailable('Could not load accounts. Resolve the error above and retry.');
+              }
               if (msg === 'forbidden') {
                 showBanner(
                   'Access denied — admin scope required. You are signed in as a customer account.',
@@ -591,7 +594,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           });
       }
 
-      function loadWithLive() {
+      function loadWithLive(options) {
         clearTimeout(debounce);
         debounce = 0;
         filterTransitionPending = false;
@@ -599,7 +602,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         firstPageBusy = true;
         setLiveState('loading');
         syncTransitionControls();
-        return load()
+        return load({ preserveOnError: !!(options && options.preserveOnError) })
           .then((result) => {
             if (owner !== liveOwner) return result;
             if (result.loaded) {
@@ -719,7 +722,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             showExpandedPause();
             return;
           }
-          if (!firstPageBusy && !appendInFlight && !filterTransitionPending) loadWithLive();
+          if (!firstPageBusy && !appendInFlight && !filterTransitionPending)
+            loadWithLive({ preserveOnError: true });
         }, 30_000);
         function fmtAge(ms) {
           const s = Math.floor((Date.now() - ms) / 1000);

@@ -687,7 +687,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         )
           .then((r) => {
             if (r.status === 403) return Promise.reject(new Error('forbidden'));
-            return r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status));
+            if (r.ok) return r.json();
+            return r
+              .json()
+              .catch(() => ({}))
+              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
           })
           .then((body) => {
             if (myReq !== inFlight || epoch !== listEpoch) {
@@ -1060,7 +1064,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           debounce = 0;
           if (revokesInFlight.size > 0) return;
           filterTransitionPending = false;
-          loadWithLive();
+          loadWithLive({ preserveOnError: true });
         }, 200);
       }
       if (accountIdEl) accountIdEl.addEventListener('input', scheduleLoad);
@@ -1105,7 +1109,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             !appendInFlight &&
             !filterTransitionPending
           ) {
-            loadWithLive();
+            loadWithLive({ preserveOnError: true });
           }
         }, 30_000);
         setInterval(() => {

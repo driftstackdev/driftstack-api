@@ -184,7 +184,9 @@ describe('admin-panel /api-keys source contract', () => {
     expect(body).toMatch(/if \(expandedView\) \{\s*showExpandedPause\(\);\s*return;\s*\}/);
     expect(body).toMatch(/\}, 30_000\);/);
     expect(body).toMatch(/!firstPageBusy &&\s*!appendInFlight &&\s*!filterTransitionPending/);
-    expect(body).toMatch(/setTimeout\(\(\) => \{[\s\S]*?loadWithLive\(\);[\s\S]*?\}, 200\)/);
+    expect(body).toMatch(
+      /setTimeout\(\(\) => \{[\s\S]*?loadWithLive\(\{ preserveOnError: true \}\);[\s\S]*?\}, 200\)/,
+    );
   });
 
   it('blocks pagination/filter transitions for every active revoke request', () => {

@@ -122,11 +122,16 @@ describe('admin incident detail mutation lifecycle', () => {
 
     releaseUpdate(response({ detail: 'test failure' }, 500));
     await flush(40);
-    expect(updateButton.disabled).toBe(false);
+    // #5 (customer-impact) fix: a 5xx is an UNKNOWN outcome — the mutation may
+    // have committed server-side — so the form is BLOCKED for a reconcile, NOT
+    // re-enabled. Re-enabling let an operator retry and DUPLICATE a public
+    // status-page timeline entry. The whole lane stays disabled; the submit
+    // button drops aria-busy and reads "Verify before retrying".
+    expect(updateButton.disabled).toBe(true);
     expect(updateButton.hasAttribute('aria-busy')).toBe(false);
-    expect(updateButton.textContent).toBe('Post update');
-    expect(resolveButton.disabled).toBe(false);
-    expect(reopenButton.disabled).toBe(false);
+    expect(updateButton.textContent).toBe('Verify before retrying');
+    expect(resolveButton.disabled).toBe(true);
+    expect(reopenButton.disabled).toBe(true);
   });
 
   it('does not report malformed accepted update JSON as a failed mutation', async () => {

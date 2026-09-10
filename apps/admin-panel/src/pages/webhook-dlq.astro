@@ -190,7 +190,25 @@ const webhookEventTypes = WebhookEventTypeSchema.options;
         return r
           .json()
           .catch(() => ({}))
-          .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+          .then((b) => {
+            const error = window.driftstackResponseError(r, b);
+            // Carry the status so mutationOutcomeIsUnknown can tell a 5xx
+            // (write may have committed) from a definitive 4xx.
+            error.httpStatus = r.status;
+            return Promise.reject(error);
+          });
+      }
+      // Canonical unknown-outcome predicate, mirrored from
+      // status-subscribers.astro:254 — true for an AbortError (deadline abort)
+      // OR a 5xx (httpStatus set by mutationError above, or an "HTTP nnn"
+      // message). A requeue/discard that 5xx'd or lost its response may still
+      // have committed, so callers refresh + advise rather than declare failure.
+      function mutationOutcomeIsUnknown(err) {
+        if (err && err.name === 'AbortError') return true;
+        const explicitStatus = Number(err && err.httpStatus);
+        if (Number.isInteger(explicitStatus)) return explicitStatus >= 500;
+        const match = String((err && err.message) || '').match(/^HTTP\s+(\d{3})$/i);
+        return Boolean(match && Number(match[1]) >= 500);
       }
       // Keep the action + phase, not only membership. Auto/manual refreshes
       // rebuild the row DOM while a slow mutation may still be pending; the
@@ -582,10 +600,10 @@ const webhookEventTypes = WebhookEventTypeSchema.options;
             return load();
           })
           .catch(async (err) => {
-            if (err && err.name === 'AbortError') {
+            if (mutationOutcomeIsUnknown(err)) {
               const refreshed = await load();
               showBanner(
-                'Requeue outcome is unknown after the request timed out. ' +
+                'Requeue outcome is unknown after the request timed out or returned a server error. ' +
                   (refreshed ? 'The DLQ was refreshed. ' : "We couldn't refresh the DLQ. ") +
                   'If ' +
                   id +
@@ -642,10 +660,10 @@ const webhookEventTypes = WebhookEventTypeSchema.options;
           showBanner('Discarded ' + id + '. Refreshing list…');
           await load();
         } catch (err) {
-          if (err && err.name === 'AbortError') {
+          if (mutationOutcomeIsUnknown(err)) {
             const refreshed = await load();
             showBanner(
-              'Discard outcome is unknown after the request timed out. ' +
+              'Discard outcome is unknown after the request timed out or returned a server error. ' +
                 (refreshed ? 'The DLQ was refreshed. ' : "We couldn't refresh the DLQ. ") +
                 'If ' +
                 id +
