@@ -429,6 +429,41 @@ describe('(b) — Test proxy on a VPN row asks the FLEET after the resolve', () 
     );
     expect(testProxy).not.toHaveBeenCalled();
   });
+
+  // (g) — pins `{ adoptExit: true }` on the card's persistServerProbe call: the
+  // shared step writes a VPN row's observed exit ONLY when the caller asks (a
+  // SOCKS5 caller must not), so dropping the flag in runFleetTestForRow makes
+  // this red — the fleet number lands, the exit never does.
+  it('CRITICAL a card Test whose fleet reply carries exit_observed writes exitIp into the cache (adoptExit)', async () => {
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 31,
+      measured_from: 'fleet',
+      node_id: 'mac-07',
+      exit_observed: {
+        ip: '203.0.113.9',
+        country: 'NL',
+        timezone: 'Europe/Amsterdam',
+        region: null,
+        city: null,
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    await waitFor(() => expect(AccountProxies.testAccountProxy).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(storedProbe('vpn1')?.serverLatencyMs).toBe(31));
+    await waitFor(() => expect(storedProbe('vpn1')?.exitIp).toBe('203.0.113.9'));
+    expect(storedProbe('vpn1')?.exitCountry).toBe('NL');
+    expect(storedProbe('vpn1')?.exitTimezone).toBe('Europe/Amsterdam');
+    expect(storedProbe('vpn1')?.endpoint).toEqual({
+      resolved: true,
+      ip: '203.0.113.9',
+      message: 'Resolved',
+    });
+  });
 });
 
 describe('(b) — a VPN LAUNCH never runs the fleet test', () => {

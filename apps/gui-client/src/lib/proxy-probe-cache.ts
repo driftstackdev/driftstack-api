@@ -733,9 +733,77 @@ export function saveServerProbeResult(
  * so `isProxyUsable` and every derivation built on it read "not a SOCKS5
  * verdict" — never a fake pass, and never the un-gated probe's false
  * "unreachable" either. Replaces any SOCKS5 verdict the row held (that verdict
- * was the bug); exit-geo and the server-side fields are NOT carried over,
- * because they were measured through a SOCKS5 listener this row does not have.
+ * was the bug), and carries NOTHING over from it: its exit-geo and server-side
+ * fields were measured through a SOCKS5 listener this row does not have.
+ *
+ * ⛔ (g) A prior ENDPOINT entry is a different case. Its server-measured fields
+ * (fleet latency + vantage, the QUIC-relay verdict, the OS fingerprint, the
+ * observed exit, a live session's QUIC verdict) came from the fleet probe or
+ * the session that followed an EARLIER pre-flight of this very row, and they
+ * are carried over when the new verdict is RESOLVED. The grid's Check runs
+ * this pre-flight BEFORE it asks the fleet, so without the carry-over a test
+ * the control plane REFUSED (`not_run` — a live session holds the tunnel, the
+ * node was busy) erased every field the last measurement had written, and the
+ * row that "kept what it holds" had nothing left to hold. An UNRESOLVED
+ * endpoint still drops them all: nothing can be measured through a dead
+ * endpoint, and a number beside "unresolved" would read as current.
+ *
+ * ⛔ (g-followup) The carry-over is keyed on the ADDRESS, not merely on the
+ * entry's shape: the prior entry must itself be a RESOLVED endpoint whose `ip`
+ * equals the one just resolved. A hostname that now answers with a different
+ * address is a server that was never measured — its predecessor's fleet
+ * latency, vantage, relay verdict, OS fingerprint and exit would render as
+ * current on the grid (the overlay keys on `endpoint.resolved` alone), and a
+ * fleet reply that writes nothing (`not_run` / `unavailable` / `failed`) would
+ * leave them there. A changed address drops every server-measured field.
  */
+/** The fields of an entry that a fleet probe or a live session wrote — every
+ *  optional member except the verdict itself (`result` / `at` / `endpoint`).
+ *  Listed by name so a new server-measured field must be added HERE to survive
+ *  a pre-flight, rather than surviving by accident of a spread. */
+function serverMeasuredFields(
+  prior: CachedProbe,
+): Omit<Partial<CachedProbe>, 'result' | 'at' | 'endpoint'> {
+  const {
+    exitIp,
+    exitCountry,
+    exitAt,
+    exitCity,
+    exitRegion,
+    exitTimezone,
+    exitAsnOrg,
+    osFingerprint,
+    serverLatencyMs,
+    quicMeasured,
+    quicMeasuredAt,
+    measuredFrom,
+    nodeId,
+    quicProbe,
+  } = prior;
+  const kept = {
+    exitIp,
+    exitCountry,
+    exitAt,
+    exitCity,
+    exitRegion,
+    exitTimezone,
+    exitAsnOrg,
+    osFingerprint,
+    serverLatencyMs,
+    quicMeasured,
+    quicMeasuredAt,
+    measuredFrom,
+    nodeId,
+    quicProbe,
+  };
+  // Absent stays absent: an `undefined` member would still be a key in the
+  // stored object (and in a toEqual), where the entry never had one.
+  for (const k of Object.keys(kept) as (keyof typeof kept)[]) {
+    if (kept[k] === undefined) delete kept[k];
+  }
+  return kept;
+}
+
 export function saveEndpointResult(
   proxyId: string,
   endpoint: CachedEndpointVerdict,
@@ -743,7 +811,16 @@ export function saveEndpointResult(
 ): Promise<ProbeCacheMap> {
   return writeLock(async () => {
     const all = await loadProbeCache();
+    const prior = all[proxyId];
+    const carried =
+      endpoint.resolved &&
+      prior?.endpoint !== undefined &&
+      prior.endpoint.resolved &&
+      prior.endpoint.ip === endpoint.ip
+        ? serverMeasuredFields(prior)
+        : {};
     all[proxyId] = {
+      ...carried,
       result: endpointPlaceholderResult(endpoint),
       at,
       endpoint: { resolved: endpoint.resolved, ip: endpoint.ip, message: endpoint.message },

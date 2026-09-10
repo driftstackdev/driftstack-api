@@ -301,10 +301,13 @@ export interface ListExitProxyLike {
  * (lumtest geo + ASN); the server's observation for it is at best a duplicate
  * and at worst geo-less, and writing it would overwrite real geo with nulls
  * (the same rule persistServerProbe's `adoptExit` enforces). Never DOWNGRADE
- * (same rule as above), and never REWIND: an observation no newer than the
- * exit already stored for the same ip/geo writes nothing, so a 15s poll does
- * not rewrite the store every tick. Best-effort per proxy; returns the proxy
- * ids written, for the guard.
+ * (same rule as above), and never REWIND: an observation whose `observed_at`
+ * is OLDER than the exit already stored writes nothing — regardless of
+ * whether the ip or geo differ (a fleet test measured minutes ago outranks a
+ * list row still carrying last week's session exit) — and the same identity
+ * at the same stamp writes nothing either, so a 15s poll does not rewrite the
+ * store every tick. Best-effort per proxy; returns the proxy ids written, for
+ * the guard.
  *
  * ⛔ A VPN row with NO cache entry on THIS Mac (a second Mac, a fresh install —
  * the very case a session-observed exit exists for) is not skipped: the exit
@@ -359,13 +362,22 @@ export async function adoptListExitObserved(
     const parsed = e.observed_at === null ? Number.NaN : Date.parse(e.observed_at);
     const at = Number.isFinite(parsed) ? parsed : nowMs;
     const sameIp = existing.exitIp === e.ip;
+    // ⛔ Never REWIND, regardless of ip or geo: an observation OLDER than the
+    // exit already stored describes an earlier state of the tunnel, and the
+    // stored one (a fleet test's, or a fresher session's) already superseded
+    // it. The old rule only refused a rewind of the SAME ip/geo, so a list row
+    // still carrying last week's exit could overwrite the exit a fleet test
+    // measured minutes ago whenever the two ips differed.
+    const rewind = existing.exitAt !== undefined && at < existing.exitAt;
+    // …and never CHURN: the same identity at the same (or an older) stamp is
+    // a no-op, so a 15s poll does not rewrite the store every tick.
     const unchanged =
       sameIp &&
       (existing.exitCountry ?? null) === e.country &&
       (existing.exitTimezone ?? null) === e.timezone &&
       existing.exitAt !== undefined &&
       existing.exitAt >= at;
-    if (unchanged || isExitDowngrade(existing, e)) continue;
+    if (rewind || unchanged || isExitDowngrade(existing, e)) continue;
     try {
       cache = await saveExitResult(
         p.id,

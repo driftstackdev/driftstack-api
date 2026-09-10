@@ -324,6 +324,73 @@ describe('adoptListExitObserved — VPN rows only, never a downgrade, never a re
     expect(entry?.exitAsnOrg).toBeNull();
   });
 
+  // (g) — the old rule refused a rewind of the SAME ip/geo only, so a list row
+  // still carrying last week's session exit overwrote the exit a fleet test
+  // measured minutes ago whenever the two ips differed. Mutation: drop the
+  // `rewind` guard in adoptListExitObserved and the first arm reds.
+  it('CRITICAL never REWINDS regardless of ip or geo: an observation OLDER than the stored exit writes nothing', async () => {
+    await seedVpnEntry('wg1');
+    await adoptListExitObserved([WG_ROW], [WG], NOW);
+    const writesAfterFirst = storeWrites;
+    const olderOtherIp = {
+      ...EXIT,
+      ip: '198.51.100.2',
+      country: 'DE',
+      timezone: 'Europe/Berlin',
+      observed_at: '2026-09-10T07:00:00.000Z',
+    };
+    expect(
+      await adoptListExitObserved([{ ...WG_ROW, exit_observed: olderOtherIp }], [WG], NOW),
+    ).toEqual([]);
+    // …and the same ip with DIFFERENT geo, older, is a rewind too.
+    const olderSameIpOtherGeo = {
+      ...EXIT,
+      country: 'DE',
+      timezone: 'Europe/Berlin',
+      observed_at: '2026-09-10T07:30:00.000Z',
+    };
+    expect(
+      await adoptListExitObserved([{ ...WG_ROW, exit_observed: olderSameIpOtherGeo }], [WG], NOW),
+    ).toEqual([]);
+    expect(storeWrites).toBe(writesAfterFirst);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitIp).toBe('203.0.113.9');
+    expect(entry?.exitCountry).toBe('NL');
+    expect(entry?.exitTimezone).toBe('Europe/Amsterdam');
+    expect(entry?.exitAt).toBe(OBSERVED_AT_MS);
+  });
+
+  it('CONTROL — the same different-ip observation, NEWER than the stored exit, is written (the guard is on the stamp, not the ip)', async () => {
+    await seedVpnEntry('wg1');
+    await adoptListExitObserved([WG_ROW], [WG], NOW);
+    const newerOtherIp = {
+      ...EXIT,
+      ip: '198.51.100.2',
+      country: 'DE',
+      timezone: 'Europe/Berlin',
+      observed_at: '2026-09-10T09:00:00.000Z',
+    };
+    expect(
+      await adoptListExitObserved([{ ...WG_ROW, exit_observed: newerOtherIp }], [WG], NOW),
+    ).toEqual(['wg1']);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitIp).toBe('198.51.100.2');
+    expect(entry?.exitCountry).toBe('DE');
+    expect(entry?.exitTimezone).toBe('Europe/Berlin');
+    expect(entry?.exitAt).toBe(Date.parse('2026-09-10T09:00:00.000Z'));
+  });
+
+  it('a fleet-measured exit (stamped with this clock) is not rewound by an older session observation of another ip', async () => {
+    await seedVpnEntry('wg1');
+    const { saveExitResult } = await import('../../src/lib/proxy-probe-cache');
+    // The fleet test wrote its exit at NOW (local clock), well after OBSERVED_AT.
+    await saveExitResult('wg1', '198.51.100.2', 'DE', { timezone: 'Europe/Berlin' }, NOW);
+    expect(await adoptListExitObserved([WG_ROW], [WG], NOW)).toEqual([]);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitIp).toBe('198.51.100.2');
+    expect(entry?.exitAt).toBe(NOW);
+  });
+
   it("a null observed_at is stamped with the caller's clock, never NaN", async () => {
     await seedVpnEntry('wg1');
     await adoptListExitObserved(

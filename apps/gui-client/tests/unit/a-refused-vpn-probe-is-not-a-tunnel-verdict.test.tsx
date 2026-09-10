@@ -115,6 +115,8 @@ import {
   loadProbeCache,
   saveEndpointResult,
   saveExitResult,
+  saveOsFingerprint,
+  saveServerProbeResult,
 } from '../../src/lib/proxy-probe-cache';
 import { persistServerProbe, serverProbeOutcome } from '../../src/lib/proxy-server-test';
 const { ProxiesView } = await import('../../src/views/ProxiesView');
@@ -324,6 +326,128 @@ describe('persistServerProbe — a refusal writes no measurement, adopts the ses
     expect((await loadProbeCache()).vpn1?.exitIp).toBe('203.0.113.9');
   });
 
+  // (g) — the grid's Check writes the endpoint pre-flight BEFORE it asks the
+  // fleet, and that write used to replace the whole entry, so a REFUSED test
+  // (nothing measured) erased the latency / vantage / relay verdict / OS
+  // fingerprint the last measurement had written. Mutation: make
+  // saveEndpointResult carry nothing over and the CRITICAL arms red.
+  it('CRITICAL the endpoint pre-flight (resolved) preserves the server-measured fields of a prior endpoint entry', async () => {
+    await seed();
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    await saveOsFingerprint('vpn1', { os: 'linux', confidence: 'high', reason: 'ttl' }, NOW - 1);
+    await saveExitResult('vpn1', '203.0.113.9', 'NL', { timezone: 'Europe/Amsterdam' }, NOW - 1);
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW,
+    );
+    const entry = cache.vpn1;
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '198.51.100.1', message: 'Resolved' });
+    expect(entry?.at).toBe(NOW);
+    expect(entry?.serverLatencyMs).toBe(42);
+    expect(entry?.measuredFrom).toBe('fleet');
+    expect(entry?.nodeId).toBe('mac-07');
+    expect(entry?.quicProbe).toBe(true);
+    expect(entry?.osFingerprint).toMatchObject({ os: 'linux', confidence: 'high' });
+    expect(entry?.exitIp).toBe('203.0.113.9');
+    expect(entry?.exitAt).toBe(NOW - 1);
+    // Still not a SOCKS5 verdict, still the placeholder.
+    expect(entry?.result).toMatchObject({ reachable: false, auth_ok: false, can_route: false });
+  });
+
+  // (g-followup) The carry-over is keyed on the ADDRESS. Mutation: drop the
+  // `prior.endpoint.ip === endpoint.ip` predicate and this arm reds while the
+  // CRITICAL arm above (same ip) stays green — the two together pin the key.
+  it('CONTROL — a pre-flight that resolves to a DIFFERENT address carries nothing over: the new server was never measured', async () => {
+    await seed();
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    await saveOsFingerprint('vpn1', { os: 'linux', confidence: 'high', reason: 'ttl' }, NOW - 1);
+    await saveExitResult('vpn1', '203.0.113.9', 'NL', { timezone: 'Europe/Amsterdam' }, NOW - 1);
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.77', message: 'Resolved' },
+      NOW,
+    );
+    const entry = cache.vpn1;
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '198.51.100.77', message: 'Resolved' });
+    expect(entry?.at).toBe(NOW);
+    expect(entry?.serverLatencyMs).toBeUndefined();
+    expect(entry?.measuredFrom).toBeUndefined();
+    expect(entry?.nodeId).toBeUndefined();
+    expect(entry?.quicProbe).toBeUndefined();
+    expect(entry?.osFingerprint).toBeUndefined();
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitAt).toBeUndefined();
+    // The entry holds ONLY the verdict triple — no server-measured key, even an
+    // absent one, so a later toEqual on the record sees nothing carried.
+    expect(Object.keys(entry ?? {}).sort()).toEqual(['at', 'endpoint', 'result']);
+  });
+
+  it('CONTROL — a prior UNRESOLVED endpoint entry carries nothing over even when the address now matches', async () => {
+    await saveEndpointResult('vpn1', { resolved: false, ip: '', message: 'NXDOMAIN' }, NOW - 2);
+    // Enrichments written after an unresolved pre-flight (a stale fleet reply
+    // landing late) must not resurface when the name resolves again.
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '', message: 'Resolved' },
+      NOW,
+    );
+    expect(cache.vpn1?.serverLatencyMs).toBeUndefined();
+    expect(cache.vpn1?.measuredFrom).toBeUndefined();
+    expect(cache.vpn1?.endpoint?.resolved).toBe(true);
+  });
+
+  it('CONTROL — an UNRESOLVED pre-flight still drops them all (nothing can be measured through a dead endpoint)', async () => {
+    await seed();
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: false, ip: '', message: 'NXDOMAIN' },
+      NOW,
+    );
+    expect(cache.vpn1?.serverLatencyMs).toBeUndefined();
+    expect(cache.vpn1?.measuredFrom).toBeUndefined();
+    expect(cache.vpn1?.nodeId).toBeUndefined();
+    expect(cache.vpn1?.quicProbe).toBeUndefined();
+    expect(cache.vpn1?.endpoint?.resolved).toBe(false);
+  });
+
+  it('CONTROL — a prior SOCKS5 entry (the row changed scheme) carries nothing over: its fields were measured through a listener this row does not have', async () => {
+    const { saveProbeResult } = await import('../../src/lib/proxy-probe-cache');
+    await saveProbeResult('vpn1', HEALTHY, NOW - 2);
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    const cache = await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW,
+    );
+    expect(cache.vpn1?.serverLatencyMs).toBeUndefined();
+    expect(cache.vpn1?.measuredFrom).toBeUndefined();
+    expect(cache.vpn1?.quicProbe).toBeUndefined();
+    expect(cache.vpn1?.endpoint?.resolved).toBe(true);
+  });
+
   it('VACUITY CONTROL — without adoptExit (a SOCKS5 caller), or with no exit on the refusal, nothing is written', async () => {
     await seed();
     const before = JSON.stringify(await loadProbeCache());
@@ -386,6 +510,40 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     const notice = await screen.findByText(BUSY);
     expect(notice.className).toContain('text-ink-muted');
     expect(screen.queryByText('tunnel down')).toBeNull();
+  });
+
+  // (g) — the pre-flight's cache write lands BEFORE the fleet reply; it used to
+  // replace the entry, so a refused test left the row with no latency and no
+  // vantage although nothing had been measured. The row keeps what it holds.
+  it('CRITICAL after a REFUSED test the row still shows its prior fleet latency and vantage, and the cache still holds them', async () => {
+    await saveEndpointResult(
+      'vpn1',
+      { resolved: true, ip: '198.51.100.1', message: 'Resolved' },
+      NOW - 2,
+    );
+    await saveServerProbeResult(
+      'vpn1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      NOW - 1,
+    );
+    testAccountProxy.mockResolvedValue(NODE_BUSY);
+    render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText(BUSY)).toBeInTheDocument();
+    // The pre-flight has been persisted by now (the reply follows it).
+    await waitFor(() =>
+      expect(loadProbeCache().then((c) => c.vpn1?.at)).resolves.not.toBe(NOW - 2),
+    );
+    expect(screen.getByText('42ms')).toBeInTheDocument();
+    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.serverLatencyMs).toBe(42);
+    expect(entry?.measuredFrom).toBe('fleet');
+    expect(entry?.nodeId).toBe('mac-07');
+    expect(entry?.quicProbe).toBe(true);
+    expect(entry?.endpoint?.resolved).toBe(true);
   });
 
   it('CONTROL — the SAME sentence as a plain failure (no not_run) still reads "tunnel down" in error ink, with no exit', async () => {
