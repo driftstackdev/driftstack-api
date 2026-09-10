@@ -69,6 +69,8 @@ export interface AgentSessionRecord {
   /** Reason set by `closeWithReason` (refused / budget-exhausted /
    *  customer-closed / fatal-error). NULL on active sessions. */
   closedReason: string | null;
+  /** (c) — the harness's intermediate `provisioning` detail token, or null. */
+  provisioningDetail: string | null;
   /**
    * v2-#9 + v2-#19 — Stripe-pattern idempotency key.
    * NULL when the caller didn't pass an `Idempotency-Key` header on
@@ -477,6 +479,14 @@ export interface AgentSessionsRepo {
   setPairModeState(id: string, state: unknown): Promise<AgentSessionRecord>;
 
   /**
+   * (c) 2026-09-10 — record (or clear, with null) the harness's intermediate
+   * `provisioning` detail — today the token `vpn_egress_active` (tunnel up,
+   * browser not attached yet). Returns null when the session is unknown; never
+   * throws, because the caller is a fire-and-forget frame consumer.
+   */
+  setProvisioningDetail(id: string, detail: string | null): Promise<AgentSessionRecord | null>;
+
+  /**
    * Atomically replace pair-mode state only when the row is still active, still
    * in pair mode, and its JSON state exactly matches `expectedState`. Returns
    * null when any predicate lost a race. This is the transition primitive for
@@ -567,6 +577,7 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
       tokenBudgetTotal: args.tokenBudgetTotal,
       tokenBudgetRemaining: args.tokenBudgetTotal,
       closedReason: null,
+      provisioningDetail: null,
       idempotencyKey: args.idempotencyKey ?? null,
       createdByUserId: args.createdByUserId ?? null,
       closedAt: null,
@@ -879,6 +890,18 @@ export class InMemoryAgentSessionsRepo implements AgentSessionsRepo {
     if (!isDeepStrictEqual(rec.pairModeState, state)) {
       this.authorityRevisions.set(id, (this.authorityRevisions.get(id) ?? 0) + 1);
     }
+    return Promise.resolve(updated);
+  }
+
+  setProvisioningDetail(id: string, detail: string | null): Promise<AgentSessionRecord | null> {
+    const rec = this.records.get(id);
+    if (!rec) return Promise.resolve(null);
+    const updated: AgentSessionRecord = {
+      ...rec,
+      provisioningDetail: detail,
+      updatedAt: this.clock(),
+    };
+    this.records.set(id, updated);
     return Promise.resolve(updated);
   }
 

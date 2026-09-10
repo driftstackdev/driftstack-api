@@ -95,6 +95,8 @@ export interface AgentSession {
   driftstack_session_id: string | null;
   status: 'active' | 'paused' | 'closed';
   closed_reason: string | null;
+  /** Why the session is still provisioning (e.g. 'vpn_egress_active'); null once active; absent on older servers. */
+  provisioning_detail?: string | null;
   token_budget_total: number;
   token_budget_remaining: number;
   transcript_length: number;

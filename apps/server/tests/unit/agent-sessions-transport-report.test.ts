@@ -47,6 +47,7 @@ function makeSession(overrides: Partial<AgentSessionRecord> = {}): AgentSessionR
     tokenBudgetTotal: 100_000,
     tokenBudgetRemaining: 99_000,
     closedReason: null,
+    provisioningDetail: null,
     idempotencyKey: null,
     createdByUserId: null,
     closedAt: null,

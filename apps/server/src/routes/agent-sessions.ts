@@ -364,6 +364,8 @@ interface PublicAgentSession {
   driftstack_session_id: string | null;
   status: string;
   closed_reason: string | null;
+  /** (c) — why the session is still provisioning (e.g. 'vpn_egress_active'), else null. */
+  provisioning_detail: string | null;
   token_budget_total: number;
   token_budget_remaining: number;
   transcript_length: number;
@@ -476,6 +478,7 @@ function publicAgentSession(
       rec.driftstackSessionId !== null ? `ses_${rec.driftstackSessionId}` : null,
     status: rec.status,
     closed_reason: rec.closedReason,
+    provisioning_detail: rec.provisioningDetail,
     token_budget_total: rec.tokenBudgetTotal,
     token_budget_remaining: rec.tokenBudgetRemaining,
     transcript_length: rec.transcript.length,

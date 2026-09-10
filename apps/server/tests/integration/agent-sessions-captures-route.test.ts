@@ -27,6 +27,7 @@ function makeRecord(over: Partial<AgentSessionRecord> = {}): AgentSessionRecord 
     tokenBudgetTotal: 100_000,
     tokenBudgetRemaining: 100_000,
     closedReason: null,
+    provisioningDetail: null,
     createdByUserId: null,
     closedAt: null,
     pairModeState: null,

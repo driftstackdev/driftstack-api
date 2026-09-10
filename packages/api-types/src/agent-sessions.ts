@@ -29,6 +29,10 @@ export const AgentSessionSchema = z.object({
   driftstack_session_id: z.string().nullable(),
   status: z.string(),
   closed_reason: z.string().nullable(),
+  /** Why the session is still provisioning — today only `vpn_egress_active` (the
+   *  VPN tunnel is up and the browser has not attached yet). Null once active or
+   *  when the harness reported nothing; absent from servers older than 2026-09-10. */
+  provisioning_detail: z.string().nullable().optional(),
   token_budget_total: z.number().int(),
   token_budget_remaining: z.number().int(),
   transcript_length: z.number().int(),

@@ -2338,6 +2338,10 @@ export const agentSessions = pgTable(
     tokenBudgetTotal: integer('token_budget_total').notNull(),
     tokenBudgetRemaining: integer('token_budget_remaining').notNull(),
     closedReason: text('closed_reason'),
+    // (c) 2026-09-10 — the harness's intermediate `provisioning` detail (e.g.
+    // 'vpn_egress_active': tunnel up, browser not attached yet). Set from a
+    // `sessionStatus` frame by the owning node, cleared on `active`/terminal.
+    provisioningDetail: text('provisioning_detail'),
     // v2-#9 — idempotency key for POST /v1/agent-sessions (Stripe-
     // pattern; partial unique on (account_id, idempotency_key) when
     // key is non-null).

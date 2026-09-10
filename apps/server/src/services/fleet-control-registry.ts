@@ -205,6 +205,9 @@ export class FleetControlConnection {
     frame: NetworkRequestsFrame,
     reportingNodeId: string,
   ) => void;
+  // (c) 2026-09-10 — intermediate `provisioning` / `active` status frames, for
+  // the provisioning-detail relay (a VPN tunnel that is up with no browser yet).
+  private readonly onSessionProvisioning?: (frame: SessionStatus, reportingNodeId: string) => void;
   private readonly logger: Logger | null;
   /** Throttle state for refused inbound frames, keyed by type+shape. */
   private readonly rejectedFrameCounts = new Map<string, number>();
@@ -257,6 +260,8 @@ export class FleetControlConnection {
     // T-9 — ownership-gated networkRequests consumer (append the frame's request
     // rows to the per-session ring). Appended for positional back-compat.
     onNetworkRequests?: (frame: NetworkRequestsFrame, reportingNodeId: string) => void,
+    // (c) — appended for positional back-compat.
+    onSessionProvisioning?: (frame: SessionStatus, reportingNodeId: string) => void,
   ) {
     this.send = send;
     this.terminate = terminate;
@@ -269,6 +274,7 @@ export class FleetControlConnection {
     this.onCapabilityReport = onCapabilityReport;
     this.onErrorEvent = onErrorEvent;
     this.onNetworkRequests = onNetworkRequests;
+    this.onSessionProvisioning = onSessionProvisioning;
     this.admitInbound = admitInbound;
     const log = logger ?? null;
     this.logger = log;
@@ -684,6 +690,14 @@ export class FleetControlConnection {
           // backstop. Independent of (and additive to) the errored fast-fail
           // above: an `errored` frame can both fast-fail an in-flight dispatch
           // AND close its row. Absent consumer (stateless deploy) → ignored.
+          // (c) 2026-09-10 — a VPN session whose tunnel is up but has no browser
+          // yet reports `provisioning` with a detail token (vpn_egress_active) and
+          // deliberately does not claim `active`; the relay records the token so
+          // the customer read can say why the session is still provisioning. An
+          // `active` frame clears it. Ownership-checked by the consumer.
+          if (frame.status === 'provisioning' || frame.status === 'active') {
+            this.onSessionProvisioning?.(frame, this.nodeId);
+          }
           if (TERMINAL_SESSION_STATUSES.has(frame.status)) {
             // #5 — pass the connection's authenticated nodeId so the consumer can
             // verify the session belongs to THIS node before closing it (a rogue node
@@ -1049,6 +1063,11 @@ export class FleetControlRegistry {
       frame: NetworkRequestsFrame,
       reportingNodeId: string,
     ) => void,
+    // (c) — appended for positional back-compat; threaded into every connection.
+    private readonly onSessionProvisioning?: (
+      frame: SessionStatus,
+      reportingNodeId: string,
+    ) => void,
   ) {}
 
   register(
@@ -1081,6 +1100,7 @@ export class FleetControlRegistry {
       (byteLength, largeFrameCandidate) =>
         this.inboundFrameBudget.admit(nodeId, byteLength, largeFrameCandidate),
       this.onNetworkRequests,
+      this.onSessionProvisioning,
     );
     this.connections.set(nodeId, conn);
     // Worker-disconnect fix — a (re)connect CANCELS any pending grace timer for

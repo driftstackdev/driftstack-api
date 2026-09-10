@@ -42,6 +42,7 @@ import { makeProfileSaveFailedRelay } from '../services/profile-save-failed-rela
 import { makeSessionPageStateRelay } from '../services/session-page-state-relay.js';
 import { makeSessionCapabilityReportRelay } from '../services/session-capability-report-relay.js';
 import { makeSessionNetworkLogRelay } from '../services/session-network-log-relay.js';
+import { makeSessionProvisioningDetailRelay } from '../services/session-provisioning-detail-relay.js';
 import { makeSessionErrorEventRelay } from '../services/session-error-event-relay.js';
 import { makeFleetHeartbeatConsumer } from '../services/fleet-heartbeat-consumer.js';
 import { makeAgentSessionTerminalStatusRelay } from '../services/agent-session-terminal-close.js';
@@ -2787,6 +2788,10 @@ export async function createProductionDeps(
             // /v1/agent-sessions/:id/network. Ownership-gated so a non-owning node
             // can't inject fabricated rows into another session's Network pane.
             makeSessionNetworkLogRelay(agentSessionsRepo, sessionNetworkLogStore, logger),
+            // (c) 2026-09-10: a `provisioning` frame's detail (vpn_egress_active —
+            // tunnel up, browser not attached yet) → agent_sessions.provisioning_detail,
+            // cleared by `active`. Ownership-gated like the terminal-close relay.
+            makeSessionProvisioningDetailRelay(agentSessionsRepo, logger),
           )),
           // The config a dispatched session browses with when it names no
           // proxy_id.

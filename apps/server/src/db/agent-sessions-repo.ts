@@ -96,6 +96,7 @@ function rowToRecord(
     tokenBudgetTotal: row.tokenBudgetTotal,
     tokenBudgetRemaining: row.tokenBudgetRemaining,
     closedReason: row.closedReason,
+    provisioningDetail: row.provisioningDetail ?? null,
     // v2-#9 + v2-#19 hardening columns — present on every row even
     // when migration 0047 left them NULL on legacy rows.
     idempotencyKey: row.idempotencyKey,
@@ -1034,6 +1035,20 @@ export class DrizzleAgentSessionsRepo implements AgentSessionsRepo {
         updatedAt: now,
       })
       .where(and(eq(agentSessions.id, args.id), eq(agentSessions.status, 'active')))
+      .returning();
+    const row = updated[0];
+    return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;
+  }
+
+  async setProvisioningDetail(
+    id: string,
+    detail: string | null,
+  ): Promise<AgentSessionRecord | null> {
+    const now = this.clock();
+    const updated = await this.database.db
+      .update(agentSessions)
+      .set({ provisioningDetail: detail, updatedAt: now })
+      .where(eq(agentSessions.id, id))
       .returning();
     const row = updated[0];
     return row ? rowToRecord(row, this.transcriptEncryptionKeyBase64) : null;

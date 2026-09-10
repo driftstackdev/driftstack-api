@@ -29,6 +29,7 @@ function makeRecord(id: string, overrides: Partial<AgentSessionRecord> = {}): Ag
     tokenBudgetTotal: 100_000,
     tokenBudgetRemaining: 100_000,
     closedReason: null,
+    provisioningDetail: null,
     createdByUserId: null,
     closedAt: null,
     pairModeState: null,
@@ -197,6 +198,7 @@ describe('agent-sessions read shape — durable error_event', () => {
     const rec = makeRecord('agt_live', {
       status: 'closed',
       closedReason: 'session_errored',
+      provisioningDetail: null,
       closedAt: new Date('2026-07-13T06:00:01.000Z'),
       lastErrorEvent: {
         timestamp: '2026-07-13T06:00:00.000Z',

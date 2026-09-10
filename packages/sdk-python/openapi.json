@@ -418,6 +418,9 @@
           "closed_reason": {
             "type": ["string", "null"]
           },
+          "provisioning_detail": {
+            "type": ["string", "null"]
+          },
           "token_budget_total": {
             "type": "integer"
           },
@@ -3900,6 +3903,9 @@
                   "closed_reason": {
                     "type": ["string", "null"]
                   },
+                  "provisioning_detail": {
+                    "type": ["string", "null"]
+                  },
                   "token_budget_total": {
                     "type": "integer"
                   },
@@ -4681,6 +4687,9 @@
                   "closed_reason": {
                     "type": ["string", "null"]
                   },
+                  "provisioning_detail": {
+                    "type": ["string", "null"]
+                  },
                   "token_budget_total": {
                     "type": "integer"
                   },
@@ -4938,6 +4947,9 @@
                   "closed_reason": {
                     "type": ["string", "null"]
                   },
+                  "provisioning_detail": {
+                    "type": ["string", "null"]
+                  },
                   "token_budget_total": {
                     "type": "integer"
                   },
@@ -5193,6 +5205,9 @@
                     "type": "string"
                   },
                   "closed_reason": {
+                    "type": ["string", "null"]
+                  },
+                  "provisioning_detail": {
                     "type": ["string", "null"]
                   },
                   "token_budget_total": {
@@ -35218,6 +35233,9 @@
                     "closed_reason": {
                       "type": ["string", "null"]
                     },
+                    "provisioning_detail": {
+                      "type": ["string", "null"]
+                    },
                     "token_budget_total": {
                       "type": "integer"
                     },
@@ -35655,6 +35673,9 @@
                           "closed_reason": {
                             "type": ["string", "null"]
                           },
+                          "provisioning_detail": {
+                            "type": ["string", "null"]
+                          },
                           "token_budget_total": {
                             "type": "integer"
                           },
@@ -36085,6 +36106,9 @@
                       "type": "string"
                     },
                     "closed_reason": {
+                      "type": ["string", "null"]
+                    },
+                    "provisioning_detail": {
                       "type": ["string", "null"]
                     },
                     "token_budget_total": {
