@@ -216,6 +216,7 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
     expect(vpnTunnelUpNotice(vpn, { streamLive: false, everLive: false, ended: false })).toEqual({
       ip: '203.0.113.7',
       timezone: 'Europe/Amsterdam',
+      source: 'report',
     });
     expect(
       vpnTunnelUpNotice(report({ proxy_kind: 'wireguard', exit_ip: '203.0.113.7' }), {
@@ -223,13 +224,45 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
         everLive: false,
         ended: false,
       }),
-    ).toEqual({ ip: '203.0.113.7', timezone: null });
+    ).toEqual({ ip: '203.0.113.7', timezone: null, source: 'report' });
     // Live stream → the generic state is over; nothing to say.
     expect(vpnTunnelUpNotice(vpn, { streamLive: true, everLive: false, ended: false })).toBeNull();
     // A stream that WAS live and dropped is "reconnecting", and an ended session is
     // attaching nothing — "the browser has not attached yet" would be false in both.
     expect(vpnTunnelUpNotice(vpn, { streamLive: false, everLive: true, ended: false })).toBeNull();
     expect(vpnTunnelUpNotice(vpn, { streamLive: false, everLive: false, ended: true })).toBeNull();
+    // (c) — the harness's own provisioning_detail wins, and needs no report at all:
+    // the node said the tunnel is up and is deliberately not claiming active yet.
+    const quiet = { streamLive: false, everLive: false, ended: false };
+    expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: 'vpn_egress_active' })).toEqual({
+      ip: null,
+      timezone: null,
+      source: 'detail',
+    });
+    expect(vpnTunnelUpNotice(vpn, { ...quiet, provisioningDetail: 'vpn_egress_active' })).toEqual({
+      ip: '203.0.113.7',
+      timezone: 'Europe/Amsterdam',
+      source: 'detail',
+    });
+    // …but never after the stream was live, or once the session ended, and an
+    // unrelated token does not fire it.
+    expect(
+      vpnTunnelUpNotice(null, {
+        ...quiet,
+        everLive: true,
+        provisioningDetail: 'vpn_egress_active',
+      }),
+    ).toBeNull();
+    expect(
+      vpnTunnelUpNotice(null, { ...quiet, ended: true, provisioningDetail: 'vpn_egress_active' }),
+    ).toBeNull();
+    expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: 'dns_resolving' })).toBeNull();
+    expect(vpnTunnelUpCaption({ ip: null, timezone: null, source: 'detail' })).toBe(
+      'VPN tunnel connected — starting the browser…',
+    );
+    expect(
+      vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: 'Europe/Amsterdam', source: 'detail' }),
+    ).toBe('VPN tunnel connected (exit 203.0.113.7, Europe/Amsterdam) — starting the browser…');
     // A SOCKS5 session, an unknown kind, or no exit yet → generic "connecting…".
     expect(
       vpnTunnelUpNotice(report({ proxy_kind: 'socks5', exit_ip: '203.0.113.7' }), {
@@ -258,10 +291,10 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
   });
 
   it('the caption names the exit and the zone, and omits the zone when there is none', () => {
-    expect(vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: 'Europe/Amsterdam' })).toBe(
-      TUNNEL_UP_SENTENCE,
-    );
-    expect(vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: null })).toBe(
+    expect(
+      vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: 'Europe/Amsterdam', source: 'report' }),
+    ).toBe(TUNNEL_UP_SENTENCE);
+    expect(vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: null, source: 'report' })).toBe(
       'VPN tunnel is up (exit 203.0.113.7) — the browser has not attached yet',
     );
   });

@@ -160,6 +160,9 @@ export interface AgentSessionControlState {
    *  (e.g. 'idle_timeout', 'browser-closed'). null when the field is absent. */
   status: string | null;
   closedReason: string | null;
+  /** (c) — why the session is still provisioning (e.g. 'vpn_egress_active': the VPN
+   *  tunnel is up, the browser has not attached yet); null otherwise / on old servers. */
+  provisioningDetail: string | null;
   /** Present once the owning harness has emitted a validated capabilityReport.
    *  Omitted on older/control-plane-disabled servers. */
   capabilityReport?: AgentSessionCapabilityReport;
@@ -186,6 +189,7 @@ interface ApiSession {
   // P1a — lifecycle liveness fields from PublicAgentSession.
   status?: string;
   closed_reason?: string | null;
+  provisioning_detail?: string | null;
   closed_at?: string | null;
   capability_report?: unknown;
   error_event?: unknown;
@@ -481,6 +485,10 @@ export async function getAgentSession(
     closedReason:
       typeof body.closed_reason === 'string' && body.closed_reason.length > 0
         ? body.closed_reason
+        : null,
+    provisioningDetail:
+      typeof body.provisioning_detail === 'string' && body.provisioning_detail.length > 0
+        ? body.provisioning_detail
         : null,
   };
   const capabilityReport = capabilityReportOf(body);
@@ -869,6 +877,10 @@ export async function setSessionMode(
     closedReason:
       typeof body.closed_reason === 'string' && body.closed_reason.length > 0
         ? body.closed_reason
+        : null,
+    provisioningDetail:
+      typeof body.provisioning_detail === 'string' && body.provisioning_detail.length > 0
+        ? body.provisioning_detail
         : null,
   };
 }

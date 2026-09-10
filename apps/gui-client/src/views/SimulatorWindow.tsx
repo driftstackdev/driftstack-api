@@ -249,6 +249,9 @@ interface ManualInputControlSnapshot {
   lifecycleStatus: string | null;
   lifecycleConfirmed: boolean;
   lifecycleTerminal: boolean;
+  /** (c) — the session read's provisioning_detail ('vpn_egress_active' = tunnel up,
+   *  browser not attached yet); null once active / on old servers. */
+  provisioningDetail: string | null;
   capabilityReport: AgentSessionCapabilityReport | null;
   mutationPending: boolean;
 }
@@ -583,8 +586,11 @@ export function reportHasEgressReadout(report: AgentSessionCapabilityReport | nu
 /** VPN exit parity (b) — what the address bar can say instead of a generic
  *  "connecting…" for a VPN session: the tunnel's observed exit. */
 export interface VpnTunnelUp {
-  ip: string;
+  /** The observed exit, when the capability report already carries one. */
+  ip: string | null;
   timezone: string | null;
+  /** 'detail' = the harness's provisioning_detail said so; 'report' = the (b) heuristic. */
+  source: 'report' | 'detail';
 }
 
 /**
@@ -608,18 +614,39 @@ export function vpnTunnelUpNotice(
     everLive: boolean;
     /** The session reached a terminal state — nothing is attaching any more. */
     ended: boolean;
+    /** (c) — the session read's provisioning_detail; 'vpn_egress_active…' wins. */
+    provisioningDetail?: string | null;
   },
 ): VpnTunnelUp | null {
-  if (report === null || state.streamLive || state.everLive || state.ended) return null;
+  if (state.streamLive || state.everLive || state.ended) return null;
+  // (c) — the harness's own word (agent_sessions.provisioning_detail, set from its
+  // `provisioning` frame) beats the (b) heuristic below, and needs no report at
+  // all: the node said the tunnel is up and is not claiming active on purpose.
+  if (state.provisioningDetail?.startsWith('vpn_egress_active') === true) {
+    return {
+      ip: report?.exit_ip ?? null,
+      timezone: report?.exit_timezone ?? null,
+      source: 'detail',
+    };
+  }
+  if (report === null) return null;
   if (report.proxy_kind !== 'openvpn' && report.proxy_kind !== 'wireguard') return null;
   if (report.exit_ip === undefined) return null;
-  return { ip: report.exit_ip, timezone: report.exit_timezone ?? null };
+  return { ip: report.exit_ip, timezone: report.exit_timezone ?? null, source: 'report' };
 }
 
 /** The one sentence for that state. `tz` is omitted when the report had none. */
 export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
-  const where = t.timezone !== null ? `exit ${t.ip}, ${t.timezone}` : `exit ${t.ip}`;
-  return `VPN tunnel is up (${where}) — the browser has not attached yet`;
+  const where =
+    t.ip === null ? null : t.timezone !== null ? `exit ${t.ip}, ${t.timezone}` : `exit ${t.ip}`;
+  // (c) — the harness's own word: the node reported the tunnel up and is deliberately
+  // not claiming the session active until the browser exists.
+  if (t.source === 'detail') {
+    return where !== null
+      ? `VPN tunnel connected (${where}) — starting the browser…`
+      : 'VPN tunnel connected — starting the browser…';
+  }
+  return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
 }
 
 /** (b) — the small notice under the address bar for that state. */
@@ -1653,7 +1680,9 @@ function NavigateAddressBar({
               aria-hidden="true"
               className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready"
             />
-            VPN tunnel up · exit {tunnelUp.ip}
+            {tunnelUp.ip !== null
+              ? `VPN tunnel up · exit ${tunnelUp.ip}`
+              : 'VPN tunnel up · starting the browser…'}
           </span>
         ) : (
           !canNavigate && (
@@ -3538,6 +3567,7 @@ export function SimulatorWindow(): JSX.Element {
     lifecycleStatus: null,
     lifecycleConfirmed: false,
     lifecycleTerminal: false,
+    provisioningDetail: null,
     capabilityReport: null,
     mutationPending: false,
   }));
@@ -3566,6 +3596,7 @@ export function SimulatorWindow(): JSX.Element {
         current.lifecycleStatus === candidate.lifecycleStatus &&
         current.lifecycleConfirmed === candidate.lifecycleConfirmed &&
         current.lifecycleTerminal === candidate.lifecycleTerminal &&
+        current.provisioningDetail === candidate.provisioningDetail &&
         current.mutationPending === candidate.mutationPending &&
         capabilityUnchanged;
       if (unchanged && !forceNewEpoch) return current.epoch;
@@ -6455,6 +6486,7 @@ export function SimulatorWindow(): JSX.Element {
               lifecycleStatus: s.status,
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
+              provisioningDetail: s.provisioningDetail,
               capabilityReport: s.capabilityReport ?? null,
             });
             setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
@@ -6485,6 +6517,7 @@ export function SimulatorWindow(): JSX.Element {
               lifecycleStatus: s.status,
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
+              provisioningDetail: s.provisioningDetail,
               // Omitted/unknown capability is intentionally non-interactive.
               capabilityReport: s.capabilityReport ?? null,
             });
@@ -6495,6 +6528,7 @@ export function SimulatorWindow(): JSX.Element {
               lifecycleStatus: s.status,
               lifecycleConfirmed: true,
               lifecycleTerminal: s.terminal,
+              provisioningDetail: s.provisioningDetail,
               capabilityReport: s.capabilityReport ?? null,
             });
           }
@@ -6528,6 +6562,7 @@ export function SimulatorWindow(): JSX.Element {
             modeConfirmed: false,
             lifecycleConfirmed: false,
             lifecycleTerminal: false,
+            provisioningDetail: null,
             ...(authFailure ? { capabilityReport: null } : {}),
           });
           setControlLinkUnreachable(true);
@@ -7160,6 +7195,7 @@ export function SimulatorWindow(): JSX.Element {
     streamLive: streamLiveNow,
     everLive: everLiveRef.current,
     ended: sessionEnded !== null,
+    provisioningDetail: manualInputControl.provisioningDetail,
   });
   // VPN parity (owner: "starts with the right timezone") — the timezone the status-bar
   // clock shows. The launch hands over `tz` from the client's cached exit probe, which
@@ -7279,6 +7315,7 @@ export function SimulatorWindow(): JSX.Element {
         lifecycleStatus: null,
         lifecycleConfirmed: false,
         lifecycleTerminal: false,
+        provisioningDetail: null,
         capabilityReport: null,
         mutationPending: false,
       },
@@ -7533,6 +7570,7 @@ export function SimulatorWindow(): JSX.Element {
           lifecycleStatus: s.status,
           lifecycleConfirmed: true,
           lifecycleTerminal: s.terminal,
+          provisioningDetail: s.provisioningDetail,
           // Older/partial responses do not prove the fork accepts manual input.
           capabilityReport: s.capabilityReport ?? null,
         });
@@ -7562,6 +7600,7 @@ export function SimulatorWindow(): JSX.Element {
           lifecycleStatus: null,
           lifecycleConfirmed: false,
           lifecycleTerminal: false,
+          provisioningDetail: null,
           capabilityReport: null,
         });
         setControlError(controlErrorMessage(err));
@@ -7695,6 +7734,7 @@ export function SimulatorWindow(): JSX.Element {
           lifecycleStatus: s.status,
           lifecycleConfirmed: true,
           lifecycleTerminal: s.terminal,
+          provisioningDetail: s.provisioningDetail,
           capabilityReport: s.capabilityReport ?? null,
           mutationPending: false,
         });
@@ -7712,6 +7752,7 @@ export function SimulatorWindow(): JSX.Element {
           lifecycleStatus: null,
           lifecycleConfirmed: false,
           lifecycleTerminal: false,
+          provisioningDetail: null,
           capabilityReport: null,
           mutationPending: false,
         });
