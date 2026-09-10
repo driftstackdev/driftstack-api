@@ -63,6 +63,10 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     createdAt: new Date('2026-06-01T00:00:00.000Z'),
     updatedAt: new Date('2026-06-01T00:00:00.000Z'),
     ...rest,
+    // Set after ...rest so the Partial spread's optional (| undefined) type does
+    // not leak into the AccountProxyRow return; a miss coerces to null.
+    osFingerprint: over.osFingerprint ?? null,
+    osFingerprintAt: over.osFingerprintAt ?? null,
   };
 }
 
