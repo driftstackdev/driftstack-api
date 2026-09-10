@@ -1276,6 +1276,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.fleetControlRegistry !== undefined
         ? { fleetControlRegistry: deps.fleetControlRegistry }
         : {}),
+      // (d) 2026-09-10 — the fleet-vantage Test refuses to probe a VPN row a
+      // live session browses through (a second tunnel on a one-connection VPN
+      // account drops the session). Same repo the session routes use; omitted
+      // → no guard.
+      ...(deps.agentSessionsRepo !== undefined ? { agentSessions: deps.agentSessionsRepo } : {}),
       // 2026-05-19 — OAuth-IDP avatar fallback for the avatar_url
       // response field. When the account has no R2-uploaded avatar
       // BUT has an OAuth link with a provider_avatar_url, return that

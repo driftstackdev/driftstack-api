@@ -58,6 +58,7 @@ difference. What you need:
   "username": "user",
   "has_password": true,
   "has_secret": false,
+  "exit_observed": null,
   "created_at": "2026-06-16T09:15:00Z",
   "updated_at": "2026-06-16T09:15:00Z"
 }
@@ -68,6 +69,15 @@ difference. What you need:
 are the only signals about the stored credentials; the plaintext is
 never readable back. For VPN schemes, `host`/`port` are the display
 endpoint (parsed from your `.ovpn` / `wg0.conf`).
+
+`exit_observed` is the last exit identity seen **through** the proxy —
+`{ ip, country, timezone, observed_via, observed_at }` — or `null` when
+nothing has observed one yet. `observed_via` is `session` (a live session
+reported it) or `probe` (a fleet-vantage test measured it); `country` and
+`timezone` are `null` when they could not be resolved. For an OpenVPN or
+WireGuard proxy this is the only source of its location and timezone short
+of running a test, since only a session or a fleet node can see through the
+tunnel. `null` means not observed, never "no location".
 
 ## List
 
@@ -241,6 +251,40 @@ response text never reach the API response.
 A proxy that authenticates but cannot route is the case worth knowing about: it
 looks healthy to anything that only opens the port, and it fails every launch.
 This test reports it.
+
+An `ok: false` result that also carries `not_run` is **not a verdict about the
+proxy** — nothing was measured. Branch on `not_run`, never on the `reason`
+prose, before treating the result as a failed proxy:
+
+```json
+{
+  "ok": false,
+  "not_run": "live_session",
+  "reason": "This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.",
+  "measured_from": "control_plane",
+  "exit_observed": {
+    "ip": "203.0.113.9",
+    "country": "NL",
+    "timezone": "Europe/Amsterdam",
+    "region": null,
+    "city": null
+  }
+}
+```
+
+- `live_session` — a `vantage=fleet` test of an `openvpn` / `wireguard` proxy
+  was refused because a live session is browsing through it. A second tunnel on
+  a one-connection VPN account would drop that session, so the control plane
+  dispatches nothing. `measured_from` is `control_plane` (no node measured
+  this) and `exit_observed`, when present, is the exit that session observed —
+  the same `exit_observed` the proxy object lists — so a client can still show
+  where the tunnel exits. End the session to test the tunnel.
+- `node_busy` — the fleet node that would measure it is holding another tunnel
+  or test; try again in a minute.
+- `node_error` — the node could not run the probe (a config it could not
+  bring up, a handshake or a timeout).
+
+Absent `not_run`, an `ok: false` result is a measurement.
 
 Two cases fall back to a plain TCP-reachability check, which confirms the port
 answers and nothing more: an `openvpn` or `wireguard` wire (there is no

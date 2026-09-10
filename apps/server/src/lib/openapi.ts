@@ -2312,6 +2312,20 @@ function buildRegistry(): OpenAPIRegistry {
       // a real 'h3' lands here).
       quic_measured: z.enum(['h3', 'h2-only']).nullable(),
       quic_measured_at: z.string().nullable(),
+      // (d) B5 — the last exit identity observed THROUGH this proxy, by a live
+      // session ('session') or the fleet-vantage Test ('probe'); latest wins. The
+      // only source of a VPN row's location / timezone short of running a test.
+      // null = never observed. Mirrors AccountProxyMetadataSchema in api-types.
+      exit_observed: z
+        .object({
+          ip: z.string(),
+          country: z.string().nullable(),
+          timezone: z.string().nullable(),
+          observed_via: z.enum(['session', 'probe']),
+          observed_at: z.string().nullable(),
+        })
+        .nullable()
+        .optional(),
       created_at: z.string(),
       updated_at: z.string(),
     })
@@ -2416,6 +2430,11 @@ function buildRegistry(): OpenAPIRegistry {
     observed_ip: z.string(),
     observed_via: z.enum(['proxy_host', 'exit_ip']),
   });
+  // (d) 2026-09-10 — why a test produced NO measurement. One vocabulary for
+  // both `ok:false` members: `live_session` is the control plane's refusal (a
+  // VPN row a live session browses through), `node_busy` / `node_error` are the
+  // node's own could-not-run. Absent on every result that actually measured.
+  const ProxyTestNotRunOpenApi = z.enum(['live_session', 'node_busy', 'node_error']);
   const AccountProxyTestResultOpenApi = z
     .union([
       z.object({
@@ -2436,6 +2455,25 @@ function buildRegistry(): OpenAPIRegistry {
         reason: z.string(),
         // T-1 — set to 'control_plane' when a fleet request fell back to the cp probe.
         measured_from: z.enum(['fleet', 'control_plane']).optional(),
+        // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a
+        // verdict about the proxy: `live_session` = a fleet-vantage test of a
+        // VPN row was REFUSED because a live session holds the tunnel (a second
+        // tunnel on a one-connection VPN account would drop it). A client
+        // branches on THIS — never on the `reason` prose — to keep the row's
+        // last verdict and show the sentence as a notice, not a failure.
+        not_run: ProxyTestNotRunOpenApi.optional(),
+        // (d) 2026-09-10 — beside `not_run: 'live_session'`: the STORED exit that
+        // session observed, so a client can still show where the tunnel exits.
+        // `region` / `city` are null — the stored observation carries neither.
+        exit_observed: z
+          .object({
+            ip: z.string(),
+            country: z.string().nullable(),
+            timezone: z.string().nullable(),
+            region: z.string().nullable(),
+            city: z.string().nullable(),
+          })
+          .optional(),
       }),
       // T-1 — the FLEET-vantage measurement: the proxy measured FROM the Mac that
       // will run the profile, not the control plane. `ok` is the node's overall
@@ -2454,6 +2492,11 @@ function buildRegistry(): OpenAPIRegistry {
         reason: z.string().optional(),
         measured_from: z.literal('fleet'),
         node_id: z.string(),
+        // (d) 2026-09-10 — present when the node could NOT RUN the probe
+        // (`node_busy`: another tunnel/test holds it; `node_error`: bad config,
+        // handshake, timeout). Nothing ran, so `ok:false` here is not a tunnel
+        // verdict; a client branches on this, never on `reason`.
+        not_run: ProxyTestNotRunOpenApi.optional(),
         // (e) — the per-leg measurements are ABSENT on a `could_not_run` result (node_busy,
         // bad_config, timeout): nothing ran, so nothing is a fact except `reason`.
         reachable: z.boolean().optional(),

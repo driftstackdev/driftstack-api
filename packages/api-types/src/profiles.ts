@@ -218,6 +218,23 @@ export const AccountProxyMetadataSchema = z.object({
   quic_measured: z.enum(['h3', 'h2-only']).nullable(),
   // When quic_measured was recorded (ISO 8601), or null when never measured.
   quic_measured_at: z.string().nullable(),
+  // (d) B5 — the last exit identity observed THROUGH this proxy, by a live
+  // session ('session') or by the fleet-vantage Test ('probe'); latest wins.
+  // For an OpenVPN / WireGuard row this is the ONLY source of its location and
+  // timezone short of running a test. null = never observed (NOT a default:
+  // a client must not paint a location nobody measured). `observed_at` is when
+  // it was recorded (ISO 8601), or null. Optional so a client built against an
+  // older server keeps parsing.
+  exit_observed: z
+    .object({
+      ip: z.string(),
+      country: z.string().nullable(),
+      timezone: z.string().nullable(),
+      observed_via: z.enum(['session', 'probe']),
+      observed_at: z.string().nullable(),
+    })
+    .nullable()
+    .optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });
@@ -257,7 +274,29 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
       })
       .optional(),
   }),
-  z.object({ ok: z.literal(false), reason: z.string() }),
+  z.object({
+    ok: z.literal(false),
+    reason: z.string(),
+    // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a verdict
+    // about the proxy: `live_session` = a fleet-vantage test of a VPN row was
+    // REFUSED because a live session holds the tunnel (a second tunnel on a
+    // one-connection VPN account drops the session); `node_busy` / `node_error`
+    // = the fleet node could not run the probe. A client branches on THIS,
+    // never on the `reason` prose.
+    not_run: z.enum(['live_session', 'node_busy', 'node_error']).optional(),
+    // (d) 2026-09-10 — beside `not_run: 'live_session'`: the STORED exit that
+    // session observed, surfaced so the client can still show where the tunnel
+    // exits. `region`/`city` are null (the stored observation carries neither).
+    exit_observed: z
+      .object({
+        ip: z.string(),
+        country: z.string().nullable(),
+        timezone: z.string().nullable(),
+        region: z.string().nullable(),
+        city: z.string().nullable(),
+      })
+      .optional(),
+  }),
 ]);
 export type AccountProxyTestResult = z.infer<typeof AccountProxyTestResultSchema>;
 

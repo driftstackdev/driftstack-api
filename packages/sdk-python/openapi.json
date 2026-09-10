@@ -3274,6 +3274,28 @@
           "quic_measured_at": {
             "type": ["string", "null"]
           },
+          "exit_observed": {
+            "type": ["object", "null"],
+            "properties": {
+              "ip": {
+                "type": "string"
+              },
+              "country": {
+                "type": ["string", "null"]
+              },
+              "timezone": {
+                "type": ["string", "null"]
+              },
+              "observed_via": {
+                "type": "string",
+                "enum": ["session", "probe"]
+              },
+              "observed_at": {
+                "type": ["string", "null"]
+              }
+            },
+            "required": ["ip", "country", "timezone", "observed_via", "observed_at"]
+          },
           "created_at": {
             "type": "string"
           },
@@ -3463,6 +3485,31 @@
               "measured_from": {
                 "type": "string",
                 "enum": ["fleet", "control_plane"]
+              },
+              "not_run": {
+                "type": "string",
+                "enum": ["live_session", "node_busy", "node_error"]
+              },
+              "exit_observed": {
+                "type": "object",
+                "properties": {
+                  "ip": {
+                    "type": "string"
+                  },
+                  "country": {
+                    "type": ["string", "null"]
+                  },
+                  "timezone": {
+                    "type": ["string", "null"]
+                  },
+                  "region": {
+                    "type": ["string", "null"]
+                  },
+                  "city": {
+                    "type": ["string", "null"]
+                  }
+                },
+                "required": ["ip", "country", "timezone", "region", "city"]
               }
             },
             "required": ["ok", "reason"]
@@ -3482,6 +3529,10 @@
               },
               "node_id": {
                 "type": "string"
+              },
+              "not_run": {
+                "type": "string",
+                "enum": ["live_session", "node_busy", "node_error"]
               },
               "reachable": {
                 "type": "boolean"

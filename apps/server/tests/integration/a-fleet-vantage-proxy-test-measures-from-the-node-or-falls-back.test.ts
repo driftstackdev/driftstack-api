@@ -270,6 +270,9 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     // the provenance, and the customer is owed both.
     expect(body.measured_from).toBe('fleet');
     expect(body.node_id).toBe('mac-us-004');
+    // (d) — a MEASURED failure carries no `not_run`: the discriminator marks
+    // only a test that did not happen, never one that happened and failed.
+    expect('not_run' in body).toBe(false);
   });
 
   it('CRITICAL the failing LEG picks the sentence, in the order the probe establishes them', async () => {
@@ -733,6 +736,9 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.ok).toBe(false);
     expect(body.measured_from).toBe('fleet');
     expect(body.reason).toMatch(/busy with another tunnel or test/);
+    // (d) — the machine-readable "nothing ran": a client branches on THIS, not
+    // on the sentence, so a busy Mac never renders as a tunnel that is down.
+    expect(body.not_run).toBe('node_busy');
     for (const k of [
       'reachable',
       'auth_ok',
@@ -766,9 +772,11 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
       url: `/v1/account/me/proxies/${id2}/test?vantage=fleet`,
       headers: auth(fx),
     });
-    expect(res2.json<Record<string, unknown>>().reason).toMatch(
-      /could not be completed on the measuring Mac/,
-    );
+    const body2 = res2.json<Record<string, unknown>>();
+    expect(body2.reason).toMatch(/could not be completed on the measuring Mac/);
+    // (d) — still "nothing ran", under its own value: not the busy token, and
+    // never absent (absent would let a client read it as a measured failure).
+    expect(body2.not_run).toBe('node_error');
   });
 
   it('(e) CONTROL — a socks5 row with a node that could not run the probe still gets the control-plane fallback (a real SOCKS5 measurement)', async () => {
@@ -833,5 +841,392 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.measured_from).toBe('control_plane');
     expect('exit_observed' in body).toBe(false);
     expect('node_id' in body).toBe(false);
+  });
+});
+
+// (d) 2026-09-10 — a fleet probe of a VPN row brings a SECOND tunnel up on the
+// same VPN account while a live session already holds one, and many VPN
+// accounts allow exactly one connection: the probe can drop the live session.
+// The node's `node_busy` covers a tunnel on ITSELF; a session on another Mac is
+// invisible there, so the control plane refuses the cross-node case before any
+// dispatch. Nothing is measured, so the refusal is labelled `control_plane`
+// (never `fleet` — no node measured it) and carries the exit the SESSION
+// observed so the GUI still shows where the tunnel exits.
+describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a live session holds the VPN tunnel', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+  const REFUSAL = /in use by a live session/;
+
+  async function makeWireGuardProxy(): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'wg',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  /** A session dispatched THROUGH `proxyId` — the same atomic claim the real
+   *  dispatch makes (`setNodeId` records node + proxy together). */
+  async function startSessionOn(proxyId: string, nodeId = 'mac-other-node'): Promise<string> {
+    const repo = fx.agentSessionsRepo;
+    if (repo === undefined) throw new Error('enableAgentRuntime must be set for this arm');
+    const rec = await repo.create({ accountId: fx.accountId, tokenBudgetTotal: 1000 });
+    const claimed = await repo.setNodeId(rec.id, nodeId, proxyId);
+    expect(claimed?.proxyId, 'the session records the proxy it browses through').toBe(proxyId);
+    expect(claimed?.status).toBe('active');
+    return rec.id;
+  }
+
+  /** Register a node that answers every leg true (with a geo exit) and records
+   *  whether it was ever asked — the discriminator for "was anything dispatched?". */
+  function registerCountingNode(nodeId: string): { frames: number } {
+    const seen = { frames: 0 };
+    const conn: FleetControlConnection = fx.fleetControlRegistry.register(nodeId, (data) => {
+      const f = JSON.parse(data) as { type: string; requestId: string };
+      if (f.type !== 'probeEgress') return;
+      seen.frames += 1;
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'probeEgressResult',
+          requestId: f.requestId,
+          node_id: nodeId,
+          ok: true,
+          reachable: true,
+          auth_ok: true,
+          udp_associate: true,
+          can_route: true,
+          latency_ms: 58,
+          h2_ok: true,
+          quic_ok: true,
+          quic_detail: null,
+          error: null,
+          exit_ip: '198.51.100.44',
+          exit_country: 'DE',
+          exit_timezone: 'Europe/Berlin',
+          exit_region: 'Hesse',
+          exit_city: 'Frankfurt am Main',
+        }),
+      );
+    });
+    return seen;
+  }
+
+  it('CRITICAL (i) a wireguard row with an ACTIVE session on it is NOT dispatched — ok:false, the refusal sentence, control_plane, and the session-observed exit', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const seen = registerCountingNode('mac-eu-030');
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    // The exit the LIVE SESSION observed through this tunnel (the relay's write).
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.9',
+          country: 'NL',
+          timezone: 'Europe/Amsterdam',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    });
+    await startSessionOn(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    // Nothing was dispatched — the registry was never asked and the node never
+    // saw a frame. This is the claim: a second tunnel never came up.
+    expect(probeSpy).not.toHaveBeenCalled();
+    expect(seen.frames).toBe(0);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(REFUSAL);
+    // No node measured this, so it is NOT a fleet answer and names no node.
+    expect(body.measured_from).toBe('control_plane');
+    expect('node_id' in body).toBe(false);
+    expect('latency_ms' in body, 'nothing ran, so no measurement field').toBe(false);
+    // (d) — the discriminator the GUI branches on: a refusal is NOT a failed
+    // tunnel, and the prose above is for a person, never for a branch.
+    expect(body.not_run).toBe('live_session');
+    // …but the exit the session observed rides along, so the GUI still shows it.
+    expect(body.exit_observed).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      region: null,
+      city: null,
+    });
+  });
+
+  it('(i-b) the refusal with NO stored exit carries no exit_observed key — absence, never a null placeholder', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerCountingNode('mac-eu-031');
+    const id = await makeWireGuardProxy();
+    await startSessionOn(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(REFUSAL);
+    expect(body.not_run).toBe('live_session');
+    expect('exit_observed' in body).toBe(false);
+  });
+
+  it('CRITICAL (ii) a CLOSED session on the proxy does not block — the probe runs and is a fleet answer', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const seen = registerCountingNode('mac-eu-032');
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    const sessionId = await startSessionOn(id);
+    const repo = fx.agentSessionsRepo;
+    if (repo === undefined) throw new Error('enableAgentRuntime must be set for this arm');
+    const closed = await repo.closeWithReason(sessionId, 'customer_closed');
+    expect(closed.status).toBe('closed');
+    expect(
+      closed.proxyId,
+      'the closed row still names the proxy — status is the discriminator',
+    ).toBe(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+    expect(seen.frames).toBe(1);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect(body.node_id).toBe('mac-eu-032');
+    expect(body.ok).toBe(true);
+    expect(body.reason).toBeUndefined();
+  });
+
+  it('CRITICAL (iii) a socks5 row is untouched — the probe runs even with a live session on it (a socks5 test is a plain CONNECT, not a second tunnel)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const seen = registerCountingNode('mac-eu-033');
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeProxy('fleet-socks-live.example.com');
+    await startSessionOn(id);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(probeSpy).toHaveBeenCalledTimes(1);
+    expect(seen.frames).toBe(1);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect(body.ok).toBe(true);
+    expect(body.reason).toBeUndefined();
+  });
+
+  it('CONTROL — a live session on a DIFFERENT proxy does not block this one (the match is by proxy, not by account)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const seen = registerCountingNode('mac-eu-034');
+    const under = await makeWireGuardProxy();
+    const other = await makeProxy('fleet-other.example.com');
+    await startSessionOn(other);
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${under}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(seen.frames).toBe(1);
+    expect(res.json<Record<string, unknown>>().measured_from).toBe('fleet');
+  });
+
+  it('VACUITY CONTROL — without the agent-sessions repo wired (the stateless composition) a wireguard row still dispatches', async () => {
+    // Proves the arms above measure the guard and not a route that now refuses
+    // every VPN row: with no repo there is nothing to consult, and today's
+    // behaviour stands.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    expect(fx.agentSessionsRepo).toBeUndefined();
+    const seen = registerCountingNode('mac-eu-035');
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(seen.frames).toBe(1);
+    expect(res.json<Record<string, unknown>>().measured_from).toBe('fleet');
+  });
+});
+
+// (d) B5 — the proxy LIST carries `exit_observed`, so the GUI can show a VPN
+// row's session-observed exit WITHOUT running a test (the only source of a
+// VPN row's location/timezone is a session or a fleet node — never the
+// control plane, and never the customer's own Mac).
+describe('GET /v1/account/me/proxies — exit_observed rides on the list', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+
+  async function makeWireGuardProxy(): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'wg',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  async function listRow(id: string): Promise<Record<string, unknown>> {
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const row = res.json<{ data: Array<Record<string, unknown>> }>().data.find((r) => r.id === id);
+    if (row === undefined) throw new Error(`proxy ${id} missing from the list`);
+    return row;
+  }
+
+  it('CRITICAL a never-observed row lists exit_observed: null (the key is PRESENT, its value is the honest null)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    const row = await listRow(id);
+    expect('exit_observed' in row).toBe(true);
+    expect(row.exit_observed).toBeNull();
+  });
+
+  it('CRITICAL a session-observed exit (the relay write) lists with observed_via:session and its observed_at', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.9',
+          country: 'NL',
+          timezone: 'Europe/Amsterdam',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    });
+    const row = await listRow(id);
+    expect(row.exit_observed).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+      observed_at: '2026-09-01T00:00:00.000Z',
+    });
+  });
+
+  it('a probe-observed exit lists with observed_via:probe — the same field, whichever vantage wrote it', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const conn: FleetControlConnection = fx.fleetControlRegistry.register('mac-eu-040', (data) => {
+      const f = JSON.parse(data) as { type: string; requestId: string };
+      if (f.type !== 'probeEgress') return;
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'probeEgressResult',
+          requestId: f.requestId,
+          node_id: 'mac-eu-040',
+          ok: true,
+          reachable: true,
+          auth_ok: true,
+          udp_associate: true,
+          can_route: true,
+          latency_ms: 58,
+          h2_ok: true,
+          quic_ok: true,
+          quic_detail: null,
+          error: null,
+          exit_ip: '198.51.100.44',
+          exit_country: 'DE',
+          exit_timezone: 'Europe/Berlin',
+        }),
+      );
+    });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const row = await listRow(id);
+    const exit = row.exit_observed as Record<string, unknown>;
+    expect(exit.ip).toBe('198.51.100.44');
+    expect(exit.country).toBe('DE');
+    expect(exit.timezone).toBe('Europe/Berlin');
+    expect(exit.observed_via).toBe('probe');
+    expect(typeof exit.observed_at).toBe('string');
+    expect(Number.isNaN(Date.parse(exit.observed_at as string))).toBe(false);
   });
 });

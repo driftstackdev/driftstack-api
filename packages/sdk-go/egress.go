@@ -71,6 +71,23 @@ type AccountProxyMetadata struct {
 	// when that measurement was taken (RFC 3339), or null.
 	QuicMeasured   *string `json:"quic_measured"`
 	QuicMeasuredAt *string `json:"quic_measured_at"`
+	// ExitObserved is the last exit identity observed THROUGH this proxy — by a
+	// live session (observed_via "session") or by the fleet-vantage test
+	// ("probe"), latest wins — or nil when never observed. For an OpenVPN /
+	// WireGuard proxy this is the only source of its location and timezone
+	// short of running a test. Nil is "not observed", never a placeholder.
+	ExitObserved *AccountProxyExitObserved `json:"exit_observed"`
+}
+
+// AccountProxyExitObserved is the stored exit identity on AccountProxyMetadata.
+// Country and Timezone are nil when the observer could not resolve them;
+// ObservedAt is when the observation was recorded (RFC 3339), or nil.
+type AccountProxyExitObserved struct {
+	IP          string  `json:"ip"`
+	Country     *string `json:"country"`
+	Timezone    *string `json:"timezone"`
+	ObservedVia string  `json:"observed_via"`
+	ObservedAt  *string `json:"observed_at"`
 }
 
 // AccountProxyList is the GET /v1/account/me/proxies envelope.
@@ -80,10 +97,17 @@ type AccountProxyList struct {
 
 // AccountProxyTestResult is the POST :id/test result. Ok=true carries
 // LatencyMs; Ok=false carries Reason. 200 either way.
+//
+// NotRun is set when NOTHING RAN, so an Ok=false result is not a verdict
+// about the proxy: "live_session" (a fleet-vantage test of a VPN proxy was
+// refused because a live session holds the tunnel), "node_busy" or
+// "node_error" (the fleet node could not run the probe). Branch on it —
+// never on the Reason prose — before treating Ok=false as a failed proxy.
 type AccountProxyTestResult struct {
 	Ok        bool   `json:"ok"`
 	LatencyMs int    `json:"latency_ms,omitempty"`
 	Reason    string `json:"reason,omitempty"`
+	NotRun    string `json:"not_run,omitempty"`
 }
 
 // AttachToSession sets the proxy config for a session. The body's

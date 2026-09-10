@@ -31,6 +31,7 @@ import {
 import { resolveEffectiveAccount, type AccountAuthRepo } from '../services/auth.js';
 import type { AuthCache } from '../services/auth-cache.js';
 import type { SessionRepo } from '../services/sessions.js';
+import type { AgentSessionsRepo } from '../services/agent-sessions.js';
 import type { ProfilesRepo } from '../services/profiles.js';
 import type { MfaService } from '../services/mfa.js';
 import type { AccountAuditService } from '../services/account-audit.js';
@@ -149,6 +150,18 @@ export interface AccountMeRoutesOptions {
    *  the control plane. Omitted, or no uncordoned node free → the route falls back to
    *  the control-plane probe and labels the result `control_plane` (never a 500). */
   fleetControlRegistry?: FleetControlRegistry;
+  /**
+   * (d) 2026-09-10 — the account's agent sessions, read by the fleet-vantage
+   * proxy Test to REFUSE probing a VPN row a live session is browsing through.
+   * A fleet probe brings a SECOND tunnel up on the same VPN account while the
+   * session already holds one, and many VPN accounts allow exactly one
+   * connection — so the probe can drop the live session. The node's own
+   * `node_busy` covers the same-node case; this covers the cross-node case,
+   * which only the control plane can see. Omitted → no guard (the stateless
+   * composition is unchanged). Typed as a Pick of the real repo so the method
+   * cannot drift from the one the session routes use.
+   */
+  agentSessions?: Pick<AgentSessionsRepo, 'listByAccount'>;
 }
 
 /** T-1 — the vantage a proxy test is measured from. `cp` (default) keeps the
@@ -190,6 +203,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   const accountProxiesService = opts.accountProxiesService;
   const accountAudit = opts.accountAudit ?? null;
   const fleetControlRegistry = opts.fleetControlRegistry;
+  const agentSessions = opts.agentSessions;
 
   // Best-effort audit emit for proxy lifecycle (egress-config changes). Carries
   // only non-secret metadata (id / label / scheme) — NEVER the credential.
@@ -521,6 +535,21 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // default.
       quic_measured: r.quicMeasured as AccountProxyMetadata['quic_measured'],
       quic_measured_at: r.quicMeasuredAt !== null ? r.quicMeasuredAt.toISOString() : null,
+      // (d) B5 — the last exit identity observed THROUGH this proxy: by a live
+      // session (the capabilityReport relay, 'session') or by the fleet-vantage
+      // Test ('probe'), latest wins. The ONLY source of a VPN row's location /
+      // timezone the GUI can show without running a test. null = never observed
+      // — never a placeholder, so a client cannot colour a cell nobody measured.
+      exit_observed:
+        r.exitObserved === null
+          ? null
+          : {
+              ip: r.exitObserved.ip,
+              country: r.exitObserved.country,
+              timezone: r.exitObserved.timezone,
+              observed_via: r.exitObserved.observed_via,
+              observed_at: r.exitObservedAt?.toISOString() ?? null,
+            },
       created_at: r.createdAt.toISOString(),
       updated_at: r.updatedAt.toISOString(),
     };
@@ -1097,6 +1126,54 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           return null;
         }
         try {
+          // (d) 2026-09-10 — REFUSE a VPN probe while a live session browses
+          // through this row. The probe would bring a SECOND tunnel up on the
+          // same VPN account while the session already holds one, and many VPN
+          // accounts allow exactly one connection: the probe can drop the live
+          // session. The node's own `node_busy` only sees tunnels on ITSELF; a
+          // session on another Mac is invisible there, so the cross-node case is
+          // the control plane's to refuse. Nothing is dispatched, so nothing was
+          // measured: `measured_from` says `control_plane` (a node did not
+          // measure this) and the stored exit — the session's own observation
+          // of the tunnel — rides along so the GUI still shows where it exits.
+          // A closed session holds no tunnel and does not block. A socks5/http
+          // row is untouched: its test is a plain CONNECT, not a second tunnel.
+          if (
+            agentSessions !== undefined &&
+            (row.scheme === 'openvpn' || row.scheme === 'wireguard')
+          ) {
+            const sessions = await agentSessions.listByAccount(ctx.account.id);
+            const live = sessions.find((s) => s.status !== 'closed' && s.proxyId === row.id);
+            if (live !== undefined) {
+              request.log.info(
+                { proxyId: row.id, agentSessionId: live.id, status: live.status },
+                'proxy test: refusing a VPN fleet probe while a live session holds the tunnel',
+              );
+              const stored = row.exitObserved;
+              return {
+                ok: false,
+                reason:
+                  'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.',
+                measured_from: 'control_plane' as const,
+                // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
+                // machine-readable discriminator a client branches on, so a
+                // wait that measured nothing is never rendered as "tunnel
+                // down" — the prose is for a person, never for a branch.
+                not_run: 'live_session' as const,
+                ...(stored !== null && stored !== undefined
+                  ? {
+                      exit_observed: {
+                        ip: stored.ip,
+                        country: stored.country,
+                        timezone: stored.timezone,
+                        region: null,
+                        city: null,
+                      },
+                    }
+                  : {}),
+              };
+            }
+          }
           const resolved = await accountProxiesService.resolveForDispatch({
             proxyId: row.id,
             accountId: ctx.account.id,
@@ -1121,14 +1198,18 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               (row.scheme === 'openvpn' || row.scheme === 'wireguard') &&
               dispatch.nodeId !== undefined
             ) {
+              const busy = /node_busy/i.test(dispatch.message);
               return {
                 ok: false,
-                reason: /node_busy/i.test(dispatch.message)
+                reason: busy
                   ? 'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.'
                   : 'The test could not be completed on the measuring Mac. Try again shortly.',
                 latency_ms: null,
                 node_id: dispatch.nodeId,
                 measured_from: 'fleet' as const,
+                // (d) — nothing RAN, so this is not a tunnel verdict: `not_run`
+                // is the discriminator a client branches on (never the prose).
+                not_run: busy ? ('node_busy' as const) : ('node_error' as const),
               };
             }
             return null;
