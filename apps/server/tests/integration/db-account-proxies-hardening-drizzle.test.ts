@@ -110,6 +110,8 @@ beforeAll(async () => {
       config jsonb NOT NULL DEFAULT '{}'::jsonb,
       quic_measured text,
       quic_measured_at timestamptz,
+      os_fingerprint jsonb,
+      os_fingerprint_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )
