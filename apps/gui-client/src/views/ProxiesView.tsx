@@ -41,7 +41,7 @@ import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
 import { parseWireGuardConfig } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
-import { openvpnRefusal } from '../lib/openvpn-refusal';
+import { openvpnRefusal, openvpnAutoStrip } from '../lib/openvpn-refusal';
 import {
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
@@ -1803,7 +1803,7 @@ export function ProxyForm({
 
   // .ovpn paste → validate + extract remote → fill host/port + the OVPN block
   // (config_blob = the pasted text; optional username/password ride alongside).
-  function handleOvpnPaste(text: string): void {
+  function handleOvpnPaste(text: string, autoNote?: string): void {
     setVpnFixable(null); // re-evaluated below; only the unsupported-lines branch sets it
     if (text.trim() === '') {
       setVpnHint(null);
@@ -1828,10 +1828,18 @@ export function ProxyForm({
     // of a round-trip 400. Keep the blob so they can edit in place.
     const dangerous = findUnsupportedOpenvpnLines(text);
     if (dangerous[0] !== undefined) {
-      // #2 — offer a one-click fix: strip the unsupported lines (script-security ≥2 is
-      // lowered to 1, other script directives removed) so a config the server refuses
-      // becomes one it accepts. Common case: a bare `script-security 2` with no actual
-      // up/down/route scripts — inert, safe to lower. The button applies fixed.config.
+      // N1 (owner) — auto-normalize on ANY entry point (paste OR file upload). The strip
+      // only removes/lowers what the control plane refuses (script-security >= 2 -> 1,
+      // script directives), and ALL of it is inert on Driftstack (the fleet forces
+      // --script-security 1 and never invokes user scripts), so apply it directly with a
+      // transparent note instead of stopping behind a button. A remaining external
+      // cert/key file reference is caught by the fileRef check after the recursion.
+      const auto = openvpnAutoStrip('openvpn', text);
+      if (auto !== null) {
+        handleOvpnPaste(auto.config, auto.note);
+        return;
+      }
+      // Defensive fallback (a refusal the strip could not change): keep the explicit fix.
       const fixed = stripUnsupportedOpenvpnLines(text);
       const n = dangerous.length;
       setVpnHint(
@@ -1868,7 +1876,11 @@ export function ProxyForm({
       port: built.port,
       openvpn: built.openvpn,
     }));
-    setVpnHint(`✓ remote ${built.host}:${built.port.toString()}`);
+    setVpnHint(
+      autoNote !== undefined
+        ? `✓ remote ${built.host}:${built.port.toString()} — ${autoNote}`
+        : `✓ remote ${built.host}:${built.port.toString()}`,
+    );
   }
 
   // Upload a .ovpn / wg0.conf file instead of pasting — reads it as text and

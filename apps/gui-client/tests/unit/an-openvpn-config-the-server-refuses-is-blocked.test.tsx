@@ -6,7 +6,7 @@
 // server enforces, so the form blocks exactly what a save would 400 on. These arms pin it.
 
 import { describe, expect, it } from 'vitest';
-import { openvpnRefusal } from '../../src/lib/openvpn-refusal';
+import { openvpnRefusal, openvpnAutoStrip } from '../../src/lib/openvpn-refusal';
 
 const REMOTE = 'client\nremote vpn.example.com 1194\n';
 
@@ -45,5 +45,28 @@ describe('openvpnRefusal — the OVPN config the server would refuse', () => {
     // Not asserting r is non-null unconditionally: the finder's exact trigger is its
     // own tested contract; this arm pins that WHEN it fires, openvpnRefusal reports it
     // as un-fixable rather than offering a strip that would not help.
+  });
+});
+
+describe('openvpnAutoStrip — auto-normalize a refusable config on paste OR file upload', () => {
+  it("lowers a bare `script-security 2` to 1 (the owner's config) with a transparent note", () => {
+    const a = openvpnAutoStrip('openvpn', `${REMOTE}script-security 2\n`);
+    expect(a).not.toBeNull();
+    expect(a?.config).toMatch(/script-security 1/);
+    expect(a?.config).not.toMatch(/script-security 2/);
+    expect(a?.note).toMatch(/script-security/i);
+  });
+
+  it('also removes real script directives (inert on Driftstack — the fleet never runs them) and says so', () => {
+    const a = openvpnAutoStrip('openvpn', `${REMOTE}up /etc/openvpn/up.sh\nscript-security 2\n`);
+    expect(a).not.toBeNull();
+    expect(a?.config).not.toMatch(/up \/etc/);
+    expect(a?.config).not.toMatch(/script-security 2/);
+    expect(a?.note).toMatch(/script directive/i);
+  });
+
+  it('is null when there is nothing to normalize, or for a non-OpenVPN scheme', () => {
+    expect(openvpnAutoStrip('openvpn', REMOTE)).toBeNull();
+    expect(openvpnAutoStrip('socks5', `${REMOTE}script-security 2\n`)).toBeNull();
   });
 });

@@ -159,7 +159,11 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     ).toBeTruthy();
   });
 
-  it('paste warns instantly on a script-executing directive (server would reject it)', async () => {
+  it('paste AUTO-NORMALIZES a script-executing directive (inert on Driftstack) instead of blocking', async () => {
+    // N1 (owner) — the server refuses a script directive, but Driftstack never runs VPN
+    // scripts, so the strip removes it without changing how the tunnel connects. The paste
+    // flow now applies that automatically (paste OR file upload) with a transparent note,
+    // rather than stopping behind a "Remove unsupported lines" button.
     stored = [];
     render(<ProxiesView />);
     fireEvent.click(await screen.findByRole('button', { name: 'New proxy' }));
@@ -168,9 +172,10 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     fireEvent.change(textarea, {
       target: { value: 'client\nremote vpn.example.com 1194\nup /etc/openvpn/up.sh\ndev tun\n' },
     });
+    // Accepted (✓ remote), with an honest note that the script directive was removed.
     expect(
       await screen.findByText(
-        (c) => c.includes('runs an external program') && c.includes('refuse this config'),
+        (c) => c.includes('✓ remote vpn.example.com:1194') && c.includes('script directive'),
       ),
     ).toBeTruthy();
   });
