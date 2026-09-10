@@ -47,7 +47,7 @@ type AgentSession struct {
 	DriftstackSessionID  *string `json:"driftstack_session_id"`
 	Status               string  `json:"status"`
 	ClosedReason         *string `json:"closed_reason"`
-	ProvisioningDetail         *string `json:"provisioning_detail,omitempty"`
+	ProvisioningDetail   *string `json:"provisioning_detail,omitempty"`
 	TokenBudgetTotal     int     `json:"token_budget_total"`
 	TokenBudgetRemaining int     `json:"token_budget_remaining"`
 	TranscriptLength     int     `json:"transcript_length"`
