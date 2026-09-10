@@ -841,6 +841,13 @@
       "when": 1786665600007,
       "tag": "0119_add_account_proxy_os_fingerprint",
       "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1786665600008,
+      "tag": "0120_add_account_proxy_exit_observed",
+      "breakpoints": true
     }
   ]
 }

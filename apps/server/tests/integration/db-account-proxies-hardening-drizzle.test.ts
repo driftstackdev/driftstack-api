@@ -112,6 +112,8 @@ beforeAll(async () => {
       quic_measured_at timestamptz,
       os_fingerprint jsonb,
       os_fingerprint_at timestamptz,
+      exit_observed jsonb,
+      exit_observed_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )

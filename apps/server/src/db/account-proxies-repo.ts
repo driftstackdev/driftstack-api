@@ -59,6 +59,17 @@ export interface AccountProxyRow {
   } | null;
   /** When {@link osFingerprint} was recorded, or null when never measured. */
   osFingerprintAt: Date | null;
+  /** VPN parity (migration 0120) — the last exit identity a live session observed through
+   *  this proxy (the ONLY source of a VPN proxy's location/timezone), or null when never
+   *  observed. Written by the capabilityReport relay, latest wins. */
+  exitObserved: {
+    ip: string;
+    country: string | null;
+    timezone: string | null;
+    observed_via: 'session';
+  } | null;
+  /** When {@link exitObserved} was recorded, or null when never observed. */
+  exitObservedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -103,6 +114,14 @@ export interface AccountProxyRowUpdates {
   } | null;
   /** N-2 — timestamp the OS fingerprint was observed. */
   osFingerprintAt?: Date | null;
+  /** VPN parity — the observed exit identity (relay back-fill, latest wins). */
+  exitObserved?: {
+    ip: string;
+    country: string | null;
+    timezone: string | null;
+    observed_via: 'session';
+  } | null;
+  exitObservedAt?: Date | null;
 }
 
 export interface AccountProxiesRepo {
@@ -185,6 +204,8 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     quicMeasuredAt: r.quicMeasuredAt,
     osFingerprint: r.osFingerprint,
     osFingerprintAt: r.osFingerprintAt,
+    exitObserved: r.exitObserved,
+    exitObservedAt: r.exitObservedAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -501,6 +522,8 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       quicMeasuredAt: null,
       osFingerprint: null,
       osFingerprintAt: null,
+      exitObserved: null,
+      exitObservedAt: null,
       createdAt: now,
       updatedAt: now,
     };

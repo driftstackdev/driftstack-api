@@ -213,3 +213,78 @@ describe('a live session back-fills the measured QUIC verdict onto its proxy', (
     expect(row?.quicMeasuredAt).toStrictEqual(MEASURED_AT);
   });
 });
+
+describe('VPN parity — a live session back-fills the EXIT IDENTITY the box observed onto its proxy', () => {
+  // The relay's widened update shape (quic OR exit fields).
+  type ExitUpdate = {
+    id: string;
+    accountId: string;
+    updates: {
+      quicMeasured?: string;
+      quicMeasuredAt?: Date;
+      exitObserved?: {
+        ip: string;
+        country: string | null;
+        timezone: string | null;
+        observed_via: 'session';
+      };
+      exitObservedAt?: Date;
+    };
+  };
+  // No observed handshake, so ONLY the exit back-fill fires and the single call is
+  // unambiguous.
+  const exitFrame = (over: Partial<CapabilityReport> = {}): CapabilityReport =>
+    report({
+      h3ConnectionObserved: undefined,
+      exitIp: '203.0.113.9',
+      exitCountry: 'NL',
+      exitTimezone: 'Europe/Amsterdam',
+      ...over,
+    });
+
+  it('CRITICAL a report carrying the observed exit writes exit_observed {ip, country, timezone, observed_via: session}, owner-scoped, stamped with the injected clock — the ONLY way an OpenVPN/WireGuard proxy ever gets a location or a timezone, because the Mac cannot probe through a tunnel', async () => {
+    const update = vi.fn((_a: ExitUpdate) => Promise.resolve(undefined));
+    relayWith('prx_owned', { update })(exitFrame(), 'node-1');
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    const arg = update.mock.calls[0]![0];
+    expect(arg.id).toBe('prx_owned');
+    expect(arg.accountId).toBe('acc_owner');
+    expect(arg.updates.exitObserved).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+    });
+    // The timestamp is the injected clock, not the frame's own time.
+    expect(arg.updates.exitObservedAt).toBe(MEASURED_AT);
+  });
+
+  it('a report with an exit IP but no country/timezone (the geo lookup missed) still records the IP with nulls — an unknown zone is null, never a placeholder', async () => {
+    const update = vi.fn((_a: ExitUpdate) => Promise.resolve(undefined));
+    relayWith('prx_owned', { update })(
+      exitFrame({ exitCountry: undefined, exitTimezone: undefined }),
+      'node-1',
+    );
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0]![0].updates.exitObserved).toEqual({
+      ip: '203.0.113.9',
+      country: null,
+      timezone: null,
+      observed_via: 'session',
+    });
+  });
+
+  it('VACUITY CONTROL a report with NO exit identity writes nothing — an absent exit is "not observed", not an exit', async () => {
+    const update = vi.fn((_a: ExitUpdate) => Promise.resolve(undefined));
+    relayWith('prx_owned', { update })(report({ h3ConnectionObserved: undefined }), 'node-1');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('VACUITY CONTROL a session that names no proxy (operator-default egress) back-fills nothing', async () => {
+    const update = vi.fn((_a: ExitUpdate) => Promise.resolve(undefined));
+    relayWith(null, { update })(exitFrame(), 'node-1');
+    await new Promise((r) => setTimeout(r, 20));
+    expect(update).not.toHaveBeenCalled();
+  });
+});

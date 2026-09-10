@@ -67,6 +67,8 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     // not leak into the AccountProxyRow return; a miss coerces to null.
     osFingerprint: over.osFingerprint ?? null,
     osFingerprintAt: over.osFingerprintAt ?? null,
+    exitObserved: over.exitObserved ?? null,
+    exitObservedAt: over.exitObservedAt ?? null,
   };
 }
 

@@ -48,6 +48,8 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     quicMeasuredAt: null,
     osFingerprint: null,
     osFingerprintAt: null,
+    exitObserved: null,
+    exitObservedAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

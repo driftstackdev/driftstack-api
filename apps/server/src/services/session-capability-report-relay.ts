@@ -55,7 +55,17 @@ interface CapabilityReportAccountProxies {
   update(args: {
     id: string;
     accountId: string;
-    updates: { quicMeasured: string; quicMeasuredAt: Date };
+    updates: {
+      quicMeasured?: string;
+      quicMeasuredAt?: Date;
+      exitObserved?: {
+        ip: string;
+        country: string | null;
+        timezone: string | null;
+        observed_via: 'session';
+      };
+      exitObservedAt?: Date;
+    };
   }): Promise<unknown>;
 }
 
@@ -210,6 +220,41 @@ export function makeSessionCapabilityReportRelay(
             err: error,
           },
           'failed to back-fill measured QUIC verdict onto the proxy',
+        );
+      }
+    }
+
+    // VPN parity — persist the EXIT IDENTITY the box observed for this session onto
+    // the attributed proxy row (latest wins). For a SOCKS5 the desktop client probes
+    // the exit from the Mac; for OpenVPN/WireGuard only the fleet can see through the
+    // tunnel, so this back-fill is the ONLY source of a VPN proxy's location/timezone
+    // — the /proxies list surfaces it and the next launch hands the timezone to the
+    // simulator. Same owner-scoping and best-effort contract as the QUIC back-fill:
+    // only an attributed proxy (proxyId non-null), a failure is logged, never thrown.
+    if (accountProxies !== undefined && session.proxyId !== null && frame.exitIp !== undefined) {
+      try {
+        await accountProxies.update({
+          id: session.proxyId,
+          accountId: session.accountId,
+          updates: {
+            exitObserved: {
+              ip: frame.exitIp,
+              country: frame.exitCountry ?? null,
+              timezone: frame.exitTimezone ?? null,
+              observed_via: 'session',
+            },
+            exitObservedAt: now(),
+          },
+        });
+      } catch (error) {
+        logger.error(
+          {
+            component: 'session-capability-report-relay',
+            sessionId: frame.sessionId,
+            proxyId: session.proxyId,
+            err: error,
+          },
+          'failed to back-fill the observed exit onto the proxy',
         );
       }
     }
