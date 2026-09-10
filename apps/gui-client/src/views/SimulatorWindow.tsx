@@ -7050,6 +7050,14 @@ export function SimulatorWindow(): JSX.Element {
   const controlMode = manualInputControl.mode;
   const controlModeConfirmed = manualInputControl.modeConfirmed;
   const sessionCapabilityReport = manualInputControl.capabilityReport;
+  // VPN parity (owner: "starts with the right timezone") — the timezone the status-bar
+  // clock shows. The launch hands over `tz` from the client's cached exit probe, which
+  // only a SOCKS5 can produce (the Mac cannot probe through a VPN tunnel), so for an
+  // OpenVPN/WireGuard session it is '' and the clock read HOST time. The box, however,
+  // observes the REAL exit through its egress seconds after the tunnel is up and reports
+  // exit_timezone on the capability report — ground truth for every scheme, so prefer it
+  // the moment it lands and fall back to the launch value until then.
+  const displayTimezone = sessionCapabilityReport?.exit_timezone ?? timezone;
   const manualInputAvailable = sessionCapabilityReport?.manual_input_available;
   const streamingHealth = sessionCapabilityReport?.streaming_state;
   const egressHealth = sessionCapabilityReport?.egress_state;
@@ -8808,7 +8816,7 @@ export function SimulatorWindow(): JSX.Element {
                 data-component="simulator-screen"
                 className="relative flex flex-1 flex-col overflow-hidden rounded-[2.1rem] bg-black shadow-[inset_0_0_0_1px_rgba(0,0,0,0.9),inset_0_0_12px_rgba(0,0,0,0.55)]"
               >
-                <IosStatusBar timeZone={timezone} />
+                <IosStatusBar timeZone={displayTimezone} />
                 {/* Cold-switch blank (W3020 + #116): while a tab switch is in flight
                     (switchingTabId set) cover the video so the PREVIOUS tab's content
                     doesn't bleed through during the re-navigation. On a WARM swap the
@@ -9522,8 +9530,11 @@ export function SimulatorWindow(): JSX.Element {
                                   {proxyLabel}
                                   {/* T-17 — the exit's timezone, when the launch handed
                                       one over (it also drives the device clock). */}
-                                  {timezone !== '' && (
-                                    <span data-component="sim-proxy-timezone"> · {timezone}</span>
+                                  {displayTimezone !== '' && (
+                                    <span data-component="sim-proxy-timezone">
+                                      {' '}
+                                      · {displayTimezone}
+                                    </span>
                                   )}
                                 </span>
                               )}
@@ -9922,10 +9933,10 @@ export function SimulatorWindow(): JSX.Element {
                                     {proxyLabel !== '' && (
                                       <div className="mt-0.5 truncate">
                                         🌍 {proxyLabel}
-                                        {timezone !== '' && (
+                                        {displayTimezone !== '' && (
                                           <span data-component="sim-proxy-timezone">
                                             {' · '}
-                                            {timezone}
+                                            {displayTimezone}
                                           </span>
                                         )}
                                       </div>

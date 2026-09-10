@@ -50,6 +50,9 @@ export interface WireGuardConfigInput {
   /** [Interface] Address (e.g. 10.7.0.2/32) — the harness WG ifconfig needs it. */
   address: string;
   dns?: string;
+  /** [Peer] PresharedKey (44-char base64), when the peer requires one — carried to the
+   *  fleet, which emits it under [Peer]. */
+  preshared_key?: string;
 }
 
 /** Server view — never carries the password/secret (has_password/has_secret instead). */
@@ -232,30 +235,60 @@ export async function deleteProxy(baseUrl: string, apiKey: string, id: string): 
 // port are set to the endpoint so the proxy renders meaningfully in the list.
 // Pure + total (no throws): a bad paste → an `error` so the form can surface it.
 
-/** Split an `host:port` endpoint (last colon, so IPv6 hosts survive). */
+/** Split an `host:port` endpoint (last colon, so IPv6 hosts survive) into the
+ *  DISPLAY host/port. A bracketed IPv6 literal (`[2001:db8::1]:51820`, the
+ *  wg-quick syntax) is unwrapped here — one surrounding `[ ]` pair — because the
+ *  native endpoint_resolve reads a bare address and cannot parse the brackets.
+ *  Only the display host changes: the `endpoint` string on the wire keeps its
+ *  bracketed form, which is what the server accepts. */
 function splitEndpoint(endpoint: string): { host: string; port: number } | null {
   const at = endpoint.lastIndexOf(':');
   if (at <= 0) return null;
-  const host = endpoint.slice(0, at);
+  const rawHost = endpoint.slice(0, at);
+  const host = rawHost.startsWith('[') && rawHost.endsWith(']') ? rawHost.slice(1, -1) : rawHost;
   const port = Number.parseInt(endpoint.slice(at + 1), 10);
   if (host === '' || !Number.isInteger(port) || port < 1 || port > 65535) return null;
   return { host, port };
 }
 
-/** Parsed wg0.conf → create body. Returns `{ error }` when the paste is unusable. */
+/** What parse-wireguard's detailed parse hands over, typed by shape so this
+ *  transport module stays free of the parser (whose fields already mirror
+ *  WireGuardConfigInput 1:1). The `ok: false` arm carries the field-naming
+ *  reason the form shows verbatim. */
+type WireGuardParseOutcome =
+  | { ok: true; value: WireGuardConfigInput }
+  | { ok: false; reason: string };
+
+/** Parsed wg0.conf → create body. Returns `{ error }` when the paste is unusable.
+ *  Takes the detailed parse result so the error NAMES the field (Address, either
+ *  key, or the Endpoint); the flat config / null form stays for callers that
+ *  hold a stored config rather than a paste, and a null can only say the paste
+ *  was unusable — it carries no reason. */
 export function buildWireGuardProxyInput(
   label: string,
-  parsed: WireGuardConfigInput | null,
+  parsed: WireGuardConfigInput | WireGuardParseOutcome | null,
 ): AccountProxyInput | { error: string } {
-  if (parsed === null) return { error: 'Not a valid wg0.conf (missing keys or endpoint).' };
-  const ep = splitEndpoint(parsed.endpoint);
+  if (parsed === null) {
+    return {
+      error:
+        'Not a valid wg0.conf (needs a PrivateKey, a [Peer] PublicKey and Endpoint, and an [Interface] Address).',
+    };
+  }
+  let config: WireGuardConfigInput;
+  if ('ok' in parsed) {
+    if (!parsed.ok) return { error: parsed.reason };
+    config = parsed.value;
+  } else {
+    config = parsed;
+  }
+  const ep = splitEndpoint(config.endpoint);
   if (ep === null) return { error: 'WireGuard endpoint must be host:port.' };
   return {
     label,
     scheme: 'wireguard',
     host: ep.host,
     port: ep.port,
-    wireguard: parsed,
+    wireguard: config,
   };
 }
 

@@ -39,9 +39,10 @@ import {
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
-import { parseWireGuardConfig } from '../lib/parse-wireguard';
+import { parseWireGuardConfigDetailed } from '../lib/parse-wireguard';
 import { validateOpenVpnConfig } from '../lib/parse-openvpn';
-import { openvpnRefusal, openvpnAutoStrip } from '../lib/openvpn-refusal';
+import { openvpnRefusal, openvpnAutoStrip, type OpenvpnRefusal } from '../lib/openvpn-refusal';
+import { wireguardRefusal, type WireguardRefusal } from '../lib/wireguard-refusal';
 import {
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
@@ -1688,6 +1689,15 @@ function HealthPill({
   );
 }
 
+// The one-line "where and why" of a VPN refusal, for the submit hint and the Save
+// tooltip. An OVPN refusal points at a LINE of the pasted blob (the finder's own number).
+// A WireGuard reason is already a sentence naming its field ("address must be …",
+// "Pre-shared keys aren't supported yet — remove the PresharedKey line …"), so it is shown
+// as-is rather than behind a fake "Line 0".
+function vpnRefusalMessage(r: OpenvpnRefusal | WireguardRefusal): string {
+  return 'line' in r ? `Line ${r.line.toString()}: ${r.reason}` : r.reason;
+}
+
 export function ProxyForm({
   initial,
   mode,
@@ -1724,15 +1734,21 @@ export function ProxyForm({
   const submitInFlightRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const locked = saving || submitting;
-  // N1 (owner: OVPN "still won't launch/save") — the OVPN config the control plane
-  // will REFUSE: a script directive / `script-security >= 2` or an unresolvable inline
-  // cert/key file reference (webhook-target-guard, enforced at proxy create/update).
-  // Computed with the SAME shared finders the server uses, on the CURRENT blob, so the
-  // form blocks exactly what a save would 400 on instead of a round-trip failure.
-  // null = acceptable; `.fixable` carries the one-click strip.
+  // N1 (owner: OVPN "still won't launch/save") + WG parity — the VPN config the control
+  // plane will REFUSE. OpenVPN: a script directive / `script-security >= 2` or an
+  // unresolvable inline cert/key file reference (webhook-target-guard, enforced at proxy
+  // create/update). WireGuard: the built block fails the server's own
+  // WireGuardProxyConfigSchema (a mask-less Address, a DNS search domain, …), or the raw
+  // conf carries a PresharedKey line the fleet cannot honour. Both computed with the SAME
+  // shared api-types code the server enforces, on the CURRENT draft, so the form blocks
+  // exactly what a save would 400 on instead of a round-trip failure. null = acceptable;
+  // an OVPN `.fixable` carries the one-click strip.
   const vpnRefusal = useMemo(
-    () => openvpnRefusal(draft.scheme, draft.openvpn?.config_blob ?? ''),
-    [draft.scheme, draft.openvpn?.config_blob],
+    () =>
+      draft.scheme === 'wireguard'
+        ? wireguardRefusal(draft.scheme, draft.wireguard, wgText)
+        : openvpnRefusal(draft.scheme, draft.openvpn?.config_blob ?? ''),
+    [draft.scheme, draft.wireguard, draft.openvpn?.config_blob, wgText],
   );
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -1785,7 +1801,7 @@ export function ProxyForm({
       setDraft((d) => ({ ...d, wireguard: undefined }));
       return;
     }
-    const built = buildWireGuardProxyInput(draft.label, parseWireGuardConfig(text));
+    const built = buildWireGuardProxyInput(draft.label, parseWireGuardConfigDetailed(text));
     if ('error' in built) {
       setVpnHint(built.error);
       setDraft((d) => ({ ...d, wireguard: undefined }));
@@ -1798,7 +1814,13 @@ export function ProxyForm({
       port: built.port,
       wireguard: built.wireguard,
     }));
-    setVpnHint(`✓ endpoint ${built.host}:${built.port.toString()}`);
+    // WG parity with the OVPN paste path: say at paste time what the control plane (or
+    // the tunnel) would refuse, instead of a green "✓ endpoint" over a config Save then
+    // blocks. The block stays in the draft so the gate + Save tooltip carry the same reason.
+    const refusal = wireguardRefusal('wireguard', built.wireguard, text);
+    setVpnHint(
+      refusal !== null ? refusal.reason : `✓ endpoint ${built.host}:${built.port.toString()}`,
+    );
   }
 
   // .ovpn paste → validate + extract remote → fill host/port + the OVPN block
@@ -1941,14 +1963,15 @@ export function ProxyForm({
     const v = validateDraft(draft);
     setValidation(v);
     if (!v.ok) return;
-    // N1 — a refusable OVPN config never leaves the form: surface the offending line
-    // and re-offer the one-click fix rather than posting it to a certain 400.
+    // N1 — a refusable VPN config never leaves the form: surface the offending line
+    // (OVPN) or field (WireGuard) and, for OVPN, re-offer the one-click fix rather than
+    // posting it to a certain 400.
     if (vpnRefusal !== null) {
       setVpnHint(
-        `Line ${vpnRefusal.line.toString()}: ${vpnRefusal.reason}. Fix this before saving — ` +
+        `${vpnRefusalMessage(vpnRefusal)}. Fix this before saving — ` +
           `Driftstack will refuse this config.`,
       );
-      setVpnFixable(vpnRefusal.fixable);
+      setVpnFixable('fixable' in vpnRefusal ? vpnRefusal.fixable : null);
       return;
     }
     submitInFlightRef.current = true;
@@ -2369,9 +2392,7 @@ export function ProxyForm({
             disabled={locked || vpnRefusal !== null}
             aria-busy={locked}
             title={
-              vpnRefusal !== null
-                ? `Line ${vpnRefusal.line.toString()}: ${vpnRefusal.reason} — fix it first`
-                : undefined
+              vpnRefusal !== null ? `${vpnRefusalMessage(vpnRefusal)} — fix it first` : undefined
             }
           >
             {locked

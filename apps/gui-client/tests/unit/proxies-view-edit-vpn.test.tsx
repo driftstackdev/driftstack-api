@@ -42,8 +42,13 @@ const WIREGUARD_PROXY: ProxyConfig = {
   createdAt: '2026-05-20T00:00:00.000Z',
   scheme: 'wireguard',
   wireguard: {
-    private_key: 'PRIV_KEY_AAA',
-    peer_public_key: 'PEER_PUB_BBB',
+    // Keys the way `wg genkey | wg pubkey` prints them (43 base64 chars + `=`). The
+    // form now runs the server's own WireGuardProxyConfigSchema over the stored block
+    // before Save (wireguardRefusal), so a placeholder key here would disable Save and
+    // this arm would measure that gate instead of the rename. A stored block always
+    // passed that schema at create time, so real-shaped keys are the faithful fixture.
+    private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+    peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
     endpoint: 'wg.example.com:51820',
     allowed_ips: '0.0.0.0/0',
     address: '10.7.0.2/32',

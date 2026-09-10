@@ -4,6 +4,7 @@ import {
   buildOpenVpnProxyInput,
   type WireGuardConfigInput,
 } from '../../src/lib/account-proxies';
+import { parseWireGuardConfigDetailed } from '../../src/lib/parse-wireguard';
 
 const WG: WireGuardConfigInput = {
   private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
@@ -34,6 +35,62 @@ describe('buildWireGuardProxyInput', () => {
     const bad = { ...WG, endpoint: 'vpn.example.com' };
     expect(buildWireGuardProxyInput('x', bad)).toEqual({
       error: expect.stringMatching(/host:port/),
+    });
+  });
+
+  // WG parity pass (2026-09-10).
+
+  it('unwraps a bracketed IPv6 endpoint for the display host but keeps the brackets on the wire', () => {
+    // The native endpoint_resolve reads a bare address; wg-quick (and the
+    // server) want the bracketed form on the `endpoint` string. Both at once.
+    const v6 = { ...WG, endpoint: '[2606:4700::1111]:51820' };
+    expect(buildWireGuardProxyInput('x', v6)).toEqual({
+      label: 'x',
+      scheme: 'wireguard',
+      host: '2606:4700::1111',
+      port: 51820,
+      wireguard: { ...v6, endpoint: '[2606:4700::1111]:51820' },
+    });
+  });
+
+  it('strips one bracket pair only — a host that is just brackets is still an error', () => {
+    expect(buildWireGuardProxyInput('x', { ...WG, endpoint: '[]:51820' })).toEqual({
+      error: expect.stringMatching(/host:port/),
+    });
+  });
+
+  it('surfaces the field the detailed parse named, verbatim', () => {
+    expect(
+      buildWireGuardProxyInput('x', { ok: false, reason: '[Interface] Address line is required' }),
+    ).toEqual({ error: '[Interface] Address line is required' });
+  });
+
+  it('builds the body from an ok detailed result', () => {
+    expect(buildWireGuardProxyInput('wg-home', { ok: true, value: WG })).toEqual({
+      label: 'wg-home',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      wireguard: WG,
+    });
+  });
+
+  it('paste → body: a wg0.conf with no Address is told about Address, not about its keys', () => {
+    const conf = [
+      '[Interface]',
+      `PrivateKey = ${WG.private_key}`,
+      '[Peer]',
+      `PublicKey = ${WG.peer_public_key}`,
+      'Endpoint = vpn.example.com:51820',
+    ].join('\n');
+    expect(buildWireGuardProxyInput('x', parseWireGuardConfigDetailed(conf))).toEqual({
+      error: '[Interface] Address line is required',
+    });
+  });
+
+  it('a null (no reason available) still says wg0.conf and now names Address among the needs', () => {
+    expect(buildWireGuardProxyInput('x', null)).toEqual({
+      error: expect.stringMatching(/wg0\.conf.*Address/),
     });
   });
 });
