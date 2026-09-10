@@ -644,7 +644,13 @@ export function AgentChatView({
     // Don't fire a doomed request when there's no API key connected — it would
     // dead-air then surface a server error. The Send button is disabled too;
     // this also guards the Enter-to-send path.
-    if (text.length === 0 || chat.sending || !aiReady) return;
+    //
+    // `chat.adopting`: reopening a chat fires a background adopt() that reattaches to
+    // its still-live server session. Sending before it settles would instead create a
+    // NEW session "continuing from" that still-active id, which the server rejects with
+    // a 409 surfaced as "The item changed or is busy." Once adopt settles, an active
+    // session is adopted (the send messages it) and a closed one is continued cleanly.
+    if (text.length === 0 || chat.sending || chat.adopting || !aiReady) return;
     // Egress gate. Only a settled resolution may start a session: 'pending'
     // means the proxy round-trip is still in flight, and 'blocked' means this
     // profile HAS a proxy we could not resolve. Sending in either state would
@@ -1103,17 +1109,20 @@ export function AgentChatView({
                 disabled={
                   draft.trim().length === 0 ||
                   !aiReady ||
+                  chat.adopting ||
                   proxyState.kind === 'pending' ||
                   proxyState.kind === 'blocked'
                 }
                 title={
                   !aiReady
                     ? 'Connect your API key in Settings first'
-                    : proxyState.kind === 'pending'
-                      ? 'Checking this profile’s proxy…'
-                      : proxyState.kind === 'blocked'
-                        ? proxyState.reason
-                        : undefined
+                    : chat.adopting
+                      ? 'Reattaching to the previous session…'
+                      : proxyState.kind === 'pending'
+                        ? 'Checking this profile’s proxy…'
+                        : proxyState.kind === 'blocked'
+                          ? proxyState.reason
+                          : undefined
                 }
                 className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
               >
