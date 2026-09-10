@@ -60,6 +60,7 @@ describe('agent-session-control transport', () => {
       terminal: false,
       status: 'active',
       closedReason: null,
+      provisioningDetail: null,
     });
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://api.test/v1/agent-sessions/agt_1/mode');
@@ -130,6 +131,7 @@ describe('agent-session-control transport', () => {
       terminal: false,
       status: 'active',
       closedReason: null,
+      provisioningDetail: null,
     });
     expect((mockFetch.mock.calls[0] as [string, RequestInit])[1].method).toBe('GET');
   });
@@ -314,6 +316,7 @@ describe('agent-session-control transport', () => {
       terminal: true,
       status: 'closed',
       closedReason: 'idle_timeout',
+      provisioningDetail: null,
     });
   });
 
@@ -424,6 +427,7 @@ describe('agent-session-control transport', () => {
       terminal: false,
       status: 'active',
       closedReason: null,
+      provisioningDetail: null,
     });
     const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect((init.headers as Record<string, string>)['x-driftstack-gui-control-key']).toBe(
