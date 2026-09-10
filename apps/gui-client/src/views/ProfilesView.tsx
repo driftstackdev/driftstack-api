@@ -188,6 +188,14 @@ export function shouldAutoProbe(
 const REFRESH_MS = 15_000;
 const PROFILES_VIEW_MODE_KEY = 'ds-profiles-view-mode';
 
+// A running profile bound to a legacy DRIVER session has no live view — only
+// agent sessions stream, and driver sessions are no longer created. Clicking
+// such a row's primary "Open session" / "Watch" control used to fall through
+// silently (the inner `bound.kind === 'agent'` guard just did nothing). Surface
+// this instead, per the component's no-silent-no-op contract.
+export const DRIVER_NO_LIVE_VIEW_NOTICE =
+  'This legacy session has no live view — Stop it and relaunch.';
+
 type ProfilesViewMode = 'list' | 'grid';
 
 // Keep the initial-loading silhouette and the loaded workspace on the same
@@ -4505,11 +4513,13 @@ export function ProfilesView({
                             // it has nothing to open. An idle profile launches.
                             if (running && bound !== null) {
                               if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                              else setState((s) => ({ ...s, notice: DRIVER_NO_LIVE_VIEW_NOTICE }));
                             } else void handleLaunch(profile);
                           }}
                           onWatch={() => {
                             if (running && bound !== null) {
                               if (bound.kind === 'agent') void reopenStream(bound.id, profile.id);
+                              else setState((s) => ({ ...s, notice: DRIVER_NO_LIVE_VIEW_NOTICE }));
                             } else void handleLaunch(profile);
                           }}
                           onTest={() => {
@@ -4662,6 +4672,7 @@ export function ProfilesView({
                           // Only agent sessions stream; a driver binding has no
                           // live UI (driver sessions are no longer created).
                           if (bound.kind === 'agent') void reopenStream(bound.id, id);
+                          else setState((s) => ({ ...s, notice: DRIVER_NO_LIVE_VIEW_NOTICE }));
                         } else void handleLaunch(profile);
                       }}
                       onWatch={(id) => {
@@ -4670,6 +4681,7 @@ export function ProfilesView({
                         const bound = boundSession(id);
                         if (bound !== null) {
                           if (bound.kind === 'agent') void reopenStream(bound.id, id);
+                          else setState((s) => ({ ...s, notice: DRIVER_NO_LIVE_VIEW_NOTICE }));
                         } else void handleLaunch(profile);
                       }}
                       onStop={(id) => {

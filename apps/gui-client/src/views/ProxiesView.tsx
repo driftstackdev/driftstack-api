@@ -480,7 +480,10 @@ export function ProxiesView(): JSX.Element {
       if (failed.length > 0) {
         setState((s) => ({
           ...s,
-          error: `${String(failed.length)} of ${String(n)} could not be removed. The rest were.`,
+          error:
+            failed.length < n
+              ? `${String(failed.length)} of ${String(n)} could not be removed. The rest were removed.`
+              : 'None could be removed.',
         }));
       }
       if (unbound.size > 0) {
@@ -1688,6 +1691,7 @@ export function ProxyForm({
   // password can't ride along on a VPN proxy (and vice versa).
   function handleSchemeChange(next: NonNullable<ProxyDraft['scheme']>): void {
     setVpnHint(null);
+    setVpnFixable(null);
     setWgText('');
     setDraft((d) => ({
       ...d,
@@ -2189,21 +2193,21 @@ export function ProxyForm({
         <div
           data-component="form-test-result"
           className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-xs ${
-            testResult.reachable && testResult.auth_ok
+            isProxyUsable(testResult)
               ? 'border-status-ready/40 bg-status-ready/10 text-status-ready'
               : 'border-status-error/40 bg-status-error/10 text-status-error'
           }`}
         >
           <span
             className="font-semibold"
-            title={testResult.reachable && testResult.auth_ok ? PROBE_ORIGIN_TITLE : undefined}
+            title={isProxyUsable(testResult) ? PROBE_ORIGIN_TITLE : undefined}
           >
-            {testResult.reachable && testResult.auth_ok ? '✓ Connected from this Mac' : '✗ Failed'}
+            {isProxyUsable(testResult) ? '✓ Connected from this Mac' : '✗ Failed'}
           </span>
           {testResult.reachable && (
             <span className="text-ink-secondary">
               {testResult.auth_ok ? 'auth ok' : 'auth failed'} · {testResult.latency_ms}ms · UDP{' '}
-              {testResult.udp_associate ? '✓' : '✗'}
+              {testResult.udp_associate ? '✓' : '✗'} · route {testResult.can_route ? '✓' : '✗'}
             </span>
           )}
           {!testResult.reachable && (

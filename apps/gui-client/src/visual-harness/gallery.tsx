@@ -70,6 +70,18 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
 const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
   { label: 'idle · UDP ok', props: base({}) },
   {
+    label: 'MAX · full egress + folder + tags + saved-tabs (overflow repro)',
+    props: base({
+      name: 'amsterdam shopper with a long descriptive profile name',
+      folder: 'Shopping / Netherlands',
+      tags: ['retail', 'nl', 'daily', 'warm', 'checkout'],
+      savedTabsReopen: true,
+      sizeLabel: '128 MB',
+      locationLabel: 'Amsterdam, North Holland, Netherlands',
+      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+    }),
+  },
+  {
     label: 'launching · proxy check',
     props: base({ busy: true, launching: true }),
   },

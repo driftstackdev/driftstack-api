@@ -546,6 +546,39 @@ export function friendlyUnavailableNote(reason: string | null | undefined): stri
       return reason ?? 'unavailable for this session';
   }
 }
+
+/** MED #3 — decide whether a background control-poll error should REVOKE
+ *  manual-input authority and blank the egress readouts. Only an authentication
+ *  failure does: an expired/invalid per-session gui_control_key 401/403s every
+ *  poll, so live-status detection is genuinely degraded and the operator must
+ *  reopen the session. A transient / network / 5xx error (any non-auth status,
+ *  or a non-control error with no status at all) is a transport blip — return
+ *  false so the poll stays silent and retries next tick, leaving mode /
+ *  lifecycle / capabilityReport intact. Pure so the gating rule is unit-testable
+ *  without rendering the whole window. */
+export function shouldControlPollErrorRevoke(err: unknown): boolean {
+  return err instanceof AgentSessionControlError && (err.status === 401 || err.status === 403);
+}
+
+/** MED #2 — the Egress card's live readouts (exit IP / HTTP-3 / OS) are driven by
+ *  the session's capabilityReport, NOT by the cosmetic `proxy` query param. This
+ *  answers "does the report carry any egress-relevant field?" so the card renders
+ *  for a reopened session whose proxyLabel resolved to '' but whose exit identity
+ *  is still measured. Absent fields still render "measuring…" (the nil-vs-value
+ *  contract lives in the readout components), so this only decides WHETHER the
+ *  card appears — it never turns an absent field into a false negative. Pure. */
+export function reportHasEgressReadout(report: AgentSessionCapabilityReport | null): boolean {
+  if (report === null) return false;
+  return (
+    report.exit_ip !== undefined ||
+    report.exit_country !== undefined ||
+    report.exit_timezone !== undefined ||
+    report.webrtc_candidate_ips !== undefined ||
+    report.observed_at !== undefined ||
+    report.h3_connection_observed === true ||
+    report.os_fingerprint !== undefined
+  );
+}
 // The iPhone CSS-logical width of the launch archetype (iphone17). Fallback for the
 // "actual size" reset (Cmd+0) before the live stream reports its per-archetype dims,
 // so the device renders at true iPhone-logical px, not whatever width the window
@@ -6366,7 +6399,7 @@ export function SimulatorWindow(): JSX.Element {
             });
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           // Drop a result that resolved after an in-place session swap (mirrors .then).
           if (
             cancelled ||
@@ -6383,7 +6416,10 @@ export function SimulatorWindow(): JSX.Element {
           // only renders when mode===null, i.e. invisible in the common browser-mode
           // case) so the operator knows live-status detection is degraded and to reopen
           // the session. Transient/network/5xx errors stay silent (retry next tick) — a
-          // transport blip must NOT read as ended.
+          // transport blip must NOT read as ended, so it must NOT revoke manual-input
+          // authority or blank the egress readouts (only an AUTH failure is a durable
+          // degrade worth surfacing).
+          if (!shouldControlPollErrorRevoke(err)) return;
           updateManualInputControl({
             sessionId: reqSessionId,
             modeConfirmed: false,
@@ -9869,20 +9905,28 @@ export function SimulatorWindow(): JSX.Element {
                                     {info && <span className="text-ink-secondary"> · ws ✓</span>}
                                   </div>
                                 </div>
-                                {proxyLabel !== '' && (
+                                {(proxyLabel !== '' ||
+                                  reportHasEgressReadout(sessionCapabilityReport)) && (
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
                                     <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
                                       Egress
                                     </div>
-                                    <div className="mt-0.5 truncate">
-                                      🌍 {proxyLabel}
-                                      {timezone !== '' && (
-                                        <span data-component="sim-proxy-timezone">
-                                          {' · '}
-                                          {timezone}
-                                        </span>
-                                      )}
-                                    </div>
+                                    {/* MED #2 — ONLY the cosmetic "🌍 {proxyLabel}" line is gated on
+                                        the launch-time proxy query param; the live readouts below read
+                                        the capabilityReport and render whenever it carries egress data
+                                        (a reopened session whose proxy resolved to '' still shows its
+                                        measured exit identity). */}
+                                    {proxyLabel !== '' && (
+                                      <div className="mt-0.5 truncate">
+                                        🌍 {proxyLabel}
+                                        {timezone !== '' && (
+                                          <span data-component="sim-proxy-timezone">
+                                            {' · '}
+                                            {timezone}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                     {/* T-26 (owner #12) — the LIVE measured exit identity for
                                         THIS session (exit IP + country/tz + WebRTC leak tell),
                                         read off the capabilityReport the simulator already holds.

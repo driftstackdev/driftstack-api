@@ -149,6 +149,10 @@ export interface UseAgentChatResult {
   pendingConfirmation: PendingConfirmation | null;
   /** Turn ids the customer DENIED — the transcript marks their paused step as skipped. */
   deniedTurnIds: ReadonlySet<number>;
+  /** Turn ids the customer APPROVED (on a successful re-send) — the transcript renders
+   *  their paused ⏸ consequential step as past-tense "approved, ran" instead of leaving
+   *  it stuck on the live "confirmation required" framing after the action already ran. */
+  approvedTurnIds: ReadonlySet<number>;
   /** Resolves true when the turn succeeded, false on error — lets the caller
    *  restore the draft for a retry instead of losing the typed message. */
   send: (userMessage: string) => Promise<boolean>;
@@ -184,6 +188,11 @@ export interface UseAgentChatResult {
    *  remember these turns — the view shows an honest divider after them. Cleared
    *  once a new live session is created (or on reset/new-chat). */
   restoredHistoryCount: number;
+  /** The persisted server session id a reopened chat is continuing (the id it last
+   *  ran on), exposed so the view can fetch that chat's captures from it while there
+   *  is no live session — the server serves captures for a closed session until
+   *  TTL/LRU eviction. Null for a new chat, or once the chat is adopted live. */
+  restoredSessionId: string | null;
 }
 
 /**
@@ -272,6 +281,15 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // Turn ids the customer explicitly DENIED (a subset of resolved) — the transcript
   // marks their paused ⏸ consequential step as denied/skipped rather than stuck-waiting.
   const [deniedTurnIds, setDeniedTurnIds] = useState<ReadonlySet<number>>(() => new Set());
+  // Turn ids the customer explicitly APPROVED (a subset of resolved) — the transcript
+  // renders their paused ⏸ consequential step as past-tense "approved, ran" once the
+  // re-send succeeds, rather than leaving it stuck on the live "confirmation required"
+  // framing forever. Mirrors deniedTurnIds. Cleared on reset()/restore().
+  const [approvedTurnIds, setApprovedTurnIds] = useState<ReadonlySet<number>>(() => new Set());
+  // The persisted (continue-from) server session a reopened chat is continuing, mirrored
+  // from continueFromRef into render state so the view can address that chat's captures by
+  // the persisted id while session===null. Set on restore(), cleared on reset().
+  const [restoredSessionId, setRestoredSessionId] = useState<string | null>(null);
   // Leading turns that came from a restore and aren't backed by a live server
   // session (see restore()). Drives the view's honest "continuing starts a new
   // session" divider. Cleared once a fresh session is created on the next send.
@@ -561,14 +579,20 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
             if (cancelGenRef.current === gen) setLiveSteps((prev) => [...prev, step.result]);
           },
         });
-        // A terminal success (fresh or replayed) removes the ambiguity. Only clear
-        // this exact receipt: a different send may have started after a soft Stop.
-        if (pendingTurnReceiptRef.current?.key === turnReceipt.key) {
-          pendingTurnReceiptRef.current = null;
-        }
         if (cancelGenRef.current !== gen) {
           rollbackUserTurn(); // user hit Stop — discard the reply + the orphan bubble
           return false;
+        }
+        // A terminal success (fresh or replayed) removes the ambiguity. Only clear
+        // this exact receipt: a different send may have started after a soft Stop.
+        // ⛔ This MUST stay BELOW the cancel-generation check: a turn that resolves
+        // successfully AFTER Stop is discarded (the gen moved), and the server may have
+        // deliberately finished the browser work — so clearing the key here would let an
+        // identical re-send re-execute + re-bill instead of replaying under the same key.
+        // Only a confirmed, non-cancelled success clears it, matching the catch path that
+        // already preserves the receipt on Stop.
+        if (pendingTurnReceiptRef.current?.key === turnReceipt.key) {
+          pendingTurnReceiptRef.current = null;
         }
         setSession(response.session);
         // P2 #9 — the turn completed (an agent reply now backs the user bubble), so
@@ -661,6 +685,15 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     });
     if (ok) {
       setResolvedTurnId(turnId);
+      // Record the turn as APPROVED so its paused ⏸ step re-renders past-tense
+      // ("approved, ran") instead of staying stuck on "confirmation required".
+      // Mirrors deny()'s deniedTurnIds; only set ON SUCCESS (a failed re-send leaves
+      // the gate up for a clean retry, above).
+      setApprovedTurnIds((prev) => {
+        const next = new Set(prev);
+        next.add(turnId);
+        return next;
+      });
     } else if (!already) {
       // The re-send failed and we had appended this approval — remove it so the next
       // Approve re-appends cleanly (idempotent whether or not it's still the tail).
@@ -695,6 +728,11 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // fresh chat's transcript + session (audit wja3dfl5t P0). Same for restore().
     cancelGenRef.current += 1;
     activePostRef.current = null;
+    // Bumping the cancel generation invalidates any in-flight adopt(), so its
+    // `adopting` flag no longer describes anything — clear it here (a following
+    // synchronous adopt() re-sets it true). Otherwise a stale-generation adopt
+    // leaves it stuck true and suppresses the honest restored-history divider.
+    setAdopting(false);
     // Best-effort close the chat we're leaving so its server session + any
     // dispatched Mac don't leak until the reaper (sweep2). Read via the ref so we
     // close the CURRENT session, not a stale closure capture.
@@ -707,10 +745,12 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     setError(null);
     setResolvedTurnId(null);
     setDeniedTurnIds(new Set());
+    setApprovedTurnIds(new Set());
     approvedActionsRef.current = [];
     pendingTurnReceiptRef.current = null;
     setLastUserMessage(null);
     setRestoredHistoryCount(0);
+    setRestoredSessionId(null);
   }, [closeServerSession, clearProfileBinding]);
 
   const restore = useCallback(
@@ -719,6 +759,10 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // its late response can't attach to (and persist onto) the restored chat.
       cancelGenRef.current += 1;
       activePostRef.current = null;
+      // The generation bump invalidates any in-flight adopt() (for the chat we're
+      // leaving), so its `adopting` flag is stale — clear it. handleSelectChat calls
+      // restore() then a synchronous adopt(), which re-sets it true, preserving order.
+      setAdopting(false);
       // Best-effort close the chat we're switching AWAY from (same leak as reset).
       if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
@@ -735,10 +779,15 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // across. That is what makes a reopened chat still have its memory, instead
       // of the agent answering "I don't have a previous task on record in this
       // session" (owner 2026-08-30). A chat with no prior session id is unchanged.
-      continueFromRef.current =
+      const continueFrom =
         typeof continueFromSessionId === 'string' && continueFromSessionId !== ''
           ? continueFromSessionId
           : null;
+      continueFromRef.current = continueFrom;
+      // Mirror the persisted session id into render state so the view can fetch this
+      // reopened chat's captures from it while there is no live session (LOW #9 — the
+      // thumbnail was handed the null live id and showed "Screenshot unavailable").
+      setRestoredSessionId(continueFrom);
       setSession(null);
       setError(null);
       setResolvedTurnId(null);
@@ -747,6 +796,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // low id space, so a stale denied id from the chat we're leaving (e.g. 3) would
       // otherwise false-mark the restored chat's own turn id 3 as "denied — skipped".
       setDeniedTurnIds(new Set());
+      setApprovedTurnIds(new Set());
       approvedActionsRef.current = [];
       setLastUserMessage(null);
       // Mark every restored turn as history the (absent) live session won't
@@ -768,6 +818,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     error,
     pendingConfirmation,
     deniedTurnIds,
+    approvedTurnIds,
     send,
     approve,
     deny,
@@ -777,5 +828,6 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     adopting,
     cancel,
     restoredHistoryCount,
+    restoredSessionId,
   };
 }

@@ -245,6 +245,11 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       aria-label={`Select ${p.name}`}
       onClick={p.onToggleSelect}
       onKeyDown={(e) => {
+        // Only the card itself toggles selection on Enter/Space. Without this,
+        // a keydown bubbling up from a nested control (Launch, the ⋯ menu, the
+        // Retest/Change buttons) would trip selection and pre-empt that
+        // control's own keyboard activation — breaking its operability.
+        if (e.target !== e.currentTarget) return;
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
           p.onToggleSelect();
@@ -396,7 +401,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         </div>
 
         {/* body */}
-        <div className="relative z-10 flex flex-1 flex-col gap-1.5 px-2.5 pb-2 pt-1.5">
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 pb-2 pt-1.5">
           {/* identity */}
           <div className="flex flex-col items-center gap-1 pt-1">
             <span
@@ -702,7 +707,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
         {/* footer: the Launch dock + a hover action strip that floats ABOVE it
             (bottom-full) so the secondary actions never overlap Launch. */}
-        <div ref={footerRef} className="relative z-10">
+        <div ref={footerRef} className="relative z-10 shrink-0">
           {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
               2026-06-17), anchored above the dock so it never collides with
               Launch/Open.

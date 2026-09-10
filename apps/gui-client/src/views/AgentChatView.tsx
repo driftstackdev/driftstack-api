@@ -860,7 +860,15 @@ export function AgentChatView({
                   <TurnRow
                     turn={turn}
                     denied={chat.deniedTurnIds.has(turn.id)}
-                    sessionId={chat.session?.id ?? null}
+                    // optional-chained: a partial useAgentChat double in a test may omit
+                    // this newer field; the real hook always provides it. An approved
+                    // consequential step renders past-tense instead of "confirmation
+                    // required" forever.
+                    approved={chat.approvedTurnIds?.has(turn.id) ?? false}
+                    // A reopened chat has no live session, so fetch its persisted captures
+                    // from the continue-from id the server still serves (LOW #9). The live
+                    // id wins once the chat is live again.
+                    sessionId={chat.session?.id ?? chat.restoredSessionId ?? null}
                     baseUrl={settings.baseUrl}
                     apiKey={settings.apiKey}
                   />
@@ -897,6 +905,9 @@ export function AgentChatView({
                               key={i}
                               result={r}
                               denied={false}
+                              // Live steps are the in-flight turn — a confirmation there is
+                              // still awaiting a decision, never a resolved approval.
+                              approved={false}
                               sessionId={chat.session?.id ?? null}
                               baseUrl={settings.baseUrl}
                               apiKey={settings.apiKey}
@@ -1765,12 +1776,14 @@ function RestoredHistoryDivider(): JSX.Element {
 const TurnRow = memo(function TurnRow({
   turn,
   denied,
+  approved,
   sessionId,
   baseUrl,
   apiKey,
 }: {
   turn: ChatTurn;
   denied: boolean;
+  approved: boolean;
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
@@ -1791,6 +1804,7 @@ const TurnRow = memo(function TurnRow({
           <AgentResponseBody
             response={turn.response}
             denied={denied}
+            approved={approved}
             sessionId={sessionId}
             baseUrl={baseUrl}
             apiKey={apiKey}
@@ -1804,12 +1818,14 @@ const TurnRow = memo(function TurnRow({
 function AgentResponseBody({
   response,
   denied,
+  approved,
   sessionId,
   baseUrl,
   apiKey,
 }: {
   response: AgentMessageResponse;
   denied: boolean;
+  approved: boolean;
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
@@ -1837,6 +1853,7 @@ function AgentResponseBody({
                     key={i}
                     result={r}
                     denied={denied}
+                    approved={approved}
                     sessionId={sessionId}
                     baseUrl={baseUrl}
                     apiKey={apiKey}
@@ -1907,17 +1924,19 @@ const COMPOSER_ROWS = 5;
 function PlanStep({
   result,
   denied,
+  approved,
   sessionId,
   baseUrl,
   apiKey,
 }: {
   result: AgentIntentResult;
   denied: boolean;
+  approved: boolean;
   sessionId: string | null;
   baseUrl: string;
   apiKey: string | null;
 }): JSX.Element {
-  const { glyph, cls, text } = describeResult(result, denied);
+  const { glyph, cls, text } = describeResult(result, denied, approved);
   // doc-132 §5.3 — the server's structured diagnosis (optional; older servers
   // omit it). Only the retryable hint is surfaced as a chip: the category's
   // human framing already lives in the reason text, but "worth retrying" vs
@@ -1952,9 +1971,12 @@ function PlanStep({
   );
 }
 
-function describeResult(
+// Exported so the confirmation-gate past-tense rendering is unit-tested without a
+// component harness — the same pattern as extractPendingConfirmation/adoptionOutcome.
+export function describeResult(
   result: AgentIntentResult,
   denied: boolean,
+  approved: boolean,
 ): { glyph: string; cls: string; text: string } {
   switch (result.kind) {
     case 'success':
@@ -1966,20 +1988,27 @@ function describeResult(
         text: `${intentLabel(result.intent)} — ${result.reason}`,
       };
     case 'confirmation_required':
-      // Once the customer has DENIED this turn, the paused step is resolved — show it
-      // as skipped/denied (muted) rather than the ⏸ busy framing, which reads as still
-      // waiting for a decision that will never come (#135 GUI sweep).
-      return denied
-        ? {
-            glyph: '🚫',
-            cls: 'text-ink-muted',
-            text: `${intentLabel(result.intent)} — denied, skipped (“${result.matchedText}”)`,
-          }
-        : {
-            glyph: '⏸',
-            cls: 'text-status-busy',
-            text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
-          };
+      // A resolved consequential step is no longer waiting: show its outcome, not the
+      // ⏸ busy framing that reads as still awaiting a decision (#135 GUI sweep).
+      // DENIED → skipped/muted; APPROVED → past-tense "approved, ran" (otherwise the
+      // step stayed stuck on "confirmation required" forever after it actually ran).
+      if (denied)
+        return {
+          glyph: '🚫',
+          cls: 'text-ink-muted',
+          text: `${intentLabel(result.intent)} — denied, skipped (“${result.matchedText}”)`,
+        };
+      if (approved)
+        return {
+          glyph: '✓',
+          cls: 'text-status-ready',
+          text: `${intentLabel(result.intent)} — approved, ran (“${result.matchedText}”)`,
+        };
+      return {
+        glyph: '⏸',
+        cls: 'text-status-busy',
+        text: `${intentLabel(result.intent)} — confirmation required (“${result.matchedText}”)`,
+      };
     default:
       // Robustness (#14): an unknown result.kind from a newer server / rehydrated chat
       // must not fall through to `undefined` — PlanStep destructures { glyph, cls, text }

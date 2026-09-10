@@ -444,7 +444,15 @@ export function SettingsView(): JSX.Element {
         (): { git_sha?: string } => ({}),
       );
       if (connectionTestTokenRef.current !== token) return;
-      setTestState({ kind: 'ok', version: body.git_sha ?? 'unknown' });
+      // /version is parsed WITHOUT runtime validation, so a 200 carrying a
+      // missing/typeless git_sha must coerce to a STRING here — the sibling
+      // ConnectivityView guards the same field the same way. Without it a
+      // numeric git_sha reaches the `.slice(0, 7)` in the "✓ Reachable" chip
+      // below and crashes the whole Settings render. (audit)
+      setTestState({
+        kind: 'ok',
+        version: typeof body.git_sha === 'string' ? body.git_sha : 'unknown',
+      });
     } catch (err) {
       if (connectionTestTokenRef.current !== token) return;
       const diag = diagnosticFetchError(err, target);
@@ -1179,22 +1187,38 @@ export function SettingsView(): JSX.Element {
                 {updateCheck === 'checking' ? 'Checking…' : 'Check for updates'}
               </button>
               {/* The action the owner expected: offer to install NOW rather
-                  than promising it will happen "shortly" and then not. */}
-              {updateCheck === 'found' && foundUpdate !== null && (
-                <button
-                  type="button"
-                  data-action="install-update-now"
-                  disabled={installState === 'installing'}
-                  onClick={() => void runInstall()}
-                  className="btn-primary text-xs disabled:opacity-50"
-                >
-                  {installState === 'installing'
-                    ? 'Installing…'
-                    : installState === 'failed'
-                      ? 'Retry install'
-                      : `Install ${foundUpdate.version} now`}
-                </button>
-              )}
+                  than promising it will happen "shortly" and then not. A
+                  downloadOnly update (a platform that cannot self-install —
+                  its install() only ever rejects) gets a Download link to the
+                  release instead, mirroring UpdateBanner, so it can never get
+                  stuck on a "Retry install" that has no way to succeed. */}
+              {updateCheck === 'found' &&
+                foundUpdate !== null &&
+                (foundUpdate.downloadOnly === true ? (
+                  <a
+                    href={foundUpdate.downloadUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-action="download-update"
+                    className="btn-primary text-xs"
+                  >
+                    Download {foundUpdate.version}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    data-action="install-update-now"
+                    disabled={installState === 'installing'}
+                    onClick={() => void runInstall()}
+                    className="btn-primary text-xs disabled:opacity-50"
+                  >
+                    {installState === 'installing'
+                      ? 'Installing…'
+                      : installState === 'failed'
+                        ? 'Retry install'
+                        : `Install ${foundUpdate.version} now`}
+                  </button>
+                ))}
             </div>
             {updateCheck !== 'idle' && updateCheck !== 'checking' && (
               <span
