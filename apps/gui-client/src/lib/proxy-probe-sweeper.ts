@@ -34,6 +34,12 @@ export const SWEEP_GAP_MS = 2_000;
  *  quarter hour. */
 export const SWEEP_INTERVAL_MS = 15 * 60 * 1000;
 
+/** N3 (owner: "auto update proxy states more often ... when opening application") —
+ *  how long after the app opens the FIRST sweep fires. The interval alone deferred it a
+ *  full 15 min; this brings fresh data on open while still staying OFF the busy launch
+ *  moment (not fired synchronously at mount). Must be < SWEEP_INTERVAL_MS. */
+export const STARTUP_SWEEP_DELAY_MS = 20 * 1000;
+
 /**
  * V-2168 — how long a FAILING verdict stands before the sweeper retries it.
  * A failure is negative caching and must expire faster than the 6h positive
@@ -157,6 +163,51 @@ export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
   } finally {
     inFlight = false;
   }
+}
+
+/** The host surface installProxySweepSchedule needs — window timers + focus and
+ *  document visibility. Abstracted so the schedule is unit-testable without a DOM
+ *  (a fake host records what was scheduled and drives the listeners). */
+export interface SweepScheduleHost {
+  setTimeout: (fn: () => void, ms: number) => number;
+  clearTimeout: (id: number) => void;
+  setInterval: (fn: () => void, ms: number) => number;
+  clearInterval: (id: number) => void;
+  addFocus: (fn: () => void) => void;
+  removeFocus: (fn: () => void) => void;
+  addVisibility: (fn: () => void) => void;
+  removeVisibility: (fn: () => void) => void;
+  isVisible: () => boolean;
+}
+
+/**
+ * N3 — schedule proxy-state refreshes on THREE triggers, all calling the SAME
+ * single-flight `sweep`:
+ *   1. a STAGGERED startup sweep (STARTUP_SWEEP_DELAY_MS — sooner than the full
+ *      interval so opening the app updates data, but off the busy launch moment);
+ *   2. the steady SWEEP_INTERVAL_MS interval (unchanged);
+ *   3. a sweep whenever the window regains focus / the document becomes visible.
+ *
+ * The focus trigger is safe because `planSweep` only refreshes entries already
+ * past their TTL (or a due failure retry): a sweep on focus therefore touches
+ * genuinely-stale rows only, never fresh or unlooked-at ones — the concern that
+ * removed an earlier unconditional onFocus refresh. Returns a cleanup that clears
+ * both timers and removes both listeners.
+ */
+export function installProxySweepSchedule(sweep: () => void, host: SweepScheduleHost): () => void {
+  const startup = host.setTimeout(sweep, STARTUP_SWEEP_DELAY_MS);
+  const interval = host.setInterval(sweep, SWEEP_INTERVAL_MS);
+  const onActive = (): void => {
+    if (host.isVisible()) sweep();
+  };
+  host.addFocus(onActive);
+  host.addVisibility(onActive);
+  return () => {
+    host.clearTimeout(startup);
+    host.clearInterval(interval);
+    host.removeFocus(onActive);
+    host.removeVisibility(onActive);
+  };
 }
 
 /** Test seam — resets the single-flight latch between cases. */

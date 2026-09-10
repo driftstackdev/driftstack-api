@@ -48,7 +48,7 @@ import { isCloudBaseUrl } from './lib/telemetry';
 import { useAppVersion } from './lib/app-version';
 import { listProxies, testProxy, type ProxyConfig } from './lib/proxies';
 import { loadProbeCache, saveProbeResult } from './lib/proxy-probe-cache';
-import { runSweep, SWEEP_INTERVAL_MS } from './lib/proxy-probe-sweeper';
+import { runSweep, installProxySweepSchedule } from './lib/proxy-probe-sweeper';
 import { FirstRunWizard } from './views/FirstRunWizard';
 import { CommandPalette, type PaletteAction } from './components/CommandPalette';
 import { ToastProvider, useToasts } from './lib/toasts';
@@ -688,11 +688,22 @@ function Shell(): JSX.Element {
       now: () => Date.now(),
       sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
     };
-    const id = window.setInterval(() => {
-      // runSweep is single-flight; a tick arriving while one runs is a no-op.
-      void runSweep(deps).catch(() => undefined);
-    }, SWEEP_INTERVAL_MS);
-    return () => window.clearInterval(id);
+    // runSweep is single-flight; a trigger arriving while one runs is a no-op.
+    const sweep = (): void => void runSweep(deps).catch(() => undefined);
+    // N3 — refresh on THREE triggers (staggered startup + steady interval + window
+    // focus/visibility), not only every 15 min. planSweep only re-probes entries
+    // already past their TTL, so the focus trigger touches genuinely-stale rows only.
+    return installProxySweepSchedule(sweep, {
+      setTimeout: (fn, ms) => window.setTimeout(fn, ms),
+      clearTimeout: (handle) => window.clearTimeout(handle),
+      setInterval: (fn, ms) => window.setInterval(fn, ms),
+      clearInterval: (handle) => window.clearInterval(handle),
+      addFocus: (fn) => window.addEventListener('focus', fn),
+      removeFocus: (fn) => window.removeEventListener('focus', fn),
+      addVisibility: (fn) => document.addEventListener('visibilitychange', fn),
+      removeVisibility: (fn) => document.removeEventListener('visibilitychange', fn),
+      isVisible: () => document.visibilityState !== 'hidden',
+    });
   }, []);
 
   // T-14 — the decision is read at decision time, not captured at mount. The
