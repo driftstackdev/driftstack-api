@@ -43,6 +43,7 @@ import type {
   AccountProxyRowUpdates,
 } from '../db/account-proxies-repo.js';
 import {
+  UnsafeProxyHostError,
   WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD,
   type AccountProxiesService,
 } from '../services/account-proxies.js';
@@ -1115,6 +1116,49 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // "fall back to the control plane" — no free node, an unresolvable config, a
       // node error/timeout, or any throw. Never lets an exception reach the client,
       // so vantage=fleet can never 500: it degrades to the cp probe instead.
+      /** (h) finding 2 — WHY no fleet node measured the row, so the VPN branch
+       *  below can say the true thing instead of asserting "no Mac was free"
+       *  for causes a retry cannot fix. `no_fleet` = this deployment cannot
+       *  dispatch a VPN test at all (no fleet registry, or no proxies service
+       *  to resolve the row); `unresolvable` = the stored row cannot be turned
+       *  into a dispatchable config (unreadable secret, unsafe targets);
+       *  `no_node` = the fleet exists and was asked, and no node produced a
+       *  measurement (none free, dispatch unavailable/timed out, an error with
+       *  no node to blame, any unexpected throw). A tier refusal is not a miss:
+       *  it is thrown, exactly as the launch path surfaces it. */
+      type FleetMiss = { miss: 'no_fleet' | 'unresolvable' | 'no_node' };
+      /** The row's STORED exit as a /test reply carries it beside a `not_run`
+       *  (live_session / no_node). (h) finding 1 — it rides WITH the date it was
+       *  observed: the stored exit is what a session saw BEFORE whatever the
+       *  fleet said since, and a client that keeps a "this exit was contradicted
+       *  at T" stamp can only honour it when the reply dates the observation
+       *  rather than letting the reply time stand in for it. `observed_at` is
+       *  null for a row whose observation predates the column. */
+      const storedExitForReply = ():
+        | {
+            exit_observed: {
+              ip: string;
+              country: string | null;
+              timezone: string | null;
+              region: null;
+              city: null;
+              observed_at: string | null;
+            };
+          }
+        | Record<string, never> => {
+        const stored = row.exitObserved;
+        if (stored === null || stored === undefined) return {};
+        return {
+          exit_observed: {
+            ip: stored.ip,
+            country: stored.country,
+            timezone: stored.timezone,
+            region: null,
+            city: null,
+            observed_at: row.exitObservedAt === null ? null : row.exitObservedAt.toISOString(),
+          },
+        };
+      };
       const runFleetProbe = async () => {
         // VPN exit parity — NO scheme guard here any more. An openvpn/wireguard row
         // dispatches too: `resolveForDispatch` already returns the flat inline VPN
@@ -1123,7 +1167,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         // VPN row silently fell back to the control-plane TCP probe of the display
         // host, which measures nothing about the tunnel.
         if (fleetControlRegistry === undefined || accountProxiesService === undefined) {
-          return null;
+          return { miss: 'no_fleet' } satisfies FleetMiss;
         }
         try {
           // (d) 2026-09-10 — REFUSE a VPN probe while a live session browses
@@ -1156,27 +1200,22 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 'proxy test: refusing a VPN fleet probe while a live session holds the tunnel',
               );
               const stored = row.exitObserved;
+              // (h) finding 24 — promise "its exit is shown from that session"
+              // ONLY when a stored exit is actually attached below; otherwise
+              // the sentence would point at an exit cell that reads "run Check".
               return {
                 ok: false,
                 reason:
-                  'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.',
+                  stored !== null && stored !== undefined
+                    ? 'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.'
+                    : 'This VPN is in use by a live session. End the session to test the tunnel.',
                 measured_from: 'control_plane' as const,
                 // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
                 // machine-readable discriminator a client branches on, so a
                 // wait that measured nothing is never rendered as "tunnel
                 // down" — the prose is for a person, never for a branch.
                 not_run: 'live_session' as const,
-                ...(stored !== null && stored !== undefined
-                  ? {
-                      exit_observed: {
-                        ip: stored.ip,
-                        country: stored.country,
-                        timezone: stored.timezone,
-                        region: null,
-                        city: null,
-                      },
-                    }
-                  : {}),
+                ...storedExitForReply(),
               };
             }
           }
@@ -1185,7 +1224,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             accountId: ctx.account.id,
             tier: ctx.account.tier,
           });
-          if (resolved === null) return null;
+          if (resolved === null) return { miss: 'unresolvable' } satisfies FleetMiss;
           const dispatch = await fleetControlRegistry.probeEgress({
             inlineProxyConfig: resolved,
             target: FLEET_PROBE_TARGET,
@@ -1218,7 +1257,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 not_run: busy ? ('node_busy' as const) : ('node_error' as const),
               };
             }
-            return null;
+            return { miss: 'no_node' } satisfies FleetMiss;
           }
           const r = dispatch.result;
           // ⛔ `r.ok` IS NOT "THE PROXY WORKS". Its contract on the node's frame is
@@ -1376,17 +1415,70 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             measured_from: 'fleet' as const,
           };
         } catch (err) {
+          // (h) finding 2 — a TIER refusal is the route's own answer (the same
+          // one POST/PUT and the launch path give for a VPN row on a tier without
+          // vpnEgress); swallowing it into "no Mac was free… try again" told a
+          // downgraded account to keep retrying something a retry can never fix.
+          // An unsafe stored host is a config the fleet must never be handed,
+          // not a missing node.
+          if (err instanceof ForbiddenError) throw err;
+          if (err instanceof UnsafeProxyHostError) {
+            request.log.info(
+              { proxyId: row.id, err },
+              'proxy test: stored proxy host is unsafe; refusing the fleet dispatch',
+            );
+            return { miss: 'unresolvable' } satisfies FleetMiss;
+          }
           request.log.info(
             { proxyId: row.id, err },
             'proxy test: fleet-vantage probe failed, falling back to the control plane',
           );
-          return null;
+          return { miss: 'no_node' } satisfies FleetMiss;
         }
       };
 
       if (vantage === 'fleet') {
         const fleet = await runFleetProbe();
-        if (fleet !== null) return fleet;
+        if (!('miss' in fleet)) return fleet;
+        // (h) H1 2026-09-10 — findings 4/10. For an openvpn/wireguard row NEVER
+        // fall through to the control-plane probe. The cp cannot bring a tunnel
+        // up; its "fallback" for a VPN row is a bare TCP connect to the tunnel
+        // endpoint — UDP-only for WireGuard, udp by default for OpenVPN — which
+        // fails and was published as `ok:false, reason:'Proxy unreachable…'`
+        // with no `not_run`: the GUI rendered a red "tunnel down" with a wrong
+        // next step for a tunnel nobody measured. "No node measured it" (registry
+        // absent, config unresolvable, dispatch unavailable/timeout, an error
+        // outcome with no node to blame, any throw) is a NOT-RUN: `no_node` is
+        // the discriminator a client branches on, `control_plane` says no node
+        // produced this, no measurement field is present, and the stored exit
+        // rides along (as on the live_session refusal) so the row still shows
+        // where it exits. A socks5/http row keeps the cp fallback below: there
+        // the control plane speaks the protocol itself, so it IS a measurement.
+        if (row.scheme === 'openvpn' || row.scheme === 'wireguard') {
+          // (h) finding 2 — the sentence says WHAT kept the fleet from measuring,
+          // and "try again in a minute" is promised only where a retry can help.
+          // A row the fleet cannot be handed (unreadable secret, unsafe target)
+          // is a verdict about the ROW, in the words the cp path uses for the
+          // same condition on a socks5 row — not a `not_run`, and never "no Mac
+          // was free". A deployment with no fleet will never have a free Mac.
+          if (fleet.miss === 'unresolvable') {
+            return {
+              ok: false as const,
+              reason: 'This VPN’s stored configuration could not be read. Re-add it and try again.',
+              measured_from: 'control_plane' as const,
+            };
+          }
+          return {
+            ok: false as const,
+            reason:
+              fleet.miss === 'no_fleet'
+                ? 'VPN tunnels are tested from a fleet Mac, and this deployment has none set up.'
+                : 'No fleet Mac was free to test this VPN tunnel. Try again in a minute.',
+            measured_from: 'control_plane' as const,
+            not_run: 'no_node' as const,
+            ...storedExitForReply(),
+          };
+        }
         // No node measured it — return the control-plane result, HONESTLY labelled
         // so a fleet request is never shown a cp measurement as if a node produced it.
         return { ...(await runControlPlaneProbe()), measured_from: 'control_plane' as const };

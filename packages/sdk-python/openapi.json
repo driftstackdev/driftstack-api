@@ -3488,7 +3488,7 @@
               },
               "not_run": {
                 "type": "string",
-                "enum": ["live_session", "node_busy", "node_error"]
+                "enum": ["live_session", "node_busy", "node_error", "no_node"]
               },
               "exit_observed": {
                 "type": "object",
@@ -3507,9 +3507,12 @@
                   },
                   "city": {
                     "type": ["string", "null"]
+                  },
+                  "observed_at": {
+                    "type": ["string", "null"]
                   }
                 },
-                "required": ["ip", "country", "timezone", "region", "city"]
+                "required": ["ip", "country", "timezone", "region", "city", "observed_at"]
               }
             },
             "required": ["ok", "reason"]
@@ -3532,7 +3535,7 @@
               },
               "not_run": {
                 "type": "string",
-                "enum": ["live_session", "node_busy", "node_error"]
+                "enum": ["live_session", "node_busy", "node_error", "no_node"]
               },
               "reachable": {
                 "type": "boolean"

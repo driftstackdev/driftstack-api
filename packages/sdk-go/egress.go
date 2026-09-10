@@ -101,8 +101,11 @@ type AccountProxyList struct {
 // NotRun is set when NOTHING RAN, so an Ok=false result is not a verdict
 // about the proxy: "live_session" (a fleet-vantage test of a VPN proxy was
 // refused because a live session holds the tunnel), "node_busy" or
-// "node_error" (the fleet node could not run the probe). Branch on it —
-// never on the Reason prose — before treating Ok=false as a failed proxy.
+// "node_error" (the fleet node could not run the probe), or "no_node" (no
+// fleet node measured a VPN tunnel — none was free, the dispatch timed out,
+// or the deployment has no fleet; the Reason says which — and the control
+// plane cannot measure a tunnel itself). Branch on it — never on the Reason
+// prose — before treating Ok=false as a failed proxy.
 type AccountProxyTestResult struct {
 	Ok        bool   `json:"ok"`
 	LatencyMs int    `json:"latency_ms,omitempty"`

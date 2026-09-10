@@ -281,12 +281,19 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // about the proxy: `live_session` = a fleet-vantage test of a VPN row was
     // REFUSED because a live session holds the tunnel (a second tunnel on a
     // one-connection VPN account drops the session); `node_busy` / `node_error`
-    // = the fleet node could not run the probe. A client branches on THIS,
-    // never on the `reason` prose.
-    not_run: z.enum(['live_session', 'node_busy', 'node_error']).optional(),
-    // (d) 2026-09-10 — beside `not_run: 'live_session'`: the STORED exit that
-    // session observed, surfaced so the client can still show where the tunnel
-    // exits. `region`/`city` are null (the stored observation carries neither).
+    // = the fleet node could not run the probe; `no_node` (h) = NO fleet node
+    // measured a VPN tunnel (none free, the dispatch timed out, or the deployment
+    // has no fleet — `reason` says which), and the control plane cannot measure a
+    // tunnel itself (it never falls back to a TCP connect for a VPN row). A
+    // client branches on THIS, never on the `reason` prose.
+    not_run: z.enum(['live_session', 'node_busy', 'node_error', 'no_node']).optional(),
+    // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'no_node'`: the STORED
+    // exit a session observed, surfaced so the client can still show where the
+    // tunnel exits. `region`/`city` are null (the stored observation carries neither).
+    // (h) `observed_at` dates the OBSERVATION (ISO 8601, null when it predates the
+    // column) — a stored exit is not something this reply measured, so a client
+    // must date it by this, never by the reply time. Optional so a client built
+    // against a newer schema keeps parsing an older server.
     exit_observed: z
       .object({
         ip: z.string(),
@@ -294,6 +301,7 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
         timezone: z.string().nullable(),
         region: z.string().nullable(),
         city: z.string().nullable(),
+        observed_at: z.string().nullable().optional(),
       })
       .optional(),
   }),

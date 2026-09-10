@@ -2433,8 +2433,13 @@ function buildRegistry(): OpenAPIRegistry {
   // (d) 2026-09-10 — why a test produced NO measurement. One vocabulary for
   // both `ok:false` members: `live_session` is the control plane's refusal (a
   // VPN row a live session browses through), `node_busy` / `node_error` are the
-  // node's own could-not-run. Absent on every result that actually measured.
-  const ProxyTestNotRunOpenApi = z.enum(['live_session', 'node_busy', 'node_error']);
+  // node's own could-not-run, and `no_node` (h) is a fleet-vantage test of a
+  // VPN row that NO node measured (none free, dispatch unavailable/timed out,
+  // or a deployment with no fleet at all — the `reason` says which) — the
+  // control plane cannot bring a tunnel up, so it refuses rather than falling
+  // back to a TCP connect that says nothing about the tunnel. Absent on every
+  // result that actually measured.
+  const ProxyTestNotRunOpenApi = z.enum(['live_session', 'node_busy', 'node_error', 'no_node']);
   const AccountProxyTestResultOpenApi = z
     .union([
       z.object({
@@ -2458,13 +2463,21 @@ function buildRegistry(): OpenAPIRegistry {
         // (d) 2026-09-10 — present when NOTHING RAN, so `ok:false` is not a
         // verdict about the proxy: `live_session` = a fleet-vantage test of a
         // VPN row was REFUSED because a live session holds the tunnel (a second
-        // tunnel on a one-connection VPN account would drop it). A client
-        // branches on THIS — never on the `reason` prose — to keep the row's
-        // last verdict and show the sentence as a notice, not a failure.
+        // tunnel on a one-connection VPN account would drop it); `no_node` (h)
+        // = no fleet node was free to bring the tunnel up, and the control plane
+        // cannot measure a tunnel itself. A client branches on THIS — never on
+        // the `reason` prose — to keep the row's last verdict and show the
+        // sentence as a notice, not a failure.
         not_run: ProxyTestNotRunOpenApi.optional(),
-        // (d) 2026-09-10 — beside `not_run: 'live_session'`: the STORED exit that
-        // session observed, so a client can still show where the tunnel exits.
+        // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'no_node'`: the
+        // STORED exit a session observed, so a client can still show where the
+        // tunnel exits.
         // `region` / `city` are null — the stored observation carries neither.
+        // (h) `observed_at` — WHEN it was observed (ISO 8601; null when the
+        // observation predates the column): this is a stored, possibly old
+        // observation, not something this reply measured, and a client that
+        // dates its exits must date this one by the observation, never by the
+        // reply.
         exit_observed: z
           .object({
             ip: z.string(),
@@ -2472,6 +2485,7 @@ function buildRegistry(): OpenAPIRegistry {
             timezone: z.string().nullable(),
             region: z.string().nullable(),
             city: z.string().nullable(),
+            observed_at: z.string().nullable(),
           })
           .optional(),
       }),

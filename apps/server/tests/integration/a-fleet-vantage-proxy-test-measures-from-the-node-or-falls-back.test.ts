@@ -14,6 +14,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import type { FleetControlConnection } from '../../src/services/fleet-control-registry.js';
+import { AccountProxiesService } from '../../src/services/account-proxies.js';
+import { ForbiddenError } from '../../src/lib/errors.js';
 
 let fx: TestAppFixture;
 afterEach(async () => {
@@ -168,6 +170,9 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     expect(body.ok).toBe(true);
     // a cp result carries no node-measured fields
     expect('node_id' in body).toBe(false);
+    // (h) H1 — a socks5 row's cp fallback is a REAL measurement (the control
+    // plane speaks SOCKS5 itself), so it is never labelled "not run".
+    expect('not_run' in body).toBe(false);
   });
 
   it('the default vantage (cp) is unchanged — today response, no measured_from field', async () => {
@@ -821,9 +826,33 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(after?.exitObserved?.observed_via).toBe('probe');
   });
 
-  it('VACUITY CONTROL — with NO node connected a wireguard row still falls back to the control plane, labelled honestly', async () => {
-    // Proves the arms above measure the dispatch and not a route that now always
-    // reports `fleet` for a VPN row.
+  // (h) H1 2026-09-10 — findings 4/10. With no fleet node the route USED TO fall
+  // through to the control-plane TCP probe for a VPN row: a TCP connect to a
+  // UDP tunnel endpoint (WireGuard is UDP-only; OpenVPN defaults to udp), which
+  // fails and came back `ok:false, reason:'Proxy unreachable…'` with no
+  // `not_run` — the GUI rendered that as a red "tunnel down" with a wrong next
+  // step. The control plane cannot bring a tunnel up, so "no node measured it"
+  // must be a NOT-RUN, never a verdict. The measurement fields every not_run
+  // must lack: nothing ran, so nothing is a fact.
+  const MEASUREMENT_KEYS = [
+    'latency_ms',
+    'node_id',
+    'reachable',
+    'auth_ok',
+    'udp_associate',
+    'can_route',
+    'h2_ok',
+    'quic_ok',
+    'quic_detail',
+    'exit_ip',
+    'os_fingerprint',
+  ] as const;
+  const NO_NODE = /No fleet Mac was free to test this VPN tunnel/;
+
+  it('(h) CRITICAL with NO node connected a wireguard row is a not_run:no_node labelled control_plane — never the cp TCP probe, never a tunnel verdict', async () => {
+    // Also the vacuity control for the dispatch arms above: the registry IS
+    // asked (and answers "unavailable"), so those arms measure a dispatch and
+    // not a route that always reports `fleet` for a VPN row.
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -838,9 +867,234 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     expect(probeSpy).toHaveBeenCalledTimes(1); // asked, and told "no node"
     const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('no_node');
+    expect(body.reason).toMatch(NO_NODE);
+    expect(body.reason).not.toMatch(/unreachable/i);
     expect(body.measured_from).toBe('control_plane');
+    for (const k of MEASUREMENT_KEYS) {
+      expect(k in body, `${k} must be absent — nothing ran`).toBe(false);
+    }
+    // No exit was ever observed on this row, so none rides along (absence,
+    // never a null placeholder).
     expect('exit_observed' in body).toBe(false);
+  });
+
+  it('(h) an openvpn row with no node is the same not_run:no_node, and the STORED exit rides along so the GUI still shows where it exits', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeOpenVpnProxy();
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '203.0.113.9',
+          country: 'NL',
+          timezone: 'Europe/Amsterdam',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+      },
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('no_node');
+    expect(body.measured_from).toBe('control_plane');
+    for (const k of MEASUREMENT_KEYS) {
+      expect(k in body, `${k} must be absent — nothing ran`).toBe(false);
+    }
+    expect(body.exit_observed).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      region: null,
+      city: null,
+      // (h) finding 1 — a STORED exit is dated by its observation, never by
+      // the reply that carries it.
+      observed_at: '2026-09-01T00:00:00.000Z',
+    });
+  });
+
+  it('(h) a dispatch that TIMES OUT (no node id to blame) is a not_run:no_node for a VPN row, not the cp TCP probe', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // The registry's own `timeout` carries no nodeId (fleet-control-registry.ts
+    // ProbeEgressDispatch), so the route cannot label it as a node's refusal.
+    vi.spyOn(fx.fleetControlRegistry, 'probeEgress').mockResolvedValue({ status: 'timeout' });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('no_node');
+    expect(body.measured_from).toBe('control_plane');
+    expect(body.reason).not.toMatch(/unreachable/i);
     expect('node_id' in body).toBe(false);
+    expect('latency_ms' in body).toBe(false);
+  });
+
+  it('(h) an error outcome WITHOUT a node id (the registry dropped an unprovable frame) is a not_run:no_node too', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    vi.spyOn(fx.fleetControlRegistry, 'probeEgress').mockResolvedValue({
+      status: 'error',
+      message: 'probeEgressResult node_id did not match the dispatched node',
+    });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('no_node');
+    expect(body.measured_from).toBe('control_plane');
+    expect('node_id' in body).toBe(false);
+  });
+
+  it('(h) CONTROL — a socks5 row whose dispatch timed out still gets the control-plane fallback: a real SOCKS5 measurement, no not_run', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    vi.spyOn(fx.fleetControlRegistry, 'probeEgress').mockResolvedValue({ status: 'timeout' });
+    const socks = await makeProxy('proxy-timeout.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${socks}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(true);
+    expect(body.measured_from).toBe('control_plane');
+    expect(typeof body.latency_ms).toBe('number');
+    expect('not_run' in body).toBe(false);
+  });
+
+  // (h) finding 2 — "No fleet Mac was free… Try again in a minute" was asserted
+  // for EVERY way the fleet closure came back empty, including causes a retry
+  // cannot fix. The three below each had that sentence; each now says its own
+  // true thing. MUTATION: collapse the FleetMiss union back to `null` → the
+  // first two arms read the "free… minute" sentence → red.
+  it('(h) a deployment with NO fleet says so — not_run:no_node, but never "was free… try again"', async () => {
+    // No enableFleetControlPlane: the registry is not wired at all. This
+    // deployment will never have a free Mac, so promising one is a lie.
+    fx = await buildTestApp({ proxyConnectivityProbe: cpProbeStub() });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('no_node');
+    expect(body.measured_from).toBe('control_plane');
+    expect(body.reason).toMatch(/this deployment has none set up/);
+    expect(body.reason).not.toMatch(/was free|try again/i);
+    expect(body.reason).not.toMatch(/unreachable/i);
+    for (const k of MEASUREMENT_KEYS) {
+      expect(k in body, `${k} must be absent — nothing ran`).toBe(false);
+    }
+  });
+
+  it('(h) the tier refusal resolveForDispatch throws for a VPN row is a 403 — the launch path’s refusal, never "no Mac was free"', async () => {
+    // Every tier with apiAccess also has vpnEgress today, so an API-key caller
+    // cannot reach this through the tier table; the closure still has to
+    // surface the throw rather than swallow it into a "try again", and the
+    // service is the one place that raises it.
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    vi.spyOn(AccountProxiesService.prototype, 'resolveForDispatch').mockRejectedValue(
+      new ForbiddenError(
+        'The "vpnEgress" feature is not available on the "free" tier. Upgrade to a tier that includes this feature.',
+      ),
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(403);
+    expect(res.body).toMatch(/vpnEgress/);
+    expect(res.body).not.toMatch(/was free/);
+    // Nothing was dispatched: the refusal is decided before any node is asked.
+    expect(probeSpy).not.toHaveBeenCalled();
+  });
+
+  it('(h) CONTROL — an UNEXPECTED throw from the resolve is still a no_node "was free… try again" (the swallowed class is unchanged)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    vi.spyOn(AccountProxiesService.prototype, 'resolveForDispatch').mockRejectedValue(
+      new Error('kms unreachable'),
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.not_run).toBe('no_node');
+    expect(body.reason).toMatch(NO_NODE);
+  });
+
+  it('(h) a VPN row whose stored secret cannot be read is a verdict about the ROW ("re-add it"), not a not_run and not "no Mac was free"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    // resolveForDispatch returns null for a VPN row with no wrapped secret —
+    // the config the fleet would need does not exist.
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: { wrappedSecret: null },
+    });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect('not_run' in body).toBe(false);
+    expect(body.reason).toMatch(/could not be read\. Re-add it/);
+    expect(body.reason).not.toMatch(/was free|unreachable/i);
+    expect(body.measured_from).toBe('control_plane');
+    expect(probeSpy).not.toHaveBeenCalled();
+    expect('latency_ms' in body).toBe(false);
   });
 });
 
@@ -963,6 +1217,10 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
     expect(body.reason).toMatch(REFUSAL);
+    // (h) finding 24 — the copy promises "its exit is shown from that session"
+    // ONLY when a stored exit is actually attached (it is, below).
+    expect(body.reason).toMatch(/its exit is shown from that session/);
+    expect(body.reason).toMatch(/End the session to test the tunnel\./);
     // No node measured this, so it is NOT a fleet answer and names no node.
     expect(body.measured_from).toBe('control_plane');
     expect('node_id' in body).toBe(false);
@@ -977,6 +1235,9 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
       timezone: 'Europe/Amsterdam',
       region: null,
       city: null,
+      // (h) finding 1 — a STORED exit is dated by its observation, never by
+      // the reply that carries it.
+      observed_at: '2026-09-01T00:00:00.000Z',
     });
   });
 
@@ -1000,6 +1261,11 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
     expect(body.reason).toMatch(REFUSAL);
     expect(body.not_run).toBe('live_session');
     expect('exit_observed' in body).toBe(false);
+    // (h) finding 24 — with NO exit attached the copy must not point at an exit
+    // the GUI cannot show ("run Check for the exit" sits beside it): the next
+    // step alone.
+    expect(body.reason).not.toMatch(/its exit is shown/);
+    expect(body.reason).toMatch(/End the session to test the tunnel\./);
   });
 
   it('CRITICAL (ii) a CLOSED session on the proxy does not block — the probe runs and is a fleet answer', async () => {

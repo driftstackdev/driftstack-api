@@ -267,7 +267,8 @@ prose, before treating the result as a failed proxy:
     "country": "NL",
     "timezone": "Europe/Amsterdam",
     "region": null,
-    "city": null
+    "city": null,
+    "observed_at": "2026-09-09T18:21:07.000Z"
   }
 }
 ```
@@ -283,13 +284,30 @@ prose, before treating the result as a failed proxy:
   or test; try again in a minute.
 - `node_error` — the node could not run the probe (a config it could not
   bring up, a handshake or a timeout).
+- `no_node` — a `vantage=fleet` test of an `openvpn` / `wireguard` proxy that
+  no fleet node measured. The `reason` says which: none was free or the
+  dispatch timed out (try again in a minute), or the deployment has no fleet
+  set up (a retry will not change that). The control plane cannot bring a
+  tunnel up, so it does not fall back to a TCP check of the tunnel endpoint (a
+  UDP endpoint would read as "down"). `measured_from` is `control_plane` and
+  `exit_observed`, when present, is the stored exit a session observed.
 
-Absent `not_run`, an `ok: false` result is a measurement.
+The `exit_observed` beside a `not_run` is the proxy's **stored** observation,
+not something this test measured, so it carries `observed_at` — when it was
+observed (`null` for an observation recorded before the field existed). Date
+it by that, never by the reply: a fleet test that later found the tunnel down
+can postdate it.
+
+Absent `not_run`, an `ok: false` result is a measurement. Two of those are
+worth knowing for a VPN proxy on `vantage=fleet`: a stored configuration the
+control plane cannot read (the `reason` says to re-add it — a retry will not
+help), and a **403** when the account's tier no longer includes VPN egress —
+the same refusal the launch path gives, never disguised as "no Mac was free".
 
 Two cases fall back to a plain TCP-reachability check, which confirms the port
-answers and nothing more: an `openvpn` or `wireguard` wire (there is no
-`host:port` to dial for the tunnel itself), and a deployment with no proxy
-connectivity probe configured.
+answers and nothing more: an `openvpn` or `wireguard` wire on the default
+`vantage=cp` (there is no `host:port` to dial for the tunnel itself), and a
+deployment with no proxy connectivity probe configured.
 
 Required scope: `account_owner` — a broad `write` key is not sufficient.
 
