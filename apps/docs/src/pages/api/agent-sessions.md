@@ -43,6 +43,7 @@ Three operational modes:
   "driftstack_session_id": "ses_<uuid> | null",
   "status": "active | paused | closed",
   "closed_reason": "<string> | null",
+  "provisioning_detail": null,
   "closed_at": "<ISO-8601> | null",
   "token_budget_total": 100000,
   "token_budget_remaining": 99500,
