@@ -29,8 +29,8 @@ vi.mock('../../src/lib/SettingsContext', () => ({
   useSettings: () => ({ client: { agentSessions: { create, message, close } } }),
 }));
 
-const markLaunched = vi.fn(() => Promise.resolve());
-const clearProfileSession = vi.fn(() => Promise.resolve());
+const markLaunched = vi.fn((_profileId: string, _sessionId: string) => Promise.resolve());
+const clearProfileSession = vi.fn((_profileId: string) => Promise.resolve());
 vi.mock('../../src/lib/profile-bindings', () => ({
   markLaunched: (profileId: string, sessionId: string) => markLaunched(profileId, sessionId),
   clearSession: (profileId: string) => clearProfileSession(profileId),
@@ -52,6 +52,7 @@ const SESSION: AgentSession = {
   account_id: 'acc_1',
   driftstack_session_id: null,
   status: 'active',
+  stop_on_exit_ip_change: false,
   closed_reason: null,
   token_budget_total: 100_000,
   token_budget_remaining: 90_000,
