@@ -547,16 +547,16 @@ export function friendlyUnavailableNote(reason: string | null | undefined): stri
   }
 }
 
-/** MED #3 — decide whether a background control-poll error should REVOKE
- *  manual-input authority and blank the egress readouts. Only an authentication
- *  failure does: an expired/invalid per-session gui_control_key 401/403s every
- *  poll, so live-status detection is genuinely degraded and the operator must
- *  reopen the session. A transient / network / 5xx error (any non-auth status,
- *  or a non-control error with no status at all) is a transport blip — return
- *  false so the poll stays silent and retries next tick, leaving mode /
- *  lifecycle / capabilityReport intact. Pure so the gating rule is unit-testable
- *  without rendering the whole window. */
-export function shouldControlPollErrorRevoke(err: unknown): boolean {
+/** MED #3 — is this control-poll error a DURABLE auth failure (an expired/invalid
+ *  per-session gui_control_key 401/403s every poll) rather than a transient blip?
+ *  ANY control-poll error fails the cockpit closed — view-only + the always-visible
+ *  controlUnreachable badge — because the poll cannot confirm current mode/lifecycle.
+ *  But only an auth failure ALSO blanks the latched egress readout: the session is
+ *  genuinely degraded and must be reopened. A transient / network / 5xx error (any
+ *  non-auth status, or a non-control error with no status) preserves the measured
+ *  exit identity, so it does not flicker to "measuring…" on every ~5s hiccup. Pure so
+ *  the gating rule is unit-testable without rendering the whole window. */
+export function isControlAuthFailure(err: unknown): boolean {
   return err instanceof AgentSessionControlError && (err.status === 401 || err.status === 403);
 }
 
@@ -6415,17 +6415,20 @@ export function SimulatorWindow(): JSX.Element {
           // degraded state via the always-visible controlUnreachable badge (controlError
           // only renders when mode===null, i.e. invisible in the common browser-mode
           // case) so the operator knows live-status detection is degraded and to reopen
-          // the session. Transient/network/5xx errors stay silent (retry next tick) — a
-          // transport blip must NOT read as ended, so it must NOT revoke manual-input
-          // authority or blank the egress readouts (only an AUTH failure is a durable
-          // degrade worth surfacing).
-          if (!shouldControlPollErrorRevoke(err)) return;
+          // the session. ANY control-poll error fails closed here (view-only + badge):
+          // the poll cannot confirm current mode/lifecycle, so a bare network blip must
+          // still read as degraded rather than as confirmed-healthy. But only an AUTH
+          // failure (401/403 — the key really expired) is a DURABLE degrade that also
+          // blanks the latched egress readout; a transient/network/5xx blip PRESERVES
+          // the measured exit identity (omitting capabilityReport keeps the current one)
+          // so it does not flicker to "measuring…" every ~5s on a healthy session.
+          const authFailure = isControlAuthFailure(err);
           updateManualInputControl({
             sessionId: reqSessionId,
             modeConfirmed: false,
             lifecycleConfirmed: false,
             lifecycleTerminal: false,
-            capabilityReport: null,
+            ...(authFailure ? { capabilityReport: null } : {}),
           });
           setControlLinkUnreachable(true);
         });
