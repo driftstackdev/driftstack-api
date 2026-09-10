@@ -638,6 +638,161 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
   });
 
+  it('(e) a QUIC leg the node SKIPPED is not reported as a QUIC verdict — quic_ok is absent, the detail stays', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-020', {
+      reachable: true,
+      auth_ok: true,
+      can_route: true,
+      exit_ip: '203.0.113.20',
+      quic_ok: false,
+      quic_detail: 'skipped: quic leg not probed on the vpn path',
+    });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.measured_from).toBe('fleet');
+    expect('quic_ok' in body, 'a skipped leg is not a false').toBe(false);
+    expect(body.quic_detail).toBe('skipped: quic leg not probed on the vpn path');
+  });
+
+  it('(e) CONTROL — a MEASURED QUIC failure (no "skipped:" detail) still lands as quic_ok:false', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-021', {
+      reachable: true,
+      auth_ok: true,
+      can_route: true,
+      exit_ip: '203.0.113.21',
+      quic_ok: false,
+      quic_detail: 'quic handshake failed',
+    });
+    const id2 = await makeWireGuardProxy();
+    const res2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id2}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res2.json<Record<string, unknown>>().quic_ok).toBe(false);
+  });
+
+  it('(e) a VPN row never reports udp_associate (a tunnel carries UDP by nature); a socks5 row still does', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerGeoNode('mac-eu-022', GEO, []);
+    const vpn = await makeWireGuardProxy();
+    const r1 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${vpn}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(r1.statusCode, r1.body).toBe(200);
+    expect('udp_associate' in r1.json<Record<string, unknown>>()).toBe(false);
+    const socks = await makeProxy('proxy-udp.example.com');
+    const r2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${socks}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(r2.statusCode, r2.body).toBe(200);
+    expect(r2.json<Record<string, unknown>>().udp_associate).toBe(true);
+  });
+
+  it('(e) CRITICAL a node_busy refusal reads as a wait, carries NO measurement fields, and is still a fleet answer', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-023', {
+      ok: false,
+      status: 'could_not_run',
+      error: 'node_busy',
+      quic_detail: null,
+      exit_ip: null,
+    });
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.measured_from).toBe('fleet');
+    expect(body.reason).toMatch(/busy with another tunnel or test/);
+    for (const k of [
+      'reachable',
+      'auth_ok',
+      'udp_associate',
+      'can_route',
+      'h2_ok',
+      'quic_ok',
+      'quic_detail',
+      'exit_ip',
+      'exit_observed',
+    ]) {
+      expect(k in body, `${k} must be absent on a could_not_run result`).toBe(false);
+    }
+  });
+
+  it('(e) CONTROL — a could_not_run WITHOUT the busy token keeps the generic could-not-complete sentence', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-024', {
+      ok: false,
+      status: 'could_not_run',
+      error: 'bad_config: missing remote',
+      quic_detail: null,
+      exit_ip: null,
+    });
+    const id2 = await makeWireGuardProxy();
+    const res2 = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id2}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res2.json<Record<string, unknown>>().reason).toMatch(
+      /could not be completed on the measuring Mac/,
+    );
+  });
+
+  it('(e) CONTROL — a socks5 row with a node that could not run the probe still gets the control-plane fallback (a real SOCKS5 measurement)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-025', {
+      ok: false,
+      status: 'could_not_run',
+      error: 'node_busy',
+      quic_detail: null,
+      exit_ip: null,
+    });
+    const socks = await makeProxy('proxy-busy.example.com');
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${socks}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.json<Record<string, unknown>>().measured_from).toBe('control_plane');
+  });
+
   it('a socks5 row carries exit_observed on the same path — parity is one implementation, not a VPN branch', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,

@@ -2454,15 +2454,19 @@ function buildRegistry(): OpenAPIRegistry {
         reason: z.string().optional(),
         measured_from: z.literal('fleet'),
         node_id: z.string(),
-        reachable: z.boolean(),
-        auth_ok: z.boolean(),
-        udp_associate: z.boolean(),
-        can_route: z.boolean(),
+        // (e) — the per-leg measurements are ABSENT on a `could_not_run` result (node_busy,
+        // bad_config, timeout): nothing ran, so nothing is a fact except `reason`.
+        reachable: z.boolean().optional(),
+        auth_ok: z.boolean().optional(),
+        // Also absent on VPN rows: a tunnel carries UDP by nature — no probed SOCKS5 grant.
+        udp_associate: z.boolean().optional(),
+        can_route: z.boolean().optional(),
         latency_ms: z.number().int().nullable(),
-        h2_ok: z.boolean(),
-        quic_ok: z.boolean(),
-        quic_detail: z.string().nullable(),
-        exit_ip: z.string().nullable(),
+        h2_ok: z.boolean().optional(),
+        // Also absent when quic_detail starts with "skipped:" (the QUIC leg never ran).
+        quic_ok: z.boolean().optional(),
+        quic_detail: z.string().nullable().optional(),
+        exit_ip: z.string().nullable().optional(),
         // VPN exit parity — the exit identity the NODE observed, with the geo it
         // resolved. Present exactly when `exit_ip` is non-null; each geo field is
         // null when the node could not resolve it. The only vantage that can see

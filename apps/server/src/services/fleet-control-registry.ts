@@ -130,7 +130,7 @@ export type FleetInboundAdmission =
  */
 export type ProbeEgressDispatch =
   | { status: 'ok'; result: ProbeEgressResult }
-  | { status: 'error'; message: string }
+  | { status: 'error'; message: string; nodeId?: string }
   | { status: 'timeout' }
   | { status: 'unavailable' };
 
@@ -1222,7 +1222,11 @@ export class FleetControlRegistry {
       inlineProxyConfig: args.inlineProxyConfig,
       target: args.target,
     });
-    if (outcome.status !== 'ok') return outcome;
+    // (e) — an error outcome carries the node that refused, so a route can label a
+    // node's `could_not_run` refusal (node_busy, bad_config…) as the fleet's answer.
+    if (outcome.status !== 'ok') {
+      return outcome.status === 'error' ? { ...outcome, nodeId: conn.nodeId } : outcome;
+    }
     // Provenance — the measurement must come from the node we dispatched to. A
     // result whose node_id differs is a misrouted/echoed frame; report it as an
     // error rather than labelling another node's exit as this proxy's.

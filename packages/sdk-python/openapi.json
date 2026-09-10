@@ -3563,20 +3563,7 @@
                 "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
               }
             },
-            "required": [
-              "ok",
-              "measured_from",
-              "node_id",
-              "reachable",
-              "auth_ok",
-              "udp_associate",
-              "can_route",
-              "latency_ms",
-              "h2_ok",
-              "quic_ok",
-              "quic_detail",
-              "exit_ip"
-            ]
+            "required": ["ok", "measured_from", "node_id", "latency_ms"]
           }
         ]
       },

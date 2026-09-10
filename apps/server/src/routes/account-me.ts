@@ -1107,7 +1107,32 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             inlineProxyConfig: resolved,
             target: FLEET_PROBE_TARGET,
           });
-          if (dispatch.status !== 'ok') return null;
+          if (dispatch.status !== 'ok') {
+            // (e) 2026-09-10 — a node that could not RUN the probe (node_busy,
+            // bad_config:*, handshake_failed…) surfaces here as an error outcome.
+            // For a socks5 row the control-plane fallback is a REAL measurement
+            // (the control plane speaks SOCKS5 itself), so it stands. For a VPN
+            // row the control plane cannot bring a tunnel up — its fallback is a
+            // bare TCP connect that says nothing about the tunnel — so the only
+            // honest answer is the node's refusal, labelled as the fleet's, with
+            // no measurement fields (nothing ran).
+            if (
+              dispatch.status === 'error' &&
+              (row.scheme === 'openvpn' || row.scheme === 'wireguard') &&
+              dispatch.nodeId !== undefined
+            ) {
+              return {
+                ok: false,
+                reason: /node_busy/i.test(dispatch.message)
+                  ? 'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.'
+                  : 'The test could not be completed on the measuring Mac. Try again shortly.',
+                latency_ms: null,
+                node_id: dispatch.nodeId,
+                measured_from: 'fleet' as const,
+              };
+            }
+            return null;
+          }
           const r = dispatch.result;
           // ⛔ `r.ok` IS NOT "THE PROXY WORKS". Its contract on the node's frame is
           // "the probe reached a verdict" — a proxy that answers nothing at all
@@ -1131,6 +1156,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             // `status` and falls back to `ok`. The schema has already refused any
             // frame where the two disagree, so this cannot pick a side quietly.
             if (!probeReachedVerdict(r)) {
+              // (e) 2026-09-10 — `node_busy`: the node refuses a VPN probe while ANY
+              // userspace tunnel is live on it (a second tunnel could break the live
+              // session), and also under its own concurrency backpressure. A wait,
+              // not a verdict on the proxy.
+              if (typeof r.error === 'string' && /node_busy/i.test(r.error)) {
+                return 'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.';
+              }
               return 'The test could not be completed on the measuring Mac. Try again shortly.';
             }
             if (!r.reachable) {
@@ -1228,14 +1260,29 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             latency_ms: r.latency_ms,
             ...quicFields,
             ...osFields,
-            reachable: r.reachable,
-            auth_ok: r.auth_ok,
-            udp_associate: r.udp_associate,
-            can_route: r.can_route,
-            h2_ok: r.h2_ok,
-            quic_ok: r.quic_ok,
-            quic_detail: r.quic_detail,
-            exit_ip: r.exit_ip,
+            // (e) 2026-09-10 — a `could_not_run` frame (node_busy, bad_config:*,
+            // timeout…) carries no fact except `error`: every measurement field on
+            // it is a default false/null, so none is reported. On a verdict: a VPN
+            // row's `udp_associate` is the tunnel's nature, not a probed SOCKS5
+            // grant; and `quic_ok:false` beside a "skipped:" detail means the QUIC
+            // leg never ran (VPN path; endpoint never answered), not that QUIC
+            // failed — neither is reported as a measurement.
+            ...(probeReachedVerdict(r)
+              ? {
+                  reachable: r.reachable,
+                  auth_ok: r.auth_ok,
+                  ...(row.scheme === 'openvpn' || row.scheme === 'wireguard'
+                    ? {}
+                    : { udp_associate: r.udp_associate }),
+                  can_route: r.can_route,
+                  h2_ok: r.h2_ok,
+                  ...(typeof r.quic_detail === 'string' && r.quic_detail.startsWith('skipped:')
+                    ? {}
+                    : { quic_ok: r.quic_ok }),
+                  quic_detail: r.quic_detail,
+                  exit_ip: r.exit_ip,
+                }
+              : {}),
             // Spread only when defined — never an `exit_observed: undefined` key.
             ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
             node_id: r.node_id,
