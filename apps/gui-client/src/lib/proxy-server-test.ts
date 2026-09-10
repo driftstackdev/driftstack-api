@@ -14,16 +14,23 @@
 // the decision between them, made once.
 
 import {
+  listProxies as listAccountProxies,
   testAccountProxy,
   type AccountProxyExitObserved,
+  type AccountProxyMeta,
+  type AccountProxyScheme,
+  type AccountProxyTestNotRun,
   type AccountProxyTestResult,
   type MeasuredQuic,
 } from './account-proxies';
 import type { OsFingerprint } from './os-fingerprint-verdict';
-import { isProxyUsable } from './proxies';
+import { isProxyUsable, resolveEndpoint } from './proxies';
+import { isVpnScheme } from './proxy-scheme';
 import {
   deriveProbeViewState,
   isQuicVerdictFresh,
+  loadProbeCache,
+  saveEndpointResult,
   saveExitResult,
   saveOsFingerprint,
   saveServerProbeResult,
@@ -65,6 +72,21 @@ export type ServerProbeOutcome =
       vantage?: ServerVantage;
     }
   | {
+      /** (d) — NOTHING RAN: the control plane refused a VPN test because a live
+       *  session holds the tunnel (`live_session`), or the fleet node could not
+       *  run the probe (`node_busy` / `node_error`). Not a verdict either way:
+       *  the views keep what they hold, show `reason` as a notice (never the red
+       *  "tunnel down"), and a sweep counts the row as skipped, not as a tunnel
+       *  that is not up. `exitObserved` rides on the live-session refusal — the
+       *  exit that session sees — and is adopted like a measured one. */
+      kind: 'not_run';
+      at: number;
+      why: AccountProxyTestNotRun;
+      reason: string;
+      vantage?: ServerVantage;
+      exitObserved?: AccountProxyExitObserved;
+    }
+  | {
       /** No server answer at all (network, auth, malformed) — the views keep
        *  what they have; nothing here is evidence either way. */
       kind: 'unavailable';
@@ -97,6 +119,18 @@ export function serverProbeOutcome(
   if (test === null) return { kind: 'unavailable' };
   if (!test.ok) {
     const vantage = cleanServerVantage(test.measured_from, undefined);
+    // (d) — the discriminator, never the prose: a refusal / could-not-run is
+    // its own outcome so no consumer can mistake it for a failed tunnel.
+    if (test.not_run !== undefined) {
+      return {
+        kind: 'not_run',
+        at: now,
+        why: test.not_run,
+        reason: test.reason,
+        ...(vantage ? { vantage } : {}),
+        ...(test.exit_observed !== undefined ? { exitObserved: test.exit_observed } : {}),
+      };
+    }
     return { kind: 'failed', at: now, reason: test.reason, ...(vantage ? { vantage } : {}) };
   }
   // T-6 — a value outside the closed set is dropped, never rendered green.
@@ -137,14 +171,27 @@ export async function testProxyOnServer(
 /**
  * Persist an `ok` outcome onto the proxy's cache entry. `failed` and
  * `unavailable` write nothing — the native probe's entry stands, and the views
- * decide what to drop from their own state. Returns the cache after the last
- * successful write, or null when nothing was written.
+ * decide what to drop from their own state. (d) A `not_run` outcome writes no
+ * measurement either (there is none), but the live-session refusal's observed
+ * exit IS adopted when the caller asks (`adoptExit`, VPN rows) — it is the exit
+ * the row has right now, seen by the session that holds the tunnel. Returns the
+ * cache after the last successful write, or null when nothing was written.
  */
 export async function persistServerProbe(
   proxyId: string,
   outcome: ServerProbeOutcome,
   opts: { adoptExit?: boolean } = {},
 ): Promise<ProbeCacheMap | null> {
+  if (outcome.kind === 'not_run') {
+    if (opts.adoptExit !== true || outcome.exitObserved === undefined) return null;
+    let cache: ProbeCacheMap;
+    try {
+      cache = await loadProbeCache();
+    } catch {
+      return null;
+    }
+    return adoptObservedExit(proxyId, cache[proxyId], outcome.exitObserved, outcome.at);
+  }
   if (outcome.kind !== 'ok') return null;
   let latest: ProbeCacheMap | null = null;
   if (outcome.osFingerprint !== undefined) {
@@ -180,30 +227,188 @@ export async function persistServerProbe(
   // for the same ip.
   let withExit: ProbeCacheMap | null = null;
   if (opts.adoptExit === true && outcome.exitObserved !== undefined) {
-    const e = outcome.exitObserved;
-    const existing = (next ?? latest)?.[proxyId];
-    const sameIp = existing?.exitIp === e.ip;
-    const incomingHasGeo = e.country !== null || e.timezone !== null;
-    const existingHasGeo =
-      existing !== undefined &&
-      ((existing.exitCountry ?? null) !== null || (existing.exitTimezone ?? null) !== null);
-    const downgrade = !incomingHasGeo && sameIp && existingHasGeo;
-    if (!downgrade) {
-      withExit = await saveExitResult(
-        proxyId,
+    withExit = await adoptObservedExit(
+      proxyId,
+      (next ?? latest)?.[proxyId],
+      outcome.exitObserved,
+      outcome.at,
+    );
+  }
+  return withExit ?? next ?? latest;
+}
+
+/** The ONE write of a server-observed exit from a /test reply (measured or
+ *  refused): never a downgrade, ASN kept for the same ip. Best-effort — null
+ *  when nothing was written. */
+async function adoptObservedExit(
+  proxyId: string,
+  existing: CachedProbe | undefined,
+  e: AccountProxyExitObserved,
+  at: number,
+): Promise<ProbeCacheMap | null> {
+  if (isExitDowngrade(existing, e)) return null;
+  const sameIp = existing?.exitIp === e.ip;
+  return saveExitResult(
+    proxyId,
+    e.ip,
+    e.country,
+    {
+      city: e.city,
+      region: e.region,
+      timezone: e.timezone,
+      asnOrg: sameIp ? (existing?.exitAsnOrg ?? null) : null,
+    },
+    at,
+  ).catch(() => null);
+}
+
+/**
+ * The ONE never-downgrade rule for a server-observed exit: an observation with
+ * no geo does not replace an entry that already has geo for the same ip. Shared
+ * by the fleet-test adoption above and the list adoption below, so the two
+ * cannot drift.
+ */
+function isExitDowngrade(
+  existing: CachedProbe | undefined,
+  incoming: { ip: string; country: string | null; timezone: string | null },
+): boolean {
+  if (existing === undefined || existing.exitIp !== incoming.ip) return false;
+  const incomingHasGeo = incoming.country !== null || incoming.timezone !== null;
+  const existingHasGeo =
+    (existing.exitCountry ?? null) !== null || (existing.exitTimezone ?? null) !== null;
+  return !incomingHasGeo && existingHasGeo;
+}
+
+/** The slice of a local proxy the list adoption reads: which server row it is,
+ *  whether it is a tunnel, and the endpoint its pre-flight resolves. */
+export interface ListExitProxyLike {
+  id: string;
+  serverId?: string;
+  scheme?: AccountProxyScheme;
+  host: string;
+  port: number;
+}
+
+/**
+ * D2 — adopt the exit the SERVER last observed through each VPN proxy (from the
+ * account proxy list's `exit_observed`) into the same cache fields the fleet
+ * test and the native exit probe write, so a VPN row shows its exit — and the
+ * launch's device-clock timezone reads it — without anyone pressing Test. A
+ * live session through a tunnel is the ONLY exit identity that row can have
+ * between tests; this is how it reaches the cards.
+ *
+ * ⛔ VPN rows ONLY. A SOCKS5 row's exit is measured NATIVELY from this Mac
+ * (lumtest geo + ASN); the server's observation for it is at best a duplicate
+ * and at worst geo-less, and writing it would overwrite real geo with nulls
+ * (the same rule persistServerProbe's `adoptExit` enforces). Never DOWNGRADE
+ * (same rule as above), and never REWIND: an observation no newer than the
+ * exit already stored for the same ip/geo writes nothing, so a 15s poll does
+ * not rewrite the store every tick. Best-effort per proxy; returns the proxy
+ * ids written, for the guard.
+ *
+ * ⛔ A VPN row with NO cache entry on THIS Mac (a second Mac, a fresh install —
+ * the very case a session-observed exit exists for) is not skipped: the exit
+ * write rides on an entry (saveExitResult invents none, and the endpoint-row
+ * overlay shows an exit only beside a RESOLVED pre-flight), so the row's
+ * endpoint pre-flight — the same DNS resolve Test runs first — is run once
+ * here and stored as its honest verdict, and the exit lands on top of it.
+ * Nothing is fabricated: an endpoint that does not resolve stores as
+ * unresolved (the exit is written but stays hidden, exactly as after a Test),
+ * and once an entry exists no resolve runs again. Only for a row that HAS an
+ * observation to adopt, so a SOCKS5-only or never-observed pool costs no
+ * lookup.
+ */
+export async function adoptListExitObserved(
+  rows: ReadonlyArray<Pick<AccountProxyMeta, 'id' | 'exit_observed'>>,
+  proxies: ReadonlyArray<ListExitProxyLike>,
+  nowMs: number = Date.now(),
+): Promise<string[]> {
+  const written: string[] = [];
+  const byServerId = new Map<string, Pick<AccountProxyMeta, 'id' | 'exit_observed'>>();
+  for (const r of rows) byServerId.set(r.id, r);
+  let cache: ProbeCacheMap;
+  try {
+    cache = await loadProbeCache();
+  } catch {
+    return written;
+  }
+  for (const p of proxies) {
+    if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
+    const e = byServerId.get(p.serverId)?.exit_observed;
+    if (e === null || e === undefined) continue;
+    let existing = cache[p.id];
+    if (existing === undefined) {
+      try {
+        const r = await resolveEndpoint(p.host, p.port);
+        // Re-read: a Test that completed while the resolve ran already wrote a
+        // fuller entry (pre-flight + fleet fields), which this must not replace.
+        cache = await loadProbeCache();
+        if (cache[p.id] === undefined) {
+          cache = await saveEndpointResult(
+            p.id,
+            { resolved: r.resolved, ip: r.ip, message: r.message },
+            nowMs,
+          );
+        }
+        existing = cache[p.id];
+      } catch {
+        /* best-effort — the next refresh retries; no entry is invented */
+      }
+      if (existing === undefined) continue;
+    }
+    const parsed = e.observed_at === null ? Number.NaN : Date.parse(e.observed_at);
+    const at = Number.isFinite(parsed) ? parsed : nowMs;
+    const sameIp = existing.exitIp === e.ip;
+    const unchanged =
+      sameIp &&
+      (existing.exitCountry ?? null) === e.country &&
+      (existing.exitTimezone ?? null) === e.timezone &&
+      existing.exitAt !== undefined &&
+      existing.exitAt >= at;
+    if (unchanged || isExitDowngrade(existing, e)) continue;
+    try {
+      cache = await saveExitResult(
+        p.id,
         e.ip,
         e.country,
         {
-          city: e.city,
-          region: e.region,
+          // The list carries no city/region/ASN: for the SAME ip the fleet
+          // test's resolution of them still describes this exit; a new ip
+          // starts clean rather than wearing the old ip's city.
+          city: sameIp ? (existing.exitCity ?? null) : null,
+          region: sameIp ? (existing.exitRegion ?? null) : null,
           timezone: e.timezone,
-          asnOrg: sameIp ? (existing?.exitAsnOrg ?? null) : null,
+          asnOrg: sameIp ? (existing.exitAsnOrg ?? null) : null,
         },
-        outcome.at,
-      ).catch(() => null);
+        at,
+      );
+      written.push(p.id);
+    } catch {
+      /* best-effort — the next refresh retries */
     }
   }
-  return withExit ?? next ?? latest;
+  return written;
+}
+
+/**
+ * D2 — fetch the account proxy list and adopt its observed exits (above). The
+ * views call this fire-and-forget from their refresh; it is `async` so every
+ * failure — offline, a 5xx, a mocked-away transport — is a rejection the caller
+ * swallows, never a throw inside the refresh that would read as "couldn't load
+ * proxies". Skips the request entirely when no local VPN proxy is synced to the
+ * server: there would be nothing to adopt, and a SOCKS5-only account should not
+ * pay a list round-trip per poll for it.
+ */
+export async function syncListExitObserved(
+  baseUrl: string,
+  apiKey: string | null,
+  proxies: ReadonlyArray<ListExitProxyLike>,
+  nowMs: number = Date.now(),
+): Promise<string[]> {
+  if (apiKey === null || apiKey.length === 0) return [];
+  if (!proxies.some((p) => p.serverId !== undefined && isVpnScheme(p.scheme))) return [];
+  const rows = await listAccountProxies(baseUrl, apiKey);
+  return adoptListExitObserved(rows, proxies, nowMs);
 }
 
 /**

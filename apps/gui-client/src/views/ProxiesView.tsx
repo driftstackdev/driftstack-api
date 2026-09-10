@@ -59,6 +59,7 @@ import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
   persistServerProbe,
+  syncListExitObserved,
   testProxyOnServer,
   type ServerProbeOutcome,
 } from '../lib/proxy-server-test';
@@ -108,24 +109,40 @@ function isSweepable(scheme: AccountProxyScheme | undefined): boolean {
   return isSocks5Probeable(scheme) || isVpnScheme(scheme);
 }
 
-/** The VPN half of a sweep's tally: rows whose endpoint check ran, and how many
- *  of those the fleet then brought up. */
+/** The VPN half of a sweep's tally: rows whose tunnel got a verdict, how many
+ *  of those the fleet brought up, and (d) rows whose test was NOT RUN — refused
+ *  while a live session holds the tunnel, or the measuring Mac was busy. A
+ *  skipped row is neither up nor down and is never counted as either. */
 interface VpnSweepTally {
   checked: number;
   tunnelOk: number;
+  skipped: number;
+}
+
+const EMPTY_VPN_TALLY: VpnSweepTally = { checked: 0, tunnelOk: 0, skipped: 0 };
+
+/** (d) — the clause a sweep appends for tunnels it could not test. Says WHY in
+ *  the same breath, so "skipped" is never read as "failed" or as "forgotten". */
+function skippedClause(skipped: number): string {
+  return `${String(skipped)} VPN tunnel${skipped === 1 ? '' : 's'} skipped (in use by a live session, or the measuring Mac was busy)`;
 }
 
 function formatTestAllSummary(
   results: ProxyTestResult[],
-  vpn: VpnSweepTally = { checked: 0, tunnelOk: 0 },
+  vpn: VpnSweepTally = EMPTY_VPN_TALLY,
 ): string {
-  if (results.length === 0 && vpn.checked === 0) {
+  if (results.length === 0 && vpn.checked === 0 && vpn.skipped === 0) {
     return 'No proxy results landed — run Test all again.';
+  }
+  // (d) — every VPN row was skipped: nothing was tested, and the sentence must
+  // not begin "Tested 0 — 0 VPN tunnels up", which reads as every tunnel down.
+  if (results.length === 0 && vpn.checked === 0) {
+    return `${skippedClause(vpn.skipped)} — nothing was tested`;
   }
   // VPN rows have no SOCKS5 buckets; they get their own clause so the sentence
   // never counts a tunnel as "healthy" on a handshake it never made.
   if (results.length === 0) {
-    return `Tested ${String(vpn.checked)} — ${String(vpn.tunnelOk)} VPN tunnel${vpn.tunnelOk === 1 ? '' : 's'} up`;
+    return `Tested ${String(vpn.checked)} — ${String(vpn.tunnelOk)} VPN tunnel${vpn.tunnelOk === 1 ? '' : 's'} up${vpn.skipped > 0 ? `, ${skippedClause(vpn.skipped)}` : ''}`;
   }
   const healthy = results.filter((result) => isProxyUsable(result)).length;
   const unreachable = results.filter((result) => !result.reachable).length;
@@ -146,6 +163,7 @@ function formatTestAllSummary(
       `${String(vpn.tunnelOk)}/${String(vpn.checked)} VPN tunnel${vpn.checked === 1 ? '' : 's'} up`,
     );
   }
+  if (vpn.skipped > 0) parts.push(skippedClause(vpn.skipped));
   return `Tested ${String(results.length + vpn.checked)} — ${parts.join(', ')}`;
 }
 
@@ -231,6 +249,11 @@ export function ProxiesView(): JSX.Element {
   // memory only, like a SOCKS5 row's failed server outcome (the cache persists
   // nothing on a failure); cleared by the next check.
   const [vpnFailures, setVpnFailures] = useState<Record<string, string>>({});
+  // (d) — the server's sentence when a VPN row's test was NOT RUN (a live
+  // session holds the tunnel; the measuring Mac was busy). A notice, never a
+  // failure: it sits beside whatever verdict the row has, in muted ink, and is
+  // cleared by the next check exactly like a failure is.
+  const [vpnNotices, setVpnNotices] = useState<Record<string, string>>({});
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -259,6 +282,12 @@ export function ProxiesView(): JSX.Element {
     try {
       const proxies = await listProxies();
       setState((s) => ({ ...s, proxies, loading: false, error: null }));
+      // D2 — a VPN row's exit is whatever the server last OBSERVED through it
+      // (a live session, or a fleet probe): adopt it from the account list into
+      // the same cache the hydration below reads, so the row shows an exit
+      // without a Test. Fire-and-forget; the cache subscription re-derives the
+      // view when it lands, and a failure changes nothing the customer sees.
+      void syncListExitObserved(settings.baseUrl, settings.apiKey, proxies).catch(() => undefined);
       // Hydrate the LAST persisted probe result per proxy so a tested proxy
       // keeps showing its reachability / UDP / exit-geo across visits instead
       // of reverting to "untested" + needing a re-test every time (the cache
@@ -286,7 +315,7 @@ export function ProxiesView(): JSX.Element {
         error: friendlyError(err, "Couldn't load proxies. Try again."),
       }));
     }
-  }, []);
+  }, [settings.apiKey, settings.baseUrl]);
 
   // P-8 — the background sweep rewrites verdicts while this grid is open. Without
   // this, a proxy re-tested and found DOWN would keep showing the healthy pill it
@@ -555,7 +584,7 @@ export function ProxiesView(): JSX.Element {
   // null when an edit/remove made the check stale.
   async function handleCheckEndpoint(
     p: ProxyConfig,
-  ): Promise<{ resolved: boolean; tunnelOk: boolean | null } | null> {
+  ): Promise<{ resolved: boolean; tunnelOk: boolean | null; skipped?: true } | null> {
     const epoch = ++testEpochRef.current;
     const stale = (): boolean => testEpochRef.current !== epoch;
     setTestingId(p.id);
@@ -564,6 +593,7 @@ export function ProxiesView(): JSX.Element {
       if (stale()) return null;
       setEndpointResults((m) => ({ ...m, [p.id]: r }));
       setVpnFailures((m) => dropKey(m, p.id));
+      setVpnNotices((m) => dropKey(m, p.id));
       // Awaited (best-effort) so the pre-flight's cache write — which drops every
       // server field from the previous check — lands BEFORE the fleet result is
       // persisted on top of it; the two writes are serialised by the cache's
@@ -594,8 +624,14 @@ export function ProxiesView(): JSX.Element {
       applyServerProbeOutcome(p.id, outcome);
       if (outcome.kind === 'failed') {
         setVpnFailures((m) => ({ ...m, [p.id]: outcome.reason }));
+      } else if (outcome.kind === 'not_run') {
+        // (d) — NOTHING RAN. The sentence is a notice beside the row, never the
+        // red "tunnel down": a live session holding the tunnel is the opposite
+        // of a tunnel that is down, and a busy Mac says nothing about it.
+        setVpnNotices((m) => ({ ...m, [p.id]: outcome.reason }));
       }
       void persistServerProbe(p.id, outcome, { adoptExit: true });
+      if (outcome.kind === 'not_run') return { resolved: true, tunnelOk: null, skipped: true };
       // A verdict about the TUNNEL comes only from a fleet Mac that brought it
       // up; a control-plane fallback measured the endpoint, not the tunnel.
       const fleetMeasured = outcome.kind === 'ok' && outcome.vantage?.measuredFrom === 'fleet';
@@ -664,6 +700,24 @@ export function ProxiesView(): JSX.Element {
       // VPN exit parity (b) — the exit the fleet Mac observed is the exit the
       // profile will have; it lands in the same row cell as the native probe's
       // exit, and for a VPN row it is the only exit there can be.
+      const exit = outcome.exitObserved;
+      if (exit !== undefined) {
+        setExitResults((r) => ({
+          ...r,
+          [id]: {
+            ip: exit.ip,
+            country: exit.country,
+            city: exit.city,
+            region: exit.region,
+            timezone: exit.timezone,
+          },
+        }));
+      }
+    } else if (outcome.kind === 'not_run') {
+      // (d) — nothing was measured, so nothing here changes: the row keeps
+      // whatever it holds. The one thing the reply CAN carry is the exit the
+      // live session sees through the tunnel, which is the row's exit right
+      // now and lands in the same cell a measured one does.
       const exit = outcome.exitObserved;
       if (exit !== undefined) {
         setExitResults((r) => ({
@@ -830,7 +884,7 @@ export function ProxiesView(): JSX.Element {
     setTestAllSummary(null);
     setTestingAll(true);
     const results: ProxyTestResult[] = [];
-    const vpn: VpnSweepTally = { checked: 0, tunnelOk: 0 };
+    const vpn: VpnSweepTally = { ...EMPTY_VPN_TALLY };
     try {
       // Only SOCKS5 (or legacy-undefined) proxies have an honest native SOCKS5
       // probe. Running it against a VPN/HTTP endpoint always returns a false
@@ -840,7 +894,11 @@ export function ProxiesView(): JSX.Element {
       for (const p of targets) {
         if (!isSocks5Probeable(p.scheme)) {
           const check = await handleCheckEndpoint(p);
-          if (check !== null && check.tunnelOk !== null) {
+          // (d) — a skipped row (test not run) is its own bucket: never a
+          // checked tunnel that is "not up".
+          if (check?.skipped === true) {
+            vpn.skipped += 1;
+          } else if (check !== null && check.tunnelOk !== null) {
             vpn.checked += 1;
             if (check.tunnelOk) vpn.tunnelOk += 1;
           }
@@ -1054,6 +1112,7 @@ export function ProxiesView(): JSX.Element {
           serverVantage={serverVantage}
           quicProbe={quicProbe}
           vpnFailures={vpnFailures}
+          vpnNotices={vpnNotices}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -1171,6 +1230,7 @@ function ProxyTable({
   serverVantage,
   quicProbe,
   vpnFailures,
+  vpnNotices,
   endpointResults,
   onEdit,
   onRemove,
@@ -1194,6 +1254,8 @@ function ProxyTable({
   quicProbe: Record<string, boolean>;
   /** (b) — the fleet's failure sentence per VPN row whose tunnel did not come up. */
   vpnFailures: Record<string, string>;
+  /** (d) — the server's sentence per VPN row whose test was NOT RUN (a notice). */
+  vpnNotices: Record<string, string>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   endpointResults: Record<string, EndpointResolveResult>;
@@ -1419,6 +1481,7 @@ function ProxyTable({
                 serverVantage={serverVantage[p.id]}
                 quicProbe={quicProbe[p.id]}
                 vpnFailure={vpnFailures[p.id]}
+                vpnNotice={vpnNotices[p.id]}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -1501,6 +1564,7 @@ function ProxyRow({
   serverVantage,
   quicProbe,
   vpnFailure,
+  vpnNotice,
   endpointResult,
   onEdit,
   onRemove,
@@ -1533,6 +1597,10 @@ function ProxyRow({
   quicProbe: boolean | undefined;
   /** (b) — the fleet's failure sentence when this VPN row's tunnel did not come up. */
   vpnFailure?: string;
+  /** (d) — the server's sentence when this VPN row's test was NOT RUN: a live
+   *  session holds the tunnel, or the measuring Mac was busy. A notice beside
+   *  the row's verdict, never a failure. */
+  vpnNotice?: string;
   endpointResult: EndpointResolveResult | undefined;
   onEdit: () => void;
   onRemove: () => void;
@@ -1731,6 +1799,14 @@ function ProxyRow({
               title={vpnFailure}
             >
               {vpnFailure}
+            </span>
+          )}
+          {vpnNotice !== undefined && vpnFailure === undefined && !isSocks5Probeable(p.scheme) && (
+            <span
+              className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-ink-muted"
+              title={vpnNotice}
+            >
+              {vpnNotice}
             </span>
           )}
           {failed && result.message.length > 0 && (

@@ -74,6 +74,43 @@ export interface AccountProxyMeta {
   quic_measured?: MeasuredQuic | null;
   /** ISO timestamp of that measurement, or null when never measured. */
   quic_measured_at?: string | null;
+  /** D2 — the exit the server last OBSERVED through this proxy (a live
+   *  session's egress, or a fleet probe), resolved to geo server-side. Lets a
+   *  VPN row show an exit without a test: the native exit probe is a SOCKS5
+   *  request from this Mac and cannot run through a tunnel. null = never
+   *  observed (the honest empty state); absent = an older server. */
+  exit_observed?: AccountProxyListExitObserved | null;
+}
+
+/** D2 — the LIST's observed exit. Narrower than the /test reply's
+ *  `AccountProxyExitObserved` (no region/city; carries WHO observed it and
+ *  WHEN). Field names match the wire. */
+export interface AccountProxyListExitObserved {
+  ip: string;
+  country: string | null;
+  timezone: string | null;
+  observed_via: 'session' | 'probe';
+  observed_at: string | null;
+}
+
+/** A listed row's `exit_observed` is kept only when it is an object whose `ip`
+ *  is a non-empty string, whose `observed_via` is in the closed set, and whose
+ *  geo/stamp members are each a string, null, or absent (absent reads as null).
+ *  Anything else — including a malformed object — becomes null, the "never
+ *  observed" state: a malformed exit must never become a rendered location, and
+ *  one bad row must not fail the whole list. */
+export function cleanListExitObserved(raw: unknown): AccountProxyListExitObserved | null {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.ip !== 'string' || r.ip.length === 0) return null;
+  if (r.observed_via !== 'session' && r.observed_via !== 'probe') return null;
+  const opt = (v: unknown): string | null | undefined =>
+    v === null || v === undefined ? null : typeof v === 'string' ? v : undefined;
+  const country = opt(r.country);
+  const timezone = opt(r.timezone);
+  const observedAt = opt(r.observed_at);
+  if (country === undefined || timezone === undefined || observedAt === undefined) return null;
+  return { ip: r.ip, country, timezone, observed_via: r.observed_via, observed_at: observedAt };
 }
 
 /** Create body. `password` is write-only; omit (or null) for no password. VPN
@@ -179,7 +216,19 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
     throw new Error(`proxies fetch failed: ${status.toString()}`);
   }
   const body = await readBoundedApiJson<{ data?: unknown }>(res);
-  return Array.isArray(body.data) ? (body.data as AccountProxyMeta[]) : [];
+  const rows = Array.isArray(body.data) ? (body.data as AccountProxyMeta[]) : [];
+  // D2 — the one list field a client ADOPTS into local state is cleaned here
+  // (closed set + typed members), so a malformed exit on one row becomes that
+  // row's "never observed" and nothing else. A row without the field (an older
+  // server) is passed through untouched — absent stays absent.
+  return rows.map((r) =>
+    typeof r === 'object' && r !== null && 'exit_observed' in r
+      ? {
+          ...r,
+          exit_observed: cleanListExitObserved((r as { exit_observed: unknown }).exit_observed),
+        }
+      : r,
+  );
 }
 
 export async function createProxy(
@@ -364,7 +413,31 @@ export type AccountProxyTestResult =
        *  null when the server could not say. Only beside 'fleet'. */
       exit_observed?: AccountProxyExitObserved;
     }
-  | { ok: false; reason: string; measured_from?: ProxyVantage };
+  | {
+      ok: false;
+      reason: string;
+      measured_from?: ProxyVantage;
+      /** (d) — present when NOTHING RAN, so this `ok:false` is not a verdict
+       *  about the proxy: the control plane refused a VPN test because a live
+       *  session holds the tunnel (`live_session`), or the fleet node could not
+       *  run the probe (`node_busy` / `node_error`). The views branch on THIS —
+       *  never on the `reason` prose — to keep the row's last verdict and show
+       *  the sentence as a notice, not as "tunnel down". */
+      not_run?: AccountProxyTestNotRun;
+      /** (d) — beside `not_run: 'live_session'` only: the exit the live session
+       *  observed through the tunnel (the server's stored observation, no
+       *  region/city), so the row still shows where it exits. */
+      exit_observed?: AccountProxyExitObserved;
+    };
+
+/** (d) — why a /test produced no measurement. A closed set: a value outside it
+ *  is dropped (the reply then reads as a plain failure, never as a refusal it
+ *  did not earn). */
+export type AccountProxyTestNotRun = 'live_session' | 'node_busy' | 'node_error';
+
+export function cleanTestNotRun(raw: unknown): AccountProxyTestNotRun | undefined {
+  return raw === 'live_session' || raw === 'node_busy' || raw === 'node_error' ? raw : undefined;
+}
 
 /** The fleet-observed exit on a /test reply. Field names match the wire. */
 export interface AccountProxyExitObserved {
@@ -504,12 +577,21 @@ export async function testAccountProxy(
       ...(exitObserved !== undefined ? { exit_observed: exitObserved } : {}),
     };
   }
-  if (body.ok === false && typeof body.reason === 'string')
+  if (body.ok === false && typeof body.reason === 'string') {
+    const notRun = cleanTestNotRun(body.not_run);
+    // (d) — the stored session exit rides ONLY on the live-session refusal (the
+    // documented case); on any other failure an exit_observed is not a claim
+    // this reply can make, and it is dropped. Malformed → dropped, never thrown.
+    const refusedExit =
+      notRun === 'live_session' ? cleanExitObserved(body.exit_observed) : undefined;
     return {
       ok: false,
       reason: body.reason,
       ...(vantage !== undefined ? { measured_from: vantage } : {}),
+      ...(notRun !== undefined ? { not_run: notRun } : {}),
+      ...(refusedExit !== undefined ? { exit_observed: refusedExit } : {}),
     };
+  }
   // T-1 — a fleet Mac reports a failed test as a RESULT without prose; that is a
   // well-formed answer, not a malformed one.
   if (body.ok === false && vantage === 'fleet')

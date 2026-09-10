@@ -138,6 +138,7 @@ import {
   deriveProbeViewWithEndpointRows,
   persistServerProbe,
   serverVerdictUsable,
+  syncListExitObserved,
   testProxyOnServer,
 } from '../lib/proxy-server-test';
 import {
@@ -1303,6 +1304,14 @@ export function ProfilesView({
         setActiveSessions(sessionsPage.data);
         setBindings(currentBindings);
         setProxies(currentProxies);
+        // D2 — a VPN proxy's exit is whatever the server last observed through
+        // it (a live session's egress, or a fleet probe). Adopt it from the
+        // account proxy list into the probe cache the cards and the launch's
+        // device-clock timezone read, so a tunnel shows its exit without a
+        // Test. Best-effort and off the critical path, like the T-27 poll below.
+        void syncListExitObserved(settings.baseUrl, settings.apiKey, currentProxies).catch(
+          () => undefined,
+        );
         // Worktimer (founder) — fetch agent sessions (best-effort, separate
         // from the critical Promise.all: the list endpoint 503s when the agent
         // runtime isn't wired, which must not blank the whole hub). Gives the
@@ -1387,7 +1396,7 @@ export function ProfilesView({
         }));
       }
     },
-    [client, settings.baseUrl, activeWorkspace],
+    [client, settings.apiKey, settings.baseUrl, activeWorkspace],
   );
 
   // L4b — load the account's trashed profiles for the recycle-bin view.
@@ -2565,7 +2574,11 @@ export function ProfilesView({
       return null;
     try {
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
-      const next = await persistServerProbe(px.id, outcome);
+      // ⛔ `adoptExit` — this IS the VPN row (gated above), and without it the
+      // shared step writes the fleet number but never the observed exit, so the
+      // card's exit cell and the launch's device-clock timezone stayed empty
+      // after a card Test. Same flag the Proxies grid passes for its VPN rows.
+      const next = await persistServerProbe(px.id, outcome, { adoptExit: true });
       if (next !== null) setProbeCache(next);
       return next;
     } catch {
