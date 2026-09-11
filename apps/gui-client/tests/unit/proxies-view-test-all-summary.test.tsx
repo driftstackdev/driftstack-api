@@ -1,9 +1,38 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
+import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type * as ProbeCacheModule from '../../src/lib/proxy-probe-cache';
 
 const testProxy = vi.fn<(input: unknown) => Promise<ProxyTestResult>>();
+// (i) I4 — the fleet test a VPN row runs in a sweep (see
+// a-vpn-row-check-runs-the-fleet-test); the SOCKS5 arms never reach it.
+const { testAccountProxy } = vi.hoisted(() => ({
+  testAccountProxy:
+    vi.fn<
+      (
+        baseUrl: string,
+        apiKey: string,
+        id: string,
+        opts?: { vantage?: 'cp' | 'fleet' },
+      ) => Promise<AccountProxiesModule.AccountProxyTestResult>
+    >(),
+}));
+vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof AccountProxiesModule>()),
+  testAccountProxy: (
+    baseUrl: string,
+    apiKey: string,
+    id: string,
+    opts?: { vantage?: 'cp' | 'fleet' },
+  ) => testAccountProxy(baseUrl, apiKey, id, opts),
+}));
+// No request leaves this suite: the list sync a signed-in grid fires on mount
+// gets a 500 and is best-effort.
+vi.mock('../../src/lib/fetch-with-deadline', () => ({
+  DEFAULT_REQUEST_TIMEOUT_MS: 15_000,
+  fetchWithDeadline: (): Promise<Response> => Promise.resolve(new Response('{}', { status: 500 })),
+}));
 const removeProxy = vi.fn<(id: string) => Promise<void>>();
 const confirmFn = vi.fn(() => Promise.resolve(true));
 
@@ -76,6 +105,12 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
   loadProbeCache: () => Promise.resolve({}),
   saveExitResult: vi.fn(() => Promise.resolve()),
   saveProbeResult: vi.fn(() => Promise.resolve()),
+  // (i) I4 — the VPN row's own writes (pre-flight, fleet result, failure):
+  // there is no store under this suite, so they are inert here.
+  saveEndpointResult: vi.fn(() => Promise.resolve({})),
+  saveServerProbeResult: vi.fn(() => Promise.resolve({})),
+  saveOsFingerprint: vi.fn(() => Promise.resolve({})),
+  saveFleetFailure: vi.fn(() => Promise.resolve({})),
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -86,7 +121,9 @@ vi.mock('../../src/components/ConfirmProvider', () => ({
   useConfirm: () => confirmFn,
 }));
 
-const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+const settingsStub = {
+  settings: { apiKey: null as string | null, baseUrl: 'http://localhost:3000' },
+};
 vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
 
 const { ProxiesView } = await import('../../src/views/ProxiesView');
@@ -100,7 +137,65 @@ describe('ProxiesView Test all completion summary', () => {
       return Promise.resolve();
     });
     confirmFn.mockClear();
+    testAccountProxy.mockReset();
+    settingsStub.settings.apiKey = null;
     stored = [proxy('one')];
+  });
+
+  // (i) I4 — a fleet `ok` with `latency_ms: null` brought the tunnel UP (the
+  // row adopts the exit and QUIC verdict from that reply); it was tallied "not
+  // tested (the fleet Mac reported no measurement)" while the row wore those
+  // fields. It is counted up, and the clause names the missing number.
+  // MUTATION: file `latencyMs === null` under notTested again → red.
+  it('CRITICAL counts a fleet ok with no latency as a VPN tunnel UP (no latency reported) beside the SOCKS5 buckets, with the "tunnel up · no latency" pill', async () => {
+    settingsStub.settings.apiKey = 'ds_test_x';
+    stored = [proxy('one'), { ...proxy('vpn1', 'wireguard'), serverId: 'aprx_vpn' }];
+    testProxy.mockResolvedValue(HEALTHY);
+    testAccountProxy.mockResolvedValue({
+      ok: true,
+      latency_ms: null,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      quic_probe: true,
+      exit_observed: { ip: '203.0.113.9', country: 'NL', timezone: null, region: null, city: null },
+    });
+    render(<ProxiesView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
+
+    expect(
+      await screen.findByText('Tested 2 — 1 healthy, 1/1 VPN tunnel up (no latency reported)'),
+    ).toBeInTheDocument();
+    expect(screen.getByText('tunnel up · no latency')).toBeInTheDocument();
+    expect(screen.getByText('203.0.113.9')).toBeInTheDocument();
+    expect(screen.queryByText(/not tested/)).toBeNull();
+    expect(testAccountProxy).toHaveBeenCalledWith(
+      'http://localhost:3000',
+      'ds_test_x',
+      'aprx_vpn',
+      {
+        vantage: 'fleet',
+      },
+    );
+  });
+
+  it('CONTROL — the same fleet ok WITH a latency is "1/1 VPN tunnel up" and a plain "tunnel up" pill', async () => {
+    settingsStub.settings.apiKey = 'ds_test_x';
+    stored = [proxy('one'), { ...proxy('vpn1', 'wireguard'), serverId: 'aprx_vpn' }];
+    testProxy.mockResolvedValue(HEALTHY);
+    testAccountProxy.mockResolvedValue({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProxiesView />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
+
+    expect(await screen.findByText('Tested 2 — 1 healthy, 1/1 VPN tunnel up')).toBeInTheDocument();
+    expect(screen.getByText('tunnel up')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel up · no latency')).toBeNull();
   });
 
   it('announces the completed sweep with honest health buckets', async () => {

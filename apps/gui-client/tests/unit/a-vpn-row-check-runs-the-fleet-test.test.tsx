@@ -392,6 +392,31 @@ describe('(h) — the VPN row says what its check does, and renders what the fle
     expect(saveServerProbeResult).toHaveBeenCalledTimes(1);
   });
 
+  // (i) I2 — the failed branch's `setQuicMeasured(dropKey)` had no direct
+  // guard: the arm above seeds only the fleet RELAY verdict (quicProbe), and a
+  // live session's HTTP/3 verdict (quicMeasured 'h3') outranks it in the chip,
+  // so dropping quicProbe alone would leave the chip green. MUTATION: drop the
+  // quicMeasured dropKey in handleCheckEndpoint's failed branch → the chip stays
+  // data-ok="true" → red. The cache is mocked here (loadProbeCache → {}), so no
+  // emit can revert the chip on the view's behalf.
+  it('CRITICAL a fleet FAILURE reverts a live session’s HTTP/3 chip (quicMeasured h3) to unmeasured', async () => {
+    testAccountProxy.mockResolvedValue({
+      ...FLEET_OK,
+      quic_measured: 'h3',
+      quic_measured_at: new Date().toISOString(),
+    });
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('true');
+    expect(quicChip()?.getAttribute('title')).toMatch(/live session/);
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('unmeasured');
+    expect(quicChip()?.getAttribute('title')).not.toMatch(/live session/);
+  });
+
   it('the previous verdict stays on the row for the whole fleet wait, until THIS check answers', async () => {
     testAccountProxy.mockResolvedValue(FLEET_FAILED);
     render(<ProxiesView />);
@@ -446,17 +471,58 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     ).toBeInTheDocument();
   });
 
-  it('a fleet ok with NO timing is not "tunnel up": the pill reads "endpoint ok" and the tally agrees', async () => {
+  // (i) I4 — a fleet ok with NO timing still brought the tunnel UP: the row
+  // adopts the exit and the QUIC chip from that reply, so the pill and the tally
+  // say "up" and name the missing number — the row was tallied "not tested"
+  // while wearing the fields that same reply put on it. MUTATION: return the
+  // notTested bucket for `latencyMs === null` again → red.
+  it('CRITICAL a fleet ok with NO timing is "tunnel up · no latency", and the tally counts it up (no latency reported)', async () => {
     testAccountProxy.mockResolvedValue({ ...FLEET_OK, latency_ms: null });
     render(<ProxiesView />);
     await clickTestAll();
     expect(
-      await screen.findByText(
-        '1 VPN tunnel not tested (the fleet Mac reported no measurement) — nothing was tested',
-      ),
+      await screen.findByText('Tested 1 — 1 VPN tunnel up (no latency reported)'),
     ).toBeInTheDocument();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('tunnel up · no latency')).toBeInTheDocument();
+    expect(screen.queryByText('endpoint ok')).toBeNull();
     expect(screen.queryByText('tunnel up')).toBeNull();
+    expect(screen.queryByText(/not tested/)).toBeNull();
+    // The row wears that reply's exit and relay verdict — the pill now agrees
+    // with them — and shows no number it was not given.
+    expect(screen.getByText('203.0.113.9')).toBeInTheDocument();
+    expect(quicChip()?.getAttribute('data-ok')).toBe('true');
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(document.querySelector('[data-latency-vantage]')).toBeNull();
+  });
+
+  it('CONTROL — a fleet ok WITH a timing is plain "tunnel up", and the clause carries no parenthetical', async () => {
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(await screen.findByText('Tested 1 — 1 VPN tunnel up')).toBeInTheDocument();
+    expect(screen.getByText('tunnel up')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel up · no latency')).toBeNull();
+  });
+
+  it('the mixed sentence names how many of the up tunnels reported no latency', async () => {
+    stored = [
+      vpnRow(),
+      { ...vpnRow(), id: 'vpn2', label: 'ResVPN 2', serverId: 'aprx_vpn2' },
+      { ...vpnRow(), id: 'vpn3', label: 'ResVPN 3', serverId: 'aprx_vpn3' },
+    ];
+    testAccountProxy.mockImplementation((_b, _k, id) =>
+      Promise.resolve(
+        id === 'aprx_vpn'
+          ? FLEET_OK
+          : id === 'aprx_vpn2'
+            ? { ...FLEET_OK, latency_ms: null }
+            : FLEET_FAILED,
+      ),
+    );
+    render(<ProxiesView />);
+    await clickTestAll();
+    expect(
+      await screen.findByText('Tested 3 — 2 VPN tunnels up (1 with no latency reported), 1 down'),
+    ).toBeInTheDocument();
   });
 
   it('a control-plane fallback ok, and a row with no API key, are "not tested" with their own reason (finding 6/15: no more "No proxy results landed")', async () => {

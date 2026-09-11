@@ -93,6 +93,13 @@ export type ServerProbeOutcome =
       kind: 'unavailable';
     };
 
+/** (i) I5 — the notice both surfaces show for an `unavailable` outcome. It is
+ *  NOT a verdict: the last fleet verdict (the cache's failure sentence, or the
+ *  row's measured fields) stands beside it, and it goes when the next check
+ *  starts, like every other notice. */
+export const SERVER_DID_NOT_ANSWER_NOTICE =
+  'The server did not answer, so the tunnel was not tested. The last verdict stands — try again.';
+
 /**
  * T-27 drop 5 — the stamp a measured QUIC verdict carries.
  *
@@ -336,6 +343,10 @@ function refusesStoredExit(
   existing: CachedProbe,
   e: { ip: string; country: string | null; timezone: string | null },
   at: number,
+  /** (i) I7 — the SERVER's contradiction stamp for this row (the list's
+   *  `exit_superseded_at`), when the caller has one. A Mac with no local stamp
+   *  (it never ran the failing test) refuses by this one instead. */
+  serverSupersededAt?: number,
 ): boolean {
   const sameIp = existing.exitIp === e.ip;
   // ⛔ Never REWIND, regardless of ip or geo: an observation OLDER than the
@@ -351,7 +362,9 @@ function refusesStoredExit(
   // failure, and an observation dated at or before the stamp is the exit the
   // fleet just contradicted. (The write refuses it too; this keeps the row
   // out of `written` and the in-memory view honest.)
-  const superseded = existing.exitSupersededAt !== undefined && at <= existing.exitSupersededAt;
+  const superseded =
+    (existing.exitSupersededAt !== undefined && at <= existing.exitSupersededAt) ||
+    (serverSupersededAt !== undefined && at <= serverSupersededAt);
   // …and never CHURN: the same identity at the same (or an older) stamp is
   // a no-op, so a 15s poll does not rewrite the store every tick.
   const unchanged =
@@ -361,6 +374,33 @@ function refusesStoredExit(
     existing.exitAt !== undefined &&
     existing.exitAt >= at;
   return rewind || superseded || unchanged || isExitDowngrade(existing, e);
+}
+
+/** The slice of a list row the adoption reads: the row, its stored exit, and
+ *  (i) I7 — when a fleet verdict contradicted that exit, if ever. */
+export type ListExitRow = Pick<AccountProxyMeta, 'id' | 'exit_observed' | 'exit_superseded_at'>;
+
+/** (i) I7 — the sentence a Mac that never ran the failing test shows for a
+ *  tunnel the list says a fleet check found down. Names no cause — the list
+ *  carries the contradiction's date, not the node's reason. */
+export const LIST_TUNNEL_DOWN_REASON = 'The last fleet check could not bring this tunnel up.';
+
+/** The list's `exit_superseded_at`, as a time — or undefined when the row was
+ *  never contradicted, the server predates the field, or the value is not a
+ *  date (a malformed stamp refuses nothing). */
+function listSupersededStamp(raw: string | null | undefined): number | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const parsed = Date.parse(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/** Whether an entry holds a server-measured field dated AFTER `t` — an exit or
+ *  a fleet probe this Mac saw later than the contradiction the list reports. */
+function holdsMeasurementAfter(existing: CachedProbe, t: number): boolean {
+  return (
+    (existing.exitAt !== undefined && existing.exitAt > t) ||
+    (existing.serverProbeAt !== undefined && existing.serverProbeAt > t)
+  );
 }
 
 /** The slice of a local proxy the list adoption reads: which server row it is,
@@ -406,12 +446,12 @@ export interface ListExitProxyLike {
  * lookup.
  */
 export async function adoptListExitObserved(
-  rows: ReadonlyArray<Pick<AccountProxyMeta, 'id' | 'exit_observed'>>,
+  rows: ReadonlyArray<ListExitRow>,
   proxies: ReadonlyArray<ListExitProxyLike>,
   nowMs: number = Date.now(),
 ): Promise<string[]> {
   const written: string[] = [];
-  const byServerId = new Map<string, Pick<AccountProxyMeta, 'id' | 'exit_observed'>>();
+  const byServerId = new Map<string, ListExitRow>();
   for (const r of rows) byServerId.set(r.id, r);
   let cache: ProbeCacheMap;
   try {
@@ -421,8 +461,10 @@ export async function adoptListExitObserved(
   }
   for (const p of proxies) {
     if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
-    const e = byServerId.get(p.serverId)?.exit_observed;
+    const row = byServerId.get(p.serverId);
+    const e = row?.exit_observed;
     if (e === null || e === undefined) continue;
+    const serverSupersededAt = listSupersededStamp(row?.exit_superseded_at);
     let existing = cache[p.id];
     if (existing === undefined) {
       try {
@@ -443,10 +485,36 @@ export async function adoptListExitObserved(
       }
       if (existing === undefined) continue;
     }
+    // (i) I7 — the server's contradiction reaches THIS Mac: when the list
+    // says a fleet verdict found the tunnel down at T and this entry holds no
+    // stamp at or after T — and nothing it holds was measured AFTER T (a later
+    // successful test here outranks a list poll that has not caught up) — the
+    // entry is stamped exactly as the Mac that ran the failing test stamped
+    // its own: every server-measured field goes, the exit is superseded at T,
+    // and the write path's own guard now agrees with this refusal. The
+    // sentence is the one this entry already holds, else a plain one — the
+    // list carries the date of the contradiction, not the node's prose.
+    // Idempotent: once stamped at T the next poll matches nothing here.
+    if (
+      serverSupersededAt !== undefined &&
+      (existing.exitSupersededAt === undefined || existing.exitSupersededAt < serverSupersededAt) &&
+      !holdsMeasurementAfter(existing, serverSupersededAt)
+    ) {
+      try {
+        cache = await saveFleetFailure(
+          p.id,
+          serverSupersededAt,
+          existing.fleetFailureReason ?? LIST_TUNNEL_DOWN_REASON,
+        );
+        existing = cache[p.id] ?? existing;
+      } catch {
+        /* best-effort — the refusal below still holds by the server's stamp */
+      }
+    }
     // (h) — dated by the observation, and the shared refusal rule (rewind /
     // resurrect / churn / downgrade) decides — see `refusesStoredExit`.
     const at = storedExitStamp(e.observed_at, existing, nowMs);
-    if (at === undefined || refusesStoredExit(existing, e, at)) continue;
+    if (at === undefined || refusesStoredExit(existing, e, at, serverSupersededAt)) continue;
     const sameIp = existing.exitIp === e.ip;
     try {
       cache = await saveExitResult(

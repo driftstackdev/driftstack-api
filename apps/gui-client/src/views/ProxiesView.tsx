@@ -61,6 +61,7 @@ import {
   deriveProbeViewWithEndpointRows,
   fleetFailureReasons,
   persistServerProbe,
+  SERVER_DID_NOT_ANSWER_NOTICE,
   serverProbeStamps,
   syncListExitObserved,
   testProxyOnServer,
@@ -124,6 +125,11 @@ function isSweepable(scheme: AccountProxyScheme | undefined): boolean {
 interface VpnSweepTally {
   checked: number;
   tunnelOk: number;
+  /** (i) I4 — of `tunnelOk`, the rows a fleet Mac brought up WITHOUT a timing:
+   *  the tunnel is up (the exit and QUIC verdict the reply carried are the
+   *  row's), and the sentence says the number is missing rather than filing
+   *  the row under "not tested" while the row wears that reply's fields. */
+  tunnelOkNoLatency: number;
   skipped: number;
   /** (d)/(h) — WHY each skipped row was not run, one phrase per row. */
   skippedWhy: string[];
@@ -137,6 +143,7 @@ function emptyVpnTally(): VpnSweepTally {
   return {
     checked: 0,
     tunnelOk: 0,
+    tunnelOkNoLatency: 0,
     skipped: 0,
     skippedWhy: [],
     notTested: 0,
@@ -159,7 +166,19 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
       return 'the fleet Mac could not complete the test; try again shortly';
     case 'no_node':
       return 'no fleet Mac free';
+    case 'plan_excluded':
+      return 'not included in your plan';
   }
+}
+
+/** (i) I4 — the "N VPN tunnel(s) up" clause, naming the rows whose tunnel a
+ *  fleet Mac brought up without reporting a latency. */
+function tunnelsUpClause(vpn: VpnSweepTally, prefix: string, nounCount: number): string {
+  const up = `${prefix} VPN tunnel${nounCount === 1 ? '' : 's'} up`;
+  if (vpn.tunnelOkNoLatency === 0) return up;
+  return vpn.tunnelOkNoLatency === vpn.tunnelOk
+    ? `${up} (no latency reported)`
+    : `${up} (${String(vpn.tunnelOkNoLatency)} with no latency reported)`;
 }
 
 /** Distinct reasons, in first-seen order, joined for a parenthetical. */
@@ -216,7 +235,7 @@ function formatTestAllSummary(
   // alone leaves the reader to subtract.
   const tunnelDown = vpn.checked - vpn.tunnelOk;
   if (results.length === 0) {
-    const parts = [`${String(vpn.tunnelOk)} VPN tunnel${vpn.tunnelOk === 1 ? '' : 's'} up`];
+    const parts = [tunnelsUpClause(vpn, String(vpn.tunnelOk), vpn.tunnelOk)];
     if (tunnelDown > 0) parts.push(`${String(tunnelDown)} down`);
     parts.push(...untestedParts(true));
     return `Tested ${String(vpnSwept)} — ${parts.join(', ')}`;
@@ -236,9 +255,7 @@ function formatTestAllSummary(
     parts.push(`${String(authFailed)} auth failure${authFailed === 1 ? '' : 's'}`);
   }
   if (vpn.checked > 0) {
-    parts.push(
-      `${String(vpn.tunnelOk)}/${String(vpn.checked)} VPN tunnel${vpn.checked === 1 ? '' : 's'} up`,
-    );
+    parts.push(tunnelsUpClause(vpn, `${String(vpn.tunnelOk)}/${String(vpn.checked)}`, vpn.checked));
   }
   parts.push(...untestedParts(false));
   return `Tested ${String(results.length + vpnSwept)} — ${parts.join(', ')}`;
@@ -666,6 +683,9 @@ export function ProxiesView(): JSX.Element {
     skipped?: string;
     notTested?: string;
     checkFailed?: true;
+    /** (i) I4 — beside `tunnelOk: true`: the fleet Mac brought the tunnel up
+     *  but reported no latency. */
+    noLatency?: true;
   };
 
   // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
@@ -755,6 +775,13 @@ export function ProxiesView(): JSX.Element {
         // red "tunnel down": a live session holding the tunnel is the opposite
         // of a tunnel that is down, and a busy Mac says nothing about it.
         setVpnNotices((m) => ({ ...m, [p.id]: outcome.reason }));
+      } else {
+        // (i) I5 — `unavailable`: the server did not answer, so nothing was
+        // learned. The standing verdict (a failure sentence, the measured
+        // fields) is untouched — `settle()` above cleared only the previous
+        // check's NOTICE — and this check leaves its own notice in its place,
+        // transient like every other: the next check clears it.
+        setVpnNotices((m) => ({ ...m, [p.id]: SERVER_DID_NOT_ANSWER_NOTICE }));
       }
       void persistServerProbe(p.id, outcome, { adoptExit: true });
       if (outcome.kind === 'not_run') {
@@ -779,13 +806,11 @@ export function ProxiesView(): JSX.Element {
           notTested: 'measured from the server, not a fleet Mac',
         };
       }
-      if (outcome.latencyMs === null) {
-        return {
-          resolved: true,
-          tunnelOk: null,
-          notTested: 'the fleet Mac reported no measurement',
-        };
-      }
+      // (i) I4 — a fleet `ok` with no timing still brought the tunnel UP (the
+      // row adopts the exit and QUIC verdict the reply carried), so it is
+      // counted up, and the sentence says the number is missing. Filing it
+      // under "not tested" contradicted the row wearing that reply's fields.
+      if (outcome.latencyMs === null) return { resolved: true, tunnelOk: true, noLatency: true };
       return { resolved: true, tunnelOk: true };
     } catch {
       if (stale()) return null;
@@ -838,12 +863,13 @@ export function ProxiesView(): JSX.Element {
       // T-1 — where that number was measured travels WITH it: a fleet Mac
       // (named) or, when none was free, the server — replaced on every
       // result, so a fleet label never outlives its measurement and the
-      // fallback is visible. The label describes a NUMBER; with no number
-      // it describes nothing, so it travels with the latency, not beside it.
+      // fallback is visible. The latency LABEL renders only beside a number
+      // (the row gates it on `lat`), while (i) I4 the vantage itself is also
+      // the VPN row's tunnel verdict — a fleet `ok` with no timing still
+      // brought the tunnel up — so it is kept on every `ok`, exactly as the
+      // cache derivation keeps `measuredFrom` beside a cleared number.
       const vantage = outcome.vantage;
-      setServerVantage((m) =>
-        vantage !== undefined && measured !== null ? { ...m, [id]: vantage } : dropKey(m, id),
-      );
+      setServerVantage((m) => (vantage !== undefined ? { ...m, [id]: vantage } : dropKey(m, id)));
       // The fleet QUIC-relay verdict is its own chip; it never becomes a
       // quicMeasured value.
       const relay = outcome.quicProbe;
@@ -1050,7 +1076,10 @@ export function ProxiesView(): JSX.Element {
             vpn.notTestedWhy.push(check.notTested);
           } else if (check.tunnelOk !== null) {
             vpn.checked += 1;
-            if (check.tunnelOk) vpn.tunnelOk += 1;
+            if (check.tunnelOk) {
+              vpn.tunnelOk += 1;
+              if (check.noLatency === true) vpn.tunnelOkNoLatency += 1;
+            }
           }
           continue;
         }
@@ -1946,7 +1975,8 @@ function ProxyRow({
           ) : (
             <EndpointHealthPill
               endpoint={endpointResult}
-              tunnelUp={fromServer && serverVantage?.measuredFrom === 'fleet'}
+              tunnelUp={serverVantage?.measuredFrom === 'fleet'}
+              noLatency={!fromServer}
               latGood={latGood}
               failure={vpnFailure}
               vantageTitle={vantageTitle}
@@ -2161,12 +2191,17 @@ function VpnQuicChip({
 function EndpointHealthPill({
   endpoint,
   tunnelUp,
+  noLatency,
   latGood,
   failure,
   vantageTitle,
 }: {
   endpoint: EndpointResolveResult | undefined;
   tunnelUp: boolean;
+  /** (i) I4 — beside `tunnelUp`: the fleet Mac brought the tunnel up but
+   *  reported no latency; the pill says so instead of reading "endpoint ok"
+   *  under an exit and a QUIC chip that same reply put on the row. */
+  noLatency: boolean;
   latGood: boolean;
   failure: string | undefined;
   vantageTitle: string;
@@ -2176,6 +2211,16 @@ function EndpointHealthPill({
     return (
       <span className={`${base} bg-status-error/12 text-status-error`} title={failure}>
         tunnel down
+      </span>
+    );
+  }
+  if (tunnelUp && noLatency) {
+    return (
+      <span
+        className={`${base} bg-status-ready/12 text-status-ready`}
+        title="A fleet Mac brought this tunnel up and measured through it, but reported no latency."
+      >
+        tunnel up · no latency
       </span>
     );
   }

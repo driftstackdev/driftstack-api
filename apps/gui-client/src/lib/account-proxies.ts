@@ -80,6 +80,13 @@ export interface AccountProxyMeta {
    *  request from this Mac and cannot run through a tunnel. null = never
    *  observed (the honest empty state); absent = an older server. */
   exit_observed?: AccountProxyListExitObserved | null;
+  /** (i) I7 — when a fleet-vantage test found the tunnel DOWN while
+   *  `exit_observed` was set (ISO 8601): the stored exit is what was last
+   *  SEEN, this is when it was CONTRADICTED. The list adoption refuses an
+   *  observation dated at or before it — and stamps the local entry — so a
+   *  Mac that never ran the failing test agrees with the one that did.
+   *  Cleared (null) by the next exit observation; absent = an older server. */
+  exit_superseded_at?: string | null;
 }
 
 /** D2 — the LIST's observed exit. Narrower than the /test reply's
@@ -221,14 +228,25 @@ export async function listProxies(baseUrl: string, apiKey: string): Promise<Acco
   // (closed set + typed members), so a malformed exit on one row becomes that
   // row's "never observed" and nothing else. A row without the field (an older
   // server) is passed through untouched — absent stays absent.
-  return rows.map((r) =>
-    typeof r === 'object' && r !== null && 'exit_observed' in r
-      ? {
-          ...r,
-          exit_observed: cleanListExitObserved((r as { exit_observed: unknown }).exit_observed),
-        }
-      : r,
-  );
+  // (i) I7 — so is the contradiction stamp the adoption dates it against: a
+  // string or null is kept, anything else reads as "never contradicted" (a
+  // malformed stamp must not refuse an exit, nor be parsed into a date).
+  return rows.map((r) => {
+    if (typeof r !== 'object' || r === null) return r;
+    const raw = r as unknown as Record<string, unknown>;
+    return {
+      ...r,
+      ...('exit_observed' in raw
+        ? { exit_observed: cleanListExitObserved(raw.exit_observed) }
+        : {}),
+      ...('exit_superseded_at' in raw
+        ? {
+            exit_superseded_at:
+              typeof raw.exit_superseded_at === 'string' ? raw.exit_superseded_at : null,
+          }
+        : {}),
+    };
+  });
 }
 
 export async function createProxy(
@@ -432,10 +450,19 @@ export type AccountProxyTestResult =
 
 /** (d) — why a /test produced no measurement. A closed set: a value outside it
  *  is dropped (the reply then reads as a plain failure, never as a refusal it
- *  did not earn). */
-export type AccountProxyTestNotRun = 'live_session' | 'node_busy' | 'node_error' | 'no_node';
+ *  did not earn). (i) I6 — `plan_excluded` is minted by THIS client from a 403
+ *  (the route's tier refusal); it is never read off the wire, so
+ *  `cleanTestNotRun` does not admit it. */
+export type AccountProxyTestNotRun =
+  | 'live_session'
+  | 'node_busy'
+  | 'node_error'
+  | 'no_node'
+  | 'plan_excluded';
 
-export function cleanTestNotRun(raw: unknown): AccountProxyTestNotRun | undefined {
+export function cleanTestNotRun(
+  raw: unknown,
+): Exclude<AccountProxyTestNotRun, 'plan_excluded'> | undefined {
   // (h) `no_node` — no fleet Mac was free to bring a VPN tunnel up, and the
   // control plane cannot measure a tunnel itself (it never falls back to a
   // TCP connect for a VPN row). Not a verdict; the row is "not tested".
@@ -513,6 +540,28 @@ const PROXY_TEST_DEADLINE_MS = 30_000;
 const FLEET_TEST_FAILED_REASON =
   'The Mac that runs your profiles could not connect through this proxy.';
 
+/** (i) I6 — a 403 on /test whose problem detail is the route's TIER refusal
+ *  (the same one POST/PUT give a VPN row on a tier without vpnEgress). The
+ *  transport used to throw on it like any non-2xx, which the shared step
+ *  turned into `unavailable` — "the server did not answer" — for an account
+ *  whose retry can never succeed. The problem+json `detail` is appended.
+ *  ⛔ Only the TIER 403: the route also answers 403 for a key lacking the
+ *  `account_owner` scope, a suspended account, a device the free-desktop
+ *  policy denies — none of which is a plan exclusion, and the tier refusal
+ *  carries no problem `type` of its own, so its sentence is the discriminator
+ *  (`requireTierFeature` in the server's errors-helpers). Every other 403
+ *  still throws, as before I6. */
+export const PLAN_EXCLUDES_FLEET_TEST_REASON =
+  'Your plan does not include fleet tests for VPN proxies.';
+
+/** The server's tier-refusal detail: `The "<feature>" feature is not available
+ *  on the "<tier>" tier. …` — matched, never reproduced. */
+const TIER_REFUSAL_DETAIL = /\bis not available on the "[^"]+" tier\b/;
+
+export function isTierRefusalDetail(detail: string | undefined): detail is string {
+  return detail !== undefined && TIER_REFUSAL_DETAIL.test(detail);
+}
+
 /**
  * @param opts.vantage T-1 — 'fleet' asks the server to measure from the Mac
  *   that will run the profile (the response then carries `measured_from`, and
@@ -533,6 +582,29 @@ export async function testAccountProxy(
   );
   if (!res.ok) {
     const status = res.status;
+    if (status === 403) {
+      // (i) I6 — the TIER refusal is an ANSWER (nothing ran; a retry cannot
+      // change it), surfaced like a `not_run` so the views show it as a notice
+      // and a sweep counts the row as skipped — never as "the server did not
+      // answer". Recognised by its detail: a 403 with any other detail (scope,
+      // suspended, device policy) or no readable body is NOT a plan exclusion
+      // and throws like every other non-2xx.
+      let detail: string | undefined;
+      try {
+        detail = problemFields(await readBoundedApiJson<unknown>(res))?.detail;
+      } catch {
+        /* status is all that is known */
+      }
+      await disposeResponseBody(res);
+      if (isTierRefusalDetail(detail)) {
+        return {
+          ok: false,
+          reason: `${PLAN_EXCLUDES_FLEET_TEST_REASON} ${detail}`,
+          not_run: 'plan_excluded',
+        };
+      }
+      throw new Error(`proxy test failed: ${status.toString()}`);
+    }
     await disposeResponseBody(res);
     throw new Error(`proxy test failed: ${status.toString()}`);
   }

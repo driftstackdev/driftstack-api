@@ -138,6 +138,7 @@ import {
   deriveProbeViewWithEndpointRows,
   fleetFailureReasons,
   persistServerProbe,
+  SERVER_DID_NOT_ANSWER_NOTICE,
   serverProbeStamps,
   serverVerdictUsable,
   syncListExitObserved,
@@ -2616,6 +2617,11 @@ export function ProfilesView({
       // grid's; `not_run` keeps everything and adds this card's notice.
       if (outcome.kind === 'not_run') {
         setVpnNotices((m) => ({ ...m, [px.id]: outcome.reason }));
+      } else if (outcome.kind === 'unavailable') {
+        // (i) I5 — the server did not answer: nothing was written above, so
+        // the cache's failure banner (and the fields the row holds) stand;
+        // this card says why THIS check measured nothing, as a notice.
+        setVpnNotices((m) => ({ ...m, [px.id]: SERVER_DID_NOT_ANSWER_NOTICE }));
       }
       return next;
     } catch {
