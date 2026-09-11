@@ -283,6 +283,32 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
+  // 2026-09-11 — the exit address never truncates. It was a shrinkable flex
+  // item (`truncate` → overflow hidden → min-width 0), so the auto-layout
+  // column took its width from the other rows and a WireGuard row, whose
+  // wider "Check VPN" control shares the line, rendered "203.0.11…" in the
+  // marketing capture. jsdom lays nothing out, so this pins the mechanism:
+  // the span is shrink-0 and carries no truncation.
+  it("the exit address is a shrink-0 span with no truncation — a VPN row's wider Check VPN control cannot squeeze it", () => {
+    render(
+      <ProfilesTable
+        {...props({
+          rows: [
+            row({ exitIp: '203.0.113.42', vpn: true, probed: true, locationLabel: 'Zürich' }),
+            row({ id: 'b', name: 'other', exitIp: '203.0.113.7' }),
+          ],
+        })}
+      />,
+    );
+    const spans = document.querySelectorAll('[data-component="profile-row-exit-ip"]');
+    expect(spans).toHaveLength(2);
+    for (const span of Array.from(spans)) {
+      expect(span.classList.contains('shrink-0')).toBe(true);
+      expect(span.classList.contains('truncate')).toBe(false);
+      expect(span.className).not.toMatch(/overflow-hidden|max-w-/);
+    }
+  });
+
   it('no proxy → "no proxy"; never-probed → "untested"; probed-but-no-IP → "no exit IP"', () => {
     render(
       <ProfilesTable

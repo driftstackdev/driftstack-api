@@ -1,0 +1,93 @@
+---
+// AppScreen — a REAL capture of the desktop app, in an app-window frame.
+//
+// 2026-09-11: the site used to depict the GUI with hand-drawn HTML mockups
+// (the hero fan of iPhone windows, the §5 cockpit, the wardrobe card stack,
+// the how-it-works fleet strip). They drifted from the app. Every GUI
+// depiction now comes from `src/assets/screens/<scene>.png` — Playwright
+// captures of the visual harness (`apps/gui-client/visual-harness.html`),
+// which renders the REAL React components with curated fixture data
+// (Amsterdam / Tokyo / Berlin / São Paulo, example hosts — never a real
+// session, proxy or account). Regenerate with `scripts/marketing-screens.mjs`
+// (see `src/assets/screens/README.md`).
+//
+// Rendering contract:
+//   • `astro:assets` <Picture>: webp <source> + png fallback <img>, both
+//     resized at build time by sharp from the 2× capture; explicit
+//     width/height (the CSS size = capture / `scale`) so the slot reserves
+//     its box and nothing shifts when the bytes land.
+//   • Below the fold: loading="lazy". The hero passes `priority` and gets
+//     eager + fetchpriority="high" instead — it is the LCP element.
+//   • Accessibility: the picture carries a real `alt` that says what the
+//     screen shows (required — Astro throws without one). The frame itself
+//     holds NO markup of its own beyond the <picture> — the app's real window
+//     chrome (title bar, traffic lights, sidebar) is INSIDE the capture — so
+//     nothing here is aria-hidden: an aria-hidden wrapper would hide the alt.
+//   • `data-contrast-decorative` stays on the frame: the capture's own text
+//     is part of a picture (WCAG 1.4.3 "incidental"). Real copy — captions,
+//     lead paragraphs — sits OUTSIDE this component so the contrast scanner
+//     still sees it.
+import { Picture } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  /** The capture (import from `../assets/screens/<scene>.png`). */
+  src: ImageMetadata;
+  /** What the screen shows, in plain words. Read aloud by screen readers. */
+  alt: string;
+  /** The capture's device scale factor — captures are 2×, so the CSS box is half. */
+  scale?: number;
+  /** Above the fold (LCP): eager + high fetch priority instead of lazy. */
+  priority?: boolean;
+  /** The `sizes` attribute for the responsive srcset. */
+  sizes?: string;
+  /** Accent ring (the hero's "this one is lit" treatment). */
+  accent?: boolean;
+  class?: string;
+}
+
+const {
+  src,
+  alt,
+  scale = 2,
+  priority = false,
+  sizes = '(min-width: 1152px) 1104px, calc(100vw - 48px)',
+  accent = false,
+  class: className,
+} = Astro.props;
+
+// CSS-pixel box of the capture. The 2× source has twice these dimensions;
+// sharp downsizes for the 1× candidates and serves the source for 2× screens.
+const width = Math.round(src.width / scale);
+const height = Math.round(src.height / scale);
+
+// Candidate widths for the srcset — never above the source (sharp would
+// upscale), always including the CSS width and the full 2× source.
+const widths = [...new Set([480, 768, 960, width, src.width].filter((w) => w <= src.width))].sort(
+  (a, b) => a - b,
+);
+---
+
+<div
+  class:list={[
+    'app-screen overflow-hidden rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg',
+    accent ? 'ring-1 ring-tk-accent/50 shadow-glow-accent' : '',
+    className,
+  ]}
+  data-contrast-decorative
+>
+  <Picture
+    src={src}
+    alt={alt}
+    width={width}
+    height={height}
+    widths={widths}
+    sizes={sizes}
+    formats={['webp']}
+    fallbackFormat="png"
+    loading={priority ? 'eager' : 'lazy'}
+    decoding="async"
+    fetchpriority={priority ? 'high' : 'auto'}
+    class="block h-auto w-full"
+  />
+</div>

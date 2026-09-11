@@ -6,7 +6,8 @@
 // not a build input (vite/Tauri bundle index.html only). Add new states here as
 // the card grows so the visual review stays representative.
 
-import type { JSX } from 'react';
+import { useMemo, type JSX, type ReactNode } from 'react';
+import type { AccountSelfProfile } from '@driftstack/sdk';
 import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/ProfilePhoneCard';
 import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
 import { CostPanel } from '../components/CostPanel';
@@ -16,8 +17,83 @@ import { DeviceToolbar } from '../views/SimulatorWindow';
 import { Kpi } from '../views/CommandCenterView';
 import { TierBadge } from '../components/TierBadge';
 import { VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
+// Marketing scenes (below) — the app's real window chrome + the cockpit readouts.
+import { TitleBar } from '../components/TitleBar';
+import { Sidebar, type SidebarViewKind } from '../components/Sidebar';
+import { ThemeSwitcher } from '../components/ThemeSwitcher';
+import { ConnectionPill } from '../components/ConnectionPill';
+import { ProfilesActionBar, type ProfileSortBy } from '../components/ProfilesActionBar';
+import { ExitIpChip } from '../components/ExitIpChip';
+import { QuicReadout } from '../components/QuicReadout';
+import { OsReadout } from '../components/OsReadout';
+import { IOSKeyboard } from '../components/IOSKeyboard';
+import { SettingsContext } from '../lib/SettingsContext';
+import { RecordingsProvider } from '../lib/recordings';
+import { DEFAULT_SETTINGS, type DriftstackSettings } from '../lib/settings';
+import type { ProxyDraft } from '../lib/proxies';
+import type { ConnectionStatus } from '../lib/use-connection-status';
+import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';
 
 const noop = (): void => undefined;
+
+// ─── Marketing-scene clock + stage (hoisted) ──────────────────────────────────
+// The marketing scenes (block at the END of this file) render "at" one frozen
+// instant. The freeze must run BEFORE `STATES` below is built: the live card's
+// `runningSinceIso` is computed from Date.now() at module load, so a freeze
+// placed after it left a human opening `?scene=` with a label counted from the
+// real clock while the capture script (which pins the clock before navigation)
+// showed "running 12m". tests/unit/marketing-scenes.test.tsx loads this module
+// with `?scene=` set and asserts both the clock and that offset.
+
+/** The instant every marketing scene is rendered "at". */
+export const FROZEN_NOW_ISO = '2026-06-15T06:42:00.000Z';
+export const MARKETING_SCENES = [
+  'profiles-grid',
+  'profiles-list',
+  'proxies',
+  'simulator',
+  'billing',
+  'command-center',
+] as const;
+export type MarketingSceneName = (typeof MARKETING_SCENES)[number];
+/** The default stage (CSS px); `sceneSize` is the per-scene truth. */
+export const SCENE_WIDTH = 1280;
+export const SCENE_HEIGHT = 800;
+/** Stage per scene. The real ProfilesTable with the eight profiles' rows
+ *  (place names, tags, a note, the five row actions) is ~1490 CSS px wide —
+ *  inside a 1280 window its Actions column falls off the right edge (the
+ *  first capture shipped a cut "Live" pill and no Launch button), so the list
+ *  view gets a wider window, which the app runs in just as happily. scripts/
+ *  marketing-screens.mjs declares the same sizes, fails when they differ, and
+ *  fails when the table does not fit its shell. */
+export function sceneSize(name: MarketingSceneName): { width: number; height: number } {
+  return name === 'profiles-list'
+    ? { width: 1800, height: SCENE_HEIGHT }
+    : { width: SCENE_WIDTH, height: SCENE_HEIGHT };
+}
+
+/** `?scene=<name>` → the scene, or null for anything else (the plain gallery). */
+export function sceneFromSearch(search: string): MarketingSceneName | null {
+  const raw = new URLSearchParams(search).get('scene');
+  if (raw === null) return null;
+  return (MARKETING_SCENES as ReadonlyArray<string>).includes(raw)
+    ? (raw as MarketingSceneName)
+    : null;
+}
+
+/** Pin `Date.now` to FROZEN_NOW_ISO. Returns the restore function. */
+export function freezeHarnessClock(): () => void {
+  const original = Date.now;
+  const fixed = Date.parse(FROZEN_NOW_ISO);
+  Date.now = () => fixed;
+  return () => {
+    Date.now = original;
+  };
+}
+
+if (typeof window !== 'undefined' && sceneFromSearch(window.location.search) !== null) {
+  freezeHarnessClock();
+}
 
 function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
   return {
@@ -465,6 +541,11 @@ function fixedWidthClass(): string | null {
 }
 
 export function Gallery(): JSX.Element {
+  // `?scene=<name>` — one marketing composition in the app's window chrome
+  // (see the Marketing scenes block at the end of this file). Anything else
+  // renders the state gallery below, unchanged.
+  const scene = typeof window === 'undefined' ? null : sceneFromSearch(window.location.search);
+  if (scene !== null) return <MarketingScene name={scene} />;
   const fixedWidth = fixedWidthClass();
   return (
     <div className="min-h-screen bg-surface-base p-8">
@@ -845,3 +926,877 @@ const TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
     createdAtIso: '2026-06-01T00:00:00.000Z',
   },
 ];
+
+// ─── Marketing scenes (2026-09-11) ────────────────────────────────────────────
+//
+// `?scene=<name>` renders ONE full-width composition inside the app's real
+// window chrome (TitleBar + Sidebar, dark + oxblood) at a fixed 1280×800 stage,
+// so repo-root scripts/marketing-screens.mjs can capture the REAL components
+// (same code, same CSS as the shipped app) for the marketing site. Nothing here
+// touches STATES / TABLE_ROWS — the scenes READ them, with privacy overrides:
+//
+// ⛔ PRIVACY — never a real session, proxy, exit IP or account. Every host is
+//    *.example.com, every exit IP is TEST-NET (RFC 5737), the account is
+//    ops@example.com. tests/unit/marketing-scenes.test.tsx scans every scene's
+//    rendered text for vendor hosts and non-TEST-NET IPv4s.
+// ⛔ DETERMINISM — the clock is frozen at FROZEN_NOW_ISO (relative-time labels,
+//    LiveElapsed, ConnectionPill's "last ok"), motion is killed by the capture
+//    context's reduced-motion setting, and the Refreshed pill is a fixed string.
+//    `freezeHarnessClock` runs at module load when a scene is requested (the
+//    hoisted block near the top of this file, BEFORE `STATES` computes the live
+//    card's start time), so a human opening the URL sees the same frame the
+//    script captures.
+
+/** RFC 5737 documentation addresses — never a real exit. */
+const TEST_NET = {
+  nl: '203.0.113.7',
+  jp: '198.51.100.24',
+  de: '192.0.2.61',
+  ch: '203.0.113.42',
+  gb: '198.51.100.8',
+  fr: '192.0.2.118',
+} as const;
+
+export const FIXTURE_ACCOUNT: AccountSelfProfile = {
+  id: 'acc_example',
+  email: 'ops@example.com',
+  name: null,
+  tier: 'team_manual',
+  status: 'active',
+  timezone: 'Europe/Amsterdam',
+  slug: null,
+  region: 'eu',
+  onboarding_completed_at: '2026-06-01T00:00:00.000Z',
+  avatar_url: null,
+  avatar_source: 'none',
+  mfa_enrolled: true,
+  concurrent_session_cap: 3,
+  concurrent_session_active: 1,
+  profile_cap: 10,
+  profile_count: 8,
+  teams: [],
+};
+
+const FIXTURE_SETTINGS: DriftstackSettings = {
+  ...DEFAULT_SETTINGS,
+  apiKey: 'ds_live_example',
+  baseUrl: 'https://driftstack.io',
+};
+
+const noopAsync = (): Promise<void> => Promise.resolve();
+
+function stateProps(label: string): ProfilePhoneCardProps {
+  const found = STATES.find((s) => s.label === label);
+  if (found === undefined) throw new Error(`marketing scene: gallery state missing: ${label}`);
+  return found.props;
+}
+
+/** The 8 curated cards of the profiles grid — each is an existing STATES entry
+ *  (so the geometry gate already covers its layout) with example hosts and
+ *  TEST-NET exits laid over it. Exported so the scene test can scan them. */
+export const MARKETING_CARDS: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
+  {
+    label: 'idle · UDP ok',
+    props: {
+      ...stateProps('idle · UDP ok'),
+      proxyName: 'Residential NL #3',
+      proxyAddress: 'nl-3.proxy.example.com:1080',
+      exitIp: TEST_NET.nl,
+    },
+  },
+  {
+    label: 'running · live',
+    props: {
+      ...stateProps('running · live'),
+      proxyName: 'Residential JP #1',
+      proxyAddress: 'jp-1.proxy.example.com:1080',
+      exitIp: TEST_NET.jp,
+      locationLabel: 'Tokyo, Tokyo',
+    },
+  },
+  {
+    label: 'vpn · idle (fleet latency)',
+    props: {
+      ...stateProps('vpn · idle (fleet latency)'),
+      proxyName: 'WireGuard CH #42',
+      proxyAddress: 'ch-42.vpn.example.com:51820',
+      exitIp: TEST_NET.ch,
+    },
+  },
+  {
+    label: 'UDP fail (muted, never red)',
+    props: {
+      ...stateProps('UDP fail (muted, never red)'),
+      proxyName: 'Datacenter DE #7',
+      proxyAddress: 'de-7.proxy.example.com:1080',
+      exitIp: TEST_NET.de,
+      locationLabel: 'Berlin, Berlin',
+    },
+  },
+  {
+    label: 'selected · folder + tags',
+    props: {
+      ...stateProps('selected · folder + tags'),
+      name: 'london checkout',
+      monogram: 'LC',
+      hue: 260,
+      flag: '🇬🇧',
+      countryCode: 'GB',
+      exitIp: TEST_NET.gb,
+      locationLabel: 'London, England',
+      proxyName: 'Residential UK #2',
+      proxyAddress: 'uk-2.proxy.example.com:1080',
+      latencyMs: 35,
+      latencyFillPct: 24,
+    },
+  },
+  {
+    label: 'MAX · full egress + folder + tags + saved-tabs + note (overflow repro)',
+    props: {
+      ...stateProps('MAX · full egress + folder + tags + saved-tabs + note (overflow repro)'),
+      name: 'amsterdam wardrobe',
+      monogram: 'AW',
+      hue: 20,
+      proxyName: 'Residential NL rotating #3',
+      proxyAddress: 'nl-3.proxy.example.com:1080',
+      exitIp: TEST_NET.nl,
+      note: 'Warm every Monday before 09:00 CET; the checkout flow rejects cold profiles',
+    },
+  },
+  {
+    label: 'untested',
+    props: {
+      ...stateProps('untested'),
+      proxyName: 'Residential BR #1',
+      proxyAddress: 'br-1.proxy.example.com:1080',
+    },
+  },
+  {
+    label: 'saved tabs · never launched',
+    props: {
+      ...stateProps('saved tabs · never launched'),
+      name: 'paris fashion',
+      monogram: 'PF',
+      hue: 200,
+      flag: '🇫🇷',
+      countryCode: 'FR',
+      exitIp: TEST_NET.fr,
+      locationLabel: 'Paris, Île-de-France',
+      proxyName: 'Residential FR #5',
+      proxyAddress: 'fr-5.proxy.example.com:1080',
+      latencyMs: 58,
+      latencyFillPct: 38,
+    },
+  },
+];
+
+function tableRowById(id: string): ProfileTableRow {
+  const found = TABLE_ROWS.find((r) => r.id === id);
+  if (found === undefined) throw new Error(`marketing scene: gallery table row missing: ${id}`);
+  return found;
+}
+/** The live profile started 12 minutes before the frozen instant — the same
+ *  offset the grid's live card uses (STATES computes it from the frozen clock). */
+const RUNNING_SINCE_ISO = new Date(Date.parse(FROZEN_NOW_ISO) - 12 * 60_000).toISOString();
+const CHECKED_AT_ISO = new Date(Date.parse(FROZEN_NOW_ISO) - 12 * 60_000).toISOString();
+/** A row for a profile the gallery's TABLE_ROWS does not carry: the first row's
+ *  shape (every flag the table reads, at its idle defaults) without its icon. */
+function gridOnlyRow(over: Partial<ProfileTableRow> & Pick<ProfileTableRow, 'id' | 'name'>) {
+  const { icon, ...plain } = tableRowById('1');
+  void icon;
+  return {
+    ...plain,
+    busy: false,
+    launching: false,
+    folder: '',
+    tags: [],
+    note: '',
+    lastUsedIso: '2026-06-15T06:30:00.000Z',
+    ...over,
+  } satisfies ProfileTableRow;
+}
+
+/** The list view shows the SAME eight profiles as the grid — the site places
+ *  both captures as one app at one instant — sorted by name the way the
+ *  table's "PROFILE ↑" header says. TABLE_ROWS' four proxied rows are
+ *  re-hosted to *.example.com / TEST-NET and aligned with their grid cards
+ *  (place names, selection, the live row's start time); the four grid-only
+ *  profiles are rows built from the first row's shape. `local sandbox` (no
+ *  proxy) is not in the grid and is not here. */
+export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
+  {
+    ...tableRowById('1'),
+    proxyAddress: 'nl-3.proxy.example.com:1080',
+    exitIp: TEST_NET.nl,
+    locationLabel: 'Amsterdam, North Holland',
+    busy: false,
+    launching: false,
+  },
+  gridOnlyRow({
+    id: 'm-wardrobe',
+    name: 'amsterdam wardrobe',
+    proxyAddress: 'nl-3.proxy.example.com:1080',
+    exitIp: TEST_NET.nl,
+    locationLabel: 'Amsterdam, North Holland',
+    folder: 'Shopping',
+    tags: ['aged', 'warm', 'vip', 'eu', 'q3', 'checkout'],
+    note: 'Warm every Monday before 09:00 CET; the checkout flow rejects cold profiles',
+    savedTabsReopen: true,
+    sizeLabel: '96.3 MiB',
+  }),
+  {
+    ...tableRowById('3'),
+    proxyAddress: 'de-7.proxy.example.com:1080',
+    exitIp: TEST_NET.de,
+    locationLabel: 'Berlin, Berlin',
+  },
+  gridOnlyRow({
+    id: 'm-london',
+    name: 'london checkout',
+    flag: '🇬🇧',
+    countryCode: 'GB',
+    exitIp: TEST_NET.gb,
+    proxyAddress: 'uk-2.proxy.example.com:1080',
+    locationLabel: 'London, England',
+    latencyMs: 35,
+    folder: 'Shopping',
+    tags: ['aged', 'vip'],
+    selected: true,
+    sizeLabel: '7.3 MiB',
+  }),
+  gridOnlyRow({
+    id: 'm-paris',
+    name: 'paris fashion',
+    flag: '🇫🇷',
+    countryCode: 'FR',
+    exitIp: TEST_NET.fr,
+    proxyAddress: 'fr-5.proxy.example.com:1080',
+    locationLabel: 'Paris, Île-de-France',
+    latencyMs: 58,
+    savedTabsReopen: true,
+    lastUsedIso: null,
+    sizeLabel: '2.8 MiB',
+  }),
+  { ...tableRowById('4'), proxyAddress: 'br-1.proxy.example.com:1080' },
+  {
+    ...tableRowById('2'),
+    proxyAddress: 'jp-1.proxy.example.com:1080',
+    exitIp: TEST_NET.jp,
+    locationLabel: 'Tokyo, Tokyo',
+    runningSinceIso: RUNNING_SINCE_ISO,
+    selected: false,
+  },
+  gridOnlyRow({
+    id: 'm-zurich',
+    name: 'zurich banking',
+    flag: '🇨🇭',
+    countryCode: 'CH',
+    exitIp: TEST_NET.ch,
+    proxyAddress: 'ch-42.vpn.example.com:51820',
+    locationLabel: 'Zürich, Zurich',
+    vpn: true,
+    latencyFromServer: true,
+    latencyMs: 61,
+    udp: 'ok',
+    quic: 'ok',
+    checkedAtIso: CHECKED_AT_ISO,
+    sizeLabel: '9.6 MiB',
+  }),
+];
+
+/** The simulator cockpit's Egress readouts read the session's capability
+ *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit. */
+export const MARKETING_CAPABILITY_REPORT: AgentSessionCapabilityReport = {
+  manual_input_available: true,
+  streaming_state: 'live',
+  egress_state: 'live',
+  h3_connection_observed: true,
+  h3_connection_count: 4,
+  exit_ip: TEST_NET.nl,
+  exit_country: 'NL',
+  exit_timezone: 'Europe/Amsterdam',
+  webrtc_candidate_ips: [TEST_NET.nl],
+  observed_at: '2026-06-15T06:41:30.000Z',
+  os_fingerprint: { os: 'Linux', confidence: 'high' },
+  proxy_kind: 'socks5',
+};
+
+/** What the fleet knows about a proxy in the scene, in the terms ProxiesView
+ *  tallies its header from: `isRowHealthy` counts a SOCKS5 row with a passing
+ *  test and a VPN row the fleet brought up; the "WebRTC + QUIC" tally counts
+ *  SOCKS5 rows with a measured UDP associate and is deliberately NOT VPN-aware
+ *  (a tunnel carries UDP by construction; the tally is about proxies that
+ *  had to prove it). The header numbers are DERIVED from these, never typed. */
+export type MarketingProxyVerdict = 'socks5_ok_udp' | 'socks5_ok' | 'vpn_up' | 'untested';
+export function proxyTally(list: ReadonlyArray<{ verdict: MarketingProxyVerdict }>): {
+  total: number;
+  healthy: number;
+  udpCapable: number;
+} {
+  return {
+    total: list.length,
+    healthy: list.filter((p) => p.verdict !== 'untested').length,
+    udpCapable: list.filter((p) => p.verdict === 'socks5_ok_udp').length,
+  };
+}
+
+/** A key-shaped value that is not a key. The editors never show keys (the
+ *  WireGuard summary names endpoint / address / allowed IPs / DNS only, and the
+ *  replace box is empty in edit mode), but a stored WireGuard row always HAS
+ *  its block — `validateDraft` refuses a save without one and `toDraft` carries
+ *  it into the editor — so an edit-mode draft without one is a state the app
+ *  cannot produce (the first capture showed the add-mode placeholder). */
+const EXAMPLE_KEY = 'ExampleExampleExampleExampleExampleExampleE=';
+
+/** The three proxies of the Proxies scene: each editor's saved draft (what
+ *  `toDraft` hands ProxyForm for a stored row) plus the fleet's verdict. */
+export const MARKETING_PROXIES: ReadonlyArray<{
+  label: string;
+  draft: ProxyDraft;
+  verdict: MarketingProxyVerdict;
+}> = [
+  {
+    label: 'socks5',
+    verdict: 'socks5_ok_udp',
+    draft: {
+      label: 'Residential NL #3',
+      scheme: 'socks5',
+      host: 'nl-3.proxy.example.com',
+      port: 1080,
+      username: 'nl3-user',
+      password: null,
+    },
+  },
+  {
+    label: 'wireguard',
+    verdict: 'vpn_up',
+    draft: {
+      label: 'WireGuard CH #42',
+      scheme: 'wireguard',
+      host: 'ch-42.vpn.example.com',
+      port: 51820,
+      username: null,
+      password: null,
+      wireguard: {
+        private_key: EXAMPLE_KEY,
+        peer_public_key: EXAMPLE_KEY,
+        endpoint: 'ch-42.vpn.example.com:51820',
+        address: '10.7.0.2/32',
+        allowed_ips: '0.0.0.0/0, ::/0',
+        dns: '10.7.0.1',
+      },
+    },
+  },
+  {
+    label: 'openvpn',
+    verdict: 'vpn_up',
+    draft: {
+      label: 'OpenVPN DE #7',
+      scheme: 'openvpn',
+      host: 'de-7.vpn.example.com',
+      port: 1194,
+      // A VPN row keeps no SOCKS-style credential (the form clears both on a
+      // scheme switch); the OpenVPN auth user rides inside the block.
+      username: null,
+      password: null,
+      openvpn: {
+        config_blob: [
+          'client',
+          'dev tun',
+          'proto udp',
+          'remote de-7.vpn.example.com 1194',
+          'resolv-retry infinite',
+          'nobind',
+          'persist-key',
+          'persist-tun',
+          'remote-cert-tls server',
+          'cipher AES-256-GCM',
+          'auth SHA256',
+          'verb 3',
+        ].join('\n'),
+        username: 'de7-user',
+      },
+    },
+  },
+];
+export const MARKETING_PROXY_TALLY = proxyTally(MARKETING_PROXIES);
+
+/** The macOS traffic lights sit in the title bar's pl-24 clearance in the real
+ *  window (drawn by the OS, outside the DOM). Harness-only, decorative. */
+function TrafficLights(): JSX.Element {
+  return (
+    <span
+      aria-hidden="true"
+      data-component="scene-traffic-lights"
+      className="pointer-events-none absolute left-3 top-0 flex h-9 items-center gap-2"
+    >
+      <span className="h-3 w-3 rounded-full bg-[#ff5f57] ring-1 ring-black/20" />
+      <span className="h-3 w-3 rounded-full bg-[#febc2e] ring-1 ring-black/20" />
+      <span className="h-3 w-3 rounded-full bg-[#28c840] ring-1 ring-black/20" />
+    </span>
+  );
+}
+
+/** The main window's chrome around one view: the real TitleBar (with the slot
+ *  App.tsx fills) and the real Sidebar, fed the fixture account through the
+ *  real SettingsContext. 1280×800, overflow hidden — nothing escapes the stage. */
+function AppWindow({
+  scene,
+  current,
+  children,
+}: {
+  scene: MarketingSceneName;
+  current: SidebarViewKind;
+  children: ReactNode;
+}): JSX.Element {
+  const settingsValue = useMemo(
+    () => ({
+      settings: FIXTURE_SETTINGS,
+      loading: false,
+      client: null,
+      activeWorkspace: null,
+      setActiveWorkspace: noop,
+      accountMe: FIXTURE_ACCOUNT,
+      refreshAccountMe: noopAsync,
+      authExpired: false,
+      dismissAuthExpired: noop,
+      update: noopAsync,
+    }),
+    [],
+  );
+  const size = sceneSize(scene);
+  const status: ConnectionStatus = {
+    state: 'connected',
+    lastOkAt: Date.parse(FROZEN_NOW_ISO) - 4_000,
+    lastError: null,
+    driver: null,
+    agentExecution: null,
+  };
+  return (
+    <SettingsContext.Provider value={settingsValue}>
+      <RecordingsProvider>
+        <div
+          data-scene={scene}
+          data-ready="1"
+          data-frozen-now={FROZEN_NOW_ISO}
+          data-stage-width={size.width}
+          data-stage-height={size.height}
+          style={{ width: size.width, height: size.height }}
+          className="relative flex shrink-0 flex-col overflow-hidden bg-surface-base font-sans text-ink-primary antialiased"
+        >
+          <div className="relative shrink-0">
+            <TrafficLights />
+            <TitleBar
+              subtitle="cloud"
+              right={
+                <>
+                  <ThemeSwitcher />
+                  <span className="text-surface-divider">|</span>
+                  <ConnectionPill status={status} baseUrl={FIXTURE_SETTINGS.baseUrl} />
+                  <span className="section-label">v0.1.49</span>
+                </>
+              }
+            />
+          </div>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <Sidebar current={current} onNavigate={noop} onSignOut={noop} onOpenPalette={noop} />
+            <main className="min-w-0 flex-1 overflow-auto bg-surface-base">{children}</main>
+          </div>
+        </div>
+      </RecordingsProvider>
+    </SettingsContext.Provider>
+  );
+}
+
+// Mirrors the ProfilesView hero + header strip (the view itself needs the
+// profile store, probe cache and live sessions, which don't render headless).
+// Keep in sync with ProfilesView's `profiles-hero` block. The grid class is the
+// view's PROFILES_GRID_CLASS, spelled out here so Tailwind emits it.
+const PROFILES_GRID_CLASS_MIRROR = 'grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3';
+function ProfilesFrame({
+  viewMode,
+  liveCount,
+  total,
+  sortBy = 'last-used',
+  sortDir = 'desc',
+  children,
+}: {
+  viewMode: 'grid' | 'list';
+  liveCount: number;
+  total: number;
+  sortBy?: ProfileSortBy;
+  sortDir?: 'asc' | 'desc';
+  children: ReactNode;
+}): JSX.Element {
+  const toggle = (mode: 'grid' | 'list', glyph: string, label: string): JSX.Element => (
+    <button
+      type="button"
+      aria-pressed={viewMode === mode}
+      className={
+        viewMode === mode
+          ? 'rounded bg-accent-subtle px-2 py-1 text-xs font-medium text-ink-primary'
+          : 'rounded px-2 py-1 text-xs text-ink-muted hover:text-ink-primary'
+      }
+    >
+      {glyph} {label}
+    </button>
+  );
+  return (
+    <div className="flex h-full min-w-0 flex-col gap-4 p-6">
+      <div
+        data-component="profiles-hero"
+        className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3"
+      >
+        <div className="min-w-0">
+          <h2 className="text-[19px] font-semibold tracking-tight text-ink-primary">
+            Good morning
+          </h2>
+          <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary">
+            <b className="font-semibold text-ink-primary">{liveCount}</b> live
+            <span className="text-surface-divider">·</span>
+            <span className="font-semibold text-status-ready">87.5% proxy health</span>
+            <span className="text-surface-divider">·</span>
+            all systems nominal
+          </p>
+        </div>
+        <div className="ml-auto flex flex-col items-end gap-2">
+          <div className="flex items-center gap-2">
+            <button type="button" className="btn-secondary flex items-center gap-1.5">
+              <span aria-hidden="true">⤒</span>
+              <span>Import</span>
+            </button>
+            <button type="button" className="btn-primary flex items-center gap-1.5">
+              <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
+                <path
+                  d="M8 3v10M3 8h10"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span>New profile</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 whitespace-nowrap text-[11px] text-ink-muted hover:text-ink-secondary"
+          >
+            <span
+              aria-hidden="true"
+              className="relative inline-block h-1.5 w-1.5 rounded-full bg-status-ready"
+            />
+            Refreshed <span className="mono">06:42:00</span> · auto-refresh 15s
+          </button>
+        </div>
+      </div>
+      <header className="flex flex-col gap-3">
+        <ProfilesActionBar
+          searchQuery=""
+          onSearchChange={noop}
+          statusFilter="all"
+          onStatusFilterChange={noop}
+          sortBy={sortBy}
+          onSortByChange={noop}
+          sortDir={sortDir}
+          onSortDirChange={noop}
+          visibleCount={total}
+          totalCount={total}
+        />
+        <div className="flex items-center justify-end gap-2">
+          {toggle('list', '☰', 'List')}
+          {toggle('grid', '▦', 'Grid')}
+        </div>
+      </header>
+      {children}
+    </div>
+  );
+}
+
+// Mirrors the ProxiesView hero strip (keep in sync with `proxies-hero`); the
+// tallies are derived from MARKETING_PROXIES the way the view derives its own.
+function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <div className="flex flex-col gap-4 p-6">
+      <div
+        data-component="proxies-hero"
+        className="flex flex-wrap items-start gap-4 border-b border-surface-divider pb-3"
+      >
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-accent/15 text-lg text-accent ring-1 ring-accent/25">
+            🌍
+          </span>
+          <div className="min-w-0">
+            <span className="section-label text-accent">Network egress</span>
+            <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
+              Egress proxies
+              <span className="mono ml-2 text-base font-normal text-ink-muted">
+                {MARKETING_PROXY_TALLY.total}
+              </span>
+            </h2>
+            <p
+              data-component="scene-proxies-tally"
+              data-healthy={MARKETING_PROXY_TALLY.healthy}
+              data-udp={MARKETING_PROXY_TALLY.udpCapable}
+              className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-ink-secondary"
+            >
+              <b className="font-semibold text-status-ready">{MARKETING_PROXY_TALLY.healthy}</b>{' '}
+              healthy
+              <span className="text-surface-divider">·</span>
+              <b className="font-semibold text-ink-primary">
+                {MARKETING_PROXY_TALLY.udpCapable}
+              </b>{' '}
+              WebRTC + QUIC
+              <span className="text-surface-divider">·</span>
+              <span className="text-ink-muted">protected locally · encrypted sync at launch</span>
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto flex items-center gap-2">
+          <button type="button" className="btn-secondary">
+            Test all
+          </button>
+          <button type="button" className="btn-primary flex items-center gap-1.5">
+            <span aria-hidden="true">+</span>
+            <span>New proxy</span>
+          </button>
+        </div>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** The simulator is its own borderless window: the real DeviceToolbar over the
+ *  phone's screen host, the real on-screen iOS keyboard, and the docked pane
+ *  with the Egress card's real readouts (ExitIpChip / QuicReadout / OsReadout)
+ *  fed a fixture report. The live video needs a session, so the screen host is
+ *  the app's own black host with nothing attached. */
+function SimulatorScene(): JSX.Element {
+  const phoneW = 300;
+  const simSize = sceneSize('simulator');
+  const infoCard = 'rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2';
+  const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/40';
+  return (
+    <div
+      data-scene="simulator"
+      data-ready="1"
+      data-frozen-now={FROZEN_NOW_ISO}
+      data-stage-width={simSize.width}
+      data-stage-height={simSize.height}
+      style={{ width: simSize.width, height: simSize.height }}
+      className="relative flex shrink-0 items-center justify-center overflow-hidden bg-surface-base font-sans text-ink-primary antialiased"
+    >
+      <div
+        data-component="scene-simulator-window"
+        className="flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12]"
+        style={{ width: phoneW + 252 }}
+      >
+        <DeviceToolbar
+          deviceName="iPhone 17"
+          profileName="amsterdam shopper"
+          running
+          keyboardVisible
+          onToggleKeyboard={noop}
+        />
+        <div className="flex min-h-0" style={{ height: 660 }}>
+          <div className="flex flex-col" style={{ width: phoneW }}>
+            <div
+              data-component="simulator-screen-host"
+              className="relative min-h-0 flex-1 bg-black"
+            />
+            <IOSKeyboard room={null} width={phoneW} onDismiss={noop} />
+          </div>
+          <div
+            data-component="sim-drawer-panel"
+            data-state="open"
+            className="flex w-[252px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12]"
+          >
+            <div
+              data-component="sim-drawer-status"
+              className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
+            >
+              <div className="truncate">
+                <span className="text-white/90">Manual</span> · ws ✓ · webrtc
+              </div>
+              <div className="truncate">60 fps · 38 ms · egress live</div>
+            </div>
+            <div className="flex flex-col gap-2 p-2.5 text-[11px] text-white/80">
+              <div className={infoCard}>
+                <div className={infoLabel}>Profile</div>
+                <div className="mt-0.5 truncate">amsterdam shopper</div>
+              </div>
+              <div className={infoCard}>
+                <div className={infoLabel}>Device</div>
+                <div className="mt-0.5 truncate">iPhone 17</div>
+              </div>
+              <div className={infoCard}>
+                <div className={infoLabel}>Link</div>
+                <div className="mt-0.5 truncate">
+                  eu-1.fleet.example.com<span className="text-ink-secondary"> · ws ✓</span>
+                </div>
+              </div>
+              <div className={infoCard}>
+                <div className={infoLabel}>Egress</div>
+                <div className="mt-0.5 truncate">
+                  🌍 Residential NL #3
+                  <span data-component="sim-proxy-timezone"> · Europe/Amsterdam</span>
+                </div>
+                <ExitIpChip report={MARKETING_CAPABILITY_REPORT} />
+                <QuicReadout report={MARKETING_CAPABILITY_REPORT} />
+                <OsReadout report={MARKETING_CAPABILITY_REPORT} />
+              </div>
+              <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
+                <div className={`font-sans ${infoLabel}`}>Identity</div>
+                <div className="mt-0.5 truncate">engine-deep · bit-exact device</div>
+                <div className="truncate">input human-cadence native</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mirrors the Command Center header band (T-18); the KPI strip is the real Kpi.
+function CommandCenterScene(): JSX.Element {
+  return (
+    <AppWindow scene="command-center" current="home">
+      <div className="flex flex-col gap-4 p-6">
+        <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
+          <div className="flex flex-col gap-1">
+            <span className="section-label text-accent">Good morning</span>
+            <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
+              What do you want to automate?
+            </h1>
+            <p className="text-sm text-ink-secondary">
+              {`${String(FIXTURE_ACCOUNT.concurrent_session_active)} session running · ${String(FIXTURE_ACCOUNT.profile_count)} profiles · ${String(MARKETING_PROXY_TALLY.healthy)} proxies healthy`}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className="btn-primary gap-2">
+              ✦ Ask Driftstack AI
+            </button>
+            <button type="button" className="btn-secondary gap-2">
+              ▤ Saved tasks
+            </button>
+          </div>
+        </section>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Kpi
+            icon={<span>▦</span>}
+            label="Profiles"
+            value={`${String(FIXTURE_ACCOUNT.profile_count)} / ${String(FIXTURE_ACCOUNT.profile_cap)}`}
+          />
+          <Kpi
+            icon={<span>⚡</span>}
+            label="Active"
+            value={String(FIXTURE_ACCOUNT.concurrent_session_active)}
+            accent
+          />
+          <Kpi icon={<span>🌍</span>} label="Proxies" value={String(MARKETING_PROXY_TALLY.total)} />
+          <Kpi
+            icon={<span>✦</span>}
+            label="Plan"
+            value="Team"
+            valueNode={<TierBadge tier="team_manual" size="md" />}
+          />
+        </section>
+      </div>
+    </AppWindow>
+  );
+}
+
+export function MarketingScene({ name }: { name: MarketingSceneName }): JSX.Element {
+  switch (name) {
+    case 'profiles-grid':
+      return (
+        <AppWindow scene={name} current="profiles">
+          <ProfilesFrame viewMode="grid" liveCount={1} total={MARKETING_CARDS.length}>
+            <div data-scene-region="grid" className={PROFILES_GRID_CLASS_MIRROR}>
+              {MARKETING_CARDS.map((c) => (
+                <ProfilePhoneCard key={c.label} {...c.props} />
+              ))}
+            </div>
+          </ProfilesFrame>
+        </AppWindow>
+      );
+    case 'profiles-list':
+      return (
+        <AppWindow scene={name} current="profiles">
+          <ProfilesFrame
+            viewMode="list"
+            liveCount={1}
+            total={MARKETING_TABLE_ROWS.length}
+            sortBy="name"
+            sortDir="asc"
+          >
+            <div data-scene-region="list">
+              <ProfilesTable
+                rows={MARKETING_TABLE_ROWS}
+                sortKey="name"
+                sortDir="asc"
+                onSort={noop}
+                allSelected={false}
+                onToggleSelectAll={noop}
+                onToggleSelect={noop}
+                onPrimary={noop}
+                onWatch={noop}
+                onStop={noop}
+                onTest={noop}
+                onEdit={noop}
+                onClone={noop}
+                onTrim={noop}
+                onDelete={noop}
+                onSaveNote={noop}
+              />
+            </div>
+          </ProfilesFrame>
+        </AppWindow>
+      );
+    case 'proxies':
+      return (
+        <AppWindow scene={name} current="proxies">
+          <ProxiesFrame>
+            <div data-scene-region="proxy-forms" className="grid grid-cols-3 gap-4">
+              {MARKETING_PROXIES.map((p) => (
+                <ProxyForm
+                  key={p.label}
+                  mode="edit"
+                  initial={p.draft}
+                  onCancel={noop}
+                  onSave={noop}
+                />
+              ))}
+            </div>
+          </ProxiesFrame>
+        </AppWindow>
+      );
+    case 'simulator':
+      return <SimulatorScene />;
+    case 'billing':
+      return (
+        <AppWindow scene={name} current="billing">
+          <div className="p-6">
+            <BillingWrapperShell>
+              <CostPanel
+                breakdown={{
+                  computeCents: 1840,
+                  storageCents: 120,
+                  egressCents: 640,
+                  emailCents: 15,
+                  llmCents: 2310,
+                  totalCents: 4925,
+                  thresholdState: 'between-soft-and-hard',
+                }}
+                billingCycle="2026-06"
+              />
+            </BillingWrapperShell>
+          </div>
+        </AppWindow>
+      );
+    case 'command-center':
+      return <CommandCenterScene />;
+  }
+}

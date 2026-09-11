@@ -191,18 +191,101 @@ describe('W500.C apps/marketing-site/src/pages/index.astro content parity', () =
     expect(body).toMatch(/secondaryHref="https:\/\/docs\.driftstack\.io"/);
   });
 
-  it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the fan-of-open-iPhones telemetry footer (S4.5 2026-07-03: the hero is now a fan of open iPhone windows matching the current GUI — '4 iPhones in your fleet / each with its own identity / all healthy'; the pre-v2 fingerprint-coherence mono line stays gone). S24 2026-07-06: the caption strip is real copy in the AA-safe tk-ready-text tone (raw ready is a fill tone, ~3.3:1 as light-mode text), and the fan itself carries data-contrast-decorative (illustration-of-a-UI, WCAG 1.4.3 incidental — the caption strip stays OUTSIDE the exempt wrapper so it is still contrast-scanned)", () => {
+  // 2026-09-11 — the hero visual is a REAL capture of the desktop app's
+  // Profiles view (the owner: "update our marketing website too with these
+  // latest views, as it still has old GUI images"). The hand-drawn fan of
+  // iPhone windows it replaces (S4.5 2026-07-03) had drifted from the app.
+  // What each arm guards, and why reverting the production line reds it:
+  //   • `import heroScreen from '../assets/screens/profiles-grid-hero.png'` +
+  //     `<AppScreen src={heroScreen}` — the hero draws the capture; a return
+  //     to markup (or a different scene) fails here.
+  //   • `priority` on the hero AppScreen — it is the LCP element; dropping the
+  //     prop makes it lazy (the component's default) and the pin reds.
+  //   • `alt={HERO_ALT}` + the constant's content — a real alt that says what
+  //     the screen shows (eight profile cards, Live/Idle, cities spelled out).
+  //     A bare alt="" or a marketing slogan as alt fails the content arm.
+  //   • Band A caption strip stays REAL copy OUTSIDE the decorative frame
+  //     (cities spelled out, "own connection", the AA-safe tk-ready-text tone)
+  //     and matches the picture: 8 iPhones (the scene renders 8 cards), each
+  //     on its own connection — the old "all healthy" claim is gone because
+  //     the capture deliberately includes non-healthy states.
+  //   • The fan markup must NOT return (heroFleet / New Tab / market.example).
+  it("Hero fleet visual pinned: 'Command a fleet of real iPhones.' + identity/history/geo triad + 'just people on phones' close + the REAL profiles-grid capture (AppScreen, priority/LCP, real alt) with the Band-A caption strip as real copy outside the decorative frame — the hand-drawn fan is gone", () => {
     expect(body).toMatch(/Command a fleet of real iPhones\./);
     expect(body).toMatch(/its own identity,\s*its own history, its own corner of the world/);
     expect(body).toMatch(/they're just people on\s*phones\./);
-    expect(body).toMatch(/<b class="text-tk-ready-text">4 iPhones<\/b> in your fleet/);
-    expect(body).toMatch(/all <b class="text-tk-ready-text">healthy<\/b>/);
+    // the capture, wired through AppScreen as the LCP element
+    expect(body).toMatch(/import AppScreen from '\.\.\/components\/AppScreen\.astro'/);
+    expect(body).toMatch(/import heroScreen from '\.\.\/assets\/screens\/profiles-grid-hero\.png'/);
     expect(body).toMatch(
+      /<AppScreen\s+src=\{heroScreen\}\s+alt=\{HERO_ALT\}\s+priority\s+accent\s+sizes="\(min-width: 768px\) 552px, calc\(100vw - 48px\)"\s*\/>/,
+    );
+    // a real alt: what the screen shows, cities spelled out (Band A)
+    expect(body).toMatch(
+      /const HERO_ALT =\s*\n\s*'The Driftstack desktop app, Profiles view: eight iPhone profile cards/,
+    );
+    expect(body).toMatch(
+      /whether it is Live ' \+\s*\n\s*'or Idle, the city it browses from \(Amsterdam, Tokyo, Zurich, Berlin, London, ' \+\s*\n\s*'Paris\)/,
+    );
+    // the caption strip — real copy, matches the picture
+    expect(body).toMatch(
+      /🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection/,
+    );
+    expect(body).toMatch(/<b class="text-tk-ready-text">8 iPhones<\/b> in your fleet/);
+    expect(body).toMatch(/each with <b class="text-tk-ink-2">its own identity<\/b>/);
+    expect(body).toMatch(/each on <b class="text-tk-ready-text">its own connection<\/b>/);
+    // the hand-drawn fan and its claims must not return
+    expect(body).not.toMatch(/heroFleet/);
+    expect(body).not.toMatch(/market\.example\.com/);
+    expect(body).not.toMatch(/New Tab/);
+    expect(body).not.toMatch(/4 iPhones<\/b> in your fleet/);
+    expect(body).not.toMatch(/all <b class="text-tk-ready-text">healthy<\/b>/);
+    expect(body).not.toMatch(
       /<div class="flex items-end justify-center pt-2" data-contrast-decorative>/,
     );
     // the pre-v2 technical telemetry line must not return above the fold
     expect(body).not.toMatch(/fingerprint coherence <b/);
     expect(body).not.toMatch(/CreepJS/);
+  });
+
+  // 2026-09-11 — the other GUI depictions on the page are captures too.
+  //   • §5 "Two ways to drive it": the floating device window is the REAL
+  //     simulator window (scene `simulator`), full width, lazy (the
+  //     component default — the pin asserts NO `priority` here, because a
+  //     second eager+high image would compete with the hero for bandwidth).
+  //   • §9 console rows: the Identity Wardrobe shows the Profiles LIST view
+  //     (scene `profiles-list`), the egress row the Proxies view (scene
+  //     `proxies`) — each through the FeatureRow media slot.
+  //   • The hand-drawn cockpit (cockpitProfiles, "98% proxy health", the
+  //     floating shop.example.com window), the tilted wardrobe cards
+  //     (jp-market / us-retail-qa) and the dotted-globe SVG must not return.
+  it('§5 + §9 GUI depictions are real captures: simulator window (lazy, not priority), profiles-list + proxies via the FeatureRow media slot — the hand-drawn cockpit / wardrobe cards / globe SVG are gone', () => {
+    expect(body).toMatch(/import simulatorScreen from '\.\.\/assets\/screens\/simulator\.png'/);
+    expect(body).toMatch(
+      /import profilesListScreen from '\.\.\/assets\/screens\/profiles-list\.png'/,
+    );
+    expect(body).toMatch(/import proxiesScreen from '\.\.\/assets\/screens\/proxies\.png'/);
+    expect(body).toMatch(/<AppScreen src=\{simulatorScreen\} alt=\{SIMULATOR_ALT\} \/>/);
+    expect(body).toMatch(
+      /<AppScreen\s+slot="media"\s+src=\{profilesListScreen\}\s+alt=\{PROFILES_LIST_ALT\}/,
+    );
+    expect(body).toMatch(/<AppScreen\s+slot="media"\s+src=\{proxiesScreen\}\s+alt=\{PROXIES_ALT\}/);
+    // every alt says what the screen shows
+    expect(body).toMatch(
+      /const SIMULATOR_ALT =\s*\n\s*'A floating device window in the Driftstack desktop app/,
+    );
+    expect(body).toMatch(
+      /const PROFILES_LIST_ALT =\s*\n\s*'The Driftstack desktop app, Profiles view as a list/,
+    );
+    expect(body).toMatch(/const PROXIES_ALT =\s*\n\s*'The Driftstack desktop app, Proxies view/);
+    // exactly ONE priority image on the page — the hero
+    expect(body.match(/\bpriority\b/g)?.length, 'priority props on the page').toBe(1);
+    // the hand-drawn depictions must not return
+    expect(body).not.toMatch(/cockpitProfiles/);
+    expect(body).not.toMatch(/98% proxy health/);
+    expect(body).not.toMatch(/shop\.example\.com/);
+    expect(body).not.toMatch(/jp-market|us-retail-qa|amsterdam-shopper/);
+    expect(body).not.toMatch(/stroke-dasharray="4 4"/);
   });
 
   it("Proof section costume metaphor + detection matrix (v2 merge of the former comparison teaser + why-works + how-its-built): 'One iPhone among millions.' + the costume-metaphor lead + the 7-signal 'What detection systems see' matrix + /comparison cross-link. The standalone 'Not another anti-detect browser.' teaser table was folded in here.", () => {

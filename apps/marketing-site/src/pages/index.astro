@@ -18,7 +18,22 @@ import Stat from '../components/Stat.astro';
 import FeatureRow from '../components/FeatureRow.astro';
 import CtaBand from '../components/CtaBand.astro';
 import CodeWindow from '../components/CodeWindow.astro';
+import AppScreen from '../components/AppScreen.astro';
 import { API_TIERS } from '../data/pricing';
+
+// 2026-09-11 — every GUI depiction on this page is a REAL capture of the
+// desktop app (src/assets/screens/*.png — Playwright shots of the visual
+// harness rendering the app's own React components with curated fixture
+// data: Amsterdam / Tokyo / Berlin / São Paulo, example hosts, never a real
+// session or account). The hand-drawn HTML mockups they replace had drifted
+// from the app. Regenerate: scripts/marketing-screens.mjs (README beside
+// the assets). The captures are the source of truth for what is SHOWN —
+// the alt text and caption strips describe what is in the picture and
+// nothing more.
+import heroScreen from '../assets/screens/profiles-grid-hero.png';
+import simulatorScreen from '../assets/screens/simulator.png';
+import profilesListScreen from '../assets/screens/profiles-list.png';
+import proxiesScreen from '../assets/screens/proxies.png';
 
 // W292.B-style data binding: every figure below derives from pricing.ts.
 const fmtUsd = (n: number): string => `$${n.toLocaleString('en-US')}`;
@@ -31,43 +46,33 @@ const apiLineup = apiLadder.map((t) => `${t.name} ${fmtUsd(t.monthlyUsd!)}/mo`).
 const manualCaps = manualLadder.map((t) => t.concurrent).join(' / ');
 const apiCaps = apiLadder.map((t) => t.concurrent).join(' / ');
 
-// Hero fleet fan — three open iPhone windows, drawn to match the current
-// desktop GUI (phone-framed, LIVE/IDLE, dark+oxblood). Band A: cities
-// spelled out, "own connection", no protocol jargon. example.com pages
-// only (no real brands/URLs). Center phone is accent-lit + LIVE.
-const heroFleet = [
-  {
-    name: 'us-retail-qa',
-    live: true,
-    site: 'market.example.com',
-    wrap: 'z-10 -mr-5 rotate-[-8deg] translate-y-4 scale-[0.9]',
-    center: false,
-  },
-  {
-    name: 'amsterdam-shopper',
-    live: true,
-    site: 'shop.example.com',
-    wrap: 'z-30',
-    center: true,
-  },
-  {
-    name: 'jp-market',
-    live: false,
-    site: '',
-    wrap: 'z-10 -ml-5 rotate-[8deg] translate-y-4 scale-[0.9]',
-    center: false,
-  },
-];
-
-// Cockpit profile grid — the current GUI renders profiles as phone-framed
-// cards (LIVE/IDLE, exit flag + country code). example.com only.
-const cockpitProfiles = [
-  { name: 'amsterdam-shopper', flag: '🇳🇱', cc: 'NL', live: true, center: true },
-  { name: 'us-retail-qa', flag: '🇺🇸', cc: 'US', live: true, center: false },
-  { name: 'jp-market', flag: '🇯🇵', cc: 'JP', live: false, center: false },
-  { name: 'de-pricing', flag: '🇩🇪', cc: 'DE', live: true, center: false },
-  { name: 'uk-checkout', flag: '🇬🇧', cc: 'GB', live: true, center: false },
-];
+// Alt text for the captures — what each screen SHOWS, in plain words
+// (Band A: cities spelled out, no protocol jargon). Kept as constants so the
+// parity pin can read them without parsing markup.
+const HERO_ALT =
+  'The Driftstack desktop app, Profiles view: eight iPhone profile cards, each a ' +
+  'small phone showing its name — amsterdam shopper, tokyo sneakers, london ' +
+  'checkout, paris fashion and more — the iPhone it runs as, whether it is Live ' +
+  'or Idle, the city it browses from (Amsterdam, Tokyo, Zurich, Berlin, London, ' +
+  'Paris), the connection it uses, and a Launch button.';
+const SIMULATOR_ALT =
+  'A floating device window in the Driftstack desktop app: the toolbar names the ' +
+  'profile (amsterdam shopper) and the device (iPhone 17) with a Live badge; ' +
+  'below it the phone screen with the iPhone keyboard open, and beside it a panel ' +
+  'listing the session link, its exit — a residential connection in Amsterdam, ' +
+  'with the time zone to match — and the device identity readouts.';
+const PROFILES_LIST_ALT =
+  'The Driftstack desktop app, Profiles view as a list: eight rows sorted by ' +
+  'name, one per iPhone profile — its name and iPhone model, tags, Live or Idle ' +
+  'status, the exit address and city it browses from, when it was created and ' +
+  'last used, storage used, a note, and Launch, Edit, Duplicate, Trim and ' +
+  'Delete actions; the live row shows Live view and Stop instead.';
+const PROXIES_ALT =
+  'The Driftstack desktop app, Proxies view: the header counts three proxies, ' +
+  'all healthy, above three editors side by side for your own internet exits — ' +
+  'a SOCKS5 proxy with an example host, a WireGuard tunnel showing the server, ' +
+  'address and routes it saved, and an OpenVPN tunnel with its config file in ' +
+  'the box — each with a Test button and Save changes.';
 ---
 
 <BaseLayout
@@ -106,74 +111,28 @@ const cockpitProfiles = [
           </p>
         </div>
 
-        <!-- The fleet: a fan of open iPhone windows — the literal "command a
-             fleet of real iPhones" visual. Drawn to match the current GUI
-             (phone-framed, LIVE/IDLE, dark+oxblood). Band A: cities spelled
-             out, "own connection", example.com pages only. -->
-        <div class="relative">
-          {/* S24 — data-contrast-decorative: the fan is an ILLUSTRATION of
-              the GUI (miniature window chrome, 6–8px faux print, no real
-              links/CTAs inside), exempt from the contrast scanner per
-              WCAG 1.4.3 "incidental" text-in-a-picture. The caption strip
-              BELOW the fan is real copy and stays scanned. */}
-          <div class="flex items-end justify-center pt-2" data-contrast-decorative>
-            {
-              heroFleet.map((p) => (
-                <div class={`relative w-[118px] shrink-0 sm:w-[128px] ${p.wrap}`}>
-                  <div
-                    class={`overflow-hidden rounded-[22px] p-[3px] shadow-ambient-lg ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
-                    style="background: linear-gradient(160deg, #161b24, #0a0e14);"
-                  >
-                    <div class="flex items-center gap-1 rounded-t-[19px] bg-[#1d1e24] px-2 py-1">
-                      <span class="h-1.5 w-1.5 rounded-full bg-[#ff5f57]" />
-                      <span class="h-1.5 w-1.5 rounded-full bg-[#febc2e]" />
-                      <span class="ml-1 truncate font-sans text-[8px] font-semibold text-white/85">
-                        {p.name}
-                      </span>
-                      <span
-                        class={`ml-auto flex shrink-0 items-center gap-0.5 text-[7px] font-bold uppercase tracking-wide ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
-                      >
-                        {p.live ? (
-                          <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
-                        ) : (
-                          <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
-                        )}
-                        {p.live ? 'Live' : 'Idle'}
-                      </span>
-                    </div>
-                    <div class="relative aspect-[9/17] overflow-hidden rounded-[19px] bg-black">
-                      <div class="absolute left-1/2 top-1.5 z-10 h-2 w-8 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
-                      {p.site ? (
-                        <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-5">
-                          <div class="mx-1.5 truncate rounded-sm bg-white px-1 py-0.5 font-mono text-[6px] text-slate-500 ring-1 ring-slate-200">
-                            {p.site} 🔒
-                          </div>
-                          <div class="mx-1.5 mt-1 h-8 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
-                          <div class="mx-1.5 mt-1 grid grid-cols-2 gap-1">
-                            <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200" />
-                            <div class="h-6 rounded-sm bg-white ring-1 ring-slate-200" />
-                          </div>
-                          <div class="mx-1.5 mb-2 mt-auto h-3 rounded-sm bg-slate-900" />
-                        </div>
-                      ) : (
-                        <div class="absolute inset-0 flex items-center justify-center bg-tk-surface">
-                          <span class="font-mono text-[7px] text-tk-ink-3">New Tab</span>
-                        </div>
-                      )}
-                      <div class="absolute bottom-1 left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-white/40" />
-                    </div>
-                  </div>
-                </div>
-              ))
-            }
-          </div>
+        <!-- The fleet: the REAL Profiles view of the desktop app — the
+             literal "command a fleet of real iPhones" visual. A capture of
+             the app's own components (see AppScreen.astro), not a drawing.
+             Band A: the caption strip below it is real copy — cities spelled
+             out, "own connection", no protocol jargon — and stays OUTSIDE
+             the data-contrast-decorative frame so the contrast scanner still
+             reads it. -->
+        <div class="relative animate-fade-up">
+          <AppScreen
+            src={heroScreen}
+            alt={HERO_ALT}
+            priority
+            accent
+            sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
+          />
           <p class="mt-4 text-center font-mono text-[10px] text-tk-ink-3">
-            🇺🇸 New York · 🇳🇱 Amsterdam · 🇯🇵 Tokyo — each on its own connection
+            🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection
           </p>
           <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span><b class="text-tk-ready-text">4 iPhones</b> in your fleet</span>
+            <span><b class="text-tk-ready-text">8 iPhones</b> in your fleet</span>
             <span>each with <b class="text-tk-ink-2">its own identity</b></span>
-            <span>all <b class="text-tk-ready-text">healthy</b></span>
+            <span>each on <b class="text-tk-ready-text">its own connection</b></span>
           </div>
         </div>
       </div>
@@ -298,116 +257,23 @@ const cockpitProfiles = [
     </div>
   </Section>
 
-  <!-- ═══ 5 · TWO WAYS TO DRIVE + the GUI cockpit (Band A headline; the
-       cockpit mockup is preserved verbatim — founder 2026-06-12: show the
-       GUI itself, no live-session implication). ═══ -->
+  <!-- ═══ 5 · TWO WAYS TO DRIVE + the floating device window (Band A
+       headline; founder 2026-06-12: show the GUI itself, no live-session
+       implication — since 2026-09-11 the GUI is shown as a real capture of
+       the simulator window, not a hand-drawn cockpit). ═══ -->
   <Section
     label="Two ways to drive it"
     title="Point and click — or just say what you want."
     lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch."
   >
-      {/* S24 — data-contrast-decorative: the whole cockpit block (window +
-          floating simulator) is an ILLUSTRATION of the desktop GUI — every
-          "control" inside is a span/div, none of it is site UI a visitor
-          must read — so it's exempt from the contrast scanner per WCAG
-          1.4.3 "incidental" text-in-a-picture. The explanatory copy below
-          it stays scanned. */}
-      <div class="mt-10 relative" data-contrast-decorative>
-        <div class="rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg overflow-hidden">
-          <!-- window chrome — matches the current GUI titlebar: brand +
-               · cloud, a Connected pill on the right. -->
-          <div class="flex items-center gap-2 border-b border-tk-border bg-tk-hover/60 px-4 py-2.5">
-            <span class="h-3 w-3 rounded-full bg-[#ff5f57]"></span>
-            <span class="h-3 w-3 rounded-full bg-[#febc2e]"></span>
-            <span class="h-3 w-3 rounded-full bg-[#28c840]"></span>
-            <span class="ml-3 font-sans text-xs font-black italic tracking-tight text-tk-ink">DRIFT<span class="text-tk-accent-text">STACK</span></span>
-            <span class="font-mono text-[10px] text-tk-ink-3">· cloud</span>
-            <span class="ml-auto inline-flex items-center gap-1 rounded-full border border-tk-border px-2 py-0.5 font-mono text-[9px] text-tk-ink-2"><span class="live-dot h-1.5 w-1.5 rounded-full bg-tk-ready"></span>Connected</span>
-          </div>
-          <div class="grid md:grid-cols-[188px_1fr]">
-            <!-- sidebar — the current grouped GUI navigation -->
-            <div class="hidden border-r border-tk-border bg-tk-bg/60 p-3 md:block">
-              <p class="text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Home</p>
-              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">Command center</div>
-              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Browse</p>
-              <div class="mt-1.5 flex items-center justify-between rounded bg-tk-accent/10 px-2 py-1 text-xs font-medium text-tk-ink">Profiles <span class="font-mono text-[9px] text-tk-ink-3">4/10</span></div>
-              <div class="px-2 py-1 text-xs text-tk-ink-2">Proxies</div>
-              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">Automate</p>
-              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">AI Browser Automation</div>
-              <div class="px-2 py-1 text-xs text-tk-ink-2">Saved tasks</div>
-              <p class="mt-3 text-[8px] font-semibold uppercase tracking-widest text-tk-ink-3">History</p>
-              <div class="mt-1.5 px-2 py-1 text-xs text-tk-ink-2">Session log</div>
-              <div class="px-2 py-1 text-xs text-tk-ink-2">Recordings</div>
-            </div>
-            <!-- profiles pane — phone-framed cards (the current GUI look) -->
-            <div class="p-4">
-              <div class="mb-3 flex items-center justify-between">
-                <span class="font-mono text-[11px] text-tk-ink-2"><b class="text-tk-ready-text">4 live</b> · 98% proxy health</span>
-                <span class="rounded-md bg-tk-accent px-2 py-0.5 text-[10px] font-semibold text-tk-accent-ink">+ New profile</span>
-              </div>
-              <div class="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-                {
-                  cockpitProfiles.map((p) => (
-                    <div
-                      class={`overflow-hidden rounded-[16px] p-[3px] ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
-                      style="background: linear-gradient(160deg, #161b24, #0a0e14);"
-                    >
-                      <div class="flex items-center gap-1 rounded-t-[13px] bg-[#1d1e24] px-1.5 py-1">
-                        <span class="truncate font-sans text-[7px] font-semibold text-white/85">{p.name}</span>
-                        <span
-                          class={`ml-auto flex shrink-0 items-center gap-0.5 text-[6px] font-bold uppercase ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
-                        >
-                          {p.live ? (
-                            <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
-                          ) : (
-                            <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
-                          )}
-                          {p.live ? 'Live' : 'Idle'}
-                        </span>
-                      </div>
-                      <div class="relative aspect-[9/13] overflow-hidden rounded-b-[13px] bg-black">
-                        <div class="absolute left-1/2 top-1 z-10 h-1.5 w-6 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
-                        {p.live ? (
-                          <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-3.5">
-                            <div class="mx-1 h-4 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
-                            <div class="mx-1 mt-1 grid grid-cols-2 gap-0.5">
-                              <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
-                              <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
-                            </div>
-                          </div>
-                        ) : (
-                          <div class="absolute inset-0 bg-tk-surface" />
-                        )}
-                        <div class="absolute bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-1 font-mono text-[6px] text-white/80">
-                          {p.flag} {p.cc}
-                        </div>
-                      </div>
-                    </div>
-                  ))
-                }
-                <div class="flex items-center justify-center rounded-[16px] border border-dashed border-tk-border text-center">
-                  <span class="text-[10px] text-tk-ink-3">+ New<br />profile</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <!-- floating simulator window, overlapping the hub -->
-        <div class="pointer-events-none absolute -bottom-6 right-4 hidden w-44 md:block">
-          <div class="overflow-hidden rounded-xl border border-tk-border bg-tk-surface shadow-xl">
-            <div class="flex items-center gap-1 border-b border-tk-border bg-tk-hover/60 px-2 py-1">
-              <span class="h-1.5 w-1.5 rounded-full bg-[#ff5f57]"></span><span class="h-1.5 w-1.5 rounded-full bg-[#febc2e]"></span>
-              <span class="ml-1 font-mono text-[8px] text-tk-ink-3">amsterdam-shopper</span>
-              <span class="live-dot ml-auto h-1.5 w-1.5 rounded-full bg-tk-ready"></span>
-            </div>
-            <div class="bg-gradient-to-b from-white to-slate-100 p-1.5">
-              <div class="rounded-sm bg-white px-1 py-0.5 font-mono text-[7px] text-slate-500 ring-1 ring-slate-200">shop.example.com 🔒</div>
-              <div class="mt-1 h-7 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600"></div>
-              <div class="mt-1 grid grid-cols-2 gap-1"><div class="h-5 rounded-sm bg-white ring-1 ring-slate-200"></div><div class="h-5 rounded-sm bg-white ring-1 ring-slate-200"></div></div>
-              <div class="mt-1 h-2.5 rounded-sm bg-slate-900"></div>
-            </div>
-          </div>
-        </div>
+      {/* The floating device window — the REAL simulator window of the
+          desktop app (a capture of its toolbar + iPhone-shaped stage; see
+          AppScreen.astro), replacing the hand-drawn cockpit + floating
+          simulator. No live-session implication: the harness renders the
+          window with fixture data. The explanatory copy below stays real
+          copy, outside the decorative frame. */}
+      <div class="mt-10">
+        <AppScreen src={simulatorScreen} alt={SIMULATOR_ALT} />
       </div>
 
       <p class="mt-10 max-w-prose text-sm text-tk-ink-2">
@@ -709,13 +575,12 @@ try {
         secure connections (TLS) — with its own cookies, stored data, proxy
         and its own way of moving. Reuse the same profile across sessions and
         its browser identity stays consistent.
-        <div slot="media" class="grid min-h-[180px] place-items-center rounded-card border border-tk-border bg-tk-surface p-8">
-          <div class="relative h-[150px] w-[230px]">
-            <div class="absolute left-0 top-7 w-[160px] -rotate-6 rounded-xl border border-tk-border bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3"><b class="block font-sans text-[11px] font-semibold text-tk-ink">jp-market</b>iPhone 15 Pro · idle<br/>🇯🇵 Tokyo · own connection</div>
-            <div class="absolute left-9 top-3 -rotate-1 w-[160px] rounded-xl border border-tk-border bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3"><b class="block font-sans text-[11px] font-semibold text-tk-ink">us-retail-qa</b>iPhone 17 · running<br/>🇺🇸 New York · own connection</div>
-            <div class="absolute left-[72px] top-0 w-[160px] rounded-xl border border-tk-accent bg-tk-surface p-3 font-mono text-[9.5px] text-tk-ink-3 shadow-glow-accent"><b class="block font-sans text-[11px] font-semibold text-tk-ink">amsterdam-shopper</b>iPhone 17 · agent-driven<br/>🇳🇱 Amsterdam · own connection</div>
-          </div>
-        </div>
+        <AppScreen
+          slot="media"
+          src={profilesListScreen}
+          alt={PROFILES_LIST_ALT}
+          sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
+        />
       </FeatureRow>
       <FeatureRow title="Exit anywhere. Leak nowhere." chip="live" reverse>
         Attach your own exit to each profile — a SOCKS5 proxy, OpenVPN (an
@@ -723,14 +588,12 @@ try {
         traffic that usually slips around a proxy (UDP, WebRTC, QUIC) rides
         the tunnel too. The phone's language and clock follow the exit's
         location, so nothing contradicts the address a website sees.
-        <div slot="media" class="relative min-h-[180px] rounded-card border border-tk-border bg-tk-surface">
-          <svg class="absolute inset-0 h-full w-full" viewBox="0 0 300 200" fill="none" preserveAspectRatio="xMidYMid meet">
-            <path d="M60 100 Q 130 30 215 78" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 4" opacity=".8"/>
-            <path d="M60 100 Q 140 165 248 120" stroke="var(--accent)" stroke-width="1.4" stroke-dasharray="4 4" opacity=".5"/>
-            <circle cx="55" cy="68" r="2.5" fill="var(--ink-3)" opacity=".4"/><circle cx="90" cy="120" r="2.5" fill="var(--ink-3)" opacity=".4"/><circle cx="138" cy="52" r="2.5" fill="var(--ink-3)" opacity=".4"/><circle cx="174" cy="140" r="2.5" fill="var(--ink-3)" opacity=".4"/><circle cx="222" cy="60" r="2.5" fill="var(--ink-3)" opacity=".4"/><circle cx="258" cy="112" r="2.5" fill="var(--ink-3)" opacity=".4"/>
-            <circle cx="60" cy="100" r="4.5" fill="var(--accent)"/><circle cx="215" cy="78" r="4.5" fill="var(--accent)"/><circle cx="248" cy="120" r="4.5" fill="var(--accent)"/>
-          </svg>
-        </div>
+        <AppScreen
+          slot="media"
+          src={proxiesScreen}
+          alt={PROXIES_ALT}
+          sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
+        />
       </FeatureRow>
     </div>
   </Section>

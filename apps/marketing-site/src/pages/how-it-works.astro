@@ -3,30 +3,34 @@
 // non-technical buyers. Band A only: the homepage's three steps,
 // expanded; profile · session · proxy in the same metaphors the
 // pricing page and faq.ts use (saved iPhone identity / browser tabs /
-// your own internet exit); a short desktop-app walkthrough with a
-// COMPACT static mockup reusing the homepage's phone-framed card idiom
-// (no invented UI). Hard rule: NO code blocks on this page — the
-// developer story lives on /use-cases/qa-testing and the docs.
-// The homepage hero's "#how-it-works" anchor CTA is untouched — that
-// stays an in-page anchor; this page is the nav-level entry.
+// your own internet exit); a short desktop-app walkthrough showing the
+// REAL Profiles view (2026-09-11: a capture of the app's own components
+// via AppScreen.astro — the compact hand-drawn fleet strip it replaces had
+// drifted from the app; no invented UI). Hard rule: NO code blocks on
+// this page — the developer story lives on /use-cases/qa-testing and the
+// docs. The homepage hero's "#how-it-works" anchor CTA is untouched —
+// that stays an in-page anchor; this page is the nav-level entry.
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PageHero from '../components/PageHero.astro';
 import Section from '../components/Section.astro';
 import Card from '../components/Card.astro';
 import IconTile from '../components/IconTile.astro';
 import CtaBand from '../components/CtaBand.astro';
+import AppScreen from '../components/AppScreen.astro';
 import AgentPlanDemo from '../components/AgentPlanDemo.astro';
 import FingerprintDemo from '../components/FingerprintDemo.astro';
 import ProxyHealthDemo from '../components/ProxyHealthDemo.astro';
+import profilesGridScreen from '../assets/screens/profiles-grid.png';
 
-// Compact fleet strip — the same phone-framed profile cards the
-// desktop app renders (and the homepage cockpit mockup draws):
-// name bar with Live/Idle, page skeleton, exit flag. example.com only.
-const walkthroughProfiles = [
-  { name: 'amsterdam-shopper', flag: '🇳🇱', cc: 'NL', live: true, center: true },
-  { name: 'us-retail-qa', flag: '🇺🇸', cc: 'US', live: true, center: false },
-  { name: 'jp-market', flag: '🇯🇵', cc: 'JP', live: false, center: false },
-];
+// What the cockpit capture SHOWS, in plain words (Band A: cities spelled
+// out, no protocol jargon). The capture is the source of truth — the alt
+// describes the picture and claims nothing beyond it.
+const COCKPIT_ALT =
+  'The Driftstack desktop app, Profiles view: eight iPhone profile cards, each a ' +
+  'small phone showing its name — amsterdam shopper, tokyo sneakers, london ' +
+  'checkout, paris fashion and more — the iPhone it runs as, whether it is Live ' +
+  'or Idle, the city it browses from (Amsterdam, Tokyo, Zurich, Berlin, London, ' +
+  'Paris) and a Launch button, with the app\'s sidebar on the left.';
 ---
 
 <BaseLayout
@@ -165,57 +169,15 @@ const walkthroughProfiles = [
     lead="The desktop app keeps every iPhone one click away. Here's the shape of it — each profile is a little phone card that tells you at a glance whether it's live, and where in the world it exits."
   >
     <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">
-      <!-- Compact fleet strip — the homepage's phone-framed card idiom,
-           reduced to three cards. Static mockup, no live-session claim.
-           S24 — data-contrast-decorative: illustration of the GUI (6-7px
-           faux print, no real links/CTAs inside), exempt from the contrast
-           scanner per WCAG 1.4.3 "incidental" text-in-a-picture; the real
-           copy beside it stays scanned. -->
-      <div class="flex items-start justify-center gap-3" data-contrast-decorative>
-        {
-          walkthroughProfiles.map((p) => (
-            <div class="w-[104px] shrink-0 sm:w-[118px]">
-              <div
-                class={`overflow-hidden rounded-[16px] p-[3px] ${p.center ? 'ring-1 ring-tk-accent shadow-glow-accent' : 'ring-1 ring-tk-border'}`}
-                style="background: linear-gradient(160deg, #161b24, #0a0e14);"
-              >
-                <div class="flex items-center gap-1 rounded-t-[13px] bg-[#1d1e24] px-1.5 py-1">
-                  <span class="truncate font-sans text-[7px] font-semibold text-white/85">
-                    {p.name}
-                  </span>
-                  <span
-                    class={`ml-auto flex shrink-0 items-center gap-0.5 text-[6px] font-bold uppercase ${p.live ? 'text-tk-ready' : 'text-tk-ink-3'}`}
-                  >
-                    {p.live ? (
-                      <span class="live-dot h-1 w-1 rounded-full bg-tk-ready" />
-                    ) : (
-                      <span class="h-1 w-1 rounded-full border border-tk-ink-3" />
-                    )}
-                    {p.live ? 'Live' : 'Idle'}
-                  </span>
-                </div>
-                <div class="relative aspect-[9/13] overflow-hidden rounded-b-[13px] bg-black">
-                  <div class="absolute left-1/2 top-1 z-10 h-1.5 w-6 -translate-x-1/2 rounded-full bg-black ring-1 ring-white/10" />
-                  {p.live ? (
-                    <div class="absolute inset-0 flex flex-col bg-gradient-to-b from-white to-slate-100 pt-3.5">
-                      <div class="mx-1 h-4 rounded-sm bg-gradient-to-br from-slate-800 to-slate-600" />
-                      <div class="mx-1 mt-1 grid grid-cols-2 gap-0.5">
-                        <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
-                        <div class="h-3 rounded-sm bg-white ring-1 ring-slate-200" />
-                      </div>
-                    </div>
-                  ) : (
-                    <div class="absolute inset-0 bg-tk-surface" />
-                  )}
-                  <div class="absolute bottom-1 left-1/2 z-10 -translate-x-1/2 rounded-full bg-black/60 px-1 font-mono text-[6px] text-white/80">
-                    {p.flag} {p.cc}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        }
-      </div>
+      <!-- The REAL Profiles view — a capture of the desktop app's own
+           components with fixture data (see AppScreen.astro). Static
+           picture, no live-session claim; the real copy beside it stays
+           outside the decorative frame so it is still contrast-scanned. -->
+      <AppScreen
+        src={profilesGridScreen}
+        alt={COCKPIT_ALT}
+        sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
+      />
       <div class="space-y-4 text-base leading-7 text-tk-ink-2">
         <p>
           Profiles live in folders — by client, by region, by job — with tags

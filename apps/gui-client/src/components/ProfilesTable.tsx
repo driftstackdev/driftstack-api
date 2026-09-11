@@ -380,7 +380,18 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             >
               <span aria-hidden="true">{r.flag}</span>
               {r.exitIp !== null ? (
-                <span className="mono truncate text-ink-primary">{r.exitIp}</span>
+                // shrink-0, never truncate: the address is the cell's fact. As a
+                // shrinkable flex item its min-width was 0, so the column sized
+                // itself to the OTHER rows' content and a VPN row — whose wider
+                // "Check VPN" control shares the line — showed "203.0.11…"
+                // (seen in the 2026-09-11 marketing capture). The column now
+                // grows for it; the shell already scrolls sideways when needed.
+                <span
+                  data-component="profile-row-exit-ip"
+                  className="mono shrink-0 text-ink-primary"
+                >
+                  {r.exitIp}
+                </span>
               ) : r.endpointUnresolved !== undefined ? (
                 // (o) — nothing was measured through an endpoint that does not
                 // resolve; the grid's word, the resolver's message as the title.

@@ -1,0 +1,79 @@
+{
+  "generatedBy": "scripts/marketing-screens.mjs",
+  "harness": "apps/gui-client/visual-harness.html?scene=<name>",
+  "frozenNow": "2026-06-15T06:42:00.000Z",
+  "stage": {
+    "width": 1280,
+    "height": 800,
+    "deviceScaleFactor": 2,
+    "profiles-list": {
+      "width": 1800,
+      "height": 800
+    }
+  },
+  "files": [
+    {
+      "scene": "profiles-grid",
+      "png": "profiles-grid.png",
+      "webp": "profiles-grid.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    },
+    {
+      "scene": "profiles-grid-hero",
+      "png": "profiles-grid-hero.png",
+      "webp": "profiles-grid-hero.webp",
+      "width": 2064,
+      "height": 1010,
+      "cssWidth": 1032,
+      "cssHeight": 505
+    },
+    {
+      "scene": "profiles-list",
+      "png": "profiles-list.png",
+      "webp": "profiles-list.webp",
+      "width": 3600,
+      "height": 1600,
+      "cssWidth": 1800,
+      "cssHeight": 800
+    },
+    {
+      "scene": "proxies",
+      "png": "proxies.png",
+      "webp": "proxies.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    },
+    {
+      "scene": "simulator",
+      "png": "simulator.png",
+      "webp": "simulator.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    },
+    {
+      "scene": "billing",
+      "png": "billing.png",
+      "webp": "billing.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    },
+    {
+      "scene": "command-center",
+      "png": "command-center.png",
+      "webp": "command-center.webp",
+      "width": 2560,
+      "height": 1600,
+      "cssWidth": 1280,
+      "cssHeight": 800
+    }
+  ]
+}

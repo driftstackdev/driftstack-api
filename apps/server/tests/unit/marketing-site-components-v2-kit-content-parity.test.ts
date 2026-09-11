@@ -41,10 +41,13 @@ const KIT = [
   'PriceCard.astro',
   'CtaBand.astro',
   'CodeWindow.astro',
+  // 2026-09-11 — the real-capture frame (replaces every hand-drawn GUI
+  // mockup on the site). Joins the kit so the hygiene sweep covers it.
+  'AppScreen.astro',
 ];
 
 describe('W529 marketing-site Fleet v2 component kit content parity', () => {
-  it('all 10 kit components exist at the canonical path', () => {
+  it('all 11 kit components exist at the canonical path', () => {
     for (const name of KIT) {
       expect(existsSync(resolve(COMPONENTS, name)), name).toBe(true);
     }
@@ -157,6 +160,62 @@ describe('W529 marketing-site Fleet v2 component kit content parity', () => {
     // the dead-inline-script trap: an expression container opening right
     // after the script tag ships a literal string instead of running
     expect(body).not.toMatch(/<script is:inline>\s*\{/);
+  });
+
+  // 2026-09-11 — AppScreen is HOW the site shows the desktop app: a real
+  // capture (src/assets/screens/<scene>.png, Playwright shots of the visual
+  // harness rendering the app's own React components with fixture data)
+  // inside an app-window frame. Each arm below pins one line of the
+  // rendering contract, and each has a reason:
+  //   • astro:assets <Picture> with formats=['webp'] + fallbackFormat="png":
+  //     a plain <img src={png}> would ship the 2× PNG (≈1 MB) to every
+  //     visitor; the webp <source> + resized candidates are the whole point.
+  //   • explicit width/height DERIVED from the capture (src.width / scale):
+  //     the slot must reserve its box (no layout shift) and must track the
+  //     capture's real aspect — a hand-typed 1280×800 goes stale the day a
+  //     scene is re-shot at a different size.
+  //   • loading follows `priority`: lazy below the fold, eager + high fetch
+  //     priority for the hero (the LCP element) — a flat loading="lazy" makes
+  //     the hero paint late; a flat "eager" downloads every screen up front.
+  //   • a real alt is REQUIRED (Astro throws without it — the arm pins that
+  //     we pass the caller's, never a hard-coded "" that would silence it).
+  //   • the frame carries data-contrast-decorative (WCAG 1.4.3 incidental
+  //     text-in-a-picture — the capture's own text is part of the picture;
+  //     the real copy sits OUTSIDE the component) and is NOT aria-hidden:
+  //     the app's real chrome is inside the capture, the frame holds nothing
+  //     but the <picture>, and an aria-hidden wrapper would hide the alt.
+  it('AppScreen: astro:assets <Picture> (webp + png fallback) sized from the capture, lazy below the fold / eager+high for the hero, real alt, decorative frame carrying data-contrast-decorative and never aria-hidden', () => {
+    const body = read('AppScreen.astro');
+    expect(body).toMatch(/import \{ Picture \} from 'astro:assets'/);
+    expect(body).toMatch(/import type \{ ImageMetadata \} from 'astro'/);
+    expect(body).toMatch(/formats=\{\['webp'\]\}/);
+    expect(body).toMatch(/fallbackFormat="png"/);
+    // dimensions derive from the capture, never hand-typed
+    expect(body).toMatch(/const width = Math\.round\(src\.width \/ scale\)/);
+    expect(body).toMatch(/const height = Math\.round\(src\.height \/ scale\)/);
+    expect(body).toMatch(/width=\{width\}/);
+    expect(body).toMatch(/height=\{height\}/);
+    expect(body).toMatch(/scale = 2,/);
+    // srcset candidates never exceed the source (sharp would upscale)
+    expect(body).toMatch(/\.filter\(\(w\) => w <= src\.width\)/);
+    expect(body).toMatch(/widths=\{widths\}/);
+    expect(body).toMatch(/sizes=\{sizes\}/);
+    // loading policy follows `priority`
+    expect(body).toMatch(/loading=\{priority \? 'eager' : 'lazy'\}/);
+    expect(body).toMatch(/fetchpriority=\{priority \? 'high' : 'auto'\}/);
+    expect(body).toMatch(/decoding="async"/);
+    expect(body).toMatch(/priority = false,/);
+    // the caller's alt is passed through; never a hard-coded empty alt
+    expect(body).toMatch(/alt=\{alt\}/);
+    expect(body).not.toMatch(/alt=""/);
+    // decorative frame semantics — and no aria-hidden ATTRIBUTE anywhere in
+    // the component (it would take the alt with it). Matched as `aria-hidden=`
+    // so the component's own comment explaining the rule cannot trip it.
+    expect(body).toMatch(/data-contrast-decorative/);
+    expect(body).not.toMatch(/aria-hidden=/);
+    expect(body).toMatch(
+      /'app-screen overflow-hidden rounded-2xl border border-tk-border bg-tk-surface shadow-ambient-lg'/,
+    );
   });
 
   it('kit hygiene: no inline event handlers (onclick=), no hard-coded hex colors, no driftstack.com/.io TLD drift', () => {

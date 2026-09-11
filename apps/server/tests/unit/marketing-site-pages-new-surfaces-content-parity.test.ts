@@ -259,10 +259,30 @@ describe('W599.B /how-it-works (zero-code explainer)', () => {
     expect(body).toMatch(/<Card title="Drive it your way">/);
   });
 
-  it('cockpit walkthrough reuses the phone-framed card idiom (no invented UI): Live/Idle name bar + exit-flag pill, example-profile names from the homepage set', () => {
-    expect(body).toMatch(/name: 'amsterdam-shopper'/);
-    expect(body).toMatch(/\{p\.live \? 'Live' : 'Idle'\}/);
-    expect(body).toMatch(/\{p\.flag\} \{p\.cc\}/);
+  // 2026-09-11 — the cockpit walkthrough shows the REAL Profiles view: a
+  // capture of the desktop app (scene `profiles-grid`) through AppScreen,
+  // lazy (it is far below the fold — the pin asserts no `priority`), with a
+  // real alt naming what the screen shows. The compact hand-drawn fleet
+  // strip (walkthroughProfiles + the Live/Idle name bar + exit-flag pill)
+  // had drifted from the app and must not return. The page stays
+  // zero-code: a capture is not a code block.
+  it('cockpit walkthrough shows the REAL Profiles view (profiles-grid capture via AppScreen, lazy, real alt) — the hand-drawn fleet strip is gone', () => {
+    expect(body).toMatch(/import AppScreen from '\.\.\/components\/AppScreen\.astro'/);
+    expect(body).toMatch(
+      /import profilesGridScreen from '\.\.\/assets\/screens\/profiles-grid\.png'/,
+    );
+    expect(body).toMatch(
+      /<AppScreen\s+src=\{profilesGridScreen\}\s+alt=\{COCKPIT_ALT\}\s+sizes="\(min-width: 768px\) 552px, calc\(100vw - 48px\)"\s*\/>/,
+    );
+    expect(body).toMatch(
+      /const COCKPIT_ALT =\s*\n\s*'The Driftstack desktop app, Profiles view: eight iPhone profile cards/,
+    );
+    expect(body).not.toMatch(/\bpriority\b/);
+    // the hand-drawn strip must not return
+    expect(body).not.toMatch(/walkthroughProfiles/);
+    expect(body).not.toMatch(/name: 'amsterdam-shopper'/);
+    expect(body).not.toMatch(/\{p\.live \? 'Live' : 'Idle'\}/);
+    expect(body).not.toMatch(/\{p\.flag\} \{p\.cc\}/);
   });
 
   it('links the glossary as the where-the-rest-of-the-words-live page', () => {
