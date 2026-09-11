@@ -65,6 +65,7 @@ import { UnsafeProxyHostError } from '../services/account-proxies.js';
 import type {
   ProxyConnectivityProbe,
   ProbeProxyDescriptor,
+  ProbeExitIdentity,
 } from '../services/proxy-connectivity-probe.js';
 import { concurrentSessionLimitFor } from '../services/sessions.js';
 import type { SessionRepo } from '../services/sessions.js';
@@ -1973,6 +1974,42 @@ export function resolveDispatchGeolocation(
   return undefined;
 }
 
+/**
+ * (n) N14 — a VPN row's STORED exit (`exitObserved`) as the identity a mid-session
+ * egress swap hands the node, or `undefined` when there is none the swap may use:
+ *   * no row / never observed → nothing to show the device;
+ *   * `exitSupersededAt` set → the last fleet verdict found the tunnel DOWN
+ *     behind this exit, so it is contradicted: the /test reply refuses to attach
+ *     it and the swap must not either (a false IP/timezone in front of the site
+ *     under test is the one thing this product exists not to produce);
+ *   * `country` null → the wire's exit identity REQUIRES a 2-letter country
+ *     (SessionAssignExitIdentitySchema), so an exit without one cannot cross.
+ * `probed_at` is the observation's own date — never "now" — and null dates
+ * (a row whose observation predates the column) are refused for the same
+ * reason: the device shows the identity as measured, and an undated one is not.
+ */
+function storedVpnExitAsSwapIdentity(
+  row: {
+    exitObserved: {
+      ip: string;
+      country: string | null;
+      timezone: string | null;
+    } | null;
+    exitObservedAt: Date | null;
+    exitSupersededAt: Date | null;
+  } | null,
+): { identity: ProbeExitIdentity; probedAt: string } | undefined {
+  if (row === null || row.exitObserved === null) return undefined;
+  if (row.exitSupersededAt !== null) return undefined;
+  if (row.exitObservedAt === null) return undefined;
+  const { ip, country, timezone } = row.exitObserved;
+  if (country === null || country.length !== 2) return undefined;
+  return {
+    identity: { ip, country, region: null, city: null, timezone },
+    probedAt: row.exitObservedAt.toISOString(),
+  };
+}
+
 export function registerAgentSessionsRoutes(
   app: FastifyInstance,
   deps: AgentSessionsRoutesDeps,
@@ -3559,27 +3596,58 @@ export function registerAgentSessionsRoutes(
           formErrors: [],
         });
       }
+      const vpnScheme =
+        'type' in resolved && (resolved.type === 'openvpn' || resolved.type === 'wireguard')
+          ? resolved.type
+          : null;
+      // (n) N14 — the exit-identity CACHE is warmed by the pre-launch probe, and
+      // that probe returns before dialling for a VPN wire (`runProxyPrelaunchGate`:
+      // the control plane cannot bring a tunnel up), so for an openvpn/wireguard
+      // proxy the cache is NEVER warm and the swap could only ever answer
+      // "unavailable — run /test first" with an instruction /test cannot satisfy.
+      // A VPN row's exit lives on the ROW instead: `exitObserved`, written by the
+      // fleet-vantage /test ('probe') and by a live session's capability report
+      // ('session'). Read it here as the swap's identity. A socks5 row keeps the
+      // cache as its only source — its exit is probed on every launch.
       const hit = await exitIdentityCache?.get(rec.accountId, proxyId);
-      if (hit === undefined) {
+      const swapIdentity =
+        hit !== undefined
+          ? { identity: hit.identity, probedAt: hit.probedAt }
+          : vpnScheme !== null
+            ? storedVpnExitAsSwapIdentity(
+                await accountProxiesService.findOwned(proxyId, rec.accountId),
+              )
+            : undefined;
+      if (swapIdentity === undefined) {
+        // Scheme-aware: the instruction must be one THIS scheme can follow. For a
+        // VPN row that is the fleet-vantage Check (or a session through it); the
+        // plain /test the socks5 sentence names measures nothing about a tunnel.
+        const schemeName = vpnScheme === 'wireguard' ? 'WireGuard' : 'OpenVPN';
         return {
           status: 'unavailable' as const,
           reason:
-            'no probed exit identity for this proxy — run POST /v1/account/me/proxies/:id/test first',
+            vpnScheme === null
+              ? 'no probed exit identity for this proxy — run POST /v1/account/me/proxies/:id/test first'
+              : `no usable exit has been observed for this ${schemeName} tunnel — run POST /v1/account/me/proxies/:id/test?vantage=fleet (Check) or launch a session through it first`,
         };
       }
       const exitIdentity = {
-        ip: hit.identity.ip,
-        country: hit.identity.country,
-        region: hit.identity.region,
-        city: hit.identity.city,
-        timezone: hit.identity.timezone,
-        ...(typeof hit.identity.lat === 'number' ? { lat: hit.identity.lat } : {}),
-        ...(typeof hit.identity.lon === 'number' ? { lon: hit.identity.lon } : {}),
+        ip: swapIdentity.identity.ip,
+        country: swapIdentity.identity.country,
+        region: swapIdentity.identity.region,
+        city: swapIdentity.identity.city,
+        timezone: swapIdentity.identity.timezone,
+        ...(typeof swapIdentity.identity.lat === 'number'
+          ? { lat: swapIdentity.identity.lat }
+          : {}),
+        ...(typeof swapIdentity.identity.lon === 'number'
+          ? { lon: swapIdentity.identity.lon }
+          : {}),
         quic_ok:
-          'type' in resolved && (resolved.type === 'openvpn' || resolved.type === 'wireguard')
+          vpnScheme !== null
             ? true
             : (resolved as { udp_capable?: boolean | null }).udp_capable === true,
-        probed_at: hit.probedAt,
+        probed_at: swapIdentity.probedAt,
       };
       const applyPoint = parsed.data.apply_point ?? 'next_navigation';
       const releaseRelay = reserveRelaySlot(rec.accountId);

@@ -1164,6 +1164,17 @@ function useStatusClock(timeZone?: string): string {
         schedule();
       }, msToNextMinute + 50);
     };
+    // (n) N13 — REPAINT on a zone change, before re-arming. `time` is seeded
+    // once by useState and this effect only re-armed the boundary timer, so a
+    // zone that arrives AFTER mount changed nothing on screen until the next
+    // :00 rollover — up to 60s of the iPhone status bar showing the operator's
+    // Mac time while the drawer and egress strip already read the exit's zone.
+    // A VPN launch is exactly that case: it hands `tz: ''` whenever no fresh
+    // exit is cached (this Mac cannot probe through the tunnel), so the zone
+    // arrives mid-session on the capability report's `exit_timezone`. A SOCKS5
+    // session has its zone at mount and never took this path, which is why it
+    // went unseen.
+    setTime(formatStatusTime(new Date(), timeZone));
     schedule();
     return () => window.clearTimeout(id);
   }, [timeZone]);

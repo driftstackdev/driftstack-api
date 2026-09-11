@@ -2513,9 +2513,17 @@ function buildRegistry(): OpenAPIRegistry {
         measured_from: z.literal('fleet'),
         node_id: z.string(),
         // (d) 2026-09-10 — present when the node could NOT RUN the probe
-        // (`node_busy`: another tunnel/test holds it; `node_error`: bad config,
-        // handshake, timeout). Nothing ran, so `ok:false` here is not a tunnel
-        // verdict; a client branches on this, never on `reason`.
+        // (`node_busy`: another tunnel/test holds it; `node_error`: a refused
+        // config, the node's own VPN tool missing, a post-tunnel exit check that
+        // did not finish, or a token this build does not know). Nothing ran, so
+        // `ok:false` here is not a tunnel verdict; a client branches on this,
+        // never on `reason`.
+        // ⛔ (n) N15 — a FAILED VPN BRING-UP is NOT one of these. When the node
+        // answers `handshake_failed` / `endpoint_unreachable` /
+        // `egress_leak_detected` it DID try the tunnel and the tunnel did not come
+        // up, so `not_run` is ABSENT and `ok:false` is a real verdict (and the
+        // row's `exit_superseded_at` is stamped). Reporting those as `node_error`
+        // left a broken VPN row on its last green verdict forever.
         not_run: ProxyTestNotRunOpenApi.optional(),
         // (e) — the per-leg measurements are ABSENT on a `could_not_run` result (node_busy,
         // bad_config, timeout): nothing ran, so nothing is a fact except `reason`.

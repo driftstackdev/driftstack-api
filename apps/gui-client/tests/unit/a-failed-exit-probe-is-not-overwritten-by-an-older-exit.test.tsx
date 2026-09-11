@@ -14,10 +14,11 @@
 // The cache arms use the real module over a store double; the grid arm renders
 // ProxiesView over that same real cache so the emit path is the one under test.
 
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type * as ProxiesModule from '../../src/lib/proxies';
+import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type { SweepDeps } from '../../src/lib/proxy-probe-sweeper';
 import {
   __resetSweepLatchForTests,
@@ -144,6 +145,16 @@ vi.mock('../../src/lib/agent-session-control', () => ({
 vi.mock('../../src/lib/open-simulator', () => ({
   openSimulatorWindow: vi.fn(() => Promise.resolve({ opened: true })),
 }));
+// (n) N-M2 — the launch arms need a key + a stored row (a launch with neither
+// aborts at ensureServerProxy before it ever reaches the exit identity). Partial
+// mock: only the three network calls are stubbed; every arm above runs with
+// `apiKey: null` and never reaches them.
+vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
+  ...(await importOriginal<typeof AccountProxiesModule>()),
+  createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_1' })),
+  updateProxy: vi.fn((_b: string, _k: string, id: string) => Promise.resolve({ id })),
+  testAccountProxy: vi.fn(() => Promise.reject(new Error('not under test here'))),
+}));
 function profile() {
   return {
     id: 'prof_1',
@@ -175,7 +186,12 @@ const settingsStub = {
       list: () => Promise.resolve({ data: [] }),
     },
   },
-  settings: { apiKey: null, baseUrl: 'http://localhost:3000', startUrl: 'https://driftstack.io' },
+  settings: {
+    // (n) N-M2 — widened so the two launch arms can hand a key in and back.
+    apiKey: null as string | null,
+    baseUrl: 'http://localhost:3000',
+    startUrl: 'https://driftstack.io',
+  },
   accountMe: {
     tier: 'solo_manual',
     concurrent_session_cap: 1,
@@ -435,9 +451,24 @@ describe('#16 — the profile card gates the VPN banner and notice on `vpn`, as 
 // (m) M3 — the #14 write on the CARD path. ProfilesView.handleTestProxy has its
 // own copy of the decision (`clearExitResult` on a null exit probe) and only the
 // grid's copy was pinned. The card reads the raw cache entry (`probe.exitIp`),
-// so its honest state after a failed exit probe is the exit line reading
-// "no exit IP" beside the probe's own "checked" — never the exit the PREVIOUS
-// Test measured, which `saveProbeResult` carries across the capability write.
+// so its honest state after a failed exit probe is the exit line reading the
+// V-857 unavailable sentence beside the probe's own "checked" — never the exit
+// the PREVIOUS Test measured, which `saveProbeResult` carries across the
+// capability write.
+//
+// (n) N-M1 — the words MOVED. The card used to say "no exit IP" here, which is
+// the same thing it says for a proxy nobody ever exit-probed: two different
+// facts, one dead-end sentence, while the grid distinguished them for the same
+// cache entry at the same moment. The card now renders the grid's own
+// `exit geo unavailable — the probe did not complete`, driven by the new
+// `exitProbeFailed` prop the parent derives from `exitResults[id] === null`.
+// MUTATION: drop that prop at the ProfilePhoneCard call site (or revert the
+// card's branch to `p.probed ? 'no exit IP' : 'run Test'`) → the CRITICAL arm
+// reds on the sentence and the NEVER-PROBED control below stays green, which is
+// what makes the arm a statement about the third state rather than about the
+// cell.
+const EXIT_GEO_UNAVAILABLE = 'exit geo unavailable — the probe did not complete';
+
 describe('(m) M3 — the card’s Test whose exit probe fails reads the honest unavailable state', () => {
   async function clickCardTest(): Promise<void> {
     fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
@@ -447,14 +478,17 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
   // MUTATION: drop the `clearExitResult` call in ProfilesView.handleTestProxy →
   // the previous 203.0.113.7 (carried by saveProbeResult) stays on the card
   // beside a Test that measured no exit → red.
-  it('CRITICAL card Test → failed exit probe → the old exit is gone, the line reads "no exit IP", and a later emit does not bring it back', async () => {
+  it('CRITICAL card Test → failed exit probe → the old exit is gone, the line reads the grid’s "probe did not complete", and a later emit does not bring it back', async () => {
     seedCache({ socks1: healthyWithExit(NOW - 1000) });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
     await clickCardTest();
     await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.queryByText('203.0.113.7')).toBeNull());
-    expect(screen.getByText('no exit IP')).toBeInTheDocument();
+    // (n) N-M1 — the PROBE's outcome, in the grid's words; never the dead end
+    // that a never-tested proxy shows.
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    expect(screen.queryByText('no exit IP')).toBeNull();
     await waitFor(async () =>
       expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeTypeOf('number'),
     );
@@ -464,7 +498,19 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
       await cache.saveProbeResult('socks1', OK, Date.now());
     });
     expect(screen.queryByText('203.0.113.7')).toBeNull();
-    expect(screen.getByText('no exit IP')).toBeInTheDocument();
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    cleanup();
+  });
+
+  // (n) N-M1's discriminator. Without it, "the card distinguishes the two
+  // states" and "the card renames the cell for every row with no exit" look
+  // identical: this entry is usable, probed, and carries NO failure stamp, so
+  // the honest words are still the never-probed ones.
+  it('CONTROL — a probed proxy whose exit was NEVER probed keeps "no exit IP" (the two states are told apart, not renamed)', async () => {
+    seedCache({ socks1: { result: OK, at: NOW - 60_000 } });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('no exit IP')).toBeInTheDocument();
+    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE)).toBeNull();
     cleanup();
   });
 
@@ -542,5 +588,106 @@ describe('(m) M4 — ProxiesView.handleTest runs its probe inside withProxyProbe
     const report = await runSweep(sweepDeps(probedBySweep));
     expect(report.skippedBusy).toEqual([]);
     expect(probedBySweep).toEqual(['socks1']);
+  });
+});
+
+// (n) N-M2 — the same #14 rule on the LAUNCH path, which had its own copy of the
+// decision and no clear-on-failure at all.
+//
+// The single-profile launch pre-flight re-tests the proxy and persists the
+// verdict with `saveProbeResult` (ProfilesView.tsx:2941). That writer PRESERVES
+// the prior exit-geo across a capability write — by design, so a re-test does
+// not erase a still-valid exit. The launch then asks `freshExitIdentity` for a
+// current exit, and when that probe measured NOTHING the function simply
+// returned the cached identity: the old IP, country, city and zone stayed in the
+// cache next to a verdict stamped seconds ago, and both surfaces presented
+// yesterday's exit as this launch's measurement.
+//
+// MUTATION: delete the `setProbeCache(await clearExitResult(px.id));` line in
+// freshExitIdentity → `exitProbeFailedAt` is never written, 203.0.113.7 is still
+// in the cache and still on the card after the launch → the CRITICAL arm reds.
+// The success arm is the vacuity control: it must stay green either way, so the
+// red is about the FAILED probe and not about the launch writing a cache at all.
+describe('(n) N-M2 — a launch whose fresh exit probe measures nothing does not leave the OLD exit as current', () => {
+  const LIVEKIT = {
+    ws_url: 'ws://localhost:7880',
+    room: 'agt_room',
+    token: 'tok',
+    participant_identity: 'customer-acc',
+    expires_at: '2026-06-08T12:00:00Z',
+  };
+  const THIRTY_ONE_MIN = 31 * 60 * 1000;
+  /** A usable SOCKS5 row whose exit identity is PAST the TTL, so the launch
+   *  re-probes it (a fresh one is handed over as cached and never probed). */
+  function staleExitEntry(): Record<string, unknown> {
+    return {
+      socks1: {
+        result: OK,
+        at: Date.now() - 60_000,
+        exitIp: '203.0.113.7',
+        exitCountry: 'US',
+        exitCity: 'Ashburn',
+        exitTimezone: 'America/New_York',
+        exitAt: Date.now() - THIRTY_ONE_MIN,
+      },
+    };
+  }
+  /** The stored row: `serverId` present so ensureServerProxy PUTs rather than
+   *  creating, and an API key so the launch is not aborted before the exit step. */
+  const STORED_SOCKS5: ProxyConfig = { ...SOCKS5, serverId: 'aprx_1' };
+  async function launch(): Promise<void> {
+    settingsStub.settings.apiKey = 'ds_test_x';
+    const create = settingsStub.client.agentSessions.create as unknown as ReturnType<typeof vi.fn>;
+    create.mockReset();
+    create.mockResolvedValue({ id: 'agt_1', livekit: LIVEKIT });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
+  }
+  // Every OTHER arm in this file runs keyless on purpose (it isolates the native
+  // probe path), so hand the key back the moment these two are done.
+  afterEach(() => {
+    settingsStub.settings.apiKey = null;
+  });
+
+  it('CRITICAL launch → the capability re-test carries the old exit across → the fresh probe measures nothing → the cache holds the honest unavailable state and the card says so', async () => {
+    stored = [STORED_SOCKS5];
+    seedCache(staleExitEntry());
+    probeProxyExit.mockResolvedValue(null);
+    await launch();
+    expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
+    await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
+    await waitFor(async () =>
+      expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeTypeOf('number'),
+    );
+    const entry = (await cache.loadProbeCache()).socks1;
+    expect(entry?.exitIp).toBeUndefined();
+    expect(entry?.exitCountry).toBeUndefined();
+    expect(entry?.exitTimezone).toBeUndefined();
+    // The capability verdict this launch measured is KEPT — only the exit the
+    // launch could not confirm is gone.
+    expect(entry?.result.reachable).toBe(true);
+    await waitFor(() => expect(screen.queryByText('203.0.113.7')).toBeNull());
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    cleanup();
+  });
+
+  it('VACUITY CONTROL — a launch whose fresh exit probe SUCCEEDS writes the new exit and stamps no failure', async () => {
+    stored = [STORED_SOCKS5];
+    seedCache(staleExitEntry());
+    probeProxyExit.mockResolvedValue({
+      ip: '198.51.100.9',
+      country: 'NL',
+      city: null,
+      region: null,
+      timezone: 'Europe/Amsterdam',
+    });
+    await launch();
+    await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
+    await waitFor(async () =>
+      expect((await cache.loadProbeCache()).socks1?.exitIp).toBe('198.51.100.9'),
+    );
+    expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeUndefined();
+    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE)).toBeNull();
+    cleanup();
   });
 });

@@ -21,6 +21,12 @@
 
 import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
+import {
+  CHECK_VPN_ACTION,
+  CHECK_VPN_TITLE,
+  VPN_NO_EXIT_YET,
+  VPN_NO_EXIT_YET_TITLE,
+} from '../lib/proxy-check-copy';
 
 export type ProfilesTableSortKey = 'name' | 'status' | 'country' | 'created' | 'lastUsed';
 
@@ -67,6 +73,22 @@ export interface ProfileTableRow {
   testDisabled: boolean;
   launchDisabled: boolean;
   launchDisabledReason?: string;
+  /** (n) N18 — the bound proxy is an OpenVPN/WireGuard TUNNEL. The grid card has
+   *  carried this since (h); the list row did not, so the SAME profile showed
+   *  'Test proxy — reachability, latency, exit IP' here and 'Check VPN' there,
+   *  'no exit IP' here and 'no exit measured yet — run Check VPN' there, and a
+   *  tunnel the fleet could not bring up rendered exactly like an untested row.
+   *  The click was already routed correctly (ProfilesView onTest → resolve +
+   *  fleet); only the rendering diverged. Same four props the card takes, from
+   *  the same parent state, so the two surfaces cannot drift again. */
+  vpn?: boolean;
+  /** The fleet's sentence for a tunnel that did not come up (the red banner). */
+  vpnFailure?: string;
+  /** The fleet's sentence for a check that did not RUN (muted; nothing failed). */
+  vpnNotice?: string;
+  /** When the fleet last answered for this row — for a VPN row that is the
+   *  fleet's own stamp, never the DNS pre-flight that precedes a refused test. */
+  checkedAtIso?: string | null;
 }
 
 export interface ProfilesTableProps {
@@ -352,6 +374,12 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               <span aria-hidden="true">{r.flag}</span>
               {r.exitIp !== null ? (
                 <span className="mono truncate text-ink-primary">{r.exitIp}</span>
+              ) : r.vpn === true ? (
+                // (n) N18 — a VPN row's empty exit says WHY and names the check,
+                // exactly as the card and the Proxies grid do (one constant).
+                <span className="italic text-ink-muted" title={VPN_NO_EXIT_YET_TITLE}>
+                  {VPN_NO_EXIT_YET}
+                </span>
               ) : (
                 <span className="text-ink-muted">{r.probed ? 'no exit IP' : 'untested'}</span>
               )}
@@ -360,11 +388,46 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 className="ml-1 shrink-0 rounded bg-surface-elevated px-1.5 py-0.5 text-[10px] font-medium text-ink-secondary hover:bg-surface-divider hover:text-ink-primary disabled:opacity-50"
                 onClick={stop(() => p.onTest(r.id))}
                 disabled={r.testDisabled}
-                title="Test proxy — reachability, latency, exit IP"
+                // (n) N18 — a tunnel's check is not a SOCKS5 reachability probe,
+                // and it has ONE name on every surface (proxy-check-copy).
+                title={
+                  r.vpn === true ? CHECK_VPN_TITLE : 'Test proxy — reachability, latency, exit IP'
+                }
               >
-                {r.testing ? '…' : 'Test'}
+                {r.testing ? '…' : r.vpn === true ? CHECK_VPN_ACTION : 'Test'}
               </button>
             </div>
+            {/* (n) N18 — the fleet's verdict for this tunnel, on the row that
+                shows it. A failure is the red sentence the card banners; a
+                not-run is muted, because nothing failed — it was not tested. */}
+            {r.vpn === true && r.vpnFailure !== undefined && (
+              <div
+                data-component="profile-row-vpn-failure"
+                className="text-[10px] font-medium text-status-error"
+                title={r.vpnFailure}
+              >
+                VPN tunnel down — {r.vpnFailure}
+              </div>
+            )}
+            {r.vpn === true && r.vpnNotice !== undefined && (
+              <div
+                data-component="profile-row-vpn-notice"
+                className="text-[10px] text-ink-muted"
+                title={r.vpnNotice}
+              >
+                {r.vpnNotice}
+              </div>
+            )}
+            {r.vpn === true && r.checkedAtIso != null && r.checkedAtIso !== '' && (
+              <div
+                data-component="profile-row-checked-at"
+                data-checked-at={r.checkedAtIso}
+                className="flex items-center gap-1 text-[10px] text-ink-muted"
+              >
+                <span className="uppercase tracking-wide">checked</span>
+                <RelativeTime iso={r.checkedAtIso} tooltipPrefix="Checked" />
+              </div>
+            )}
             <div className="flex items-center gap-2 text-[10px] text-ink-muted">
               {r.locationLabel !== null && <span className="truncate">{r.locationLabel}</span>}
               {r.latencyMs !== null && (
@@ -387,7 +450,18 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       </td>
       {/* UDP (collapses below md) */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
-        {r.udp === 'unknown' ? (
+        {r.vpn === true ? (
+          // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
+          // it. The card's chip has said so since (h); the list showed a dash,
+          // which reads as "not measured" for something that is not measurable.
+          <span
+            data-udp="tunnel"
+            className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-muted"
+            title={`UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`}
+          >
+            UDP via tunnel
+          </span>
+        ) : r.udp === 'unknown' ? (
           <span className="text-ink-muted">–</span>
         ) : (
           <span

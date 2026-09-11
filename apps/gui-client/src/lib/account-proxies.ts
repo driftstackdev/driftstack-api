@@ -544,6 +544,23 @@ function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
  *  off here and reported as a failure the server never saw. */
 const PROXY_TEST_DEADLINE_MS = 30_000;
 
+/** A `vantage=fleet` test on a VPN row is a different order of wait, and this
+ *  deadline is the CLIENT half of the same rule the constant above states: sit
+ *  above the server's own wait, so the server's honest answer arrives instead of
+ *  being cut off here and shown as a failure nobody measured.
+ *
+ *  The node brings a tunnel up with a 40s init budget plus a 10s SOCKS-listen
+ *  budget — 50s worst case, and ~40s for the case that matters most, an endpoint
+ *  that never answers. The control plane waits for the node's own reported budget
+ *  plus headroom (60s when a node reports none). At 30s the desktop cut FIRST, so
+ *  a WireGuard/OpenVPN endpoint that was merely slow, or honestly unreachable,
+ *  surfaced as "the server did not answer" — the client inventing a verdict while
+ *  the measurement it asked for was still running.
+ *
+ *  ⛔ Keep this ABOVE the control plane's fleet wait. If the server's wait ever
+ *  exceeds this, the bug returns in full and looks exactly like a server fault. */
+const FLEET_PROXY_TEST_DEADLINE_MS = 90_000;
+
 /** T-1 — a fleet `ok:false` frame carries no `reason` (the node reports the
  *  measurement, not prose), so the client says what happened in plain words. */
 const FLEET_TEST_FAILED_REASON =
@@ -616,11 +633,12 @@ export async function testAccountProxy(
   id: string,
   opts?: { vantage?: 'cp' | 'fleet' },
 ): Promise<AccountProxyTestResult> {
-  const query = opts?.vantage === 'fleet' ? '?vantage=fleet' : '';
+  const fleet = opts?.vantage === 'fleet';
+  const query = fleet ? '?vantage=fleet' : '';
   const res = await fetchWithDeadline(
     `${base(baseUrl)}/${encodeURIComponent(id)}/test${query}`,
     { method: 'POST', headers: authHeaders(apiKey) },
-    PROXY_TEST_DEADLINE_MS,
+    fleet ? FLEET_PROXY_TEST_DEADLINE_MS : PROXY_TEST_DEADLINE_MS,
   );
   if (!res.ok) {
     const status = res.status;

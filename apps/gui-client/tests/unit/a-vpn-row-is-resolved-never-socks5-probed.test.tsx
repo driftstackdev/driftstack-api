@@ -128,7 +128,14 @@ const { state } = vi.hoisted(() => ({
   // account); the (l) #1 card arms flip it.
   // `vpn1Scheme` — (m) M5: the same row (same id/host/port) edited to SOCKS5
   // and back, as a customer's scheme-only edit does; a Refresh re-lists it.
-  state: { boundProxyId: 'vpn1', vpnStored: true, vpn1Scheme: 'openvpn' },
+  // (n) N11/N20: it also selects WHICH VPN fixture `vpn1` is — 'openvpn' or
+  // 'wireguard' — so the parametrised describes at the foot of this file drive
+  // the same surfaces with a real WireGuard row.
+  state: {
+    boundProxyId: 'vpn1',
+    vpnStored: true,
+    vpn1Scheme: 'openvpn',
+  },
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -171,6 +178,31 @@ const VPN_PROXY: ProxyConfig = {
   openvpn: { config_blob: 'client\nremote vpn.example.com 1194\n' },
 };
 
+// (n) N11 / N20 — the WireGuard twin of VPN_PROXY: the SAME row id, so every
+// cache seed, binding and notice map in this file addresses it unchanged, with
+// WireGuard's own endpoint (the `Endpoint` line's host:port) and config block.
+// Its display host/port differ on purpose — an arm that asserts the resolve
+// target has to read the fixture's own address, which is what catches a code
+// path that hardcodes the OpenVPN one.
+const WG_PROXY: ProxyConfig = {
+  id: 'vpn1',
+  label: 'wg-london',
+  host: 'wg.example.com',
+  port: 51820,
+  username: null,
+  password: null,
+  createdAt: '2026-06-08T00:00:00Z',
+  scheme: 'wireguard',
+  serverId: 'aprx_vpn',
+  wireguard: {
+    private_key: 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+    peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+    endpoint: 'wg.example.com:51820',
+    allowed_ips: '0.0.0.0/0',
+    address: '10.7.0.2/32',
+  },
+};
+
 const SOCKS5_PROXY: ProxyConfig = {
   id: 'p1',
   label: 'P1',
@@ -196,9 +228,12 @@ const { testProxy, resolveEndpoint, probeProxyExit } = vi.hoisted(() => ({
 vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof ProxiesModule>()),
   listProxies: () => {
-    const { serverId: _stored, ...unstoredVpn } = VPN_PROXY;
-    const vpn1 = state.vpnStored ? VPN_PROXY : unstoredVpn;
-    const { openvpn: _cfg, ...asSocks5 } = { ...vpn1, scheme: 'socks5' as const };
+    // (n) N11/N20 — 'socks5' means "the VPN row edited to SOCKS5" (M5), so the
+    // BASE fixture for that case is still the OpenVPN one, as before.
+    const base = state.vpn1Scheme === 'wireguard' ? WG_PROXY : VPN_PROXY;
+    const { serverId: _stored, ...unstoredVpn } = base;
+    const vpn1 = state.vpnStored ? base : unstoredVpn;
+    const { openvpn: _cfg, wireguard: _wg, ...asSocks5 } = { ...vpn1, scheme: 'socks5' as const };
     return Promise.resolve([state.vpn1Scheme === 'socks5' ? asSocks5 : vpn1, SOCKS5_PROXY]);
   },
   addProxy: vi.fn(),
@@ -1281,3 +1316,182 @@ describe('(m) M5 — a SOCKS5 Test clears a stale VPN notice on the card', () =>
     expect(testProxy).not.toHaveBeenCalled();
   });
 });
+
+// (n) N11 + N20 — every VPN arm above runs on an `openvpn` fixture; `wireguard`
+// appeared in this file exactly once, in the header comment. The code those arms
+// cover routes on `isVpnScheme` (proxy-scheme.ts:32-34) TODAY, so a later edit
+// that narrows any one of those sites to `scheme === 'openvpn'` — the exact
+// pattern the L4 review found — sends a WireGuard row back down the SOCKS5
+// handshake, "unreachable" on every launch, with this suite fully green.
+//
+// So the five load-bearing surfaces are re-run here under `describe.each` over
+// BOTH tunnel schemes: the launch pre-flight, the card's Check VPN, the fleet
+// leg after the resolve, the card's fleet FAILURE banner and its not-run notice,
+// plus the UDP chip and — N20 — the unresolved-endpoint confirm, whose WireGuard
+// sentence was pinned only as a pure-function call (a-vpn-verdict-is-not-a-
+// socks5-verdict.test.ts:110-111) and never through the ProfilesView confirm.
+//
+// The 'openvpn' leg is the INSTRUMENT CONTROL: these arms are known-green for
+// the scheme the file already covered, so a red on the 'wireguard' leg alone is
+// a statement about the scheme, not about the harness.
+const VPN_SCHEME_CASES = [
+  {
+    scheme: 'openvpn' as const,
+    host: 'vpn.example.com',
+    port: 1194,
+    // proxy-scheme.ts:50-53 — each scheme names the line in ITS OWN file.
+    confirmLine: 'remote',
+  },
+  {
+    scheme: 'wireguard' as const,
+    host: 'wg.example.com',
+    port: 51820,
+    confirmLine: 'Endpoint',
+  },
+];
+
+describe.each(VPN_SCHEME_CASES)(
+  '(n) N11/N20 — the VPN surfaces on a $scheme row',
+  ({ scheme, host, port, confirmLine }) => {
+    beforeEach(() => {
+      state.vpn1Scheme = scheme;
+    });
+
+    // MUTATION: narrow the launch gate from `isVpnScheme(proxy.scheme)` to
+    // `proxy.scheme === 'openvpn'` → the WireGuard leg takes the SOCKS5
+    // pre-flight, `testProxy` is called and `resolveEndpoint` is not → red on
+    // the wireguard leg, green on the openvpn one.
+    it('CRITICAL a launch resolves the endpoint and NEVER invokes the SOCKS5 probe', async () => {
+      await launch();
+      await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+      expect(resolveEndpoint).toHaveBeenCalledWith(host, port);
+      expect(
+        testProxy,
+        'a SOCKS5 greeting sent to a tunnel endpoint can only ever answer "unreachable"',
+      ).not.toHaveBeenCalled();
+      expect(confirmMock).not.toHaveBeenCalled();
+    });
+
+    // N20 — the confirm sentence, through the view rather than through the pure
+    // helper. MUTATION: drop the scheme argument at ProfilesView.tsx:2969
+    // (`endpointUnresolvedCopy('openvpn', …)` or the bare host form) → the
+    // WireGuard row is told to check a `remote` line its file does not have → red.
+    it("CRITICAL an endpoint that does not resolve confirms with THIS scheme's config line, and none of the SOCKS5 ladder", async () => {
+      resolveEndpoint.mockResolvedValue({ resolved: false, ip: '', message: 'DNS lookup failed' });
+      await launch();
+      await waitFor(() => expect(confirmMock).toHaveBeenCalledTimes(1));
+      const text = confirmMock.mock.calls[0]?.[0] ?? '';
+      expect(text).toBe(
+        `The VPN endpoint ${host} could not be resolved. Check the config's ${confirmLine} line. Launch anyway?`,
+      );
+      expect(text).not.toMatch(/unreachable|credentials|route traffic/i);
+      await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+      expect((agentCreate.mock.calls[0]?.[0] as Record<string, unknown>).skip_proxy_probe).toBe(
+        true,
+      );
+    });
+
+    // MUTATION: narrow handleTestProxy's fork to `=== 'openvpn'` → the card's
+    // Check VPN on a WireGuard row runs `testProxy` → red.
+    it('CRITICAL the card’s Check VPN resolves the endpoint and never runs proxy_test', async () => {
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await clickCheckVpn();
+      await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith(host, port));
+      expect(testProxy).not.toHaveBeenCalled();
+      await waitFor(() => expect(storedProbe('vpn1')?.endpoint).toBeDefined());
+    });
+
+    // MUTATION: narrow runFleetTestForRow's scheme gate → the WireGuard row's
+    // tunnel is never brought up on a fleet Mac → red.
+    it('CRITICAL the card’s Check VPN asks the FLEET after the resolve (vantage: fleet, the stored row)', async () => {
+      const AccountProxies = await import('../../src/lib/account-proxies');
+      vi.mocked(AccountProxies.testAccountProxy).mockClear();
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await clickCheckVpn();
+      await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith(host, port));
+      await waitFor(() =>
+        expect(AccountProxies.testAccountProxy).toHaveBeenCalledWith(
+          'http://localhost:3000',
+          'ds_test_x',
+          'aprx_vpn',
+          { vantage: 'fleet' },
+        ),
+      );
+      expect(testProxy).not.toHaveBeenCalled();
+    });
+
+    // MUTATION: revert the launch gate to "run the fleet test first" → red for
+    // both legs; kept per-scheme because the gate is the same `isVpnScheme`.
+    it('CRITICAL a LAUNCH never calls testAccountProxy (one tunnel, one connection)', async () => {
+      const AccountProxies = await import('../../src/lib/account-proxies');
+      vi.mocked(AccountProxies.testAccountProxy).mockClear();
+      await launch();
+      await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith(host, port));
+      await new Promise((r) => setTimeout(r, 30));
+      expect(AccountProxies.testAccountProxy).not.toHaveBeenCalled();
+    });
+
+    // MUTATION: gate the card's banner on `scheme === 'openvpn'` instead of the
+    // `vpn` prop the parent derives from isVpnScheme → the WireGuard tunnel that
+    // the fleet could not bring up renders as an untested row → red.
+    it('CRITICAL a fleet FAILURE shows the VPN broken banner with the fleet’s sentence and drops the exit it showed', async () => {
+      seedCache({ vpn1: measuredVpnEntry(5000) });
+      const AccountProxies = await import('../../src/lib/account-proxies');
+      vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+        ok: false,
+        reason: FLEET_DOWN,
+        measured_from: 'fleet',
+      });
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+      await clickCheckVpn();
+      await waitFor(() =>
+        expect(
+          document.querySelector('[data-component="proxy-broken-banner"][data-vpn-failure="true"]'),
+        ).not.toBeNull(),
+      );
+      expect(screen.getByText('VPN tunnel down')).toBeTruthy();
+      expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
+        FLEET_DOWN,
+      );
+      expect(screen.queryByText('198.51.100.9')).toBeNull();
+    });
+
+    // MUTATION: route the `not_run` reply to the failure branch → a busy test Mac
+    // reads as a down tunnel and the row loses its standing exit → red.
+    it('CRITICAL a NOT-RUN keeps the exit and latency and shows the sentence as a muted notice, never the banner', async () => {
+      seedCache({ vpn1: measuredVpnEntry(5000) });
+      const AccountProxies = await import('../../src/lib/account-proxies');
+      vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+        ok: false,
+        reason: BUSY,
+        measured_from: 'fleet',
+        not_run: 'node_busy',
+      });
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+      await clickCheckVpn();
+      await waitFor(() =>
+        expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+          BUSY,
+        ),
+      );
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+      expect(screen.getByText('198.51.100.9')).toBeTruthy();
+      expect(screen.getByText('42ms')).toBeTruthy();
+    });
+
+    // MUTATION: gate the chip on `scheme === 'openvpn'` → a WireGuard card shows
+    // "UDP ?" (an unprobed SOCKS5 grant) for a tunnel that carries UDP → red.
+    it('the UDP chip says "UDP via tunnel", never the SOCKS5 "UDP ?"', async () => {
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      const chip = await waitFor(() => {
+        const el = document.querySelector('[data-udp="tunnel"]');
+        expect(el).not.toBeNull();
+        return el as HTMLElement;
+      });
+      expect(chip.textContent).toBe('UDP via tunnel');
+      expect(screen.queryByText('UDP ?')).toBeNull();
+    });
+  },
+);

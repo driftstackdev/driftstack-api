@@ -2328,6 +2328,25 @@ export const ProbeEgressResultSchema = z
     exit_timezone: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
     exit_region: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
     exit_city: z.string().max(HARNESS_FRAME_ID_MAX_LENGTH).nullable().optional(),
+    /**
+     * (n) N16 — HOW LONG the node was prepared to spend on THIS probe, in ms,
+     * derived on the node from the constants its bring-up enforces
+     * (`bringUp(initTimeoutMs: 40_000, listenTimeoutMs: 10_000)` → 50_000), so a
+     * retune on the node moves the number rather than silently outrunning the
+     * server's wait. The server sizes its NEXT dispatch to this node from it
+     * (see `probe-egress-request-correlator.ts`): the 15 s socks5 default expired
+     * long before a dead WireGuard endpoint could be declared dead, the late
+     * frame was dropped, and the customer was told "No fleet Mac was free".
+     *
+     * ⛔ `null` on a socks5 probe means "not reported for this scheme" — NEVER
+     * "no budget". A consumer must not read null as 0 or as "unbounded"; it means
+     * this frame says nothing about a budget.
+     * ⛔ `.nullable().optional()`, BOTH, for the reason the exit_* keys above give:
+     * NULLABLE so "not reported for this scheme" can be said explicitly, OPTIONAL
+     * so every node that predates the field still validates. Deployable in either
+     * order — and as of this writing NO node has ever sent it.
+     */
+    probe_budget_ms: z.number().int().nonnegative().nullable().optional(),
     error: z.string().max(HARNESS_RESULT_ERROR_MAX_LENGTH).nullable(),
   })
   .superRefine((frame, ctx) => {

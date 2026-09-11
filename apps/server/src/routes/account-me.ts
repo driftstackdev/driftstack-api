@@ -181,6 +181,120 @@ const FLEET_PROBE_TARGET: { host: string; port: number } = (() => {
 })();
 
 /**
+ * (n) N15 — what a VPN row's customer is told when the NODE could not return a
+ * measurement, and — the load-bearing half — whether that answer is a VERDICT
+ * about the tunnel or a `not_run` notice about the Mac.
+ *
+ * ⛔ Before this, EVERY non-busy node error was `not_run: 'node_error'` ("the test
+ * could not be completed on the measuring Mac; try again shortly"). That branch is
+ * exactly where a FAILED WIREGUARD BRING-UP lands: the node wraps bring-up in
+ * `withVPNEgress`, whose catch tears the tunnel down and answers
+ * `probeEgressRefusal(error: <token>)` — a frame with `error !== null`, which the
+ * correlator maps to `{ status: 'error', message: <token> }`. So a wrong key, a
+ * wrong PSK, a dead endpoint or an anti-leak failure all arrived as "the Mac is
+ * having a moment": the row KEPT its last green verdict and its stale exit /
+ * timezone, and no amount of retrying could ever change the sentence.
+ *
+ * The node's tokens are a CLOSED static set (A3 `cf1343076`) and they split in two:
+ *   * a VERDICT about the tunnel — `handshake_failed`, `endpoint_unreachable`,
+ *     `egress_leak_detected`: the node DID try to bring the tunnel up and it did
+ *     not come up (or came up leaking). `not_run` is ABSENT so a client renders
+ *     the red "tunnel down", and the stored exit is contradicted (`exit_superseded_at`
+ *     stamped) exactly as on the verdict path;
+ *   * a NOT-RUN — `node_busy`, `bad_config*`, `bad_request`, `egress_bin_missing`,
+ *     `tunnel_up_no_socks`, the post-tunnel `timeout` / `probe_failed`, a send
+ *     failure, and ANY token this build does not know: nothing was learned about
+ *     the tunnel, so the row keeps what it holds.
+ *
+ * ⛔ The residual is a NOT-RUN, deliberately. An unknown token is a node newer
+ * than this build; guessing "tunnel down" from a word we cannot read would publish
+ * a red verdict nothing measured. An unrecognised token therefore keeps today's
+ * sentence and `node_error`.
+ *
+ * Copy rules (owner directive): `egress_bin_missing` / `tunnel_up_no_socks` read as
+ * OUR fault, never the customer's config; `endpoint_unreachable` says the endpoint
+ * did not answer within the tunnel's wait and NEVER "check your address" — from the
+ * node, a wrong endpoint and a down endpoint are indistinguishable.
+ */
+export interface VpnProbeRefusal {
+  /** The customer-facing sentence. Never the raw token. */
+  reason: string;
+  /** Absent ⇒ this IS a tunnel verdict (and the stored exit is superseded). */
+  notRun?: 'node_busy' | 'node_error';
+}
+
+export function classifyVpnProbeFailure(
+  message: string,
+  scheme: 'openvpn' | 'wireguard',
+): VpnProbeRefusal {
+  const token = message.trim().toLowerCase();
+  const name = scheme === 'wireguard' ? 'WireGuard' : 'OpenVPN';
+  // Substring, not equality: the node sends the bare token today, but the
+  // registry/correlator wrap send failures and provenance mismatches in prose,
+  // and `bad_config:<field>` carries a suffix. The existing `node_busy` test was
+  // a substring test and stays one.
+  const has = (t: string): boolean => token.includes(t);
+
+  // ── NOT-RUN, checked first: a busy Mac and a refused config are about the
+  //    RUN, and must never be read as a tunnel that is down.
+  if (has('node_busy')) {
+    return {
+      reason:
+        'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.',
+      notRun: 'node_busy',
+    };
+  }
+  // `egress_bin_missing` = the node's own VPN binary is not executable;
+  // `tunnel_up_no_socks` = the tunnel came up but the node's local listener never
+  // did. Both are NODE faults — the config was never disproved — so the sentence
+  // owns the failure rather than sending the customer to re-check their keys.
+  if (has('egress_bin_missing') || has('tunnel_up_no_socks')) {
+    return {
+      reason: `The test Mac could not start its VPN tool, so your ${name} configuration was never tested. This is a fault on our side — try again shortly.`,
+      notRun: 'node_error',
+    };
+  }
+  // Post-tunnel exit probe: the tunnel came up, the exit check did not finish.
+  // Not a verdict about the tunnel (it was up), and not a config problem.
+  if (has('probe_failed') || has('timeout')) {
+    return {
+      reason: `The ${name} tunnel came up on the test Mac, but the exit check did not finish. Try again shortly.`,
+      notRun: 'node_error',
+    };
+  }
+
+  // ── VERDICTS: the node tried to bring the tunnel up and it did not come up.
+  // ⛔ `egress_leak_detected` is a verdict about THIS config: the tunnel came up
+  // and traffic did not leave through it, so the node fail-closed. Telling the
+  // customer their tunnel is fine would be the worst possible answer.
+  if (has('egress_leak_detected')) {
+    return {
+      reason: `The ${name} tunnel came up but traffic did not leave through it, so the test Mac stopped it. This configuration is not safe to browse through.`,
+    };
+  }
+  // ⛔ No "check your address". The node waits out the tunnel's init window and
+  // cannot tell a wrong endpoint from a down one; naming the address as the fault
+  // would send a customer to edit a line that is correct.
+  if (has('endpoint_unreachable')) {
+    return {
+      reason: `The ${name} endpoint did not answer within the tunnel's wait, so the tunnel did not come up. The endpoint is down, blocked, or not accepting this peer — the test Mac cannot tell which.`,
+    };
+  }
+  if (has('handshake_failed')) {
+    return {
+      reason: `The ${name} tunnel did not come up on the test Mac. Check the keys, the endpoint, and that the server accepts this peer.`,
+    };
+  }
+
+  // Residual — `bad_config*`, `bad_request`, a send failure, or a token from a
+  // node newer than this build. Today's sentence, and NOT a verdict.
+  return {
+    reason: 'The test could not be completed on the measuring Mac. Try again shortly.',
+    notRun: 'node_error',
+  };
+}
+
+/**
  * Resolve the profile cap for a tier. `PROFILES_PER_TIER` returns
  * `'custom'` for enterprise (negotiated per-customer); we surface
  * that as `null` to the customer (read: "no fixed cap on this tier;
@@ -1278,18 +1392,45 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               (row.scheme === 'openvpn' || row.scheme === 'wireguard') &&
               dispatch.nodeId !== undefined
             ) {
-              const busy = /node_busy/i.test(dispatch.message);
+              // (n) N15 — classify the node's STATIC token before deciding
+              // `not_run`. A failed bring-up (`handshake_failed`,
+              // `endpoint_unreachable`, `egress_leak_detected`) arrives on this
+              // branch and IS a verdict about the tunnel; calling it a `not_run`
+              // left the row on its last green verdict with a stale exit forever,
+              // and no retry could change the sentence. See classifyVpnProbeFailure.
+              const refusal = classifyVpnProbeFailure(dispatch.message, row.scheme);
+              if (refusal.notRun === undefined) {
+                // (i) I7 parity — a tunnel the node found DOWN contradicts the
+                // stored exit NOW, exactly as the verdict path below does for
+                // `!usable && probeReachedVerdict(r)`. The exit is KEPT (it is
+                // still the last thing seen, at its own date) and the stamp dates
+                // the contradiction, so the /proxies list can carry it to a Mac
+                // that never saw this test. Best-effort like the verdict path's
+                // write: a throw here would be caught by this closure's handler
+                // and RELABEL the node's verdict as `control_plane`.
+                try {
+                  await proxiesRepo.update({
+                    id: row.id,
+                    accountId: ctx.account.id,
+                    updates: { exitSupersededAt: new Date() },
+                  });
+                } catch (err) {
+                  request.log.info(
+                    { proxyId: row.id, err },
+                    'proxy test: failed to stamp exit_superseded_at for a failed VPN bring-up',
+                  );
+                }
+              }
               return {
                 ok: false,
-                reason: busy
-                  ? 'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.'
-                  : 'The test could not be completed on the measuring Mac. Try again shortly.',
+                reason: refusal.reason,
                 latency_ms: null,
                 node_id: dispatch.nodeId,
                 measured_from: 'fleet' as const,
-                // (d) — nothing RAN, so this is not a tunnel verdict: `not_run`
-                // is the discriminator a client branches on (never the prose).
-                not_run: busy ? ('node_busy' as const) : ('node_error' as const),
+                // (d) — `not_run` is the discriminator a client branches on (never
+                // the prose): present when NOTHING was learned about the tunnel,
+                // ABSENT when the node reached a tunnel verdict.
+                ...(refusal.notRun !== undefined ? { not_run: refusal.notRun } : {}),
               };
             }
             return { miss: 'no_node' } satisfies FleetMiss;

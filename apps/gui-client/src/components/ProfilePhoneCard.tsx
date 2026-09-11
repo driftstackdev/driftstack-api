@@ -33,6 +33,17 @@ import {
   VPN_NO_EXIT_YET_TITLE,
 } from '../lib/proxy-check-copy';
 
+/** (n) N-M1 — V-857's null-exit wording, kept BYTE-IDENTICAL to the Proxies
+ *  grid's (ProxiesView.tsx:1971 and its title at :1969): the grid and this card
+ *  describe the same cache state for the same proxy, and the whole finding was
+ *  that they described it differently. ⚠️ These two literals belong in
+ *  lib/proxy-check-copy beside VPN_NO_EXIT_YET so neither surface can drift —
+ *  that file is outside this change's ownership, so the hoist is filed rather
+ *  than done here. Change one of these and you must change ProxiesView too. */
+const EXIT_GEO_UNAVAILABLE = 'exit geo unavailable — the probe did not complete';
+const EXIT_GEO_UNAVAILABLE_TITLE =
+  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
+
 export interface ProfilePhoneCardProps {
   name: string;
   monogram: string;
@@ -81,7 +92,22 @@ export interface ProfilePhoneCardProps {
   proxyExplicit: boolean;
   flag: string; // emoji or '🌍'
   countryCode: string | null; // exit country code (e.g. 'NL') for the badge
-  exitIp: string | null; // real exit IP, or null = untested
+  exitIp: string | null; // real exit IP, or null = no exit to show
+  /**
+   * (n) N-M1 — V-857's THIRD exit state, which this card had collapsed away.
+   * The exit has THREE states, not two, and the Proxies grid renders all three
+   * (ProxiesView.tsx:1965-1982):
+   *   • an ip           → `exitIp` holds it;
+   *   • `true` here     → the proxy is usable and the echo round-trip did NOT
+   *                       complete through it (the grid's `exit === null`);
+   *   • absent/`false`  → never exit-probed.
+   * The card said "no exit IP" for BOTH of the last two, so a customer who had
+   * just run a Test that measured nothing read the same dead-end words as one
+   * who had never tested at all — and the grid, for the same proxy at the same
+   * moment, said why. The parent derives this from the same place the grid does:
+   * `deriveProbeViewWithEndpointRows(...).exitResults[id] === null`.
+   */
+  exitProbeFailed?: boolean;
   locationLabel?: string | null; // #6 — resolved "city, region" / country name for the exit
   latencyMs: number | null;
   latencyFillPct: number;
@@ -474,7 +500,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     className={`min-w-0 flex-1 truncate text-right text-[11.5px] ${
                       p.exitIp !== null ? 'mono text-ink-primary' : 'italic text-ink-muted'
                     }`}
-                    title={p.exitIp ?? (p.vpn === true ? VPN_NO_EXIT_YET_TITLE : undefined)}
+                    title={
+                      p.exitIp ??
+                      (p.vpn === true
+                        ? VPN_NO_EXIT_YET_TITLE
+                        : p.exitProbeFailed === true
+                          ? EXIT_GEO_UNAVAILABLE_TITLE
+                          : undefined)
+                    }
                   >
                     {/* (l) #3 — a VPN row with no exit is "no exit measured yet —
                         run Check VPN" whether or not a pre-flight ever wrote an
@@ -482,8 +515,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         included, and after list adoption): "no exit IP" was a
                         dead end naming no next step, and disagreed with the
                         grid's prompt for the same proxy. Same constant there. */}
+                    {/* (n) N-M1 — the third state, in the grid's own words:
+                        "the probe did not complete" is what happened, and it is
+                        not the same fact as "never probed". */}
                     {p.exitIp ??
-                      (p.vpn === true ? VPN_NO_EXIT_YET : p.probed ? 'no exit IP' : 'run Test')}
+                      (p.vpn === true
+                        ? VPN_NO_EXIT_YET
+                        : p.exitProbeFailed === true
+                          ? EXIT_GEO_UNAVAILABLE
+                          : p.probed
+                            ? 'no exit IP'
+                            : 'run Test')}
                   </span>
                 </div>
                 {/* #6 — exit LOCATION (city, region / country name). Previously shown

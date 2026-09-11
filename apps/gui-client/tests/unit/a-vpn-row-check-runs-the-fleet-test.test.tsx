@@ -39,7 +39,16 @@ const saveServerProbeResult = vi.fn<(...a: unknown[]) => Promise<Record<string, 
 const saveFleetFailure = vi.fn<(...a: unknown[]) => Promise<Record<string, never>>>(() =>
   Promise.resolve({}),
 );
-const { testAccountProxy } = vi.hoisted(() => ({
+const { updateAccountProxy, testAccountProxy } = vi.hoisted(() => ({
+  updateAccountProxy:
+    vi.fn<
+      (
+        baseUrl: string,
+        apiKey: string,
+        id: string,
+        patch: Record<string, unknown>,
+      ) => Promise<{ id: string }>
+    >(),
   testAccountProxy:
     vi.fn<
       (
@@ -77,6 +86,14 @@ vi.mock('../../src/lib/proxies', () => ({
 
 vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof AccountProxiesModule>()),
+  // (n) N2 — the account row is REFRESHED from this Mac's material before the fleet leg,
+  // so the tunnel a check measures is the config the customer holds and not the one the
+  // last launch stored. Doubled here (it is a PUT) and recorded in the same call order,
+  // which is what makes "before" measurable rather than merely asserted.
+  updateProxy: (baseUrl: string, apiKey: string, id: string, patch: Record<string, unknown>) => {
+    callOrder.push('updateAccountProxy');
+    return updateAccountProxy(baseUrl, apiKey, id, patch);
+  },
   testAccountProxy: (
     baseUrl: string,
     apiKey: string,
@@ -171,6 +188,8 @@ beforeEach(() => {
   testProxy.mockResolvedValue(HEALTHY);
   testAccountProxy.mockReset();
   testAccountProxy.mockResolvedValue(FLEET_OK);
+  updateAccountProxy.mockReset();
+  updateAccountProxy.mockResolvedValue({ id: 'aprx_vpn' });
   saveEndpointResult.mockClear();
   saveExitResult.mockClear();
   saveServerProbeResult.mockClear();
@@ -201,6 +220,16 @@ describe('(b) — a VPN row’s Check endpoint runs the fleet test after the pre
       callOrder.indexOf('testAccountProxy'),
     );
     expect(testProxy).not.toHaveBeenCalled();
+    // (n) N2 — and the account row was refreshed BETWEEN the two: resolve → push → fleet.
+    expect(updateAccountProxy).toHaveBeenCalledTimes(1);
+    expect(updateAccountProxy.mock.calls[0]?.[3]).toMatchObject({
+      scheme: 'openvpn',
+      host: 'vpn.example.com',
+      openvpn: { config_blob: 'client\nremote vpn.example.com 1194\n' },
+    });
+    expect(callOrder.indexOf('updateAccountProxy')).toBeLessThan(
+      callOrder.indexOf('testAccountProxy'),
+    );
     // The pre-flight's cache write lands BEFORE the fleet result is persisted on
     // top of it (it drops the previous check's server fields).
     await waitFor(() => expect(saveServerProbeResult).toHaveBeenCalledTimes(1));

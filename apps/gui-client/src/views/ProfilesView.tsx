@@ -150,6 +150,7 @@ import {
 import {
   createProxy as createAccountProxy,
   updateProxy as updateAccountProxy,
+  type AccountProxyScheme,
 } from '../lib/account-proxies';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
@@ -2739,7 +2740,26 @@ export function ProfilesView({
         username: px.username,
         password: px.password,
       });
-      if (exit === null) return fromCache;
+      if (exit === null) {
+        // (n) N-M2 — the (l) #14 rule, on the LAUNCH path. The pre-flight above
+        // has just re-stamped this proxy's capability verdict with
+        // `saveProbeResult`, which CARRIES THE PREVIOUS EXIT ACROSS — so a fresh
+        // exit probe that measures nothing used to leave yesterday's IP,
+        // country, city and zone in the cache beside a verdict dated seconds
+        // ago, and every surface then presented them as this launch's
+        // measurement. Same clear-on-failure path handleTestProxy takes (2591):
+        // drop the exit fields and stamp `exitProbeFailedAt`, so the card and
+        // the grid both say "the probe did not complete" instead of showing a
+        // stale exit as current.
+        //
+        // The stale identity is still HANDED to this launch's simulator (the
+        // device clock needs some zone, and the session's own capability report
+        // replaces it seconds later — which the status bar now repaints on, see
+        // N13). Two suites pin that handover; what changes here is only what
+        // OUTLIVES the launch in the cache.
+        setProbeCache(await clearExitResult(px.id));
+        return fromCache;
+      }
       setProbeCache(
         await saveExitResult(px.id, exit.ip, exit.country, {
           city: exit.city ?? null,
@@ -4678,6 +4698,13 @@ export function ProfilesView({
                           flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                           countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
                           exitIp={exitOk ? (probe?.exitIp ?? null) : null}
+                          // (n) N-M1 — the THIRD exit state, from the same
+                          // derivation the Proxies grid reads: `null` (not
+                          // absent) means the proxy is usable and the echo
+                          // round-trip did not complete through it. Without it
+                          // the card said "no exit IP" for a Test that measured
+                          // nothing AND for a proxy nobody ever tested.
+                          exitProbeFailed={px !== null && probeView.exitResults[px.id] === null}
                           locationLabel={exitLocationLabel(exitOk, probe)}
                           latencyMs={lat ?? null}
                           latencyFillPct={latFill}
@@ -4852,6 +4879,28 @@ export function ProfilesView({
                       launchDisabledReason: teamLaunchBlocked
                         ? teamLaunchBlockedReason
                         : concurrentCapReason,
+                      // (n) N18 — the four VPN props the GRID CARD has taken
+                      // since (h), derived here the SAME way from the SAME state
+                      // (isVpnScheme / vpnFailures / vpnNotices / fleetStamps).
+                      // Without them the list rendered a WireGuard row as an
+                      // untested SOCKS5 one: 'Test', 'no exit IP', a dash for
+                      // UDP, and no banner for a tunnel the fleet could not
+                      // bring up — while the card for the same profile showed
+                      // the red sentence. The click was always routed right;
+                      // only the rendering diverged.
+                      vpn: px !== null && isVpnScheme(px.scheme),
+                      ...(px !== null && vpnFailures[px.id] !== undefined
+                        ? { vpnFailure: vpnFailures[px.id] }
+                        : {}),
+                      ...(px !== null && vpnNotices[px.id] !== undefined
+                        ? { vpnNotice: vpnNotices[px.id] }
+                        : {}),
+                      checkedAtIso:
+                        px !== null && fleetStamps[px.id] !== undefined
+                          ? new Date(fleetStamps[px.id] ?? 0).toISOString()
+                          : probe?.at !== undefined
+                            ? new Date(probe.at).toISOString()
+                            : null,
                     };
                   });
                   // 2026-06-20 — UNIFIED sort: `rows` is built from the already
@@ -5449,8 +5498,8 @@ function CreateProfileModal({
                   {proxies.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.label} ·{' '}
-                      {p.scheme === 'openvpn' || p.scheme === 'wireguard'
-                        ? `${p.scheme} · ${p.host}:${p.port}`
+                      {isVpnScheme(p.scheme)
+                        ? `${vpnSchemeDisplayName(p.scheme)} · ${p.host}:${p.port}`
                         : `${p.host}:${p.port}`}
                     </option>
                   ))}
@@ -6095,8 +6144,8 @@ function EditProfileModal({
               {[...proxies, ...extraProxies].map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.label} ·{' '}
-                  {p.scheme === 'openvpn' || p.scheme === 'wireguard'
-                    ? `${p.scheme} · ${p.host}:${p.port}`
+                  {isVpnScheme(p.scheme)
+                    ? `${vpnSchemeDisplayName(p.scheme)} · ${p.host}:${p.port}`
                     : `${p.host}:${p.port}`}
                 </option>
               ))}
@@ -6815,6 +6864,15 @@ function EmptyConnect({
 function flagEmoji(cc: string): string {
   if (!/^[A-Z]{2}$/.test(cc)) return '🌍';
   return String.fromCodePoint(...[...cc].map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
+}
+
+// (n) N8 — the proxy picker named a VPN row by its raw enum (`wireguard ·
+// wg.example.com:51820`) while the Proxies tab and the scheme <select> call the
+// same row "WireGuard". The customer-facing name of a tunnel scheme, for both
+// <option> sites (New Profile / Edit Profile); a SOCKS5/HTTP row shows no scheme
+// there, as before. Kept local until lib/proxy-scheme exports the shared label.
+function vpnSchemeDisplayName(scheme: AccountProxyScheme | undefined): string {
+  return scheme === 'wireguard' ? 'WireGuard' : scheme === 'openvpn' ? 'OpenVPN' : '';
 }
 
 // #6 — ONE definition of the exit's human location (city, region / country name),

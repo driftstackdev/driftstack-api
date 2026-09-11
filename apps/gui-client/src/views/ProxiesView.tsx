@@ -52,6 +52,7 @@ import {
   buildWireGuardProxyInput,
   buildOpenVpnProxyInput,
   deleteProxy as deleteAccountProxy,
+  updateProxy as updateAccountProxy,
   type AccountProxyScheme,
   type AccountProxyTestNotRun,
   type MeasuredQuic,
@@ -128,6 +129,46 @@ function schemeLabel(scheme: AccountProxyScheme | undefined): { icon: string; te
  *  + the fleet test. An HTTP row has neither and is still verified at launch. */
 function isSweepable(scheme: AccountProxyScheme | undefined): boolean {
   return isSocks5Probeable(scheme) || isVpnScheme(scheme);
+}
+
+/**
+ * (n) N3 — whether an edit changed the material a VPN row AUTHENTICATES with.
+ *
+ * The edit path's `connChanged` compared scheme/host/port/username/password
+ * only. For a VPN row host and port are DERIVED from the conf's endpoint line
+ * and username/password are null, so a provider key rotation — a new conf, same
+ * server — changed none of them: the cached probe was kept, no re-test ran, and
+ * the row's "tunnel up", latency, exit IP and timezone went on describing a
+ * tunnel built from the PREVIOUS keys. Compared field-wise (not by identity or
+ * JSON, which would also fire on key ORDER) so the answer is about the material
+ * and nothing else. A row that is not on a VPN scheme has no material here and
+ * answers false — its own fields are compared above.
+ */
+function vpnMaterialChanged(prev: ProxyConfig, draft: ProxyDraft): boolean {
+  const scheme = draft.scheme;
+  if (scheme === 'wireguard') {
+    const a = prev.wireguard;
+    const b = draft.wireguard;
+    if (a === undefined || b === undefined) return a !== b;
+    return (
+      a.private_key !== b.private_key ||
+      a.peer_public_key !== b.peer_public_key ||
+      a.preshared_key !== b.preshared_key ||
+      a.endpoint !== b.endpoint ||
+      a.address !== b.address ||
+      a.allowed_ips !== b.allowed_ips ||
+      a.dns !== b.dns
+    );
+  }
+  if (scheme === 'openvpn') {
+    const a = prev.openvpn;
+    const b = draft.openvpn;
+    if (a === undefined || b === undefined) return a !== b;
+    return (
+      a.config_blob !== b.config_blob || a.username !== b.username || a.password !== b.password
+    );
+  }
+  return false;
 }
 
 /** The VPN half of a sweep's tally: rows whose tunnel got a verdict, how many
@@ -494,13 +535,22 @@ export function ProxiesView(): JSX.Element {
         // is a different KIND of check (the endpoint verdict, the fleet
         // failure sentence and its notice describe a tunnel the row no longer
         // is), so it invalidates and re-tests like a moved endpoint.
+        // (n) N3 — and the VPN BLOCK. Host/port are derived from the conf's
+        // Endpoint line and username/password are null on a VPN row, so a
+        // re-pasted conf whose only change is the key material (a provider key
+        // rotation on the same server) left every field above equal: no
+        // invalidation, no re-test, and yesterday's "tunnel up" + latency + exit
+        // + timezone stood as the verdict for keys the fleet had never used.
+        // Changing a SOCKS5 password re-tests immediately — this is that rule
+        // for the material a VPN row actually authenticates with.
         const connChanged =
           prev === undefined ||
           prev.scheme !== draft.scheme ||
           prev.host !== draft.host ||
           prev.port !== draft.port ||
           prev.username !== draft.username ||
-          prev.password !== draft.password;
+          prev.password !== draft.password ||
+          vpnMaterialChanged(prev, draft);
         if (connChanged) {
           testEpochRef.current++; // discard any in-flight probe against the old endpoint
           void invalidateProbe(editId).catch(() => undefined);
@@ -726,6 +776,46 @@ export function ProxiesView(): JSX.Element {
     noLatency?: true;
   };
 
+  /**
+   * (n) N2 — push THIS Mac's material onto the account row before the fleet
+   * tests it.
+   *
+   * ⛔ MEASURED: nothing in this view ever called `updateAccountProxy`. The only
+   * writers were the two launch paths (ProfilesView.ensureServerProxy,
+   * AgentChatView), so between a Save and the next LAUNCH the account row still
+   * held the previous private key / endpoint / blob — and the fleet leg below
+   * brought THAT tunnel up. The row then showed the old tunnel's latency, exit
+   * IP, country and timezone as the verdict for the config just pasted, and a
+   * manual Check repeated it. A SOCKS5 row is unaffected: its Test is native and
+   * reads the local credentials directly.
+   *
+   * Best-effort by design. The PUT is a REFRESH, not a precondition: the common
+   * check is an unedited row where the account already holds this exact material,
+   * and blocking those on a transient failure would trade a rare stale verdict for
+   * a check that cannot run at all. A failure therefore falls through to the fleet
+   * leg, which answers about whatever the account row holds — the status quo
+   * before this existed. The same 404 a stale `serverId` produces is not
+   * self-healed here (that needs a create + `setProxyServerId`, which the launch
+   * path owns); the fleet test then reports its own `unavailable`.
+   */
+  async function pushLocalMaterialToAccount(p: ProxyConfig): Promise<void> {
+    const apiKey = settings.apiKey;
+    if (apiKey === null || apiKey.length === 0) return;
+    if (p.serverId === undefined) return;
+    // The SAME body ensureServerProxy builds at launch, so the account row after a
+    // Check is byte-identical to the one a launch would have written.
+    await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, {
+      label: p.label,
+      scheme: p.scheme ?? 'socks5',
+      host: p.host,
+      port: p.port,
+      username: p.username,
+      password: p.password,
+      ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
+      ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
+    });
+  }
+
   // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
   // check is a DNS pre-flight of its endpoint (endpoint_resolve), NOT a SOCKS5
   // handshake (which a VPN endpoint never speaks — it always read "unreachable").
@@ -820,6 +910,10 @@ export function ProxiesView(): JSX.Element {
         setVpnNotices((m) => ({ ...m, [p.id]: VPN_NOT_STORED_CHECK_NOTICE }));
         return { resolved: true, tunnelOk: null, notTested: VPN_NOT_STORED_TALLY_REASON };
       }
+      // (n) N2 — the account row is refreshed FIRST, so the tunnel the fleet brings
+      // up is the one this Mac holds and not the one the last launch stored.
+      await pushLocalMaterialToAccount(p).catch(() => undefined);
+      if (stale()) return null;
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
       if (stale()) return null;
       settle();
@@ -1201,11 +1295,16 @@ export function ProxiesView(): JSX.Element {
   // NONE are sweepable, "Test all" would flip on→off running zero probes with no feedback
   // — a dead button (audit 2026-07-08); disable it with an explaining title instead.
   const probeableCount = state.proxies.filter((p) => isSweepable(p.scheme)).length;
-  const tested = state.proxies.filter((p) => testResults[p.id] !== undefined);
-  const healthy = tested.filter((p) => {
-    const r = testResults[p.id];
-    return r !== undefined && isProxyUsable(r);
-  });
+  // (n) N19 — the tallies count a VPN row from ITS verdict (the fleet answer the row
+  // renders), not from `testResults`, which is empty for every endpoint row by
+  // construction. Before this, a WireGuard-only pool stayed on the generic "Protected
+  // locally…" sentence however many tunnels were up.
+  const vpnVerdictState: VpnVerdictState = { vpnFailures, endpointResults, serverVantage };
+  const tested = state.proxies.filter((p) => isRowTested(p, testResults, vpnVerdictState));
+  const healthy = tested.filter((p) => isRowHealthy(p, testResults, vpnVerdictState));
+  // ⛔ NOT VPN-aware on purpose: `udp_associate` is a MEASURED capability of the native
+  // SOCKS5 probe. A tunnel carries UDP by construction, but no probe measured it here,
+  // and the row's own "UDP via tunnel" chip is where that belongs.
   const udpCapable = tested.filter((p) => {
     const r = testResults[p.id];
     return r !== undefined && r.udp_associate;
@@ -1494,6 +1593,76 @@ function statusRank(result: ProxyTestResult | undefined): number {
   return (result.latency_ms ?? 0) > 100 ? 1 : 3;
 }
 
+/** (n) N19 — the state every VPN-aware tally reads, so the hero counts, the pool stats
+ *  and the status sort cannot answer differently about the same row. */
+interface VpnVerdictState {
+  vpnFailures: Record<string, string>;
+  endpointResults: Record<string, EndpointResolveResult>;
+  serverVantage: Record<string, ServerVantage>;
+}
+
+/**
+ * (n) N19 — a VPN row's health, from the SAME state the row itself renders.
+ *
+ * ⛔ MEASURED: every tally on this page read `testResults` only, and
+ * `deriveProbeViewWithEndpointRows` DELETES the entry of every endpoint row from
+ * `testResults` by design (a VPN row's placeholder is not a SOCKS5 verdict). So for a
+ * WireGuard or OpenVPN row `testResults[p.id]` is permanently undefined: the hero said
+ * nothing needed attention while the row beside it read "tunnel down", sort-by-status
+ * left that row exactly where it was, and a VPN-only pool never reached the "N healthy"
+ * line no matter how many tunnels came up.
+ *
+ * 'down' is the row's red: the fleet's failure sentence, or an endpoint that does not
+ * resolve. 'up' is the only thing that can claim a tunnel — a FLEET-measured vantage;
+ * a control-plane fallback measured no tunnel and stays 'untested', exactly as the row's
+ * own pill does.
+ */
+function vpnRowVerdict(id: string, s: VpnVerdictState): 'down' | 'up' | 'untested' {
+  if (s.vpnFailures[id] !== undefined) return 'down';
+  if (s.endpointResults[id]?.resolved === false) return 'down';
+  if (s.serverVantage[id]?.measuredFrom === 'fleet') return 'up';
+  return 'untested';
+}
+
+/** (n) N19 — "has this row been checked at all", for the hero's `tested` tally. */
+function isRowTested(
+  p: ProxyConfig,
+  testResults: Record<string, ProxyTestResult>,
+  s: VpnVerdictState,
+): boolean {
+  return isVpnScheme(p.scheme)
+    ? vpnRowVerdict(p.id, s) !== 'untested'
+    : testResults[p.id] !== undefined;
+}
+
+/** (n) N19 — "is this row healthy", for the hero + pool stats. A VPN row is healthy when
+ *  a fleet Mac brought its tunnel up; a SOCKS5 row when its native probe says so. */
+function isRowHealthy(
+  p: ProxyConfig,
+  testResults: Record<string, ProxyTestResult>,
+  s: VpnVerdictState,
+): boolean {
+  if (isVpnScheme(p.scheme)) return vpnRowVerdict(p.id, s) === 'up';
+  const r = testResults[p.id];
+  return r !== undefined && isProxyUsable(r);
+}
+
+/** (n) N19 — `statusRank` with the VPN branch: a tunnel that is down sorts to the top
+ *  like an unreachable SOCKS5 row, an up tunnel sorts by its fleet latency, and a row
+ *  with no verdict keeps the "untested" middle. */
+function rowStatusRank(
+  p: ProxyConfig,
+  testResults: Record<string, ProxyTestResult>,
+  serverLatency: Record<string, number>,
+  s: VpnVerdictState,
+): number {
+  if (!isVpnScheme(p.scheme)) return statusRank(testResults[p.id]);
+  const verdict = vpnRowVerdict(p.id, s);
+  if (verdict === 'down') return 0;
+  if (verdict === 'untested') return 2;
+  return (serverLatency[p.id] ?? 0) > 100 ? 1 : 3;
+}
+
 function ProxyTable({
   proxies,
   busyId,
@@ -1561,6 +1730,13 @@ function ProxyTable({
     return new Set([...selected].filter((id) => ids.has(id)));
   }, [proxies, selected]);
 
+  // (n) N19 — the VPN verdict state the rank + the attention count read, built from the
+  // props the rows already render so a row and the tally above it cannot disagree.
+  const vpnVerdictState: VpnVerdictState = useMemo(
+    () => ({ vpnFailures, endpointResults, serverVantage }),
+    [vpnFailures, endpointResults, serverVantage],
+  );
+
   const sorted = useMemo(() => {
     const dir = sort.dir === 'asc' ? 1 : -1;
     const val = (p: ProxyConfig): string | number => {
@@ -1584,7 +1760,12 @@ function ProxyTable({
           return testedAt[p.id] ?? 0;
         case 'status':
         default:
-          return statusRank(r);
+          // (n) N19 — VPN-aware: a tunnel-down row ranks 0 and floats to the top of
+          // the default sort exactly like an unreachable SOCKS5 row. Reading
+          // `testResults` alone left every VPN row at the "untested" rank 2 — the
+          // page's whole safety argument ("the broken proxy is the first row") did
+          // not hold for a scheme whose verdict never lands in that map.
+          return rowStatusRank(p, testResults, serverLatency, vpnVerdictState);
       }
     };
     // Tie-break on the ORIGINAL position, not the label. Equal-status rows are
@@ -1601,9 +1782,13 @@ function ProxyTable({
       if (av > bv) return 1 * dir;
       return (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0);
     });
-  }, [proxies, sort, testResults, testedAt, serverLatency]);
+  }, [proxies, sort, testResults, testedAt, serverLatency, vpnVerdictState]);
 
-  const attention = proxies.filter((p) => statusRank(testResults[p.id]) === 0).length;
+  // (n) N19 — the hero's "N needs attention" counts a tunnel the fleet could not bring
+  // up, or an endpoint that does not resolve, through the same rank the sort uses.
+  const attention = proxies.filter(
+    (p) => rowStatusRank(p, testResults, serverLatency, vpnVerdictState) === 0,
+  ).length;
   const selectedProxies = sorted.filter((p) => live.has(p.id));
   const allSelected = proxies.length > 0 && live.size === proxies.length;
 
@@ -2369,13 +2554,91 @@ function EndpointHealthPill({
   );
 }
 
+/**
+ * (n) N7 — the wg0.conf LINE behind each field name the server's schema reports.
+ *
+ * `WireguardRefusal.field` is the schema path (`allowed_ips`, `peer_public_key`, …) —
+ * the API's wire name, which appears NOWHERE in the file the customer is looking at.
+ * `Address`, `DNS` and `Endpoint` differ only in case, so their sentences already point
+ * at a findable line; the snake_case ones do not, and `[Peer] PublicKey` is not even the
+ * same word.
+ */
+const WG_CONF_LINE_BY_FIELD: Record<string, string> = {
+  private_key: 'PrivateKey',
+  peer_public_key: '[Peer] PublicKey',
+  preshared_key: 'PresharedKey',
+  endpoint: 'Endpoint',
+  allowed_ips: 'AllowedIPs',
+  address: 'Address',
+  dns: 'DNS',
+};
+
+/** zod's DEFAULT `.max()` sentence, which names no field at all. api-types declares
+ *  `.max()` before `.regex()` on allowed_ips/address/dns, so for an over-long value this
+ *  is `issues[0]` and it was reaching the customer verbatim. */
+const ZOD_TOO_LONG_RE = /^String must contain at most (\d+) character\(s\)\.?$/;
+
 // The one-line "where and why" of a VPN refusal, for the submit hint and the Save
 // tooltip. An OVPN refusal points at a LINE of the pasted blob (the finder's own number).
-// A WireGuard reason is already a sentence naming its field ("address must be …",
-// "Pre-shared keys aren't supported yet — remove the PresharedKey line …"), so it is shown
-// as-is rather than behind a fake "Line 0".
+// A WireGuard refusal names a FIELD, which (n) N7 translates to the wg0.conf line the
+// customer can actually search for — leaving alone the sentences that already open with
+// it, so the server's own wording still reaches them wherever it is findable.
 function vpnRefusalMessage(r: OpenvpnRefusal | WireguardRefusal): string {
-  return 'line' in r ? `Line ${r.line.toString()}: ${r.reason}` : r.reason;
+  if ('line' in r) return `Line ${r.line.toString()}: ${r.reason}`;
+  const line = WG_CONF_LINE_BY_FIELD[r.field];
+  if (line === undefined) return r.reason;
+  // Already points at the line ("address must be …", "PresharedKey is not a 44-char …").
+  if (r.reason.toLowerCase().startsWith(line.toLowerCase())) return r.reason;
+  // A sentence that opens with the WIRE name: swap in the line name, keep the rest.
+  if (r.reason.startsWith(`${r.field} `)) return `${line}${r.reason.slice(r.field.length)}`;
+  // A sentence that names nothing — zod's length default. Say the line AND the cap
+  // rather than handing over "String must contain at most 1024 character(s)".
+  const tooLong = ZOD_TOO_LONG_RE.exec(r.reason);
+  if (tooLong !== null) return `${line} is too long — at most ${tooLong[1] ?? ''} characters.`;
+  return `${line}: ${r.reason}`;
+}
+
+/** (n) N4 — what the wg0.conf box says while a row already HAS a saved config: the box
+ *  is a REPLACE field, not the config. Shown as the placeholder, never as its value. */
+const WG_SAVED_PLACEHOLDER =
+  'Paste a new wg0.conf here to replace the saved one — leave this empty to keep it.';
+/** (n) N4 — one keystroke in that box is not a configuration, so the parser's
+ *  first-field complaint would name a line the text never had. */
+const WG_REPLACE_INCOMPLETE_HINT =
+  'That is not a complete wg0.conf yet — the saved WireGuard config is kept until you paste one.';
+/** (n) N4 — appended to a real parse refusal while a saved config stands, so the customer
+ *  knows the bad text did NOT wipe what the row already holds. */
+const WG_SAVED_KEPT_SUFFIX =
+  ' — the saved WireGuard config is kept until a complete wg0.conf is pasted.';
+
+/** (n) N4 — is this text even an ATTEMPT at a wg0.conf? A single character in the replace
+ *  box is not, and reporting "PrivateKey is not a 44-char base64 key" about it sends the
+ *  customer hunting for a field they never typed. A real conf attempt — a section header
+ *  or a PrivateKey line — gets the parser's own specific reason. */
+function looksLikeWireGuardConf(text: string): boolean {
+  return /^\s*\[\s*(interface|peer)\s*\]/im.test(text) || /^\s*privatekey\s*=/im.test(text);
+}
+
+/**
+ * (n) N9 — the paste-time hint for either VPN editor.
+ *
+ * It used to be one muted <span> for both outcomes: a refusal ("PresharedKey is not a
+ * 44-char base64 key …") rendered in exactly the same small grey text as the "✓ endpoint
+ * …" confirmation, with no role — so a screen reader never announced the refusal at all,
+ * and a sighted customer had to READ a success and a failure to tell them apart. A
+ * refusal is an alert (announced, and coloured like every other error in this form); the
+ * confirmation is a quiet status.
+ */
+function VpnHint({ hint, isError }: { hint: string; isError: boolean }): JSX.Element {
+  return (
+    <span
+      data-component="vpn-paste-hint"
+      role={isError ? 'alert' : 'status'}
+      className={`mt-1 text-2xs ${isError ? 'text-status-error' : 'text-ink-muted'}`}
+    >
+      {hint}
+    </span>
+  );
 }
 
 export function ProxyForm({
@@ -2405,8 +2668,23 @@ export function ProxyForm({
   // OVPN/WG — the wg0.conf textarea text (the parsed WG block doesn't retain
   // the raw conf; OpenVPN keeps its blob in draft.openvpn.config_blob) + a
   // parse-feedback hint.
-  const [wgText, setWgText] = useState(initial.wireguard ? '(saved WireGuard config)' : '');
+  // (n) N4 — EMPTY, never the old '(saved WireGuard config)' sentinel. That sentinel was
+  // the textarea's VALUE, so the box read as if that sentence were the configuration, and
+  // one keystroke re-parsed it: the hint said "PrivateKey is not a 44-char base64 key"
+  // about text the customer never entered, `draft.wireguard` was dropped, Save went dead
+  // ("Paste a valid wg0.conf configuration.") and the only ways out were Cancel or
+  // re-pasting the whole conf. The box is a REPLACE field now — empty means keep what is
+  // saved, which is what `savedWireguard` below holds.
+  const [wgText, setWgText] = useState('');
+  /** (n) N4 — the block this row already has (edit mode). A failed parse of replacement
+   *  text must not delete it: the customer edited the REPLACEMENT, not the saved config.
+   *  Undefined in add mode, where a failed parse correctly leaves nothing to save. */
+  const savedWireguard = initial.wireguard;
   const [vpnHint, setVpnHint] = useState<string | null>(null);
+  /** (n) N9 — every hint this form sets is a PROBLEM except the paste-time confirmation,
+   *  which is the only one that opens with '✓'. Derived from the hint itself rather than
+   *  tracked beside it at a dozen setVpnHint sites, where the two would drift. */
+  const vpnHintIsError = vpnHint !== null && !vpnHint.startsWith('✓');
   // #2 — when a pasted OVPN config has lines the server will refuse (e.g. a bare
   // `script-security 2` with no script directives), hold the auto-fixed blob here so
   // the hint can offer a one-click "Remove unsupported lines". Null = nothing to fix.
@@ -2460,6 +2738,16 @@ export function ProxyForm({
 
   // Switch proxy type — clear the now-irrelevant fields so a half-typed socks5
   // password can't ride along on a VPN proxy (and vice versa).
+  //
+  // (n) N1 — and so the OTHER scheme's VPN block can't either. Switching to a VPN
+  // scheme used to clear only username/password, so a wg0.conf pasted before the
+  // switch stayed in `draft.wireguard` while the customer pasted an .ovpn: Add
+  // persisted BOTH blocks (lib/proxies addProxy has no scheme check) and every
+  // launch through the row then died on the control plane's `.strict()` per-scheme
+  // branch — "Unrecognized key(s) in object: 'wireguard'" — with no way to see why
+  // from the form. The draft carries exactly ONE block now: the one that belongs to
+  // `next`. Same retention also made WireGuard → OpenVPN → WireGuard show an EMPTY
+  // wg0.conf box over a still-saveable earlier paste.
   function handleSchemeChange(next: NonNullable<ProxyDraft['scheme']>): void {
     setVpnHint(null);
     setVpnFixable(null);
@@ -2467,9 +2755,12 @@ export function ProxyForm({
     setDraft((d) => ({
       ...d,
       scheme: next,
-      ...(next === 'openvpn' || next === 'wireguard'
-        ? { username: null, password: null }
-        : { openvpn: undefined, wireguard: undefined }),
+      ...(next === 'openvpn' || next === 'wireguard' ? { username: null, password: null } : {}),
+      // Coming BACK to the row's own scheme restores what it already had saved —
+      // the box is empty again, and (n) N4's rule is that an empty box means "keep
+      // the saved config". In add mode there is nothing saved, so both stay dropped.
+      openvpn: next === 'openvpn' ? (d.openvpn ?? initial.openvpn) : undefined,
+      wireguard: next === 'wireguard' ? (d.wireguard ?? savedWireguard) : undefined,
     }));
   }
 
@@ -2477,14 +2768,24 @@ export function ProxyForm({
   function handleWgPaste(text: string): void {
     setWgText(text);
     if (text.trim() === '') {
+      // (n) N4 — an empty replace box keeps the saved config (undefined in add mode,
+      // where there is nothing to keep and the submit gate still asks for a paste).
       setVpnHint(null);
-      setDraft((d) => ({ ...d, wireguard: undefined }));
+      setDraft((d) => ({ ...d, wireguard: savedWireguard }));
       return;
     }
     const built = buildWireGuardProxyInput(draft.label, parseWireGuardConfigDetailed(text));
     if ('error' in built) {
-      setVpnHint(built.error);
-      setDraft((d) => ({ ...d, wireguard: undefined }));
+      // (n) N4 — the refusal describes the text in the box; it never deletes the block the
+      // row already holds, and it says so.
+      setVpnHint(
+        savedWireguard === undefined
+          ? built.error
+          : looksLikeWireGuardConf(text)
+            ? `${built.error}${WG_SAVED_KEPT_SUFFIX}`
+            : WG_REPLACE_INCOMPLETE_HINT,
+      );
+      setDraft((d) => ({ ...d, wireguard: savedWireguard }));
       return;
     }
     setDraft((d) => ({
@@ -2497,9 +2798,13 @@ export function ProxyForm({
     // WG parity with the OVPN paste path: say at paste time what the control plane (or
     // the tunnel) would refuse, instead of a green "✓ endpoint" over a config Save then
     // blocks. The block stays in the draft so the gate + Save tooltip carry the same reason.
+    // (n) N7 — through the SAME message builder as the Save tooltip and the submit hint,
+    // so the paste hint names the wg0.conf line too and the three cannot disagree.
     const refusal = wireguardRefusal('wireguard', built.wireguard, text);
     setVpnHint(
-      refusal !== null ? refusal.reason : `✓ endpoint ${built.host}:${built.port.toString()}`,
+      refusal !== null
+        ? vpnRefusalMessage(refusal)
+        : `✓ endpoint ${built.host}:${built.port.toString()}`,
     );
   }
 
@@ -2877,20 +3182,48 @@ export function ProxyForm({
           </div>
         </>
       )}
+      {/* (n) N9 — the textarea is alone inside its <label>. The upload control is itself a
+          <label> (a nested <label> is invalid HTML) and BOTH it and the hint used to sit
+          inside this one, so a screen reader read the textarea's name as "Paste your
+          wg0.conf … Upload a wg0.conf file ✓ endpoint …" — the button's caption and the
+          last parse result glued onto the field's name. They are siblings now, the field
+          keeps its own caption, and the hint is announced on its own. */}
       {scheme === 'wireguard' && (
-        <Field
-          label="Paste your wg0.conf — keys, endpoint + allowed IPs auto-fill"
-          error={validation.errors.wireguard}
-        >
-          <textarea
-            className="form-input mono min-h-[120px]"
-            value={wgText}
-            onChange={(e) => handleWgPaste(e.target.value)}
-            placeholder={'[Interface]\nPrivateKey = …\n[Peer]\nPublicKey = …\nEndpoint = host:port'}
-            autoComplete="off"
-            spellCheck={false}
-          />
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+        <div className="flex flex-col">
+          <label className="flex flex-col gap-1">
+            <span className="text-2xs text-ink-muted">
+              Paste your wg0.conf — keys, endpoint + allowed IPs auto-fill
+            </span>
+            <textarea
+              className="form-input mono min-h-[120px]"
+              value={wgText}
+              onChange={(e) => handleWgPaste(e.target.value)}
+              // (n) N4 — the saved-config sentence is the PLACEHOLDER, never the value: a
+              // placeholder disappears the moment the customer types, and typing over it
+              // cannot be mistaken for editing the configuration itself.
+              placeholder={
+                savedWireguard !== undefined
+                  ? WG_SAVED_PLACEHOLDER
+                  : '[Interface]\nPrivateKey = …\n[Peer]\nPublicKey = …\nEndpoint = host:port'
+              }
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          {validation.errors.wireguard !== undefined && (
+            <span className="text-2xs text-status-error">{validation.errors.wireguard}</span>
+          )}
+          {/* (n) N4 — what the row already holds, so "leave this empty to keep it" names
+              something the customer can see. Never the private key or the pre-shared key. */}
+          {savedWireguard !== undefined && (
+            <span data-component="wg-saved-summary" className="mt-1 text-2xs text-ink-muted">
+              {`Saved: endpoint ${savedWireguard.endpoint} · address ${savedWireguard.address} · allowed IPs ${savedWireguard.allowed_ips}`}
+              {savedWireguard.dns !== undefined && savedWireguard.dns.length > 0
+                ? ` · DNS ${savedWireguard.dns}`
+                : ''}
+            </span>
+          )}
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
             <span aria-hidden>⤓</span> Upload a wg0.conf file
             <input
               type="file"
@@ -2899,24 +3232,31 @@ export function ProxyForm({
               onChange={(e) => handleVpnFile(e, handleWgPaste)}
             />
           </label>
-          {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
-        </Field>
+          {vpnHint !== null && <VpnHint hint={vpnHint} isError={vpnHintIsError} />}
+        </div>
       )}
       {scheme === 'openvpn' && (
         <>
-          <Field
-            label="Paste your .ovpn — the remote endpoint auto-fills"
-            error={validation.errors.openvpn}
-          >
-            <textarea
-              className="form-input mono min-h-[120px]"
-              value={draft.openvpn?.config_blob ?? ''}
-              onChange={(e) => handleOvpnPaste(e.target.value)}
-              placeholder={'client\nremote vpn.example.com 1194 udp\ndev tun\n…'}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+          {/* (n) N9 — same structure as the WireGuard editor above, for the same reason:
+              the upload <label> and the hint were nested inside the field's <label>. */}
+          <div className="flex flex-col">
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs text-ink-muted">
+                Paste your .ovpn — the remote endpoint auto-fills
+              </span>
+              <textarea
+                className="form-input mono min-h-[120px]"
+                value={draft.openvpn?.config_blob ?? ''}
+                onChange={(e) => handleOvpnPaste(e.target.value)}
+                placeholder={'client\nremote vpn.example.com 1194 udp\ndev tun\n…'}
+                autoComplete="off"
+                spellCheck={false}
+              />
+            </label>
+            {validation.errors.openvpn !== undefined && (
+              <span className="text-2xs text-status-error">{validation.errors.openvpn}</span>
+            )}
+            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
               <span aria-hidden>⤓</span> Upload a .ovpn file
               <input
                 type="file"
@@ -2925,7 +3265,7 @@ export function ProxyForm({
                 onChange={(e) => handleVpnFile(e, handleOvpnPaste)}
               />
             </label>
-            {vpnHint !== null && <span className="mt-1 text-2xs text-ink-muted">{vpnHint}</span>}
+            {vpnHint !== null && <VpnHint hint={vpnHint} isError={vpnHintIsError} />}
             {vpnFixable !== null && (
               <button
                 type="button"
@@ -2939,7 +3279,7 @@ export function ProxyForm({
                 Remove unsupported lines (lower script-security to 1)
               </button>
             )}
-          </Field>
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Auth username (optional)">
               <input
