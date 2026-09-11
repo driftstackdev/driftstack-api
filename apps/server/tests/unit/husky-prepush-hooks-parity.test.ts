@@ -252,6 +252,26 @@ describe('W722 Husky pre-push gate + installer parity', () => {
     expect(p).toMatch(/git push --no-verify/);
   });
 
+  it('CRITICAL pre-push checks Cargo.lock consistency with `cargo update -w --locked` BEFORE the tests, inside the cargo block. A blanket version-replace at 0.1.45 pinned the `tracing` crate to a version that does not exist while the app entry stayed stale; the push gate (typecheck/lint/vitest) cannot see either, so all three release builds failed and an asset-less release became the updater\'s "latest". `--locked` fails on both states; offline first, the network variant when the offline index cannot answer; the fix hint names the by-field bump script', () => {
+    const p = read(PRE_PUSH);
+    expect(p).toMatch(
+      /cd apps\/gui-client\/src-tauri && \{ cargo update -w --locked --offline >\/dev\/null 2>&1 \|\| cargo update -w --locked >\/dev\/null 2>&1; \}/,
+    );
+    expect(p).toMatch(/gui-client Cargo\.lock is not consistent with Cargo\.toml \/ the registry/);
+    expect(p).toMatch(/node scripts\/bump-gui-version\.mjs <x\.y\.z>/);
+    // Inside the `command -v cargo` block (skipped with the fmt check when cargo is
+    // absent, and the skip line says BOTH were skipped), and before `npm test`.
+    const cargoBlock = p.indexOf('if command -v cargo >/dev/null 2>&1; then');
+    const lockCheck = p.indexOf('cargo update -w --locked --offline');
+    const skipLine = p.indexOf('cargo fmt + Cargo.lock checks SKIPPED (no cargo on PATH)');
+    const tests = p.indexOf('\nnpm test\n');
+    expect(cargoBlock).toBeGreaterThan(-1);
+    expect(lockCheck).toBeGreaterThan(cargoBlock);
+    expect(skipLine).toBeGreaterThan(lockCheck);
+    expect(tests).toBeGreaterThan(skipLine);
+    expect(existsSync(resolve(REPO_ROOT, 'scripts/bump-gui-version.mjs'))).toBe(true);
+  });
+
   it('test file metadata — file exists at canonical path', () => {
     expect(
       existsSync(resolve(REPO_ROOT, 'apps/server/tests/unit/husky-prepush-hooks-parity.test.ts')),

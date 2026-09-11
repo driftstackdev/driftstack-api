@@ -131,8 +131,21 @@ if command -v cargo >/dev/null 2>&1; then
     exit 1
   fi
   echo "→ gui-client cargo fmt check clean"
+  # Cargo.lock consistency: `cargo update -w --locked` fails on a stale app entry
+  # AND on a crate pinned to a version that does not exist — the two states a
+  # blanket version-replace produced at 0.1.45 (all three release builds failed
+  # at resolution and an asset-less release became the updater's "latest").
+  # Offline first (instant); the network variant when the offline index cannot
+  # answer. Bumps go through scripts/bump-gui-version.mjs, which edits by field.
+  if ! (cd apps/gui-client/src-tauri && { cargo update -w --locked --offline >/dev/null 2>&1 || cargo update -w --locked >/dev/null 2>&1; }); then
+    echo "✗ gui-client Cargo.lock is not consistent with Cargo.toml / the registry"
+    (cd apps/gui-client/src-tauri && cargo update -w --locked 2>&1) | head -12 | sed 's/^/    /'
+    echo "  bump the desktop client with 'node scripts/bump-gui-version.mjs <x.y.z>' (edits by field, never a blanket replace)"
+    exit 1
+  fi
+  echo "→ gui-client Cargo.lock consistent (--locked)"
 else
-  echo "→ gui-client cargo fmt SKIPPED (no cargo on PATH)"
+  echo "→ gui-client cargo fmt + Cargo.lock checks SKIPPED (no cargo on PATH)"
 fi
 
 # W-12 — the test files that no tsconfig used to cover. Runs HERE and not in
