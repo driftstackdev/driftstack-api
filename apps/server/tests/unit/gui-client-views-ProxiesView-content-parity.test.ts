@@ -241,7 +241,15 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     // proxy" on a proxy that saved fine. They are load-bearing, not defensive
     // habit — hence pinned individually.
     expect(body).toContain('await listProxies().catch(() => null)');
-    expect(body).toContain('void handleTest(target).catch(() => undefined)');
+    // (l) #16 — the post-save probe is routed by SCHEME: the native SOCKS5
+    // handshake only for a probeable row, the endpoint check for a VPN/HTTP row
+    // (it can only answer "unreachable" to a UDP endpoint — the T-20 false
+    // negative). Both branches and the swallowing catch are pinned together so
+    // neither a reverted route nor a dropped catch survives.
+    expect(body).toMatch(
+      /void \(\s*isSocks5Probeable\(target\.scheme\) \? handleTest\(target\) : handleCheckEndpoint\(target\)\s*\)\.catch\(\(\) => undefined\);/,
+    );
+    expect(body).not.toContain('void handleTest(target).catch(() => undefined)');
   });
 
   it('file exists at canonical path', () => {
