@@ -156,9 +156,20 @@ function cardProps(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardP
   };
 }
 
+// Phase B (2026-09-11): the card's latency is its ONE health pill
+// (`[data-component="health-pill"]`, a fixed 20px status row). The words that
+// said WHERE the number was measured were a visible label + a 26px bar in a row
+// that no longer exists (D2); they are the pill's title now, and the pill keeps
+// `data-latency-vantage` so the provenance is still machine-readable.
 describe('the profile card labels a server latency with where it was measured', () => {
-  it('\'fleet\' reads "from the test Mac"', () => {
-    render(
+  const pillOf = (container: HTMLElement): HTMLElement => {
+    const el = container.querySelector('[data-component="health-pill"]');
+    if (el === null) throw new Error('no health pill');
+    return el as HTMLElement;
+  };
+
+  it("'fleet' says it was measured from the Mac that runs your profiles", () => {
+    const { container } = render(
       <ProfilePhoneCard
         {...cardProps({
           latencyFromServer: true,
@@ -166,7 +177,11 @@ describe('the profile card labels a server latency with where it was measured', 
         })}
       />,
     );
-    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
+    expect(pillOf(container).textContent).toBe('42ms');
+    expect(pillOf(container).getAttribute('title')).toContain(
+      'Measured from the Mac that runs your profiles',
+    );
+    expect(pillOf(container).getAttribute('title')).not.toMatch(/not your computer\.$/);
   });
 
   it("'fleet' names the node in the hover text on the number", () => {
@@ -179,10 +194,11 @@ describe('the profile card labels a server latency with where it was measured', 
       />,
     );
     const el = container.querySelector('[data-latency-vantage="fleet"]');
+    expect(el).toBe(pillOf(container));
     expect(el?.getAttribute('title')).toContain('mac-mini-07');
   });
 
-  it('\'control_plane\' reads "from the server" and says why', () => {
+  it("'control_plane' says it came from the server and why", () => {
     const { container } = render(
       <ProfilePhoneCard
         {...cardProps({
@@ -191,23 +207,25 @@ describe('the profile card labels a server latency with where it was measured', 
         })}
       />,
     );
-    expect(screen.getByText('from the server')).toBeInTheDocument();
     const el = container.querySelector('[data-latency-vantage="control_plane"]');
+    expect(el).toBe(pillOf(container));
     expect(el?.getAttribute('title')).toContain('No test Mac was free');
   });
 
-  it('VACUITY CONTROL — a server number with no vantage keeps today\'s plain "server" marker', () => {
-    render(<ProfilePhoneCard {...cardProps({ latencyFromServer: true })} />);
-    expect(screen.getByText('server')).toBeInTheDocument();
-    expect(screen.queryByText('from the test Mac')).toBeNull();
-    expect(screen.queryByText('from the server')).toBeNull();
+  it("VACUITY CONTROL — a server number with no vantage keeps today's plain server sentence", () => {
+    const { container } = render(<ProfilePhoneCard {...cardProps({ latencyFromServer: true })} />);
+    const el = container.querySelector('[data-latency-vantage="server"]');
+    expect(el).toBe(pillOf(container));
+    expect(el?.getAttribute('title')).toContain('Measured from Driftstack, not your computer.');
+    expect(el?.getAttribute('title')).not.toMatch(/test Mac|No test Mac was free/);
   });
 
-  it('a native number carries no vantage marker at all', () => {
+  it('a native number carries the this-Mac marker and no server words', () => {
     const { container } = render(<ProfilePhoneCard {...cardProps()} />);
-    expect(container.querySelector('[data-latency-vantage="this_mac"]')).not.toBeNull();
-    expect(screen.queryByText('server')).toBeNull();
-    expect(screen.queryByText('from the test Mac')).toBeNull();
+    const el = container.querySelector('[data-latency-vantage="this_mac"]');
+    expect(el).toBe(pillOf(container));
+    expect(el?.getAttribute('title')).toContain('Measured from your computer');
+    expect(el?.getAttribute('title')).not.toMatch(/Driftstack|test Mac/);
   });
 });
 

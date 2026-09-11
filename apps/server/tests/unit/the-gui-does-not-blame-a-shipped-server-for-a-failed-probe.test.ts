@@ -42,6 +42,7 @@ const REPO_ROOT = resolve(HERE, '..', '..', '..', '..');
 const TAURI = resolve(REPO_ROOT, 'apps/gui-client/src-tauri/src/lib.rs');
 const ECHO_ROUTE = resolve(REPO_ROOT, 'apps/server/src/routes/egress-echo.ts');
 const VIEW = resolve(REPO_ROOT, 'apps/gui-client/src/views/ProxiesView.tsx');
+const COPY = resolve(REPO_ROOT, 'apps/gui-client/src/lib/proxy-check-copy.ts');
 const LIB = resolve(REPO_ROOT, 'apps/gui-client/src/lib/proxies.ts');
 
 /**
@@ -110,9 +111,17 @@ describe('V-857 the GUI does not blame a shipped server for a failed probe', () 
   });
 
   it('CRITICAL the null-exit line describes the probe rather than a release. A customer sees it only when their proxy connected and authenticated but carried no round-trip, so it must point at the probe outcome; anything that points at our release schedule tells them to wait instead of to look.', () => {
-    const view = readFileSync(VIEW, 'utf8');
-    expect(view, 'the honest null-exit wording').toContain(
-      'exit geo unavailable — the probe did not complete',
+    // The sentence now lives ONCE, in lib/proxy-check-copy.ts, and the view renders the
+    // constant (Phase B hoisted it so the card, the list and the Proxies tab cannot drift).
+    // The pin therefore reads the constant's value for the wording and the view for its use.
+    const copy = readFileSync(COPY, 'utf8');
+    expect(copy, 'the honest null-exit wording').toContain(
+      'EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the probe did not complete`',
     );
+    expect(copy).toContain("EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable'");
+    expect(copy).not.toMatch(/release|ships? (in|with)|next version/i);
+    const view = readFileSync(VIEW, 'utf8');
+    expect(view, 'the view renders the shared constant').toContain('{EXIT_GEO_UNAVAILABLE}');
+    expect(view).not.toContain('exit geo unavailable — the probe did not complete');
   });
 });

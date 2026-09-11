@@ -39,12 +39,53 @@ export const HTTP_VERIFIED_AT_LAUNCH = 'verified at launch';
  *  brought up: a refused test, no test Mac free, not stored, no API key, or a
  *  list-adopted entry). Says WHY there is no exit and what fills it, on the
  *  grid and the card alike; "no exit IP" was a dead end. */
-export const VPN_NO_EXIT_YET = `no exit measured yet — run ${CHECK_VPN_ACTION}`;
+/** Phase B (2026-09-11) — the profile card's exit line is ONE fixed 18px row at
+ *  a 144px content width, so it shows the SHORT half and carries the long
+ *  sentence (`VPN_NO_EXIT_YET_TITLE`) as its title. The long string is derived
+ *  from the short one so the grid's full sentence and the card's clause can
+ *  never disagree about the state they name. */
+export const VPN_NO_EXIT_YET_SHORT = 'no exit measured yet';
+export const VPN_NO_EXIT_YET = `${VPN_NO_EXIT_YET_SHORT} — run ${CHECK_VPN_ACTION}`;
 export const VPN_NO_EXIT_YET_TITLE = `No exit measured yet. Run ${CHECK_VPN_ACTION} to bring the tunnel up on the test Mac, or launch a session — a live session reports its own exit.`;
+
+/** (n) N-M1 / Phase B — V-857's THIRD exit state ("the probe did not complete"),
+ *  hoisted from the card so the Proxies grid (ProxiesView) and the profile card
+ *  read one constant: the whole finding was that the two surfaces described the
+ *  same cache state in different words. The card renders the SHORT clause with
+ *  the full sentence as its title; the grid renders the full sentence. Derived,
+ *  never retyped — `EXIT_GEO_UNAVAILABLE` stays byte-identical to the literal
+ *  the grid shipped. */
+export const EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable';
+export const EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the probe did not complete`;
+export const EXIT_GEO_UNAVAILABLE_TITLE =
+  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
 
 /** #3 — the card's latency slot for a VPN row with no fleet number: nothing
  *  was ever measured, so "stale" (a number that aged) is the wrong word. */
 export const VPN_LATENCY_NOT_MEASURED = 'not measured';
+/** (o) — the hover text of that pill when the row ALREADY SHOWS an exit (a live
+ *  session reported it, or the list adopted it) but no latency was ever
+ *  measured through the tunnel. `VPN_NO_EXIT_YET_TITLE` was used here and
+ *  asserted "No exit measured yet" two rows above the exit it contradicted;
+ *  this sentence names only what is missing. */
+export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel yet. Run ${CHECK_VPN_ACTION} to bring the tunnel up on the test Mac and measure it.`;
+
+/** (o) — the Proxies grid's "tunnel up · no latency" pill ((i) I4: the test Mac
+ *  brought the tunnel up and observed the exit but reported no number). The
+ *  profile card reads the SAME cache entry and used to call it "not measured"
+ *  with a "no exit yet" title beside the exit that reply put on the row; both
+ *  surfaces now carry this one sentence. */
+export const VPN_TUNNEL_UP_NO_LATENCY_TITLE =
+  'The test Mac brought this tunnel up and measured through it, but reported no latency.';
+
+/** (o) — the pre-flight of a VPN/HTTP row is a DNS resolve of its endpoint. When
+ *  it does NOT resolve, nothing downstream ran: no tunnel, no latency, no exit.
+ *  The grid's pill has said "unresolved" (with the resolver's message) since
+ *  T-20; the profile card said "not measured" + "no exit measured yet — run
+ *  Check VPN", promising a check that cannot bring the tunnel up. This is the
+ *  card's word for the exit line; the pill carries the resolver's message. */
+export const ENDPOINT_UNRESOLVED = 'unresolved';
+export const ENDPOINT_UNRESOLVED_EXIT_TITLE = `The endpoint did not resolve, so no exit could be measured. Fix the address, then ${RECHECK_ACTION}.`;
 
 /** #9 — the ONE next step for a missing API key, everywhere a proxy check
  *  needs one. Settings is the place the customer can go from here; "the

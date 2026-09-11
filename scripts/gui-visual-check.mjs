@@ -1,31 +1,39 @@
 #!/usr/bin/env node
-// Profiles-grid card GEOMETRY GATE (Phase A, 2026-09-11) — the only proof that
-// "nothing is outside the box". Rewritten from the 2026-06-15 screenshot-only
-// self-review: a screenshot can be looked at; this MEASURES.
+// Profiles-grid card GEOMETRY GATE (Phase A, 2026-09-11; Phase B the same day)
+// — the only proof that "nothing is outside the box". Rewritten from the
+// 2026-06-15 screenshot-only self-review: a screenshot can be looked at; this
+// MEASURES.
 //
 // Renders the visual harness (apps/gui-client/visual-harness.html → the real
 // ProfilePhoneCard, every state in gallery.tsx STATES) with each card pinned
 // to 178 / 240 / 260 px via the gallery's `?w=` query, and for EVERY card,
 // plain and hovered, asserts:
 //   1. the phone screen (`[data-component="phone-screen"]`) and the body have
-//      scrollWidth <= clientWidth — nothing inside wants to scroll sideways;
+//      scrollWidth <= clientWidth AND scrollHeight <= clientHeight — nothing
+//      inside wants to scroll in either axis (Phase B: the body no longer
+//      scrolls; a fixed-height tile has no fold);
 //   2. every `[data-component],[data-action],[data-udp],[data-region]` inside
-//      the card article has a bounding box ⊆ the article's box (±0.5px) —
-//      horizontally as raw geometry; vertically, an element inside a SCROLL
-//      container (the body, the ⋯ menu) is judged against that container's
-//      reachable content and counted as `belowFold` when it is under the fold
-//      (see measureCard for why that is the honest reading of Phase A);
+//      the card article has a bounding box ⊆ the article's box (±0.5px) on ALL
+//      FOUR sides — raw geometry, no scroll-container allowance any more. An
+//      element hidden by opacity 0 (the closed ⋯ menu and its rows) is skipped
+//      and counted: invisible is not "outside the box";
 //   3. nothing is CUT AND UNREACHABLE: an overflow-hidden element whose content
 //      exceeds its box is a violation unless it is a titled text clip
-//      (truncate / line-clamp) or the tags row, which is reported as
-//      clippedByDesign rather than passed in silence.
-// Elements with a 0×0 box (display:none — the hidden hover row, an absent
-// spinner) are skipped and COUNTED, and a card that yields fewer than
-// MIN_PROBES measurable elements is itself a violation: an empty page must
-// not pass as a clean one.
+//      (truncate / line-clamp);
+//   4. Phase B anatomy: the article is exactly CARD_HEIGHT (234px) tall at every
+//      width, each `[data-region]` appears once in the order REGION_ORDER and
+//      its clientHeight equals its budget, the dock (`[data-component=
+//      "card-dock"]`) and the Launch button are outside the body;
+//   5. the ⋯ menu, opened on the FIRST and the LAST card of every width: it
+//      stays inside the viewport, flips DOWNWARD on the top row (< 320px of room
+//      above the dock) and opens UPWARD further down, and closes on Escape.
+// Elements with a 0×0 box (display:none — an absent spinner) are skipped and
+// COUNTED, and a card that yields fewer than MIN_PROBES measurable elements is
+// itself a violation: an empty page must not pass as a clean one.
 //
-// Output: `shot-<state>-<width>.png` per card plus `report.json` in OUT_DIR.
-// Exit 1 on any violation (each printed), exit 0 only on a full clean sweep.
+// Output: `shot-<state>-<width>.png` per card (plus `menu-<pos>-<width>.png`)
+// and `report.json` in OUT_DIR. Exit 1 on any violation (each printed), exit 0
+// only on a full clean sweep.
 //
 // Usage (repo root): `node scripts/gui-visual-check.mjs`
 //   HARNESS_URL  default http://127.0.0.1:5199/visual-harness.html — when it
@@ -53,9 +61,18 @@ const WIDTHS = (process.env.WIDTHS ?? '178,240,260')
   .filter((w) => Number.isFinite(w) && w > 0);
 const TOLERANCE = 0.5;
 const PROBE_SELECTOR = '[data-component],[data-action],[data-udp],[data-region]';
-// select-indicator, phone-screen, card-body, egress-widget (or the no-proxy
-// row's absence), card-actions-menu — a real card always yields more than this.
-const MIN_PROBES = 4;
+// Phase B anatomy — the numbers the design panel judged. The article is
+// border 2 + padding 12 + screen 220; the screen is body 173 + dock 47; the
+// body is padding 12 + regions 142 + gaps 21.
+const CARD_HEIGHT = 234;
+const REGION_BUDGET = { identity: 38, status: 20, exit: 18, via: 16, caps: 20, when: 14, meta: 16 };
+const REGION_ORDER = ['identity', 'status', 'exit', 'via', 'caps', 'when', 'meta'];
+// The room above the dock (inside the scroller) below which the menu opens
+// downward — mirrors MENU_FLIP_ROOM_PX in ProfilePhoneCard.tsx.
+const MENU_FLIP_ROOM_PX = 360; // polish: card grew to 360 with the menu open;
+// select-indicator, phone-screen, card-body, seven regions, health-pill,
+// card-dock, card-actions-menu — a real card always yields more than this.
+const MIN_PROBES = 12;
 const MIN_STATES = 8;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -99,25 +116,22 @@ async function ensureHarness() {
 
 /** Runs INSIDE the page against one card article.
  *
- *  Three rules, each measuring a different way content leaves the box:
- *  • ESCAPED — a probe element's box past the article's. Horizontally this is
- *    raw geometry: nothing may be wider than the card, clipped or not. Vertically
- *    an element inside a SCROLL container (overflow-y auto/scroll — the body, the
- *    ⋯ menu) is judged against that container's scrollable content, because
- *    "below the fold but reachable" is the design Phase A keeps (R1: the aspect
- *    ratio stays; R2: the body scrolls) — those are COUNTED as belowFold so the
- *    report says so, and Phase B's card-grows-to-fit is measured by that number.
+ *  Rules, each measuring a different way content leaves the box:
+ *  • ESCAPED — a probe element's box past the article's, on any side. Raw
+ *    geometry: Phase B has no scroll container inside the card, so there is no
+ *    "below the fold but reachable" any more. Elements hidden by opacity 0 (the
+ *    closed ⋯ menu) are skipped and counted as `invisible`.
  *  • CONTENT-LOST — an element that clips (overflow hidden/clip) but does not
  *    scroll, whose scrollHeight/scrollWidth exceeds its client box: something is
  *    cut and nothing can bring it back. Deliberate text clips (text-overflow:
  *    ellipsis, -webkit-line-clamp) are exempt from the size rule but must carry
- *    a title on themselves or an ancestor (CLAMPED-WITHOUT-TITLE otherwise). The
- *    tags row is the ONE whole-element clip kept in Phase A (its "+N" tail is
- *    Phase B's); it is reported as clippedByDesign, never as a pass by silence.
- *  • SCROLLS-X — the screen or the body wants a horizontal scroll at all.
+ *    a title on themselves or an ancestor (CLAMPED-WITHOUT-TITLE otherwise).
+ *  • SCROLLS — the screen or the body wants a scroll in either axis at all.
+ *  • ANATOMY — article height, region presence/order/budgets, dock and Launch
+ *    outside the body.
  */
 function measureCard(article, opts) {
-  const { tolerance, probeSelector } = opts;
+  const { tolerance, probeSelector, cardHeight, regionBudget, regionOrder } = opts;
   const round = (n) => Math.round(n * 100) / 100;
   const describe = (el) => {
     const marks = ['data-component', 'data-action', 'data-udp', 'data-region']
@@ -127,63 +141,100 @@ function measureCard(article, opts) {
     const txt = (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40);
     return `${el.tagName.toLowerCase()}[${marks}]${txt ? ` "${txt}"` : ''}`;
   };
-  const scrolls = (cs) => cs.overflowY === 'auto' || cs.overflowY === 'scroll';
-  const nearestScroller = (el) => {
-    for (let n = el.parentElement; n !== null && n !== article; n = n.parentElement) {
-      if (scrolls(getComputedStyle(n))) return n;
+  const invisible = (el) => {
+    for (let n = el; n !== null && n !== article; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (cs.opacity === '0' || cs.visibility === 'hidden') return true;
     }
-    return null;
+    return false;
   };
   const a = article.getBoundingClientRect();
   const violations = [];
-  const clippedByDesign = [];
-  let belowFold = 0;
 
+  // ANATOMY — the fixed tile.
+  if (Math.abs(a.height - cardHeight) > tolerance) {
+    violations.push({ kind: 'card-height', height: round(a.height), expected: cardHeight });
+  }
   const screen = article.querySelector('[data-component="phone-screen"]');
-  if (screen === null) {
-    violations.push({ kind: 'missing', what: 'phone-screen' });
-  } else if (screen.scrollWidth > screen.clientWidth) {
-    violations.push({
-      kind: 'screen-scrolls-x',
-      scrollWidth: screen.scrollWidth,
-      clientWidth: screen.clientWidth,
-    });
-  }
   const body = article.querySelector('[data-component="card-body"]');
-  if (body === null) {
-    violations.push({ kind: 'missing', what: 'card-body' });
-  } else if (body.scrollWidth > body.clientWidth) {
-    violations.push({
-      kind: 'body-scrolls-x',
-      scrollWidth: body.scrollWidth,
-      clientWidth: body.clientWidth,
-    });
+  for (const [name, el] of [
+    ['phone-screen', screen],
+    ['card-body', body],
+  ]) {
+    if (el === null) {
+      violations.push({ kind: 'missing', what: name });
+      continue;
+    }
+    if (el.scrollWidth > el.clientWidth) {
+      violations.push({
+        kind: `${name}-scrolls-x`,
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      });
+    }
+    if (el.scrollHeight > el.clientHeight) {
+      violations.push({
+        kind: `${name}-scrolls-y`,
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+      });
+    }
+  }
+  const regions = Array.from(article.querySelectorAll('[data-region]'));
+  const order = regions.map((r) => r.getAttribute('data-region'));
+  if (order.join(',') !== regionOrder.join(',')) {
+    violations.push({ kind: 'region-order', order, expected: regionOrder });
+  }
+  const regionHeights = {};
+  for (const r of regions) {
+    const name = r.getAttribute('data-region');
+    regionHeights[name] = r.clientHeight;
+    const budget = regionBudget[name];
+    if (budget === undefined) {
+      violations.push({ kind: 'region-unknown', region: name });
+    } else if (r.clientHeight !== budget) {
+      violations.push({ kind: 'region-height', region: name, height: r.clientHeight, budget });
+    }
+    if (body !== null && !body.contains(r)) {
+      violations.push({ kind: 'region-outside-body', region: name });
+    }
+  }
+  const dock = article.querySelector('[data-component="card-dock"]');
+  if (dock === null) {
+    violations.push({ kind: 'missing', what: 'card-dock' });
+  } else if (body !== null && body.contains(dock)) {
+    violations.push({ kind: 'dock-inside-body' });
+  }
+  const launch = Array.from(article.querySelectorAll('button')).find((b) =>
+    /^(Launch|Launching…|Open session)$/.test((b.textContent ?? '').trim().replace(/^↻\s*/, '')),
+  );
+  if (launch === undefined) {
+    violations.push({ kind: 'missing', what: 'launch-button' });
+  } else if (body !== null && body.contains(launch)) {
+    violations.push({ kind: 'launch-inside-body' });
   }
 
-  // Rule 1 — ESCAPED.
+  // Rule 1 — ESCAPED, all four sides, raw geometry.
   let probed = 0;
   let skipped = 0;
+  let invisibleCount = 0;
   for (const el of article.querySelectorAll(probeSelector)) {
     const b = el.getBoundingClientRect();
     if (b.width === 0 && b.height === 0) {
       skipped += 1;
       continue;
     }
-    probed += 1;
-    const over = { left: round(a.left - b.left), right: round(b.right - a.right) };
-    const scroller = nearestScroller(el);
-    if (scroller === null) {
-      over.top = round(a.top - b.top);
-      over.bottom = round(b.bottom - a.bottom);
-    } else {
-      // Reachable = inside the scroller's CONTENT box (its top, minus what is
-      // already scrolled, down to its full scrollHeight).
-      const s = scroller.getBoundingClientRect();
-      const contentTop = s.top - scroller.scrollTop;
-      over.top = round(contentTop - b.top);
-      over.bottom = round(b.bottom - (contentTop + scroller.scrollHeight));
-      if (b.bottom > s.bottom + tolerance) belowFold += 1;
+    if (invisible(el)) {
+      invisibleCount += 1;
+      continue;
     }
+    probed += 1;
+    const over = {
+      left: round(a.left - b.left),
+      right: round(b.right - a.right),
+      top: round(a.top - b.top),
+      bottom: round(b.bottom - a.bottom),
+    };
     if (Math.max(over.left, over.right, over.top, over.bottom) > tolerance) {
       violations.push({ kind: 'escaped', el: describe(el), over });
     }
@@ -192,10 +243,10 @@ function measureCard(article, opts) {
     violations.push({ kind: 'too-few-probes', probed, minProbes: opts.minProbes });
   }
 
-  // Rule 2 — CONTENT-LOST / CLAMPED-WITHOUT-TITLE, over EVERY descendant.
+  // Rule 2 — CONTENT-LOST / CLAMPED-WITHOUT-TITLE, over EVERY visible descendant.
   for (const el of article.querySelectorAll('*')) {
     const cs = getComputedStyle(el);
-    if (cs.display === 'none') continue;
+    if (cs.display === 'none' || invisible(el)) continue;
     const clipsX = cs.overflowX === 'hidden' || cs.overflowX === 'clip';
     const clipsY = cs.overflowY === 'hidden' || cs.overflowY === 'clip';
     const textClip =
@@ -211,22 +262,25 @@ function measureCard(article, opts) {
     const lostX = clipsX && el.scrollWidth > el.clientWidth + 1;
     const lostY = clipsY && el.scrollHeight > el.clientHeight + 1;
     if (!lostX && !lostY) continue;
-    const entry = {
+    violations.push({
+      kind: 'content-lost',
       el: describe(el),
       scroll: [el.scrollWidth, el.scrollHeight],
       client: [el.clientWidth, el.clientHeight],
-    };
-    if (el.getAttribute('data-component') === 'tags-row' && !lostX) {
-      clippedByDesign.push(entry);
-    } else {
-      violations.push({ kind: 'content-lost', ...entry });
-    }
+    });
   }
 
   return {
     card: { w: round(a.width), h: round(a.height) },
     screen:
-      screen === null ? null : { scrollWidth: screen.scrollWidth, clientWidth: screen.clientWidth },
+      screen === null
+        ? null
+        : {
+            scrollWidth: screen.scrollWidth,
+            clientWidth: screen.clientWidth,
+            scrollHeight: screen.scrollHeight,
+            clientHeight: screen.clientHeight,
+          },
     body:
       body === null
         ? null
@@ -236,10 +290,89 @@ function measureCard(article, opts) {
             scrollWidth: body.scrollWidth,
             clientWidth: body.clientWidth,
           },
+    regionHeights,
     probed,
     skipped,
-    belowFold,
-    clippedByDesign,
+    invisible: invisibleCount,
+    violations,
+  };
+}
+
+/** Runs INSIDE the page with the ⋯ menu OPEN on one card: the menu is allowed
+ *  to leave the card (it is a popover) but not the viewport, and it must have
+ *  flipped the way the room above the dock dictates. */
+function measureOpenMenu(article, opts) {
+  const round = (n) => Math.round(n * 100) / 100;
+  const violations = [];
+  const menu = article.querySelector('[data-component="card-actions-menu"]');
+  const dock = article.querySelector('[data-component="card-dock"]');
+  if (menu === null || dock === null) {
+    return { violations: [{ kind: 'missing', what: menu === null ? 'menu' : 'dock' }] };
+  }
+  if (menu.getAttribute('data-open') !== 'true') violations.push({ kind: 'menu-not-open' });
+  if (getComputedStyle(menu).opacity !== '1') violations.push({ kind: 'menu-not-visible' });
+  const m = menu.getBoundingClientRect();
+  const d = dock.getBoundingClientRect();
+  const a = article.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  const over = {
+    left: round(-m.left),
+    right: round(m.right - vw),
+    top: round(-m.top),
+    bottom: round(m.bottom - vh),
+  };
+  if (Math.max(over.left, over.right, over.top, over.bottom) > opts.tolerance) {
+    violations.push({ kind: 'menu-outside-viewport', over });
+  }
+  // Anchored to BOTH card edges (Phase A): never wider than the card.
+  if (m.left < a.left - opts.tolerance || m.right > a.right + opts.tolerance) {
+    violations.push({
+      kind: 'menu-wider-than-card',
+      menu: [round(m.left), round(m.right)],
+      card: [round(a.left), round(a.right)],
+    });
+  }
+  // The same room the component computed (nearest scroller, else the viewport).
+  let scrollerTop = 0;
+  for (let n = dock.parentElement; n !== null; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') {
+      scrollerTop = n.getBoundingClientRect().top;
+      break;
+    }
+  }
+  const room = d.top - scrollerTop;
+  const expected = room < opts.flipRoom ? 'below' : 'above';
+  const placement = menu.getAttribute('data-placement');
+  if (placement !== expected) {
+    violations.push({ kind: 'menu-placement', placement, expected, room: round(room) });
+  }
+  if (expected === 'below' && m.top < d.bottom - opts.tolerance) {
+    violations.push({
+      kind: 'menu-below-overlaps-dock',
+      menuTop: round(m.top),
+      dockBottom: round(d.bottom),
+    });
+  }
+  if (expected === 'above' && m.bottom > d.top + opts.tolerance) {
+    violations.push({
+      kind: 'menu-above-overlaps-dock',
+      menuBottom: round(m.bottom),
+      dockTop: round(d.top),
+    });
+  }
+  if (menu.scrollWidth > menu.clientWidth) {
+    violations.push({
+      kind: 'menu-scrolls-x',
+      scrollWidth: menu.scrollWidth,
+      clientWidth: menu.clientWidth,
+    });
+  }
+  return {
+    placement,
+    room: round(room),
+    menu: { top: round(m.top), bottom: round(m.bottom), h: round(m.height) },
     violations,
   };
 }
@@ -249,8 +382,25 @@ async function main() {
   await mkdir(OUT, { recursive: true });
   const started = await ensureHarness();
   const browser = await chromium.launch();
-  const report = { url: URL, widths: WIDTHS, tolerance: TOLERANCE, cards: [] };
+  const report = {
+    url: URL,
+    widths: WIDTHS,
+    tolerance: TOLERANCE,
+    cardHeight: CARD_HEIGHT,
+    regionBudget: REGION_BUDGET,
+    cards: [],
+    menus: [],
+  };
   let violationCount = 0;
+  const opts = {
+    tolerance: TOLERANCE,
+    probeSelector: PROBE_SELECTOR,
+    minProbes: MIN_PROBES,
+    cardHeight: CARD_HEIGHT,
+    regionBudget: REGION_BUDGET,
+    regionOrder: REGION_ORDER,
+    flipRoom: MENU_FLIP_ROOM_PX,
+  };
   try {
     for (const width of WIDTHS) {
       const page = await browser.newPage({
@@ -275,6 +425,7 @@ async function main() {
           `harness rendered ${n} phone-card states (< ${MIN_STATES}) — nothing to measure`,
         );
       }
+      const heights = new Set();
       for (let i = 0; i < n; i += 1) {
         const wrapper = wrappers.nth(i);
         const label = (await wrapper.getAttribute('data-state')) ?? `state-${i}`;
@@ -284,7 +435,6 @@ async function main() {
           .replace(/^-|-$/g, '')
           .slice(0, 48);
         const card = wrapper.locator('article').first();
-        const opts = { tolerance: TOLERANCE, probeSelector: PROBE_SELECTOR, minProbes: MIN_PROBES };
         await page.mouse.move(0, 0);
         const plain = await card.evaluate(measureCard, opts);
         await card.hover();
@@ -293,6 +443,7 @@ async function main() {
         const shot = `${OUT}/shot-${slug}-${width}.png`;
         await card.screenshot({ path: shot });
         await page.mouse.move(0, 0);
+        heights.add(plain.card.h);
         const entry = { width, index: i, label, shot, plain, hovered };
         report.cards.push(entry);
         const v = plain.violations.length + hovered.violations.length;
@@ -300,14 +451,69 @@ async function main() {
         process.stdout.write(
           `${String(width).padStart(3)}px ${plain.card.w}x${plain.card.h} [${label}] ` +
             `plain ${plain.violations.length} (probed ${plain.probed}, skipped ${plain.skipped}` +
-            `, belowFold ${plain.belowFold}, clippedByDesign ${plain.clippedByDesign.length}) · ` +
-            `hover ${hovered.violations.length} (belowFold ${hovered.belowFold})${v > 0 ? '  ✗' : ''}\n`,
+            `, invisible ${plain.invisible}) · hover ${hovered.violations.length}${v > 0 ? '  ✗' : ''}\n`,
         );
         for (const pass of ['plain', 'hovered']) {
           for (const viol of entry[pass].violations) {
             process.stdout.write(`      ${pass}: ${JSON.stringify(viol)}\n`);
           }
         }
+      }
+      if (heights.size !== 1) {
+        violationCount += 1;
+        process.stdout.write(
+          `${String(width).padStart(3)}px ✗ card heights differ across states: ${[...heights].join(', ')}\n`,
+        );
+        report.menus.push({ width, kind: 'heights-differ', heights: [...heights] });
+      }
+
+      // Rule 5 — the ⋯ menu on the top row scrolled to the top of the viewport
+      // (< 320px above the dock → opens downward) and on the last card scrolled
+      // into view at the bottom (opens upward). Both placements must be SEEN:
+      // a flip that never flips would pass every per-card arm.
+      const placements = new Set();
+      for (const which of ['first', 'last']) {
+        const idx = which === 'first' ? 0 : n - 1;
+        const wrapper = wrappers.nth(idx);
+        const card = wrapper.locator('article').first();
+        if (which === 'first') {
+          await card.evaluate((el) => {
+            window.scrollTo(0, Math.max(0, el.getBoundingClientRect().top + window.scrollY - 24));
+          });
+        } else {
+          await card.scrollIntoViewIfNeeded();
+        }
+        await page.waitForTimeout(100);
+        await card.getByRole('button', { name: 'More actions' }).click();
+        await page.waitForTimeout(200);
+        const measured = await card.evaluate(measureOpenMenu, opts);
+        const shot = `${OUT}/menu-${which}-${width}.png`;
+        await page.screenshot({ path: shot, fullPage: false });
+        await page.keyboard.press('Escape');
+        await page.waitForTimeout(200);
+        const stillOpen = await card
+          .locator('[data-component="card-actions-menu"]')
+          .getAttribute('data-open');
+        if (stillOpen !== 'false')
+          measured.violations.push({ kind: 'menu-did-not-close-on-escape' });
+        if (measured.placement !== undefined) placements.add(measured.placement);
+        violationCount += measured.violations.length;
+        report.menus.push({ width, which, shot, ...measured });
+        process.stdout.write(
+          `${String(width).padStart(3)}px menu ${which} → ${measured.placement ?? '?'} (room ${measured.room ?? '?'}) ` +
+            `${measured.violations.length} violation(s)${measured.violations.length > 0 ? '  ✗' : ''}\n`,
+        );
+        for (const viol of measured.violations) {
+          process.stdout.write(`      menu: ${JSON.stringify(viol)}\n`);
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
+      }
+      if (!(placements.has('below') && placements.has('above'))) {
+        violationCount += 1;
+        report.menus.push({ width, kind: 'menu-flip-not-exercised', placements: [...placements] });
+        process.stdout.write(
+          `${String(width).padStart(3)}px ✗ the menu flip was not exercised both ways (saw: ${[...placements].join(', ') || 'nothing'})\n`,
+        );
       }
       await page.close();
     }

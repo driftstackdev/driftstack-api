@@ -288,10 +288,21 @@ describe('ProfilesView profile-lifecycle actions', () => {
       // Anchored on the subject itself now, so it cannot be broken by unrelated
       // chrome appearing or disappearing above the grid.
       await screen.findByTitle(/Stored profile size/);
-      // The card footer shows the formatted sealed-store size (3 MiB) with an
-      // explanatory title — distinct from the meter's account total.
+      // Phase B (2026-09-11): the fixed-height tile has no slot for the size; it
+      // rides in the meta row's title (the details sheet, Phase C, will show it)
+      // — the formatted sealed-store size (3 MiB), distinct from the meter's
+      // account total.
+      // Polish (2026-09-11): the size is a static, titled info row in the card's
+      // ⋯ menu (it rode in the meta row's title, which only surfaced between
+      // pills — information with no affordance); the Phase C details sheet is
+      // its final home.
       const sized = within(container).getByTitle(/Stored profile size/);
-      expect(sized.textContent).toBe('3.0 MiB');
+      expect(sized.getAttribute('data-component')).toBe('profile-size');
+      expect(sized.closest('[data-component="card-actions-menu"]')).not.toBeNull();
+      expect(sized.textContent).toContain('3.0 MiB stored');
+      expect(sized.getAttribute('title')).toMatch(
+        /Stored profile size \(encrypted browser state\): 3\.0 MiB$/,
+      );
     });
 
     it('exposes a Clear cache action in the card menu, saying what it keeps', async () => {

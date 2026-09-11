@@ -46,7 +46,9 @@ const BACKLOG = [
   // 91 → 88 on 2026-09-07 (T-14/T-19/T-20/T-23): the owner-list test files were type-cleaned
   // as they landed — mock-call tuples narrowed, getByLabelText<HTMLInputElement>, and the
   // clipboard teardown via Reflect.deleteProperty — so no new debt entered the backlog.
-  { project: 'apps/gui-client/tsconfig.test.json', pinned: 88, minTestFiles: 200 },
+  // 88 → 87 on 2026-09-11: the Phase-B rewrite of profile-phone-card.test.tsx removed its one
+  // pre-existing error; the ratchet is two-sided, so the pin follows the measurement DOWN.
+  { project: 'apps/gui-client/tsconfig.test.json', pinned: 87, minTestFiles: 200 },
   // W-12, 2026-08-26 — every `packages/*` suite was transpiled by vitest and
   // typechecked by NOTHING: each package's `tsconfig.json` includes only
   // `src/**/*`, and five of them additionally `exclude` tests. Measured at 50

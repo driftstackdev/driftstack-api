@@ -43,7 +43,7 @@ describe('the chip', () => {
     const el = container.querySelector('[data-component="proxy-os-fingerprint"]');
     if (el === null) throw new Error('chip did not render');
     return {
-      verdict: el.getAttribute('data-verdict'),
+      verdict: el.getAttribute('data-os-tone'),
       green: el.className.includes('status-ready'),
       red: el.className.includes('status-error'),
     };

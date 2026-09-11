@@ -206,8 +206,8 @@ describe('ProfilesView — exit-geo is gated on capability health', () => {
     await screen.findByRole('button', { name: 'Launch' });
     // The stale exit IP + country must NOT show for a down proxy — the card
     // falls back to the honest "no exit IP" prompt.
-    expect(screen.queryByText('203.0.113.7')).toBeNull();
-    expect(screen.queryByText('US')).toBeNull();
+    expect(screen.queryByTitle(/203\.0\.113\.7/)).toBeNull();
+    expect(screen.queryByText(/United States|^US$/)).toBeNull();
     expect(screen.getByText('no exit IP')).toBeTruthy();
     // F1 (audit 2026-09-08): the native probe returns latency_ms=0 for a DOWN
     // proxy; gated on exitOk, so it must NOT render as a green "0ms" chip — a dead
@@ -219,9 +219,12 @@ describe('ProfilesView — exit-geo is gated on capability health', () => {
     lastReachable = true;
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await screen.findByRole('button', { name: 'Launch' });
-    // A healthy proxy still surfaces its hydrated exit IP + country.
-    expect(screen.getByText('203.0.113.7')).toBeTruthy();
-    expect(screen.getByText('US')).toBeTruthy();
+    // A healthy proxy still surfaces its hydrated exit IP + country. Phase B:
+    // the exit line reads the place (the country's name when no city is known)
+    // and carries `place · ip` as its title; the CC chip is gone.
+    const exit = screen.getByTitle(/203\.0\.113\.7$/);
+    expect(exit.getAttribute('title')).toMatch(/^(United States|US) · 203\.0\.113\.7$/);
+    expect(exit.textContent).toMatch(/^(United States|US)$/);
     // F1 vacuity control: the exitOk gate must not suppress a REAL latency — a
     // healthy proxy (latency_ms=42) still shows its number.
     expect(screen.getByText('42ms')).toBeTruthy();

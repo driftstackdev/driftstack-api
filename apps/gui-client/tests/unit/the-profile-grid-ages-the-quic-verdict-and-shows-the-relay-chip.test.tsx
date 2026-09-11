@@ -337,7 +337,14 @@ describe('the fleet relay verdict reaches the card', () => {
       result: { ...UDP_OK, reachable: false, can_route: false },
     });
     const { container } = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    await quicChip(container);
+    // Phase B: a proxy that is not usable shows the verdict in its health pill
+    // and the repair row — no capability chip at all, relay or otherwise.
+    await waitFor(() => {
+      expect(
+        container.querySelector('[data-component="health-pill"][data-health="broken"]'),
+      ).not.toBeNull();
+    });
+    expect(container.querySelector('[data-quic-inferred]')).toBeNull();
     expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
   });
 });

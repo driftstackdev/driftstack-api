@@ -34,6 +34,8 @@ import {
   MISSING_API_KEY_NEXT_STEP,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET,
+  VPN_NO_EXIT_YET_SHORT,
+  VPN_NO_EXIT_YET_TITLE,
   VPN_NOT_STORED_CHECK_NOTICE,
   VPN_NOT_STORED_TALLY_REASON,
 } from '../../src/lib/proxy-check-copy';
@@ -339,9 +341,14 @@ describe('#3 — the profile card for a checked-but-no-exit VPN row', () => {
 
   // MUTATION: restore `p.probed ? 'no exit IP' : …` → the VPN arm reads the
   // dead end again → red.
-  it('CRITICAL says why there is no exit and names Check VPN — the same words as the grid', () => {
+  // Phase B (2026-09-11): the card's exit line is ONE fixed 18px row, so it
+  // shows the SHORT clause ('no exit measured yet') and carries the grid's
+  // full sentence as its title — the same constant family, never a retype.
+  it('CRITICAL says why there is no exit and names Check VPN — the same words as the grid (short clause on the line, full sentence in its title)', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true })} />);
-    expect(screen.getByText(VPN_NO_EXIT_YET)).toBeTruthy();
+    const line = screen.getByText(VPN_NO_EXIT_YET_SHORT);
+    expect(line.getAttribute('title')).toBe(VPN_NO_EXIT_YET_TITLE);
+    expect(VPN_NO_EXIT_YET.startsWith(`${VPN_NO_EXIT_YET_SHORT} — run `)).toBe(true);
     expect(screen.queryByText('no exit IP')).toBeNull();
     cleanup();
   });
@@ -353,11 +360,16 @@ describe('#3 — the profile card for a checked-but-no-exit VPN row', () => {
     cleanup();
   });
 
-  it('CONTROL — a probed SOCKS5 card with no exit keeps "no exit IP" and "stale" (a number that aged)', () => {
+  it('CONTROL — a probed SOCKS5 card with no exit keeps "no exit IP" (the VPN clause is gated on `vpn`); its pill is "not measured" too — "stale" is gone from the card (G9)', () => {
+    // Phase B deleted 'stale': a number that was never taken did not age. The
+    // discriminator this arm exists for — the VPN clause never leaks onto a
+    // SOCKS5 card — is unchanged.
     render(<ProfilePhoneCard {...cardProps({ vpn: false })} />);
     expect(screen.getByText('no exit IP')).toBeTruthy();
-    expect(screen.getByText('stale')).toBeTruthy();
+    expect(screen.getByText('not measured')).toBeTruthy();
+    expect(screen.queryByText('stale')).toBeNull();
     expect(screen.queryByText(VPN_NO_EXIT_YET)).toBeNull();
+    expect(screen.queryByText(VPN_NO_EXIT_YET_SHORT)).toBeNull();
     cleanup();
   });
 

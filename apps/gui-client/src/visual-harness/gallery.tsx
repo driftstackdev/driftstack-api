@@ -15,6 +15,7 @@ import { ProxyForm } from '../views/ProxiesView';
 import { DeviceToolbar } from '../views/SimulatorWindow';
 import { Kpi } from '../views/CommandCenterView';
 import { TierBadge } from '../components/TierBadge';
+import { VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
 
 const noop = (): void => undefined;
 
@@ -31,6 +32,11 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     tags: [],
     hasProxy: true,
     proxyExplicit: true,
+    // Polish — the default via row is the proxy's LABEL (the comp's); the
+    // mono host:port fallback is the 'unnamed proxy' state's, which sets
+    // proxyName: null explicitly.
+    proxyName: 'Oxylabs residential NL #3',
+    proxyAddress: 'gate.nodemaven.com:1080',
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
@@ -67,7 +73,7 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
 }
 
 /** One SOCKS5 result that FAILS `proxyVerdict` (reaches + authenticates, cannot
- *  route) — the shape that trips the broken-proxy banner. */
+ *  route) — the shape that trips the repair row. */
 const CANNOT_ROUTE = {
   reachable: true,
   auth_ok: true,
@@ -78,25 +84,49 @@ const CANNOT_ROUTE = {
   message: 'CONNECT refused by the proxy (reply 0x05 — connection refused)',
 } as const;
 
+/** The failure the state matrix names: the proxy did not answer at all. */
+const NOT_REACHABLE = {
+  reachable: false,
+  auth_ok: false,
+  udp_associate: false,
+  can_route: false,
+  connect_reply: 0xff,
+  latency_ms: 0,
+  message: 'The proxy did not answer. Check the host and port, and that it is online.',
+} as const;
+
 const SIXTY_CHAR_NAME = 'amsterdam shopper for the netherlands christmas campaigns 26';
 const EIGHTY_CHAR_NOTE =
   'Warm this one every Monday before 09:00 CET; the checkout flow rejects cold ones';
+/** Phase B state 11 — a 45-char name (truncates at 178 and at 260). */
+const FORTY_FIVE_CHAR_NAME = 'amsterdam shopper with a long descriptive nam';
+const LONG_PROXY_NAME = 'Oxylabs residential NL rotating #3';
+const LONG_PLACE = 'Amsterdam, North Holland, Netherlands';
 
 // The meaningful visual states. Label each so the screenshot is self-describing.
 // ⛔ EXPORTED: the jsdom guard in tests/unit/profile-phone-card.test.tsx renders
 // EVERY state here and asserts the Launch control survives each one — a state
 // added here is a state that guard covers, with no second list to keep in sync.
+// Phase B — the gate (scripts/gui-visual-check.mjs) additionally asserts that
+// every state is exactly 234px tall and that every region meets its budget, so
+// a state added here is a state the geometry proof covers too.
 export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
   { label: 'idle · UDP ok', props: base({}) },
   {
-    label: 'MAX · full egress + folder + tags + saved-tabs (overflow repro)',
+    label: 'MAX · full egress + folder + tags + saved-tabs + note (overflow repro)',
     props: base({
-      name: 'amsterdam shopper with a long descriptive profile name',
+      name: FORTY_FIVE_CHAR_NAME,
       folder: 'Shopping / Netherlands',
       tags: ['retail', 'nl', 'daily', 'warm', 'checkout'],
       savedTabsReopen: true,
       sizeLabel: '128 MB',
-      locationLabel: 'Amsterdam, North Holland, Netherlands',
+      locationLabel: LONG_PLACE,
+      proxyName: LONG_PROXY_NAME,
+      note: EIGHTY_CHAR_NOTE,
+      onSaveNote: noop,
+      onEdit: noop,
+      onTrim: noop,
+      onActivity: noop,
       osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
     }),
   },
@@ -112,15 +142,18 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       icon: '👟',
       hue: 320,
       running: true,
+      runningSinceIso: new Date(Date.now() - 12 * 60_000).toISOString(),
+      onStop: noop,
       flag: '🇯🇵',
       countryCode: 'JP',
       exitIp: '133.18.7.40',
+      locationLabel: 'Tokyo',
       latencyMs: 88,
       latencyFillPct: 60,
     }),
   },
   {
-    label: 'UDP fail (red)',
+    label: 'UDP fail (muted, never red)',
     props: base({
       name: 'berlin reviews',
       monogram: 'BR',
@@ -128,6 +161,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       flag: '🇩🇪',
       countryCode: 'DE',
       exitIp: '91.64.12.200',
+      locationLabel: 'Berlin',
       latencyMs: 210,
       latencyFillPct: 95,
       latencyGood: false,
@@ -149,11 +183,14 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'SP',
       hue: 140,
       flag: '🇧🇷',
-      countryCode: 'BR',
+      countryCode: null,
       exitIp: null,
+      locationLabel: null,
       latencyMs: null,
       probed: false,
       capabilities: null,
+      checkedAtIso: null,
+      lastUsedIso: null,
     }),
   },
   {
@@ -164,11 +201,14 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       hue: 0,
       hasProxy: false,
       proxyExplicit: true,
+      proxyAddress: null,
       flag: '🌍',
       countryCode: null,
       exitIp: null,
+      locationLabel: null,
       latencyMs: null,
       capabilities: null,
+      checkedAtIso: null,
     }),
   },
   {
@@ -185,14 +225,33 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
   // ── Phase A (2026-09-11) — the states the grid measurement named. Each one
   // exists because a row in it painted past the 178px card before the fix.
   {
-    label: 'failed · socks5 (Retest + Change)',
+    label: 'failed · socks5 (Re-test + Change)',
     props: base({
       name: 'lisbon returns',
       monogram: 'LR',
       hue: 350,
       flag: '🇵🇹',
-      countryCode: 'PT',
+      countryCode: null,
       exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      capabilities: NOT_REACHABLE,
+      proxyName: LONG_PROXY_NAME,
+      lastUsedIso: null,
+      checkedAtIso: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+      onEdit: noop,
+    }),
+  },
+  {
+    label: 'failed · socks5 · cannot route',
+    props: base({
+      name: 'porto returns',
+      monogram: 'PR',
+      hue: 340,
+      flag: '🇵🇹',
+      countryCode: null,
+      exitIp: null,
+      locationLabel: null,
       latencyMs: null,
       capabilities: CANNOT_ROUTE,
       onEdit: noop,
@@ -205,8 +264,9 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'LR',
       hue: 350,
       flag: '🇵🇹',
-      countryCode: 'PT',
+      countryCode: null,
       exitIp: null,
+      locationLabel: null,
       latencyMs: null,
       capabilities: CANNOT_ROUTE,
       testing: true,
@@ -226,7 +286,9 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       locationLabel: 'Zürich, Zurich',
       vpn: true,
       proxyName: 'ProtonVPN CH#42',
+      proxyAddress: 'ch-42.protonvpn.net:51820',
       capabilities: null,
+      quicProbe: true,
       latencyMs: 61,
       latencyFillPct: 40,
       latencyFromServer: true,
@@ -240,13 +302,14 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'OC',
       hue: 80,
       flag: '🇳🇴',
-      countryCode: 'NO',
+      countryCode: null,
       exitIp: null,
       locationLabel: null,
       latencyMs: null,
       capabilities: null,
       vpn: true,
       proxyName: 'Mullvad no-osl-wg-001',
+      proxyAddress: '193.32.127.66:51820',
       vpnFailure:
         'The test Mac could not bring the tunnel up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
       vpnNotice:
@@ -263,13 +326,69 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'MT',
       hue: 40,
       flag: '🇪🇸',
-      countryCode: 'ES',
+      countryCode: null,
       exitIp: null,
       locationLabel: null,
       latencyMs: null,
       capabilities: null,
       vpn: true,
+      proxyName: 'Mullvad es-mad-wg-004',
       checkedAtIso: null,
+      // Polish — the notice says 'Endpoint resolves.', so the row carries the
+      // resolved pre-flight the grid would: the pill reads 'endpoint ok'.
+      endpoint: { resolved: true, message: 'Resolved' },
+      vpnNotice: VPN_NOT_STORED_CHECK_NOTICE,
+    }),
+  },
+  {
+    // (o) — the fleet brought the tunnel up and observed the exit but reported
+    // no latency: the grid's green 'tunnel up · no latency'; the card's pill is
+    // 'tunnel up' and the caps row shows what that reply measured.
+    label: 'vpn · tunnel up, no latency',
+    props: base({
+      name: 'vienna listings',
+      monogram: 'VL',
+      hue: 300,
+      flag: '🇦🇹',
+      countryCode: 'AT',
+      exitIp: '185.22.1.10',
+      locationLabel: 'Vienna, Vienna',
+      vpn: true,
+      proxyName: 'ProtonVPN AT#7',
+      proxyAddress: 'at-7.protonvpn.net:51820',
+      capabilities: null,
+      quicProbe: true,
+      latencyMs: null,
+      latencyFillPct: 0,
+      latencyGood: false,
+      latencyVantage: { measuredFrom: 'fleet', nodeId: 'mac-mini-02' },
+      endpoint: { resolved: true, message: 'Resolved' },
+    }),
+  },
+  {
+    // (o) — the endpoint does not resolve: red 'unresolved' (the resolver's
+    // message as title), Re-check + Change, no exit, no Check VPN promise.
+    label: 'vpn · endpoint unresolved',
+    props: base({
+      name: 'warsaw parcels',
+      monogram: 'WP',
+      hue: 20,
+      flag: '🌍',
+      countryCode: null,
+      exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      latencyFillPct: 0,
+      latencyGood: false,
+      capabilities: null,
+      vpn: true,
+      proxyName: 'Mullvad pl-waw-wg-003',
+      proxyAddress: 'pl-waw-wg-003.mullvad.net:51820',
+      endpoint: {
+        resolved: false,
+        message: 'DNS lookup of pl-waw-wg-003.mullvad.net failed: no such host.',
+      },
+      onEdit: noop,
     }),
   },
   {
@@ -279,7 +398,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       monogram: 'DS',
       hue: 120,
       flag: '🇮🇪',
-      countryCode: 'IE',
+      countryCode: null,
       exitIp: null,
       exitProbeFailed: true,
       locationLabel: null,
@@ -292,10 +411,18 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
     props: base({ latencyFromServer: true, latencyVantage: { measuredFrom: 'control_plane' } }),
   },
   {
-    label: 'inherited default · 15-char IPv4',
-    props: base({ proxyExplicit: false, exitIp: '255.255.255.255' }),
+    label: 'inherited default · 15-char IPv4 · unnamed proxy',
+    props: base({
+      proxyExplicit: false,
+      proxyName: null,
+      proxyAddress: '255.255.255.255:65535',
+      exitIp: '255.255.255.255',
+    }),
   },
-  { label: 'ipv6 exit', props: base({ exitIp: '2001:0db8:85a3:0000:0000:8a2e:0370:7334' }) },
+  {
+    label: 'ipv6 exit',
+    props: base({ exitIp: '2001:0db8:85a3:0000:0000:8a2e:0370:7334', locationLabel: null }),
+  },
   {
     label: 'long proxy label',
     props: base({
@@ -304,6 +431,21 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
   },
   { label: 'note · 80 chars', props: base({ note: EIGHTY_CHAR_NOTE, onSaveNote: noop }) },
   { label: '60-char name', props: base({ name: SIXTY_CHAR_NAME, monogram: 'AS' }) },
+  {
+    label: 'long-names · 45-char name · long place · long proxy · default',
+    props: base({
+      name: FORTY_FIVE_CHAR_NAME,
+      proxyName: LONG_PROXY_NAME,
+      proxyAddress: '255.255.255.255:65535',
+      proxyExplicit: false,
+      locationLabel: LONG_PLACE,
+      exitIp: '255.255.255.255',
+    }),
+  },
+  {
+    label: 'saved tabs · never launched',
+    props: base({ savedTabsReopen: true, lastUsedIso: null }),
+  },
 ];
 
 /** Phase A — `?w=178|240|260` pins every phone card to that exact width, so the
@@ -330,8 +472,9 @@ export function Gallery(): JSX.Element {
         ProfilePhoneCard — visual states
       </h1>
       <p className="mb-6 text-sm text-ink-secondary">
-        Automated render for self-review (scripts/visual-check.mjs). Hover states are forced on via
-        the harness so the action strip + WebRTC/QUIC detail are visible in the static shot.
+        Automated render for the geometry gate (scripts/gui-visual-check.mjs). Every tile is 234px
+        tall at 178 / 240 / 260px; the gate measures each region against its budget, plain and
+        hovered, and opens the ⋯ menu on the first and last card.
       </p>
       <div
         data-harness="phone-cards"

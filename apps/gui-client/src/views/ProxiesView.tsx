@@ -86,6 +86,8 @@ import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
   DESKTOP_CREDENTIAL_NEXT_STEP,
+  EXIT_GEO_UNAVAILABLE,
+  EXIT_GEO_UNAVAILABLE_TITLE,
   HTTP_VERIFIED_AT_LAUNCH,
   MISSING_API_KEY_NEXT_STEP,
   RECHECK_ACTION,
@@ -94,6 +96,7 @@ import {
   VPN_NO_EXIT_YET_TITLE,
   VPN_NOT_STORED_CHECK_NOTICE,
   VPN_NOT_STORED_TALLY_REASON,
+  VPN_TUNNEL_UP_NO_LATENCY_TITLE,
 } from '../lib/proxy-check-copy';
 
 interface ListState {
@@ -2268,11 +2271,8 @@ function ProxyRow({
         {exitIp !== undefined ? (
           <span className="mono text-[11px] text-ink-secondary">{exitIp}</span>
         ) : exit === null ? (
-          <span
-            className="text-[10.5px] text-ink-muted"
-            title="The proxy connected and authenticated, but no traffic completed a round trip through it."
-          >
-            exit geo unavailable — the probe did not complete
+          <span className="text-[10.5px] text-ink-muted" title={EXIT_GEO_UNAVAILABLE_TITLE}>
+            {EXIT_GEO_UNAVAILABLE}
           </span>
         ) : isVpnScheme(p.scheme) ? (
           // (l) #3 / #10 — a VPN row with no exit MEASURED: says why and names
@@ -2696,7 +2696,7 @@ function EndpointHealthPill({
     return (
       <span
         className={`${base} bg-status-ready/12 text-status-ready`}
-        title="The test Mac brought this tunnel up and measured through it, but reported no latency."
+        title={VPN_TUNNEL_UP_NO_LATENCY_TITLE}
       >
         tunnel up · no latency
       </span>

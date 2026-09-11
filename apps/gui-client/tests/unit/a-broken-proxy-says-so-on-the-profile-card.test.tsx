@@ -73,7 +73,13 @@ describe('a broken proxy says so on the profile card', () => {
 
   it('names WHY, using the same words as the proxies page — not reachable vs auth vs routing', () => {
     renderCard({ capabilities: { ...ROUTES, reachable: false } });
-    expect(screen.getByText('Not reachable')).toBeInTheDocument();
+    // Phase B (2026-09-11): the verdict word is the card's ONE health pill (the
+    // repair row holds only the two buttons), so the words a customer reads for
+    // a dead proxy sit in the status row, never below a fold.
+    const label = screen.getByText('Not reachable');
+    expect(label).toBeInTheDocument();
+    expect(label.getAttribute('data-component')).toBe('health-pill');
+    expect(label.getAttribute('data-health')).toBe('broken');
 
     renderCard({ capabilities: { ...ROUTES, auth_ok: false } });
     expect(screen.getByText('Auth failed')).toBeInTheDocument();
@@ -93,7 +99,7 @@ describe('a broken proxy says so on the profile card', () => {
   it('retest is one click ON the card, not buried in the overflow menu', () => {
     const onTest = vi.fn();
     renderCard({ capabilities: { ...ROUTES, can_route: false }, onTest });
-    fireEvent.click(screen.getByRole('button', { name: 'Retest' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Re-test' }));
     expect(onTest).toHaveBeenCalledTimes(1);
   });
 
@@ -102,11 +108,11 @@ describe('a broken proxy says so on the profile card', () => {
     // retest would silently select the profile too.
     const onToggleSelect = vi.fn();
     renderCard({ capabilities: { ...ROUTES, can_route: false }, onToggleSelect });
-    fireEvent.click(screen.getByRole('button', { name: 'Retest' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Re-test' }));
     expect(onToggleSelect).not.toHaveBeenCalled();
   });
 
-  it('offers Change alongside Retest, because a dead proxy often needs replacing rather than re-probing', () => {
+  it("offers Change alongside Re-test (polish: the Proxies tab's word), because a dead proxy often needs replacing rather than re-probing", () => {
     const onEdit = vi.fn();
     const onToggleSelect = vi.fn();
     renderCard({ capabilities: { ...ROUTES, can_route: false }, onEdit, onToggleSelect });

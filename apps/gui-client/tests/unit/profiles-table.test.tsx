@@ -80,7 +80,7 @@ describe('ProfilesTable', () => {
     const { rerender } = render(<ProfilesTable {...props({ rows: [row({ udp: 'ok' })] })} />);
     expect(screen.getByText('✓')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'fail' })] })} />);
-    expect(screen.getByText('✗')).toBeTruthy();
+    expect(screen.getByText('⤵')).toBeTruthy();
     rerender(<ProfilesTable {...props({ rows: [row({ udp: 'unknown' })] })} />);
     expect(screen.getByText('–')).toBeTruthy();
     cleanup();

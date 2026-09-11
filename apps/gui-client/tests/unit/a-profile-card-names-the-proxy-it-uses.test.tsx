@@ -89,10 +89,28 @@ describe('the card names the proxy it is using (N-6)', () => {
     expect(a.textContent).not.toBe(b.textContent);
   });
 
-  it('renders no name row when the proxy has no label', () => {
+  it('renders no name row when the proxy has neither a label nor an address', () => {
     // An empty row would read as a nameless proxy rather than an unnamed one.
-    render(<ProfilePhoneCard {...props({ proxyName: null })} />);
+    render(<ProfilePhoneCard {...props({ proxyName: null, proxyAddress: null })} />);
     expect(nameRow()).toBeNull();
+  });
+
+  it('falls back to the address when the proxy has no label — the tile identifies the proxy by host:port, as the list does', () => {
+    // Phase B: ProfilesView always passes proxyAddress for a bound proxy, so a label-less
+    // proxy is named by its address rather than leaving the row empty. MUTATION: drop the
+    // `?? proxyAddress` fallback in ProfilePhoneCard's via row → the row is empty → red.
+    render(
+      <ProfilePhoneCard {...props({ proxyName: null, proxyAddress: 'proxy.example.com:1080' })} />,
+    );
+    const row = nameRow();
+    expect(row).not.toBeNull();
+    expect(row?.textContent).toContain('proxy.example.com:1080');
+    // The title rides on the row, an ancestor, or the label span inside it — any of the
+    // three makes the address recoverable on hover, which is what the arm is for.
+    const titled = row?.matches('[title]')
+      ? row
+      : (row?.closest('[title]') ?? row?.querySelector('[title]'));
+    expect(titled?.getAttribute('title') ?? '').toContain('proxy.example.com:1080');
   });
 
   it('renders no name row for a profile with no proxy at all', () => {

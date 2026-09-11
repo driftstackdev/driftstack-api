@@ -199,7 +199,8 @@ describe('ProfilesView launch → stream', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
 
     await waitFor(() => expect(agentCreate).toHaveBeenCalled());
-    const starting = screen.getByRole('button', { name: 'Starting…' });
+    // Phase B: the card says 'Launching…', the list's word (ProfilesTable), not 'Starting…'.
+    const starting = screen.getByRole('button', { name: 'Launching…' });
     expect(starting).toBeDisabled();
     expect(starting).toHaveAttribute('aria-busy', 'true');
     expect(container.querySelector('[data-component="launch-spinner"]')).not.toBeNull();

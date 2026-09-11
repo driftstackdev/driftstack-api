@@ -24,6 +24,8 @@ import { RelativeTime } from './RelativeTime';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
+  ENDPOINT_UNRESOLVED,
+  ENDPOINT_UNRESOLVED_EXIT_TITLE,
   VPN_NO_EXIT_YET,
   VPN_NO_EXIT_YET_TITLE,
 } from '../lib/proxy-check-copy';
@@ -86,6 +88,11 @@ export interface ProfileTableRow {
   vpnFailure?: string;
   /** The fleet's sentence for a check that did not RUN (muted; nothing failed). */
   vpnNotice?: string;
+  /** (o) — the resolver's message when the row's endpoint pre-flight did NOT
+   *  resolve (a VPN/HTTP row's check is a DNS resolve of its host). Absent when
+   *  it resolved or no pre-flight ran. The exit cell then says "unresolved"
+   *  rather than promising that Check VPN will measure an exit. */
+  endpointUnresolved?: string;
   /** When the fleet last answered for this row — for a VPN row that is the
    *  fleet's own stamp, never the DNS pre-flight that precedes a refused test. */
   checkedAtIso?: string | null;
@@ -374,6 +381,20 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               <span aria-hidden="true">{r.flag}</span>
               {r.exitIp !== null ? (
                 <span className="mono truncate text-ink-primary">{r.exitIp}</span>
+              ) : r.endpointUnresolved !== undefined ? (
+                // (o) — nothing was measured through an endpoint that does not
+                // resolve; the grid's word, the resolver's message as the title.
+                <span
+                  data-component="profile-row-endpoint-unresolved"
+                  className="italic text-status-error"
+                  title={
+                    r.endpointUnresolved.length > 0
+                      ? r.endpointUnresolved
+                      : ENDPOINT_UNRESOLVED_EXIT_TITLE
+                  }
+                >
+                  {ENDPOINT_UNRESOLVED}
+                </span>
               ) : r.vpn === true ? (
                 // (n) N18 — a VPN row's empty exit says WHY and names the check,
                 // exactly as the card and the Proxies grid do (one constant).
@@ -468,7 +489,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
               r.udp === 'ok'
                 ? 'bg-status-ready/20 text-status-ready'
-                : 'bg-status-error/20 text-status-error'
+                : 'bg-surface-divider/60 text-ink-muted'
             }`}
             title={
               r.udp === 'ok'
@@ -476,7 +497,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 : 'No UDP relay — WebRTC/QUIC fall back to TCP'
             }
           >
-            {r.udp === 'ok' ? '✓' : '✗'}
+            {r.udp === 'ok' ? '✓' : '⤵'}
           </span>
         )}
       </td>
@@ -674,8 +695,11 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
 }
 
 /** Worktimer — compact elapsed since an ISO start ("12s" / "4m" / "1h 2m" /
- *  "2d 3h"). Recomputed on each render; the parent's poll re-renders it. */
-function formatElapsed(startIso: string): string {
+ *  "2d 3h"). Recomputed on each render; the parent's poll re-renders it.
+ *  Phase B (2026-09-11) — exported: the grid card's "when" row renders the same
+ *  `running 12m` from the same function, so the two views cannot count
+ *  differently for the same session. */
+export function formatElapsed(startIso: string): string {
   const start = new Date(startIso).getTime();
   if (Number.isNaN(start)) return '';
   const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));

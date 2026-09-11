@@ -437,13 +437,22 @@ describe('#16 — the profile card gates the VPN banner and notice on `vpn`, as 
     cleanup();
   });
 
-  it('VACUITY CONTROL — a VPN card renders both', () => {
+  it('VACUITY CONTROL — a VPN card renders both: the repair row + pill for the failure, and the notice in the failure line’s title', () => {
+    // Phase B: one 14px "when" line. The failure takes it; the notice about
+    // what THIS check did not do rides in that line's title and the pill's.
     render(<ProfilePhoneCard {...cardProps({ vpn: true })} />);
     expect(
       document.querySelector('[data-component="proxy-broken-banner"][data-vpn-failure="true"]'),
     ).not.toBeNull();
     expect(screen.getByText('VPN tunnel down')).toBeTruthy();
-    expect(document.querySelector('[data-component="proxy-vpn-notice"]')).not.toBeNull();
+    const failure = document.querySelector('[data-component="proxy-vpn-failure"]');
+    expect(failure).not.toBeNull();
+    expect(failure?.getAttribute('title')).toContain(
+      'No test Mac was free to test this VPN tunnel. Try again in a minute.',
+    );
+    expect(
+      document.querySelector('[data-component="health-pill"]')?.getAttribute('title'),
+    ).toContain('No test Mac was free to test this VPN tunnel.');
     cleanup();
   });
 });
@@ -468,6 +477,12 @@ describe('#16 — the profile card gates the VPN banner and notice on `vpn`, as 
 // what makes the arm a statement about the third state rather than about the
 // cell.
 const EXIT_GEO_UNAVAILABLE = 'exit geo unavailable — the probe did not complete';
+// Phase B (2026-09-11): the card's exit line is ONE fixed 18px row, so it shows
+// the SHORT clause and carries the full sentence as its title; the grid still
+// shows the full sentence. Both derive from lib/proxy-check-copy.
+const EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable';
+const EXIT_GEO_UNAVAILABLE_TITLE =
+  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
 
 describe('(m) M3 — the card’s Test whose exit probe fails reads the honest unavailable state', () => {
   async function clickCardTest(): Promise<void> {
@@ -481,13 +496,18 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
   it('CRITICAL card Test → failed exit probe → the old exit is gone, the line reads the grid’s "probe did not complete", and a later emit does not bring it back', async () => {
     seedCache({ socks1: healthyWithExit(NOW - 1000) });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
+    expect(await screen.findByTitle(/203\.0\.113\.7/)).toBeInTheDocument();
     await clickCardTest();
     await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(screen.queryByText('203.0.113.7')).toBeNull());
+    await waitFor(() => expect(screen.queryByTitle(/203\.0\.113\.7/)).toBeNull());
     // (n) N-M1 — the PROBE's outcome, in the grid's words; never the dead end
-    // that a never-tested proxy shows.
-    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    // that a never-tested proxy shows. (Phase B: the SHORT clause on the line,
+    // the full sentence as its title — derived from the same constant.)
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeInTheDocument();
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE_SHORT).getAttribute('title')).toBe(
+      EXIT_GEO_UNAVAILABLE_TITLE,
+    );
+    expect(EXIT_GEO_UNAVAILABLE.startsWith(`${EXIT_GEO_UNAVAILABLE_SHORT} — `)).toBe(true);
     expect(screen.queryByText('no exit IP')).toBeNull();
     await waitFor(async () =>
       expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeTypeOf('number'),
@@ -497,8 +517,8 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
     await act(async () => {
       await cache.saveProbeResult('socks1', OK, Date.now());
     });
-    expect(screen.queryByText('203.0.113.7')).toBeNull();
-    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    expect(screen.queryByTitle(/203\.0\.113\.7/)).toBeNull();
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeInTheDocument();
     cleanup();
   });
 
@@ -510,7 +530,7 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
     seedCache({ socks1: { result: OK, at: NOW - 60_000 } });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     expect(await screen.findByText('no exit IP')).toBeInTheDocument();
-    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE)).toBeNull();
+    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeNull();
     cleanup();
   });
 
@@ -524,9 +544,9 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
       timezone: 'Europe/Amsterdam',
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    await screen.findByText('203.0.113.7');
+    await screen.findByTitle(/203\.0\.113\.7/);
     await clickCardTest();
-    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument();
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeInTheDocument();
     await waitFor(async () =>
       expect((await cache.loadProbeCache()).socks1?.exitIp).toBe('198.51.100.9'),
     );
@@ -654,7 +674,7 @@ describe('(n) N-M2 — a launch whose fresh exit probe measures nothing does not
     seedCache(staleExitEntry());
     probeProxyExit.mockResolvedValue(null);
     await launch();
-    expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
+    expect(await screen.findByTitle(/203\.0\.113\.7/)).toBeInTheDocument();
     await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
     await waitFor(async () =>
       expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeTypeOf('number'),
@@ -666,8 +686,8 @@ describe('(n) N-M2 — a launch whose fresh exit probe measures nothing does not
     // The capability verdict this launch measured is KEPT — only the exit the
     // launch could not confirm is gone.
     expect(entry?.result.reachable).toBe(true);
-    await waitFor(() => expect(screen.queryByText('203.0.113.7')).toBeNull());
-    expect(screen.getByText(EXIT_GEO_UNAVAILABLE)).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByTitle(/203\.0\.113\.7/)).toBeNull());
+    expect(screen.getByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeInTheDocument();
     cleanup();
   });
 
@@ -687,7 +707,7 @@ describe('(n) N-M2 — a launch whose fresh exit probe measures nothing does not
       expect((await cache.loadProbeCache()).socks1?.exitIp).toBe('198.51.100.9'),
     );
     expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeUndefined();
-    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE)).toBeNull();
+    expect(screen.queryByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeNull();
     cleanup();
   });
 });

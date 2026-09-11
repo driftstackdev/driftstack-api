@@ -588,7 +588,7 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
       measured_from: 'fleet',
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
     expect(screen.getByText('42ms')).toBeTruthy();
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
     await clickCheckVpn();
@@ -601,7 +601,7 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
       FLEET_DOWN,
     );
-    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(screen.queryByTitle(/198\.51\.100\.9/)).toBeNull();
     expect(screen.queryByText('42ms')).toBeNull();
     // Written, and superseding the exit (the list adoption respects the stamp).
     await waitFor(() => expect(storedProbe('vpn1')?.exitSupersededAt).toEqual(expect.any(Number)));
@@ -621,13 +621,13 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
       not_run: 'node_busy',
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
     await clickCheckVpn();
     await waitFor(() =>
       expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(BUSY),
     );
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
-    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    expect(screen.getByTitle(/198\.51\.100\.9/)).toBeTruthy();
     expect(screen.getByText('42ms')).toBeTruthy();
     expect(storedProbe('vpn1')?.serverLatencyMs).toBe(42);
     expect(storedProbe('vpn1')?.exitIp).toBe('198.51.100.9');
@@ -656,21 +656,133 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
     expect(await screen.findByText('31ms')).toBeTruthy();
   });
 
-  it('the UDP chip on a VPN card says "UDP via tunnel" (not a probed grant, not "?"); a SOCKS5 card keeps "UDP ?"', async () => {
+  it('a VPN card renders NO UDP chip — "UDP via tunnel" and its sentence ride in the caps "+N" title (Phase B); an unprobed SOCKS5 card offers Test and no UDP chip at all', async () => {
+    // Phase B (2026-09-11): the caps row is a fixed 20px line of MEASUREMENTS.
+    // UDP on a tunnel is not a measurement, so it is a hint behind '+N', never
+    // a chip; and 'UDP ?' (an unprobed SOCKS5 grant) no longer exists — that
+    // row's caps region is the first-measurement 'Test' button.
     const first = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    const chip = await waitFor(() => {
-      const el = document.querySelector('[data-udp="tunnel"]');
+    const overflow = await waitFor(() => {
+      const el = document.querySelector('[data-component="caps-overflow"]');
       expect(el).not.toBeNull();
       return el as HTMLElement;
     });
-    expect(chip.textContent).toBe('UDP via tunnel');
-    expect(chip.getAttribute('title')).toMatch(/not a probed grant/);
+    expect(overflow.getAttribute('title')).toMatch(/UDP via tunnel/);
+    expect(overflow.getAttribute('title')).toMatch(/not a probed grant/);
+    expect(document.querySelector('[data-udp]')).toBeNull();
     expect(screen.queryByText('UDP ?')).toBeNull();
     first.unmount();
     state.boundProxyId = 'p1';
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByText('UDP ?')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Test' })).toBeTruthy();
+    expect(screen.queryByText('UDP ?')).toBeNull();
     expect(document.querySelector('[data-udp="tunnel"]')).toBeNull();
+    // A SOCKS5 row's "+N" (the OS-not-measured hint) never carries the tunnel sentence.
+    expect(
+      document.querySelector('[data-component="caps-overflow"]')?.getAttribute('title') ?? '',
+    ).not.toMatch(/UDP via tunnel/);
+  });
+});
+
+describe('(o) — the card and the list say what the Proxies grid says for the same cache entry', () => {
+  it('CRITICAL an endpoint that does NOT resolve is a red "unresolved" pill (the resolver’s message as title) with Re-check + Change — never "not measured" + a Check VPN that cannot bring the tunnel up', async () => {
+    // Call site ProfilesView.tsx `endpoint={… probeView.endpointResults[px.id] …}`:
+    // dropping that prop makes the card fall to pill arm 7 ('not measured',
+    // title "No exit measured yet. Run Check VPN…") and caps mode C ('Check
+    // VPN') for this exact cache write → reds every arm below.
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    resolveEndpoint.mockResolvedValue({ resolved: false, ip: '', message: 'DNS lookup failed' });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
+    expect(screen.getByText('42ms')).toBeTruthy();
+    await clickCheckVpn();
+    const pill = await waitFor(() => {
+      const el = document.querySelector('[data-component="health-pill"][data-health="broken"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(pill.textContent).toBe('unresolved');
+    expect(pill.getAttribute('title')).toBe('DNS lookup failed');
+    expect(document.body.textContent).not.toMatch(/not measured/);
+    expect(document.body.textContent).not.toMatch(/untested/);
+    // The exit and number the pre-flight dropped are gone from the tile too.
+    expect(screen.queryByTitle(/198\.51\.100\.9/)).toBeNull();
+    expect(screen.queryByText('42ms')).toBeNull();
+    // Repair, not first measurement: Re-check + Change; no 'Check VPN' button.
+    const banner = document.querySelector('[data-component="proxy-broken-banner"]');
+    expect(banner?.getAttribute('data-vpn-failure')).toBe('false');
+    expect(banner?.querySelector('[data-action="retest-proxy"]')?.textContent).toBe('Re-check');
+    expect(banner?.querySelector('[data-action="change-proxy"]')?.textContent).toBe('Change');
+    expect(screen.queryByRole('button', { name: 'Check VPN' })).toBeNull();
+    // The exit line does not promise that Check VPN will bring a tunnel up.
+    const exit = document.querySelector('[data-region="exit"]') as HTMLElement;
+    expect(exit.textContent).toContain('no exit measured yet');
+    expect(exit.querySelector('[title]')?.getAttribute('title')).toMatch(/did not resolve/);
+    expect(exit.querySelector('[title*="bring the tunnel up"]')).toBeNull();
+    // The write the tile reads.
+    expect(storedProbe('vpn1')?.endpoint).toEqual({
+      resolved: false,
+      ip: '',
+      message: 'DNS lookup failed',
+    });
+  });
+
+  it('CRITICAL a tunnel the test Mac brought up with an exit but NO number reads "tunnel up" (the grid’s green pill), caps mode A — not "not measured" over a Check VPN button', async () => {
+    // healthPill arm 6b + capsMode's `tunnelUpNoLatency` clause, through the
+    // real derivation (serverVantage is set only for a usable endpoint row):
+    // deleting either reds this.
+    const { serverLatencyMs: _none, ...noNumber } = measuredVpnEntry(5000);
+    seedCache({ vpn1: noNumber });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
+    const pill = document.querySelector('[data-component="health-pill"]') as HTMLElement;
+    expect(pill.textContent).toBe('tunnel up');
+    expect(pill.getAttribute('data-health')).toBe('ok');
+    expect(pill.getAttribute('data-latency-vantage')).toBe('fleet');
+    expect(pill.getAttribute('title')).toBe(
+      'The test Mac brought this tunnel up and measured through it, but reported no latency.',
+    );
+    expect(document.body.textContent).not.toMatch(/not measured/);
+    expect(document.querySelector('[data-region="caps"]')?.getAttribute('data-caps-mode')).toBe(
+      'measured',
+    );
+    expect(screen.queryByRole('button', { name: 'Check VPN' })).toBeNull();
+    // What that reply measured is on the row: the relay probe's QUIC chip.
+    expect(
+      document.querySelector('[data-region="caps"] [data-quic-inferred="false"]')?.textContent,
+    ).toBe('QUIC ✓');
+  });
+
+  it('the LIST row’s exit cell reads "unresolved" (message as title) for the same entry, not "no exit measured yet — run Check VPN"; the grid card on mount reads the cached pre-flight too', async () => {
+    // ProfilesView list mapping `endpointUnresolved:` + ProfilesTable's
+    // `profile-row-endpoint-unresolved` span: dropping either restores the
+    // VPN_NO_EXIT_YET cell → reds the list arm. The grid arm reds when the
+    // call site's `endpoint=` prop is dropped (mount path, no click).
+    seedCache({
+      vpn1: {
+        result: ENDPOINT_PLACEHOLDER,
+        at: Date.now() - 5000,
+        endpoint: { resolved: false, ip: '', message: 'DNS lookup failed' },
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    const pill = await waitFor(() => {
+      const el = document.querySelector('[data-component="health-pill"]');
+      expect(el?.textContent).toBe('unresolved');
+      return el as HTMLElement;
+    });
+    expect(pill.getAttribute('title')).toBe('DNS lookup failed');
+    fireEvent.click(await screen.findByRole('button', { name: '☰ List' }));
+    await screen.findByRole('table');
+    const cell = await waitFor(() => {
+      const el = document.querySelector('[data-component="profile-row-endpoint-unresolved"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(cell.textContent).toBe('unresolved');
+    expect(cell.getAttribute('title')).toBe('DNS lookup failed');
+    expect(document.body.textContent).not.toMatch(/no exit measured yet/);
+    expect(document.body.textContent).not.toMatch(/no exit IP/);
   });
 });
 
@@ -709,9 +821,10 @@ describe('(h) — a VPN launch never hands a STALE cached exit to the simulator'
 // the next card Test when that Test returned early; and the "checked" stamp
 // the parent computed from the fleet result was a prop the card never
 // rendered.
+// Phase B: the "checked" stamp is `data-checked-at` on the checked span, or on
+// the VPN failure/notice line when that line takes the whole "when" row.
 const checkedAt = (): string | null =>
-  document.querySelector('[data-component="proxy-checked-at"]')?.getAttribute('data-checked-at') ??
-  null;
+  document.querySelector('[data-checked-at]')?.getAttribute('data-checked-at') ?? null;
 
 describe('(h) findings 3/4/5 — the card reads the failure from the cache, clears a stale notice, and dates "checked"', () => {
   // MUTATION: drop `fleetFailureReasons` from the card's props (back to the
@@ -737,10 +850,13 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
       FLEET_DOWN,
     );
-    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(screen.queryByTitle(/198\.51\.100\.9/)).toBeNull();
     // (l) #3 — a VPN card with no exit says why and names the check, never the
-    // dead-end "no exit IP".
-    expect(screen.getByText('no exit measured yet — run Check VPN')).toBeTruthy();
+    // dead-end "no exit IP". Phase B: the card's fixed 18px exit line shows the
+    // SHORT clause and carries the grid's full sentence as its title.
+    expect(screen.getByText('no exit measured yet').getAttribute('title')).toBe(
+      VPN_NO_EXIT_YET_TITLE,
+    );
     expect(checkedAt()).toBe(new Date(failedAt).toISOString());
   });
 
@@ -753,7 +869,7 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
       measured_from: 'fleet',
     });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
-    expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+    expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
     await clickCheckVpn();
     await waitFor(() =>
       expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull(),
@@ -766,10 +882,19 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
     // The mock is module-level (not reset per test), so count the delta.
     const fleetCalls = vi.mocked(AccountProxies.testAccountProxy).mock.calls.length;
     await clickCheckVpn();
+    // (o) — the TUNNEL-DOWN banner goes; what stays in the repair row is the
+    // unresolved endpoint's own (data-vpn-failure="false", pill 'unresolved'),
+    // never the fleet's sentence.
     await waitFor(() =>
-      expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull(),
+      expect(
+        document.querySelector('[data-component="proxy-broken-banner"][data-vpn-failure="true"]'),
+      ).toBeNull(),
     );
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
+    expect(screen.queryByText('VPN tunnel down')).toBeNull();
+    expect(document.querySelector('[data-component="health-pill"]')?.textContent).toBe(
+      'unresolved',
+    );
     expect(storedProbe('vpn1')?.fleetFailureReason).toBeUndefined();
     expect(storedProbe('vpn1')?.exitSupersededAt).toBeUndefined();
     // The fleet was never asked the second time: the pre-flight answered.
@@ -862,7 +987,7 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     // Nothing was learned, so nothing moved: the measurement the card showed
     // before the check is the measurement it shows after it.
     expect(screen.getByText('42ms')).toBeTruthy();
-    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    expect(screen.getByTitle(/198\.51\.100\.9/)).toBeTruthy();
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
     expect(storedProbe('vpn1')?.serverLatencyMs).toBe(42);
@@ -892,7 +1017,7 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     expect(await screen.findByText('42ms')).toBeTruthy();
-    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    expect(screen.getByTitle(/198\.51\.100\.9/)).toBeTruthy();
     await clickCheckVpn();
     // Pinned as the literal the grid's arm pins (a-refused-vpn-probe…), so the
     // two surfaces cannot drift apart behind one renamed constant.
@@ -910,7 +1035,7 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
     // The verdict really is gone — the notice describes the card it sits on.
     expect(screen.queryByText('42ms')).toBeNull();
-    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(screen.queryByTitle(/198\.51\.100\.9/)).toBeNull();
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
     expect(storedProbe('vpn1')?.endpoint).toEqual({
@@ -1049,14 +1174,19 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
       expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull(),
     );
     await clickCheckVpn();
+    // Phase B: the card's ONE "when" line shows the standing failure; the
+    // notice about THIS check rides in that line's title (and the pill's).
     await waitFor(() =>
-      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
-        SERVER_DID_NOT_ANSWER_NOTICE,
-      ),
+      expect(
+        document.querySelector('[data-component="proxy-vpn-failure"]')?.getAttribute('title'),
+      ).toContain(SERVER_DID_NOT_ANSWER_NOTICE),
     );
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull();
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
       FLEET_DOWN,
+    );
+    expect(document.querySelector('[data-component="health-pill"]')?.getAttribute('title')).toBe(
+      `${FLEET_DOWN} — ${SERVER_DID_NOT_ANSWER_NOTICE}`,
     );
     expect(storedProbe('vpn1')?.fleetFailureReason).toBe(FLEET_DOWN);
     expect(storedProbe('vpn1')?.exitSupersededAt).toBe(failedAt);
@@ -1073,11 +1203,19 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
 // The notices are the grid's own constants (lib/proxy-check-copy).
 import {
   VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_NO_EXIT_YET_TITLE,
   VPN_NOT_STORED_CHECK_NOTICE,
 } from '../../src/lib/proxy-check-copy';
 
-const cardNotice = (): string | null =>
-  document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent ?? null;
+// Polish (2026-09-11): the notice ROW shows the next-step clause ('not stored
+// yet — launch once') and carries the full sentence as its title, followed by
+// the facts it displaced (' · Last used … · Checked …'). The sentence — what
+// this suite pins against the grid's constants — is the title's first part.
+const cardNotice = (): string | null => {
+  const el = document.querySelector('[data-component="proxy-vpn-notice"]');
+  if (el === null) return null;
+  return (el.getAttribute('title') ?? '').split(' · ')[0] ?? null;
+};
 
 describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tested', () => {
   // MUTATION: restore the silent `return null` for `px.serverId === undefined`
@@ -1099,7 +1237,10 @@ describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tes
     );
     expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
     // The exit cell still names the check — beside the reason it did not run.
-    expect(screen.getByText('no exit measured yet — run Check VPN')).toBeTruthy();
+    // (Phase B: the SHORT clause on the line, the full sentence in its title.)
+    expect(screen.getByText('no exit measured yet').getAttribute('title')).toBe(
+      VPN_NO_EXIT_YET_TITLE,
+    );
   });
 
   // MUTATION: restore the silent `return null` for a missing key → red.
@@ -1132,7 +1273,8 @@ describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tes
       render(<ProfilesView onGoToSettings={vi.fn()} />);
       await clickCheckVpn();
       await waitFor(() => expect(cardNotice()).toBe(VPN_NO_API_KEY_CHECK_NOTICE));
-      expect(screen.queryByText(VPN_NOT_STORED_CHECK_NOTICE)).toBeNull();
+      expect(cardNotice()).not.toBe(VPN_NOT_STORED_CHECK_NOTICE);
+      expect(document.querySelector(`[title^="${VPN_NOT_STORED_CHECK_NOTICE}"]`)).toBeNull();
     } finally {
       live.apiKey = 'ds_test_x';
     }
@@ -1443,7 +1585,7 @@ describe.each(VPN_SCHEME_CASES)(
         measured_from: 'fleet',
       });
       render(<ProfilesView onGoToSettings={vi.fn()} />);
-      expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+      expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
       await clickCheckVpn();
       await waitFor(() =>
         expect(
@@ -1454,7 +1596,7 @@ describe.each(VPN_SCHEME_CASES)(
       expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
         FLEET_DOWN,
       );
-      expect(screen.queryByText('198.51.100.9')).toBeNull();
+      expect(screen.queryByTitle(/198\.51\.100\.9/)).toBeNull();
     });
 
     // MUTATION: route the `not_run` reply to the failure branch → a busy test Mac
@@ -1469,7 +1611,7 @@ describe.each(VPN_SCHEME_CASES)(
         not_run: 'node_busy',
       });
       render(<ProfilesView onGoToSettings={vi.fn()} />);
-      expect(await screen.findByText('198.51.100.9')).toBeTruthy();
+      expect(await screen.findByTitle(/198\.51\.100\.9/)).toBeTruthy();
       await clickCheckVpn();
       await waitFor(() =>
         expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
@@ -1477,20 +1619,24 @@ describe.each(VPN_SCHEME_CASES)(
         ),
       );
       expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
-      expect(screen.getByText('198.51.100.9')).toBeTruthy();
+      expect(screen.getByTitle(/198\.51\.100\.9/)).toBeTruthy();
       expect(screen.getByText('42ms')).toBeTruthy();
     });
 
     // MUTATION: gate the chip on `scheme === 'openvpn'` → a WireGuard card shows
     // "UDP ?" (an unprobed SOCKS5 grant) for a tunnel that carries UDP → red.
-    it('the UDP chip says "UDP via tunnel", never the SOCKS5 "UDP ?"', async () => {
+    it('the caps row carries "UDP via tunnel" in its "+N" title and never the SOCKS5 "UDP ?"', async () => {
+      // Phase B: no UDP chip on a tunnel (not a measurement); the sentence is
+      // the '+N' pill's title. Gating the hint on `scheme === 'openvpn'` would
+      // leave a WireGuard card with no tunnel sentence at all → red.
       render(<ProfilesView onGoToSettings={vi.fn()} />);
-      const chip = await waitFor(() => {
-        const el = document.querySelector('[data-udp="tunnel"]');
+      const overflow = await waitFor(() => {
+        const el = document.querySelector('[data-component="caps-overflow"]');
         expect(el).not.toBeNull();
         return el as HTMLElement;
       });
-      expect(chip.textContent).toBe('UDP via tunnel');
+      expect(overflow.getAttribute('title')).toMatch(/UDP via tunnel/);
+      expect(document.querySelector('[data-udp]')).toBeNull();
       expect(screen.queryByText('UDP ?')).toBeNull();
     });
   },

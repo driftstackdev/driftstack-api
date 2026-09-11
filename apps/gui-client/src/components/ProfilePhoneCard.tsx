@@ -9,28 +9,94 @@
 // (overflow-x-hidden, min-w-0 on every row), the egress widget clips its own
 // children, the latency row wraps, the ⋯ menu is anchored to BOTH card edges
 // instead of a fixed 176px, and every truncated/clamped text carries a title.
-// Measured, not eyeballed: scripts/gui-visual-check.mjs renders the harness at
-// 178/240/260px and fails on any descendant painting past the card.
-// Pure presentational; ProfilesView passes data/display strings + handlers + an
-// organize slot. flag covers every ISO country via flagEmoji (regional-indicator
-// transform — no hardcoded list).
+// Phase B (2026-09-11) — the "simulator tile". Phase A made horizontal escape
+// impossible; the ROOT CAUSE the design panel measured stayed: `aspect-[9/18.5]`
+// made the card's height a function of its WIDTH, so at the grid's 178px minimum
+// the body had ~228px for content that needed up to 220px more, and hid the rest
+// by scrolling (invisible under macOS overlay scrollbars — the owner's "things
+// outside the grid view box"). The card is now a FIXED 234px tile at every
+// column width: a 220px screen holding eight single-line fixed-height regions
+// (identity 38 · status 20 · exit 18 · via 16 · caps 20 · when 14 · meta 16)
+// plus a 47px dock, each region `data-region`, explicit `h-*`, `shrink-0`,
+// `overflow-hidden`, every truncating text titled. What does not fit a region
+// is CUT IN JS (chip cap, meta cap, one health pill with a strict precedence),
+// never by the browser — so it is deterministic and unit-testable without
+// layout (`healthPill`, `visibleChips`, `visibleMeta` below). Geometry is
+// proved by scripts/gui-visual-check.mjs at 178/240/260px; jsdom pins the rules.
+// Polish (2026-09-11) — the tile judged against the owner's comp and the app's
+// tokens: a slate bezel (never a black ring), ONE radial hue wash (the body
+// stays on the raised surface so 9–10px text keeps ≥ 4.5:1), translucent slate
+// pills/chips (never the near-black inset), soft inks for red/rose text on
+// tints, a compact "when" row ('3 mo ago · CHECKED 2 H AGO'), a mint frame +
+// dock for a live tile, a neutral busy dock button, a selected halo that is a
+// Tailwind ring (it survives the hover shadow), solid focus rings, and a
+// keyboard-complete ⋯ group (arrow keys, focus restored to ⋯ on close).
+// Pure presentational; ProfilesView passes data/display strings + handlers.
+// flag covers every ISO country via flagEmoji (regional-indicator transform —
+// no hardcoded list).
 
-import { useEffect, useRef, useState, type JSX, type ReactNode } from 'react';
-import { ProxyOsChip, proxyCapabilities } from './ProxyCapabilities';
-import { RelativeTime } from './RelativeTime';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type ReactNode,
+  type RefObject,
+} from 'react';
+import { proxyCapabilities, type ProxyCapability } from './ProxyCapabilities';
+import { formatElapsed } from './ProfilesTable';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 
 /** Hover text on the card's probe measurements. The probe runs on this Mac; the
  *  profile runs on Driftstack's servers (same sentence as ProxiesView, kept local
  *  because lib/proxies is hand-mocked by dozens of suites). */
-const PROBE_ORIGIN_TITLE =
+export const PROBE_ORIGIN_TITLE =
   'Measured from your computer, not from the server that runs your profile.';
 /** T-1 — hover text on a latency measured by the control plane, closer to the
  *  fleet that runs the profile than this Mac. */
-const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
+export const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
+/** The menu row's and the first-measurement button's description of a SOCKS5
+ *  test (one string, two surfaces on the same card). */
+const TEST_PROXY_TITLE = 'Test proxy from this Mac — reachability, latency, exit IP';
+const SAVED_TABS_REOPEN_TITLE = "This profile's saved tabs reopen when you launch it";
+/** Polish — the ONE word for re-running a failed SOCKS5 test is the Proxies
+ *  tab's ('Re-test', ProxiesView; the comp said 'Retest'). Pinned verbatim
+ *  against that source; hoisting it into lib/proxy-check-copy.ts so the tab
+ *  reads the constant too is the grid follow-up. */
+export const RETEST_ACTION = 'Re-test';
+/** Polish — the Proxies grid's EndpointHealthPill word + title for a VPN row
+ *  whose endpoint resolved and whose tunnel was never brought up (the card said
+ *  'not measured' for the same cache entry). Pinned verbatim against ProxiesView. */
+export const ENDPOINT_OK_PILL = 'endpoint ok';
+export const ENDPOINT_OK_TITLE =
+  'The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch.';
+/** Polish — the exit line's title for a proxy whose LAST test measured nothing
+ *  (probed, usable, no failure stamp); the text says 'no exit IP', the title
+ *  says what fills it. */
+const NO_EXIT_AFTER_TEST_TITLE = 'No exit was measured by the last test — run Test proxy again';
+/** Polish — dock / when-row titles that ADD something to the visible word
+ *  (a title that restates its button is a tooltip that says nothing). */
+const LAUNCH_TITLE = 'Launch a session with this profile';
+const OPEN_SESSION_TITLE = 'Open the running session';
+const LAUNCHING_TITLE = 'Launching — the proxy is checked before the session starts';
+const LAUNCH_CHECK_TITLE = 'Checking the proxy before the session starts';
+const NEVER_LAUNCHED_TITLE = 'This profile has never been launched';
+/** Polish — what the VPN tag MEANS (the Check VPN sentence belongs to the button
+ *  and the menu row, not to a label that performs nothing). */
+const VPN_TAG_TITLE =
+  'OpenVPN / WireGuard tunnel — the whole session, UDP included, travels inside it';
+/** Polish — soft inks for coloured text on its own tint. The red-400 and
+ *  oxblood-500 TOKENS measure 3.3–3.8:1 and 1.9:1 at 9–10px on their 15–25%
+ *  tints; one step lighter (red-300 / oxblood-300) passes 4.5 (measured on the
+ *  rendered tile). Literals, because the token file is outside this component. */
+const SOFT_ERROR_INK = 'text-[#fca5a5]';
+const SOFT_ACCENT_INK = 'text-[#e8a0ab]';
 import {
   OS_FINGERPRINT_MEASURING,
   VPN_TUNNEL_OS_FINGERPRINT,
+  osFingerprintVerdict,
   type OsFingerprint,
 } from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
@@ -38,21 +104,27 @@ import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
+  ENDPOINT_UNRESOLVED,
+  ENDPOINT_UNRESOLVED_EXIT_TITLE,
+  EXIT_GEO_UNAVAILABLE_SHORT,
+  EXIT_GEO_UNAVAILABLE_TITLE,
+  RECHECK_ACTION,
   VPN_LATENCY_NOT_MEASURED,
-  VPN_NO_EXIT_YET,
+  VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_NO_EXIT_YET_SHORT,
   VPN_NO_EXIT_YET_TITLE,
+  VPN_NO_LATENCY_YET_TITLE,
+  VPN_NOT_STORED_CHECK_NOTICE,
+  VPN_TUNNEL_UP_NO_LATENCY_TITLE,
 } from '../lib/proxy-check-copy';
 
-/** (n) N-M1 — V-857's null-exit wording, kept BYTE-IDENTICAL to the Proxies
- *  grid's (ProxiesView.tsx:1971 and its title at :1969): the grid and this card
- *  describe the same cache state for the same proxy, and the whole finding was
- *  that they described it differently. ⚠️ These two literals belong in
- *  lib/proxy-check-copy beside VPN_NO_EXIT_YET so neither surface can drift —
- *  that file is outside this change's ownership, so the hoist is filed rather
- *  than done here. Change one of these and you must change ProxiesView too. */
-const EXIT_GEO_UNAVAILABLE = 'exit geo unavailable — the probe did not complete';
-const EXIT_GEO_UNAVAILABLE_TITLE =
-  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
+/** (o) — the pre-flight of a VPN/HTTP row: a DNS resolve of the configured
+ *  endpoint (field names match the cache's `CachedEndpointVerdict`; typed
+ *  structurally so this presentational component imports no cache module). */
+export interface EndpointPreflight {
+  resolved: boolean;
+  message: string;
+}
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -65,9 +137,14 @@ export interface ProfilePhoneCardProps {
   running: boolean;
   selected: boolean;
   lastUsedIso: string | null;
+  /** Phase B — when the bound session started (ISO), so a running card's "when"
+   *  row reads `running 12m` from the SAME formatElapsed the list uses. Null /
+   *  absent → the row falls back to last-used. */
+  runningSinceIso?: string | null;
   /** doc-150 item 5 — already-formatted per-profile storage size (e.g. "2.4 MiB"
    *  or "—" when never saved). The parent formats it via fmtBytes so the card
-   *  stays purely presentational. */
+   *  stays purely presentational. Phase B: rendered by the details sheet (Phase
+   *  C); the tile has no slot for it. Kept so the call site is stable. */
   sizeLabel?: string;
   /** Existing save metadata proves this profile has a persisted browser-state
    *  blob. The exact tab count stays encrypted inside ProfileBlob.openTabs, so
@@ -89,6 +166,10 @@ export interface ProfilePhoneCardProps {
    *  there, so a customer with several proxies could see that a profile had one
    *  and never which. Null when unbound or unnamed. */
   proxyName?: string | null;
+  /** Phase B (N8) — `host:port` of the bound proxy, already derived for the list
+   *  at the call site. The "via" row falls back to it when the proxy has no
+   *  label, and every via row carries `name — host:port` as its title. */
+  proxyAddress?: string | null;
   /**
    * Whether this profile is bound to that proxy DELIBERATELY, or merely inherits it.
    *
@@ -119,6 +200,9 @@ export interface ProfilePhoneCardProps {
    */
   exitProbeFailed?: boolean;
   locationLabel?: string | null; // #6 — resolved "city, region" / country name for the exit
+  /** Phase B — reserved: the exit's IANA timezone, rendered as a trailing ≤40px
+   *  glyph on the exit row when a caller starts passing it. No relayout. */
+  exitTz?: string | null;
   latencyMs: number | null;
   latencyFillPct: number;
   latencyGood: boolean;
@@ -149,6 +233,15 @@ export interface ProfilePhoneCardProps {
    *  VPN up. Renders the broken-proxy banner (a VPN row has no SOCKS5 caps to
    *  trip it); cleared by the next check. */
   vpnFailure?: string;
+  /** (o) — the row's last ENDPOINT pre-flight (a VPN/HTTP row's check resolves
+   *  the configured host; it is never a SOCKS5 probe), from the same derivation
+   *  the Proxies grid reads (`deriveProbeViewWithEndpointRows(...).endpointResults`).
+   *  `resolved: false` is the one state this card had no word for: it read
+   *  "not measured" + "no exit measured yet — run Check VPN" and offered a
+   *  Check VPN button, while the grid's pill for the SAME cache entry was a red
+   *  "unresolved" carrying the resolver's message. Undefined / null = the row
+   *  holds no pre-flight (a SOCKS5 row, or never checked). */
+  endpoint?: EndpointPreflight | null;
   /** (h) — the server's sentence when the last tunnel test was NOT RUN (a live
    *  session holds the tunnel, no fleet Mac was free…). A muted notice, never
    *  a failure; the card keeps its prior data beside it. */
@@ -173,6 +266,9 @@ export interface ProfilePhoneCardProps {
   launchDisabledReason?: string;
   onToggleSelect: () => void;
   onPrimary: () => void; // Launch (idle) / Open session (running)
+  /** Kept for call-site compatibility. Phase B removed the menu's Watch / View
+   *  live row: ProfilesView gives onWatch and onPrimary identical bodies, so the
+   *  row was a second name for the primary button (D8/C9). */
   onWatch: () => void;
   onTest: () => void;
   onAssist?: () => void;
@@ -207,13 +303,641 @@ export interface ProfilePhoneCardProps {
   onDelete?: () => void;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase B — the pure rules. Exported so the precedence and the caps are pinned
+// without layout; the render tree below only reads them.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The content width the JS caps assume when nothing has been measured yet
+ *  (jsdom, the first paint before the layout effect): the 240px column's 206px.
+ *  A real browser overwrites it synchronously in useLayoutEffect, before paint. */
+export const DEFAULT_CONTENT_WIDTH = 206;
+/** Static widths (px) of every chip the caps row can show, MEASURED from the
+ *  live render at text-[9.5px] font-semibold px-1.5 gap-0.5 (Chromium, Geist;
+ *  scratchpad/polish-chips.mjs reads offsetWidth per chip and asserts no caps
+ *  child's right edge passes the row's at 178/186/240/260). The cut is decided
+ *  from this table, not from layout, so it is the same in jsdom and in Chromium.
+ *  ⛔ The table was stale by ~10px per chip (32 for a 44px 'UDP ✓'): the sum
+ *  said MAX fit the 186px column's 152px, the browser then cut the OS chip
+ *  mid-glyph. Anything not listed uses the 6px/char + 14px rule (rounded up). */
+const CHIP_WIDTH: Readonly<Record<string, number>> = {
+  'UDP ✓': 45, // 44.22 rendered
+  '⤵ UDP': 44, // 43.47
+  'QUIC ✓': 49, // 48.30
+  'QUIC ~': 47, // 46.03
+  '⤵ QUIC': 48, // 47.55
+  '✓ iOS/macOS': 78, // 77.38
+  '✗ Windows': 68, // the 6px/char rule; not in the harness — re-measure when it is
+  '… OS': 38, // 37.41
+};
+const CHIP_GAP = 4;
+/** The dashed '+N' tail: 9.5px semibold + 12px padding + 2px border. */
+const OVERFLOW_PILL_WIDTH = 27;
+const chipWidth = (text: string): number => CHIP_WIDTH[text] ?? Math.ceil(text.length * 6 + 14);
+
+export type HealthState =
+  | 'none'
+  | 'broken'
+  | 'checking'
+  | 'untested'
+  | 'ok'
+  | 'slow'
+  | 'unmeasured';
+/** (o) — the ONE state whose word is not in the list/proxies.ts/copy file: the
+ *  Proxies grid's `EndpointHealthPill` ("unresolved", red, title = the
+ *  resolver's message). Pinned verbatim against views/ProxiesView.tsx. */
+export const ENDPOINT_UNRESOLVED_PILL = ENDPOINT_UNRESOLVED;
+/** (o) — the grid's "tunnel up · no latency" state, cut to the pill's 15 chars;
+ *  the "no latency" half is what the title says. */
+export const TUNNEL_UP_PILL = 'tunnel up';
+export type HealthTone = 'ready' | 'busy' | 'error' | 'muted';
+export interface HealthPill {
+  /** ≤ 15 characters, every value pinned in profile-phone-card.test.tsx. */
+  text: string;
+  state: HealthState;
+  tone: HealthTone;
+  /** Always set: the pill truncates (a safety net — every string is ≤ 15
+   *  chars), and a truncating text carries its full form as its title. */
+  title: string;
+}
+export type HealthPillInput = Pick<
+  ProfilePhoneCardProps,
+  | 'hasProxy'
+  | 'capabilities'
+  | 'vpn'
+  | 'vpnFailure'
+  | 'vpnNotice'
+  | 'endpoint'
+  | 'testing'
+  | 'launching'
+  | 'probed'
+  | 'latencyMs'
+  | 'latencyGood'
+  | 'latencyFromServer'
+  | 'latencyVantage'
+  | 'exitIp'
+>;
+
+/** (o) — the row's pre-flight ran and the endpoint did NOT resolve. */
+const endpointUnresolved = (p: Pick<ProfilePhoneCardProps, 'endpoint'>): boolean =>
+  p.endpoint != null && !p.endpoint.resolved;
+/** (o) — the test Mac brought this tunnel up (the grid's `tunnelUp`: the
+ *  fleet vantage is on the row) but reported no latency number. */
+const tunnelUpNoLatency = (
+  p: Pick<ProfilePhoneCardProps, 'vpn' | 'latencyMs' | 'latencyVantage'>,
+): boolean => p.vpn === true && p.latencyMs === null && p.latencyVantage?.measuredFrom === 'fleet';
+
+/**
+ * R2 — ONE health pill, strict precedence (first arm that holds wins):
+ *   1. no proxy                 → 'no proxy'
+ *   2. a SOCKS5 verdict that is not ok → its label ('Not reachable' · 'Auth failed' · 'Cannot route')
+ *   3. a VPN whose tunnel test failed  → 'VPN tunnel down'
+ *   3b. (o) an endpoint pre-flight that did NOT resolve → 'unresolved' (the grid's word),
+ *       error, title = the resolver's message — nothing downstream ran
+ *   4. a test in flight          → 'Checking…' (VPN) | 'Testing…' — a LAUNCH too (polish): the
+ *      launch runs the proxy check, so the card says a check is in flight, not a stale number
+ *   5. never probed, nothing measured → 'untested'
+ *   6. a latency number          → `${n}ms`, tone by latencyGood; title says WHERE it was measured
+ *      (polish: the title is the origin sentence ALONE — it used to append the SOCKS5
+ *      label's own '… · 42 ms', a second number beside the pill's)
+ *   6b. (o) a VPN the test Mac brought up with no number → 'tunnel up' (the grid's
+ *       'tunnel up · no latency'), ready, one shared title
+ *   6c. (polish) a VPN whose endpoint RESOLVED and whose tunnel was never brought up →
+ *       'endpoint ok' (the Proxies grid's word for the same cache entry), muted
+ *   7. probed with no number and no failure → 'not measured' ('stale' is gone: a number that
+ *      was never taken did not age); a VPN title never says "no exit yet" beside an exit
+ * Arm 2 outranks 7 by construction, so a failed SOCKS5 can never read 'not measured';
+ * arm 3b outranks 7 so an unresolved endpoint can never read it either.
+ */
+export function healthPill(p: HealthPillInput): HealthPill {
+  if (!p.hasProxy)
+    return { text: 'no proxy', state: 'none', tone: 'muted', title: 'no proxy bound' };
+  const verdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
+  if (verdict !== null && !verdict.ok) {
+    return {
+      text: verdict.label,
+      state: 'broken',
+      tone: 'error',
+      title: p.capabilities?.message ?? verdict.label,
+    };
+  }
+  if (p.vpn === true && p.vpnFailure !== undefined) {
+    return {
+      text: 'VPN tunnel down',
+      state: 'broken',
+      tone: 'error',
+      title: p.vpnNotice !== undefined ? `${p.vpnFailure} — ${p.vpnNotice}` : p.vpnFailure,
+    };
+  }
+  if (endpointUnresolved(p)) {
+    const message = p.endpoint?.message ?? '';
+    return {
+      text: ENDPOINT_UNRESOLVED_PILL,
+      state: 'broken',
+      tone: 'error',
+      title: message.length > 0 ? message : ENDPOINT_UNRESOLVED_EXIT_TITLE,
+    };
+  }
+  if (p.testing || p.launching) {
+    return {
+      text: p.vpn === true ? 'Checking…' : 'Testing…',
+      state: 'checking',
+      tone: 'muted',
+      title: p.testing ? (p.vpn === true ? CHECK_VPN_TITLE : TEST_PROXY_TITLE) : LAUNCH_CHECK_TITLE,
+    };
+  }
+  if (!p.probed && p.capabilities === null) {
+    return {
+      text: 'untested',
+      state: 'untested',
+      tone: 'muted',
+      title: p.vpn === true ? CHECK_VPN_TITLE : TEST_PROXY_TITLE,
+    };
+  }
+  if (p.latencyMs !== null) {
+    const where =
+      p.latencyFromServer === true
+        ? p.latencyVantage !== undefined
+          ? vantageLabel(p.latencyVantage).title
+          : SERVER_LATENCY_TITLE
+        : PROBE_ORIGIN_TITLE;
+    return {
+      text: `${p.latencyMs.toString()}ms`,
+      state: p.latencyGood ? 'ok' : 'slow',
+      tone: p.latencyGood ? 'ready' : 'busy',
+      title: where,
+    };
+  }
+  if (tunnelUpNoLatency(p)) {
+    return {
+      text: TUNNEL_UP_PILL,
+      state: 'ok',
+      tone: 'ready',
+      title:
+        p.vpnNotice !== undefined
+          ? `${VPN_TUNNEL_UP_NO_LATENCY_TITLE} — ${p.vpnNotice}`
+          : VPN_TUNNEL_UP_NO_LATENCY_TITLE,
+    };
+  }
+  if (p.vpn === true && p.endpoint?.resolved === true) {
+    return {
+      text: ENDPOINT_OK_PILL,
+      state: 'unmeasured',
+      tone: 'muted',
+      title:
+        p.vpnNotice !== undefined ? `${ENDPOINT_OK_TITLE} — ${p.vpnNotice}` : ENDPOINT_OK_TITLE,
+    };
+  }
+  // (o) — the VPN title must not assert "no exit measured yet" on a tile whose
+  // exit row shows one (a session-reported exit adopted with no fleet number).
+  const vpnUnmeasuredTitle =
+    p.exitIp !== null && p.exitIp !== undefined ? VPN_NO_LATENCY_YET_TITLE : VPN_NO_EXIT_YET_TITLE;
+  return {
+    text: VPN_LATENCY_NOT_MEASURED,
+    state: 'unmeasured',
+    tone: 'muted',
+    title: p.vpn === true ? (p.vpnNotice ?? vpnUnmeasuredTitle) : TEST_PROXY_TITLE,
+  };
+}
+
+/** Polish — ready at /10 (the /15 green tint over a green hue wash measured
+ *  4.41:1 on one card); error text is the soft ink (the token measured 3.3–3.8);
+ *  muted is the comp's translucent slate — the near-black inset made the
+ *  quietest states ('untested', 'no proxy') the darkest object on the tile. */
+const HEALTH_TONE_CLASS: Readonly<Record<HealthTone, string>> = {
+  ready: 'bg-status-ready/10 text-status-ready',
+  busy: 'bg-status-busy/15 text-status-busy',
+  error: `bg-status-error/15 ${SOFT_ERROR_INK}`,
+  muted: 'bg-ink-muted/15 text-ink-secondary',
+};
+/** Polish — one fill and one ink for every non-green chip: a guess ('QUIC ~')
+ *  must not read brighter than a measured negative ('⤵ QUIC'). */
+const CHIP_MUTED_CLASS = 'bg-ink-muted/15 text-ink-secondary';
+const CHIP_READY_CLASS = 'bg-status-ready/10 text-status-ready';
+
+export type CapsMode = 'none' | 'repair' | 'measured' | 'first';
+export type CapsInput = Pick<
+  ProfilePhoneCardProps,
+  | 'hasProxy'
+  | 'capabilities'
+  | 'quicMeasured'
+  | 'quicProbe'
+  | 'osFingerprint'
+  | 'vpn'
+  | 'vpnFailure'
+  | 'endpoint'
+  | 'testing'
+  | 'latencyMs'
+  | 'latencyVantage'
+>;
+
+/** R5 — which of the four rows the caps region shows. Exactly one. */
+export function capsMode(p: CapsInput): CapsMode {
+  if (!p.hasProxy) return 'none';
+  const verdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
+  // (o) — an endpoint that does not resolve is a repair, not a first
+  // measurement: "Check VPN" cannot bring a tunnel up on an address that does
+  // not resolve, so the row offers Re-check + Change, as it does for a tunnel
+  // the test Mac could not bring up.
+  if (
+    (verdict !== null && !verdict.ok) ||
+    (p.vpn === true && p.vpnFailure !== undefined) ||
+    endpointUnresolved(p)
+  ) {
+    return 'repair';
+  }
+  if (verdict !== null) return 'measured';
+  // A VPN row has no SOCKS5 caps; a fleet number is its measurement — and so
+  // is a tunnel the test Mac brought up without reporting one (o): its QUIC
+  // relay probe and the tunnel's UDP hint are what that reply measured.
+  if (p.vpn === true && (p.latencyMs !== null || tunnelUpNoLatency(p))) return 'measured';
+  return 'first';
+}
+
+export interface CapChip {
+  key: 'udp' | 'quic' | 'os';
+  /** The visible text, also the key into the static width table. */
+  text: string;
+  width: number;
+  className: string;
+  title: string;
+  /** Data attributes; the OS chip carries `data-component="proxy-os-fingerprint"`
+   *  + `data-os-tone` here (polish: it renders with CHIP_BASE like its neighbours
+   *  — ProxyOsChip's 9px/400 rounded-sm was a second chip typography in the row). */
+  attrs: Readonly<Record<string, string>>;
+}
+
+/** Polish — 9.5px/600, radius 6 (the comp's chip; 9px bold rendered heavier and
+ *  smaller than the buttons and the pill in the same rows). */
+const CHIP_BASE =
+  'inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1.5 py-px text-[9.5px] font-semibold leading-4';
+/** The '+N' tail: transparent with a dashed divider — visibly "there is more",
+ *  not another chip. The meta row's '+N' wears the same. */
+const OVERFLOW_PILL_CLASS =
+  'border border-dashed border-surface-divider bg-transparent text-ink-muted';
+
+/** The UDP chip's hover text (kept from v3): the WebRTC/QUIC consequence of the
+ *  relay verdict, with the QUIC clause read from the CANONICAL quic chip — never
+ *  a guess from udp_associate. */
+function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyCapability): string {
+  if (vpn) {
+    return `UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`;
+  }
+  if (caps === null) return 'Run Test to check UDP (WebRTC + QUIC) support on this exit.';
+  const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
+  if (!udpOk) return 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
+  const quicClause =
+    quicCap?.inferred === true
+      ? 'QUIC likely (not yet measured)'
+      : quicCap?.ok === true
+        ? 'QUIC ✓'
+        : 'QUIC ✗ (HTTP/2 on last measure)';
+  return `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`;
+}
+
+/** A VPN row's QUIC verdict comes from the fleet relay probe or a live session,
+ *  never from a SOCKS5 result (it has none). Reuses proxyCapabilities so the hint
+ *  wording is the one shared definition; only a MEASURED verdict is admitted —
+ *  the UDP inference has no UDP grant to infer from on a tunnel. */
+function vpnQuicCap(quicMeasured: MeasuredQuic | null | undefined, quicProbe: boolean | undefined) {
+  const measured =
+    quicMeasured === 'h3' || quicMeasured === 'h2-only' || typeof quicProbe === 'boolean';
+  if (!measured) return undefined;
+  const synthetic: ProxyTestResult = {
+    reachable: true,
+    auth_ok: true,
+    udp_associate: false,
+    can_route: true,
+    connect_reply: 0x00,
+    latency_ms: 0,
+    message: '',
+  };
+  return proxyCapabilities(synthetic, quicMeasured, quicProbe).find((c) => c.key === 'quic');
+}
+
+/**
+ * R5 mode A — the chips a row is ELIGIBLE to show, in fixed order UDP → QUIC →
+ * OS, plus the hints that never get a chip (a VPN's "UDP via tunnel", an OS
+ * placeholder). Eligibility = a MEASUREMENT or a measured inference only:
+ *   • UDP: 'UDP ✓' (green) when the relay was verified, '⤵ UDP' (muted — a
+ *     measured fall-back, never red) when it was not; no chip on a VPN row;
+ *   • QUIC: 'QUIC ✓' measured (green), '⤵ QUIC' measured negative (muted),
+ *     'QUIC ~' inferred (muted, `data-quic-inferred="true"`);
+ *   • OS: the shared ProxyOsChip for a match ('✓ iOS/macOS'), a mismatch ('✗
+ *     Windows' — the ONE measured defect that stays red) or a probe in flight
+ *     ('… OS'); the '—' / '?' placeholders are hints, not chips.
+ */
+export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: string[] } {
+  const vpn = p.vpn === true;
+  const caps =
+    p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe) : null;
+  const quicCap = vpn
+    ? vpnQuicCap(p.quicMeasured, p.quicProbe)
+    : caps?.find((c) => c.key === 'quic');
+  const eligible: CapChip[] = [];
+  const hidden: string[] = [];
+
+  if (vpn) {
+    hidden.push(`UDP via tunnel — ${udpTitle(true, null)}`);
+  } else if (caps !== null) {
+    const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
+    const text = udpOk ? 'UDP ✓' : '⤵ UDP';
+    eligible.push({
+      key: 'udp',
+      text,
+      width: chipWidth(text),
+      className: udpOk ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
+      title: udpTitle(false, caps, quicCap),
+      attrs: { 'data-udp': udpOk ? 'true' : 'false' },
+    });
+  }
+
+  if (quicCap !== undefined) {
+    const inferred = quicCap.inferred === true;
+    const text = inferred ? 'QUIC ~' : quicCap.ok ? 'QUIC ✓' : '⤵ QUIC';
+    eligible.push({
+      key: 'quic',
+      text,
+      width: chipWidth(text),
+      className: !inferred && quicCap.ok ? CHIP_READY_CLASS : CHIP_MUTED_CLASS,
+      title: quicCap.hint,
+      attrs: { 'data-quic-inferred': inferred ? 'true' : 'false' },
+    });
+  }
+
+  // (o) O4 — "measuring" is rendered from `p.testing` (a probe THIS client has
+  // in flight), never from an absent fingerprint; and never on a VPN row at
+  // all: nothing fingerprints a tunnel, so a VPN row states that cause from its
+  // own scheme in every state. A reading the server did send outranks both.
+  const fingerprint =
+    p.osFingerprint ??
+    (vpn ? VPN_TUNNEL_OS_FINGERPRINT : p.testing ? OS_FINGERPRINT_MEASURING : undefined);
+  const os = osFingerprintVerdict(fingerprint);
+  const osText = `${os.glyph} ${os.label}`;
+  if (os.tone === 'match' || os.tone === 'mismatch' || os.glyph === '…') {
+    eligible.push({
+      key: 'os',
+      text: osText,
+      width: chipWidth(osText),
+      // The colour rule is osFingerprintVerdict's (match green, the ONE measured
+      // defect red, measuring muted) — only the chip chrome is the card's.
+      className:
+        os.tone === 'match'
+          ? CHIP_READY_CLASS
+          : os.tone === 'mismatch'
+            ? `bg-status-error/15 ${SOFT_ERROR_INK}`
+            : CHIP_MUTED_CLASS,
+      title: os.hint,
+      attrs: { 'data-component': 'proxy-os-fingerprint', 'data-os-tone': os.tone },
+    });
+  } else {
+    hidden.push(`OS — ${os.hint}`);
+  }
+  return { eligible, hidden };
+}
+
+export interface VisibleChips {
+  chips: CapChip[];
+  /** One line per hidden chip or placeholder: `label — hint`. The '+N' pill's title. */
+  hiddenHints: string[];
+}
+
+/**
+ * R5 mode A — the static width-table cut: fixed order, as many whole chips as
+ * fit `contentWidth` (gaps 4px), then a '+N' pill (27px) when anything is
+ * hidden. MAX (UDP ✓ 45 + QUIC ~ 47 + ✓ iOS/macOS 78 + gaps 8 = 178) fits
+ * neither the 178px column's 144px nor the 186px column's 152px (the 1440
+ * viewport), so it renders 'UDP ✓ · QUIC ~ · +1' there and all three at
+ * 240/260. Deterministic in JS; the row's `overflow-hidden` is a safety net,
+ * never the mechanism.
+ */
+export function visibleChips(p: CapsInput, contentWidth: number): VisibleChips {
+  const { eligible, hidden } = capabilityChips(p);
+  for (let k = Math.min(3, eligible.length); k >= 0; k -= 1) {
+    const shown = eligible.slice(0, k);
+    const hiddenCount = eligible.length - k + hidden.length;
+    let width = shown.reduce((sum, c) => sum + c.width, 0) + Math.max(0, k - 1) * CHIP_GAP;
+    if (hiddenCount > 0) width += (k > 0 ? CHIP_GAP : 0) + OVERFLOW_PILL_WIDTH;
+    if (width <= contentWidth || k === 0) {
+      return {
+        chips: shown,
+        hiddenHints: [...eligible.slice(k).map((c) => `${c.text} — ${c.title}`), ...hidden],
+      };
+    }
+  }
+  return { chips: [], hiddenHints: [...eligible.map((c) => `${c.text} — ${c.title}`), ...hidden] };
+}
+
+export interface MetaPill {
+  kind: 'folder' | 'tag';
+  text: string;
+  title: string;
+  width: number;
+}
+export interface VisibleMeta {
+  pills: MetaPill[];
+  /** Names of the pills that did not fit: the '+N' pill's title (joined ' · '). */
+  hidden: string[];
+}
+const FOLDER_PILL_MAX = 72;
+const TAG_PILL_MAX = 50;
+const META_GLYPH_WIDTH = 16;
+const metaPillWidth = (text: string, cap: number): number =>
+  Math.min(cap, Math.round(text.length * 5.2 + 14));
+
+/**
+ * R7 — pills fill left to right (folder first, then tags), as many WHOLE pills
+ * as fit after the trailing glyphs are reserved, then a '+N' pill whose title
+ * names what was hidden. At 178 that is typically folder + '+N'; at 260 folder
+ * + 2 tags + '+N'. `glyphs` = how many trailing glyph buttons the row shows.
+ */
+export function visibleMeta(
+  p: Pick<ProfilePhoneCardProps, 'folder' | 'tags'>,
+  contentWidth: number,
+  glyphs: number,
+): VisibleMeta {
+  const all: MetaPill[] = [];
+  if (p.folder !== '') {
+    const text = `📁 ${p.folder}`;
+    all.push({
+      kind: 'folder',
+      text,
+      title: p.folder,
+      width: metaPillWidth(text, FOLDER_PILL_MAX),
+    });
+  }
+  for (const tag of p.tags) {
+    all.push({ kind: 'tag', text: tag, title: tag, width: metaPillWidth(tag, TAG_PILL_MAX) });
+  }
+  const available = contentWidth - glyphs * (META_GLYPH_WIDTH + CHIP_GAP);
+  for (let k = all.length; k >= 0; k -= 1) {
+    const shown = all.slice(0, k);
+    let width = shown.reduce((sum, c) => sum + c.width, 0) + Math.max(0, k - 1) * CHIP_GAP;
+    if (k < all.length) width += (k > 0 ? CHIP_GAP : 0) + OVERFLOW_PILL_WIDTH;
+    if (width <= available || k === 0) {
+      return { pills: shown, hidden: all.slice(k).map((c) => c.title) };
+    }
+  }
+  return { pills: [], hidden: all.map((c) => c.title) };
+}
+
+/**
+ * Polish — the "when" row's compact relative form. RelativeTime's long form
+ * ('3 months ago') truncated to '3 m…' (reads as minutes) on 24 of 27 tiles at
+ * the 178px column; both halves of the row now fit: 'just now' · '5 min ago' ·
+ * '2 h ago' · 'yesterday' · '2 d ago' · '3 mo ago' · '1 yr ago'. The absolute
+ * stamp stays in the title. A future or unparseable stamp degrades honestly.
+ */
+type AgoUnit = 'now' | 'min' | 'h' | 'd' | 'mo' | 'yr';
+function agoParts(iso: string, nowMs: number): { n: number; unit: AgoUnit } | null {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  const s = Math.round((nowMs - t) / 1000);
+  if (s < 60) return { n: 0, unit: 'now' };
+  const m = Math.round(s / 60);
+  if (m < 60) return { n: m, unit: 'min' };
+  const h = Math.round(m / 60);
+  if (h < 24) return { n: h, unit: 'h' };
+  const d = Math.round(h / 24);
+  if (d < 30) return { n: d, unit: 'd' };
+  const mo = Math.round(d / 30.44);
+  if (mo < 12) return { n: Math.max(1, mo), unit: 'mo' };
+  return { n: Math.max(1, Math.round(d / 365.25)), unit: 'yr' };
+}
+export function compactAgo(iso: string, nowMs: number = Date.now()): string {
+  const a = agoParts(iso, nowMs);
+  if (a === null) return '—';
+  if (a.unit === 'now') return 'just now';
+  if (a.unit === 'd' && a.n === 1) return 'yesterday';
+  return `${a.n.toString()} ${a.unit} ago`;
+}
+/**
+ * Polish — the "checked" stamp's TERSE form ('checked 3 mo' · 'checked 59 min'
+ * · 'checked <1 min'): the verb already places it in the past, and beside
+ * 'never launched' (70.5px at 9.5px) the 144px row leaves 70px — 'checked
+ * 59 min ago' measures 89, 'checked 59 min' 67 (tracking-tight). Measured in
+ * the live harness; the absolute stamp is the title.
+ */
+export function terseAgo(iso: string, nowMs: number = Date.now()): string {
+  const a = agoParts(iso, nowMs);
+  if (a === null) return '—';
+  if (a.unit === 'now') return '<1 min';
+  return `${a.n.toString()} ${a.unit}`;
+}
+
+/** Polish — hues 4–175 (orange → cyan) take the LIGHT thumb gradient
+ *  (L58→L52) with the inverted (dark) ink; 176–359 and 0–3 (blue → magenta →
+ *  red) the DARK gradient (L32→L24) with white. Searched over the hue wheel
+ *  against BOTH gradient stops: every hue ≥ 4.64:1 with its ink. */
+export function thumbUsesDarkInk(hue: number): boolean {
+  const h = ((hue % 360) + 360) % 360;
+  return h >= 4 && h <= 175;
+}
+
+/**
+ * Polish — the clause of a VPN failure the "when" row SHOWS. The fleet's
+ * sentence opens with a generic preamble ('The test Mac could not bring the
+ * tunnel up: …') that repeats the pill above it, so at every column width the
+ * visible part carried no information and the cause was hidden. The row now
+ * shows what follows the first ': ' (or the sentence minus that preamble); the
+ * whole sentence stays in the title.
+ */
+export function vpnFailureClause(sentence: string): string {
+  const colon = sentence.indexOf(': ');
+  const clause =
+    colon > 0
+      ? sentence.slice(colon + 2)
+      : sentence.replace(/^The test Mac could not bring the tunnel up\b[\s:.—-]*/i, '');
+  const trimmed = clause.trim();
+  return /[A-Za-z0-9]/.test(trimmed) ? trimmed : sentence;
+}
+
+/**
+ * Polish — the clause of a VPN notice the "when" row SHOWS. The two notices the
+ * server sends both open with the reassurance ('Endpoint resolves.') and cut
+ * the NEXT STEP at every width; each gets a ≤ 30-char row form and keeps the
+ * full sentence in the title. An unknown notice drops that first sentence.
+ */
+export function vpnNoticeClause(notice: string): string {
+  if (notice === VPN_NOT_STORED_CHECK_NOTICE) return 'not stored yet — launch once';
+  if (notice === VPN_NO_API_KEY_CHECK_NOTICE) return 'needs an API key — Settings';
+  const rest = notice.replace(/^Endpoint resolves\.\s*/, '').trim();
+  return rest === '' ? notice : rest;
+}
+
+/** The content width of the tile's rows, measured from a row that always
+ *  renders, so the JS caps cut for the column the card is actually in. Read in a
+ *  layout effect (before paint — no flash of a wider cut at 178) and kept fresh
+ *  by a ResizeObserver where one exists; jsdom measures 0 and keeps the default. */
+function useContentWidth(ref: RefObject<HTMLElement | null>): number {
+  const [width, setWidth] = useState(DEFAULT_CONTENT_WIDTH);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    const read = (): void => {
+      const w = el.clientWidth;
+      if (w > 0) setWidth(w);
+    };
+    read();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return width;
+}
+
+/** R8 — the ⋯ menu opens UPWARD (over the body) unless fewer than this many px
+ *  of room lie above the dock inside the nearest scroll container, in which
+ *  case it opens downward over the next row. Phase C portals it. Polish: 360
+ *  (was 320) — the menu grew to max-h 350 so a 13-row menu (Assist + note +
+ *  Clear… expanded) has no fold; scripts/gui-visual-check.mjs mirrors it. */
+const MENU_FLIP_ROOM_PX = 360;
+function roomAbove(el: HTMLElement): number {
+  const top = el.getBoundingClientRect().top;
+  for (let n = el.parentElement; n !== null; n = n.parentElement) {
+    const cs = getComputedStyle(n);
+    if (cs.overflowY === 'auto' || cs.overflowY === 'scroll') {
+      return top - n.getBoundingClientRect().top;
+    }
+  }
+  return top;
+}
+
+/** Polish — the enabled menu rows, in DOM order (the arrow-key ring). The
+ *  rows stay plain <button>s inside a role="group": every suite that reaches a
+ *  row by `getByRole('button', …)` keeps working, and a group of buttons is
+ *  valid ARIA where a role="menu" of buttons was not. */
+function menuItemsOf(menu: HTMLElement | null): HTMLElement[] {
+  if (menu === null) return [];
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('button')).filter(
+    (el) => !el.disabled,
+  );
+}
+function focusMenuItem(menu: HTMLElement | null, which: 'first' | 'last' | 'next' | 'prev'): void {
+  const items = menuItemsOf(menu);
+  if (items.length === 0) return;
+  const i = items.findIndex((el) => el === document.activeElement);
+  const target =
+    which === 'first'
+      ? items[0]
+      : which === 'last'
+        ? items[items.length - 1]
+        : which === 'next'
+          ? items[(i + 1) % items.length]
+          : items[i <= 0 ? items.length - 1 : i - 1];
+  target?.focus();
+}
+
 export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
-  // Secondary actions (Watch/Test/Assist) live behind a ⋯ button in the dock so
-  // they're tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
-  // matching the visual-demo dock). Mouse hover still reveals them too.
+  // Secondary actions live behind a ⋯ button in the dock so they're
+  // tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
+  // matching the visual-demo dock).
   const [actionsOpen, setActionsOpen] = useState(false);
-  // F3 — inline note editor (opened from the ⋯ menu's "Edit note" row). Lives
-  // here so the small <textarea> overlays the card body without leaving the grid.
+  const [menuBelow, setMenuBelow] = useState(false);
+  // F3 — inline note editor (opened from the ⋯ menu's "Edit note" row or the
+  // meta row's 🗒 glyph). Lives here so the small <textarea> overlays the card
+  // body without leaving the grid.
   const [editingNote, setEditingNote] = useState(false);
   const [noteDraft, setNoteDraft] = useState(p.note ?? '');
   const [noteSaving, setNoteSaving] = useState(false);
@@ -238,15 +962,29 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       setNoteSaving(false);
     }
   };
+  const openNoteEditor = (): void => {
+    setNoteDraft(p.note ?? '');
+    setNoteError(null);
+    setEditingNote(true);
+  };
   // Dismiss the tap-opened ⋯ menu on an outside pointer-down or Escape — a
   // toggle-opened dropdown that can only be re-toggled shut reads as stuck.
+  // Phase B: the menu is a sibling of the screen (it must escape the screen's
+  // overflow-hidden to open downward). Polish: "inside" is the ⋯ toggle OR the
+  // menu — it was the whole dock, so clicking Launch with the menu open
+  // launched AND left the menu standing.
   const footerRef = useRef<HTMLDivElement | null>(null);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const menuId = useId();
   useEffect(() => {
     if (!actionsOpen) return;
     const onPointerDown = (e: PointerEvent): void => {
-      if (footerRef.current !== null && !footerRef.current.contains(e.target as Node)) {
-        setActionsOpen(false);
-      }
+      const target = e.target as Node;
+      const inside =
+        (moreRef.current !== null && moreRef.current.contains(target)) ||
+        (menuRef.current !== null && menuRef.current.contains(target));
+      if (!inside) setActionsOpen(false);
     };
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') setActionsOpen(false);
@@ -258,46 +996,146 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       document.removeEventListener('keydown', onKey);
     };
   }, [actionsOpen]);
-  // UDP badge state + the WebRTC/QUIC detail shown on hover. proxyCapabilities
-  // gates WebRTC/QUIC on reachable+auth+udp_associate (they ride UDP).
-  // T-1 — the words beside a server-measured latency name the machine that
-  // measured it; a number without a vantage keeps the plain "server" marker.
-  const latVantage = p.latencyVantage !== undefined ? vantageLabel(p.latencyVantage) : undefined;
-  const caps =
-    p.capabilities !== null ? proxyCapabilities(p.capabilities, p.quicMeasured, p.quicProbe) : null;
-  const webrtc = caps?.find((c) => c.key === 'webrtc')?.ok ?? false;
-  // T-6 — read the QUIC chip's ok AND inferred: a green ✓ is only for a MEASURED
-  // 'h3'. An inferred chip (UDP relays but HTTP/3 was never measured) renders a
-  // muted '~', never green — an operator must not read a guess as a pass.
-  const quicCap = caps?.find((c) => c.key === 'quic');
-  const quicOk = quicCap?.ok ?? false;
-  const quicInferred = quicCap?.inferred === true;
-  const udpOk = webrtc; // WebRTC ok === UDP relay verified
-  // The overall verdict, from the ONE shared definition rather than a local
-  // spelling of it — a card that disagreed with the proxies page about whether
-  // a proxy works is the whole failure this helper exists to prevent.
-  const verdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
-  const proxyOk = verdict === null || verdict.ok;
-  const proxyLabel = verdict?.label ?? '';
-  // T-6 — the QUIC clause reads the CANONICAL quic chip verdict, never a
-  // guess from udp_associate: udp relaying does not prove HTTP/3 carries. Saying
-  // "QUIC ✓" here while the chip shows a muted "~" is exactly the contradiction
-  // that makes the owner read the QUIC indicator as broken ("never goes green").
-  const quicClause = quicInferred
-    ? 'QUIC likely (not yet measured)'
-    : quicOk
-      ? 'QUIC ✓'
-      : 'QUIC ✗ (HTTP/2 on last measure)';
-  // (h) — a VPN card: nothing probes a UDP grant on a tunnel (the tunnel carries
-  // UDP), so the chip says that instead of a "?" and a Test that can never fill it.
-  const udpTitle =
-    p.vpn === true
-      ? `UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`
-      : caps === null
-        ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
-        : udpOk
-          ? `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`
-          : 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
+  // Polish — keyboard: closing the menu (Escape, Enter on a row) made the
+  // focused row `invisible` and focus fell to <body>, so the next Tab restarted
+  // at the top of the page. Focus returns to ⋯ whenever the menu closes with
+  // focus inside it (or lost); a menu opened with ArrowDown/ArrowUp focuses its
+  // first/last item once the rows are visible.
+  const wasOpenRef = useRef(false);
+  const focusOnOpenRef = useRef<'first' | 'last' | null>(null);
+  useEffect(() => {
+    if (actionsOpen) {
+      wasOpenRef.current = true;
+      const which = focusOnOpenRef.current;
+      focusOnOpenRef.current = null;
+      if (which !== null) focusMenuItem(menuRef.current, which);
+      return;
+    }
+    if (!wasOpenRef.current) return;
+    wasOpenRef.current = false;
+    const active = document.activeElement;
+    if (
+      active === null ||
+      active === document.body ||
+      (menuRef.current !== null && menuRef.current.contains(active))
+    ) {
+      moreRef.current?.focus({ preventScroll: true });
+    }
+  }, [actionsOpen]);
+  const toggleMenu = (): void => {
+    if (!actionsOpen && footerRef.current !== null) {
+      setMenuBelow(roomAbove(footerRef.current) < MENU_FLIP_ROOM_PX);
+    }
+    setActionsOpen((v) => !v);
+  };
+
+  const statusRowRef = useRef<HTMLDivElement | null>(null);
+  const contentWidth = useContentWidth(statusRowRef);
+
+  const pill = healthPill(p);
+  const mode = capsMode(p);
+  const chips = visibleChips(p, contentWidth);
+  // Mode C has no measured chips, but the row's standing facts (a tunnel
+  // carries UDP; why the OS stack cannot be read) are still true before any
+  // test — they ride in a '+N' pill beside the button rather than vanishing.
+  const firstHints = mode === 'first' ? visibleChips(p, 0).hiddenHints : [];
+  const vpn = p.vpn === true;
+  const hasNote = p.onSaveNote !== undefined && p.note !== undefined && p.note.trim() !== '';
+  const meta = visibleMeta(p, contentWidth, hasNote ? 1 : 0);
+  // (o) — 'tunnel up' (no number) is a fleet reading too: the vantage attribute
+  // names the test Mac, never this Mac (no native probe runs on a tunnel).
+  const latencyVantage =
+    pill.state === 'ok' || pill.state === 'slow'
+      ? p.latencyFromServer === true || p.latencyMs === null
+        ? (p.latencyVantage?.measuredFrom ?? 'server')
+        : 'this_mac'
+      : undefined;
+
+  // R3 — the exit line's states. The flag is rendered ONLY when an exit is
+  // known (G12 — the parent's '🌍' never asserts an exit); a null state shows a
+  // 13px dashed ring of the flag's width (polish: the ◌ glyph rendered as a
+  // 6px speck and the 🚫 emoji was the one saturated pictogram on a muted
+  // row), its SHORT clause, and a title that says something the text does not.
+  const hasExit = p.hasProxy && (p.exitIp !== null || p.countryCode !== null);
+  const exitPlace = p.locationLabel != null && p.locationLabel !== '' ? p.locationLabel : null;
+  const socksVerdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
+  const exit: { glyph: string | null; text: string; title: string; muted: boolean } = !p.hasProxy
+    ? { glyph: null, text: 'no proxy bound', title: 'Choose a proxy in Edit', muted: true }
+    : hasExit
+      ? {
+          glyph: p.flag,
+          text: exitPlace ?? p.countryCode ?? p.exitIp ?? '',
+          title: [exitPlace ?? p.countryCode, p.exitIp]
+            .filter((s): s is string => typeof s === 'string' && s.length > 0)
+            .join(' · '),
+          muted: false,
+        }
+      : endpointUnresolved(p)
+        ? // (o) — no check can measure an exit through an endpoint that does
+          // not resolve; the "run Check VPN" promise is the one thing this line
+          // must not make. The SHORT clause stays honest; the title says why.
+          {
+            glyph: null,
+            text: vpn ? VPN_NO_EXIT_YET_SHORT : 'no exit IP',
+            title: ENDPOINT_UNRESOLVED_EXIT_TITLE,
+            muted: true,
+          }
+        : vpn
+          ? { glyph: null, text: VPN_NO_EXIT_YET_SHORT, title: VPN_NO_EXIT_YET_TITLE, muted: true }
+          : p.exitProbeFailed === true
+            ? {
+                glyph: null,
+                text: EXIT_GEO_UNAVAILABLE_SHORT,
+                title: EXIT_GEO_UNAVAILABLE_TITLE,
+                muted: true,
+              }
+            : !p.probed && p.capabilities === null
+              ? // Polish — never probed reads the LIST's word for this cell
+                // ('untested', ProfilesTable) and names the action that fills it.
+                { glyph: null, text: 'untested', title: TEST_PROXY_TITLE, muted: true }
+              : {
+                  glyph: null,
+                  text: 'no exit IP',
+                  // A failed SOCKS5 explains itself here (its message); a usable
+                  // proxy whose last test measured nothing says what fills it.
+                  title:
+                    socksVerdict !== null && !socksVerdict.ok
+                      ? p.capabilities?.message || socksVerdict.label
+                      : NO_EXIT_AFTER_TEST_TITLE,
+                  muted: true,
+                };
+
+  // R4 — via: the proxy's label, or its host:port when it has none.
+  const proxyName = p.proxyName != null && p.proxyName !== '' ? p.proxyName : null;
+  const proxyAddress = p.proxyAddress != null && p.proxyAddress !== '' ? p.proxyAddress : null;
+  const viaTitle =
+    proxyName !== null && proxyAddress !== null
+      ? `${proxyName} — ${proxyAddress}`
+      : (proxyName ?? proxyAddress ?? undefined);
+
+  // R6 — when.
+  const runningSince =
+    p.running && p.runningSinceIso != null && p.runningSinceIso !== '' ? p.runningSinceIso : null;
+  const whenTitle =
+    runningSince !== null
+      ? `Running since ${new Date(runningSince).toLocaleString()}`
+      : p.lastUsedIso !== null
+        ? `Last used: ${new Date(p.lastUsedIso).toLocaleString()}`
+        : NEVER_LAUNCHED_TITLE;
+  // When a VPN failure/notice takes the whole "when" line, the facts it
+  // displaces (last used, checked) move into that line's title — and the
+  // stamp stays machine-readable on the line (`data-checked-at`).
+  const displacedFacts =
+    p.checkedAtIso !== null
+      ? ` · ${whenTitle} · Checked: ${new Date(p.checkedAtIso).toLocaleString()}`
+      : ` · ${whenTitle}`;
+
+  // Polish — which thumb recipe this hue gets (see the identity row).
+  const thumbDarkInk = thumbUsesDarkInk(p.hue);
+
+  const dot = (cls: string): JSX.Element => (
+    <span aria-hidden="true" className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${cls}`} />
+  );
 
   return (
     <article
@@ -317,19 +1155,32 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           p.onToggleSelect();
         }
       }}
-      className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-all hover:-translate-y-0.5 hover:shadow-xl ${
+      // Polish — the bezel: a hairline of white/8% over a slate gradient (the
+      // #0a0d12 ring was darker than the page and read as a black outline; the
+      // 160° grey-green gradient sat outside the slate family), an inset top
+      // highlight + soft drop. Hover DEEPENS the shadow with the 2px lift
+      // (`hover:shadow-xl` swapped in a lighter one, so the lift read as a
+      // flatten, and rewrote --tw-shadow — which erased the selected ring).
+      // Selected = accent2 border + a 2px 35% halo in the RING layer, so it
+      // composes with every shadow utility; running = a mint frame visible
+      // from across the grid. Focus: a solid ring at 2px offset (the global
+      // 40%-alpha outline composited to 1.4:1 — invisible).
+      className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
+        actionsOpen ? 'z-30' : ''
+      } ${
         p.selected
-          ? 'border-accent shadow-[0_0_0_1.5px_rgb(var(--accent-rgb)),0_10px_26px_rgba(0,0,0,0.5)]'
+          ? 'border-accent-hover ring-2 ring-accent-hover/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
           : p.running
-            ? 'border-[#0a0d12] shadow-[0_10px_26px_rgba(0,0,0,0.5)]'
-            : 'border-[#0a0d12] shadow-[0_8px_20px_rgba(0,0,0,0.38)]'
+            ? 'border-status-ready/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
+            : 'border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
       }`}
-      style={{ background: 'linear-gradient(160deg,#161b24,#0a0e14)' }}
+      style={{ background: 'linear-gradient(180deg,#141c2f,#0c1322)' }}
     >
-      {/* SCREEN — taller (height-only bump) so the body has room. */}
+      {/* SCREEN — a FIXED 220px of glass (Phase B: no aspect ratio, so the
+          card's height depends on neither its width nor its state). */}
       <div
         data-component="phone-screen"
-        className="relative flex aspect-[9/18.5] min-w-0 flex-col overflow-hidden rounded-[17px] bg-surface-raised"
+        className="relative flex h-[220px] min-w-0 flex-col overflow-hidden rounded-[17px] bg-surface-raised"
       >
         {/* F3 — inline note editor overlay. Floats over the screen so it never
             reshapes the card; stops propagation so typing/saving never toggles
@@ -391,34 +1242,23 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             </div>
           </div>
         ) : null}
+        {/* Polish — ONE identity-hue wash: a radial from above the top edge
+            that fades out by 60%, so the top third glows and the body stays on
+            the raised surface (the full-screen tint + blurred disc + vignette
+            coloured whole screens green/purple/brown and cost every 9–10px
+            text its contrast). */}
         <div
           aria-hidden="true"
-          className="absolute inset-0 opacity-[0.16]"
+          data-component="screen-wash"
+          className="pointer-events-none absolute inset-0"
           style={{
-            background: `linear-gradient(160deg, hsl(${p.hue} 44% 32%), hsl(${(p.hue + 38) % 360} 42% 18%))`,
-          }}
-        />
-        {/* soft identity-hue wallpaper glow behind the avatar */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute left-1/2 top-[58px] z-[3] h-28 w-28 -translate-x-1/2 rounded-full opacity-50 blur-2xl"
-          style={{
-            background: `radial-gradient(circle, hsl(${p.hue} 70% 55% / 0.55), transparent 70%)`,
+            background: `radial-gradient(120% 55% at 50% -10%, hsl(${p.hue} 60% 55% / 0.28), transparent 60%)`,
           }}
         />
         {/* top gloss */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 top-0 z-[5] h-1/3 bg-gradient-to-b from-white/[0.07] to-transparent"
-        />
-        {/* inner vignette — reads the screen as glass */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 z-[6] rounded-[17px] shadow-[inset_0_0_28px_rgba(0,0,0,0.32)]"
-        />
-        <span
-          aria-hidden="true"
-          className="absolute left-1/2 top-2 z-30 h-[12px] w-[42px] -translate-x-1/2 rounded-[8px] bg-[#05070b]"
         />
 
         {/* T-19 — selection marker. The whole card toggles selection on click
@@ -429,816 +1269,862 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             the card that says what a click does; it takes pointer events so the
             tooltip shows, and its click bubbles to the article like any other
             spot. Not on the article itself: a card-level title would leak onto
-            the untitled Launch button as its hover text. The read of the ask is
-            DISCOVERABILITY — a single-select-to-launch model was deliberately not
-            introduced, because selection is a Set that every bulk action reads
-            (ProfilesView toggleSelected). */}
+            the untitled Launch button as its hover text. Phase B: it sits over
+            the identity row's left gutter (R1 has pl-5), never under the name.
+            Polish: a 1.5px white/35 ring with no fill (the filled disc competed
+            with the thumbnail), and z-[15] — above the body (z-10), BELOW the
+            ⋯ menu (z-20, a sibling of the screen in the same stacking context):
+            at z-30 it painted through the open menu's top row. */}
         <span
           data-component="select-indicator"
           aria-hidden="true"
           title={p.selected ? 'Selected — click to deselect' : 'Click to select'}
-          className={`absolute left-1.5 top-[7px] z-30 grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
+          className={`absolute left-1.5 top-[7px] z-[15] grid h-4 w-4 place-items-center rounded-full text-[9px] font-bold transition-all ${
             p.selected
               ? 'bg-accent text-white shadow-[0_0_0_1px_rgba(0,0,0,0.35)] group-hover:bg-accent-hover'
-              : 'border-[1.5px] border-white/70 bg-black/35 text-transparent group-hover:border-white group-hover:bg-white/15'
+              : 'border-[1.5px] border-white/35 bg-transparent text-transparent group-hover:border-white/70'
           }`}
         >
           ✓
         </span>
 
-        {/* status bar — readable device chip (left) + Live/Idle (right). Sits
-            BELOW the dynamic island (pt clears it) so neither overlaps the label. */}
-        <div className="relative z-20 flex items-center justify-between gap-1 px-2.5 pb-1 pt-[26px]">
-          <span
-            className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[11px] font-semibold tracking-tight text-ink-primary"
-            title={p.deviceLabel}
-          >
-            {p.deviceLabel}
-          </span>
-          {p.running ? (
-            <span className="inline-flex shrink-0 items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-status-ready">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready shadow-[0_0_6px_rgb(var(--status-ready-rgb))]" />
-              Live
-            </span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center gap-1 text-[9.5px] font-semibold uppercase tracking-wider text-ink-muted">
-              <span className="h-1.5 w-1.5 rounded-full border border-ink-muted" />
-              Idle
-            </span>
-          )}
-        </div>
-
-        {/* body */}
+        {/* BODY — eight fixed single-line regions. `overflow-hidden`, never a
+            scroll: every child has an explicit height, so the sum (173px) is the
+            body, and nothing can be below a fold that does not exist.
+            Polish rhythm — padding 6+4 and gaps 5/4/2/4/4/2 (= 21): exit + via
+            read as a pair, status and caps as separate blocks (the flat
+            4/3/3/3/3/3 made every row equidistant). 10 + 142 + 21 = 173. */}
         <div
           data-component="card-body"
-          className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden px-2.5 pb-2 pt-1.5"
+          className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-2.5 pb-1 pt-1.5"
         >
-          {/* identity */}
-          <div className="flex flex-col items-center gap-1 pt-1">
+          {/* R1 · identity — thumbnail + name over device (the device chip moved
+              here from the old status bar, N10). Both lines truncate + title.
+              Polish: TWO thumb recipes keyed by hue — white on the old L54→L38
+              gradient measured 1.7–2.7:1 for half the hue wheel, and no single
+              gradient passes 4.5 with either ink at every hue (the cyan and
+              orange troughs fail both). Hues 4–175 (orange → cyan) get a
+              LIGHT gradient (L58→L52) with the inverted ink; 176–3 (blue →
+              magenta → red) a DARK one (L32→L24) with white — searched over
+              the hue wheel at BOTH gradient stops, worst hue 4.64. The explicit
+              background-color is the recipe's worst-case stop, so a contrast
+              reader that cannot see gradients measures the honest floor. */}
+          <div
+            data-region="identity"
+            className="mb-[5px] flex h-[38px] shrink-0 items-center gap-2 overflow-hidden pl-5"
+          >
             <span
-              className={`grid h-11 w-11 place-items-center rounded-full font-bold text-white shadow-[0_4px_12px_rgba(0,0,0,0.35)] ring-1 ring-white/25 ${
-                p.icon ? 'text-[22px]' : 'text-[15px]'
-              }`}
+              data-component="identity-thumb"
+              data-ink={thumbDarkInk ? 'dark' : 'white'}
+              className={`relative grid h-[38px] w-[22px] shrink-0 place-items-center rounded-[5px] font-bold ring-1 ring-white/25 ${
+                thumbDarkInk ? 'text-ink-inverted' : 'text-white'
+              } ${p.icon ? 'text-[12px]' : 'text-[9px]'}`}
               style={{
-                background: `linear-gradient(145deg, hsl(${p.hue} 58% 54%), hsl(${(p.hue + 34) % 360} 52% 38%))`,
+                backgroundColor: thumbDarkInk
+                  ? `hsl(${(p.hue + 34) % 360} 52% 52%)`
+                  : `hsl(${p.hue} 58% 32%)`,
+                backgroundImage: thumbDarkInk
+                  ? `linear-gradient(145deg, hsl(${p.hue} 58% 58%), hsl(${(p.hue + 34) % 360} 52% 52%))`
+                  : `linear-gradient(145deg, hsl(${p.hue} 58% 32%), hsl(${(p.hue + 34) % 360} 52% 24%))`,
               }}
             >
               {p.icon ? p.icon : p.monogram}
+              {p.running ? (
+                // The ONE pulsing dot on a live tile (1.6s, haloed by the
+                // raised surface so it separates from the thumb).
+                <span
+                  aria-hidden="true"
+                  data-component="thumb-live-dot"
+                  className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 animate-pulse rounded-full bg-status-ready ring-2 ring-surface-raised [animation-duration:1.6s]"
+                />
+              ) : null}
             </span>
-            <p
-              className="line-clamp-1 max-w-full text-center text-sm font-semibold leading-tight text-ink-primary"
-              title={p.name}
-            >
-              {p.name}
-            </p>
+            <div className="flex min-w-0 flex-1 flex-col justify-center">
+              <p
+                className="truncate text-[12.5px] font-semibold leading-4 text-ink-primary"
+                title={p.name}
+              >
+                {p.name}
+              </p>
+              <p
+                className="truncate text-[10px] leading-[14px] text-ink-secondary"
+                title={p.deviceLabel}
+              >
+                {p.deviceLabel}
+              </p>
+            </div>
           </div>
 
-          {/* egress widget */}
-          {/* Phase A — `overflow-hidden` clips children that would paint past
-              the border, but it also zeroes the widget's automatic min-height,
-              and in the scrolling body that let the WIDGET shrink and swallow
-              its own last rows instead of the body scrolling (measured: the
-              UDP badge half-cut at 178px). `shrink-0` keeps its content height
-              so vertical overflow goes to the body's scroll, where it belongs. */}
+          {/* R2 · status — session pill (list parity: 'Live' | 'Idle'; launching
+              stays 'Idle', as the list does) + ONE health pill (healthPill). */}
           <div
-            data-component="egress-widget"
-            className="flex min-w-0 shrink-0 flex-col gap-1.5 overflow-hidden rounded-[12px] border border-surface-divider bg-surface-inset px-2 py-2"
+            ref={statusRowRef}
+            data-region="status"
+            className="mb-1 flex h-5 shrink-0 items-center gap-1.5 overflow-hidden"
+          >
+            {p.running ? (
+              <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[9.5px] font-semibold uppercase leading-4 tracking-wider text-status-ready">
+                <span className="h-1.5 w-1.5 rounded-full bg-status-ready shadow-[0_0_6px_rgb(var(--status-ready-rgb))]" />
+                Live
+              </span>
+            ) : (
+              <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[9.5px] font-semibold uppercase leading-4 tracking-wider text-ink-secondary">
+                <span className="h-1.5 w-1.5 rounded-full border border-ink-muted" />
+                Idle
+              </span>
+            )}
+            {/* Polish: flush right (`ml-auto`), so rows 2 and 6 share one
+                label-left / value-right rhythm. */}
+            <span
+              data-component="health-pill"
+              data-health={pill.state}
+              data-latency-vantage={latencyVantage}
+              title={pill.title}
+              className={`ml-auto min-w-0 truncate whitespace-nowrap rounded-[5px] px-1.5 py-px text-[10px] font-semibold leading-4 ${HEALTH_TONE_CLASS[pill.tone]}`}
+            >
+              {pill.state === 'checking' ? dot('animate-pulse bg-ink-muted') : null}
+              {pill.text}
+            </span>
+          </div>
+
+          {/* R3 · exit — flag + place (the exit IP rides in the title; the list's
+              Exit IP column is where IPs are scanned). The CC chip is gone. */}
+          <div
+            data-region="exit"
+            data-component="exit-location"
+            className="mb-[2px] flex h-[18px] shrink-0 items-center gap-[5px] overflow-hidden"
+          >
+            {exit.glyph !== null ? (
+              <span aria-hidden="true" className="shrink-0 text-[13px] leading-none">
+                {exit.glyph}
+              </span>
+            ) : (
+              <span
+                aria-hidden="true"
+                data-component="exit-placeholder"
+                className="h-[13px] w-[13px] shrink-0 rounded-full border-[1.5px] border-dashed border-ink-muted opacity-70"
+              />
+            )}
+            <span
+              className={`min-w-0 flex-1 truncate text-[10.5px] leading-4 ${
+                exit.muted ? 'italic text-ink-muted' : 'text-ink-secondary'
+              }`}
+              title={exit.title}
+            >
+              {exit.text}
+            </span>
+            {p.exitTz != null && p.exitTz !== '' ? (
+              <span
+                className="max-w-[40px] shrink-0 truncate text-[9px] leading-4 text-ink-muted"
+                title={p.exitTz}
+              >
+                {p.exitTz}
+              </span>
+            ) : null}
+          </div>
+
+          {/* R4 · via — WHICH proxy (its label, or host:port when unnamed), a VPN
+              tag for tunnels (N3), and the inherited-default badge (N5). The row
+              keeps its height with no proxy so every card's rows line up. */}
+          <div
+            data-region="via"
+            {...(p.hasProxy && (proxyName !== null || proxyAddress !== null)
+              ? { 'data-component': 'profile-card-proxy-name' }
+              : {})}
+            className="mb-1 flex h-4 shrink-0 items-center gap-[5px] overflow-hidden"
           >
             {p.hasProxy ? (
               <>
-                {/* Phase A (2026-09-11, grid "nothing outside the box") — the
-                    broken-proxy banner renders FIRST in the widget. At the grid's
-                    178px minimum the phone screen's aspect ratio leaves the body
-                    ~228px for content that needs more, and the body scrolls, so
-                    the LAST rows are the ones that vanish; the verdict a customer
-                    must not miss belongs above the fold, not under it. */}
-                {/* A proxy that FAILED its last test says so, in place, with the
-                    reason and a one-click retest.
-                    Before this the card rendered a broken proxy almost exactly
-                    like an untested one — "no exit IP" and a blank latency —
-                    which reads as "not checked yet", not "this will not work".
-                    The only retest lived in the overflow menu, so the customer
-                    had to already suspect the proxy to find out it was dead. */}
-                {/* (h) — a VPN row has no SOCKS5 caps to trip this banner, so a
-                    tunnel the fleet just could not bring up rendered exactly like
-                    a healthy one. The fleet's failure sentence drives it now. */}
-                {/* (l) #16 — the VPN failure/notice are gated on `vpn`, as the
-                    grid gates them on scheme: a proxy edited vpn→socks5 kept a
-                    "VPN tunnel down" banner from the cache entry the edit had
-                    not yet dropped, and a notice nothing would ever clear. */}
-                {((caps !== null && !proxyOk) ||
-                  (p.vpn === true && p.vpnFailure !== undefined)) && (
-                  <div
-                    data-component="proxy-broken-banner"
-                    data-vpn-failure={
-                      p.vpn === true && p.vpnFailure !== undefined ? 'true' : 'false'
-                    }
-                    role="status"
-                    className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
-                  >
-                    {/* `flex-auto`, not `flex-1`: a 0% basis let the action pair
-                        share the first line and starve the label to "C…"; with a
-                        content basis the pair wraps under the label instead, and
-                        the label still grows to fill (and truncates if it must). */}
-                    <span
-                      className="min-w-0 flex-auto truncate text-[10px] font-semibold text-status-error"
-                      title={p.vpnFailure ?? p.capabilities?.message}
-                    >
-                      {p.vpn === true && p.vpnFailure !== undefined
-                        ? 'VPN tunnel down'
-                        : proxyLabel}
-                    </span>
-                    {/* Phase A — the two actions travel as ONE non-shrinking unit
-                        (ml-auto pushes the pair right; whitespace-nowrap keeps each
-                        label on one line) so a 128px-wide banner wraps the PAIR
-                        under the label instead of pushing Change past the box. */}
-                    <span className="ml-auto flex shrink-0 gap-1.5 whitespace-nowrap">
-                      <button
-                        type="button"
-                        data-action="retest-proxy"
-                        disabled={p.testing || p.testDisabled}
-                        onClick={(e) => {
-                          // The card body is itself clickable (select/expand), so a
-                          // bare click here would also toggle the row.
-                          e.stopPropagation();
-                          p.onTest();
-                        }}
-                        className="rounded bg-status-error/20 px-1.5 py-px text-[9.5px] font-semibold text-status-error hover:bg-status-error/30 disabled:opacity-50"
-                      >
-                        {p.testing
-                          ? p.vpn === true
-                            ? 'Checking…'
-                            : 'Testing…'
-                          : p.vpn === true
-                            ? 'Re-check'
-                            : 'Retest'}
-                      </button>
-                      {p.onEdit !== undefined && (
-                        // Straight to the edit modal, which is where the proxy is
-                        // chosen — "retest or change more conveniently" needs both
-                        // to be one click from the card that reports the problem.
-                        <button
-                          type="button"
-                          data-action="change-proxy"
-                          disabled={p.anyBusy}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            p.onEdit?.();
-                          }}
-                          className="rounded bg-surface-divider/60 px-1.5 py-px text-[9.5px] font-semibold text-ink-secondary hover:bg-surface-divider disabled:opacity-50"
-                        >
-                          Change
-                        </button>
-                      )}
-                    </span>
-                  </div>
-                )}
-                {/* country + exit IP */}
-                <div data-component="exit-row" className="flex min-w-0 items-center gap-1.5">
-                  <span aria-hidden="true" className="text-[15px] leading-none">
-                    {p.flag}
-                  </span>
-                  {p.countryCode !== null && (
-                    <span className="rounded bg-surface-divider/70 px-1 text-[9px] font-semibold uppercase tracking-wide text-ink-secondary">
-                      {p.countryCode}
-                    </span>
-                  )}
-                  {!p.proxyExplicit && (
-                    // An inherited default, not a choice. Saying so is what stops a
-                    // second proxy silently moving every profile that never picked one.
-                    <span
-                      data-component="proxy-inherited-badge"
-                      title="No proxy chosen for this profile — it uses the first saved proxy, and will follow whichever that is."
-                      className="shrink-0 rounded bg-surface-divider/40 px-1 text-[9px] font-medium uppercase tracking-wide text-ink-muted"
-                    >
-                      default
-                    </span>
-                  )}
+                {vpn ? (
+                  // Polish: the same oxblood tint with a LIGHT rose ink (the
+                  // accent token on its own tint measured 1.9:1), and a title
+                  // that says what VPN means here — not the Check VPN sentence.
                   <span
-                    className={`min-w-[3ch] flex-1 truncate text-right text-[11.5px] ${
-                      p.exitIp !== null ? 'mono text-ink-primary' : 'italic text-ink-muted'
-                    }`}
-                    title={
-                      p.exitIp ??
-                      (p.vpn === true
-                        ? VPN_NO_EXIT_YET_TITLE
-                        : p.exitProbeFailed === true
-                          ? EXIT_GEO_UNAVAILABLE_TITLE
-                          : p.probed
-                            ? 'no exit IP'
-                            : 'run Test')
-                    }
+                    data-component="proxy-vpn-tag"
+                    className={`shrink-0 rounded bg-accent-subtle px-1 text-[9px] font-semibold uppercase leading-4 tracking-wide ${SOFT_ACCENT_INK}`}
+                    title={VPN_TAG_TITLE}
                   >
-                    {/* (l) #3 — a VPN row with no exit is "no exit measured yet —
-                        run Check VPN" whether or not a pre-flight ever wrote an
-                        entry (`probed` is true after ANY Check, refused ones
-                        included, and after list adoption): "no exit IP" was a
-                        dead end naming no next step, and disagreed with the
-                        grid's prompt for the same proxy. Same constant there. */}
-                    {/* (n) N-M1 — the third state, in the grid's own words:
-                        "the probe did not complete" is what happened, and it is
-                        not the same fact as "never probed". */}
-                    {p.exitIp ??
-                      (p.vpn === true
-                        ? VPN_NO_EXIT_YET
-                        : p.exitProbeFailed === true
-                          ? EXIT_GEO_UNAVAILABLE
-                          : p.probed
-                            ? 'no exit IP'
-                            : 'run Test')}
+                    VPN
                   </span>
-                </div>
-                {/* #6 — exit LOCATION (city, region / country name). Previously shown
-                    only in the Profiles LIST view; the grid card had just the flag +
-                    2-letter code. Rendered when the exit probe resolved it. */}
-                {p.locationLabel != null && p.locationLabel !== '' && (
-                  <div
-                    className="truncate text-[9.5px] text-ink-muted"
-                    title={p.locationLabel}
-                    data-component="exit-location"
-                  >
-                    {p.locationLabel}
-                  </div>
+                ) : (
+                  <span className="shrink-0 text-[9px] font-semibold uppercase leading-4 tracking-wider text-ink-muted">
+                    via
+                  </span>
                 )}
-                {/* WHICH proxy. Its own row rather than squeezed beside the exit
-                    IP: with several saved proxies the name is the thing that
-                    tells two otherwise-identical cards apart. */}
-                {p.proxyName !== null && p.proxyName !== undefined && p.proxyName !== '' && (
-                  <div
-                    className="flex min-w-0 items-center gap-1.5"
-                    data-component="profile-card-proxy-name"
-                  >
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
-                      via
-                    </span>
-                    <span
-                      className="min-w-0 flex-1 truncate text-[11.5px] text-ink-secondary"
-                      title={p.proxyName}
-                    >
-                      {p.proxyName}
-                    </span>
-                  </div>
-                )}
-                {/* latency + UDP badge (red/green) */}
-                <div
-                  data-component="latency-row"
-                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+                <span
+                  className={`min-w-0 flex-1 truncate leading-4 ${
+                    proxyName !== null
+                      ? 'text-[10.5px] text-ink-secondary'
+                      : proxyAddress !== null
+                        ? // 9.5px: Berkeley Mono's x-height at 10px outweighed the
+                          // 10.5px place name directly above it.
+                          'mono text-[9.5px] text-ink-secondary'
+                        : 'text-[10.5px] text-ink-muted'
+                  }`}
+                  title={viaTitle ?? '—'}
                 >
-                  <span className="flex min-w-0 flex-wrap items-center gap-1 text-[9.5px] text-ink-muted">
-                    {p.latencyMs !== null ? (
-                      <>
-                        <span
-                          className="mono text-[10.5px] whitespace-nowrap"
-                          title={
-                            p.latencyFromServer === true
-                              ? (latVantage?.title ?? SERVER_LATENCY_TITLE)
-                              : PROBE_ORIGIN_TITLE
-                          }
-                          data-latency-vantage={
-                            p.latencyFromServer === true
-                              ? (p.latencyVantage?.measuredFrom ?? 'server')
-                              : 'this_mac'
-                          }
-                        >
-                          {p.latencyMs}ms
-                        </span>
-                        {/* T-1 — say WHERE a server-measured latency came from (a
-                            fleet Mac, or the server when none was free) so it is
-                            never read as the laptop's number. */}
-                        {p.latencyFromServer === true && (
-                          <span className="whitespace-nowrap text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                            {latVantage?.label ?? 'server'}
-                          </span>
-                        )}
-                        <span className="inline-block h-1 w-[26px] overflow-hidden rounded-[2px] bg-surface-divider">
-                          <span
-                            className="block h-full rounded-[2px]"
-                            style={{
-                              width: `${p.latencyFillPct.toFixed(0)}%`,
-                              background: p.latencyGood
-                                ? 'rgb(var(--status-ready-rgb))'
-                                : 'rgb(var(--status-busy-rgb))',
-                            }}
-                          />
-                        </span>
-                      </>
-                    ) : (
-                      // (l) #3 — a VPN row never holds a native latency (its
-                      // SOCKS5 result is null by design), so "stale" beside
-                      // "checked just now" described a number that was never
-                      // measured. Say that instead.
-                      <span className="mono text-[10.5px] whitespace-nowrap opacity-60">
-                        {p.vpn === true
-                          ? VPN_LATENCY_NOT_MEASURED
-                          : p.probed
-                            ? 'stale'
-                            : 'untested'}
-                      </span>
-                    )}
-                  </span>
-                  {/* (h) finding 5 — WHEN the proxy was last checked. For a VPN
-                      row the parent dates this from the fleet's own answer (a
-                      number or a failure), never from the DNS pre-flight that
-                      precedes a refused test; the prop existed and nothing
-                      rendered it, so an hour-old fleet result read as "just
-                      checked" or not at all. */}
-                  {p.checkedAtIso !== null && (
-                    <span
-                      data-component="proxy-checked-at"
-                      data-checked-at={p.checkedAtIso}
-                      className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[9px] text-ink-muted"
-                    >
-                      <span className="uppercase tracking-wide">checked</span>
-                      <RelativeTime iso={p.checkedAtIso} tooltipPrefix="Checked" />
-                    </span>
-                  )}
+                  {proxyName ?? proxyAddress ?? '—'}
+                </span>
+                {!p.proxyExplicit && (
+                  // An inherited default, not a choice. Saying so is what stops a
+                  // second proxy silently moving every profile that never picked one.
+                  // Polish: lowercase in a hairline box (the comp's .dflt) — the
+                  // uppercase tracked 'DEFAULT' ate two glyphs of the label.
                   <span
-                    title={udpTitle}
-                    data-udp={p.vpn === true ? 'tunnel' : udpOk ? 'true' : 'false'}
-                    className={`ml-auto inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-px text-[9.5px] font-bold ${
-                      p.vpn === true || caps === null
-                        ? 'bg-surface-divider/60 text-ink-muted'
-                        : udpOk
-                          ? 'bg-status-ready/20 text-status-ready'
-                          : 'bg-status-error/20 text-status-error'
-                    }`}
+                    data-component="proxy-inherited-badge"
+                    title="No proxy chosen for this profile — it uses the first saved proxy, and will follow whichever that is."
+                    className="shrink-0 rounded border border-surface-divider px-1 text-[9px] font-medium leading-[14px] text-ink-secondary"
                   >
-                    {p.vpn === true
-                      ? 'UDP via tunnel'
-                      : `UDP ${caps === null ? '?' : udpOk ? '✓' : '✗'}`}
+                    default
                   </span>
-                </div>
-                {/* OS chip on its OWN row — on the 178px card it was the last child of
-                    the latency/UDP row and overflowed the card, clipped by the phone
-                    screen's overflow-hidden. Its own row keeps it fully visible. */}
-                {p.hasProxy && (
-                  <div className="flex items-center gap-1.5">
-                    {/* (o) O4 — same rule as the proxies grid: nothing measures a
-                        proxy's stack except the Test this card's own button starts,
-                        so "measuring" is rendered from `p.testing` — a probe this
-                        client has in flight — and never from an absent fingerprint.
-                        ⛔ (o) 2026-09-11 follow-up — and never on a VPN row at all:
-                        `p.testing` is set for the "Check VPN" button too, but no
-                        fingerprint is taken through a tunnel (the control plane has
-                        no SOCKS5 endpoint to dial), so the card claimed a measurement
-                        was running and then said none can exist. A VPN row states that
-                        cause from its own scheme, in every state. */}
-                    <ProxyOsChip
-                      fingerprint={
-                        p.osFingerprint ??
-                        (p.vpn === true
-                          ? VPN_TUNNEL_OS_FINGERPRINT
-                          : p.testing
-                            ? OS_FINGERPRINT_MEASURING
-                            : undefined)
-                      }
-                      size="xs"
-                    />
-                  </div>
-                )}
-                {p.vpn === true && p.vpnFailure !== undefined && (
-                  <div
-                    data-component="proxy-vpn-failure"
-                    className="line-clamp-2 text-[9.5px] leading-tight text-status-error"
-                    title={p.vpnFailure}
-                  >
-                    {p.vpnFailure}
-                  </div>
-                )}
-                {/* (h) — the tunnel test was NOT RUN: a notice in muted ink beside
-                    whatever the card already holds, never the red banner. */}
-                {/* (h) finding 3 — beside a standing failure too: the failure
-                    is the LAST verdict (the cache's), the notice is what THIS
-                    check did not do; hiding one behind the other lost either. */}
-                {p.vpn === true && p.vpnNotice !== undefined && (
-                  <div
-                    data-component="proxy-vpn-notice"
-                    role="status"
-                    className="line-clamp-2 rounded-[8px] bg-surface-divider/40 px-1.5 py-1 text-[9.5px] leading-tight text-ink-muted"
-                    title={p.vpnNotice}
-                  >
-                    {p.vpnNotice}
-                  </div>
-                )}
-                {/* WebRTC/QUIC detail — on hover (founder: hover shows them) */}
-                {caps !== null && (
-                  <div className="hidden flex-wrap gap-1 group-hover:flex">
-                    <span
-                      className={`rounded px-1 text-[8.5px] ${webrtc ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
-                    >
-                      WebRTC {webrtc ? '✓' : '✗'}
-                    </span>
-                    {/* T-6/T-27 — ONE QUIC verdict (see proxyCapabilities): green ✓ for
-                        a live 'h3' or a fleet relay-verified proxy, red ✗ for a measured
-                        negative, muted '~' when only inferred from UDP. The hint says
-                        which. No separate "QUIC relayed" chip — it read as a second,
-                        contradictory QUIC badge. */}
-                    <span
-                      data-quic-inferred={quicInferred ? 'true' : 'false'}
-                      title={quicCap?.hint}
-                      className={`rounded px-1 text-[8.5px] ${
-                        quicInferred
-                          ? 'bg-surface-inset text-ink-secondary'
-                          : quicOk
-                            ? 'bg-status-ready/15 text-status-ready'
-                            : 'bg-status-error/15 text-status-error'
-                      }`}
-                    >
-                      QUIC {quicInferred ? '~' : quicOk ? '✓' : '✗'}
-                    </span>
-                  </div>
                 )}
               </>
             ) : (
-              <div className="flex items-center gap-1.5">
-                <span aria-hidden="true" className="text-[13px]">
-                  🚫
-                </span>
-                <span className="text-[10.5px] text-ink-muted">no proxy bound</span>
-              </div>
+              // Polish: the row keeps its height with no glyph — a bare '—'
+              // under 'no proxy bound' read as broken data.
+              <span aria-hidden="true" className="h-4" />
             )}
           </div>
 
-          {(p.folder !== '' || p.tags.length > 0) && (
-            // Phase A — capped at exactly TWO pill lines (measured: a pill is
-            // 19.5px tall, gap 4px → 43px; the judge's 38px cut the second line
-            // through its glyphs). A third line is clipped whole; the "+N" tail
-            // that names what was hidden is Phase B's.
-            <div
-              data-component="tags-row"
-              className="flex max-h-[43px] shrink-0 flex-wrap justify-center gap-1 overflow-hidden"
-            >
-              {p.folder !== '' && (
-                <span
-                  className="max-w-full truncate rounded-full border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-[9px] text-ink-secondary"
-                  title={p.folder}
-                >
-                  📁 {p.folder}
-                </span>
-              )}
-              {p.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="max-w-full truncate rounded-full border border-surface-divider px-1.5 py-0.5 text-[9px] text-ink-muted"
-                  title={tag}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* F3 — note line. Editable in-place (click) when onSaveNote is wired;
-              clicking opens the same overlay editor as the ⋯ "Edit note" row. */}
-          {p.onSaveNote && p.note && p.note.trim() !== '' ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setNoteDraft(p.note ?? '');
-                setNoteError(null);
-                setEditingNote(true);
-              }}
-              title="Click to edit note"
-              className="min-w-0 rounded-md border border-surface-divider/70 bg-surface-inset/60 px-1.5 py-1 text-left text-[9.5px] italic text-ink-secondary transition-colors hover:text-ink-primary"
-            >
-              {/* Phase A — the clamp lives on an inner block, not the <button>:
-                  a line-clamped button is display:-webkit-box, which drops the
-                  button's own box sizing and let its text paint past the card. */}
-              <span data-component="profile-note" className="line-clamp-2">
-                🗒 {p.note}
-              </span>
-            </button>
-          ) : null}
-
-          <div className="mt-auto flex flex-col items-center gap-1">
-            {p.savedTabsReopen === true && !p.running ? (
-              <span
-                data-component="saved-tabs-reopen"
-                title="This profile's saved tabs reopen when you launch it"
-                className="inline-flex items-center gap-1 rounded-full border border-accent/25 bg-accent-subtle px-2 py-0.5 text-[9.5px] font-medium text-accent"
-              >
-                <span aria-hidden="true">↻</span>
-                Saved tabs reopen
-              </span>
-            ) : null}
-            <span className="flex items-center justify-center gap-1.5 text-center text-[9.5px] text-ink-muted">
-              {p.lastUsedIso !== null ? (
-                <RelativeTime iso={p.lastUsedIso} tooltipPrefix="Last used" />
-              ) : (
-                'never launched'
-              )}
-              {/* doc-150 item 5 — per-profile sealed-store size. "—" = never saved. */}
-              {p.sizeLabel !== undefined && (
-                <>
-                  <span aria-hidden="true">·</span>
-                  <span title="Stored profile size (encrypted browser state)">{p.sizeLabel}</span>
-                </>
-              )}
-            </span>
-          </div>
-        </div>
-
-        {/* footer: the Launch dock + a hover action strip that floats ABOVE it
-            (bottom-full) so the secondary actions never overlap Launch. */}
-        <div ref={footerRef} className="relative z-10 shrink-0">
-          {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
-              2026-06-17), anchored above the dock so it never collides with
-              Launch/Open.
-              ⛔ Opened ONLY by the ⋯ toggle. It also opened on card HOVER
-              (group-hover:opacity-100), so moving the pointer across the grid unfurled
-              every action — the destructive ones included — over whatever card the
-              cursor passed (owner 2026-08-30: "hover over profile currently expands all
-              options, but it should just happen when clicking the … dots"). Same
-              correction as the Clear group in V-2149, one level up.
-              Rows stay in the DOM (opacity-toggled) so the
-              accessible labels are always queryable. */}
+          {/* R5 · capability / repair — exactly one of four modes (capsMode). */}
           <div
-            data-component="card-actions-menu"
-            role="menu"
-            className={`absolute bottom-full left-1.5 right-1.5 z-20 mb-1.5 max-h-[260px] w-auto overflow-y-auto overflow-x-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
-              actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
-            }`}
+            data-region="caps"
+            data-caps-mode={mode}
+            className="mb-1 flex h-5 shrink-0 items-center gap-1 overflow-hidden"
           >
-            {p.onAssist ? (
-              <MenuRow
-                glyph="✦"
-                caption="Assist"
-                label={`Ask the AI assistant about ${p.name}`}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onAssist?.();
-                }}
-              />
-            ) : null}
-            <MenuRow
-              glyph={p.running ? '◉' : '▶'}
-              caption={p.running ? 'View live' : 'Watch'}
-              label={p.running ? 'Open the live view' : 'Launch and watch live'}
-              onClick={() => {
-                setActionsOpen(false);
-                p.onWatch();
-              }}
-              disabled={p.busy || (!p.running && p.launchDisabled)}
-            />
-            {/* Stop — only for a RUNNING profile with a stop handler (idle cards
-                never show it). Reuses `busy` so a double-click can't double-close
-                (founder Track A). */}
-            {p.running && p.onStop ? (
-              <MenuRow
-                glyph={p.busy ? '…' : '◼'}
-                caption={p.busy ? 'Stopping…' : 'Stop session'}
-                label={`Stop ${p.name}'s running session`}
-                tone="danger"
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onStop?.();
-                }}
-                disabled={p.busy}
-              />
-            ) : null}
-            {p.hasProxy ? (
-              <MenuRow
-                glyph={p.testing ? '…' : '⟳'}
-                // (l) #10 — the grid's button and this menu row name the VPN
-                // check the same way, from one constant.
-                caption={p.vpn === true ? CHECK_VPN_ACTION : 'Test proxy'}
-                label={
-                  p.vpn === true
-                    ? CHECK_VPN_TITLE
-                    : 'Test proxy from this Mac — reachability, latency, exit IP'
-                }
-                onClick={() => {
-                  setActionsOpen(false);
+            {mode === 'none' ? (
+              <span aria-hidden="true" className="h-4" />
+            ) : mode === 'repair' ? (
+              // A proxy that FAILED its last test (or a tunnel the fleet could
+              // not bring up) gets its two actions ON the card. No label text
+              // here — the health pill carries the verdict (B5).
+              <div
+                data-component="proxy-broken-banner"
+                data-vpn-failure={vpn && p.vpnFailure !== undefined ? 'true' : 'false'}
+                role="status"
+                className="flex items-center gap-1.5"
+              >
+                <button
+                  type="button"
+                  data-action="retest-proxy"
+                  disabled={p.testing || p.testDisabled}
+                  aria-busy={p.testing}
+                  onClick={(e) => {
+                    // The card body is itself clickable (select), so a bare
+                    // click here would also toggle the row.
+                    e.stopPropagation();
+                    p.onTest();
+                  }}
+                  // Polish: OUTLINED repair button (the comp's), soft red ink;
+                  // in flight it is the neutral busy button at full opacity —
+                  // busy is not unavailable, and the in-flight word was the
+                  // least readable thing on the card at 50%. Only testDisabled
+                  // dims. Hover only while enabled; an inset focus ring (the
+                  // 20px row clips an offset one).
+                  className={`shrink-0 whitespace-nowrap rounded-md border px-2 py-px text-[10px] font-semibold leading-4 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover ${
+                    p.testing
+                      ? 'cursor-progress border-surface-divider bg-surface-elevated text-ink-secondary'
+                      : `border-status-error/45 bg-status-error/10 ${SOFT_ERROR_INK} enabled:hover:bg-status-error/20 disabled:opacity-50`
+                  }`}
+                >
+                  {p.testing
+                    ? vpn
+                      ? 'Checking…'
+                      : 'Testing…'
+                    : vpn || p.endpoint != null
+                      ? // A row holding a pre-flight re-runs it (the grid's word
+                        // for both buttons once a pre-flight exists).
+                        RECHECK_ACTION
+                      : RETEST_ACTION}
+                </button>
+                {p.onEdit !== undefined && (
+                  // Straight to the edit modal, which is where the proxy is
+                  // chosen — "retest or change more conveniently" needs both
+                  // to be one click from the card that reports the problem.
+                  <button
+                    type="button"
+                    data-action="change-proxy"
+                    disabled={p.anyBusy}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      p.onEdit?.();
+                    }}
+                    className="shrink-0 whitespace-nowrap rounded-md border border-surface-divider bg-white/[0.04] px-2 py-px text-[10px] font-semibold leading-4 text-ink-secondary transition-colors enabled:hover:bg-surface-divider focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover disabled:opacity-50"
+                  >
+                    Change
+                  </button>
+                )}
+              </div>
+            ) : mode === 'first' ? (
+              // Nothing measured yet: the list's inline Test, by its one name.
+              // While the test runs the pill already says 'Testing…'; the
+              // button keeps its word, disabled.
+              <button
+                type="button"
+                data-action="retest-proxy"
+                disabled={p.testing || p.testDisabled}
+                aria-busy={p.testing}
+                title={vpn ? CHECK_VPN_TITLE : TEST_PROXY_TITLE}
+                onClick={(e) => {
+                  e.stopPropagation();
                   p.onTest();
                 }}
-                disabled={p.testDisabled}
-              />
+                className={`shrink-0 whitespace-nowrap rounded-md border border-surface-divider px-2 py-px text-[10px] font-semibold leading-4 text-ink-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover ${
+                  p.testing
+                    ? 'cursor-progress bg-surface-elevated'
+                    : 'bg-white/[0.04] enabled:hover:bg-surface-divider enabled:hover:text-ink-primary disabled:opacity-50'
+                }`}
+              >
+                {vpn ? CHECK_VPN_ACTION : 'Test'}
+              </button>
             ) : null}
-            {p.onEdit ? (
-              <MenuRow
-                glyph="✎"
-                caption="Edit"
-                label={`Edit ${p.name}`}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onEdit?.();
-                }}
-              />
+            {mode === 'first' && firstHints.length > 0 ? (
+              <span
+                data-component="caps-overflow"
+                title={firstHints.join('\n')}
+                className={`${CHIP_BASE} ${OVERFLOW_PILL_CLASS}`}
+              >
+                +{firstHints.length}
+              </span>
             ) : null}
-            {p.onSaveNote ? (
-              <MenuRow
-                glyph="🗒"
-                caption={p.note && p.note.trim() !== '' ? 'Edit note' : 'Add note'}
-                label={`Edit note for ${p.name}`}
-                onClick={() => {
-                  setActionsOpen(false);
-                  setNoteDraft(p.note ?? '');
-                  setNoteError(null);
-                  setEditingNote(true);
-                }}
-              />
-            ) : null}
-            {p.onClone ? (
-              <MenuRow
-                glyph="⧉"
-                caption="Duplicate"
-                label={`Duplicate ${p.name}`}
-                title={
-                  p.cloneDisabled
-                    ? p.cloneDisabledReason
-                    : p.anyBusy && !p.busy
-                      ? 'Another profile is busy — wait for it to finish'
-                      : undefined
-                }
-                disabled={p.cloneDisabled || p.busy || p.anyBusy}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onClone?.();
-                }}
-              />
-            ) : null}
-            {p.onActivity ? (
-              <MenuRow
-                glyph="🕘"
-                caption="Activity"
-                label={`Recent pages opened with ${p.name}`}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onActivity?.();
-                }}
-              />
-            ) : null}
-            {p.onExport ? (
-              <MenuRow
-                glyph="⤓"
-                caption="Export"
-                label={`Export ${p.name} as a portable JSON copy`}
-                onClick={() => {
-                  setActionsOpen(false);
-                  p.onExport?.();
-                }}
-              />
-            ) : null}
-            {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. The
-                title spells out exactly what's kept so the customer knows
-                nothing identity-bearing is dropped. Disabled while busy. */}
-            {p.onTrim ? (
-              <MenuGroup glyph="🧹" caption="Clear…" label={`Clearing options for ${p.name}`}>
-                <MenuRow
-                  glyph="🧹"
-                  caption="Clear cache"
-                  label={`Clear cache for ${p.name}`}
-                  title={
-                    p.anyBusy && !p.busy
-                      ? 'Another profile is busy — wait for it to finish'
-                      : 'Free re-fetchable files. Logins, site data and tabs are kept'
-                  }
-                  disabled={p.busy || p.anyBusy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    p.onTrim?.('cache');
-                  }}
-                />
-                {/* W3120 (doc-150 §8.4). These three DESTROY state the customer
-                    cannot get back, unlike a cache clear which simply refetches,
-                    so each title says plainly what goes before the confirm does. */}
-                <MenuRow
-                  glyph="🍪"
-                  caption="Clear cookies"
-                  label={`Clear cookies for ${p.name}`}
-                  title={
-                    p.anyBusy && !p.busy
-                      ? 'Another profile is busy — wait for it to finish'
-                      : 'Signs this profile out everywhere. Cached files and tabs are kept'
-                  }
-                  disabled={p.busy || p.anyBusy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    p.onTrim?.('cookies');
-                  }}
-                />
-                <MenuRow
-                  glyph="🕘"
-                  caption="Clear history"
-                  label={`Clear history for ${p.name}`}
-                  title={
-                    p.anyBusy && !p.busy
-                      ? 'Another profile is busy — wait for it to finish'
-                      : 'Forgets the remembered tabs — the only page record a profile keeps'
-                  }
-                  disabled={p.busy || p.anyBusy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    p.onTrim?.('history');
-                  }}
-                />
-                <MenuRow
-                  glyph="🧨"
-                  caption="Clear everything"
-                  label={`Clear all browsing data for ${p.name}`}
-                  title={
-                    p.anyBusy && !p.busy
-                      ? 'Another profile is busy — wait for it to finish'
-                      : 'Cookies, site data, cache and tabs. The profile and its fingerprint stay'
-                  }
-                  disabled={p.busy || p.anyBusy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    p.onTrim?.('all');
-                  }}
-                />
-              </MenuGroup>
-            ) : null}
-            {p.onDelete ? (
+            {mode === 'measured' ? (
               <>
-                <div className="my-1 h-px bg-surface-divider" aria-hidden="true" />
-                {/* Delete is rejected by the server for a RUNNING session, so
-                    disable it (matching ProfilesTable) and explain via the
-                    tooltip rather than letting the click 409. Also disable while
-                    BUSY (a launch/clone in flight) so a delete can't race an
-                    in-flight launch before `running` is set — w410wv3eq #4. */}
-                <MenuRow
-                  glyph="🗑"
-                  caption="Delete"
-                  label={`Delete ${p.name}`}
-                  title={
-                    p.running
-                      ? 'Stop the session first before deleting'
-                      : p.anyBusy && !p.busy
-                        ? 'Another profile is busy — wait for it to finish'
-                        : undefined
-                  }
-                  tone="danger"
-                  disabled={p.busy || p.running || p.anyBusy}
-                  onClick={() => {
-                    setActionsOpen(false);
-                    p.onDelete?.();
-                  }}
-                />
+                {chips.chips.map((c) => (
+                  <span
+                    key={c.key}
+                    {...c.attrs}
+                    title={c.title}
+                    className={`${CHIP_BASE} ${c.className}`}
+                  >
+                    {c.text}
+                  </span>
+                ))}
+                {chips.hiddenHints.length > 0 ? (
+                  <span
+                    data-component="caps-overflow"
+                    title={chips.hiddenHints.join('\n')}
+                    className={`${CHIP_BASE} ${OVERFLOW_PILL_CLASS}`}
+                  >
+                    +{chips.hiddenHints.length}
+                  </span>
+                ) : null}
               </>
             ) : null}
           </div>
 
-          {/* dock — Launch/Open (flex-1) + a persistent ⋯ for the secondary
-              actions, mirroring the visual-demo dock (founder 2026-06-16). */}
-          <div className="flex items-center gap-2 border-t border-surface-divider bg-white/[0.03] px-2.5 py-2">
-            <button
-              type="button"
-              className={`flex-1 rounded-[10px] py-1.5 text-[11.5px] font-semibold transition-colors disabled:opacity-50 ${
-                p.running
-                  ? 'border border-surface-divider bg-surface-elevated text-ink-primary hover:bg-surface-divider'
-                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] hover:bg-accent-hover'
-              }`}
-              disabled={p.busy || (!p.running && p.launchDisabled)}
-              aria-busy={!p.running && p.launching}
-              title={!p.running && p.launchDisabled ? p.launchDisabledReason : undefined}
-              onClick={(e) => {
-                e.stopPropagation();
-                p.onPrimary();
-              }}
-            >
-              {p.running ? (
-                'Open session'
-              ) : p.launching ? (
-                <span className="inline-flex items-center justify-center gap-1.5">
+          {/* R6 · when — last used / running-since ⟷ checked; a VPN failure or
+              notice takes the whole line (list parity: one line, full text in
+              the title; the four-line paragraph is gone, D4). */}
+          <div
+            data-region="when"
+            className="mb-[2px] flex h-[14px] shrink-0 items-center justify-between gap-1 overflow-hidden text-[9.5px] leading-[14px] text-ink-muted"
+          >
+            {vpn && p.vpnFailure !== undefined ? (
+              // Polish: the row shows the CAUSE (the clause after the fleet's
+              // preamble), which the pill above does not; the whole sentence,
+              // the notice and the displaced facts stay in the title.
+              <div
+                data-component="proxy-vpn-failure"
+                data-checked-at={p.checkedAtIso ?? undefined}
+                className="min-w-0 flex-1 truncate text-status-error"
+                title={`${p.vpnNotice !== undefined ? `${p.vpnFailure} — ${p.vpnNotice}` : p.vpnFailure}${displacedFacts}`}
+              >
+                {vpnFailureClause(p.vpnFailure)}
+              </div>
+            ) : vpn && p.vpnNotice !== undefined ? (
+              // (h) — the tunnel test was NOT RUN: a notice in muted ink, never
+              // the red banner (and never the busy amber: on this tile that is
+              // the slow-latency colour, and a not-run notice is not a caution).
+              // Polish: the row shows the NEXT STEP, the sentence is the title.
+              <div
+                data-component="proxy-vpn-notice"
+                role="status"
+                data-checked-at={p.checkedAtIso ?? undefined}
+                className="min-w-0 flex-1 truncate text-ink-muted"
+                title={`${p.vpnNotice}${displacedFacts}`}
+              >
+                {vpnNoticeClause(p.vpnNotice)}
+              </div>
+            ) : (
+              <>
+                {/* Polish: compact forms on both halves, the left fact has
+                    priority (it never collapses to '3 m…'), the right half
+                    is ONE label in ONE case, terse ('checked 3 mo' — the
+                    comp's whole-uppercase 'CHECKED 3 MO AGO' measured 108px
+                    against the 100px the 178px column leaves beside '3 mo
+                    ago', so it truncated on 23 of 26 tiles; 'CHECKED 3 months
+                    ago' mixed two cases; with 'ago' it still lost to 'never
+                    launched'). It truncates first. Absolute stamps live in
+                    the titles. */}
+                <span
+                  className={`truncate ${p.checkedAtIso !== null ? 'max-w-[60%] shrink-0' : 'min-w-0'}`}
+                  title={whenTitle}
+                >
+                  {runningSince !== null ? (
+                    <>running {formatElapsed(runningSince)}</>
+                  ) : p.lastUsedIso !== null ? (
+                    <time dateTime={p.lastUsedIso}>{compactAgo(p.lastUsedIso)}</time>
+                  ) : (
+                    'never launched'
+                  )}
+                </span>
+                {/* (h) finding 5 — WHEN the proxy was last checked. For a VPN
+                    row the parent dates this from the fleet's own answer. */}
+                {p.checkedAtIso !== null && (
                   <span
-                    aria-hidden="true"
-                    data-component="launch-spinner"
-                    className="h-3 w-3 animate-spin rounded-full border-2 border-white/35 border-t-white"
-                  />
-                  Starting…
+                    data-component="proxy-checked-at"
+                    data-checked-at={p.checkedAtIso}
+                    className="min-w-0 truncate whitespace-nowrap text-[9px] tracking-tight"
+                    title={`Checked: ${new Date(p.checkedAtIso).toLocaleString()}`}
+                  >
+                    checked <time dateTime={p.checkedAtIso}>{terseAgo(p.checkedAtIso)}</time>
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* R7 · meta — folder + tag pills, JS-capped with a '+N' tail that names
+              what was hidden; the note is a glyph (its text in the title, click
+              to edit). Empty row when nothing applies — the height is kept. */}
+          {/* Polish: no row-level title — each pill and the '+N' tail carry
+              their own, and a title that only surfaced between pills was
+              information with no affordance. doc-150 item 5 (`sizeLabel`)
+              moved to a static row in the ⋯ menu. Pills
+              are the comp's: a translucent slate fill, no border (three
+              outlined boxes read as a toolbar); '+N' is the dashed tail the
+              caps row also wears. Tags stay neutral — the accent is Launch's
+              (the comp's rose tag was a second accent tint). */}
+          <div data-region="meta" className="flex h-4 shrink-0 items-center gap-1 overflow-hidden">
+            {meta.pills.map((pill) =>
+              pill.kind === 'folder' ? (
+                <span
+                  key="folder"
+                  className="h-[15px] max-w-[72px] shrink-0 truncate rounded-full bg-ink-muted/15 px-1.5 text-[9px] leading-[15px] text-ink-secondary"
+                  title={pill.title}
+                >
+                  📁 {p.folder}
                 </span>
               ) : (
-                'Launch'
-              )}
-            </button>
-            <button
-              type="button"
-              aria-label="More actions"
-              aria-expanded={actionsOpen}
-              title="More actions"
-              className={`flex h-[30px] w-[34px] shrink-0 items-center justify-center rounded-[10px] border text-[15px] leading-none transition-colors ${
-                actionsOpen
-                  ? 'border-accent bg-accent-subtle text-ink-primary'
-                  : 'border-surface-divider bg-surface-elevated text-ink-secondary hover:text-ink-primary'
-              }`}
-              onClick={(e) => {
-                e.stopPropagation();
-                setActionsOpen((v) => !v);
-              }}
-            >
-              ⋯
-            </button>
-          </div>
-          {/* iOS home indicator — sells the phone metaphor; below the dock row. */}
-          <div className="bg-white/[0.03] pb-2">
-            <span
-              aria-hidden="true"
-              className="mx-auto block h-1 w-10 rounded-full bg-ink-muted/40"
-            />
+                <span
+                  key={`tag-${pill.text}`}
+                  className="h-[15px] max-w-[50px] shrink-0 truncate rounded-full bg-ink-muted/15 px-1.5 text-[9px] leading-[15px] text-ink-secondary"
+                  title={pill.title}
+                >
+                  {pill.text}
+                </span>
+              ),
+            )}
+            {meta.hidden.length > 0 ? (
+              <span
+                data-component="tags-overflow"
+                className="h-[15px] shrink-0 whitespace-nowrap rounded-full border border-dashed border-surface-divider bg-transparent px-1.5 text-[9px] leading-[13px] text-ink-muted"
+                title={meta.hidden.join(' · ')}
+              >
+                +{meta.hidden.length}
+              </span>
+            ) : null}
+            {hasNote ? (
+              // Polish: a 16px box so the inset focus ring has room (a 14×11
+              // glyph showed a partial arc), hover fades 150ms like its peers.
+              <button
+                type="button"
+                data-component="profile-note"
+                aria-label={`Edit the note on ${p.name}`}
+                title={`${p.note ?? ''} — Click to edit note`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openNoteEditor();
+                }}
+                className="ml-auto grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] leading-none text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+              >
+                🗒
+              </button>
+            ) : null}
           </div>
         </div>
+
+        {/* R8 · dock — Launch/Open (flex-1) + a persistent ⋯ for the secondary
+            actions, mirroring the visual-demo dock (founder 2026-06-16). Outside
+            the body, so no state can push it anywhere. */}
+        {/* Polish: a hairline of white/6% (the divider token was a bright rule
+            across every tile); Launch is a 30px 12px/600 block (the 29.25px
+            fractional height blurred its edge); live → the mint tint carried
+            into the dock, launching → the neutral busy button at FULL opacity
+            (the 50%-dimmed accent read as a broken Launch — busy is not
+            unavailable; only launchDisabled dims); ⋯ is a white/6% fill with no
+            border. Both get a solid focus ring at 2px offset. */}
+        <div
+          ref={footerRef}
+          data-component="card-dock"
+          className="relative z-10 flex h-[47px] shrink-0 items-center gap-1.5 border-t border-white/[0.06] bg-white/[0.03] px-2.5"
+        >
+          <button
+            type="button"
+            className={`h-[30px] min-w-0 flex-1 truncate whitespace-nowrap rounded-[10px] px-1 py-0 text-center text-[12px] font-semibold leading-[30px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
+              p.running
+                ? 'bg-status-ready/[0.18] text-status-ready enabled:hover:bg-status-ready/25 disabled:opacity-50'
+                : p.launching
+                  ? 'cursor-progress bg-ink-muted/15 text-ink-secondary'
+                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-hover disabled:opacity-50'
+            }`}
+            disabled={p.busy || (!p.running && p.launchDisabled)}
+            aria-busy={!p.running && p.launching}
+            // A truncating control carries a title: the disabled reason, the
+            // saved-tabs promise (N11), else a sentence that ADDS to the word.
+            title={
+              !p.running && p.launchDisabled
+                ? (p.launchDisabledReason ?? LAUNCH_TITLE)
+                : p.savedTabsReopen === true && !p.running
+                  ? SAVED_TABS_REOPEN_TITLE
+                  : p.running
+                    ? OPEN_SESSION_TITLE
+                    : p.launching
+                      ? LAUNCHING_TITLE
+                      : LAUNCH_TITLE
+            }
+            onClick={(e) => {
+              e.stopPropagation();
+              // Launching with the menu open closes it (it is a sibling of the
+              // dock; the outside-pointerdown test no longer treats the whole
+              // dock as "inside").
+              setActionsOpen(false);
+              p.onPrimary();
+            }}
+          >
+            {p.running ? (
+              'Open session'
+            ) : p.launching ? (
+              <span className="inline-flex items-center justify-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  data-component="launch-spinner"
+                  className="h-3 w-3 animate-spin rounded-full border-2 border-ink-muted/40 border-t-ink-secondary"
+                />
+                Launching…
+              </span>
+            ) : (
+              <>
+                {p.savedTabsReopen === true ? (
+                  // N11 — the "Saved tabs reopen" pill became this glyph; the
+                  // sentence is the button's title.
+                  <span data-component="saved-tabs-reopen" aria-hidden="true" className="mr-1">
+                    ↻
+                  </span>
+                ) : null}
+                Launch
+              </>
+            )}
+          </button>
+          <button
+            ref={moreRef}
+            type="button"
+            aria-label="More actions"
+            aria-expanded={actionsOpen}
+            aria-controls={menuId}
+            title="More actions"
+            className={`flex h-[30px] w-[34px] shrink-0 items-center justify-center rounded-[10px] text-[15px] leading-none transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-raised ${
+              actionsOpen
+                ? 'border border-accent bg-accent-subtle text-ink-primary'
+                : 'bg-white/[0.06] text-ink-primary hover:bg-white/10'
+            }`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMenu();
+            }}
+            onKeyDown={(e) => {
+              // ArrowDown/ArrowUp on the toggle: open (if closed) and move into
+              // the menu — the menu-button pattern.
+              if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+              e.preventDefault();
+              e.stopPropagation();
+              const which = e.key === 'ArrowDown' ? 'first' : 'last';
+              if (actionsOpen) {
+                focusMenuItem(menuRef.current, which);
+              } else {
+                focusOnOpenRef.current = which;
+                toggleMenu();
+              }
+            }}
+          >
+            ⋯
+          </button>
+        </div>
+      </div>
+
+      {/* action menu — a clean VERTICAL DROPDOWN of labelled rows (founder
+          2026-06-17). Anchored to BOTH card edges. Opens UPWARD over the body,
+          or DOWNWARD (over the next row) when fewer than 320px of room lie above
+          the dock inside the scroller — which is why it is a sibling of the
+          screen, not a child: the screen clips.
+          ⛔ Opened ONLY by the ⋯ toggle. It also opened on card HOVER
+          (group-hover:opacity-100), so moving the pointer across the grid
+          unfurled every action — the destructive ones included — over whatever
+          card the cursor passed (owner 2026-08-30). Same correction as the Clear
+          group in V-2149, one level up. Rows stay in the DOM (opacity-toggled)
+          so the accessible labels are always queryable. */}
+      <div
+        ref={menuRef}
+        id={menuId}
+        data-component="card-actions-menu"
+        data-open={actionsOpen ? 'true' : 'false'}
+        data-placement={menuBelow ? 'below' : 'above'}
+        // Polish: a labelled role="group" of plain buttons (a role="menu" whose
+        // rows were role-less buttons was an ARIA required-children violation —
+        // announced as an empty menu); ArrowDown/ArrowUp/Home/End walk the
+        // enabled rows, Tab still traverses them; max-h 350 so the 13-row
+        // real-app maximum has no fold (at 260 'Clear everything' and 'Delete'
+        // sat under an invisible overlay scrollbar).
+        role="group"
+        aria-label={`More actions for ${p.name}`}
+        onKeyDown={(e) => {
+          const which =
+            e.key === 'ArrowDown'
+              ? 'next'
+              : e.key === 'ArrowUp'
+                ? 'prev'
+                : e.key === 'Home'
+                  ? 'first'
+                  : e.key === 'End'
+                    ? 'last'
+                    : null;
+          if (which === null) return;
+          e.preventDefault();
+          e.stopPropagation();
+          focusMenuItem(menuRef.current, which);
+        }}
+        className={`absolute left-1.5 right-1.5 z-20 max-h-[350px] w-auto overflow-y-auto overflow-x-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
+          menuBelow ? 'top-full mt-1.5' : 'bottom-[59px]'
+        } ${
+          // `invisible` as well as opacity-0: a closed menu of many rows is
+          // taller than the room above the dock, and visibility (inherited,
+          // unlike opacity) is what keeps its rows out of the raw-rect "outside
+          // the box" measurement, out of hit-testing and out of the a11y tree.
+          actionsOpen
+            ? 'visible pointer-events-auto opacity-100'
+            : 'invisible pointer-events-none opacity-0'
+        }`}
+      >
+        {p.onAssist ? (
+          <MenuRow
+            glyph="✦"
+            caption="Assist"
+            label={`Ask the AI assistant about ${p.name}`}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onAssist?.();
+            }}
+          />
+        ) : null}
+        {/* Stop — only for a RUNNING profile with a stop handler (idle cards
+            never show it). Reuses `busy` so a double-click can't double-close
+            (founder Track A). */}
+        {p.running && p.onStop ? (
+          <MenuRow
+            glyph={p.busy ? '…' : '◼'}
+            caption={p.busy ? 'Stopping…' : 'Stop session'}
+            // Polish: the label opens with the visible caption (WCAG 2.5.3 —
+            // 'click Stop session' must match).
+            label={`Stop session — end ${p.name}'s running session`}
+            tone="danger"
+            onClick={() => {
+              setActionsOpen(false);
+              p.onStop?.();
+            }}
+            disabled={p.busy}
+          />
+        ) : null}
+        {p.hasProxy ? (
+          <MenuRow
+            glyph={p.testing ? '…' : '⟳'}
+            // (l) #10 — the grid's button and this menu row name the VPN
+            // check the same way, from one constant.
+            caption={vpn ? CHECK_VPN_ACTION : 'Test proxy'}
+            label={vpn ? CHECK_VPN_TITLE : TEST_PROXY_TITLE}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onTest();
+            }}
+            disabled={p.testDisabled}
+          />
+        ) : null}
+        {p.onEdit ? (
+          <MenuRow
+            glyph="✎"
+            caption="Edit"
+            label={`Edit ${p.name}`}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onEdit?.();
+            }}
+          />
+        ) : null}
+        {p.onSaveNote ? (
+          <MenuRow
+            glyph="🗒"
+            caption={p.note && p.note.trim() !== '' ? 'Edit note' : 'Add note'}
+            label={`Edit note for ${p.name}`}
+            onClick={() => {
+              setActionsOpen(false);
+              openNoteEditor();
+            }}
+          />
+        ) : null}
+        {p.onClone ? (
+          <MenuRow
+            glyph="⧉"
+            caption="Duplicate"
+            label={`Duplicate ${p.name}`}
+            title={
+              p.cloneDisabled
+                ? p.cloneDisabledReason
+                : p.anyBusy && !p.busy
+                  ? 'Another profile is busy — wait for it to finish'
+                  : undefined
+            }
+            disabled={p.cloneDisabled || p.busy || p.anyBusy}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onClone?.();
+            }}
+          />
+        ) : null}
+        {p.onActivity ? (
+          <MenuRow
+            glyph="🕘"
+            caption="Activity"
+            label={`Activity — recent pages opened with ${p.name}`}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onActivity?.();
+            }}
+          />
+        ) : null}
+        {p.onExport ? (
+          <MenuRow
+            glyph="⤓"
+            caption="Export"
+            label={`Export ${p.name} as a portable JSON copy`}
+            onClick={() => {
+              setActionsOpen(false);
+              p.onExport?.();
+            }}
+          />
+        ) : null}
+        {/* doc-150 item 5 / polish — the sealed-store size, as a static info
+            row where it is DISCOVERABLE (it rode in the meta row's title, which
+            only surfaced when the pointer landed between pills). The details
+            sheet (Phase C) is its final home. Never rendered for '—' (no save). */}
+        {p.sizeLabel !== undefined && p.sizeLabel !== '—' ? (
+          <div
+            data-component="profile-size"
+            title={`Stored profile size (encrypted browser state): ${p.sizeLabel}`}
+            className="flex w-full cursor-default items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium text-ink-muted"
+          >
+            <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">
+              📦
+            </span>
+            <span className="leading-none">{p.sizeLabel} stored</span>
+          </div>
+        ) : null}
+        {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. The
+            title spells out exactly what's kept so the customer knows
+            nothing identity-bearing is dropped. Disabled while busy. */}
+        {p.onTrim ? (
+          <MenuGroup glyph="🧹" caption="Clear…" label={`Clearing options for ${p.name}`}>
+            <MenuRow
+              glyph="🧹"
+              caption="Clear cache"
+              label={`Clear cache for ${p.name}`}
+              title={
+                p.anyBusy && !p.busy
+                  ? 'Another profile is busy — wait for it to finish'
+                  : 'Free re-fetchable files. Logins, site data and tabs are kept'
+              }
+              disabled={p.busy || p.anyBusy}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onTrim?.('cache');
+              }}
+            />
+            {/* W3120 (doc-150 §8.4). These three DESTROY state the customer
+                cannot get back, unlike a cache clear which simply refetches,
+                so each title says plainly what goes before the confirm does. */}
+            <MenuRow
+              glyph="🍪"
+              caption="Clear cookies"
+              label={`Clear cookies for ${p.name}`}
+              title={
+                p.anyBusy && !p.busy
+                  ? 'Another profile is busy — wait for it to finish'
+                  : 'Signs this profile out everywhere. Cached files and tabs are kept'
+              }
+              disabled={p.busy || p.anyBusy}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onTrim?.('cookies');
+              }}
+            />
+            <MenuRow
+              glyph="🕘"
+              caption="Clear history"
+              label={`Clear history for ${p.name}`}
+              title={
+                p.anyBusy && !p.busy
+                  ? 'Another profile is busy — wait for it to finish'
+                  : 'Forgets the remembered tabs — the only page record a profile keeps'
+              }
+              disabled={p.busy || p.anyBusy}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onTrim?.('history');
+              }}
+            />
+            <MenuRow
+              glyph="🧨"
+              caption="Clear everything"
+              label={`Clear all browsing data for ${p.name}`}
+              title={
+                p.anyBusy && !p.busy
+                  ? 'Another profile is busy — wait for it to finish'
+                  : 'Cookies, site data, cache and tabs. The profile and its fingerprint stay'
+              }
+              disabled={p.busy || p.anyBusy}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onTrim?.('all');
+              }}
+            />
+          </MenuGroup>
+        ) : null}
+        {p.onDelete ? (
+          <>
+            <div role="separator" className="my-1 h-px bg-surface-divider" aria-hidden="true" />
+            {/* Delete is rejected by the server for a RUNNING session, so
+                disable it (matching ProfilesTable) and explain via the
+                tooltip rather than letting the click 409. Also disable while
+                BUSY (a launch/clone in flight) so a delete can't race an
+                in-flight launch before `running` is set — w410wv3eq #4. */}
+            <MenuRow
+              glyph="🗑"
+              caption="Delete"
+              label={`Delete ${p.name}`}
+              title={
+                p.running
+                  ? 'Stop the session first before deleting'
+                  : p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : undefined
+              }
+              tone="danger"
+              disabled={p.busy || p.running || p.anyBusy}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onDelete?.();
+              }}
+            />
+          </>
+        ) : null}
       </div>
     </article>
   );
@@ -1282,6 +2168,16 @@ function MenuGroup({
   children: ReactNode;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const rowsRef = useRef<HTMLDivElement | null>(null);
+  // Polish — belt and braces under the menu's max-h: an expanded group scrolls
+  // its last row into view, so a destructive row is never left under the fold.
+  useEffect(() => {
+    if (!open) return;
+    const last = rowsRef.current?.lastElementChild;
+    if (last instanceof HTMLElement && typeof last.scrollIntoView === 'function') {
+      last.scrollIntoView({ block: 'nearest' });
+    }
+  }, [open]);
   return (
     <div data-component="menu-group" data-open={open ? 'true' : 'false'}>
       <button
@@ -1293,7 +2189,7 @@ function MenuGroup({
           e.stopPropagation();
           setOpen((v) => !v);
         }}
-        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink-primary"
+        className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium text-ink-secondary transition-colors hover:bg-surface-elevated hover:text-ink-primary focus-visible:bg-surface-elevated focus-visible:outline-offset-[-2px]"
       >
         <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">
           {glyph}
@@ -1303,7 +2199,11 @@ function MenuGroup({
           {open ? '▾' : '▸'}
         </span>
       </button>
-      {open ? <div className="border-l border-surface-divider pl-1.5">{children}</div> : null}
+      {open ? (
+        <div ref={rowsRef} role="group" className="border-l border-surface-divider pl-1.5">
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1336,10 +2236,12 @@ function MenuRow({
         e.stopPropagation();
         onClick();
       }}
-      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium transition-colors disabled:opacity-40 ${
+      // Polish: the focus ring is inset (the menu's overflow-x-hidden clipped
+      // an offset ring to two horizontal lines) and the row highlights like hover.
+      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium transition-colors focus-visible:outline-offset-[-2px] disabled:opacity-40 ${
         tone === 'danger'
-          ? 'text-status-error/90 hover:bg-status-error/15 hover:text-status-error'
-          : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary'
+          ? 'text-status-error/90 hover:bg-status-error/15 hover:text-status-error focus-visible:bg-status-error/15'
+          : 'text-ink-secondary hover:bg-surface-elevated hover:text-ink-primary focus-visible:bg-surface-elevated'
       }`}
     >
       <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">

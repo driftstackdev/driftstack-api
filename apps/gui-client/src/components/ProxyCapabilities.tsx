@@ -223,7 +223,7 @@ export function ProxyOsChip({
     <span
       title={v.hint}
       data-component="proxy-os-fingerprint"
-      data-verdict={v.tone}
+      data-os-tone={v.tone}
       className={`inline-flex items-center gap-0.5 rounded-sm px-1 py-px ${text} ${tone}`}
     >
       <span aria-hidden="true">{v.glyph}</span>

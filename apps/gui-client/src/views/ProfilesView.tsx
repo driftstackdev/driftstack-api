@@ -4692,6 +4692,9 @@ export function ProfilesView({
                           running={running}
                           selected={selectedIds.has(profile.id)}
                           lastUsedIso={profile.last_used_at}
+                          // Phase B — the card's "when" row counts a running
+                          // session from the same stamp the list's worktimer reads.
+                          runningSinceIso={boundSessionStartedAt(profile.id)}
                           sizeLabel={fmtBytes(profile.size_bytes)}
                           savedTabsReopen={profile.last_saved_at != null}
                           folder={profilesMeta[profile.id]?.folder ?? ''}
@@ -4700,6 +4703,9 @@ export function ProfilesView({
                           onSaveNote={(note) => handleSaveNote(profile.id, note)}
                           hasProxy={px !== null}
                           proxyName={px?.label ?? null}
+                          // Phase B (N8) — the same host:port the list row carries,
+                          // so an unnamed proxy is still identified on the card.
+                          proxyAddress={px !== null ? `${px.host}:${px.port}` : null}
                           proxyExplicit={proxyIsExplicit(profile.id)}
                           flag={exitOk && probe?.exitCountry ? flagEmoji(probe.exitCountry) : '🌍'}
                           countryCode={exitOk ? (probe?.exitCountry ?? null) : null}
@@ -4728,6 +4734,12 @@ export function ProfilesView({
                           vpn={px !== null && isVpnScheme(px.scheme)}
                           vpnFailure={px !== null ? vpnFailures[px.id] : undefined}
                           vpnNotice={px !== null ? vpnNotices[px.id] : undefined}
+                          // (o) — the row's endpoint pre-flight, from the SAME
+                          // derivation the Proxies grid reads, so an endpoint
+                          // that does not resolve is a red "unresolved" here as
+                          // there — not "not measured" + a Check VPN that cannot
+                          // bring a tunnel up on an address that does not resolve.
+                          endpoint={px !== null ? (probeView.endpointResults[px.id] ?? null) : null}
                           // (h) — a VPN row's "checked" dates the fleet number it
                           // shows, not the pre-flight that preceded a refusal.
                           checkedAtIso={
@@ -4900,6 +4912,13 @@ export function ProfilesView({
                         : {}),
                       ...(px !== null && vpnNotices[px.id] !== undefined
                         ? { vpnNotice: vpnNotices[px.id] }
+                        : {}),
+                      // (o) — an endpoint that did not resolve, with the
+                      // resolver's message: the exit cell says so instead of
+                      // "no exit measured yet — run Check VPN" (the card and
+                      // the Proxies grid read the same entry).
+                      ...(px !== null && probeView.endpointResults[px.id]?.resolved === false
+                        ? { endpointUnresolved: probeView.endpointResults[px.id]?.message ?? '' }
                         : {}),
                       checkedAtIso:
                         px !== null && fleetStamps[px.id] !== undefined

@@ -155,7 +155,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     render(<ProxyOsChip fingerprint={res.os_fingerprint} size="xs" />);
     expect(chip().getAttribute('title')).toMatch(/VPN tunnel/i);
     // Never green, never red — an unmeasurable row is neutral.
-    expect(chip().getAttribute('data-verdict')).toBe('unknown');
+    expect(chip().getAttribute('data-os-tone')).toBe('unknown');
   });
 
   it('ARM 5 — the cause survives a reload through the REAL cache: a stored placeholder still renders its sentence, not a bare "undetermined"', async () => {
@@ -276,15 +276,33 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
     expect(chip().getAttribute('title')).toMatch(/Measuring this proxy’s stack/i);
   });
 
-  it('ARM 11 — CRITICAL VACUITY CONTROL: with no Test in flight the card says NOT measured, never "measuring"', () => {
+  // Phase B (2026-09-11) — the card's caps row is a fixed line of MEASUREMENTS:
+  // an OS placeholder ('—' / '?') is not a chip there; its hint rides in the
+  // "+N" pill's title (`[data-component="caps-overflow"]`). A match, a mismatch
+  // or a probe in flight ('… OS') is still the chip. The arms read whichever the
+  // state produces.
+  function osHint(): string {
+    const chipEl = document.querySelector('[data-component="proxy-os-fingerprint"]');
+    if (chipEl !== null) return chipEl.getAttribute('title') ?? '';
+    const overflow = document.querySelector('[data-component="caps-overflow"]');
+    if (overflow === null) throw new Error('neither an OS chip nor a caps-overflow rendered');
+    const line = (overflow.getAttribute('title') ?? '')
+      .split('\n')
+      .find((l) => l.startsWith('OS — '));
+    if (line === undefined) throw new Error('the caps-overflow title carries no OS line');
+    return line;
+  }
+
+  it('ARM 11 — CRITICAL VACUITY CONTROL: with no Test in flight the card says NOT measured, never "measuring" — and renders no OS chip (the hint is in "+N")', () => {
     render(<ProfilePhoneCard {...cardProps({ testing: false })} />);
-    expect(chip().getAttribute('title') ?? '').not.toMatch(/measuring/i);
-    expect(chip().getAttribute('title')).toMatch(/not measured/i);
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    expect(osHint()).not.toMatch(/measuring/i);
+    expect(osHint()).toMatch(/not measured/i);
   });
 
   it('ARM 12 — CONTROL: a real reading is never clobbered by the sentinel, even mid-test', () => {
     render(<ProfilePhoneCard {...cardProps({ testing: true, osFingerprint: REAL })} />);
-    expect(chip().getAttribute('data-verdict')).toBe('match');
+    expect(chip().getAttribute('data-os-tone')).toBe('match');
     expect(chip().getAttribute('title') ?? '').not.toMatch(/measuring/i);
   });
 
@@ -303,7 +321,10 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
   //    a Test genuinely in flight would stop saying so.
   it('ARM 13 — CRITICAL: a VPN card with its own Check in flight says why a tunnel has no fingerprint, never that one is being measured', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, testing: true })} />);
-    const title = chip().getAttribute('title') ?? '';
+    // Phase B: a VPN card never renders an OS chip (the cause is a placeholder,
+    // not a measurement); the cause sentence is the "+N" pill's OS line.
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    const title = osHint();
     expect(title).not.toMatch(/measuring/i);
     expect(title).toMatch(/VPN tunnel/i);
     expect(title).toMatch(/No test can produce one here/i);
@@ -312,13 +333,14 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
 
   it('ARM 14 — a VPN card that has never been checked carries the same cause — the chip was blank under the dead-end hint before any reply existed', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, testing: false })} />);
-    expect(chip().getAttribute('title') ?? '').toMatch(/VPN tunnel/i);
-    expect(chip().getAttribute('data-verdict')).toBe('unknown');
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    expect(osHint()).toMatch(/VPN tunnel/i);
+    expect(osHint()).not.toMatch(/Run Test/i);
   });
 
   it('ARM 15 — CONTROL: the scheme-derived cause is a FALLBACK — a reading the server did send still wins on a VPN card', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, osFingerprint: REAL })} />);
-    expect(chip().getAttribute('data-verdict')).toBe('match');
+    expect(chip().getAttribute('data-os-tone')).toBe('match');
     expect(chip().getAttribute('title') ?? '').not.toMatch(/VPN tunnel/i);
   });
 });
