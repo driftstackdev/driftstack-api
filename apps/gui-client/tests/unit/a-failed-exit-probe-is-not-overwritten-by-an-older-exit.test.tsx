@@ -522,6 +522,32 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
     cleanup();
   });
 
+  // Phase C (C8) — the LIST reads the same third state from the same
+  // derivation. MUTATION: drop `exitProbeFailed:` from ProfilesView's table row
+  // builder → the row falls back to "no exit IP" → red (the ProfilesTable arm
+  // alone cannot catch the missing wire; it feeds the prop by hand).
+  it('CRITICAL the LIST row reads "exit geo unavailable" for the same entry — the view hands the table the third exit state, not just the card', async () => {
+    seedCache({ socks1: healthyWithExit(NOW - 1000) });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByTitle(/203\.0\.113\.7/)).toBeInTheDocument();
+    await clickCardTest();
+    await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByTitle(/203\.0\.113\.7/)).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: '☰ List' }));
+    await screen.findByRole('table');
+    const cell = await waitFor(() => {
+      const el = document.querySelector('[data-component="profile-row-exit-probe-failed"]');
+      expect(el).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(cell.textContent).toBe(EXIT_GEO_UNAVAILABLE_SHORT);
+    expect(cell.getAttribute('title')).toBe(EXIT_GEO_UNAVAILABLE_TITLE);
+    const table = screen.getByRole('table');
+    expect(table.textContent).not.toContain('no exit IP');
+    expect(table.textContent).not.toContain('203.0.113.7');
+    cleanup();
+  });
+
   // (n) N-M1's discriminator. Without it, "the card distinguishes the two
   // states" and "the card renames the cell for every row with no exit" look
   // identical: this entry is usable, probed, and carries NO failure stamp, so

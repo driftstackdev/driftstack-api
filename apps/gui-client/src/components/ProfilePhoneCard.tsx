@@ -31,6 +31,19 @@
 // dock for a live tile, a neutral busy dock button, a selected halo that is a
 // Tailwind ring (it survives the hover shadow), solid focus rings, and a
 // keyboard-complete ⋯ group (arrow keys, focus restored to ⋯ on close).
+// Phase C (2026-09-11) — the click-opened DETAILS SHEET. Every fact Phase B cut
+// from the visible tile (the full capability set with the OS fact and its
+// hints, the exact checked-at and last-used stamps, the whole folder + tag
+// list, the note, a VPN failure/notice in full, the stored size, the exit
+// address) lives in `[data-component="card-details-sheet"]`: a role="dialog"
+// overlay built like the note editor (absolute inset-0 z-40 INSIDE the screen,
+// so it covers the dock and never reshapes the card), opened by the ⓘ glyph
+// (`data-action="open-details"`, the 16px visibleMeta reserves) or the first
+// row of the ⋯ menu, closed by ×, Escape or an outside pointer-down; focus is
+// trapped inside and returns to the opener. Nothing opens on hover: the harness's
+// forced hover is inert for the card. The ⋯ menu is PORTALED to document.body
+// (position: fixed from the card's rect, flipped by the room above the dock) so
+// no ancestor clip can cut it and it never widens the article's box.
 // Pure presentational; ProfilesView passes data/display strings + handlers.
 // flag covers every ISO country via flagEmoji (regional-indicator transform —
 // no hardcoded list).
@@ -45,7 +58,13 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { proxyCapabilities, type ProxyCapability } from './ProxyCapabilities';
+import { createPortal } from 'react-dom';
+import {
+  ProxyCapabilityChips,
+  ProxyOsChip,
+  proxyCapabilities,
+  type ProxyCapability,
+} from './ProxyCapabilities';
 import { formatElapsed } from './ProfilesTable';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 
@@ -301,6 +320,10 @@ export interface ProfilePhoneCardProps {
    */
   onTrim?: (scope: 'cache' | 'cookies' | 'history' | 'all') => void;
   onDelete?: () => void;
+  /** Phase C — HARNESS ONLY: mount with the details sheet already open, so the
+   *  gallery can list sheet-open states and the geometry gate can measure them
+   *  at rest. The app never passes it; the sheet opens by click alone. */
+  detailsInitiallyOpen?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -904,6 +927,117 @@ function roomAbove(el: HTMLElement): number {
   return top;
 }
 
+/** Phase C — the portaled menu's fixed box. Anchored to BOTH card edges inside
+ *  the bezel's 6px padding (Phase A's `left-1.5 right-1.5`), 6px below the
+ *  card when it opens downward, 6px above the dock when it opens upward — the
+ *  exact offsets the absolute menu had (`top-full mt-1.5` / `bottom-[59px]`),
+ *  now in viewport coordinates so no ancestor clip can cut it. */
+export interface MenuBox {
+  left: number;
+  width: number;
+  top?: number;
+  bottom?: number;
+  /** The box's height cap: the class's 350px, or less when the viewport edge
+   *  it opens toward is nearer — a fixed box cannot be scrolled INTO view by
+   *  the grid (a grid scroll closes it), so it must never leave the viewport;
+   *  the rows past the cap scroll inside the menu instead. */
+  maxHeight: number;
+}
+const EMPTY_MENU_BOX: MenuBox = { left: 0, width: 0, top: 0, maxHeight: 350 };
+const MENU_INSET_PX = 6;
+const MENU_GAP_PX = 6;
+/** The menu's own height cap (mirrors `max-h-[350px]` on the box). */
+export const MENU_MAX_HEIGHT_PX = 350;
+/** Breathing room kept between the menu and the viewport edge it opens toward. */
+export const MENU_VIEWPORT_EDGE_PX = 8;
+/** The cap never drops under this: with less room than four rows the menu is
+ *  still a menu (it scrolls), not a sliver — the flip rule is what keeps a
+ *  menu away from a short side in the first place. */
+export const MENU_MIN_HEIGHT_PX = 96;
+function clampMenuHeight(room: number): number {
+  return Math.max(
+    MENU_MIN_HEIGHT_PX,
+    Math.min(MENU_MAX_HEIGHT_PX, Math.floor(room - MENU_VIEWPORT_EDGE_PX)),
+  );
+}
+export function menuBoxFor(article: HTMLElement, dock: HTMLElement, below: boolean): MenuBox {
+  const a = article.getBoundingClientRect();
+  const d = dock.getBoundingClientRect();
+  const base = { left: a.left + MENU_INSET_PX, width: Math.max(0, a.width - 2 * MENU_INSET_PX) };
+  const viewportHeight =
+    typeof window !== 'undefined' ? window.innerHeight : document.documentElement.clientHeight;
+  if (below) {
+    const top = a.bottom + MENU_GAP_PX;
+    return { ...base, top, maxHeight: clampMenuHeight(viewportHeight - top) };
+  }
+  const menuBottom = d.top - MENU_GAP_PX;
+  return {
+    ...base,
+    bottom: viewportHeight - menuBottom,
+    maxHeight: clampMenuHeight(menuBottom),
+  };
+}
+
+/** Phase C — keyboard scrolling of the sheet's body. The body is the sheet's
+ *  only scroller and focus lands on the DIALOG node when the sheet opens (or on
+ *  ×), so a browser's default arrow/page scroll would move the nearest
+ *  scrollable ANCESTOR of the focused element — the grid behind the sheet —
+ *  and the facts under the fold stayed unreachable by keyboard whenever the
+ *  card had no trailing note button to Tab to. Returns the new scrollTop, or
+ *  null when the key is not a scroll key. `clientHeight` is 0 in jsdom, hence
+ *  the page fallback. */
+export const SHEET_ARROW_STEP_PX = 32;
+export const SHEET_PAGE_FALLBACK_PX = 160;
+export function scrollSheetBody(body: HTMLElement, key: string): number | null {
+  const page = Math.max(SHEET_PAGE_FALLBACK_PX, body.clientHeight - SHEET_ARROW_STEP_PX);
+  const delta =
+    key === 'ArrowDown'
+      ? SHEET_ARROW_STEP_PX
+      : key === 'ArrowUp'
+        ? -SHEET_ARROW_STEP_PX
+        : key === 'PageDown'
+          ? page
+          : key === 'PageUp'
+            ? -page
+            : null;
+  if (delta === null) return null;
+  const next = Math.max(0, body.scrollTop + delta);
+  body.scrollTop = next;
+  return next;
+}
+
+/** Phase C — the sheet's focus ring: Tab from the last focusable wraps to the
+ *  first, Shift+Tab from the first (or from the dialog node itself) to the
+ *  last. The dialog is the only overlay on the card, so nothing behind it may
+ *  take focus while it is open. */
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+export function trapTab(
+  dialog: HTMLElement,
+  e: { shiftKey: boolean; preventDefault(): void },
+): void {
+  const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
+  if (items.length === 0) {
+    e.preventDefault();
+    dialog.focus();
+    return;
+  }
+  const first = items[0] as HTMLElement;
+  const last = items[items.length - 1] as HTMLElement;
+  const active = document.activeElement;
+  if (e.shiftKey) {
+    if (active === first || active === dialog || !dialog.contains(active)) {
+      e.preventDefault();
+      last.focus();
+    }
+    return;
+  }
+  if (active === last || !dialog.contains(active)) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
 /** Polish — the enabled menu rows, in DOM order (the arrow-key ring). The
  *  rows stay plain <button>s inside a role="group": every suite that reaches a
  *  row by `getByRole('button', …)` keeps working, and a group of buttons is
@@ -935,6 +1069,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // matching the visual-demo dock).
   const [actionsOpen, setActionsOpen] = useState(false);
   const [menuBelow, setMenuBelow] = useState(false);
+  // Phase C — the portaled menu's fixed-position box, computed from the card's
+  // rect the moment it opens (never on render: jsdom measures 0 everywhere).
+  const [menuBox, setMenuBox] = useState<MenuBox>(EMPTY_MENU_BOX);
+  // Phase C — the details sheet. `detailsOpenerRef` is the control that opened
+  // it (the ⓘ glyph or the ⋯ toggle), where focus returns when it closes.
+  const [detailsOpen, setDetailsOpen] = useState(p.detailsInitiallyOpen === true);
+  const detailsOpenerRef = useRef<HTMLElement | null>(null);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const sheetBodyRef = useRef<HTMLDivElement | null>(null);
+  const sheetTitleId = useId();
   // F3 — inline note editor (opened from the ⋯ menu's "Edit note" row or the
   // meta row's 🗒 glyph). Lives here so the small <textarea> overlays the card
   // body without leaving the grid.
@@ -965,37 +1109,99 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const openNoteEditor = (): void => {
     setNoteDraft(p.note ?? '');
     setNoteError(null);
+    // Phase C — exclusive overlays: the editor replaces the sheet (its note
+    // row is one of the editor's openers) and the menu.
+    setDetailsOpen(false);
+    setActionsOpen(false);
     setEditingNote(true);
   };
+  // Phase C — open the details sheet from a control; the menu and the note
+  // editor close (one overlay at a time), and focus returns to that control.
+  const openDetails = (opener: HTMLElement | null): void => {
+    detailsOpenerRef.current = opener;
+    setActionsOpen(false);
+    setEditingNote(false);
+    setDetailsOpen(true);
+  };
+  const closeDetails = (): void => setDetailsOpen(false);
   // Dismiss the tap-opened ⋯ menu on an outside pointer-down or Escape — a
   // toggle-opened dropdown that can only be re-toggled shut reads as stuck.
   // Phase B: the menu is a sibling of the screen (it must escape the screen's
   // overflow-hidden to open downward). Polish: "inside" is the ⋯ toggle OR the
   // menu — it was the whole dock, so clicking Launch with the menu open
   // launched AND left the menu standing.
+  const articleRef = useRef<HTMLElement | null>(null);
   const footerRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const menuId = useId();
+  // Phase C — the same hook dismisses the details sheet: a pointer-down outside
+  // the sheet closes it, and so does Escape wherever focus sits. "Inside" is
+  // tested on the DOM nodes (menuRef / sheetRef), so the PORTALED menu counts
+  // as inside even though it is no descendant of the card.
   useEffect(() => {
-    if (!actionsOpen) return;
+    if (!actionsOpen && !detailsOpen) return;
     const onPointerDown = (e: PointerEvent): void => {
       const target = e.target as Node;
-      const inside =
-        (moreRef.current !== null && moreRef.current.contains(target)) ||
-        (menuRef.current !== null && menuRef.current.contains(target));
-      if (!inside) setActionsOpen(false);
+      if (actionsOpen) {
+        const inside =
+          (moreRef.current !== null && moreRef.current.contains(target)) ||
+          (menuRef.current !== null && menuRef.current.contains(target));
+        if (!inside) setActionsOpen(false);
+      }
+      if (detailsOpen && sheetRef.current !== null && !sheetRef.current.contains(target)) {
+        setDetailsOpen(false);
+      }
     };
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') setActionsOpen(false);
+      if (e.key !== 'Escape') return;
+      setActionsOpen(false);
+      setDetailsOpen(false);
+    };
+    // A fixed-position menu detaches from its card when the grid scrolls or the
+    // window resizes; it closes instead of floating free. A scroll INSIDE the
+    // menu (an expanded Clear group scrolling its last row into view) is not
+    // the grid scrolling.
+    const onScroll = (e: Event): void => {
+      if (!actionsOpen) return;
+      if (
+        menuRef.current !== null &&
+        e.target instanceof Node &&
+        menuRef.current.contains(e.target)
+      )
+        return;
+      setActionsOpen(false);
     };
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
     };
-  }, [actionsOpen]);
+  }, [actionsOpen, detailsOpen]);
+  // Phase C — focus management for the sheet: on open, focus moves INTO the
+  // dialog (its own node, so the first Tab lands on the close button and a
+  // screen reader announces the label); on close, focus returns to the opener
+  // when it was inside the sheet or fell to <body> — never when another
+  // control (the note editor's textarea) already took it.
+  const sheetWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (detailsOpen) {
+      sheetWasOpenRef.current = true;
+      sheetRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!sheetWasOpenRef.current) return;
+    sheetWasOpenRef.current = false;
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      detailsOpenerRef.current?.focus({ preventScroll: true });
+    }
+  }, [detailsOpen]);
   // Polish — keyboard: closing the menu (Escape, Enter on a row) made the
   // focused row `invisible` and focus fell to <body>, so the next Tab restarted
   // at the top of the page. Focus returns to ⋯ whenever the menu closes with
@@ -1024,8 +1230,13 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   }, [actionsOpen]);
   const toggleMenu = (): void => {
     if (!actionsOpen && footerRef.current !== null) {
-      setMenuBelow(roomAbove(footerRef.current) < MENU_FLIP_ROOM_PX);
+      const below = roomAbove(footerRef.current) < MENU_FLIP_ROOM_PX;
+      setMenuBelow(below);
+      if (articleRef.current !== null) {
+        setMenuBox(menuBoxFor(articleRef.current, footerRef.current, below));
+      }
     }
+    setDetailsOpen(false);
     setActionsOpen((v) => !v);
   };
 
@@ -1041,7 +1252,19 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const firstHints = mode === 'first' ? visibleChips(p, 0).hiddenHints : [];
   const vpn = p.vpn === true;
   const hasNote = p.onSaveNote !== undefined && p.note !== undefined && p.note.trim() !== '';
-  const meta = visibleMeta(p, contentWidth, hasNote ? 1 : 0);
+  // Phase C — the ⓘ glyph is always on the row (every card has a sheet); the
+  // note glyph joins it when there is a note: 2 glyphs reserved, else 1.
+  const meta = visibleMeta(p, contentWidth, hasNote ? 2 : 1);
+  // Phase C — what the sheet lists under Capabilities: every chip the row is
+  // eligible for (its text and hint) and every hint that never gets a chip.
+  const allCaps = capabilityChips(p);
+  const capabilityHints = [
+    ...allCaps.eligible.map((c) => `${c.text} — ${c.title}`),
+    ...allCaps.hidden,
+  ];
+  const sheetFingerprint =
+    p.osFingerprint ??
+    (vpn ? VPN_TUNNEL_OS_FINGERPRINT : p.testing ? OS_FINGERPRINT_MEASURING : undefined);
   // (o) — 'tunnel up' (no number) is a fleet reading too: the vantage attribute
   // names the test Mac, never this Mac (no native probe runs on a tunnel).
   const latencyVantage =
@@ -1139,6 +1362,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
 
   return (
     <article
+      ref={articleRef}
       role="button"
       tabIndex={0}
       aria-pressed={p.selected}
@@ -1166,8 +1390,6 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       // from across the grid. Focus: a solid ring at 2px offset (the global
       // 40%-alpha outline composited to 1.4:1 — invisible).
       className={`group relative cursor-pointer rounded-[24px] border p-1.5 transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_40px_rgba(0,0,0,0.45)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-hover focus-visible:ring-offset-2 focus-visible:ring-offset-surface-base ${
-        actionsOpen ? 'z-30' : ''
-      } ${
         p.selected
           ? 'border-accent-hover ring-2 ring-accent-hover/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_10px_30px_rgba(0,0,0,0.35)]'
           : p.running
@@ -1239,6 +1461,260 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               >
                 {noteSaving ? 'Saving…' : 'Save'}
               </button>
+            </div>
+          </div>
+        ) : null}
+        {/* Phase C — the DETAILS SHEET: every fact the tile cut, at full length,
+            in a role="dialog" that covers the screen AND the dock (absolute
+            inset-0 inside the screen, like the note editor — the card is never
+            reshaped, the dock is covered, not displaced). The body scrolls
+            vertically inside the sheet; nothing scrolls the screen. Clicks and
+            keys stop here so they never toggle selection; Escape closes; Tab
+            is trapped (`trapTab`). */}
+        {detailsOpen ? (
+          <div
+            ref={sheetRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={sheetTitleId}
+            tabIndex={-1}
+            data-component="card-details-sheet"
+            className="absolute inset-0 z-40 flex flex-col bg-surface-raised/95 backdrop-blur-sm focus-visible:outline-none"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                closeDetails();
+              } else if (e.key === 'Tab' && sheetRef.current !== null) {
+                trapTab(sheetRef.current, e);
+              } else if (
+                sheetBodyRef.current !== null &&
+                scrollSheetBody(sheetBodyRef.current, e.key) !== null
+              ) {
+                // Arrow / Page keys scroll the BODY wherever focus sits in the
+                // sheet (the dialog node, ×, the body, the note row) — never the
+                // grid behind it (the browser default for a non-scrolling
+                // focused element).
+                e.preventDefault();
+              }
+            }}
+          >
+            <div className="flex h-7 shrink-0 items-center gap-1.5 border-b border-white/[0.06] pl-2.5 pr-1.5">
+              <span
+                id={sheetTitleId}
+                className="min-w-0 flex-1 truncate text-[11px] font-semibold leading-4 text-ink-primary"
+                title={p.name}
+              >
+                {p.name}
+              </span>
+              <button
+                type="button"
+                data-action="close-details"
+                aria-label="Close details"
+                title="Close (Esc)"
+                onClick={closeDetails}
+                className="grid h-5 w-5 shrink-0 place-items-center rounded text-[13px] leading-none text-ink-secondary transition-colors hover:bg-white/10 hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+              >
+                ×
+              </button>
+            </div>
+            {/* The body is a focus stop (tabIndex 0 — a scrollable region must
+                be reachable by Tab, and `trapTab`'s ring includes it between ×
+                and the note row) with an inset focus ring so the stop is
+                visible; the arrow/page keys above scroll it from anywhere in
+                the sheet. */}
+            <div
+              ref={sheetBodyRef}
+              data-component="card-details-body"
+              tabIndex={0}
+              className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2.5 py-1.5 text-[10.5px] leading-4 text-ink-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent-hover"
+            >
+              <dl className="flex flex-col gap-1.5">
+                {/* Exit — the address the tile keeps in its title. A muted
+                    state shows its word AND the sentence the tile hides. */}
+                <DetailRow fact="exit" label="Exit">
+                  <div data-component="exit-row" className="flex flex-col gap-px">
+                    {hasExit ? (
+                      <>
+                        <span className="break-words text-ink-primary">
+                          <span aria-hidden="true">{exit.glyph} </span>
+                          {exitPlace ?? p.countryCode ?? ''}
+                        </span>
+                        {p.exitIp !== null ? (
+                          <span className="mono break-all text-[9.5px] text-ink-secondary">
+                            {p.exitIp}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        <span className="italic text-ink-muted">{exit.text}</span>
+                        <span className="text-ink-muted">{exit.title}</span>
+                      </>
+                    )}
+                  </div>
+                </DetailRow>
+                {p.hasProxy ? (
+                  <DetailRow fact="proxy" label={vpn ? 'VPN' : 'Proxy'}>
+                    <div className="flex flex-col gap-px">
+                      <span className="break-words text-ink-primary">{proxyName ?? '—'}</span>
+                      {proxyAddress !== null ? (
+                        <span className="mono break-all text-[9.5px]">{proxyAddress}</span>
+                      ) : null}
+                      {vpn ? <span className="text-ink-muted">{VPN_TAG_TITLE}</span> : null}
+                      {!p.proxyExplicit ? (
+                        <span className="text-ink-muted">
+                          Inherited default — no proxy chosen for this profile.
+                        </span>
+                      ) : null}
+                    </div>
+                  </DetailRow>
+                ) : null}
+                <DetailRow fact="status" label="Status">
+                  <span className="text-ink-primary">{pill.text}</span>
+                  <span className="text-ink-muted"> — {pill.title}</span>
+                </DetailRow>
+                {p.hasProxy ? (
+                  <DetailRow fact="capabilities" label="Capabilities">
+                    <div className="flex flex-col gap-1">
+                      {!vpn && p.capabilities !== null ? (
+                        <ProxyCapabilityChips
+                          result={p.capabilities}
+                          quicMeasured={p.quicMeasured}
+                          quicProbe={p.quicProbe}
+                          size="xs"
+                        />
+                      ) : null}
+                      {vpn && allCaps.eligible.some((c) => c.key !== 'os') ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {allCaps.eligible
+                            .filter((c) => c.key !== 'os')
+                            .map((c) => (
+                              <span
+                                key={c.key}
+                                {...c.attrs}
+                                title={c.title}
+                                className={`${CHIP_BASE} ${c.className}`}
+                              >
+                                {c.text}
+                              </span>
+                            ))}
+                        </div>
+                      ) : null}
+                      <ProxyOsChip fingerprint={sheetFingerprint} size="xs" />
+                      <ul data-component="capability-hints" className="flex flex-col gap-px">
+                        {capabilityHints.map((hint) => (
+                          <li key={hint} className="break-words text-ink-muted">
+                            {hint}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </DetailRow>
+                ) : null}
+                {vpn && p.vpnFailure !== undefined ? (
+                  <DetailRow fact="vpn-failure" label="Tunnel">
+                    <p data-component="proxy-vpn-failure" className="break-words text-status-error">
+                      {p.vpnFailure}
+                    </p>
+                  </DetailRow>
+                ) : null}
+                {vpn && p.vpnNotice !== undefined ? (
+                  <DetailRow fact="vpn-notice" label="Notice">
+                    <p data-component="proxy-vpn-notice" role="status" className="break-words">
+                      {p.vpnNotice}
+                    </p>
+                  </DetailRow>
+                ) : null}
+                {p.hasProxy ? (
+                  <DetailRow fact="checked" label="Checked">
+                    {p.checkedAtIso !== null ? (
+                      <span data-component="proxy-checked-at" data-checked-at={p.checkedAtIso}>
+                        <time dateTime={p.checkedAtIso}>
+                          {new Date(p.checkedAtIso).toLocaleString()}
+                        </time>
+                      </span>
+                    ) : (
+                      <span className="italic text-ink-muted">never checked</span>
+                    )}
+                  </DetailRow>
+                ) : null}
+                <DetailRow fact="last-used" label={runningSince !== null ? 'Running' : 'Last used'}>
+                  <span data-component="profile-last-used">
+                    {runningSince !== null ? (
+                      <>
+                        since{' '}
+                        <time dateTime={runningSince}>
+                          {new Date(runningSince).toLocaleString()}
+                        </time>
+                      </>
+                    ) : p.lastUsedIso !== null ? (
+                      <time dateTime={p.lastUsedIso}>
+                        {new Date(p.lastUsedIso).toLocaleString()}
+                      </time>
+                    ) : (
+                      <span className="italic text-ink-muted">never launched</span>
+                    )}
+                  </span>
+                </DetailRow>
+                {p.sizeLabel !== undefined ? (
+                  <DetailRow fact="size" label="Stored">
+                    {p.sizeLabel !== '—' ? (
+                      <span
+                        data-component="profile-size"
+                        title={`Stored profile size (encrypted browser state): ${p.sizeLabel}`}
+                      >
+                        {p.sizeLabel} stored
+                      </span>
+                    ) : (
+                      <span className="italic text-ink-muted">not saved yet</span>
+                    )}
+                  </DetailRow>
+                ) : null}
+                {p.folder !== '' || p.tags.length > 0 ? (
+                  <DetailRow fact="tags" label="Folder & tags">
+                    <div data-component="tags-row" className="flex flex-wrap items-center gap-1">
+                      {p.folder !== '' ? (
+                        <span className="break-words rounded-full bg-ink-muted/15 px-1.5 text-[9.5px] leading-[15px] text-ink-secondary">
+                          📁 {p.folder}
+                        </span>
+                      ) : null}
+                      {p.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="break-words rounded-full bg-ink-muted/15 px-1.5 text-[9.5px] leading-[15px] text-ink-secondary"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </DetailRow>
+                ) : null}
+                {p.onSaveNote !== undefined ? (
+                  <DetailRow fact="note" label="Note">
+                    {/* The note row IS the editor's opener: clicking it swaps the
+                        sheet for the textarea (one overlay at a time). */}
+                    <button
+                      type="button"
+                      data-component="profile-note"
+                      aria-label={
+                        hasNote ? `Note on ${p.name} — click to edit` : `Add a note to ${p.name}`
+                      }
+                      onClick={openNoteEditor}
+                      className="w-full whitespace-pre-wrap break-words rounded-md border border-surface-divider bg-white/[0.03] px-1.5 py-1 text-left text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+                    >
+                      {hasNote ? p.note : 'Add note…'}
+                    </button>
+                  </DetailRow>
+                ) : p.note !== undefined && p.note.trim() !== '' ? (
+                  <DetailRow fact="note" label="Note">
+                    <p data-component="profile-note" className="whitespace-pre-wrap break-words">
+                      {p.note}
+                    </p>
+                  </DetailRow>
+                ) : null}
+              </dl>
             </div>
           </div>
         ) : null}
@@ -1724,23 +2200,42 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 +{meta.hidden.length}
               </span>
             ) : null}
-            {hasNote ? (
-              // Polish: a 16px box so the inset focus ring has room (a 14×11
-              // glyph showed a partial arc), hover fades 150ms like its peers.
+            {/* Phase C — the trailing glyphs visibleMeta reserved: 🗒 (a note)
+                and ⓘ (always — the sheet is every card's click-opened depth). */}
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {hasNote ? (
+                // Polish: a 16px box so the inset focus ring has room (a 14×11
+                // glyph showed a partial arc), hover fades 150ms like its peers.
+                <button
+                  type="button"
+                  data-component="profile-note"
+                  aria-label={`Edit the note on ${p.name}`}
+                  title={`${p.note ?? ''} — Click to edit note`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openNoteEditor();
+                  }}
+                  className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] leading-none text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+                >
+                  🗒
+                </button>
+              ) : null}
               <button
                 type="button"
-                data-component="profile-note"
-                aria-label={`Edit the note on ${p.name}`}
-                title={`${p.note ?? ''} — Click to edit note`}
+                data-action="open-details"
+                aria-label={`Details for ${p.name}`}
+                aria-haspopup="dialog"
+                aria-expanded={detailsOpen}
+                title="Details — every fact about this profile, in full"
                 onClick={(e) => {
                   e.stopPropagation();
-                  openNoteEditor();
+                  openDetails(e.currentTarget);
                 }}
-                className="ml-auto grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] leading-none text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
+                className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11.5px] font-semibold leading-none text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
               >
-                🗒
+                ⓘ
               </button>
-            ) : null}
+            </span>
           </div>
         </div>
 
@@ -1863,270 +2358,321 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           card the cursor passed (owner 2026-08-30). Same correction as the Clear
           group in V-2149, one level up. Rows stay in the DOM (opacity-toggled)
           so the accessible labels are always queryable. */}
-      <div
-        ref={menuRef}
-        id={menuId}
-        data-component="card-actions-menu"
-        data-open={actionsOpen ? 'true' : 'false'}
-        data-placement={menuBelow ? 'below' : 'above'}
-        // Polish: a labelled role="group" of plain buttons (a role="menu" whose
-        // rows were role-less buttons was an ARIA required-children violation —
-        // announced as an empty menu); ArrowDown/ArrowUp/Home/End walk the
-        // enabled rows, Tab still traverses them; max-h 350 so the 13-row
-        // real-app maximum has no fold (at 260 'Clear everything' and 'Delete'
-        // sat under an invisible overlay scrollbar).
-        role="group"
-        aria-label={`More actions for ${p.name}`}
-        onKeyDown={(e) => {
-          const which =
-            e.key === 'ArrowDown'
-              ? 'next'
-              : e.key === 'ArrowUp'
-                ? 'prev'
-                : e.key === 'Home'
-                  ? 'first'
-                  : e.key === 'End'
-                    ? 'last'
-                    : null;
-          if (which === null) return;
-          e.preventDefault();
-          e.stopPropagation();
-          focusMenuItem(menuRef.current, which);
-        }}
-        className={`absolute left-1.5 right-1.5 z-20 max-h-[350px] w-auto overflow-y-auto overflow-x-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
-          menuBelow ? 'top-full mt-1.5' : 'bottom-[59px]'
-        } ${
-          // `invisible` as well as opacity-0: a closed menu of many rows is
-          // taller than the room above the dock, and visibility (inherited,
-          // unlike opacity) is what keeps its rows out of the raw-rect "outside
-          // the box" measurement, out of hit-testing and out of the a11y tree.
-          actionsOpen
-            ? 'visible pointer-events-auto opacity-100'
-            : 'invisible pointer-events-none opacity-0'
-        }`}
-      >
-        {p.onAssist ? (
-          <MenuRow
-            glyph="✦"
-            caption="Assist"
-            label={`Ask the AI assistant about ${p.name}`}
-            onClick={() => {
+      {/* Phase C — PORTALED to document.body with a fixed box from the card's
+          rect (`menuBoxFor`): no ancestor clip (the grid's scroller, a
+          transformed hover lift) can cut it, and it never widens the article.
+          React events still bubble to the article through the portal, so the
+          container stops clicks (a click on the menu's padding must not
+          toggle selection); the dismiss hook tests `menuRef.contains`, which
+          holds for a portal node. Closes on grid scroll / resize. */}
+      {createPortal(
+        <div
+          ref={menuRef}
+          id={menuId}
+          data-component="card-actions-menu"
+          data-open={actionsOpen ? 'true' : 'false'}
+          data-placement={menuBelow ? 'below' : 'above'}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            left: menuBox.left,
+            width: menuBox.width,
+            top: menuBox.top,
+            bottom: menuBox.bottom,
+            // ⊆ viewport at ANY window height (tauri minHeight 600): the class's
+            // 350 cap, or the room to the viewport edge when that is less — the
+            // cut rows scroll inside the menu (a scroll inside never closes it).
+            maxHeight: menuBox.maxHeight,
+          }}
+          // Polish: a labelled role="group" of plain buttons (a role="menu" whose
+          // rows were role-less buttons was an ARIA required-children violation —
+          // announced as an empty menu); ArrowDown/ArrowUp/Home/End walk the
+          // enabled rows, Tab still traverses them; max-h 350 so the 13-row
+          // real-app maximum has no fold (at 260 'Clear everything' and 'Delete'
+          // sat under an invisible overlay scrollbar).
+          role="group"
+          aria-label={`More actions for ${p.name}`}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab') {
+              // The menu-button pattern: Tab / Shift+Tab CLOSE the menu and move
+              // focus on. The portal node sits at the END of document.body, so
+              // the browser's own next/previous tabbable from a row is browser
+              // chrome (or the app's first control) — nowhere near the card.
+              // Focus is put back on ⋯ synchronously and the default is left
+              // alone: the browser's sequential navigation runs AFTER dispatch
+              // from the element focused THEN, so Tab lands on the control
+              // after ⋯ (the next card) and Shift+Tab on the one before it.
               setActionsOpen(false);
-              p.onAssist?.();
-            }}
+              moreRef.current?.focus({ preventScroll: true });
+              return;
+            }
+            const which =
+              e.key === 'ArrowDown'
+                ? 'next'
+                : e.key === 'ArrowUp'
+                  ? 'prev'
+                  : e.key === 'Home'
+                    ? 'first'
+                    : e.key === 'End'
+                      ? 'last'
+                      : null;
+            if (which === null) return;
+            e.preventDefault();
+            e.stopPropagation();
+            focusMenuItem(menuRef.current, which);
+          }}
+          className={`fixed z-50 max-h-[350px] overflow-y-auto overflow-x-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
+            // `invisible` as well as opacity-0: a closed menu of many rows is
+            // taller than the room above the dock, and visibility (inherited,
+            // unlike opacity) is what keeps its rows out of the raw-rect "outside
+            // the box" measurement, out of hit-testing and out of the a11y tree.
+            actionsOpen
+              ? 'visible pointer-events-auto opacity-100'
+              : 'invisible pointer-events-none opacity-0'
+          }`}
+        >
+          {/* Phase C — the first row opens the same sheet the ⓘ glyph does; focus
+            returns to ⋯ (the control that was focused) when it closes. */}
+          <MenuRow
+            glyph="ⓘ"
+            caption="Details"
+            label={`Details — every fact about ${p.name}, in full`}
+            action="open-details-row"
+            onClick={() => openDetails(moreRef.current)}
           />
-        ) : null}
-        {/* Stop — only for a RUNNING profile with a stop handler (idle cards
+          {p.onAssist ? (
+            <MenuRow
+              glyph="✦"
+              caption="Assist"
+              label={`Ask the AI assistant about ${p.name}`}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onAssist?.();
+              }}
+            />
+          ) : null}
+          {/* Stop — only for a RUNNING profile with a stop handler (idle cards
             never show it). Reuses `busy` so a double-click can't double-close
             (founder Track A). */}
-        {p.running && p.onStop ? (
-          <MenuRow
-            glyph={p.busy ? '…' : '◼'}
-            caption={p.busy ? 'Stopping…' : 'Stop session'}
-            // Polish: the label opens with the visible caption (WCAG 2.5.3 —
-            // 'click Stop session' must match).
-            label={`Stop session — end ${p.name}'s running session`}
-            tone="danger"
-            onClick={() => {
-              setActionsOpen(false);
-              p.onStop?.();
-            }}
-            disabled={p.busy}
-          />
-        ) : null}
-        {p.hasProxy ? (
-          <MenuRow
-            glyph={p.testing ? '…' : '⟳'}
-            // (l) #10 — the grid's button and this menu row name the VPN
-            // check the same way, from one constant.
-            caption={vpn ? CHECK_VPN_ACTION : 'Test proxy'}
-            label={vpn ? CHECK_VPN_TITLE : TEST_PROXY_TITLE}
-            onClick={() => {
-              setActionsOpen(false);
-              p.onTest();
-            }}
-            disabled={p.testDisabled}
-          />
-        ) : null}
-        {p.onEdit ? (
-          <MenuRow
-            glyph="✎"
-            caption="Edit"
-            label={`Edit ${p.name}`}
-            onClick={() => {
-              setActionsOpen(false);
-              p.onEdit?.();
-            }}
-          />
-        ) : null}
-        {p.onSaveNote ? (
-          <MenuRow
-            glyph="🗒"
-            caption={p.note && p.note.trim() !== '' ? 'Edit note' : 'Add note'}
-            label={`Edit note for ${p.name}`}
-            onClick={() => {
-              setActionsOpen(false);
-              openNoteEditor();
-            }}
-          />
-        ) : null}
-        {p.onClone ? (
-          <MenuRow
-            glyph="⧉"
-            caption="Duplicate"
-            label={`Duplicate ${p.name}`}
-            title={
-              p.cloneDisabled
-                ? p.cloneDisabledReason
-                : p.anyBusy && !p.busy
-                  ? 'Another profile is busy — wait for it to finish'
-                  : undefined
-            }
-            disabled={p.cloneDisabled || p.busy || p.anyBusy}
-            onClick={() => {
-              setActionsOpen(false);
-              p.onClone?.();
-            }}
-          />
-        ) : null}
-        {p.onActivity ? (
-          <MenuRow
-            glyph="🕘"
-            caption="Activity"
-            label={`Activity — recent pages opened with ${p.name}`}
-            onClick={() => {
-              setActionsOpen(false);
-              p.onActivity?.();
-            }}
-          />
-        ) : null}
-        {p.onExport ? (
-          <MenuRow
-            glyph="⤓"
-            caption="Export"
-            label={`Export ${p.name} as a portable JSON copy`}
-            onClick={() => {
-              setActionsOpen(false);
-              p.onExport?.();
-            }}
-          />
-        ) : null}
-        {/* doc-150 item 5 / polish — the sealed-store size, as a static info
-            row where it is DISCOVERABLE (it rode in the meta row's title, which
-            only surfaced when the pointer landed between pills). The details
-            sheet (Phase C) is its final home. Never rendered for '—' (no save). */}
-        {p.sizeLabel !== undefined && p.sizeLabel !== '—' ? (
-          <div
-            data-component="profile-size"
-            title={`Stored profile size (encrypted browser state): ${p.sizeLabel}`}
-            className="flex w-full cursor-default items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] font-medium text-ink-muted"
-          >
-            <span className="w-4 shrink-0 text-center text-[13px] leading-none" aria-hidden="true">
-              📦
-            </span>
-            <span className="leading-none">{p.sizeLabel} stored</span>
-          </div>
-        ) : null}
-        {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. The
-            title spells out exactly what's kept so the customer knows
-            nothing identity-bearing is dropped. Disabled while busy. */}
-        {p.onTrim ? (
-          <MenuGroup glyph="🧹" caption="Clear…" label={`Clearing options for ${p.name}`}>
+          {p.running && p.onStop ? (
             <MenuRow
-              glyph="🧹"
-              caption="Clear cache"
-              label={`Clear cache for ${p.name}`}
-              title={
-                p.anyBusy && !p.busy
-                  ? 'Another profile is busy — wait for it to finish'
-                  : 'Free re-fetchable files. Logins, site data and tabs are kept'
-              }
-              disabled={p.busy || p.anyBusy}
+              glyph={p.busy ? '…' : '◼'}
+              caption={p.busy ? 'Stopping…' : 'Stop session'}
+              // Polish: the label opens with the visible caption (WCAG 2.5.3 —
+              // 'click Stop session' must match).
+              label={`Stop session — end ${p.name}'s running session`}
+              tone="danger"
               onClick={() => {
                 setActionsOpen(false);
-                p.onTrim?.('cache');
+                p.onStop?.();
               }}
+              disabled={p.busy}
             />
-            {/* W3120 (doc-150 §8.4). These three DESTROY state the customer
-                cannot get back, unlike a cache clear which simply refetches,
-                so each title says plainly what goes before the confirm does. */}
+          ) : null}
+          {p.hasProxy ? (
             <MenuRow
-              glyph="🍪"
-              caption="Clear cookies"
-              label={`Clear cookies for ${p.name}`}
-              title={
-                p.anyBusy && !p.busy
-                  ? 'Another profile is busy — wait for it to finish'
-                  : 'Signs this profile out everywhere. Cached files and tabs are kept'
-              }
-              disabled={p.busy || p.anyBusy}
+              glyph={p.testing ? '…' : '⟳'}
+              // (l) #10 — the grid's button and this menu row name the VPN
+              // check the same way, from one constant.
+              caption={vpn ? CHECK_VPN_ACTION : 'Test proxy'}
+              label={vpn ? CHECK_VPN_TITLE : TEST_PROXY_TITLE}
               onClick={() => {
                 setActionsOpen(false);
-                p.onTrim?.('cookies');
+                p.onTest();
               }}
+              disabled={p.testDisabled}
             />
+          ) : null}
+          {p.onEdit ? (
             <MenuRow
-              glyph="🕘"
-              caption="Clear history"
-              label={`Clear history for ${p.name}`}
-              title={
-                p.anyBusy && !p.busy
-                  ? 'Another profile is busy — wait for it to finish'
-                  : 'Forgets the remembered tabs — the only page record a profile keeps'
-              }
-              disabled={p.busy || p.anyBusy}
+              glyph="✎"
+              caption="Edit"
+              label={`Edit ${p.name}`}
               onClick={() => {
                 setActionsOpen(false);
-                p.onTrim?.('history');
+                p.onEdit?.();
               }}
             />
+          ) : null}
+          {p.onSaveNote ? (
             <MenuRow
-              glyph="🧨"
-              caption="Clear everything"
-              label={`Clear all browsing data for ${p.name}`}
-              title={
-                p.anyBusy && !p.busy
-                  ? 'Another profile is busy — wait for it to finish'
-                  : 'Cookies, site data, cache and tabs. The profile and its fingerprint stay'
-              }
-              disabled={p.busy || p.anyBusy}
+              glyph="🗒"
+              caption={p.note && p.note.trim() !== '' ? 'Edit note' : 'Add note'}
+              label={`Edit note for ${p.name}`}
               onClick={() => {
                 setActionsOpen(false);
-                p.onTrim?.('all');
+                openNoteEditor();
               }}
             />
-          </MenuGroup>
-        ) : null}
-        {p.onDelete ? (
-          <>
-            <div role="separator" className="my-1 h-px bg-surface-divider" aria-hidden="true" />
-            {/* Delete is rejected by the server for a RUNNING session, so
-                disable it (matching ProfilesTable) and explain via the
-                tooltip rather than letting the click 409. Also disable while
-                BUSY (a launch/clone in flight) so a delete can't race an
-                in-flight launch before `running` is set — w410wv3eq #4. */}
+          ) : null}
+          {p.onClone ? (
             <MenuRow
-              glyph="🗑"
-              caption="Delete"
-              label={`Delete ${p.name}`}
+              glyph="⧉"
+              caption="Duplicate"
+              label={`Duplicate ${p.name}`}
               title={
-                p.running
-                  ? 'Stop the session first before deleting'
+                p.cloneDisabled
+                  ? p.cloneDisabledReason
                   : p.anyBusy && !p.busy
                     ? 'Another profile is busy — wait for it to finish'
                     : undefined
               }
-              tone="danger"
-              disabled={p.busy || p.running || p.anyBusy}
+              disabled={p.cloneDisabled || p.busy || p.anyBusy}
               onClick={() => {
                 setActionsOpen(false);
-                p.onDelete?.();
+                p.onClone?.();
               }}
             />
-          </>
-        ) : null}
-      </div>
+          ) : null}
+          {p.onActivity ? (
+            <MenuRow
+              glyph="🕘"
+              caption="Activity"
+              label={`Activity — recent pages opened with ${p.name}`}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onActivity?.();
+              }}
+            />
+          ) : null}
+          {p.onExport ? (
+            <MenuRow
+              glyph="⤓"
+              caption="Export"
+              label={`Export ${p.name} as a portable JSON copy`}
+              onClick={() => {
+                setActionsOpen(false);
+                p.onExport?.();
+              }}
+            />
+          ) : null}
+          {/* doc-150 item 5 — the sealed-store size moved to the details sheet
+            (Phase C, its final home): a static info row in an actions menu was
+            the one row that did nothing. */}
+          {/* doc-150 §8 — Trim: clear re-fetchable caches, keep logins. The
+            title spells out exactly what's kept so the customer knows
+            nothing identity-bearing is dropped. Disabled while busy. */}
+          {p.onTrim ? (
+            <MenuGroup glyph="🧹" caption="Clear…" label={`Clearing options for ${p.name}`}>
+              <MenuRow
+                glyph="🧹"
+                caption="Clear cache"
+                label={`Clear cache for ${p.name}`}
+                title={
+                  p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : 'Free re-fetchable files. Logins, site data and tabs are kept'
+                }
+                disabled={p.busy || p.anyBusy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTrim?.('cache');
+                }}
+              />
+              {/* W3120 (doc-150 §8.4). These three DESTROY state the customer
+                cannot get back, unlike a cache clear which simply refetches,
+                so each title says plainly what goes before the confirm does. */}
+              <MenuRow
+                glyph="🍪"
+                caption="Clear cookies"
+                label={`Clear cookies for ${p.name}`}
+                title={
+                  p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : 'Signs this profile out everywhere. Cached files and tabs are kept'
+                }
+                disabled={p.busy || p.anyBusy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTrim?.('cookies');
+                }}
+              />
+              <MenuRow
+                glyph="🕘"
+                caption="Clear history"
+                label={`Clear history for ${p.name}`}
+                title={
+                  p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : 'Forgets the remembered tabs — the only page record a profile keeps'
+                }
+                disabled={p.busy || p.anyBusy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTrim?.('history');
+                }}
+              />
+              <MenuRow
+                glyph="🧨"
+                caption="Clear everything"
+                label={`Clear all browsing data for ${p.name}`}
+                title={
+                  p.anyBusy && !p.busy
+                    ? 'Another profile is busy — wait for it to finish'
+                    : 'Cookies, site data, cache and tabs. The profile and its fingerprint stay'
+                }
+                disabled={p.busy || p.anyBusy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onTrim?.('all');
+                }}
+              />
+            </MenuGroup>
+          ) : null}
+          {p.onDelete ? (
+            <>
+              <div role="separator" className="my-1 h-px bg-surface-divider" aria-hidden="true" />
+              {/* Delete is rejected by the server for a RUNNING session, so
+                disable it (matching ProfilesTable) and explain via the
+                tooltip rather than letting the click 409. Also disable while
+                BUSY (a launch/clone in flight) so a delete can't race an
+                in-flight launch before `running` is set — w410wv3eq #4. */}
+              <MenuRow
+                glyph="🗑"
+                caption="Delete"
+                label={`Delete ${p.name}`}
+                title={
+                  p.running
+                    ? 'Stop the session first before deleting'
+                    : p.anyBusy && !p.busy
+                      ? 'Another profile is busy — wait for it to finish'
+                      : undefined
+                }
+                tone="danger"
+                disabled={p.busy || p.running || p.anyBusy}
+                onClick={() => {
+                  setActionsOpen(false);
+                  p.onDelete?.();
+                }}
+              />
+            </>
+          ) : null}
+        </div>,
+        document.body,
+      )}
     </article>
+  );
+}
+
+/** Phase C — one labelled fact in the details sheet: a 9px uppercase label
+ *  (`dt`) over the value (`dd`), the group tagged `data-fact` so the sheet's
+ *  rows are addressable without reusing the tile's `data-region` names (the
+ *  geometry gate asserts those appear exactly once, in order). */
+function DetailRow({
+  fact,
+  label,
+  children,
+}: {
+  fact: string;
+  label: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div data-fact={fact} className="flex min-w-0 flex-col gap-px">
+      <dt className="text-[9px] font-semibold uppercase leading-3 tracking-wider text-ink-muted">
+        {label}
+      </dt>
+      <dd className="min-w-0 break-words">{children}</dd>
+    </div>
   );
 }
 
@@ -2213,6 +2759,7 @@ function MenuRow({
   caption,
   label,
   title,
+  action,
   onClick,
   disabled,
   tone,
@@ -2222,6 +2769,8 @@ function MenuRow({
   label: string;
   /** Optional hover title; falls back to `label` (e.g. a disabled-reason). */
   title?: string;
+  /** Optional `data-action` (Phase C: the Details row). */
+  action?: string;
   onClick: () => void;
   disabled?: boolean;
   tone?: 'danger';
@@ -2231,6 +2780,7 @@ function MenuRow({
       type="button"
       aria-label={label}
       title={title ?? label}
+      data-action={action}
       disabled={disabled}
       onClick={(e) => {
         e.stopPropagation();

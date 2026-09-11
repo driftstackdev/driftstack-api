@@ -26,6 +26,8 @@ import {
   CHECK_VPN_TITLE,
   ENDPOINT_UNRESOLVED,
   ENDPOINT_UNRESOLVED_EXIT_TITLE,
+  EXIT_GEO_UNAVAILABLE_SHORT,
+  EXIT_GEO_UNAVAILABLE_TITLE,
   VPN_NO_EXIT_YET,
   VPN_NO_EXIT_YET_TITLE,
 } from '../lib/proxy-check-copy';
@@ -93,6 +95,12 @@ export interface ProfileTableRow {
    *  it resolved or no pre-flight ran. The exit cell then says "unresolved"
    *  rather than promising that Check VPN will measure an exit. */
   endpointUnresolved?: string;
+  /** Phase C (C8) — V-857's third exit state, the one the grid card already
+   *  carries (`exitProbeFailed`): the proxy is usable and the last test's echo
+   *  round-trip did not complete, so there is no exit to show and the reason
+   *  is not "never tested". Derived at the call site exactly as the card's:
+   *  `px !== null && probeView.exitResults[px.id] === null`. */
+  exitProbeFailed?: boolean;
   /** When the fleet last answered for this row — for a VPN row that is the
    *  fleet's own stamp, never the DNS pre-flight that precedes a refused test. */
   checkedAtIso?: string | null;
@@ -299,7 +307,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
       </td>
       {/* Profile: status dot + icon + name + device subtitle + folder. T-19 —
           the select tooltip lives here, not on the <tr>: a row-level title would
-          leak onto the untitled action buttons (Edit, Live view) as their hover
+          leak onto the untitled action buttons (Edit, Open session) as their hover
           text. */}
       <td
         className="px-3 py-2"
@@ -411,6 +419,19 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 // exactly as the card and the Proxies grid do (one constant).
                 <span className="italic text-ink-muted" title={VPN_NO_EXIT_YET_TITLE}>
                   {VPN_NO_EXIT_YET}
+                </span>
+              ) : r.exitProbeFailed === true ? (
+                // Phase C (C8) — V-857's THIRD exit state: the proxy is usable
+                // and the last test's echo round-trip did NOT complete. The card
+                // shows this SHORT with this title for the same cache entry
+                // (`exitProbeFailed` there too); "no exit IP" here would have
+                // read like a test that measured nothing at all.
+                <span
+                  data-component="profile-row-exit-probe-failed"
+                  className="italic text-ink-muted"
+                  title={EXIT_GEO_UNAVAILABLE_TITLE}
+                >
+                  {EXIT_GEO_UNAVAILABLE_SHORT}
                 </span>
               ) : (
                 <span className="text-ink-muted">{r.probed ? 'no exit IP' : 'untested'}</span>
@@ -618,8 +639,12 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 className="rounded bg-surface-elevated px-2 py-1 text-[11px] font-medium text-ink-primary hover:bg-surface-divider disabled:opacity-50"
                 onClick={stop(() => p.onWatch(r.id))}
                 disabled={r.busy}
+                // Phase C (C9) — the grid card's dock says 'Open session' for
+                // the same handler on the same running profile; the list said
+                // 'Live view'. One word for one action on both surfaces.
+                title="Open the running session"
               >
-                Live view
+                Open session
               </button>
               <button
                 type="button"

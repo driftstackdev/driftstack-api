@@ -366,8 +366,9 @@ describe('ProfilePhoneCard', () => {
   });
 
   it('the ⋯ menu opens on toggle and dismisses on an outside pointer-down (and Escape)', () => {
-    const { container } = render(<ProfilePhoneCard {...props()} />);
-    const menu = container.querySelector('[data-component="card-actions-menu"]');
+    render(<ProfilePhoneCard {...props()} />);
+    // Phase C: the menu is PORTALED to document.body — queried on the document.
+    const menu = document.querySelector('[data-component="card-actions-menu"]');
     const toggle = screen.getByRole('button', { name: 'More actions' });
     // classList membership (not substring) — the static class also carries a
     // `group-hover:opacity-100` token that a substring check would match.
@@ -385,6 +386,9 @@ describe('ProfilePhoneCard', () => {
     // Phase B: the menu is a sibling of the screen (so it can open downward
     // past the screen's overflow-hidden); a pointer-down INSIDE it must not
     // count as outside, or every row click would close it before it fired.
+    // Phase C: the menu is a PORTAL node (no descendant of the card at all) —
+    // `menuRef.contains` is what makes it "inside"; a DOM-ancestry test would
+    // close it on every row click.
     fireEvent.click(toggle);
     fireEvent.pointerDown(menu as Element);
     expect(menu?.classList.contains('opacity-100')).toBe(true);
@@ -494,10 +498,10 @@ describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
     // including Delete and the Clear group, over whatever card the cursor reached
     // (owner 2026-08-30). Same correction as V-2149's Clear group, one level up.
     const { container } = render(<ProfilePhoneCard {...props({ onTrim: vi.fn() })} />);
-    const menu = container.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
+    const menu = document.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
     expect(
       menu,
-      'the menu is always in the DOM (opacity-toggled) so labels stay queryable',
+      'the menu is always in the DOM (opacity-toggled, portaled to body) so labels stay queryable',
     ).not.toBeNull();
 
     // Closed: no hover class may make it interactive, and it must not be reachable.
@@ -513,7 +517,7 @@ describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
 
     // The ⋯ toggle is the only opener.
     fireEvent.click(screen.getByLabelText('More actions'));
-    const opened = container.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
+    const opened = document.querySelector('[data-component="card-actions-menu"]') as HTMLElement;
     expect(opened.className).toMatch(/pointer-events-auto/);
     expect(opened.className).toMatch(/opacity-100/);
     cleanup();
@@ -1672,7 +1676,7 @@ describe('B9 — dock + menu', () => {
         })}
       />,
     );
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     const captions = Array.from(menu.querySelectorAll('button')).map(
       (b) => b.textContent?.trim() ?? '',
     );
@@ -1682,20 +1686,24 @@ describe('B9 — dock + menu', () => {
     expect(classes(menu).some((c) => /^w-(\d|\[)/.test(c) && c !== 'w-auto')).toBe(false);
     expect(classes(menu)).toEqual(
       expect.arrayContaining([
-        'absolute',
-        'left-1.5',
-        'right-1.5',
+        // Phase C: a fixed box in the viewport (portaled) — never `absolute`
+        // inside the card, where the grid's scroller could clip it.
+        'fixed',
+        'z-50',
         // Polish: 350 — the 13-row real-app maximum (344px) has no fold; at
         // 260 'Clear everything' and 'Delete' sat under an invisible scrollbar.
         'max-h-[350px]',
         'overflow-y-auto',
       ]),
     );
+    expect(classes(menu)).not.toContain('absolute');
     const labels = Array.from(menu.querySelectorAll('button')).map((b) =>
       b.getAttribute('aria-label'),
     );
     // Polish (WCAG 2.5.3): a row's accessible name opens with its visible caption.
+    // Phase C: the Details row is FIRST (the sheet is the card's depth).
     expect(labels).toEqual([
+      'Details — every fact about amsterdam shopper, in full',
       'Ask the AI assistant about amsterdam shopper',
       "Stop session — end amsterdam shopper's running session",
       'Test proxy from this Mac — reachability, latency, exit IP',
@@ -1707,8 +1715,12 @@ describe('B9 — dock + menu', () => {
       'Clearing options for amsterdam shopper',
       'Delete amsterdam shopper',
     ]);
-    // The menu is a sibling of the screen (it must escape the screen's clip).
+    // Phase C: the menu is a PORTAL — no descendant of the article at all (it
+    // used to be a sibling of the screen, which escaped the screen's clip but
+    // not the grid's), a direct child of document.body.
     expect(byComponent(container, 'phone-screen')?.contains(menu)).toBe(false);
+    expect(container.querySelector('article')?.contains(menu)).toBe(false);
+    expect(menu.parentElement).toBe(document.body);
     cleanup();
   });
 
@@ -1730,21 +1742,30 @@ describe('B9 — dock + menu', () => {
     });
     try {
       HTMLElement.prototype.getBoundingClientRect = () => rectAt(120);
-      const { container, unmount } = render(<ProfilePhoneCard {...props()} />);
+      const { unmount } = render(<ProfilePhoneCard {...props()} />);
       fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-      const below = byComponent(container, 'card-actions-menu') as HTMLElement;
+      const below = byComponent(document, 'card-actions-menu') as HTMLElement;
       expect(below.getAttribute('data-placement')).toBe('below');
-      expect(classes(below)).toEqual(expect.arrayContaining(['top-full', 'mt-1.5']));
+      // Phase C (`menuBoxFor`): a FIXED box from the card's rect — 6px below
+      // the card's bottom edge, inset 6px from both card edges (Phase A's
+      // "anchored to both edges", now in viewport coordinates); no `bottom`.
+      expect(below.style.top).toBe('173px'); // rect bottom 167 + 6
+      expect(below.style.bottom).toBe('');
+      expect(below.style.left).toBe('6px');
+      expect(below.style.width).toBe('166px'); // 178 − 2 × 6
+      expect(classes(below)).not.toContain('top-full');
       expect(classes(below)).not.toContain('bottom-[59px]');
       unmount();
 
       HTMLElement.prototype.getBoundingClientRect = () => rectAt(600);
-      const { container: c2 } = render(<ProfilePhoneCard {...props()} />);
+      render(<ProfilePhoneCard {...props()} />);
       fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
-      const above = byComponent(c2, 'card-actions-menu') as HTMLElement;
+      const above = byComponent(document, 'card-actions-menu') as HTMLElement;
       expect(above.getAttribute('data-placement')).toBe('above');
-      expect(classes(above)).toContain('bottom-[59px]');
-      expect(classes(above)).not.toContain('top-full');
+      // Above: the menu's bottom sits 6px above the dock's top (rect top 600).
+      expect(above.style.bottom).toBe(`${String(window.innerHeight - (600 - 6))}px`);
+      expect(above.style.top).toBe('');
+      expect(classes(above)).not.toContain('bottom-[59px]');
       cleanup();
     } finally {
       HTMLElement.prototype.getBoundingClientRect = original;
@@ -1990,7 +2011,7 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
       expect.arrayContaining(['z-[15]', 'border-white/35', 'bg-transparent']),
     );
     expect(classes(indicator)).not.toContain('bg-black/35');
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     const z = (el: HTMLElement): number =>
       Number(
         classes(el)
@@ -2198,16 +2219,23 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
       'bg-surface-inset',
     );
     // The meta row carries no row-level title; the sealed-store size lives in
-    // the ⋯ menu as a static info row (never for '—', a profile never saved).
+    // the details sheet (Phase C — it was a static info row in the ⋯ menu),
+    // never on the resting tile and never for '—' (a profile never saved).
     expect(byRegion(container, 'meta')?.getAttribute('title')).toBeNull();
     cleanup();
     const { container: sized } = render(<ProfilePhoneCard {...props({ sizeLabel: '128 MB' })} />);
     expect(byRegion(sized, 'meta')?.getAttribute('title')).toBeNull();
-    const sizeRow = sized.querySelector('[title*="Stored profile size"]') as HTMLElement;
-    expect(byComponent(sized, 'card-actions-menu')?.contains(sizeRow)).toBe(true);
+    expect(document.querySelector('[title*="Stored profile size"]')).toBeNull();
     expect((byComponent(sized, 'card-body') as HTMLElement).textContent).not.toContain('128 MB');
+    expect(byComponent(document, 'card-actions-menu')?.textContent).not.toContain('128 MB');
+    fireEvent.click(screen.getByLabelText('Details for amsterdam shopper'));
+    const sizeRow = sized.querySelector('[title*="Stored profile size"]') as HTMLElement;
+    expect(byComponent(sized, 'card-details-sheet')?.contains(sizeRow)).toBe(true);
+    expect(sizeRow.getAttribute('data-component')).toBe('profile-size');
     cleanup();
     const { container: unsaved } = render(<ProfilePhoneCard {...props({ sizeLabel: '—' })} />);
+    fireEvent.click(screen.getByLabelText('Details for amsterdam shopper'));
+    expect(byComponent(unsaved, 'card-details-sheet')).not.toBeNull();
     expect(byComponent(unsaved, 'profile-size')).toBeNull();
     cleanup();
     const { container: first } = render(
@@ -2356,11 +2384,11 @@ describe('P4 — the ⋯ group: labelled, arrow keys, focus restored to ⋯, Lau
     onDelete: vi.fn(),
   });
 
-  it('a labelled role=group of plain buttons (a role=menu of role-less buttons announced as an empty menu; menuitems would break every getByRole("button") pin); ⋯ carries aria-controls; the Clear rows sit in a nested group; rows wear an inset focus ring; the stored size is a static, titled info row', () => {
+  it('a labelled role=group of plain buttons (a role=menu of role-less buttons announced as an empty menu; menuitems would break every getByRole("button") pin); ⋯ carries aria-controls; the Clear rows sit in a nested group; rows wear an inset focus ring; the stored size is NOT a menu row (Phase C: the sheet)', () => {
     const { container } = render(
       <ProfilePhoneCard {...props({ ...full(), sizeLabel: '3.0 MiB' })} />,
     );
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     expect(menu.getAttribute('role')).toBe('group');
     expect(menu.getAttribute('aria-label')).toBe('More actions for amsterdam shopper');
     const more = screen.getByRole('button', { name: 'More actions' });
@@ -2370,12 +2398,10 @@ describe('P4 — the ⋯ group: labelled, arrow keys, focus restored to ⋯, Lau
       expect(b.getAttribute('role'), b.getAttribute('aria-label') ?? '').toBeNull();
       expect(classes(b)).toContain('focus-visible:outline-offset-[-2px]');
     }
-    const size = byComponent(menu, 'profile-size') as HTMLElement;
-    expect(size.tagName).toBe('DIV');
-    expect(size.textContent).toContain('3.0 MiB stored');
-    expect(size.getAttribute('title')).toBe(
-      'Stored profile size (encrypted browser state): 3.0 MiB',
-    );
+    // Phase C: the size is no menu row any more (the details sheet holds it —
+    // see a-card-details-sheet-holds-every-fact-the-tile-cut.test.tsx).
+    expect(byComponent(menu, 'profile-size')).toBeNull();
+    expect(menu.textContent).not.toContain('3.0 MiB');
     expect(byRegion(container, 'meta')?.getAttribute('title')).toBeNull();
     fireEvent.click(more);
     fireEvent.click(screen.getByLabelText(/^Clearing options for /));
@@ -2386,11 +2412,9 @@ describe('P4 — the ⋯ group: labelled, arrow keys, focus restored to ⋯, Lau
   });
 
   it('ArrowDown on ⋯ opens the menu and focuses its first enabled item; ArrowDown/ArrowUp/Home/End walk the enabled items (a disabled row is skipped); Escape closes it and returns focus to ⋯', () => {
-    const { container } = render(
-      <ProfilePhoneCard {...props({ ...full(), running: true, onStop: vi.fn() })} />,
-    );
+    render(<ProfilePhoneCard {...props({ ...full(), running: true, onStop: vi.fn() })} />);
     const more = screen.getByRole('button', { name: 'More actions' });
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     more.focus();
     fireEvent.keyDown(more, { key: 'ArrowDown' });
     expect(menu.getAttribute('data-open')).toBe('true');
@@ -2422,9 +2446,9 @@ describe('P4 — the ⋯ group: labelled, arrow keys, focus restored to ⋯, Lau
 
   it("activating a row (Enter → click) closes the menu and returns focus to ⋯; the row's handler fires once", () => {
     const onEdit = vi.fn();
-    const { container } = render(<ProfilePhoneCard {...props({ ...full(), onEdit })} />);
+    render(<ProfilePhoneCard {...props({ ...full(), onEdit })} />);
     const more = screen.getByRole('button', { name: 'More actions' });
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     more.focus();
     fireEvent.keyDown(more, { key: 'ArrowDown' });
     const edit = screen.getByLabelText('Edit amsterdam shopper');
@@ -2444,7 +2468,7 @@ describe('P4 — the ⋯ group: labelled, arrow keys, focus restored to ⋯, Lau
   it('with the menu open, clicking Launch launches AND closes the menu; a pointer-down on the dock outside ⋯ closes it too', () => {
     const onPrimary = vi.fn();
     const { container } = render(<ProfilePhoneCard {...props({ ...full(), onPrimary })} />);
-    const menu = byComponent(container, 'card-actions-menu') as HTMLElement;
+    const menu = byComponent(document, 'card-actions-menu') as HTMLElement;
     fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
     expect(menu.getAttribute('data-open')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Launch' }));

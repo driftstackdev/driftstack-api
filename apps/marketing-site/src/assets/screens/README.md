@@ -5,7 +5,7 @@ code, same CSS as the Tauri app), not an illustration. They come from the
 gui-client visual harness (`apps/gui-client/visual-harness.html` →
 `src/visual-harness/gallery.tsx`) with `?scene=<name>`, which composes one
 screen inside the app's real window chrome (TitleBar + Sidebar, dark theme,
-oxblood accent) at a fixed stage — 1280×800, except the list view at 1800×800
+oxblood accent) at a fixed stage — 1280×800, except the list view at 1800×880
 so its full-width table (Actions column included) fits in frame — captured at
 2× by Playwright.
 
@@ -13,7 +13,7 @@ so its full-width table (Actions column included) fits in frame — captured at
 | --------------------------- | --------- | -------- | ----------------------------------------------------------------------------------------------- |
 | `profiles-grid.{png,webp}`  | 2560×1600 | 1280×800 | Profiles view — grid of 8 profile tiles (idle / live / VPN / untested / selected …)             |
 | `profiles-grid-hero.*`      | 2064×1010 | 1032×505 | the tile grid alone, cropped from `profiles-grid` (hero image)                                  |
-| `profiles-list.{png,webp}`  | 3600×1600 | 1800×800 | Profiles view — list mode: the grid's same 8 profiles as rows, sorted by name                   |
+| `profiles-list.{png,webp}`  | 3600×1760 | 1800×880 | Profiles view — list mode: the grid's same 8 profiles as rows, sorted by name                   |
 | `proxies.{png,webp}`        | 2560×1600 | 1280×800 | Proxies view — the SOCKS5 / WireGuard / OpenVPN editors, each holding its saved config          |
 | `simulator.{png,webp}`      | 2560×1600 | 1280×800 | the simulator window — live toolbar, phone screen host, on-screen iOS keyboard, Egress readouts |
 | `billing.{png,webp}`        | 2560×1600 | 1280×800 | Billing — Usage & cost for one billing cycle                                                    |
@@ -55,7 +55,7 @@ the harness itself, so a browser opened at
 frame — the harness freezes its clock at module load, before its fixtures
 compute any relative time), motion is disabled (reduced-motion), locale/timezone
 are pinned, and each scene carries a DOM guard (8 tiles in ≥ 3 columns; 8 rows
-AND the table fits its shell without horizontal scroll; 3 editors AND both
+AND the table fits its shell without horizontal scroll and the pane without vertical scroll; 3 editors AND both
 tunnel editors show a saved config; the observed Egress readouts) so an empty
 or clipped stage fails instead of shipping. The script also reads
 `data-frozen-now` / `data-stage-width` / `data-stage-height` off every stage

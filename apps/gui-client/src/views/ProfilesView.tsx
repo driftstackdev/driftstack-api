@@ -4867,6 +4867,11 @@ export function ProfilesView({
                       proxyAddress: px !== null ? `${px.host}:${px.port}` : null,
                       locationLabel: exitLocationLabel(exitOk, probe),
                       probed: probe !== undefined,
+                      // Phase C (C8) — the list's third exit state: the probe ran
+                      // and measured NO exit (the derivation's explicit null), the
+                      // same expression the grid card is handed above, so the row
+                      // reads "exit geo unavailable", never "no exit IP".
+                      exitProbeFailed: px !== null && probeView.exitResults[px.id] === null,
                       udp,
                       quic,
                       // rowLat prefers the fleet number and falls back to the native

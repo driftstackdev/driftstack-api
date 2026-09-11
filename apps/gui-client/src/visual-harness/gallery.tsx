@@ -63,12 +63,14 @@ export const SCENE_HEIGHT = 800;
  *  (place names, tags, a note, the five row actions) is ~1490 CSS px wide —
  *  inside a 1280 window its Actions column falls off the right edge (the
  *  first capture shipped a cut "Live" pill and no Launch button), so the list
- *  view gets a wider window, which the app runs in just as happily. scripts/
+ *  view gets a wider window — and a taller one (880): the eight rows include a
+ *  six-tag row that wraps to four lines once the Actions column widened for
+ *  'Open session', and at 800 the last row ran past the frame. scripts/
  *  marketing-screens.mjs declares the same sizes, fails when they differ, and
  *  fails when the table does not fit its shell. */
 export function sceneSize(name: MarketingSceneName): { width: number; height: number } {
   return name === 'profiles-list'
-    ? { width: 1800, height: SCENE_HEIGHT }
+    ? { width: 1800, height: 880 }
     : { width: SCENE_WIDTH, height: SCENE_HEIGHT };
 }
 
@@ -521,6 +523,72 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
   {
     label: 'saved tabs · never launched',
     props: base({ savedTabsReopen: true, lastUsedIso: null }),
+  },
+  // ── Phase C (2026-09-11) — the DETAILS SHEET at rest, so the gate measures a
+  // sheet-open tile like any other (234px, nothing outside the box, the dock
+  // covered, the sheet's body the only scroller) and the review sees its
+  // fullest and its emptiest fill. `detailsInitiallyOpen` is harness-only.
+  {
+    label: 'sheet open · MAX (every fact at full length)',
+    props: base({
+      name: FORTY_FIVE_CHAR_NAME,
+      folder: 'Shopping / Netherlands',
+      tags: ['retail', 'nl', 'daily', 'warm', 'checkout'],
+      savedTabsReopen: true,
+      sizeLabel: '128 MB',
+      locationLabel: LONG_PLACE,
+      proxyName: LONG_PROXY_NAME,
+      note: EIGHTY_CHAR_NOTE,
+      onSaveNote: noop,
+      onEdit: noop,
+      onTrim: noop,
+      onActivity: noop,
+      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+      detailsInitiallyOpen: true,
+    }),
+  },
+  {
+    label: 'sheet open · vpn tunnel down (failure + notice in full)',
+    props: base({
+      name: 'oslo classifieds',
+      monogram: 'OC',
+      hue: 80,
+      flag: '🇳🇴',
+      countryCode: null,
+      exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      capabilities: null,
+      vpn: true,
+      proxyName: 'Mullvad no-osl-wg-001',
+      proxyAddress: '193.32.127.66:51820',
+      vpnFailure:
+        'The test Mac could not bring the tunnel up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
+      vpnNotice:
+        'Tunnel test not run this time — a live session holds the tunnel. Showing the last result.',
+      folder: 'Marketplaces',
+      tags: ['classifieds', 'norway', 'aged', 'warm'],
+      onEdit: noop,
+      detailsInitiallyOpen: true,
+    }),
+  },
+  {
+    label: 'sheet open · untested (the emptiest fill)',
+    props: base({
+      name: 'sao paulo deals',
+      monogram: 'SP',
+      hue: 140,
+      flag: '🇧🇷',
+      countryCode: null,
+      exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      probed: false,
+      capabilities: null,
+      checkedAtIso: null,
+      lastUsedIso: null,
+      detailsInitiallyOpen: true,
+    }),
   },
 ];
 

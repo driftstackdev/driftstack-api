@@ -10,6 +10,10 @@ import {
   type ProfileTableRow,
   type ProfilesTableProps,
 } from '../../src/components/ProfilesTable';
+import {
+  EXIT_GEO_UNAVAILABLE_SHORT,
+  EXIT_GEO_UNAVAILABLE_TITLE,
+} from '../../src/lib/proxy-check-copy';
 
 function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
   return {
@@ -167,9 +171,15 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
-  it('running row → Live view + Stop instead of Launch', () => {
-    render(<ProfilesTable {...props({ rows: [row({ running: true })] })} />);
-    expect(screen.getByRole('button', { name: 'Live view' })).toBeTruthy();
+  it('running row → Open session + Stop instead of Launch (Phase C / C9: the grid card\'s word for the same handler — never "Live view")', () => {
+    const onWatch = vi.fn();
+    render(<ProfilesTable {...props({ rows: [row({ running: true })], onWatch })} />);
+    // ProfilesTable.tsx, the running row's first action: its caption is the
+    // card dock's 'Open session'; restoring 'Live view' reds both arms.
+    const open = screen.getByRole('button', { name: 'Open session' });
+    expect(screen.queryByRole('button', { name: 'Live view' })).toBeNull();
+    fireEvent.click(open);
+    expect(onWatch).toHaveBeenCalledWith('p1');
     expect(screen.getByRole('button', { name: 'Stop' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Launch' })).toBeNull();
     cleanup();
@@ -323,6 +333,36 @@ describe('ProfilesTable', () => {
     // probed but the echo endpoint returned no IP — don't re-prompt a test.
     render(<ProfilesTable {...props({ rows: [row({ exitIp: null, probed: true })] })} />);
     expect(within(screen.getByRole('table')).getByText('no exit IP')).toBeTruthy();
+    cleanup();
+  });
+
+  it('Phase C (C8) — the THIRD exit state: a usable proxy whose last echo round-trip did not complete reads the SAME word as the card (EXIT_GEO_UNAVAILABLE_SHORT), titled with why — never "no exit IP" or "untested"', () => {
+    // ProfilesTable.tsx exit cell, the `r.exitProbeFailed === true` arm: dropping
+    // it falls through to 'no exit IP' (probed) and reds the first assertion;
+    // retyping the word instead of reading the constant reds the parity arm.
+    render(
+      <ProfilesTable
+        {...props({ rows: [row({ exitIp: null, probed: true, exitProbeFailed: true })] })}
+      />,
+    );
+    const table = screen.getByRole('table');
+    const cell = within(table).getByText(EXIT_GEO_UNAVAILABLE_SHORT);
+    expect(cell.getAttribute('data-component')).toBe('profile-row-exit-probe-failed');
+    expect(cell.getAttribute('title')).toBe(EXIT_GEO_UNAVAILABLE_TITLE);
+    expect(within(table).queryByText('no exit IP')).toBeNull();
+    expect(within(table).queryByText('untested')).toBeNull();
+    // Parity: the card renders the identical word for the identical state.
+    expect(EXIT_GEO_UNAVAILABLE_SHORT).toBe('exit geo unavailable');
+    cleanup();
+    // A VPN row keeps its own sentence (the tunnel state outranks the echo state).
+    render(
+      <ProfilesTable
+        {...props({
+          rows: [row({ exitIp: null, probed: true, exitProbeFailed: true, vpn: true })],
+        })}
+      />,
+    );
+    expect(within(screen.getByRole('table')).queryByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeNull();
     cleanup();
   });
 });

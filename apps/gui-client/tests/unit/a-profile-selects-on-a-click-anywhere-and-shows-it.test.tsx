@@ -324,8 +324,10 @@ describe('ProfilePhoneCard — the selection indicator is visible before hover (
 
     // Vacuity control: the actions menu on the SAME card still hides with
     // opacity-0 while closed, so "no opacity-0" above is a property of the
-    // indicator and not of a query that could never see the class.
-    const menu = container.querySelector('[data-component="card-actions-menu"]');
+    // indicator and not of a query that could never see the class. (Phase C
+    // portals the menu to document.body, so it is queried on the document.)
+    const menu = document.querySelector('[data-component="card-actions-menu"]');
+    expect(menu, 'the vacuity control needs the menu node').not.toBeNull();
     expect(menu?.classList.contains('opacity-0')).toBe(true);
   });
 

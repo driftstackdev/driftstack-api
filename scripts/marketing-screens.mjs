@@ -6,8 +6,8 @@
 // What it captures: the visual harness (apps/gui-client/visual-harness.html →
 // src/visual-harness/gallery.tsx) with `?scene=<name>`, which renders ONE
 // composition inside the app's real window chrome (TitleBar + Sidebar, dark +
-// oxblood) at a fixed stage (1280×800; the list view 1800×800 so its ~1490px
-// table fits with the Actions column in frame), from the same React components
+// oxblood) at a fixed stage (1280×800; the list view 1800×880 so its ~1490px
+// table fits with the Actions column in frame and every row above the fold), from the same React components
 // and the same CSS the Tauri app ships. Scenes:
 //   profiles-grid    Profiles view framing around the real ProfilePhoneCard grid
 //                    (8 curated states, ≥ 3 columns) — also cropped to a hero
@@ -34,7 +34,7 @@
 // compares pixel-for-pixel against the files on disk (exit 1 on any diff).
 //
 // Output (OUT_DIR, default apps/marketing-site/src/assets/screens):
-//   <scene>.png + <scene>.webp     2560×1600 (1280×800 @2x); profiles-list 3600×1600
+//   <scene>.png + <scene>.webp     2560×1600 (1280×800 @2x); profiles-list 3600×1760
 //   profiles-grid-hero.png/.webp   the card grid region of profiles-grid @2x
 //   manifest.json                  every file with its pixel size
 //
@@ -66,7 +66,7 @@ const OUT = resolve(REPO_ROOT, process.env.OUT_DIR ?? 'apps/marketing-site/src/a
  *  instant or size. */
 const FROZEN_NOW_ISO = '2026-06-15T06:42:00.000Z';
 const STAGE = { width: 1280, height: 800 };
-const LIST_STAGE = { width: 1800, height: 800 };
+const LIST_STAGE = { width: 1800, height: 880 };
 const DPR = 2;
 const WEBP_QUALITY = 90;
 /** CSS px of breathing room around the grid in the hero crop. */
@@ -97,6 +97,10 @@ const SCENES = [
     // clientWidth on the shell.
     guard: { selector: '[data-scene-region="list"] tbody tr', count: 8 },
     fits: '[data-scene-region="list"] .ds-table-shell',
+    // …and vertically: the window's main pane must not scroll either, or the
+    // last rows are cut at the frame (a six-tag row wrapped to four lines
+    // once the Actions column widened, and the eighth row fell off at 800).
+    fitsY: '[data-scene="profiles-list"] main',
   },
   {
     name: 'proxies',
@@ -189,12 +193,17 @@ function measureGuard(selector) {
   const xs = new Set(els.map((el) => Math.round(el.getBoundingClientRect().x)));
   return { count: els.length, columns: xs.size };
 }
-/** Runs INSIDE the page: does the element's content fit without horizontal
- *  scrolling (what a screenshot can show)? */
+/** Runs INSIDE the page: does the element's content fit without scrolling
+ *  (what a screenshot can show), on both axes? */
 function measureFits(selector) {
   const el = document.querySelector(selector);
   if (el === null) return null;
-  return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth };
+  return {
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+  };
 }
 /** Runs INSIDE the page: the values of every matched textarea/input. */
 function readValues(selector) {
@@ -273,6 +282,16 @@ async function renderScene(context, scene) {
       if (f.scrollWidth > f.clientWidth) {
         throw new Error(
           `${scene.name}: "${scene.fits}" is ${f.scrollWidth}px wide inside ${f.clientWidth}px — the right ${f.scrollWidth - f.clientWidth}px would be cut off the capture`,
+        );
+      }
+    }
+    if (scene.fitsY !== undefined) {
+      const f = await page.evaluate(measureFits, scene.fitsY);
+      if (f === null)
+        throw new Error(`${scene.name}: nothing matches fitsY guard "${scene.fitsY}"`);
+      if (f.scrollHeight > f.clientHeight) {
+        throw new Error(
+          `${scene.name}: "${scene.fitsY}" is ${f.scrollHeight}px tall inside ${f.clientHeight}px — the bottom ${f.scrollHeight - f.clientHeight}px would be cut off the capture`,
         );
       }
     }

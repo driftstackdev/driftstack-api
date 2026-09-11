@@ -287,18 +287,19 @@ describe('ProfilesView profile-lifecycle actions', () => {
       // meter became conditional the arm hung on an element that no longer renders.
       // Anchored on the subject itself now, so it cannot be broken by unrelated
       // chrome appearing or disappearing above the grid.
-      await screen.findByTitle(/Stored profile size/);
-      // Phase B (2026-09-11): the fixed-height tile has no slot for the size; it
-      // rides in the meta row's title (the details sheet, Phase C, will show it)
-      // — the formatted sealed-store size (3 MiB), distinct from the meter's
-      // account total.
-      // Polish (2026-09-11): the size is a static, titled info row in the card's
-      // ⋯ menu (it rode in the meta row's title, which only surfaced between
-      // pills — information with no affordance); the Phase C details sheet is
-      // its final home.
+      // Phase B (2026-09-11): the fixed-height tile has no slot for the size.
+      // Polish: it was a static info row in the ⋯ menu. Phase C (2026-09-11):
+      // its final home is the click-opened DETAILS SHEET — the ⓘ glyph on the
+      // card opens it; nothing on the resting tile or in the menu shows the
+      // size. The formatted sealed-store size (3 MiB) is distinct from the
+      // meter's account total.
+      const details = await screen.findByLabelText('Details for Demo');
+      expect(within(container).queryByTitle(/Stored profile size/)).toBeNull();
+      fireEvent.click(details);
       const sized = within(container).getByTitle(/Stored profile size/);
       expect(sized.getAttribute('data-component')).toBe('profile-size');
-      expect(sized.closest('[data-component="card-actions-menu"]')).not.toBeNull();
+      expect(sized.closest('[data-component="card-details-sheet"]')).not.toBeNull();
+      expect(sized.closest('[data-component="card-actions-menu"]')).toBeNull();
       expect(sized.textContent).toContain('3.0 MiB stored');
       expect(sized.getAttribute('title')).toMatch(
         /Stored profile size \(encrypted browser state\): 3\.0 MiB$/,

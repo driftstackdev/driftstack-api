@@ -8,7 +8,7 @@
     "deviceScaleFactor": 2,
     "profiles-list": {
       "width": 1800,
-      "height": 800
+      "height": 880
     }
   },
   "files": [
@@ -35,9 +35,9 @@
       "png": "profiles-list.png",
       "webp": "profiles-list.webp",
       "width": 3600,
-      "height": 1600,
+      "height": 1760,
       "cssWidth": 1800,
-      "cssHeight": 800
+      "cssHeight": 880
     },
     {
       "scene": "proxies",
