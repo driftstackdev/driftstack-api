@@ -79,6 +79,32 @@ while read -r _local_ref local_sha remote_ref _remote_sha; do
   echo "→ ${remote_ref#refs/tags/} is an annotated tag"
 done
 
+# 2026-09-11 — the gate certifies on CI's Node MAJOR, not whatever `node` is
+# first on PATH. Measured: this Mac ran Node 25, CI runs 22. Node 25's global
+# `localStorage` is a stub whose methods throw and it shadows jsdom's; every
+# storage read in the GUI sits in a try/catch, so the whole GUI suite passed
+# here against storage that cannot store — while on CI's real storage one
+# test's "☰ List" click persisted into the 29 tests after it and they failed.
+# Two green gates certified a red main. The major is read from ci.yml so the
+# two cannot drift apart silently; a Homebrew `node@<major>` is used when
+# present, otherwise the push is refused with the install line.
+ci_major=$(grep -m1 -oE "node-version: '[0-9]+'" .github/workflows/ci.yml | grep -oE '[0-9]+')
+here_major=$(node -v | sed 's/^v//' | cut -d. -f1)
+if [ -n "$ci_major" ] && [ "$here_major" != "$ci_major" ]; then
+  alt="/opt/homebrew/opt/node@${ci_major}/bin"
+  if [ -x "$alt/node" ]; then
+    echo "→ node v$here_major here, CI runs Node $ci_major — the gate uses $alt"
+    export PATH="$alt:$PATH"
+    hash -r 2>/dev/null || true
+  else
+    echo "✗ node v$here_major here, CI runs Node $ci_major, and $alt/node is not installed"
+    echo "  brew install node@$ci_major"
+    echo "  (a gate on another major can pass where CI fails — see apps/gui-client/tests/setup.ts (4))"
+    exit 1
+  fi
+fi
+echo "→ gate node $(node -v) (CI: $ci_major)"
+
 echo "→ typecheck (workspaces, including tsconfig.test.json)"
 npm run typecheck
 

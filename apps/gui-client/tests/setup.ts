@@ -11,6 +11,8 @@
 //      with a clean DOM. Safe to run even when no component was rendered.
 //   3. Restores real timers after every test, so a spec that installs fake
 //      ones cannot leak them into whatever runs next.
+//   4. Guarantees a REAL Web Storage on the window and EMPTIES it after every
+//      test (see the block at the bottom).
 //
 // (3) closes a real order-dependence. A describe block in
 // simulator-window-frozen.test.tsx ended with a test that called
@@ -30,8 +32,70 @@ import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
+// (4) Web Storage — measured 2026-09-11, two runtimes, two wrong truths:
+//
+//   • Node ≥ 25 ships an experimental GLOBAL `localStorage` whose methods throw
+//     ("setItem is not a function") and it shadows jsdom's on this global. Every
+//     storage read in the app sits in a try/catch, so on the Mac's Node 25 the
+//     whole suite ran against storage that cannot store and passed by accident.
+//   • CI's Node 22 gets jsdom's real Storage — which PERSISTS across the tests
+//     of a file. One test's "☰ List" click left `ds-profiles-view-mode=list`
+//     behind, and the 29 tests after it rendered the table and waited for a
+//     grid card that never mounted (a-vpn-row-is-resolved-never-socks5-probed).
+//
+// So: the storage must WORK (a stub that throws is not "no storage", it is a
+// broken instrument the app politely hides), and every test must start from an
+// empty one, the way the app does on a fresh install. Guarded by
+// tests/unit/the-test-storage-is-real-and-empty-for-every-test.test.tsx.
+
+class MemoryStorage implements Storage {
+  private map = new Map<string, string>();
+  get length(): number {
+    return this.map.size;
+  }
+  clear(): void {
+    this.map.clear();
+  }
+  getItem(key: string): string | null {
+    return this.map.get(String(key)) ?? null;
+  }
+  key(index: number): string | null {
+    return Array.from(this.map.keys())[index] ?? null;
+  }
+  removeItem(key: string): void {
+    this.map.delete(String(key));
+  }
+  setItem(key: string, value: string): void {
+    this.map.set(String(key), String(value));
+  }
+}
+
+function ensureRealStorage(name: 'localStorage' | 'sessionStorage'): Storage {
+  const g = globalThis as unknown as Record<string, unknown>;
+  const current = g[name] as Partial<Storage> | undefined;
+  if (typeof current?.setItem === 'function' && typeof current.getItem === 'function') {
+    return current as Storage;
+  }
+  const fresh = new MemoryStorage();
+  // Node's experimental global is an accessor; defineProperty replaces it. If
+  // some future runtime makes it non-configurable this THROWS — a suite that
+  // cannot store must not run and report green.
+  Object.defineProperty(globalThis, name, { value: fresh, configurable: true, writable: true });
+  if (typeof window !== 'undefined' && (window as unknown) !== globalThis) {
+    Object.defineProperty(window, name, { value: fresh, configurable: true, writable: true });
+  }
+  return fresh;
+}
+
+const STORAGES: ReadonlyArray<Storage> = [
+  ensureRealStorage('localStorage'),
+  ensureRealStorage('sessionStorage'),
+];
+
 afterEach(() => {
   // cleanup() first: unmount runs under whatever timer mode the test chose.
   cleanup();
   vi.useRealTimers();
+  // Then the storage: nothing a test stored outlives it.
+  for (const s of STORAGES) s.clear();
 });
