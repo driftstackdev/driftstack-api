@@ -1,0 +1,25 @@
+-- 2026-09-10 ((i) I7, VPN parity) — record WHEN a fleet verdict CONTRADICTED the
+-- exit stored on a proxy row, so every client agrees the tunnel was seen down.
+--
+-- account_proxies.exit_observed (0120) is the last exit identity a live session
+-- or a fleet-vantage test saw THROUGH the proxy, and the /proxies list hands it
+-- to every desktop client as the row's location. When a later fleet test finds
+-- the tunnel DOWN (the node reached a verdict and could not bring it up), nothing
+-- server-side said so: the row kept carrying the pre-failure exit, and a second
+-- Mac adopting it from the list showed a location for a tunnel the first Mac had
+-- just watched fail. The grid that ran the test knew; the list did not.
+--
+-- The exit is NOT nulled — it is still what was last observed, and the date it
+-- was observed still matters to a client that dates its exits. This column is
+-- the contradiction's own date: set when a fleet verdict says the tunnel is
+-- down while a stored exit exists, cleared (NULL) by the next exit observation
+-- (a session's report or a probe that saw an exit — the tunnel seen up again).
+-- A refusal / could-not-run (`not_run`) measured nothing and never sets it.
+-- Mirrors the desktop cache's `exitSupersededAt`; the list surfaces it as
+-- `exit_superseded_at` so the adoption on another Mac refuses an observation
+-- dated at or before it.
+--
+-- EXPAND ONLY. Nullable, no default, no back-fill: NULL = never contradicted.
+-- Reversible by dropping what it adds; it changes nothing that already exists.
+
+ALTER TABLE "account_proxies" ADD COLUMN "exit_superseded_at" timestamptz;

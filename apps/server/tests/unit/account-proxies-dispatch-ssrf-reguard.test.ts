@@ -69,6 +69,7 @@ function row(over: Partial<AccountProxyRow> & { scheme: string }): AccountProxyR
     osFingerprintAt: over.osFingerprintAt ?? null,
     exitObserved: over.exitObserved ?? null,
     exitObservedAt: over.exitObservedAt ?? null,
+    exitSupersededAt: over.exitSupersededAt ?? null,
   };
 }
 

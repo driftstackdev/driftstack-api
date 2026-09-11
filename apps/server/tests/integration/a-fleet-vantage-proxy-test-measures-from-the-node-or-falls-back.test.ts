@@ -1564,3 +1564,471 @@ describe('GET /v1/account/me/proxies — exit_observed rides on the list', () =>
     expect(Number.isNaN(Date.parse(exit.observed_at as string))).toBe(false);
   });
 });
+
+// (i) I3 + I7 — two things the (h) review left open about the STORED exit:
+//   I3  the live_session refusal said "its exit is shown from that session"
+//       whenever ANY stored exit existed — a probe's observation is "the last
+//       check's exit", and the prose must name the exit's real source.
+//   I7  a fleet verdict that found the tunnel DOWN never contradicted the stored
+//       exit server-side, so the /proxies list kept handing the pre-failure exit
+//       to every OTHER Mac while the grid that ran the test showed "tunnel down".
+//       `exit_superseded_at` (migration 0122) dates the contradiction; the exit
+//       is kept; the next exit observation clears it; a `not_run` never sets it.
+describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by a down verdict', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+  const SESSION_EXIT = {
+    ip: '203.0.113.9',
+    country: 'NL',
+    timezone: 'Europe/Amsterdam',
+    observed_via: 'session' as const,
+  };
+  const OBSERVED_AT = new Date('2026-09-01T00:00:00Z');
+
+  async function makeWireGuardProxy(): Promise<string> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: { ...auth(fx), 'content-type': 'application/json' },
+      payload: {
+        label: 'wg',
+        scheme: 'wireguard',
+        host: 'vpn.example.com',
+        port: 51820,
+        wireguard: {
+          private_key: WG_PRIV,
+          peer_public_key: WG_PUB,
+          endpoint: 'vpn.example.com:51820',
+          allowed_ips: '0.0.0.0/0',
+          address: '10.7.0.2/32',
+        },
+      },
+    });
+    expect(res.statusCode, res.body).toBe(201);
+    return res.json<{ id: string }>().id;
+  }
+
+  async function seedExit(
+    id: string,
+    exit: {
+      ip: string;
+      country: string | null;
+      timezone: string | null;
+      observed_via: 'session' | 'probe';
+    },
+    supersededAt: Date | null = null,
+  ): Promise<void> {
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: { exitObserved: exit, exitObservedAt: OBSERVED_AT, exitSupersededAt: supersededAt },
+    });
+  }
+
+  async function fleetTest(id: string): Promise<Record<string, unknown>> {
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    return res.json<Record<string, unknown>>();
+  }
+
+  async function listRow(id: string): Promise<Record<string, unknown>> {
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const row = res.json<{ data: Array<Record<string, unknown>> }>().data.find((r) => r.id === id);
+    if (row === undefined) throw new Error(`proxy ${id} missing from the list`);
+    return row;
+  }
+
+  /** A session dispatched THROUGH `proxyId` (the same atomic claim the real
+   *  dispatch makes). */
+  async function startSessionOn(proxyId: string): Promise<void> {
+    const repo = fx.agentSessionsRepo;
+    if (repo === undefined) throw new Error('enableAgentRuntime must be set for this arm');
+    const rec = await repo.create({ accountId: fx.accountId, tokenBudgetTotal: 1000 });
+    const claimed = await repo.setNodeId(rec.id, 'mac-other-node', proxyId);
+    expect(claimed?.proxyId).toBe(proxyId);
+  }
+
+  /** A node that answers every leg true with a geo exit (the tunnel seen UP). */
+  function registerUpNode(nodeId: string, exit: Record<string, unknown>): void {
+    const conn: FleetControlConnection = fx.fleetControlRegistry.register(nodeId, (data) => {
+      const f = JSON.parse(data) as { type: string; requestId: string };
+      if (f.type !== 'probeEgress') return;
+      conn.handleInbound(
+        JSON.stringify({
+          type: 'probeEgressResult',
+          requestId: f.requestId,
+          node_id: nodeId,
+          ok: true,
+          reachable: true,
+          auth_ok: true,
+          udp_associate: true,
+          can_route: true,
+          latency_ms: 58,
+          h2_ok: true,
+          quic_ok: true,
+          quic_detail: null,
+          error: null,
+          ...exit,
+        }),
+      );
+    });
+  }
+
+  it('I3 CRITICAL a live_session refusal over a PROBE-observed stored exit says "the last check", never "that session"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-050', {});
+    const id = await makeWireGuardProxy();
+    await seedExit(id, { ...SESSION_EXIT, observed_via: 'probe' });
+    await startSessionOn(id);
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    expect(body.not_run).toBe('live_session');
+    expect(body.reason).toMatch(/its exit is shown from the last check/);
+    expect(body.reason).not.toMatch(/from that session/);
+    expect(body.reason).toMatch(/End the session to test the tunnel\./);
+    // The exit still rides along, dated by its observation — only the prose changed.
+    expect((body.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
+    expect((body.exit_observed as { observed_at?: string })?.observed_at).toBe(
+      '2026-09-01T00:00:00.000Z',
+    );
+  });
+
+  it('I3 CONTROL — the same refusal over a SESSION-observed stored exit still says "from that session" and never "the last check"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-051', {});
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT);
+    await startSessionOn(id);
+    const body = await fleetTest(id);
+    expect(body.not_run).toBe('live_session');
+    expect(body.reason).toMatch(/its exit is shown from that session/);
+    expect(body.reason).not.toMatch(/last check/);
+  });
+
+  it('I7 CRITICAL a verdict that finds the tunnel DOWN stamps exit_superseded_at, KEEPS the stored exit at its own date, and the LIST carries both', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-052');
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT);
+    const before = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(before?.exitSupersededAt, 'never contradicted before the test').toBeNull();
+    const t0 = Date.now();
+    const body = await fleetTest(id);
+    // A real verdict (the node answered, the tunnel did not come up) — not a not_run.
+    expect(body.ok).toBe(false);
+    expect(body.measured_from).toBe('fleet');
+    expect('not_run' in body).toBe(false);
+    expect(body.reason).toMatch(/did not answer/);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    // The exit is what was last SEEN — kept, at the date it was seen.
+    expect(after?.exitObserved).toEqual(SESSION_EXIT);
+    expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+    // …and the contradiction is dated NOW, not by the observation.
+    expect(after?.exitSupersededAt).toBeInstanceOf(Date);
+    expect(after?.exitSupersededAt!.getTime()).toBeGreaterThanOrEqual(t0);
+    expect(after?.exitSupersededAt!.getTime()).toBeGreaterThan(OBSERVED_AT.getTime());
+    // The LIST — what a Mac that never ran this test adopts from — carries it.
+    const row = await listRow(id);
+    expect((row.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
+    expect(typeof row.exit_superseded_at).toBe('string');
+    expect(Date.parse(row.exit_superseded_at as string)).toBe(after!.exitSupersededAt!.getTime());
+  });
+
+  it('I7 CRITICAL a later probe that SEES an exit clears the stamp — the tunnel was seen up again', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-053', {
+      exit_ip: '198.51.100.44',
+      exit_country: 'DE',
+      exit_timezone: 'Europe/Berlin',
+    });
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(true);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved?.ip).toBe('198.51.100.44');
+    expect(after?.exitObserved?.observed_via).toBe('probe');
+    expect(after?.exitSupersededAt, 'an observation after the failure spends it').toBeNull();
+    const row = await listRow(id);
+    expect('exit_superseded_at' in row).toBe(true);
+    expect(row.exit_superseded_at).toBeNull();
+  });
+
+  it('I7 an un-migrated node (ip only) that would DOWNGRADE the stored geo still clears the stamp — seen up is seen up, whatever it could resolve', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // Same ip as the stored exit, no geo keys → the exit write is refused (it
+    // would erase real geo), but the tunnel WAS up, so the contradiction is spent.
+    registerUpNode('mac-eu-054', { exit_ip: '203.0.113.9' });
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(true);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved, 'the geo-bearing session exit is kept').toEqual(SESSION_EXIT);
+    expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+    expect(after?.exitSupersededAt).toBeNull();
+  });
+
+  it('I7 CONTROL — a node_busy (nothing ran) does NOT stamp: a wait is not a verdict about the tunnel', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-055', {
+      ok: false,
+      status: 'could_not_run',
+      error: 'node_busy',
+      quic_detail: null,
+      exit_ip: null,
+    });
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT);
+    const body = await fleetTest(id);
+    expect(body.not_run).toBe('node_busy');
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual(SESSION_EXIT);
+    expect(after?.exitSupersededAt).toBeNull();
+    expect((await listRow(id)).exit_superseded_at).toBeNull();
+  });
+
+  it('I7 CONTROL — a live_session refusal does NOT stamp either (nothing was dispatched)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-056');
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT);
+    await startSessionOn(id);
+    const body = await fleetTest(id);
+    expect(body.not_run).toBe('live_session');
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitSupersededAt).toBeNull();
+  });
+
+  it('I7 a down verdict on a row with NO stored exit stamps nothing — there is nothing to contradict; the list key is present and null', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-057');
+    const id = await makeWireGuardProxy();
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    expect('not_run' in body).toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toBeNull();
+    expect(after?.exitSupersededAt).toBeNull();
+    const row = await listRow(id);
+    expect('exit_superseded_at' in row, 'the key is PRESENT on every row').toBe(true);
+    expect(row.exit_superseded_at).toBeNull();
+  });
+
+  it('I7 a SECOND down verdict re-stamps with the newer failure — the stamp is the LATEST contradiction', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-058');
+    const id = await makeWireGuardProxy();
+    const older = new Date('2026-09-02T00:00:00Z');
+    await seedExit(id, SESSION_EXIT, older);
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitSupersededAt!.getTime()).toBeGreaterThan(older.getTime());
+  });
+
+  // (i) I7 follow-up (review of the batch) — the node's egress-LEAK verdict:
+  // `can_route:false` WITH an `exit_ip` that is the node's OWN address ("traffic
+  // is not leaving through the tunnel"). The first cut keyed the exit write on
+  // `exit_ip !== null`, so a leak stored the fleet Mac's public IP as this VPN's
+  // exit, dated now, and cleared the stamp — beside a reply that said ok:false.
+  const LEAK_FRAME = {
+    reachable: true,
+    auth_ok: true,
+    can_route: false,
+    latency_ms: 31,
+    quic_detail: null,
+    exit_ip: '192.0.2.77', // the measuring Mac's own address, not the tunnel's exit
+    exit_country: 'US',
+    exit_timezone: 'America/Los_Angeles',
+  };
+
+  it('I7 CRITICAL a can_route:false verdict that carries an exit_ip (the egress LEAK) is a DOWN verdict: the node IP is never stored, the stored exit is kept and STAMPED, the reply attaches no exit', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-059', LEAK_FRAME);
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT);
+    const t0 = Date.now();
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    expect(body.measured_from).toBe('fleet');
+    expect('not_run' in body).toBe(false);
+    expect(body.reason).toMatch(/could not reach the internet/);
+    // The raw measurement still reports what the node saw…
+    expect(body.exit_ip).toBe('192.0.2.77');
+    // …but it is NOT an observed exit of this tunnel.
+    expect('exit_observed' in body, 'no exit_observed beside a down verdict').toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved, 'the session exit is kept, the node IP is not stored').toEqual(
+      SESSION_EXIT,
+    );
+    expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
+    expect(after?.exitSupersededAt).toBeInstanceOf(Date);
+    expect(after?.exitSupersededAt!.getTime()).toBeGreaterThanOrEqual(t0);
+    const row = await listRow(id);
+    expect((row.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
+    expect(typeof row.exit_superseded_at).toBe('string');
+  });
+
+  it('I7 a leak verdict on a row with NO stored exit stores nothing — the node IP never becomes an exit, and there is nothing to contradict', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-060', LEAK_FRAME);
+    const id = await makeWireGuardProxy();
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    expect('exit_observed' in body).toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toBeNull();
+    expect(after?.exitObservedAt).toBeNull();
+    expect(after?.exitSupersededAt).toBeNull();
+  });
+
+  it('I7 a leak verdict does NOT clear an older stamp — it re-stamps with the newer contradiction', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-061', LEAK_FRAME);
+    const id = await makeWireGuardProxy();
+    const older = new Date('2026-09-02T00:00:00Z');
+    await seedExit(id, SESSION_EXIT, older);
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(false);
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved).toEqual(SESSION_EXIT);
+    expect(after?.exitSupersededAt, 'not cleared by a non-exit').not.toBeNull();
+    expect(after?.exitSupersededAt!.getTime()).toBeGreaterThan(older.getTime());
+  });
+
+  it('I7 CONTROL — the same frame with can_route:true IS an exit: written, dated now, stamp cleared (the predicate is the verdict, not the field)', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerDeadProxyNode('mac-eu-062', { ...LEAK_FRAME, can_route: true });
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(true);
+    expect((body.exit_observed as { ip?: string })?.ip).toBe('192.0.2.77');
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved?.ip).toBe('192.0.2.77');
+    expect(after?.exitObserved?.observed_via).toBe('probe');
+    expect(after?.exitSupersededAt).toBeNull();
+  });
+
+  // (i) I3 follow-up — a CONTRADICTED stored exit (stamp set) is one the Mac
+  // that ran the failing test refuses to show, and the last check produced no
+  // exit at all: the refusal neither attaches it nor says it is shown.
+  it('I3 CRITICAL a live_session refusal over a CONTRADICTED probe exit says neither "that session" nor "the last check", and attaches no exit', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-063', {});
+    const id = await makeWireGuardProxy();
+    await seedExit(
+      id,
+      { ...SESSION_EXIT, observed_via: 'probe' },
+      new Date('2026-09-02T00:00:00Z'),
+    );
+    await startSessionOn(id);
+    const body = await fleetTest(id);
+    expect(body.not_run).toBe('live_session');
+    expect(body.reason).toBe(
+      'This VPN is in use by a live session. End the session to test the tunnel.',
+    );
+    expect('exit_observed' in body, 'a contradicted exit is not attached').toBe(false);
+    // The stored exit and its stamp are untouched — nothing was dispatched.
+    const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
+    expect(after?.exitObserved?.ip).toBe('203.0.113.9');
+    expect(after?.exitSupersededAt?.toISOString()).toBe('2026-09-02T00:00:00.000Z');
+    // …and the LIST still carries both, for the client to date.
+    const row = await listRow(id);
+    expect((row.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
+    expect(row.exit_superseded_at).toBe('2026-09-02T00:00:00.000Z');
+  });
+
+  it('I3 the same over a CONTRADICTED session exit: no "from that session" either', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      enableAgentRuntime: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-064', {});
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
+    await startSessionOn(id);
+    const body = await fleetTest(id);
+    expect(body.not_run).toBe('live_session');
+    expect(body.reason).not.toMatch(/exit is shown/);
+    expect('exit_observed' in body).toBe(false);
+  });
+
+  it('I7 CRITICAL a no_node refusal attaches no CONTRADICTED exit either — CONTROL: an uncontradicted one still rides along, dated', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    // No node registered → the fleet is asked and answers "no node".
+    const id = await makeWireGuardProxy();
+    await seedExit(id, SESSION_EXIT, new Date('2026-09-02T00:00:00Z'));
+    const contradicted = await fleetTest(id);
+    expect(contradicted.not_run).toBe('no_node');
+    expect('exit_observed' in contradicted).toBe(false);
+    // CONTROL — clear the stamp and the very same reply carries the exit.
+    await seedExit(id, SESSION_EXIT, null);
+    const plain = await fleetTest(id);
+    expect(plain.not_run).toBe('no_node');
+    expect((plain.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
+    expect((plain.exit_observed as { observed_at?: string })?.observed_at).toBe(
+      '2026-09-01T00:00:00.000Z',
+    );
+  });
+});

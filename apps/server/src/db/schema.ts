@@ -774,6 +774,16 @@ export const accountProxies = pgTable(
       observed_via: 'session' | 'probe';
     }>(),
     exitObservedAt: timestamp('exit_observed_at', { withTimezone: true }),
+    // (i) I7 (migration 0122) — WHEN a fleet verdict CONTRADICTED `exitObserved`:
+    // the node reached a verdict and the tunnel was down while a stored exit
+    // existed. The exit itself is kept (it is still the last thing observed, at
+    // its own date); this is the contradiction's date, which the /proxies list
+    // surfaces so a client adopting the stored exit on another Mac refuses an
+    // observation dated at or before it. Cleared (NULL) by the next exit write —
+    // a session's report or a probe that saw an exit — because the tunnel was
+    // seen up again. A `not_run` (refusal / could-not-run) measured nothing and
+    // never sets it. NULL = never contradicted.
+    exitSupersededAt: timestamp('exit_superseded_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .default(sql`now()`),

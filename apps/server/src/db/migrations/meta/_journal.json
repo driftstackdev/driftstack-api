@@ -855,6 +855,13 @@
       "when": 1786665600009,
       "tag": "0121_add_agent_session_provisioning_detail",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1786665600010,
+      "tag": "0122_add_account_proxy_exit_superseded_at",
+      "breakpoints": true
     }
   ]
 }

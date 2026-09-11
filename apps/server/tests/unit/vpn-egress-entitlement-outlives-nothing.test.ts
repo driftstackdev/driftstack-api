@@ -50,6 +50,7 @@ function rowOf(scheme: AccountProxyRow['scheme']): AccountProxyRow {
     osFingerprintAt: null,
     exitObserved: null,
     exitObservedAt: null,
+    exitSupersededAt: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

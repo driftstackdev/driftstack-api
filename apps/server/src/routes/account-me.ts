@@ -551,6 +551,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               observed_via: r.exitObserved.observed_via,
               observed_at: r.exitObservedAt?.toISOString() ?? null,
             },
+      // (i) I7 — when a fleet verdict found the tunnel DOWN while `exit_observed`
+      // was set: the stored exit is what was last SEEN, this is when it was
+      // CONTRADICTED. A client adopting the exit from this list (the grid on a
+      // second Mac, which never saw the failing test) refuses an observation
+      // dated at or before it, so both Macs agree the tunnel was seen down.
+      // Cleared by the next exit observation (session or probe). null = never
+      // contradicted — never a default.
+      exit_superseded_at: r.exitSupersededAt?.toISOString() ?? null,
       created_at: r.createdAt.toISOString(),
       updated_at: r.updatedAt.toISOString(),
     };
@@ -1133,7 +1141,19 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
        *  fleet said since, and a client that keeps a "this exit was contradicted
        *  at T" stamp can only honour it when the reply dates the observation
        *  rather than letting the reply time stand in for it. `observed_at` is
-       *  null for a row whose observation predates the column. */
+       *  null for a row whose observation predates the column.
+       *  (i) I7 follow-up — and NEVER a CONTRADICTED exit: a non-null
+       *  `exitSupersededAt` always postdates the stored exit (every exit write
+       *  clears it), so the stored exit is one a fleet verdict has since found
+       *  the tunnel down behind. The Mac that ran that test refuses to show it;
+       *  a Mac with no local stamp would adopt it off this reply — so the reply
+       *  attaches none (the LIST still carries it beside the stamp, dated). */
+      const storedExitUnlessSuperseded = (): {
+        ip: string;
+        country: string | null;
+        timezone: string | null;
+        observed_via: 'session' | 'probe';
+      } | null => (row.exitSupersededAt !== null ? null : (row.exitObserved ?? null));
       const storedExitForReply = ():
         | {
             exit_observed: {
@@ -1146,8 +1166,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             };
           }
         | Record<string, never> => {
-        const stored = row.exitObserved;
-        if (stored === null || stored === undefined) return {};
+        const stored = storedExitUnlessSuperseded();
+        if (stored === null) return {};
         return {
           exit_observed: {
             ip: stored.ip,
@@ -1199,16 +1219,31 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 { proxyId: row.id, agentSessionId: live.id, status: live.status },
                 'proxy test: refusing a VPN fleet probe while a live session holds the tunnel',
               );
-              const stored = row.exitObserved;
               // (h) finding 24 — promise "its exit is shown from that session"
               // ONLY when a stored exit is actually attached below; otherwise
               // the sentence would point at an exit cell that reads "run Check".
+              // (i) I3 — and only when that exit IS the session's: a stored
+              // exit a fleet probe observed (`observed_via: 'probe'`) is "the
+              // last check's exit", not something the live session reported.
+              // The prose names the exit's real source; a person reading the
+              // exit cell must not be told a session observed what a check did.
+              // (i) I7 follow-up — a CONTRADICTED exit (`exitSupersededAt` set)
+              // is attached by neither `storedExitForReply` nor this sentence:
+              // the last check found the tunnel DOWN and produced no exit, and
+              // the Mac that ran it shows an empty cell, so "its exit is shown
+              // from the last check" would name an exit nobody shows. Same
+              // predicate as the attachment, so prose and payload cannot part.
+              const stored = storedExitUnlessSuperseded();
+              const exitSource =
+                stored === null ? 'none' : stored.observed_via === 'session' ? 'session' : 'probe';
               return {
                 ok: false,
                 reason:
-                  stored !== null && stored !== undefined
+                  exitSource === 'session'
                     ? 'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.'
-                    : 'This VPN is in use by a live session. End the session to test the tunnel.',
+                    : exitSource === 'probe'
+                      ? 'This VPN is in use by a live session; its exit is shown from the last check. End the session to test the tunnel.'
+                      : 'This VPN is in use by a live session. End the session to test the tunnel.',
                 measured_from: 'control_plane' as const,
                 // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
                 // machine-readable discriminator a client branches on, so a
@@ -1329,13 +1364,21 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest
           // wins), so the /proxies list can show a VPN row's location and hand its
           // timezone to the next launch before any session has run. ONLY when the
-          // node saw an exit: a null exit_ip writes NOTHING and never nulls a value a
-          // live session observed earlier. Best-effort, owner-scoped, logged at info
-          // — mirrors persistOsFingerprintIfObserved: a persistence failure must
-          // not throw, because a throw here is caught by this closure's handler and
-          // would RELABEL a node measurement as `control_plane`.
+          // proxy was USABLE and the node saw an exit: a null exit_ip writes
+          // NOTHING and never nulls a value a live session observed earlier.
+          // ⛔ (i) I7 follow-up — `usable`, not `exit_ip !== null`: the node's
+          // egress-LEAK verdict is `can_route:false` WITH an exit_ip — the node's
+          // OWN public address, "traffic is not leaving through the tunnel"
+          // (HarnessCoordinator.swift `canRoute:false, exitIp: proxiedIp`). That
+          // ip is not this tunnel's exit; storing it dated now would put the
+          // fleet Mac's address on the /proxies list as this VPN's location,
+          // beside a reply that says `ok:false`, and clear the superseded stamp
+          // with a non-exit. Best-effort, owner-scoped, logged at info — mirrors
+          // persistOsFingerprintIfObserved: a persistence failure must not throw,
+          // because a throw here is caught by this closure's handler and would
+          // RELABEL a node measurement as `control_plane`.
           const exitObserved =
-            r.exit_ip === null
+            !usable || r.exit_ip === null
               ? undefined
               : {
                   ip: r.exit_ip,
@@ -1358,25 +1401,54 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             existingExit !== null &&
             existingExit.ip === exitObserved.ip &&
             (existingExit.country !== null || existingExit.timezone !== null);
-          if (exitObserved !== undefined && !wouldDowngrade) {
+          // (i) I7 — the row's `exit_superseded_at` (migration 0122). Three
+          // outcomes, decided by the node's VERDICT (`usable`: reached a verdict,
+          // reachable, auth ok, can route) — never by whether an `exit_ip` came
+          // back, since the leak frame above carries one on a DOWN verdict:
+          //   * the proxy was usable and the node saw an exit → the tunnel was
+          //     up: the exit is written (unless it would downgrade stored geo)
+          //     AND the stamp is cleared, because a contradiction older than an
+          //     observation is spent;
+          //   * the node reached a verdict and the proxy is not usable (no
+          //     exit, or a leak's non-exit) → the tunnel is DOWN: the stored
+          //     exit (if any) is contradicted NOW. It is kept — it is still the
+          //     last thing seen, at its own date — and the stamp dates the
+          //     contradiction so the /proxies list can carry it to a Mac that
+          //     never saw this test;
+          //   * nothing ran (`could_not_run`) → nothing was measured, nothing
+          //     is written: a wait is not a verdict about the tunnel.
+          // Best-effort like the exit write: a persistence failure must not
+          // throw, or the node's measurement would be relabelled `control_plane`.
+          const stampUpdates: AccountProxyRowUpdates | null =
+            exitObserved !== undefined
+              ? wouldDowngrade
+                ? row.exitSupersededAt !== null
+                  ? { exitSupersededAt: null }
+                  : null
+                : {
+                    exitObserved: {
+                      ip: exitObserved.ip,
+                      country: exitObserved.country,
+                      timezone: exitObserved.timezone,
+                      observed_via: 'probe',
+                    },
+                    exitObservedAt: new Date(),
+                    exitSupersededAt: null,
+                  }
+              : !usable && probeReachedVerdict(r) && row.exitObserved !== null
+                ? { exitSupersededAt: new Date() }
+                : null;
+          if (stampUpdates !== null) {
             try {
               await proxiesRepo.update({
                 id: row.id,
                 accountId: ctx.account.id,
-                updates: {
-                  exitObserved: {
-                    ip: exitObserved.ip,
-                    country: exitObserved.country,
-                    timezone: exitObserved.timezone,
-                    observed_via: 'probe',
-                  },
-                  exitObservedAt: new Date(),
-                },
+                updates: stampUpdates,
               });
             } catch (err) {
               request.log.info(
                 { proxyId: row.id, err },
-                'proxy test: failed to persist probe-observed exit',
+                'proxy test: failed to persist the probe-observed exit / exit_superseded_at',
               );
             }
           }

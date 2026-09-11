@@ -3296,6 +3296,9 @@
             },
             "required": ["ip", "country", "timezone", "observed_via", "observed_at"]
           },
+          "exit_superseded_at": {
+            "type": ["string", "null"]
+          },
           "created_at": {
             "type": "string"
           },

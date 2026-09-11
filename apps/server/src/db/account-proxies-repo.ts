@@ -71,6 +71,12 @@ export interface AccountProxyRow {
   } | null;
   /** When {@link exitObserved} was recorded, or null when never observed. */
   exitObservedAt: Date | null;
+  /** (i) I7 (migration 0122) — when a fleet verdict found the tunnel DOWN while
+   *  {@link exitObserved} was set (the stored exit was contradicted), or null when
+   *  never contradicted / cleared by a later exit observation. The exit is kept;
+   *  this dates the contradiction so a list consumer can refuse to adopt an
+   *  observation dated at or before it. */
+  exitSupersededAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -124,6 +130,9 @@ export interface AccountProxyRowUpdates {
     observed_via: 'session' | 'probe';
   } | null;
   exitObservedAt?: Date | null;
+  /** (i) I7 — set by the fleet-vantage Test when its verdict contradicts the
+   *  stored exit; cleared (null) by every exit write (relay or probe). */
+  exitSupersededAt?: Date | null;
 }
 
 export interface AccountProxiesRepo {
@@ -208,6 +217,7 @@ function toRow(r: typeof accountProxies.$inferSelect): AccountProxyRow {
     osFingerprintAt: r.osFingerprintAt,
     exitObserved: r.exitObserved,
     exitObservedAt: r.exitObservedAt,
+    exitSupersededAt: r.exitSupersededAt,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
@@ -526,6 +536,7 @@ export class InMemoryAccountProxiesRepo implements AccountProxiesRepo {
       osFingerprintAt: null,
       exitObserved: null,
       exitObservedAt: null,
+      exitSupersededAt: null,
       createdAt: now,
       updatedAt: now,
     };

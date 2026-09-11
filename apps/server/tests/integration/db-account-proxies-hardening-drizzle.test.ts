@@ -114,6 +114,7 @@ beforeAll(async () => {
       os_fingerprint_at timestamptz,
       exit_observed jsonb,
       exit_observed_at timestamptz,
+      exit_superseded_at timestamptz,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
     )

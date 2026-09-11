@@ -2326,6 +2326,12 @@ function buildRegistry(): OpenAPIRegistry {
         })
         .nullable()
         .optional(),
+      // (i) I7 — when a fleet-vantage test found the tunnel DOWN while
+      // `exit_observed` was set (ISO 8601): the stored exit is the last thing
+      // SEEN, this is when it was CONTRADICTED. A client adopting `exit_observed`
+      // refuses an observation dated at or before it. Cleared (null) by the next
+      // exit observation. null = never contradicted. Mirrors api-types.
+      exit_superseded_at: z.string().nullable().optional(),
       created_at: z.string(),
       updated_at: z.string(),
     })

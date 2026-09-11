@@ -66,6 +66,9 @@ interface CapabilityReportAccountProxies {
         observed_via: 'session' | 'probe';
       };
       exitObservedAt?: Date;
+      /** (i) I7 — a session exit is the tunnel seen UP: it clears the stamp a
+       *  fleet failure left on the row (null), never sets one. */
+      exitSupersededAt?: Date | null;
     };
   }): Promise<unknown>;
 }
@@ -245,6 +248,10 @@ export function makeSessionCapabilityReportRelay(
               observed_via: 'session',
             },
             exitObservedAt: now(),
+            // (i) I7 — the tunnel is up (a session is browsing through it and
+            // just reported its exit), so a fleet failure's contradiction stamp
+            // no longer describes it. Cleared with every exit write.
+            exitSupersededAt: null,
           },
         });
       } catch (error) {

@@ -235,6 +235,14 @@ export const AccountProxyMetadataSchema = z.object({
     })
     .nullable()
     .optional(),
+  // (i) I7 — when a fleet-vantage test found the tunnel DOWN while
+  // `exit_observed` was set (ISO 8601): the stored exit is what was last SEEN,
+  // this is when it was CONTRADICTED. A client adopting `exit_observed` must
+  // refuse an observation dated at or before it — that is how a Mac that never
+  // ran the failing test agrees with the one that did. Cleared (null) by the
+  // next exit observation, session or probe. null = never contradicted.
+  // Optional so a client built against an older server keeps parsing.
+  exit_superseded_at: z.string().nullable().optional(),
   created_at: z.string(),
   updated_at: z.string(),
 });

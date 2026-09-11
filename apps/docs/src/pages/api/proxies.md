@@ -59,6 +59,7 @@ difference. What you need:
   "has_password": true,
   "has_secret": false,
   "exit_observed": null,
+  "exit_superseded_at": null,
   "created_at": "2026-06-16T09:15:00Z",
   "updated_at": "2026-06-16T09:15:00Z"
 }
@@ -78,6 +79,20 @@ reported it) or `probe` (a fleet-vantage test measured it); `country` and
 WireGuard proxy this is the only source of its location and timezone short
 of running a test, since only a session or a fleet node can see through the
 tunnel. `null` means not observed, never "no location".
+
+`exit_superseded_at` is when a fleet-vantage test found the tunnel **down**
+while `exit_observed` was set (ISO 8601), or `null` when never contradicted.
+The stored exit is kept — it is still the last exit seen, at its own
+`observed_at` — and this dates the contradiction: a client adopting
+`exit_observed` from the list refuses an observation dated at or before
+`exit_superseded_at` (the Driftstack GUI does, and stamps its own cache), so a
+client that never ran the failing test agrees with the one that did. The next
+exit observation (a session's report or a test that saw an exit through a
+usable tunnel) clears it; a verdict whose `exit_ip` is not the tunnel's exit —
+`can_route: false` with the measuring Mac's own address — is a down verdict
+and sets it. A test that was refused or could not run (`not_run`) measured
+nothing and never sets it, and while it is set a `not_run` reply attaches no
+`exit_observed` at all (see the test endpoint below).
 
 ## List
 
@@ -296,7 +311,10 @@ The `exit_observed` beside a `not_run` is the proxy's **stored** observation,
 not something this test measured, so it carries `observed_at` — when it was
 observed (`null` for an observation recorded before the field existed). Date
 it by that, never by the reply: a fleet test that later found the tunnel down
-can postdate it.
+can postdate it. A stored exit a fleet test has since contradicted (the
+proxy's `exit_superseded_at` is set) is **not attached** — and the
+`live_session` reason then does not say the exit is shown — because the last
+check found the tunnel down and produced no exit to show.
 
 Absent `not_run`, an `ok: false` result is a measurement. Two of those are
 worth knowing for a VPN proxy on `vantage=fleet`: a stored configuration the

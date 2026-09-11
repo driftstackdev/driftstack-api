@@ -77,6 +77,12 @@ type AccountProxyMetadata struct {
 	// WireGuard proxy this is the only source of its location and timezone
 	// short of running a test. Nil is "not observed", never a placeholder.
 	ExitObserved *AccountProxyExitObserved `json:"exit_observed"`
+	// ExitSupersededAt is when a fleet-vantage test found the tunnel DOWN while
+	// ExitObserved was set (RFC 3339), or nil when never contradicted. The
+	// stored exit is the last thing SEEN; this is when it was CONTRADICTED, so
+	// a caller adopting ExitObserved should refuse an observation dated at or
+	// before it. Cleared by the next exit observation (session or probe).
+	ExitSupersededAt *string `json:"exit_superseded_at"`
 }
 
 // AccountProxyExitObserved is the stored exit identity on AccountProxyMetadata.
