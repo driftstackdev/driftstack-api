@@ -287,4 +287,92 @@ describe('VPN parity — a live session back-fills the EXIT IDENTITY the box obs
     await new Promise((r) => setTimeout(r, 20));
     expect(update).not.toHaveBeenCalled();
   });
+
+  // (i) I7 — a fleet-vantage Test that found the tunnel DOWN stamps
+  // exit_superseded_at on the row (the stored exit was contradicted). A session
+  // that then reports its exit is the tunnel seen UP, so the same write that
+  // records the exit must clear the stamp: a list consumer refuses to adopt an
+  // observation dated at or before the stamp, so a clear that never happened
+  // would keep a live proxy reading as contradicted. Seeded through the real
+  // in-memory repo so the assertion is on the ROW, not on a mock's argument.
+  const SUPERSEDED_AT = new Date('2026-09-03T11:00:00.000Z');
+  const seedStampedRow = async (): Promise<InMemoryAccountProxiesRepo> => {
+    const proxies = new InMemoryAccountProxiesRepo();
+    await proxies.create('acc_owner', {
+      id: 'prx_owned',
+      label: 'mine',
+      scheme: 'openvpn',
+      host: 'vpn.example',
+      port: 1194,
+      username: null,
+      wrappedPassword: null,
+    });
+    await proxies.update({
+      id: 'prx_owned',
+      accountId: 'acc_owner',
+      updates: {
+        exitObserved: {
+          ip: '198.51.100.1',
+          country: 'DE',
+          timezone: 'Europe/Berlin',
+          observed_via: 'probe',
+        },
+        exitObservedAt: new Date('2026-09-03T10:00:00.000Z'),
+        exitSupersededAt: SUPERSEDED_AT,
+      },
+    });
+    const seeded = await proxies.findById({ id: 'prx_owned', accountId: 'acc_owner' });
+    // The seed is real: a stamp that was never there would make the clear vacuous.
+    expect(seeded?.exitSupersededAt).toStrictEqual(SUPERSEDED_AT);
+    return proxies;
+  };
+
+  it("CRITICAL (i) I7 a session report carrying an exit CLEARS a fleet failure's exit_superseded_at stamp on the row (null) in the same write that records the new exit — the tunnel is up, the contradiction no longer describes it", async () => {
+    const proxies = await seedStampedRow();
+
+    relayWith('prx_owned', proxies)(exitFrame(), 'node-1');
+    await vi.waitFor(async () => {
+      const row = await proxies.findById({ id: 'prx_owned', accountId: 'acc_owner' });
+      expect(row?.exitObservedAt).toStrictEqual(MEASURED_AT);
+    });
+    const row = await proxies.findById({ id: 'prx_owned', accountId: 'acc_owner' });
+    // Property: the stamp is CLEARED — null, not left as the seeded date and not
+    // merely dropped from the update (an absent key leaves the in-memory spread
+    // untouched, an `undefined` value is not null; only an explicit null passes).
+    expect(row?.exitSupersededAt).toBeNull();
+    // Property: the same write recorded the session's exit (latest wins over the
+    // probe's), so the clear rides the exit write rather than a separate one.
+    expect(row?.exitObserved).toEqual({
+      ip: '203.0.113.9',
+      country: 'NL',
+      timezone: 'Europe/Amsterdam',
+      observed_via: 'session',
+    });
+  });
+
+  it('(i) I7 the clear is carried on the update itself as an explicit `exitSupersededAt: null` — the real repo writes only the keys it is handed, so an omitted key would leave the stamp standing', async () => {
+    const update = vi.fn((_a: ExitUpdate & { updates: { exitSupersededAt?: Date | null } }) =>
+      Promise.resolve(undefined),
+    );
+    relayWith('prx_owned', { update })(exitFrame(), 'node-1');
+    await vi.waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    const updates = update.mock.calls[0]![0].updates;
+    expect(Object.hasOwn(updates, 'exitSupersededAt')).toBe(true);
+    expect(updates.exitSupersededAt).toBeNull();
+  });
+
+  it('CONTROL (i) I7 a report with NO exit identity (a QUIC-only observation) leaves the stamp standing — only an exit write clears it, because only an exit says the tunnel carried traffic', async () => {
+    const proxies = await seedStampedRow();
+
+    // h3ConnectionObserved true, no exitIp: the QUIC back-fill fires, the exit
+    // back-fill does not.
+    relayWith('prx_owned', proxies)(report(), 'node-1');
+    await vi.waitFor(async () => {
+      const row = await proxies.findById({ id: 'prx_owned', accountId: 'acc_owner' });
+      expect(row?.quicMeasured).toBe('h3');
+    });
+    const row = await proxies.findById({ id: 'prx_owned', accountId: 'acc_owner' });
+    expect(row?.exitSupersededAt, 'not cleared by a non-exit write').toStrictEqual(SUPERSEDED_AT);
+    expect(row?.exitObserved?.observed_via).toBe('probe');
+  });
 });
