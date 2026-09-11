@@ -117,6 +117,32 @@ type AccountProxyTestResult struct {
 	LatencyMs int    `json:"latency_ms,omitempty"`
 	Reason    string `json:"reason,omitempty"`
 	NotRun    string `json:"not_run,omitempty"`
+	// MeasuredFrom names the vantage that produced the verdict: "control_plane"
+	// or "fleet" (a Mac in the fleet, for VPN rows and ?vantage=fleet).
+	MeasuredFrom *string `json:"measured_from,omitempty"`
+	// OsFingerprint is the proxy's own TCP-stack fingerprint, present only when
+	// the control plane actually observed it. Absent is "not observed", never
+	// a placeholder OS.
+	OsFingerprint *AccountProxyOsFingerprint `json:"os_fingerprint,omitempty"`
+	// OsFingerprintUnavailable names WHY OsFingerprint is absent when the server
+	// knows: "vpn_tunnel" (a tunnel has no SOCKS5 stack to fingerprint),
+	// "not_observed" (the observer tunnel was refused) or "observer_off" (the
+	// deployment runs no observer). Nil when a fingerprint is present or the
+	// server predates the field.
+	OsFingerprintUnavailable *string `json:"os_fingerprint_unavailable,omitempty"`
+	// ExitObserved is the exit the fleet saw behind a VPN row, when one was
+	// observed; nil otherwise.
+	ExitObserved *AccountProxyExitObserved `json:"exit_observed,omitempty"`
+}
+
+// AccountProxyOsFingerprint is the control plane's passive TCP-stack
+// fingerprint of the proxy host (or its exit IP), as the server reports it.
+type AccountProxyOsFingerprint struct {
+	OS          string `json:"os"`
+	Confidence  string `json:"confidence"`
+	Reason      string `json:"reason"`
+	ObservedIP  string `json:"observed_ip"`
+	ObservedVia string `json:"observed_via"`
 }
 
 // AttachToSession sets the proxy config for a session. The body's

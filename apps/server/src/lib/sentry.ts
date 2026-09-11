@@ -109,6 +109,8 @@ const SENTRY_SENSITIVE_KEYS = new Set<string>([
   'id_token',
   'idtoken',
   'code_verifier',
+  // OAuth v2 hand-off: the browser-held flow secret redeemed for a session.
+  'flow_secret',
   'codeverifier',
   // OAuth start URL embeds the signed state handshake token.
   'authorize_url',

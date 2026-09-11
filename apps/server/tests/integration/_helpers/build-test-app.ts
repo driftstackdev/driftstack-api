@@ -1888,7 +1888,14 @@ export async function buildTestApp(opts: TestAppOptions = {}): Promise<TestAppFi
         }
       : {}),
     ...(opts.oauthClient !== undefined && oauthClientService !== undefined
-      ? { oauthClient: opts.oauthClient, oauthClientService, oauthLinksRepo }
+      ? {
+          // 2026-09-11 — the v2 OAuth flow store is injected HERE, not by each
+          // test: the in-memory MFA challenge store above is the test-side
+          // twin of the RedisMfaChallengeStore bootstrap wires.
+          oauthClient: { ...opts.oauthClient, flowStore: mfaChallengeStore },
+          oauthClientService,
+          oauthLinksRepo,
+        }
       : {}),
   });
 

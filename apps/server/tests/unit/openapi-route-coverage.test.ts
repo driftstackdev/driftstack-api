@@ -259,7 +259,9 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // 235 since T-9 published `GET /v1/agent-sessions/{id}/network`.
     // P-23 — 236 since `GET /v1/profiles/{id}/activity` was published.
     // P-17 — 237 since `POST /v1/agent-sessions/{id}/egress` was published.
-    expect(specOperations.size).toBe(237);
+    // 2026-09-11 — 238 since `POST /v1/auth/oauth-client/redeem` was published
+    // (v2 cookie-free sign-in hand-off).
+    expect(specOperations.size).toBe(238);
     // f66e8a02c added PUT /v1/admin/incidents/:id as the 254th unique Fastify
     // registration; this verifier-only correction does not add a route.
     // 256 since V-1611 #14 registered `GET /v1/teams` + `PATCH /v1/teams/:id`.
@@ -269,7 +271,9 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // 259 since P-17 registered `POST /v1/agent-sessions/:id/egress`.
     // 260 since #7 registered `GET /v1/agent-sessions/:id/captures/:captureId` (live
     // route + its disabled twin share one normalized method+path, so +1; unpublished).
-    expect(routeOperations.size).toBe(260);
+    // 261 since 2026-09-11 registered `POST /v1/auth/oauth-client/redeem` — published,
+    // so it is deliberately NOT in INTENTIONALLY_UNPUBLISHED_OPERATIONS.
+    expect(routeOperations.size).toBe(261);
   });
 
   it('documents the method-specific customer-core contract', () => {

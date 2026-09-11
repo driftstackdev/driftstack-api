@@ -720,8 +720,26 @@ const apiBaseUrl = resolveApiBaseUrl();
       // the authorize_url and let the browser navigate there. The
       // server sets the HTTP-only PKCE cookie via Set-Cookie on this
       // same response. Errors surface in the banner.
+      //
+      // 2026-09-11 cookie-free v2 (owner blocker "Google/GitHub login
+      // broken"): this page is on app.driftstack.io and the API on
+      // api.driftstack.dev, so the Set-Cookie above arrives on a CROSS-SITE
+      // XHR response and Safari ITP (the owner's default) drops it before
+      // it is stored — the callback then fails with "PKCE verifier cookie
+      // missing". v2 keeps no browser state on the API host: before
+      // navigating, this page mints a random flow_secret, stores it in ITS
+      // OWN first-party localStorage under the server-issued flow_id, and
+      // sends only binding_hash = sha256(flow_secret) to /start. A new
+      // server signs that digest into the state and sets NO cookie; the
+      // callback page later proves the preimage to /redeem. An OLD server
+      // ignores binding_hash (non-strict schema), answers without flow_id
+      // and sets its cookie as before — `credentials:'include'` is kept so
+      // that legacy response still stores its cookie where browsers allow
+      // it, which is exactly today's behaviour.
       const oauthButtons = root.querySelectorAll('[data-oauth]');
       const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
+      const OAUTH_FLOW_KEY_PREFIX = 'ds_oauth_flow.';
+      const OAUTH_FLOW_MAX_AGE_MS = 10 * 60 * 1000;
       let oauthStartInFlight = false;
       function setOauthButtonsDisabled(disabled, activeButton) {
         oauthButtons.forEach((button) => {
@@ -732,6 +750,63 @@ const apiBaseUrl = resolveApiBaseUrl();
           );
         });
       }
+      function base64UrlFromBytes(bytes) {
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      }
+      // Drop flow records older than 10 minutes (the state they belong to
+      // expired at 5). Keyed per flow so parallel tabs do not clobber each
+      // other; pruning keeps abandoned attempts from accumulating.
+      function pruneOauthFlows(nowMs) {
+        try {
+          const stale = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!key || key.indexOf(OAUTH_FLOW_KEY_PREFIX) !== 0) continue;
+            let iat = 0;
+            try {
+              const rec = JSON.parse(localStorage.getItem(key) || '');
+              iat = rec && typeof rec.iat === 'number' ? rec.iat : 0;
+            } catch (_) {
+              iat = 0;
+            }
+            if (nowMs - iat > OAUTH_FLOW_MAX_AGE_MS) stale.push(key);
+          }
+          stale.forEach((key) => localStorage.removeItem(key));
+        } catch (_) {
+          // Storage unavailable — nothing to prune; the pre-flight check
+          // below already refused to start a flow this browser cannot finish.
+        }
+      }
+      // Mint the v2 binding: 32 random bytes → base64url flow_secret (43
+      // chars), and binding_hash = base64url(SHA-256(utf8(flow_secret))) —
+      // the SAME bytes the server hashes at /redeem. Resolves null when
+      // WebCrypto is unavailable (a non-secure context; every HTTPS page and
+      // localhost has it), in which case the server's legacy cookie flow
+      // runs — that path fails on Safari exactly as before v2, never worse.
+      function mintOauthBinding() {
+        const c = window.crypto;
+        if (
+          !c ||
+          typeof c.getRandomValues !== 'function' ||
+          !c.subtle ||
+          typeof c.subtle.digest !== 'function'
+        ) {
+          return Promise.resolve(null);
+        }
+        try {
+          const bytes = new Uint8Array(32);
+          c.getRandomValues(bytes);
+          const secret = base64UrlFromBytes(bytes);
+          return c.subtle.digest('SHA-256', new TextEncoder().encode(secret)).then(
+            (digest) => ({ secret: secret, bindingHash: base64UrlFromBytes(new Uint8Array(digest)) }),
+            () => null,
+          );
+        } catch (_) {
+          return Promise.resolve(null);
+        }
+      }
       oauthButtons.forEach((btn) => {
         btn.addEventListener('click', () => {
           banner.classList.add('hidden');
@@ -739,24 +814,44 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (!provider) return;
           if (oauthStartInFlight) return;
           if (loginInFlight || mfaInFlight) return;
+          // The callback page can only finish a sign-in it can persist (the
+          // session lands in localStorage, and v2's flow secret lives there
+          // too). Refuse before anything is minted server-side.
+          if (!canPersistWebSession()) {
+            showBanner(
+              'Enable browser site storage before signing in with a provider. Nothing has been sent to the provider yet, so you can retry once storage is available.',
+            );
+            return;
+          }
           oauthStartInFlight = true;
           setOauthButtonsDisabled(true, btn);
           if (submitBtn) submitBtn.disabled = true;
           const mfaSubmit = mfaForm && mfaForm.querySelector('button[type="submit"]');
           if (mfaSubmit) mfaSubmit.disabled = true;
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), OAUTH_REQUEST_TIMEOUT_MS);
-          fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            credentials: 'include', // PKCE cookie round-trip
-            body: JSON.stringify({
-              provider,
-              redirect_to:
-                window.location.origin + (next ? next : '/'),
-            }),
-            signal: controller.signal,
-          })
+          let timeoutId = null;
+          let flowSecret = null;
+          mintOauthBinding()
+            .then((binding) => {
+              const startBody = {
+                provider: provider,
+                redirect_to: window.location.origin + (next ? next : '/'),
+              };
+              if (binding) {
+                flowSecret = binding.secret;
+                startBody.binding_hash = binding.bindingHash;
+              }
+              // The deadline bounds the REQUEST, so it starts here, right
+              // before the fetch, not around the local digest above.
+              timeoutId = setTimeout(() => controller.abort(), OAUTH_REQUEST_TIMEOUT_MS);
+              return fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                credentials: 'include', // legacy PKCE cookie round-trip (old server only; v2 sets none)
+                body: JSON.stringify(startBody),
+                signal: controller.signal,
+              });
+            })
             .then((r) =>
               r.ok
                 ? r.json()
@@ -770,11 +865,32 @@ const apiBaseUrl = resolveApiBaseUrl();
                 'https://accounts.google.com',
                 'https://github.com',
               ]);
-              if (authorizeUrl) {
-                window.location.href = authorizeUrl;
-              } else {
+              if (!authorizeUrl) {
                 showBanner('OAuth start failed: invalid authorize URL');
+                return;
               }
+              // v2 server: persist the secret under the flow_id BEFORE leaving,
+              // and read it back — a write that did not land would strand the
+              // sign-in at the callback with nothing to redeem. A response with
+              // no flow_id is an old server: it set a cookie, there is nothing
+              // to store, and the callback page's legacy branch finishes it.
+              if (flowSecret && typeof body.flow_id === 'string' && body.flow_id.length > 0) {
+                const key = OAUTH_FLOW_KEY_PREFIX + body.flow_id;
+                const record = JSON.stringify({ secret: flowSecret, iat: Date.now() });
+                try {
+                  pruneOauthFlows(Date.now());
+                  localStorage.setItem(key, record);
+                  if (localStorage.getItem(key) !== record) {
+                    throw new Error('flow record read-back failed');
+                  }
+                } catch (_) {
+                  showBanner(
+                    'This browser could not persist the sign-in flow. Enable site storage, then start a fresh sign-in.',
+                  );
+                  return;
+                }
+              }
+              window.location.href = authorizeUrl;
             })
             .catch((err) => {
               showBanner(
@@ -784,7 +900,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               );
             })
             .finally(() => {
-              clearTimeout(timeoutId);
+              if (timeoutId !== null) clearTimeout(timeoutId);
               oauthStartInFlight = false;
               setOauthButtonsDisabled(false);
               if (submitBtn) submitBtn.disabled = false;

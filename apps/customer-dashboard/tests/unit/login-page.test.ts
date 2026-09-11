@@ -19,6 +19,8 @@ import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installDashboardDeadline } from './dashboard-test-runtime';
+import { webcrypto } from 'node:crypto';
+import { TextEncoder } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'login', 'index.html');
@@ -81,6 +83,17 @@ function setUpDom(
     virtualConsole,
   });
   const { window } = dom;
+  // jsdom ships no WebCrypto, so without this the built page's OAuth v2 branch (which
+  // hashes a browser-held flow secret with crypto.subtle) is never exercised and the
+  // click silently falls to the legacy cookie start. Node's webcrypto is the real thing.
+  if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
+    Object.defineProperty(window.crypto, 'subtle', { value: webcrypto.subtle });
+  }
+  // The page encodes the secret with TextEncoder before hashing; jsdom's realm has
+  // none, and the page's own guard turns that into a silent legacy start.
+  if (typeof (window as unknown as { TextEncoder?: unknown }).TextEncoder === 'undefined') {
+    Object.defineProperty(window, 'TextEncoder', { value: TextEncoder });
+  }
   const fetchCalls: MockFetchCall[] = [];
   const plan = [...(opts.fetchPlan ?? [])];
   // @ts-expect-error — jsdom global is loose
@@ -543,6 +556,50 @@ describe('login page — local integration', () => {
     expect(typeof body.provider).toBe('string');
     expect(body.provider.length).toBeGreaterThan(0);
     expect(typeof body.redirect_to).toBe('string');
+  });
+
+  it('OAuth v2 start: sends binding_hash = base64url(sha256(flow_secret)) and, given a flow_id, stores the secret under it before navigating — the record the callback page will redeem', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'FLOW_ID_TEST',
+          }),
+      ],
+    });
+    win = window;
+    const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
+    if (!btn) {
+      expect(true).toBe(true);
+      return;
+    }
+    btn.click();
+    await flush();
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    const body = JSON.parse(String(post?.init?.body)) as { binding_hash?: unknown };
+    // The v2 discriminator: 43 base64url chars of a SHA-256, never the secret itself.
+    expect(typeof body.binding_hash).toBe('string');
+    expect(body.binding_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const raw = window.localStorage.getItem('ds_oauth_flow.FLOW_ID_TEST');
+    expect(raw, 'the flow record must be stored before the page navigates away').not.toBeNull();
+    const record = JSON.parse(String(raw)) as { secret?: unknown; iat?: unknown };
+    expect(typeof record.secret).toBe('string');
+    expect(typeof record.iat).toBe('number');
+    // The stored secret and the sent hash are the SAME flow: hash it here and compare.
+    const digest = await webcrypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(String(record.secret)),
+    );
+    const b64url = Buffer.from(digest)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    expect(b64url).toBe(body.binding_hash);
+    // And the secret itself never leaves the browser in the start body.
+    expect(String(post?.init?.body)).not.toContain(String(record.secret));
   });
 
   it('serializes OAuth starts across providers and restores the group after timeout', async () => {

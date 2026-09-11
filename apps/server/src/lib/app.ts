@@ -47,6 +47,7 @@ import type { ValidationHarnessService } from '../services/validation-harness.js
 import { registerAdminValidationHarnessRoutes } from '../routes/admin-validation-harness.js';
 import { registerAccountRateLimitsRoutes } from '../routes/account-rate-limits.js';
 import type { AuthFlowsService } from '../services/auth-flows.js';
+import type { MfaChallengeStore } from '../services/mfa-challenge-store.js';
 import type { CliAuthorizeService } from '../services/cli-authorize.js';
 import type { StripeWebhooksService } from '../services/stripe-webhooks.js';
 import type { ProfilesService } from '../services/profiles.js';
@@ -795,6 +796,16 @@ export interface AppDeps {
     callbackUrlBase: string;
     /** Dashboard origin for the post-IDP 302 redirect target. */
     dashboardOrigin: string;
+    /**
+     * 2026-09-11 — single-use store for the v2 OAuth PKCE verifier and the
+     * post-exchange hand-off record (see RegisterOAuthClientRoutesDeps.flowStore
+     * in routes/auth-oauth-client.ts). REQUIRED, not optional: an optional
+     * field here compiles and then 500s on every v2 /start
+     * (`deps.flowStore.set` on undefined). bootstrap passes the
+     * RedisMfaChallengeStore it already builds for the MFA login hand-off;
+     * build-test-app injects its InMemoryMfaChallengeStore.
+     */
+    flowStore: Pick<MfaChallengeStore, 'set' | 'consume'>;
     google?: { clientId: string; clientSecret: string };
     github?: { clientId: string; clientSecret: string };
     /** Test seam for the two IDP HTTP calls — see the note on
@@ -1445,6 +1456,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       // gates on auth.ts use.
       rateLimitStore: deps.rateLimitStore,
       logger: deps.logger,
+      // 2026-09-11 — v2 PKCE-verifier + hand-off store. Required by the
+      // route deps so a missing wire is a compile error, never a 500.
+      flowStore: deps.oauthClient.flowStore,
       ...(deps.oauthClient.fetch !== undefined ? { fetch: deps.oauthClient.fetch } : {}),
     });
   }

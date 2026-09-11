@@ -193,6 +193,7 @@ const SDK_ABSENT = new Map<string, string>([
     'PUBLISHED and documented with NO consumer anywhere in this repo — not the desktop client, not the dashboard, not the admin panel. The purest of the three gaps: it exists only as customer surface, and no SDK reaches it (W-7). Streaming is NOT the reason — the SDK streams /message through the same requestEventStream. The GUI\'s "transcript" is its own local chat history, not this endpoint',
   ],
   ['/v1/auth/oauth-client/confirm-merge', 'OAuth 2 browser flow step — redirect-driven'],
+  ['/v1/auth/oauth-client/redeem', 'OAuth 2 browser flow step — redirect-driven'],
   ['/v1/auth/oauth-client/start', 'OAuth 2 browser flow entry — redirect-driven'],
   [
     '/v1/auth/resend-verification',

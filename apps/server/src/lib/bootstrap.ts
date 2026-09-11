@@ -3154,6 +3154,10 @@ export async function createProductionDeps(
               signingSecret: config.oauthClient.signingSecret,
               callbackUrlBase: config.oauthClient.callbackUrlBase,
               dashboardOrigin: config.dashboardOrigin,
+              // 2026-09-11 — v2 OAuth flow store (PKCE verifier + hand-off
+              // code, single-use via GETDEL). The same Redis store as the MFA
+              // login hand-off; fails closed on a Redis outage, like MFA.
+              flowStore: mfaChallengeStore,
               ...(config.oauthClient.google !== undefined
                 ? { google: config.oauthClient.google }
                 : {}),

@@ -62,6 +62,8 @@ const OPERATIONS_WITHOUT_OPENAPI_SECURITY = new Set([
   'POST /v1/auth/magic-link/request',
   'POST /v1/auth/mfa/challenge',
   'POST /v1/auth/oauth-client/confirm-merge',
+  // OAuth v2 browser hand-off: the caller proves the flow secret; no account context yet.
+  'POST /v1/auth/oauth-client/redeem',
   'POST /v1/auth/oauth-client/start',
   'POST /v1/auth/password-reset/confirm',
   'POST /v1/auth/password-reset/request',

@@ -1,6 +1,8 @@
 // OpenAPI parity — OAuth-client IDP signin endpoints (V-667.C).
 // /start + /confirm-merge are the customer-facing endpoints for
-// dashboard sign-in-with-Google/GitHub. /callback is an IDP-redirect
+// dashboard sign-in-with-Google/GitHub; /redeem (2026-09-11) is the
+// v2 cookie-free hand-off step the SPA POSTs after the top-level IDP
+// callback 302s it a single-use code. /callback is an IDP-redirect
 // target and intentionally NOT in the customer spec (no client
 // posts to it directly).
 
@@ -26,6 +28,16 @@ describe('OpenAPI — OAuth-client IDP signin endpoints (V-667.C)', () => {
     );
   });
 
+  it('registers POST /v1/auth/oauth-client/redeem (v2 hand-off: code + flow_secret, both 43-char base64url)', () => {
+    expect(src).toMatch(/method:\s*'post',\s*\n\s*path:\s*'\/v1\/auth\/oauth-client\/redeem'/);
+    expect(src).toMatch(
+      /OauthClientRedeemRequestOpenApi[\s\S]{0,200}code:\s*OauthClientBase64Url256OpenApi,\s*\n\s*flow_secret:\s*OauthClientBase64Url256OpenApi/,
+    );
+    expect(src).toMatch(
+      /OauthClientBase64Url256OpenApi\s*=\s*z\.string\(\)\.regex\(\/\^\[A-Za-z0-9_-\]\{43\}\$\/\)/,
+    );
+  });
+
   it('start endpoint constrains provider to {google, github}', () => {
     expect(src).toMatch(/provider:\s*z\.enum\(\['google',\s*'github'\]\)/);
   });
@@ -48,13 +60,14 @@ describe('OpenAPI — OAuth-client IDP signin endpoints (V-667.C)', () => {
     );
   });
 
-  it('both endpoints tagged "auth" (consistent with the rest of /v1/auth/*)', () => {
+  it('all three endpoints tagged "auth" (consistent with the rest of /v1/auth/*)', () => {
     const slice = src.slice(
       src.indexOf('OAuth-client IDP signin'),
       src.indexOf('OAuth 2.0 public dance'),
     );
     const tagOccurrences = (slice.match(/tags:\s*\['auth'\]/g) ?? []).length;
-    expect(tagOccurrences).toBe(2);
+    // 3 since 2026-09-11: /start, /redeem, /confirm-merge.
+    expect(tagOccurrences).toBe(3);
   });
 
   it('callback endpoint (IDP-redirect target) intentionally absent from the spec', () => {

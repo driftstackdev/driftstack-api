@@ -36,6 +36,15 @@ export interface OAuthClientStatePayload {
   /** Unix-epoch-seconds issue time. The verifier rejects payloads
    *  older than ttlSeconds. */
   iat: number;
+  /** 2026-09-11 (cookie-free OAuth v2) — base64url(SHA-256(flow_secret)).
+   *  The dashboard mints `flow_secret` in first-party localStorage before
+   *  navigating to the IDP and sends only this digest to /start; the
+   *  top-level callback carries it into the hand-off record and /redeem
+   *  proves the preimage. Its PRESENCE is the signed v2 marker: a state
+   *  without it was minted for an old bundle's cookie flow and takes the
+   *  legacy forward. Optional so states minted before the deploy still
+   *  verify. */
+  bind?: string;
 }
 
 export interface SignStateOpts {
@@ -46,6 +55,8 @@ export interface SignStateOpts {
   nowMs?: number;
   /** Override for tests — fixed nonce. */
   nonce?: string;
+  /** v2 flow-secret digest; omitted for the legacy cookie flow. */
+  bind?: string;
 }
 
 /**
@@ -71,6 +82,7 @@ export function signOauthClientState(opts: SignStateOpts): string {
     redirectTo: opts.redirectTo,
     nonce: opts.nonce ?? randomNonce(),
     iat: Math.floor((opts.nowMs ?? Date.now()) / 1000),
+    ...(opts.bind !== undefined ? { bind: opts.bind } : {}),
   };
   const encodedPayload = toBase64Url(Buffer.from(JSON.stringify(payload), 'utf8'));
   const signature = createHmac('sha256', opts.signingSecret).update(encodedPayload).digest();
@@ -151,6 +163,12 @@ export function verifyOauthClientState(opts: VerifyStateOpts): VerifyStateResult
     typeof payload.nonce !== 'string' ||
     typeof payload.iat !== 'number'
   ) {
+    return { kind: 'malformed' };
+  }
+  // v2 marker: absent (legacy) or a string. Checked apart from the block above
+  // so the pinned 4-field shape stays byte-identical; a non-string `bind`
+  // cannot be a signed digest and is refused rather than read as legacy.
+  if (payload.bind !== undefined && typeof payload.bind !== 'string') {
     return { kind: 'malformed' };
   }
 

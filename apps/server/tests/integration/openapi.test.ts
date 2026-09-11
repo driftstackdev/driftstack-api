@@ -207,6 +207,7 @@ describe('OpenAPI spec generation', () => {
         // Arc 7 docs.openapi — OAuth-client IDP signin (V-667.C)
         '/v1/auth/oauth-client/start',
         '/v1/auth/oauth-client/confirm-merge',
+        '/v1/auth/oauth-client/redeem',
         // Arc 7 docs.openapi — OAuth 2.0 public dance (V-667)
         '/v1/oauth/authorize',
         '/v1/oauth/introspect',

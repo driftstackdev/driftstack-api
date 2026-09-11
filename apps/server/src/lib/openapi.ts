@@ -2436,6 +2436,19 @@ function buildRegistry(): OpenAPIRegistry {
     observed_ip: z.string(),
     observed_via: z.enum(['proxy_host', 'exit_ip']),
   });
+  // (o) 2026-09-11 — WHY an ok result carries no `os_fingerprint`. ONE definition
+  // spread into BOTH ok-bearing members, for the reason the block above states:
+  // the cp member and the fleet member reach the same three causes, and a second
+  // copy is a second thing to forget.
+  //   `vpn_tunnel`   — an openvpn/wireguard row has no SOCKS5 endpoint to dial
+  //                    through, so no SYN exists to read. No retry can help.
+  //   `not_observed` — the observer tunnel was refused, or no SYN was recorded
+  //                    under either candidate address. A retry may help.
+  //   `observer_off` — this deployment runs no raw-socket observer (or no
+  //                    connectivity probe at all). No retry can help.
+  // Absent when a fingerprint WAS observed. A client renders the cause; it must
+  // never turn a bare absence into advice, which is what shipped before this.
+  const OsFingerprintUnavailableOpenApi = z.enum(['vpn_tunnel', 'not_observed', 'observer_off']);
   // (d) 2026-09-10 — why a test produced NO measurement. One vocabulary for
   // both `ok:false` members: `live_session` is the control plane's refusal (a
   // VPN row a live session browses through), `node_busy` / `node_error` are the
@@ -2457,6 +2470,9 @@ function buildRegistry(): OpenAPIRegistry {
         quic_measured_at: z.string().nullable().optional(),
         // N-2 — present ONLY when the passive observer recorded the proxy's SYN.
         os_fingerprint: OsFingerprintOpenApi.optional(),
+        // (o) — and when it is absent, WHY. Nullable + optional: an older server
+        // sends neither field and a client must read that as "no cause reported".
+        os_fingerprint_unavailable: OsFingerprintUnavailableOpenApi.nullable().optional(),
         // T-1 — present only when a fleet-vantage request FELL BACK to the control
         // plane (no node free). Absent on a plain control-plane test.
         measured_from: z.enum(['fleet', 'control_plane']).optional(),
@@ -2557,6 +2573,10 @@ function buildRegistry(): OpenAPIRegistry {
         // N-2 — the fingerprint the CONTROL PLANE observed while the node measured
         // the latency. Same field, same shape, same "absent means unobserved" rule.
         os_fingerprint: OsFingerprintOpenApi.optional(),
+        // (o) — and the cause when it is absent. `vpn_tunnel` is REACHED HERE and
+        // only here in practice: a VPN row is measurable from a node alone, and a
+        // tunnel has no SOCKS5 endpoint for the control plane's observer to dial.
+        os_fingerprint_unavailable: OsFingerprintUnavailableOpenApi.nullable().optional(),
       }),
     ])
     .openapi('AccountProxyTestResult');
@@ -2612,11 +2632,64 @@ function buildRegistry(): OpenAPIRegistry {
   // IDP-redirect target; /start returns the authorize URL the
   // dashboard sends the customer's browser to; /confirm-merge is
   // the verdict-1 same-email-collision resolution path.
+  //
+  // 2026-09-11 — cookie-free v2 flow. A /start carrying `binding_hash`
+  // (sha256 of a browser-held flow secret) answers with a `flow_id` and NO
+  // Set-Cookie; the PKCE verifier stays server-side. The top-level IDP
+  // callback then runs the token exchange itself, parks the verified
+  // identity under a single-use hand-off code and 302s to the dashboard with
+  // that code in the URL fragment; /redeem is where the browser proves the
+  // flow secret and the account row + session are minted. A start without
+  // binding_hash is the legacy cookie flow, unchanged — what an old bundle
+  // sends.
+  /** 32 random bytes, base64url, unpadded → exactly 43 chars. Mirrors the
+   *  route's BASE64URL_256_BIT_RE; shared by binding_hash, flow_secret and
+   *  the hand-off code. */
+  const OauthClientBase64Url256OpenApi = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
   const OauthClientStartRequestOpenApi = z.object({
     provider: z.enum(['google', 'github']),
     redirect_to: z.string().url(),
+    binding_hash: OauthClientBase64Url256OpenApi.optional().describe(
+      'base64url SHA-256 of a browser-held flow secret; presence selects the cookie-free v2 flow',
+    ),
   });
-  const OauthClientStartResponseOpenApi = z.object({ authorize_url: z.string().url() });
+  const OauthClientStartResponseOpenApi = z.object({
+    authorize_url: z.string().url(),
+    flow_id: z.string().optional().describe('present only for v2 starts'),
+  });
+  const OauthClientRedeemRequestOpenApi = z.object({
+    code: OauthClientBase64Url256OpenApi,
+    flow_secret: OauthClientBase64Url256OpenApi,
+  });
+  // The outcome union `completeSignIn` answers — shared with the legacy XHR
+  // callback so a client handles one shape. `provider` rides on every arm: a
+  // v2 page has no provider in its query string (the fragment carries only
+  // flow + code), so the collision banner reads it from here.
+  const OauthClientProviderOpenApi = z.enum(['google', 'github']);
+  const OauthClientRedeemResponseOpenApi = z.union([
+    z.object({
+      outcome: z.enum(['signed-in-existing-link', 'created-new-account']),
+      provider: OauthClientProviderOpenApi,
+      account_id: z.string(),
+      redirect_to: z.string(),
+      session_token: z.string().optional(),
+      mfa_required: z.literal(true).optional(),
+      challenge_token: z.string().optional(),
+      challenge_expires_at: z.string().optional(),
+    }),
+    z.object({
+      outcome: z.literal('collision-pending-verification'),
+      provider: OauthClientProviderOpenApi,
+      pending_link_id: z.string(),
+      expires_at: z.string(),
+    }),
+    z.object({
+      outcome: z.literal('existing-link-revoked'),
+      provider: OauthClientProviderOpenApi,
+      account_id: z.string(),
+      hint: z.string(),
+    }),
+  ]);
   const OauthClientConfirmMergeRequestOpenApi = z.object({
     token: z.string().min(32).max(128),
   });
@@ -2645,22 +2718,54 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
+          "Authorize URL — the client redirects the user's browser here to start the IDP consent flow. A v2 start (binding_hash present) also returns `flow_id`.",
         content: { 'application/json': { schema: OauthClientStartResponseOpenApi } },
         // V-944 — this endpoint SETS the PKCE cookie the confirm step reads back,
-        // so the flow does not work without it. Declared because a client
+        // so the legacy flow does not work without it. Declared because a client
         // implementing the dance outside a browser has to know to return it; a
         // browser does it automatically and would never notice the omission,
-        // which is why it went unpublished.
+        // which is why it went unpublished. 2026-09-11 — a v2 start sets NO
+        // cookie: the verifier is held server-side and the browser proves the
+        // flow secret at /redeem instead.
         headers: {
           'Set-Cookie': {
             description:
-              'HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Must be returned on the callback for the flow to complete.',
+              'HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Set ONLY for legacy starts without `binding_hash`; a v2 start sets no cookie. Must be returned on the callback for the legacy flow to complete.',
             schema: { type: 'string' },
           },
         },
       },
       400: { description: 'Unknown provider OR provider not configured.', content: problemContent },
+    },
+  });
+  registerRoute(r, {
+    method: 'post',
+    path: '/v1/auth/oauth-client/redeem',
+    summary: 'Redeem a v2 hand-off code — completes the IDP signin for the browser that started it',
+    tags: ['auth'],
+    request: {
+      body: {
+        required: true,
+        content: { 'application/json': { schema: OauthClientRedeemRequestOpenApi } },
+      },
+    },
+    responses: {
+      429: {
+        description:
+          'Per-IP rate limit exceeded. Gated by `ipRateLimit` (its own bucket, the callback budget) rather than the account-keyed limiter, so the refusal is reachable without authenticating at all.',
+        content: problemContent,
+        headers: { ...rateLimitHeaders, ...requestIdHeader },
+      },
+      200: {
+        description:
+          'The same outcome union the legacy callback answers, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.',
+        content: { 'application/json': { schema: OauthClientRedeemResponseOpenApi } },
+      },
+      400: {
+        description:
+          'Hand-off code invalid, expired, or already used. OR Sign-in was not started by this browser. (A binding mismatch also burns the code: a leaked fragment gets one guess at a 256-bit preimage.)',
+        content: problemContent,
+      },
     },
   });
   registerRoute(r, {

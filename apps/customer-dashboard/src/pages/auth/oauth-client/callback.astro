@@ -12,6 +12,19 @@ import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 //   existing-link-revoked → /login with "re-link or password" prompt
 //
 // PKCE verifier cookie round-trip is automatic via credentials:'include'.
+//
+// 2026-09-11 cookie-free v2 — the paragraph above is now the LEGACY branch
+// (an old server, or a flow an old bundle started). The API's top-level
+// /v1/auth/oauth/:provider/callback finishes the IDP exchange itself and
+// 302s here with `#flow=<id>&code=<hand-off>` in the URL FRAGMENT: never
+// sent to a server, never in Referer, stripped from history below before
+// anything else runs. The code is single-use, 60 s, and worthless without
+// the flow secret login.astro stored in this origin's localStorage; this
+// page POSTs {code, flow_secret} to /v1/auth/oauth-client/redeem with NO
+// credentials and receives the same outcome JSON the legacy fetch does.
+// No cookie exists anywhere in v2, so Safari ITP / Chrome Incognito /
+// Firefox Total Cookie Protection have nothing to block. Expected server
+// failures arrive as `#oauth_error=<enum>` and are mapped to copy here.
 
 import { resolveApiBaseUrl } from '../../../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -329,6 +342,191 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       const qs = window.location.search;
+
+      const OAUTH_FLOW_KEY_PREFIX = 'ds_oauth_flow.';
+      const OAUTH_FLOW_MAX_AGE_MS = 10 * 60 * 1000;
+      // Read-and-remove the flow record login.astro wrote before leaving for
+      // the IDP. Missing → this browser/window did not start the flow (or
+      // the record was pruned); older than 10 min → stale. Either way the
+      // hand-off cannot be redeemed here, which is the login-CSRF defence
+      // working, not an error to route around.
+      function takeOauthFlowRecord(id) {
+        const key = OAUTH_FLOW_KEY_PREFIX + id;
+        let raw = null;
+        try {
+          raw = localStorage.getItem(key);
+          localStorage.removeItem(key);
+        } catch (_) {
+          return null;
+        }
+        if (!raw) return null;
+        let rec;
+        try {
+          rec = JSON.parse(raw);
+        } catch (_) {
+          return null;
+        }
+        if (!rec || typeof rec.secret !== 'string' || rec.secret.length === 0) return null;
+        if (typeof rec.iat !== 'number' || Date.now() - rec.iat > OAUTH_FLOW_MAX_AGE_MS) return null;
+        return rec;
+      }
+
+      // Bounded enum from the server's top-level callback → customer copy.
+      // Never renders the raw value: an unknown code gets the generic line.
+      function oauthErrorMessage(code) {
+        switch (code) {
+          case 'idp_denied':
+            return 'The identity provider did not complete sign-in (access was denied or cancelled). Return to sign-in and try again.';
+          case 'state_invalid':
+            return 'This sign-in link is not valid for this dashboard. Return to sign-in and start again.';
+          case 'state_replayed':
+            return 'This sign-in link has already been used or has expired. Return to sign-in and start again.';
+          case 'missing_code':
+            return 'The identity provider returned without a sign-in code. Return to sign-in and try again.';
+          case 'provider_unavailable':
+            return 'This sign-in provider is not available right now. Sign in with your password, or try again later.';
+          case 'exchange_failed':
+          case 'userinfo_failed':
+            return 'The identity provider could not confirm your account. Return to sign-in and try again.';
+          default:
+            return 'OAuth sign-in failed. Return to sign-in and try again.';
+        }
+      }
+
+      function parseJsonOrReject(r) {
+        return r.ok
+          ? r.json()
+          : r
+              .json()
+              .catch(() => ({}))
+              .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
+      }
+
+      // One outcome handler for both the legacy exchange and the v2 redeem:
+      // the server answers the same 4-outcome JSON on both routes.
+      function handleOutcome(body) {
+        if (body.outcome === 'signed-in-existing-link' || body.outcome === 'created-new-account') {
+          // 2026-05-19 — server now mints the web session inline in
+          // the callback handler. Write the token to localStorage
+          // before navigating so the dashboard finds it on landing
+          // (otherwise the dashboard surfaces "Sign in to see live
+          // account data" because localStorage is empty). Mirrors
+          // the password-login flow at login.astro:217.
+          if (body.mfa_required === true) {
+            startMfaChallenge(body);
+            return;
+          }
+          // Sanitize the server-returned redirect_to to a same-origin path
+          // (empty/missing → '/'); never navigate a raw off-origin value.
+          if (!body.session_token) {
+            showBanner('Sign-in could not be completed. Return to sign-in and try again.');
+            return;
+          }
+          completeSession(
+            body.session_token,
+            safeNextPath(body.redirect_to, window.location.origin),
+          );
+          return;
+        }
+        if (body.outcome === 'collision-pending-verification') {
+          if (intro) intro.textContent = '';
+          // v2 answers carry `provider` (the fragment has no query string to
+          // read it from); the query-string heuristic stays as the legacy
+          // fallback.
+          if (mergeProvider && body.provider === 'github') {
+            mergeProvider.textContent = 'GitHub';
+          } else if (mergeProvider && body.provider === 'google') {
+            mergeProvider.textContent = 'Google';
+          } else if (mergeProvider && qs.indexOf('provider=github') >= 0) {
+            mergeProvider.textContent = 'GitHub';
+          } else if (mergeProvider) {
+            mergeProvider.textContent = 'Google';
+          }
+          if (body.expires_at) {
+            const minutes = Math.max(
+              1,
+              Math.round((new Date(body.expires_at).getTime() - Date.now()) / 60000),
+            );
+            if (mergeWindow) mergeWindow.textContent = minutes + ' minutes';
+          }
+          successMerge.classList.remove('hidden');
+          return;
+        }
+        if (body.outcome === 'existing-link-revoked') {
+          showBanner(
+            'This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.',
+          );
+          return;
+        }
+        showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
+      }
+
+      // Shared failure path. On a timeout the one-time code (IDP code on the
+      // legacy route, hand-off code on v2) may already be consumed server-side,
+      // so the copy tells the user not to retry THIS URL.
+      function handleCallbackFailure(err) {
+        if (err && err.name === 'AbortError') {
+          if (unknownRecovery) unknownRecovery.classList.remove('hidden');
+          showBanner(
+            'OAuth sign-in outcome is unknown after the request timed out. The server may already have exchanged this one-time callback code, created a session whose credential did not reach this browser, or sent an account-link confirmation email. Do not reload or submit this callback URL again. Check your inbox first; if no confirmation email arrives, return to sign-in and start a fresh provider authorization.',
+          );
+          return;
+        }
+        showBanner(window.driftstackRequestErrorMessage(err, 'OAuth callback failed.'));
+      }
+
+      // ── v2: fragment hand-off ──────────────────────────────────────
+      const rawHash = window.location.hash;
+      const fragment = new URLSearchParams(
+        rawHash && rawHash.charAt(0) === '#' ? rawHash.slice(1) : rawHash || '',
+      );
+      const flowId = fragment.get('flow');
+      const handoffCode = fragment.get('code');
+      const oauthError = fragment.get('oauth_error');
+      if (flowId && handoffCode) {
+        // Strip the fragment from the history entry BEFORE any await: the
+        // hand-off code must not survive in the URL bar or session history.
+        window.history.replaceState(window.history.state, '', window.location.pathname);
+        if (!canPersistWebSession()) {
+          showBanner(
+            'Enable browser site storage before completing this one-time provider sign-in. The hand-off code was not redeemed; start a fresh sign-in once storage is available.',
+          );
+          return;
+        }
+        const flowRecord = takeOauthFlowRecord(flowId);
+        if (!flowRecord) {
+          showBanner(
+            'This sign-in was started in a different browser or window, or took too long. Return to sign-in and try again.',
+          );
+          return;
+        }
+        const redeemController = new AbortController();
+        const redeemTimeout = window.setTimeout(() => redeemController.abort(), CALLBACK_TIMEOUT_MS);
+        fetch(apiBaseUrl + '/v1/auth/oauth-client/redeem', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          // No credentials: v2 has no cookie to carry, and omitting them keeps
+          // this XHR outside every third-party-cookie policy by construction.
+          body: JSON.stringify({ code: handoffCode, flow_secret: flowRecord.secret }),
+          signal: redeemController.signal,
+        })
+          .then(parseJsonOrReject)
+          .then(handleOutcome)
+          .catch(handleCallbackFailure)
+          .finally(() => window.clearTimeout(redeemTimeout));
+        return;
+      }
+      if (oauthError) {
+        window.history.replaceState(window.history.state, '', window.location.pathname);
+        showBanner(oauthErrorMessage(oauthError));
+        return;
+      }
+
+      // ── legacy: ?code&state exchange via the credentialed XHR ─────
+      // Reached when an OLD server bounced the IDP query string here (it set
+      // its PKCE cookie on /start and reads it on this fetch), or when an old
+      // bundle's flow was forwarded by the new server. Byte-for-byte the
+      // pre-v2 behaviour, Safari failure included — never worse.
       if (!qs || qs.length === 0) {
         showBanner('Missing callback parameters.');
         return;
@@ -352,73 +550,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         credentials: 'include', // PKCE cookie round-trip
         signal: controller.signal,
       })
-        .then((r) =>
-          r.ok
-            ? r.json()
-            : r
-                .json()
-                .catch(() => ({}))
-                .then((b) => Promise.reject(window.driftstackResponseError(r, b))),
-        )
-        .then((body) => {
-          if (body.outcome === 'signed-in-existing-link' || body.outcome === 'created-new-account') {
-            // 2026-05-19 — server now mints the web session inline in
-            // the callback handler. Write the token to localStorage
-            // before navigating so the dashboard finds it on landing
-            // (otherwise the dashboard surfaces "Sign in to see live
-            // account data" because localStorage is empty). Mirrors
-            // the password-login flow at login.astro:217.
-            if (body.mfa_required === true) {
-              startMfaChallenge(body);
-              return;
-            }
-            // Sanitize the server-returned redirect_to to a same-origin path
-            // (empty/missing → '/'); never navigate a raw off-origin value.
-            if (!body.session_token) {
-              showBanner('Sign-in could not be completed. Return to sign-in and try again.');
-              return;
-            }
-            completeSession(
-              body.session_token,
-              safeNextPath(body.redirect_to, window.location.origin),
-            );
-            return;
-          }
-          if (body.outcome === 'collision-pending-verification') {
-            if (intro) intro.textContent = '';
-            if (mergeProvider && qs.indexOf('provider=github') >= 0) {
-              mergeProvider.textContent = 'GitHub';
-            } else if (mergeProvider) {
-              mergeProvider.textContent = 'Google';
-            }
-            if (body.expires_at) {
-              const minutes = Math.max(
-                1,
-                Math.round((new Date(body.expires_at).getTime() - Date.now()) / 60000),
-              );
-              if (mergeWindow) mergeWindow.textContent = minutes + ' minutes';
-            }
-            successMerge.classList.remove('hidden');
-            return;
-          }
-          if (body.outcome === 'existing-link-revoked') {
-            showBanner(
-              'This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.',
-            );
-            return;
-          }
-          showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
-        })
-        .catch((err) => {
-          if (err && err.name === 'AbortError') {
-            if (unknownRecovery) unknownRecovery.classList.remove('hidden');
-            showBanner(
-              'OAuth sign-in outcome is unknown after the request timed out. The server may already have exchanged this one-time callback code, created a session whose credential did not reach this browser, or sent an account-link confirmation email. Do not reload or submit this callback URL again. Check your inbox first; if no confirmation email arrives, return to sign-in and start a fresh provider authorization.',
-            );
-            return;
-          }
-          showBanner(window.driftstackRequestErrorMessage(err, 'OAuth callback failed.'));
-        })
+        .then(parseJsonOrReject)
+        .then(handleOutcome)
+        .catch(handleCallbackFailure)
         .finally(() => window.clearTimeout(timeout));
     })();
   </script>

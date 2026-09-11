@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest';
 import { registerOAuthClientRoutes } from '../../src/routes/auth-oauth-client.js';
 import { FIRST_PARTY_DASHBOARD_ORIGINS } from '../../src/lib/cors-allow.js';
 import { MemoryRateLimitStore } from '../../src/lib/memory-rate-limit-store.js';
+import { InMemoryMfaChallengeStore } from '../../src/services/mfa-challenge-store.js';
 import type { OAuthClientService } from '../../src/services/oauth-client.js';
 import type { AuthFlowsService } from '../../src/services/auth-flows.js';
 
@@ -39,6 +40,9 @@ async function mount(dashboardOrigin: string) {
     signingSecret: 's'.repeat(48),
     logger: pino({ level: 'silent' }),
     rateLimitStore: new MemoryRateLimitStore(),
+    // 2026-09-11 — the v2 flow store is a required route dep; a bare /start
+    // with no binding_hash (this test) never touches it.
+    flowStore: new InMemoryMfaChallengeStore(),
   });
   await app.ready();
   return app;

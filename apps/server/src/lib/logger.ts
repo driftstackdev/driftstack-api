@@ -205,6 +205,8 @@ export function createLogger(config: Pick<Config, 'logLevel' | 'nodeEnv'>): Logg
         'body.code_verifier',
         'body.signing_secret',
         'body.secret',
+        // OAuth v2 hand-off: the browser-held flow secret redeemed for a session.
+        'body.flow_secret',
         // Account-proxy VPN secrets (ARC A). The POST/PUT
         // /v1/account/me/proxies body carries the customer's VPN
         // credentials NESTED under the scheme block — the OpenVPN

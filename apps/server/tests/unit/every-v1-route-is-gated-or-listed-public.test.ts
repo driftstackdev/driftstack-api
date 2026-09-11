@@ -87,6 +87,9 @@ const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   'GET /v1/auth/oauth-client/callback',
   'GET /v1/auth/oauth/${provider}/callback',
   'POST /v1/auth/oauth-client/confirm-merge',
+  // v2 browser sign-in hand-off: the caller proves the flow secret it holds; no
+  // account context is read — the session is what this call mints.
+  'POST /v1/auth/oauth-client/redeem',
   // RFC 6749 / 7662 endpoints. The CLIENT authenticates in the request body with
   // client_secret, which is checked in the handler rather than by a preHandler.
   'GET /v1/oauth/authorize',

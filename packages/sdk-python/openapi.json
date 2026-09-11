@@ -542,6 +542,10 @@
               "h3_connection_observed": {
                 "type": ["boolean", "null"]
               },
+              "h3_connection_count": {
+                "type": ["integer", "null"],
+                "minimum": 0
+              },
               "exit_ip": {
                 "type": ["string", "null"]
               },
@@ -3468,6 +3472,10 @@
                 },
                 "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
               },
+              "os_fingerprint_unavailable": {
+                "type": ["string", "null"],
+                "enum": ["vpn_tunnel", "not_observed", "observer_off", null]
+              },
               "measured_from": {
                 "type": "string",
                 "enum": ["fleet", "control_plane"]
@@ -3618,6 +3626,10 @@
                   }
                 },
                 "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
+              },
+              "os_fingerprint_unavailable": {
+                "type": ["string", "null"],
+                "enum": ["vpn_tunnel", "not_observed", "observer_off", null]
               }
             },
             "required": ["ok", "measured_from", "node_id", "latency_ms"]
@@ -4070,6 +4082,10 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "h3_connection_count": {
+                        "type": ["integer", "null"],
+                        "minimum": 0
                       },
                       "exit_ip": {
                         "type": ["string", "null"]
@@ -4855,6 +4871,10 @@
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
                       },
+                      "h3_connection_count": {
+                        "type": ["integer", "null"],
+                        "minimum": 0
+                      },
                       "exit_ip": {
                         "type": ["string", "null"]
                       },
@@ -5115,6 +5135,10 @@
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
                       },
+                      "h3_connection_count": {
+                        "type": ["integer", "null"],
+                        "minimum": 0
+                      },
                       "exit_ip": {
                         "type": ["string", "null"]
                       },
@@ -5374,6 +5398,10 @@
                       },
                       "h3_connection_observed": {
                         "type": ["boolean", "null"]
+                      },
+                      "h3_connection_count": {
+                        "type": ["integer", "null"],
+                        "minimum": 0
                       },
                       "exit_ip": {
                         "type": ["string", "null"]
@@ -20178,6 +20206,11 @@
                   "redirect_to": {
                     "type": "string",
                     "format": "uri"
+                  },
+                  "binding_hash": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$",
+                    "description": "base64url SHA-256 of a browser-held flow secret; presence selects the cookie-free v2 flow"
                   }
                 },
                 "required": ["provider", "redirect_to"]
@@ -20187,10 +20220,10 @@
         },
         "responses": {
           "200": {
-            "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow.",
+            "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow. A v2 start (binding_hash present) also returns `flow_id`.",
             "headers": {
               "Set-Cookie": {
-                "description": "HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Must be returned on the callback for the flow to complete.",
+                "description": "HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Set ONLY for legacy starts without `binding_hash`; a v2 start sets no cookie. Must be returned on the callback for the legacy flow to complete.",
                 "schema": {
                   "type": "string"
                 }
@@ -20204,6 +20237,10 @@
                     "authorize_url": {
                       "type": "string",
                       "format": "uri"
+                    },
+                    "flow_id": {
+                      "type": "string",
+                      "description": "present only for v2 starts"
                     }
                   },
                   "required": ["authorize_url"]
@@ -20223,6 +20260,202 @@
           },
           "429": {
             "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Limit": {
+                "description": "Request capacity of the bucket this call was charged to.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Remaining": {
+                "description": "Requests left in that bucket.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "RateLimit-Reset": {
+                "description": "Seconds until that bucket refills.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Bucket": {
+                "description": "Which bucket was charged, e.g. `global` or `sessions:create`. Sent alongside the X-RateLimit-* aliases of the three headers above, kept for existing clients.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "X-RateLimit-Limit": {
+                "description": "Legacy alias of `RateLimit-Limit`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Remaining": {
+                "description": "Legacy alias of `RateLimit-Remaining`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-RateLimit-Reset": {
+                "description": "Legacy alias of `RateLimit-Reset`, sent alongside it.",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "X-Request-Id": {
+                "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth-client/redeem": {
+      "post": {
+        "summary": "Redeem a v2 hand-off code — completes the IDP signin for the browser that started it",
+        "tags": ["auth"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  },
+                  "flow_secret": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{43}$"
+                  }
+                },
+                "required": ["code", "flow_secret"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same outcome union the legacy callback answers, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["signed-in-existing-link", "created-new-account"]
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": ["google", "github"]
+                        },
+                        "account_id": {
+                          "type": "string"
+                        },
+                        "redirect_to": {
+                          "type": "string"
+                        },
+                        "session_token": {
+                          "type": "string"
+                        },
+                        "mfa_required": {
+                          "type": "boolean",
+                          "enum": [true]
+                        },
+                        "challenge_token": {
+                          "type": "string"
+                        },
+                        "challenge_expires_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["outcome", "provider", "account_id", "redirect_to"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["collision-pending-verification"]
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": ["google", "github"]
+                        },
+                        "pending_link_id": {
+                          "type": "string"
+                        },
+                        "expires_at": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["outcome", "provider", "pending_link_id", "expires_at"]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "outcome": {
+                          "type": "string",
+                          "enum": ["existing-link-revoked"]
+                        },
+                        "provider": {
+                          "type": "string",
+                          "enum": ["google", "github"]
+                        },
+                        "account_id": {
+                          "type": "string"
+                        },
+                        "hint": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["outcome", "provider", "account_id", "hint"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Hand-off code invalid, expired, or already used. OR Sign-in was not started by this browser. (A binding mismatch also burns the code: a leaked fragment gets one guess at a 256-bit preimage.)",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Per-IP rate limit exceeded. Gated by `ipRateLimit` (its own bucket, the callback budget) rather than the account-keyed limiter, so the refusal is reachable without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -35401,6 +35634,10 @@
                         "h3_connection_observed": {
                           "type": ["boolean", "null"]
                         },
+                        "h3_connection_count": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
+                        },
                         "exit_ip": {
                           "type": ["string", "null"]
                         },
@@ -35847,6 +36084,10 @@
                               "h3_connection_observed": {
                                 "type": ["boolean", "null"]
                               },
+                              "h3_connection_count": {
+                                "type": ["integer", "null"],
+                                "minimum": 0
+                              },
                               "exit_ip": {
                                 "type": ["string", "null"]
                               },
@@ -36275,6 +36516,10 @@
                         },
                         "h3_connection_observed": {
                           "type": ["boolean", "null"]
+                        },
+                        "h3_connection_count": {
+                          "type": ["integer", "null"],
+                          "minimum": 0
                         },
                         "exit_ip": {
                           "type": ["string", "null"]
