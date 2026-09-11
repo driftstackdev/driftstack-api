@@ -100,8 +100,9 @@ describe('a probe verdict is not a pass', () => {
     );
     expect(src).toContain("'probeEgressResult accepted: key set'");
     // W-29 — the SAME observation on capabilityReport. Without it nothing can see
-    // whether the node sends `h3ConnectionCount`: the customer-safe projection
-    // strips it, so a clean parse is again the only evidence and it says nothing.
+    // whether the node sends `h3ConnectionCount`: a clean parse says nothing about
+    // the key set (the customer projection carries the count since (o) O2, but
+    // the parse-side key log is still the only evidence of what the NODE sent).
     expect(src).toContain("'capabilityReport accepted: key set'");
     expect(src).toContain("Object.keys(frame).sort().join(',')");
     // ⛔ Structure only, on BOTH lines. The first version of this arm checked the

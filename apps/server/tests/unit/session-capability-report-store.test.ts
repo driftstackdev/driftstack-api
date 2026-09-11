@@ -47,6 +47,10 @@ describe('SessionCapabilityReportStore', () => {
       // negative would assert "this session carried no HTTP/3" from no evidence,
       // the same defect shape as the streaming_health zeroes below.
       h3_connection_observed: null,
+      // (o) O2 — ⛔ null, not 0, for exactly the reason above: a 0 is the
+      // measurement "this session has carried no HTTP/3 connection", and this
+      // frame measured nothing.
+      h3_connection_count: null,
       interpose_image_loaded: null,
       // T-26 — ⛔ null, not empty: absent means NOT OBSERVED (this frame carries
       // no exit identity), never "no exit". Same absent-until-measured contract.

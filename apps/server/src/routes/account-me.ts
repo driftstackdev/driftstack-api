@@ -181,6 +181,44 @@ const FLEET_PROBE_TARGET: { host: string; port: number } = (() => {
 })();
 
 /**
+ * (o) 2026-09-11 — a proxy test's OS-fingerprint half: the measurement, or the
+ * REASON there is none. A union, not two optional keys, so "a fingerprint AND a
+ * cause" is unrepresentable — a client that sees the cause knows the value is
+ * absent, and cannot be handed both.
+ *
+ * ⛔ The three causes are not interchangeable to a customer. `vpn_tunnel` and
+ * `observer_off` are PERMANENT for that row / that deployment: telling someone to
+ * press Test again is advice that can never terminate. `not_observed` is the only
+ * one a retry can change. Merging them into bare absence is precisely what put a
+ * dead-end hint under every blank OS chip.
+ */
+type OsFingerprintFields =
+  | {
+      os_fingerprint: {
+        os: FingerprintedOs;
+        confidence: 'high' | 'medium' | 'low' | 'none';
+        reason: string;
+        observed_ip: string;
+        observed_via: 'proxy_host' | 'exit_ip';
+      };
+    }
+  | { os_fingerprint_unavailable: 'vpn_tunnel' | 'not_observed' | 'observer_off' };
+
+/**
+ * (o) — the exact `reason` `ProxyConnectivityProbe.observeOs` returns when the
+ * deployment configured NO raw-socket observer (`this.osObserver === undefined`,
+ * `services/proxy-connectivity-probe.ts`). Matched, not inferred: the probe
+ * reports "no observer is configured" and "the observer tunnel was refused"
+ * through the SAME `{ observed: false, reason }` shape, and those two causes take
+ * a customer to opposite places — one says retrying cannot work, the other says
+ * it might. Pinned against the real probe in
+ * `tests/unit/a-blank-os-chip-carries-its-cause.test.ts`, so rewording the probe's
+ * literal reds a test here rather than silently downgrading every deployment with
+ * the observer off to "not observed".
+ */
+const OBSERVER_NOT_CONFIGURED_REASON = 'observer not configured';
+
+/**
  * (n) N15 — what a VPN row's customer is told when the NODE could not return a
  * measurement, and — the load-bearing half — whether that answer is a VERDICT
  * about the tunnel or a `not_run` notice about the Mac.
@@ -1066,19 +1104,24 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // and fall the whole request back to the control plane, which would relabel
       // a node measurement `control_plane`. A wrong provenance is worse than a
       // missing chip.
+      //
+      // (o) 2026-09-11 — AND WHEN NOTHING WAS OBSERVED, WHY. A bare `{}` said
+      // "absent" and nothing else, so the desktop client rendered every miss with
+      // one hint — "Run Test on a proxy stored on your account; the control plane
+      // fingerprints the proxy's own TCP stack" — which is advice that CANNOT
+      // produce a value for two of the three causes. `os_fingerprint_unavailable`
+      // is the machine-readable cause a client branches on; the three values are
+      // the three arms that already existed here, now reported instead of merged.
       const osFingerprintFields = async (
         descriptor: ProbeProxyDescriptor,
         exitIp: string | null | undefined,
-      ): Promise<{
-        os_fingerprint?: {
-          os: FingerprintedOs;
-          confidence: 'high' | 'medium' | 'low' | 'none';
-          reason: string;
-          observed_ip: string;
-          observed_via: 'proxy_host' | 'exit_ip';
-        };
-      }> => {
-        if (proxyConnectivityProbe === undefined) return {};
+      ): Promise<OsFingerprintFields> => {
+        // No probe wired at all (a fixture, or a deployment with no master key):
+        // nothing on this deployment fingerprints anything, which is the same
+        // thing a customer needs told as a probe with no observer configured.
+        if (proxyConnectivityProbe === undefined) {
+          return { os_fingerprint_unavailable: 'observer_off' as const };
+        }
         try {
           const os = await proxyConnectivityProbe.observeOs(descriptor, exitIp ?? undefined);
           if (!os.observed) {
@@ -1089,7 +1132,12 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               { proxyId: row.id, reason: os.reason },
               'proxy test: os fingerprint not observed',
             );
-            return {};
+            return {
+              os_fingerprint_unavailable:
+                os.reason === OBSERVER_NOT_CONFIGURED_REASON
+                  ? ('observer_off' as const)
+                  : ('not_observed' as const),
+            };
           }
           return {
             os_fingerprint: {
@@ -1105,7 +1153,9 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             { proxyId: row.id, err },
             'proxy test: os fingerprint observation failed',
           );
-          return {};
+          // A throw is the observer tunnel failing, never the observer being off:
+          // `observeOs` answers the off case without touching the network.
+          return { os_fingerprint_unavailable: 'not_observed' as const };
         }
       };
 
@@ -1118,16 +1168,13 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // `accountProxiesRepo` is non-null here (checked at the top of the handler);
       // the local binding carries that narrowing into this closure.
       const proxiesRepo = accountProxiesRepo;
-      const persistOsFingerprintIfObserved = async (fields: {
-        os_fingerprint?: {
-          os: FingerprintedOs;
-          confidence: 'high' | 'medium' | 'low' | 'none';
-          reason: string;
-          observed_ip: string;
-          observed_via: 'proxy_host' | 'exit_ip';
-        };
-      }): Promise<void> => {
-        const fp = fields.os_fingerprint;
+      // (o) — takes the union, so the "no fingerprint, here is why" members reach
+      // it and are correctly no-ops: a CAUSE is not a measurement and must never
+      // touch the stored column.
+      const persistOsFingerprintIfObserved = async (
+        fields: OsFingerprintFields | Record<string, never>,
+      ): Promise<void> => {
+        const fp = 'os_fingerprint' in fields ? fields.os_fingerprint : undefined;
         if (fp === undefined) return;
         try {
           await proxiesRepo.update({
@@ -1177,7 +1224,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // asserting it away.
           if (!('host' in resolved)) {
             await proxyTcpProbe(row.host, row.port, 8_000);
-            return { ok: true as const, latency_ms: Date.now() - startedAt, ...quicFields };
+            return {
+              ok: true as const,
+              latency_ms: Date.now() - startedAt,
+              ...quicFields,
+              // (o) — same cause as the fleet branch's twin of this narrowing: a
+              // VPN wire has no SOCKS5 endpoint for the observer to dial through,
+              // so there is no SYN to read and no retry can produce one.
+              os_fingerprint_unavailable: 'vpn_tunnel' as const,
+            };
           }
           const descriptor = {
             protocol: 'socks5' as const,
@@ -1485,21 +1540,45 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           // could not use has no stack worth fingerprinting and must not spend the
           // observer's budget. The `'host' in resolved` narrowing IS REACHABLE: a
           // VPN wire carries `type` and no host/port (there is no SOCKS5 endpoint to
-          // dial through), so an openvpn/wireguard row takes the `{}` arm and carries
-          // no fingerprint — absent means unobserved, never a placeholder.
-          const osFields =
-            usable && 'host' in resolved
-              ? await osFingerprintFields(
-                  {
-                    protocol: 'socks5' as const,
-                    host: resolved.host,
-                    port: resolved.port,
-                    ...(resolved.username !== undefined ? { username: resolved.username } : {}),
-                    ...(resolved.password !== undefined ? { password: resolved.password } : {}),
-                  },
-                  r.exit_ip,
-                )
-              : {};
+          // dial through), so an openvpn/wireguard row takes the no-fingerprint arm.
+          //
+          // ⛔ (o) 2026-09-11 — and THAT ARM IS THE WHOLE VPN POPULATION. `'host' in
+          // resolved` is false for EVERY openvpn/wireguard row, so before this the
+          // chip on a VPN profile card was blank permanently, under a hint telling
+          // the owner to press Test — the one action that provably cannot change it.
+          // The arm now reports its cause: `vpn_tunnel`, "there is no SOCKS5 stack
+          // here to fingerprint", which is true and terminates.
+          //
+          // ⛔ (o) 2026-09-11 follow-up — `vpn_tunnel` is a property of the SCHEME,
+          // never of the verdict. It used to sit behind a `!usable ? {}` gate, so
+          // the cause was emitted ONLY when the tunnel came up — i.e. in the one
+          // state the owner does not need it. In the two states a VPN owner
+          // actually presses Check in (the handshake failed; the row has never
+          // tested green) the reply carried no cause at all, and the desktop chip
+          // fell back to "Run Test … the control plane fingerprints the proxy's
+          // own TCP stack" — a button that row does not have, promising a
+          // measurement that can never exist for a tunnel. The narrowing decides
+          // FIRST now: a VPN wire always reports its cause, and the observer is
+          // still spent only on a usable socks5 row.
+          //
+          // The socks5 `!usable` arm still reports NOTHING on purpose: a proxy the
+          // node could not use has its cause in `reason` already, and "fingerprint
+          // unavailable because VPN" would be false about a broken socks5 row.
+          const osFields: OsFingerprintFields | Record<string, never> =
+            'host' in resolved
+              ? usable
+                ? await osFingerprintFields(
+                    {
+                      protocol: 'socks5' as const,
+                      host: resolved.host,
+                      port: resolved.port,
+                      ...(resolved.username !== undefined ? { username: resolved.username } : {}),
+                      ...(resolved.password !== undefined ? { password: resolved.password } : {}),
+                    },
+                    r.exit_ip,
+                  )
+                : {}
+              : { os_fingerprint_unavailable: 'vpn_tunnel' as const };
           await persistOsFingerprintIfObserved(osFields);
           // VPN exit parity — persist the exit the NODE observed onto the proxy row
           // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest

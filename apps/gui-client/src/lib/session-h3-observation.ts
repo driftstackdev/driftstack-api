@@ -15,8 +15,9 @@
 //   • `h3_connection_observed` is latched node-side — an insert-only set, it
 //     can never return to false — so it answers "ever this session", not "now".
 //     It is stamped ONCE per session, from the first report that carries it.
-//   • `h3_connection_count` (declared for the report, not yet in the customer
-//     projection) is monotone; its RATE is the liveness the boolean lacks. When
+//   • `h3_connection_count` (projected to the customer report since (o) O2 —
+//     nullable, absent from older servers) is monotone; its RATE is the liveness
+//     the boolean lacks. When
 //     present, an increase re-stamps; an unchanged count writes nothing.
 //   An absent key means "leave today's behaviour alone"; a 0 is a measurement.
 

@@ -17,6 +17,7 @@ import { cleanMeasuredQuic, type MeasuredQuic } from './account-proxies';
 import {
   isFingerprintConfidence,
   isFingerprintedOs,
+  isOsFingerprintUnavailable,
   type OsFingerprint,
 } from './os-fingerprint-verdict';
 import { cleanServerVantage, type ProxyVantage, type ServerVantage } from './proxy-vantage';
@@ -430,7 +431,20 @@ function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
   const f = raw as Record<string, unknown>;
   if (!isFingerprintedOs(f.os) || !isFingerprintConfidence(f.confidence)) return undefined;
   if (typeof f.reason !== 'string' || typeof f.at !== 'number') return undefined;
-  return { os: f.os, confidence: f.confidence, reason: f.reason, at: f.at };
+  // (o) O3 — the CAUSE survives the reload. This allowlist is the only way a field
+  // outlives a load, so dropping it here would re-open the dead end on the next app
+  // start: the placeholder would come back as a bare `os: 'unknown'` and the chip
+  // would say "we looked and could not tell" about a row nothing ever looked at.
+  // ⛔ `measuring` is deliberately NOT admitted — it is an in-flight UI sentinel, and
+  // a persisted one would claim a probe was running across a restart.
+  const unavailable = isOsFingerprintUnavailable(f.unavailable) ? f.unavailable : undefined;
+  return {
+    os: f.os,
+    confidence: f.confidence,
+    reason: f.reason,
+    at: f.at,
+    ...(unavailable !== undefined ? { unavailable } : {}),
+  };
 }
 
 /** T-20 — a stored endpoint verdict is kept only when every field is present
@@ -763,7 +777,15 @@ export function saveOsFingerprint(
     if (prior === undefined) return all;
     all[proxyId] = {
       ...prior,
-      osFingerprint: { os: fp.os, confidence: fp.confidence, reason: fp.reason, at },
+      // (o) O3 — the reported cause is written beside the reading it stands in for;
+      // without it the next load reproduces a bare `unknown` and the dead-end hint.
+      osFingerprint: {
+        os: fp.os,
+        confidence: fp.confidence,
+        reason: fp.reason,
+        at,
+        ...(fp.unavailable !== undefined ? { unavailable: fp.unavailable } : {}),
+      },
     };
     await getStore().set(KEY, all);
     await getStore().save();

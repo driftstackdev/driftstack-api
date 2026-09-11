@@ -847,12 +847,17 @@ export class FleetControlConnection {
           // driver-session egress persistence/webhook path.
           // W-29 — same key-set observation as probeEgressResult above, and for
           // the same reason: a frame that parses tells you validation succeeded,
-          // not which keys arrived. `h3ConnectionCount` is being introduced on
-          // this frame precisely because the latched `h3ConnectionObserved` cannot
-          // carry liveness, and the customer-safe projection strips the count — so
-          // WITHOUT this line there is no instrument anywhere that can see whether
-          // the node is sending it. Names only, never values: these frames carry
-          // an archetype id, a fork build string, safeguard detail and the
+          // not which keys arrived. `h3ConnectionCount` is on this frame precisely
+          // because the latched `h3ConnectionObserved` cannot carry liveness.
+          // ⚠️ UPDATED (o) O2 2026-09-11 — this comment used to end "and the
+          // customer-safe projection strips the count", and that is NO LONGER
+          // TRUE: `customerSafeCapabilityReport` now projects it as
+          // `h3_connection_count`, which is what made the desktop readout's
+          // `· N connections` branch reachable at all. The log line stays: it is
+          // the only place the count is visible BEFORE the ownership-gated
+          // consumer runs, so a node sending it to a session the relay drops is
+          // still observable. Names only, never values: these frames carry an
+          // archetype id, a fork build string, safeguard detail and the
           // customer's upstream endpoint.
           //
           // ⛔ ONE DELIBERATE EXCEPTION, and it is narrow. `h3ConnectionCount` is

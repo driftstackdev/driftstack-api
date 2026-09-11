@@ -82,6 +82,14 @@ export const AgentSessionSchema = z.object({
        *  must not be read as "no HTTP/3" — the two modes above describe the
        *  transport that was CONFIGURED, not what carried. */
       h3_connection_observed: z.boolean().nullable(),
+      /** (o) O2 — HOW MANY HTTP/3 connections the node has seen on this session.
+       *  `null` means NOT REPORTED (an older harness, or none sent yet) and must
+       *  never be read as zero. It is not a nicer form of the flag above: that
+       *  flag is latched and can never return to false, so it can say "h3 was
+       *  reached once" and nothing about whether it still is. This count is
+       *  monotone, so its RATE carries the liveness the flag structurally cannot.
+       *  Optional as well as nullable: an older server sends no key at all. */
+      h3_connection_count: z.number().int().nonnegative().nullable().optional(),
       /** T-26 — the live exit identity this session's traffic leaves through,
        *  and the IPs its WebRTC candidates surface. Each is `null` until the box
        *  reports it (NOT OBSERVED), never read as "no exit". */

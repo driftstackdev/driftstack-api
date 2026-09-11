@@ -22,7 +22,11 @@ const PROBE_ORIGIN_TITLE =
 /** T-1 — hover text on a latency measured by the control plane, closer to the
  *  fleet that runs the profile than this Mac. */
 const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
-import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
+import {
+  OS_FINGERPRINT_MEASURING,
+  VPN_TUNNEL_OS_FINGERPRINT,
+  type OsFingerprint,
+} from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
@@ -650,7 +654,27 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     screen's overflow-hidden. Its own row keeps it fully visible. */}
                 {p.hasProxy && (
                   <div className="flex items-center gap-1.5">
-                    <ProxyOsChip fingerprint={p.osFingerprint} size="xs" />
+                    {/* (o) O4 — same rule as the proxies grid: nothing measures a
+                        proxy's stack except the Test this card's own button starts,
+                        so "measuring" is rendered from `p.testing` — a probe this
+                        client has in flight — and never from an absent fingerprint.
+                        ⛔ (o) 2026-09-11 follow-up — and never on a VPN row at all:
+                        `p.testing` is set for the "Check VPN" button too, but no
+                        fingerprint is taken through a tunnel (the control plane has
+                        no SOCKS5 endpoint to dial), so the card claimed a measurement
+                        was running and then said none can exist. A VPN row states that
+                        cause from its own scheme, in every state. */}
+                    <ProxyOsChip
+                      fingerprint={
+                        p.osFingerprint ??
+                        (p.vpn === true
+                          ? VPN_TUNNEL_OS_FINGERPRINT
+                          : p.testing
+                            ? OS_FINGERPRINT_MEASURING
+                            : undefined)
+                      }
+                      size="xs"
+                    />
                   </div>
                 )}
                 {/* A proxy that FAILED its last test says so, in place, with the

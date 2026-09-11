@@ -11,6 +11,7 @@ import { EmptyState } from '../components/EmptyState';
 import { RelativeTime } from '../components/RelativeTime';
 import { Skeleton, SkeletonRegion } from '../components/Skeleton';
 import { ProxyCapabilityChips, ProxyOsChip } from '../components/ProxyCapabilities';
+import { OS_FINGERPRINT_MEASURING, VPN_TUNNEL_OS_FINGERPRINT } from '../lib/os-fingerprint-verdict';
 import {
   isProxyUsable,
   addProxy,
@@ -417,6 +418,17 @@ export function ProxiesView(): JSX.Element {
   // failure: it sits beside whatever verdict the row has, in muted ink, and is
   // cleared by the next check exactly like a failure is.
   const [vpnNotices, setVpnNotices] = useState<Record<string, string>>({});
+  // (o) O5 — the rows whose LAST server test could not reach a fleet Mac at all
+  // (`not_run: 'no_node'`: none free, the dispatch never landed, or the deployment
+  // has no fleet). ⛔ This is the only honest signal for it, and it is NOT the
+  // vantage: for a VPN row the control plane NEVER measures, so it never answers
+  // `ok` — it answers `ok:false` + `not_run`, which writes no `serverVantage` at
+  // all (`applyServerProbeOutcome` sets it inside the `ok` arm only, and the cache
+  // surfaces a `measuredFrom` only beside a usable result). Keying the chip on
+  // `vantage === 'control_plane'` therefore guarded a state a VPN row cannot be in.
+  // In memory only, like `vpnNotices`: a remount has not seen the reply, and the
+  // chip then says "not measured yet" — which is what is true of what it knows.
+  const [noFleetMac, setNoFleetMac] = useState<Record<string, true>>({});
   const [testAllSummary, setTestAllSummary] = useState<TestAllSummary | null>(null);
   // A ref closes the one-render gap before `testingAll` disables the button. It
   // also owns the eventual summary, so an abandoned/stale sweep cannot announce
@@ -1006,6 +1018,10 @@ export function ProxiesView(): JSX.Element {
     setQuicMeasured((m) => dropKey(m, id));
     setServerVantage((m) => dropKey(m, id));
     setQuicProbe((m) => dropKey(m, id));
+    // (o) O5 — and the "no Mac was free" state with them: it describes the last
+    // server test, and this drop is taken where that test's answer no longer
+    // stands (an endpoint that stopped resolving, an edit).
+    setNoFleetMac((m) => dropKey(m, id));
   }
 
   /**
@@ -1015,6 +1031,22 @@ export function ProxiesView(): JSX.Element {
    * VPN row never showed a fleet number.
    */
   function applyServerProbeOutcome(id: string, outcome: ServerProbeOutcome): void {
+    // (o) O5 — a test that DID reach a Mac (ok or a failed verdict) clears the
+    // "no Mac was free" state; a `no_node` sets it. Written here rather than at
+    // the call sites so the grid's Check and the sweep cannot drift.
+    setNoFleetMac((m) =>
+      outcome.kind === 'not_run'
+        ? outcome.why === 'no_node'
+          ? { ...m, [id]: true }
+          : // A refusal the customer can act on (a live session, a busy node) is a
+            // DIFFERENT cause, and the row's notice states it.
+            dropKey(m, id)
+        : outcome.kind === 'unavailable'
+          ? // (i) I5 — the server did not answer, so nothing was learned and nothing
+            // here moves: the standing state is still the last thing measured.
+            m
+          : dropKey(m, id),
+    );
     if (outcome.kind === 'ok') {
       const fp = outcome.osFingerprint;
       if (fp !== undefined) {
@@ -1490,6 +1522,7 @@ export function ProxiesView(): JSX.Element {
           quicProbe={quicProbe}
           vpnFailures={vpnFailures}
           vpnNotices={vpnNotices}
+          noFleetMac={noFleetMac}
           onEdit={(id) => setEditor({ kind: 'edit', id })}
           onRemove={(id) => void handleRemove(id)}
           onTest={(p) => void handleTest(p)}
@@ -1678,6 +1711,7 @@ function ProxyTable({
   quicProbe,
   vpnFailures,
   vpnNotices,
+  noFleetMac,
   endpointResults,
   onEdit,
   onRemove,
@@ -1703,6 +1737,9 @@ function ProxyTable({
   vpnFailures: Record<string, string>;
   /** (d) — the server's sentence per VPN row whose test was NOT RUN (a notice). */
   vpnNotices: Record<string, string>;
+  /** (o) O5 — the rows whose last server test reached NO fleet Mac (`not_run:
+   *  'no_node'`). Absent = a Mac answered, or no server test has landed yet. */
+  noFleetMac: Record<string, true>;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   endpointResults: Record<string, EndpointResolveResult>;
@@ -1945,6 +1982,7 @@ function ProxyTable({
                 quicProbe={quicProbe[p.id]}
                 vpnFailure={vpnFailures[p.id]}
                 vpnNotice={vpnNotices[p.id]}
+                noFleetMac={noFleetMac[p.id] === true}
                 onEdit={() => onEdit(p.id)}
                 onRemove={() => onRemove(p.id)}
                 onTest={() => onTest(p)}
@@ -2028,6 +2066,7 @@ function ProxyRow({
   quicProbe,
   vpnFailure,
   vpnNotice,
+  noFleetMac,
   endpointResult,
   onEdit,
   onRemove,
@@ -2064,6 +2103,10 @@ function ProxyRow({
    *  session holds the tunnel, or the measuring Mac was busy. A notice beside
    *  the row's verdict, never a failure. */
   vpnNotice?: string;
+  /** (o) O5 — the last server test of this row found NO fleet Mac to run it
+   *  (`not_run: 'no_node'`). The QUIC absence it leaves behind is about the
+   *  FLEET, not about this tunnel, and the chip says which. */
+  noFleetMac: boolean;
   endpointResult: EndpointResolveResult | undefined;
   onEdit: () => void;
   onRemove: () => void;
@@ -2235,7 +2278,7 @@ function ProxyRow({
           // and the cell read a permanent "untested" naming a Test button the
           // row does not have. A tunnel carries UDP; the one protocol probed
           // through it is QUIC (the fleet's relay leg, or a live session's h3).
-          <VpnQuicChip quicMeasured={quicMeasured} quicProbe={quicProbe} />
+          <VpnQuicChip quicMeasured={quicMeasured} quicProbe={quicProbe} noFleetMac={noFleetMac} />
         ) : result !== undefined && reachable ? (
           <ProxyCapabilityChips
             result={result}
@@ -2258,7 +2301,31 @@ function ProxyRow({
       </td>
 
       <td className="px-3 py-2">
-        <ProxyOsChip fingerprint={osFingerprint} size="xs" />
+        {/* (o) O4 — "measuring" is a claim about work in progress, and the ONLY thing
+            that measures a proxy's stack is the Test this row's button starts (there
+            is no scheduler behind it). So the measuring state is rendered from THIS
+            client's in-flight probe — `testing` — and never from an absent value; a
+            row nobody has tested says "not measured", which is what is true of it.
+
+            ⛔ (o) 2026-09-11 follow-up — and NOT EVEN THEN on a VPN row. `testing` is
+            set for the "Check VPN" button too, but the control plane fingerprints no
+            tunnel: `'host' in resolved` is false for every openvpn/wireguard wire, so
+            the observer is never consulted and the reply says `vpn_tunnel`. The chip
+            claimed a stack measurement was running for the whole 30-45 s fleet wait
+            and then contradicted itself. A VPN row states its cause from its own
+            SCHEME — true before the first Check, while one runs, and after a tunnel
+            that failed (states in which no reply carries the cause at all). */}
+        <ProxyOsChip
+          fingerprint={
+            osFingerprint ??
+            (isVpnScheme(p.scheme)
+              ? VPN_TUNNEL_OS_FINGERPRINT
+              : testing
+                ? OS_FINGERPRINT_MEASURING
+                : undefined)
+          }
+          size="xs"
+        />
       </td>
 
       <td className="px-3 py-2">
@@ -2429,6 +2496,13 @@ function HealthPill({
  * only the DNS resolve has run; `tunnel down` when the fleet said so. Never
  * "healthy from this Mac" — this Mac never made a connection.
  */
+/** (o) O5 — the sentence for a QUIC verdict that is missing because the FLEET was
+ *  unavailable, not because the tunnel failed anything. It names the cause and the
+ *  machine that would measure it, and it does NOT tell the customer to press a button
+ *  that cannot produce a value while every Mac is busy. */
+const NO_TEST_MAC_QUIC_HINT =
+  'Not measured yet — no test Mac was free; QUIC is measured from the Mac that runs your profiles.';
+
 /**
  * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
  * first (a live session's HTTP/3 verdict outranks the fleet relay leg), and
@@ -2438,9 +2512,23 @@ function HealthPill({
 function VpnQuicChip({
   quicMeasured,
   quicProbe,
+  noFleetMac,
 }: {
   quicMeasured: MeasuredQuic | undefined;
   quicProbe: boolean | undefined;
+  /** (o) O5 — the LAST server test of this row reached no fleet Mac at all
+   *  (`not_run: 'no_node'` — none free, the dispatch never landed, or the
+   *  deployment has none). The reply then carries no QUIC leg, because only a
+   *  fleet Mac can run one through a tunnel: the absence below is about the
+   *  FLEET, not about this tunnel. False = either a Mac answered, or no server
+   *  test has landed on this row yet.
+   *
+   *  ⛔ NOT derived from the vantage. `measured_from: 'control_plane'` rides on
+   *  the fleet-miss reply, but that reply is `ok:false` + `not_run`, and the view
+   *  writes a `serverVantage` only from an `ok` outcome — so for a VPN row, which
+   *  the control plane never measures, the vantage is 'fleet' or undefined and a
+   *  `vantage === 'control_plane'` test was dead on arrival. */
+  noFleetMac: boolean;
 }): JSX.Element {
   const verdict: { ok: boolean; hint: string } | null =
     quicMeasured === 'h3'
@@ -2462,12 +2550,22 @@ function VpnQuicChip({
               }
             : null;
   if (verdict === null) {
+    // (o) O5 — absence has two unlike causes and one of them is NOT about this row.
+    // When the last test found no fleet Mac (busy, or a deployment with none), the
+    // reply carried no QUIC leg at all, and no number of presses of Check can add one
+    // until a Mac frees up. Telling the customer to press it again is the loop that
+    // reads as "it's not detecting my QUIC". Name the cause.
     return (
       <span
         className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
         data-component="vpn-quic-chip"
         data-ok="unmeasured"
-        title={`Not measured yet — run ${CHECK_VPN_ACTION}: the test Mac brings the tunnel up and probes QUIC through it.`}
+        data-unmeasured={noFleetMac ? 'no_fleet_mac' : 'never_tested'}
+        title={
+          noFleetMac
+            ? NO_TEST_MAC_QUIC_HINT
+            : `Not measured yet — run ${CHECK_VPN_ACTION}: the test Mac brings the tunnel up and probes QUIC through it.`
+        }
       >
         QUIC untested
       </span>
@@ -2889,6 +2987,87 @@ export function ProxyForm({
         : `✓ remote ${built.host}:${built.port.toString()}`,
     );
   }
+
+  /**
+   * (o) O6 — a row STORED with a VPN config the control plane refuses. OpenVPN self-heals
+   * (the strip is a safe, reversible normalisation); WireGuard cannot be healed without
+   * guessing where the tunnel routes, so it says what is wrong instead — see the
+   * wireguard arm inside. Both close the same dead end: Save greyed, nothing visible.
+   *
+   * The paste and upload paths auto-strip before any gate, so nothing refusable can be
+   * created today. But a row created by a build that predates that gate opens through
+   * `toDraft`, which seeds `draft.openvpn.config_blob` VERBATIM — and until this effect
+   * existed nothing normalized it, because the form's only other effect is the `inert`
+   * lock. The customer then hit a dead end with no way out and no message:
+   *   • Save is disabled on `vpnRefusal !== null`, so its `title` is the only trace;
+   *   • `vpnHint` is null on mount, so there is no visible sentence at all;
+   *   • the "Remove unsupported lines" button never renders, because `vpnFixable`'s
+   *     only reachable setter is inside `handleSubmit`, which a disabled Save cannot
+   *     reach — and meanwhile every launch re-PUTs the raw blob and 400s.
+   * The only escape was typing a character into the textarea to re-fire the paste path.
+   *
+   * So: run that same path once, on mount, through `handleOvpnPaste` — the identical
+   * function the textarea calls — so the row heals the first time it is opened and
+   * shows the SAME transparent adjustment note a paste shows. Not a silent rewrite.
+   *
+   * ⛔ `openvpnAutoStrip` returns null when there is nothing refusable, so a clean
+   * stored config is left byte-for-byte alone and shows no note. It also never invents
+   * missing material: a config referencing an external cert/key file is untouched here
+   * and still surfaces its own honest refusal.
+   */
+  const seededOvpnNormalized = useRef(false);
+  useEffect(() => {
+    if (seededOvpnNormalized.current) return;
+    seededOvpnNormalized.current = true;
+    // (o) 2026-09-11 follow-up — WIREGUARD REACHES THE SAME DEAD END, and it cannot be
+    // healed the way an .ovpn can. A stored WG block is refused by the control plane's
+    // own schema (a mask-less `Address = 10.7.0.2`, a DNS search domain, a malformed
+    // PresharedKey) and `wireguardRefusal` runs that schema over the SEEDED block on
+    // mount — so Save is dead, its `title` the only trace, `vpnHint` null, the "Remove
+    // unsupported lines" affordance OpenVPN-only, and the textarea empty by design
+    // (N4: it is a REPLACE field). That is strictly worse than the OpenVPN case: there
+    // the offending blob is at least visible in the box.
+    //
+    // ⛔ There is deliberately NO auto-fix here. Inventing the missing half of an
+    // address, or dropping a DNS entry, would change where the tunnel routes — the form
+    // must not guess that. So the heal is the HONEST one: say what the control plane
+    // refuses, in its own words, name the field, and name the action that CAN clear it
+    // (replace the conf). Save stays disabled, because the config really is refusable.
+    if (initial.scheme === 'wireguard') {
+      // Same call the Save gate makes, on the same inputs the mount has: the seeded
+      // block and an empty replacement box. It cannot disagree with `vpnRefusal`.
+      const refusal = wireguardRefusal('wireguard', initial.wireguard, '');
+      if (refusal === null) return;
+      setVpnHint(
+        `This saved WireGuard config is one Driftstack refuses — ${refusal.field}: ${refusal.reason}. ` +
+          'Paste or upload a corrected wg0.conf above to replace it; the saved one cannot be launched as it is.',
+      );
+      return;
+    }
+    if (initial.scheme !== 'openvpn') return;
+    const seeded = initial.openvpn?.config_blob ?? '';
+    const auto = openvpnAutoStrip('openvpn', seeded);
+    if (auto === null) {
+      // Nothing the strip can heal — but the row may STILL be refusable (an external
+      // cert/key file reference the config must inline). That is the original dead
+      // end in full: Save greyed, no sentence, no button. Say what is wrong, in the
+      // finder's own words, and name the action that can clear it — the same honest
+      // heal the WireGuard arm above does. Save stays disabled; the config really is
+      // refusable, and the strip must never invent the missing material.
+      const refusal = openvpnRefusal('openvpn', seeded);
+      if (refusal !== null) {
+        setVpnHint(
+          `Line ${refusal.line.toString()}: ${refusal.reason} ` +
+            'Paste or upload a corrected .ovpn above to replace it; the saved one cannot be launched as it is.',
+        );
+      }
+      return;
+    }
+    handleOvpnPaste(auto.config, auto.note);
+    // Mount-only (empty dep list + the ref): this heals what the row was SEEDED with.
+    // Re-running it on a later `initial` identity would fight the customer's own edits
+    // in the textarea — which is why the effect reads `initial`, never `draft`.
+  }, []);
 
   // Upload a .ovpn / wg0.conf file instead of pasting — reads it as text and
   // routes through the same parse handler. Resets the input so re-picking the

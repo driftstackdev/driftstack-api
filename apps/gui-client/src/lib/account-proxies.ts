@@ -16,7 +16,10 @@ import { readBoundedApiJson } from './read-bounded-json';
 import {
   isFingerprintConfidence,
   isFingerprintedOs,
+  isOsFingerprintUnavailable,
+  unavailableOsFingerprint,
   type OsFingerprint,
+  type OsFingerprintUnavailable,
 } from './os-fingerprint-verdict';
 import { cleanProxyVantage, type ProxyVantage } from './proxy-vantage';
 import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
@@ -402,6 +405,14 @@ export type AccountProxyTestResult =
        *  the previous number stayed on the card looking freshly measured. */
       latency_ms: number | null;
       os_fingerprint?: OsFingerprint;
+      /** (o) O3 — WHY this reply carries no `os_fingerprint`. Optional + nullable on
+       *  the wire, so an older server (which sends neither) is still parsed and the
+       *  row falls back to today's neutral "not measured" wording. When present it is
+       *  ALSO minted onto `os_fingerprint` as the placeholder
+       *  `unavailableOsFingerprint` builds, which is how the cause reaches the chip:
+       *  every hop between here and the chip already carries `os_fingerprint`, and a
+       *  second parallel channel would be a field to forget at each of them. */
+      os_fingerprint_unavailable?: OsFingerprintUnavailable;
       /** T-6 — the measured QUIC verdict, present only when the server measured
        *  one in a live session; absent = never measured (chip stays inferred). */
       quic_measured?: MeasuredQuic | null;
@@ -700,7 +711,17 @@ export async function testAccountProxy(
         ? null
         : undefined;
   if (body.ok === true && latency !== undefined) {
-    const fp = cleanWireFingerprint(body.os_fingerprint);
+    // (o) O3 — a reported cause is kept only when it is IN the closed set; a value
+    // from a newer server is dropped, and the row then reads as today's plain "not
+    // measured" rather than under a cause this build cannot state truthfully.
+    const fpUnavailable = isOsFingerprintUnavailable(body.os_fingerprint_unavailable)
+      ? body.os_fingerprint_unavailable
+      : undefined;
+    // ⛔ A real reading always wins: a server that sent BOTH measured something, and the
+    // measurement is the answer. The placeholder is minted ONLY in the absence branch.
+    const fp =
+      cleanWireFingerprint(body.os_fingerprint) ??
+      (fpUnavailable !== undefined ? unavailableOsFingerprint(fpUnavailable) : undefined);
     // T-6 — a value outside the closed set is DROPPED (the field is omitted, read
     // downstream as "never measured"), never coerced into a would-be green chip.
     const quic = cleanMeasuredQuic(body.quic_measured);
@@ -731,6 +752,7 @@ export async function testAccountProxy(
       ok: true,
       latency_ms: latency,
       ...(fp !== undefined ? { os_fingerprint: fp } : {}),
+      ...(fpUnavailable !== undefined ? { os_fingerprint_unavailable: fpUnavailable } : {}),
       ...(quic !== null
         ? {
             quic_measured: quic,

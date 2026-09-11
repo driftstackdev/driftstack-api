@@ -24,15 +24,27 @@ export function OsReadout({
 }): JSX.Element {
   const fingerprint = report?.os_fingerprint;
   if (fingerprint === undefined) {
-    // Not observed yet — the live state until the control plane measures the exit
-    // proxy's stack. NEVER a placeholder OS: absence is "the report did not say".
+    // (o) O4 — this used to read "OS: measuring…", which asserts work in progress.
+    // Nothing measures a session's OS fingerprint: `observeOs` has exactly one call
+    // site, the customer-initiated proxy Test, and the session report only carries
+    // the value that Test stored on the proxy row. So absence is "not measured",
+    // never "measuring" — and the hint names the one action that can produce it.
+    // A VPN tunnel has no SOCKS5 stack for the control plane to fingerprint, so for
+    // an openvpn/wireguard session even that action cannot help; say so instead.
+    // NEVER a placeholder OS: absence is "the report did not say".
+    const vpn = report?.proxy_kind === 'openvpn' || report?.proxy_kind === 'wireguard';
     return (
       <div
         data-component="sim-os-readout"
-        data-state="measuring"
+        data-state={vpn ? 'not-available' : 'not-measured'}
+        title={
+          vpn
+            ? 'A VPN tunnel has no SOCKS5 stack for the control plane to fingerprint.'
+            : 'Not measured yet — run Test on this profile’s proxy (Proxies screen) to fingerprint its stack.'
+        }
         className="mt-1 text-[10px] leading-snug text-white/40"
       >
-        OS: measuring…
+        {vpn ? 'OS: not available for a VPN tunnel' : 'OS: not measured'}
       </div>
     );
   }

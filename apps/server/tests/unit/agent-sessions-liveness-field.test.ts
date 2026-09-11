@@ -172,6 +172,10 @@ describe('agent-sessions read shape — capability_report', () => {
       // completed QUIC handshake, so absent stays NOT-OBSERVED. The internal
       // interpose diagnostic is deliberately not here.
       h3_connection_observed: null,
+      // (o) O2 — the count crosses to the customer beside the flag (it is the
+      // same fact at a finer grain, and the only one that can carry liveness).
+      // null, not 0: this frame reported no count, and 0 would be a measurement.
+      h3_connection_count: null,
       // T-26 — null, not empty: this frame carries no exit identity, so the
       // live-exit fields stay NOT-OBSERVED. They ARE customer-safe.
       exit_ip: null,

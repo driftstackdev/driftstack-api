@@ -33,6 +33,25 @@ export interface SessionCapabilityReport {
    * do with the device.
    */
   h3_connection_observed: boolean | null;
+  /**
+   * (o) O2 2026-09-11 — HOW MANY HTTP/3 connections the node has seen on this
+   * session. `null` means NOT REPORTED (an older harness, or a node that has not
+   * sent one yet) and must never be read as zero.
+   *
+   * ⛔ IT IS NOT A NICER `h3_connection_observed`. That flag is backed by an
+   * insert-only Set on the node and can never return to false, so it is a sound
+   * "h3 was reached at least once" claim and an UNSOUND liveness signal: a
+   * consumer reading it as current refreshes a verdict on a relay that died an
+   * hour ago, and the timestamp looks fresh BECAUSE nothing was checking. The
+   * count is monotone, so its RATE carries the liveness the latched boolean
+   * cannot — and a rate is unobservable from a boolean, however often you read it.
+   *
+   * The node has sent it since the schema accepted it; nothing consumed it. The
+   * customer-safe projection stripped it, so the desktop readout's `· N
+   * connections` branch was unreachable code, and the cockpit could only ever
+   * show the latched "ever". This field is the one hop that was missing.
+   */
+  h3_connection_count: number | null;
   /** T-6 — the interpose image was seen loaded in the node's network process.
    *  INTERNAL diagnostic only (it names an implementation detail, and loaded is
    *  not carried), so it is deliberately NOT in the customer subset below. */
@@ -114,6 +133,13 @@ export function customerSafeCapabilityReport(
     // transport_mode_active beside it. The internal interpose diagnostic is NOT
     // included.
     h3_connection_observed: report.h3_connection_observed,
+    // (o) O2 — a DELIBERATE allowlist addition, beside the flag it makes usable.
+    // It is the same fact as `h3_connection_observed` at a finer grain — the
+    // customer's own session, their own egress — and it carries the liveness the
+    // latched boolean structurally cannot. It names no endpoint, identifies no
+    // person, and is a small non-negative integer. `null` stays null: NOT
+    // REPORTED, never rendered as zero connections.
+    h3_connection_count: report.h3_connection_count,
     // T-26 — the live exit identity + WebRTC candidate IPs are the customer's
     // OWN egress facts (T-26 ledger row: live exit IP + WebRTC IP in the
     // simulator), so they cross to the customer. Added deliberately to the
@@ -153,6 +179,11 @@ export class SessionCapabilityReportStore {
       // the field is reported only once a handshake has completed, so absent
       // stays NOT-OBSERVED and never collapses into a false "no HTTP/3".
       h3_connection_observed: frame.h3ConnectionObserved ?? null,
+      // (o) O2 — `?? null` and NEVER `?? 0`: a zero is a MEASUREMENT ("this
+      // session has carried no HTTP/3 connection"), and a frame that never
+      // carried the key has measured nothing. Coercing absence to 0 would put a
+      // confident negative on every older harness's session.
+      h3_connection_count: frame.h3ConnectionCount ?? null,
       interpose_image_loaded: frame.interposeImageLoaded ?? null,
       // T-26 — `?? null` preserves the node's absent-until-observed semantics
       // exactly: a key the schema dropped (malformed value) or an older harness

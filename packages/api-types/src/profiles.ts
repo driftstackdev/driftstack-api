@@ -267,6 +267,24 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // null when never measured.
     quic_measured: z.enum(['h3', 'h2-only']).nullable().optional(),
     quic_measured_at: z.string().nullable().optional(),
+    // (o) 2026-09-11 — WHY this result carries no OS fingerprint. Absence alone
+    // was indistinguishable across three unlike causes, and the desktop client
+    // rendered ALL of them as "press Test again" — advice that can never produce
+    // a value on the first two:
+    //   `vpn_tunnel`    an openvpn/wireguard row has no SOCKS5 stack to dial
+    //                   through, so there is no SYN to read. No retry can help.
+    //   `not_observed`  the observer tunnel was refused, or no SYN was recorded
+    //                   under either candidate address. Retrying may help.
+    //   `observer_off`  this deployment runs no raw-socket observer (or no
+    //                   connectivity probe at all), so nothing fingerprints
+    //                   anything here. No retry can help.
+    // Absent on a result that DID observe one, and absent from an older server —
+    // optional + nullable so an older client keeps parsing and a newer client
+    // reads absence as "no cause reported", never as a cause.
+    os_fingerprint_unavailable: z
+      .enum(['vpn_tunnel', 'not_observed', 'observer_off'])
+      .nullable()
+      .optional(),
     // VPN exit parity — the exit identity the measuring fleet node observed
     // (vantage=fleet only; the only vantage that can see through an OpenVPN /
     // WireGuard tunnel). Present exactly when the node saw an exit IP; the geo
