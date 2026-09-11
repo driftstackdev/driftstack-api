@@ -60,6 +60,13 @@ export interface CachedProbe {
    *  how old the exit identity is. Absent on entries written before this field
    *  existed, which `isExitIdentityFresh` reads as NOT fresh. */
   exitAt?: number;
+  /** (l) #14 — epoch ms when a native exit probe through a USABLE proxy did
+   *  not complete (V-857's "exit geo unavailable" state). Written by
+   *  `clearExitResult`, which also drops the exit fields, so a later cache
+   *  emit from ANY writer (a fleet test's persist, the sweeper, a list
+   *  adoption) reproduces the honest null state instead of re-hydrating the
+   *  PREVIOUS exit beside "Tested just now". Cleared by the next exit write. */
+  exitProbeFailedAt?: number;
   /** Geo enrichment (2026-06-15) from lumtest through the proxy — best-effort,
    *  absent when lumtest was unreachable. exitCountry stays the baseline. */
   exitCity?: string | null;
@@ -304,6 +311,11 @@ export function deriveProbeViewState(
         ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
         ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
       };
+    } else if (c.exitProbeFailedAt !== undefined && isProxyUsable(c.result)) {
+      // (l) #14 — V-857's third state, reproduced from the cache: the proxy
+      // is usable and the exit probe did not complete. `null`, not absent, so
+      // an emit renders "exit geo unavailable" rather than "run Test".
+      exitResults[id] = null;
     }
   }
   return {
@@ -471,6 +483,9 @@ function cleanEntry(raw: unknown): CachedProbe | null {
   const quicProbe = typeof r.quicProbe === 'boolean' ? r.quicProbe : undefined;
   // T-17 — the exit identity's own stamp; absent reads as "not fresh".
   const exitAt = typeof r.exitAt === 'number' ? r.exitAt : undefined;
+  // (l) #14 — the failed-exit-probe stamp; same allowlist rule as below.
+  const exitProbeFailedAt =
+    typeof r.exitProbeFailedAt === 'number' ? r.exitProbeFailedAt : undefined;
   // (h) — the server test's own stamp, and the fleet-failure stamp that keeps
   // a dropped exit from being adopted back. ⛔ This allowlist is the ONLY way a
   // field survives a load: a field written but not read here is gone on the
@@ -490,6 +505,7 @@ function cleanEntry(raw: unknown): CachedProbe | null {
     ...(exitIp !== undefined ? { exitIp } : {}),
     ...(exitCountry !== undefined ? { exitCountry } : {}),
     ...(exitAt !== undefined ? { exitAt } : {}),
+    ...(exitProbeFailedAt !== undefined ? { exitProbeFailedAt } : {}),
     ...(exitCity !== undefined ? { exitCity } : {}),
     ...(exitRegion !== undefined ? { exitRegion } : {}),
     ...(exitTimezone !== undefined ? { exitTimezone } : {}),
@@ -624,6 +640,11 @@ export function saveProbeResult(
       ...(prior?.exitAsnOrg !== undefined ? { exitAsnOrg: prior.exitAsnOrg } : {}),
       // T-17 — the exit identity's own stamp travels with the geo it dates.
       ...(prior?.exitAt !== undefined ? { exitAt: prior.exitAt } : {}),
+      // (l) #14 — and so does the failed-probe stamp: a capability re-test
+      // says nothing about the exit, so the null state it recorded stands.
+      ...(prior?.exitProbeFailedAt !== undefined
+        ? { exitProbeFailedAt: prior.exitProbeFailedAt }
+        : {}),
       ...(prior?.osFingerprint !== undefined ? { osFingerprint: prior.osFingerprint } : {}),
       // T-1/T-6 — the server latency and measured QUIC ride a separate call (the
       // control plane /test), so a native capability re-test must not erase them,
@@ -672,7 +693,13 @@ export function saveExitResult(
     if (prior.exitSupersededAt !== undefined && at <= prior.exitSupersededAt) return all;
     // …and an exit seen AFTER the failure is the tunnel seen up: the failure
     // verdict goes with the stamp (finding 3 — the sentence lives here now).
-    const { exitSupersededAt: _superseded, fleetFailureReason: _failure, ...kept } = prior;
+    // (l) #14 — a measured exit is the answer the failed probe lacked.
+    const {
+      exitSupersededAt: _superseded,
+      fleetFailureReason: _failure,
+      exitProbeFailedAt: _probeFailed,
+      ...kept
+    } = prior;
     all[proxyId] = {
       ...kept,
       exitIp,
@@ -683,6 +710,37 @@ export function saveExitResult(
       exitAsnOrg: geo.asnOrg ?? null,
       exitAt: at,
     };
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
+/**
+ * (l) #14 — record that a native exit probe through a USABLE proxy did not
+ * complete. The entry's exit fields go (they were an EARLIER probe's answer,
+ * and `saveProbeResult` had just carried them across this Test's capability
+ * write) and `exitProbeFailedAt` is stamped, so the derivation emits the null
+ * "exit geo unavailable" state from now on instead of the previous exit. Rides
+ * on an existing entry; none is invented. Cleared by the next `saveExitResult`.
+ */
+export function clearExitResult(proxyId: string, at: number = Date.now()): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    const {
+      exitIp: _ip,
+      exitCountry: _country,
+      exitCity: _city,
+      exitRegion: _region,
+      exitTimezone: _tz,
+      exitAsnOrg: _asn,
+      exitAt: _exitAt,
+      ...kept
+    } = prior;
+    all[proxyId] = { ...kept, exitProbeFailedAt: at };
     await getStore().set(KEY, all);
     await getStore().save();
     emitProbeCache(all);
@@ -873,6 +931,7 @@ function serverMeasuredFields(
     exitIp,
     exitCountry,
     exitAt,
+    exitProbeFailedAt,
     exitCity,
     exitRegion,
     exitTimezone,
@@ -892,6 +951,7 @@ function serverMeasuredFields(
     exitIp,
     exitCountry,
     exitAt,
+    exitProbeFailedAt,
     exitCity,
     exitRegion,
     exitTimezone,

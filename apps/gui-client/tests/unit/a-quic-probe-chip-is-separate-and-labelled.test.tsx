@@ -13,7 +13,7 @@
 //
 // MEASURED mechanism, label half: beside a server-measured latency the grid row
 // (ProxiesView) and the profile card (ProfilePhoneCard) render vantageLabel():
-// 'fleet' → "from a fleet Mac" with the node id in the hover text,
+// 'fleet' → "from the test Mac" with the node id in the hover text,
 // 'control_plane' → "from the server" with why ("No fleet Mac was free") — the
 // fallback is visible, never silent. The grid arm drives the real Test action:
 // it must ask the server for the fleet vantage ({ vantage: 'fleet' }) and put
@@ -87,7 +87,7 @@ describe('QUIC is ONE verdict, strongest evidence first (no separate relay chip)
   });
 
   it('quicProbe true names the fleet-Mac relay measurement in the hint', () => {
-    expect(chips(undefined, true).quic?.getAttribute('title')).toContain('fleet Mac');
+    expect(chips(undefined, true).quic?.getAttribute('title')).toContain('test Mac');
   });
 
   it('quicProbe false → the single QUIC chip is a measured NEGATIVE (not green, not inferred, no "~")', () => {
@@ -157,7 +157,7 @@ function cardProps(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardP
 }
 
 describe('the profile card labels a server latency with where it was measured', () => {
-  it('\'fleet\' reads "from a fleet Mac"', () => {
+  it('\'fleet\' reads "from the test Mac"', () => {
     render(
       <ProfilePhoneCard
         {...cardProps({
@@ -166,7 +166,7 @@ describe('the profile card labels a server latency with where it was measured', 
         })}
       />,
     );
-    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
   });
 
   it("'fleet' names the node in the hover text on the number", () => {
@@ -193,13 +193,13 @@ describe('the profile card labels a server latency with where it was measured', 
     );
     expect(screen.getByText('from the server')).toBeInTheDocument();
     const el = container.querySelector('[data-latency-vantage="control_plane"]');
-    expect(el?.getAttribute('title')).toContain('No fleet Mac was free');
+    expect(el?.getAttribute('title')).toContain('No test Mac was free');
   });
 
   it('VACUITY CONTROL — a server number with no vantage keeps today\'s plain "server" marker', () => {
     render(<ProfilePhoneCard {...cardProps({ latencyFromServer: true })} />);
     expect(screen.getByText('server')).toBeInTheDocument();
-    expect(screen.queryByText('from a fleet Mac')).toBeNull();
+    expect(screen.queryByText('from the test Mac')).toBeNull();
     expect(screen.queryByText('from the server')).toBeNull();
   });
 
@@ -207,7 +207,7 @@ describe('the profile card labels a server latency with where it was measured', 
     const { container } = render(<ProfilePhoneCard {...cardProps()} />);
     expect(container.querySelector('[data-latency-vantage="this_mac"]')).not.toBeNull();
     expect(screen.queryByText('server')).toBeNull();
-    expect(screen.queryByText('from a fleet Mac')).toBeNull();
+    expect(screen.queryByText('from the test Mac')).toBeNull();
   });
 });
 
@@ -300,7 +300,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     // fleet vantage learned to report that honestly, a fleet result was never
     // `ok:false` and this path could not be reached; now a proxy that answers
     // nothing produces one. Without the clear, the row keeps the fleet latency,
-    // its "from a fleet Mac" label and the relay chip from the LAST successful
+    // its "from the test Mac" label and the relay chip from the LAST successful
     // test, sitting next to a row the customer has just re-tested.
     testAccountProxy.mockResolvedValueOnce({
       ok: true,
@@ -311,7 +311,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     render(<ProxiesView />);
     await testTheRow();
-    expect(await screen.findByText('from a fleet Mac')).toBeInTheDocument();
+    expect(await screen.findByText('from the test Mac')).toBeInTheDocument();
 
     // Second test: the server now refuses it.
     testAccountProxy.mockResolvedValueOnce({
@@ -326,11 +326,11 @@ describe('the Proxies grid labels the server latency with where it was measured'
     fireEvent.click(retest);
     await waitFor(() => expect(testAccountProxy).toHaveBeenCalledTimes(2));
     await waitFor(() => {
-      expect(screen.queryByText('from a fleet Mac')).not.toBeInTheDocument();
+      expect(screen.queryByText('from the test Mac')).not.toBeInTheDocument();
     });
   });
 
-  it('a fleet reply labels the latency "from a fleet Mac"', async () => {
+  it('a fleet reply labels the latency "from the test Mac"', async () => {
     testAccountProxy.mockResolvedValue({
       ok: true,
       latency_ms: 31,
@@ -340,7 +340,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     render(<ProxiesView />);
     await testTheRow();
-    expect(await screen.findByText('from a fleet Mac')).toBeInTheDocument();
+    expect(await screen.findByText('from the test Mac')).toBeInTheDocument();
   });
 
   it('a fleet reply shows the fleet number and names the node in the hover text', async () => {
@@ -353,7 +353,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from a fleet Mac');
+    await screen.findByText('from the test Mac');
     const cell = container.querySelector('[data-latency-vantage="fleet"]');
     expect(cell?.getAttribute('title')).toContain('mac-mini-07');
     expect(cell?.textContent).toContain('31ms');
@@ -369,7 +369,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from a fleet Mac');
+    await screen.findByText('from the test Mac');
     expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
     const quic = container.querySelector('[data-capability="quic"]');
     expect(quic?.getAttribute('data-inferred')).toBe('false');
@@ -386,7 +386,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     await testTheRow();
     expect(await screen.findByText('from the server')).toBeInTheDocument();
     const cell = container.querySelector('[data-latency-vantage="control_plane"]');
-    expect(cell?.getAttribute('title')).toContain('No fleet Mac was free');
+    expect(cell?.getAttribute('title')).toContain('No test Mac was free');
   });
 
   it('a control-plane fallback renders no relay chip', async () => {
@@ -406,7 +406,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     render(<ProxiesView />);
     await testTheRow();
     expect(await screen.findByText('server')).toBeInTheDocument();
-    expect(screen.queryByText('from a fleet Mac')).toBeNull();
+    expect(screen.queryByText('from the test Mac')).toBeNull();
     expect(screen.queryByText('from the server')).toBeNull();
   });
 });

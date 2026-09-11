@@ -106,7 +106,7 @@ export function proxyCapabilities(
               label: 'QUIC',
               ok: true,
               inferred: false,
-              hint: 'This proxy relays QUIC — measured from a fleet Mac, the kind that runs your profiles. HTTP/3 works through this exit.',
+              hint: 'This proxy relays QUIC — measured from the test Mac, the kind that runs your profiles. HTTP/3 works through this exit.',
             }
           : quicProbe === false
             ? {
@@ -114,7 +114,7 @@ export function proxyCapabilities(
                 label: 'QUIC',
                 ok: false,
                 inferred: false,
-                hint: 'This proxy does not relay QUIC — measured from a fleet Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+                hint: 'This proxy does not relay QUIC — measured from the test Mac. HTTP/3 falls back to HTTP/2 over TCP.',
               }
             : {
                 key: 'quic',

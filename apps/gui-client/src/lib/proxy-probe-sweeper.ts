@@ -122,9 +122,65 @@ export interface SweepReport {
   failed: string[];
   /** True when a sweep was already running and this call did nothing. */
   skipped: boolean;
+  /** (l) #15 — planned proxies left alone because a user-initiated probe
+   *  held them when their turn came; the next sweep re-plans from its write. */
+  skippedBusy: string[];
 }
 
 let inFlight = false;
+
+/**
+ * (l) #15 — the SOCKS5 proxies a probe is running against RIGHT NOW, whoever
+ * started it: this sweep, the grid's Test, the card's Test, the pre-launch
+ * probe. One handshake per proxy at a time.
+ *
+ * ⛔ Not a nicety. The sweep fires on every window focus (N3) — exactly when a
+ * customer returning to the app clicks Test on the stale row the plan just
+ * selected — and the two handshakes then overlap: the file's own note says
+ * parallel probes through consumer endpoints skew each other's latency, and
+ * whichever `saveProbeResult` lands LAST wins regardless of which measurement
+ * is fresher, so a sweep probe that started earlier but timed out later
+ * overwrote the customer's just-shown healthy verdict with "Not reachable" a
+ * few seconds after they read it, with no user action.
+ *
+ * The sweep SKIPS a claimed proxy (the user's probe is the fresher answer and
+ * the next sweep re-plans from its write); a user-initiated probe AWAITS a
+ * sweep's probe on the same proxy and then runs its own, so the customer's
+ * click is never dropped and its verdict is the one that lands last.
+ */
+const probesInFlight = new Map<string, Promise<void>>();
+
+/** Whether a probe against this proxy is running now (any caller). */
+export function isProxyProbeInFlight(proxyId: string): boolean {
+  return probesInFlight.has(proxyId);
+}
+
+/**
+ * Run `probe` as THE probe for this proxy: waits for any probe already running
+ * against it (a sweep's, or another surface's) to finish first, then holds the
+ * claim until `probe` settles. The sweep checks the claim and skips; a user
+ * caller queues behind it. Errors propagate to the caller; the claim is always
+ * released.
+ */
+export async function withProxyProbe<T>(proxyId: string, probe: () => Promise<T>): Promise<T> {
+  // Queue behind whatever holds the claim (its outcome is not ours to inspect).
+  while (probesInFlight.has(proxyId)) {
+    await probesInFlight.get(proxyId)?.catch(() => undefined);
+  }
+  let release!: () => void;
+  const claim = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  probesInFlight.set(proxyId, claim);
+  try {
+    return await probe();
+  } finally {
+    // Only drop OUR claim: a queued caller may not have replaced it yet, but
+    // if it has, that entry is theirs.
+    if (probesInFlight.get(proxyId) === claim) probesInFlight.delete(proxyId);
+    release();
+  }
+}
 
 /**
  * Run one sweep. Single-flight: a second call while one is running returns
@@ -135,12 +191,17 @@ let inFlight = false;
  * consistent read of the cache and the proxy list. Recomputing between probes
  * would let a sweep that is writing fresh timestamps observe its own writes and
  * shrink its own worklist.
+ *
+ * (l) #15 — but it DOES re-check the per-proxy claim before each probe: a
+ * proxy a user-initiated Test / pre-launch probe holds by then is skipped
+ * (reported in `skippedBusy`), never probed a second time underneath them.
  */
 export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
-  if (inFlight) return { refreshed: [], failed: [], skipped: true };
+  if (inFlight) return { refreshed: [], failed: [], skipped: true, skippedBusy: [] };
   inFlight = true;
   const refreshed: string[] = [];
   const failed: string[] = [];
+  const skippedBusy: string[] = [];
   try {
     const [cache, proxies] = await Promise.all([deps.loadCache(), deps.listProxies()]);
     const plan = planSweep(cache, proxies, deps.now());
@@ -149,9 +210,15 @@ export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
       // Pause BETWEEN probes, never before the first — a sweep should not sit
       // idle for two seconds to do one probe.
       if (i > 0) await deps.sleep(SWEEP_GAP_MS);
+      if (isProxyProbeInFlight(p.id)) {
+        skippedBusy.push(p.id);
+        continue;
+      }
       try {
-        const result = await deps.testProxy(p);
-        await deps.saveResult(p.id, result, deps.now());
+        await withProxyProbe(p.id, async () => {
+          const result = await deps.testProxy(p);
+          await deps.saveResult(p.id, result, deps.now());
+        });
         refreshed.push(p.id);
       } catch {
         // Deliberately swallowed per-proxy: one unreachable host must not
@@ -159,7 +226,7 @@ export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
         failed.push(p.id);
       }
     }
-    return { refreshed, failed, skipped: false };
+    return { refreshed, failed, skipped: false, skippedBusy };
   } finally {
     inFlight = false;
   }
@@ -210,7 +277,9 @@ export function installProxySweepSchedule(sweep: () => void, host: SweepSchedule
   };
 }
 
-/** Test seam — resets the single-flight latch between cases. */
+/** Test seam — resets the single-flight latch (and the per-proxy claims)
+ *  between cases. */
 export function __resetSweepLatchForTests(): void {
   inFlight = false;
+  probesInFlight.clear();
 }

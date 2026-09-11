@@ -25,6 +25,13 @@ const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
 import type { OsFingerprint } from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
+import {
+  CHECK_VPN_ACTION,
+  CHECK_VPN_TITLE,
+  VPN_LATENCY_NOT_MEASURED,
+  VPN_NO_EXIT_YET,
+  VPN_NO_EXIT_YET_TITLE,
+} from '../lib/proxy-check-copy';
 
 export interface ProfilePhoneCardProps {
   name: string;
@@ -249,7 +256,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // UDP), so the chip says that instead of a "?" and a Test that can never fill it.
   const udpTitle =
     p.vpn === true
-      ? 'UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run Check VPN to measure QUIC through it.'
+      ? `UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`
       : caps === null
         ? 'Run Test to check UDP (WebRTC + QUIC) support on this exit.'
         : udpOk
@@ -467,10 +474,16 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     className={`min-w-0 flex-1 truncate text-right text-[11.5px] ${
                       p.exitIp !== null ? 'mono text-ink-primary' : 'italic text-ink-muted'
                     }`}
-                    title={p.exitIp ?? undefined}
+                    title={p.exitIp ?? (p.vpn === true ? VPN_NO_EXIT_YET_TITLE : undefined)}
                   >
+                    {/* (l) #3 — a VPN row with no exit is "no exit measured yet —
+                        run Check VPN" whether or not a pre-flight ever wrote an
+                        entry (`probed` is true after ANY Check, refused ones
+                        included, and after list adoption): "no exit IP" was a
+                        dead end naming no next step, and disagreed with the
+                        grid's prompt for the same proxy. Same constant there. */}
                     {p.exitIp ??
-                      (p.probed ? 'no exit IP' : p.vpn === true ? 'run Check VPN' : 'run Test')}
+                      (p.vpn === true ? VPN_NO_EXIT_YET : p.probed ? 'no exit IP' : 'run Test')}
                   </span>
                 </div>
                 {/* #6 — exit LOCATION (city, region / country name). Previously shown
@@ -545,7 +558,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         </span>
                       </>
                     ) : (
-                      <span className="mono opacity-60">{p.probed ? 'stale' : 'untested'}</span>
+                      // (l) #3 — a VPN row never holds a native latency (its
+                      // SOCKS5 result is null by design), so "stale" beside
+                      // "checked just now" described a number that was never
+                      // measured. Say that instead.
+                      <span className="mono opacity-60">
+                        {p.vpn === true
+                          ? VPN_LATENCY_NOT_MEASURED
+                          : p.probed
+                            ? 'stale'
+                            : 'untested'}
+                      </span>
                     )}
                   </span>
                   {/* (h) finding 5 — WHEN the proxy was last checked. For a VPN
@@ -598,10 +621,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 {/* (h) — a VPN row has no SOCKS5 caps to trip this banner, so a
                     tunnel the fleet just could not bring up rendered exactly like
                     a healthy one. The fleet's failure sentence drives it now. */}
-                {((caps !== null && !proxyOk) || p.vpnFailure !== undefined) && (
+                {/* (l) #16 — the VPN failure/notice are gated on `vpn`, as the
+                    grid gates them on scheme: a proxy edited vpn→socks5 kept a
+                    "VPN tunnel down" banner from the cache entry the edit had
+                    not yet dropped, and a notice nothing would ever clear. */}
+                {((caps !== null && !proxyOk) ||
+                  (p.vpn === true && p.vpnFailure !== undefined)) && (
                   <div
                     data-component="proxy-broken-banner"
-                    data-vpn-failure={p.vpnFailure !== undefined ? 'true' : 'false'}
+                    data-vpn-failure={
+                      p.vpn === true && p.vpnFailure !== undefined ? 'true' : 'false'
+                    }
                     role="status"
                     className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
                   >
@@ -609,7 +639,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       className="min-w-0 truncate text-[10px] font-semibold text-status-error"
                       title={p.vpnFailure ?? p.capabilities?.message}
                     >
-                      {p.vpnFailure !== undefined ? 'VPN tunnel down' : proxyLabel}
+                      {p.vpn === true && p.vpnFailure !== undefined
+                        ? 'VPN tunnel down'
+                        : proxyLabel}
                     </span>
                     <button
                       type="button"
@@ -650,7 +682,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     )}
                   </div>
                 )}
-                {p.vpnFailure !== undefined && (
+                {p.vpn === true && p.vpnFailure !== undefined && (
                   <div
                     data-component="proxy-vpn-failure"
                     className="text-[9.5px] leading-tight text-status-error"
@@ -664,7 +696,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 {/* (h) finding 3 — beside a standing failure too: the failure
                     is the LAST verdict (the cache's), the notice is what THIS
                     check did not do; hiding one behind the other lost either. */}
-                {p.vpnNotice !== undefined && (
+                {p.vpn === true && p.vpnNotice !== undefined && (
                   <div
                     data-component="proxy-vpn-notice"
                     role="status"
@@ -838,10 +870,12 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             {p.hasProxy ? (
               <MenuRow
                 glyph={p.testing ? '…' : '⟳'}
-                caption={p.vpn === true ? 'Check VPN' : 'Test proxy'}
+                // (l) #10 — the grid's button and this menu row name the VPN
+                // check the same way, from one constant.
+                caption={p.vpn === true ? CHECK_VPN_ACTION : 'Test proxy'}
                 label={
                   p.vpn === true
-                    ? 'Check VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and reports latency + exit'
+                    ? CHECK_VPN_TITLE
                     : 'Test proxy from this Mac — reachability, latency, exit IP'
                 }
                 onClick={() => {

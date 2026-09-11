@@ -181,7 +181,7 @@ beforeEach(() => {
 });
 
 async function clickCheck(): Promise<void> {
-  const btn = await screen.findByRole('button', { name: /check endpoint|re-check/i });
+  const btn = await screen.findByRole('button', { name: /^check vpn$|^re-check$/i });
   callOrder.length = 0;
   fireEvent.click(btn);
 }
@@ -247,14 +247,15 @@ describe('(b) — a VPN row’s Check endpoint runs the fleet test after the pre
   it('CONTROL — an HTTP row gets the pre-flight ALONE: no tunnel to test, so the fleet is never asked', async () => {
     stored = [{ ...vpnRow(), scheme: 'http' }];
     render(<ProxiesView />);
-    await clickCheck();
+    // (l) #2 — an HTTP row's button is "Check endpoint" (DNS only), never "Check VPN".
+    fireEvent.click(await screen.findByRole('button', { name: /^check endpoint$/i }));
     expect(await screen.findByText('endpoint ok')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 20));
     expect(testAccountProxy).not.toHaveBeenCalled();
     expect(screen.queryByText('tunnel up')).toBeNull();
   });
 
-  it('a control-plane FALLBACK (no fleet Mac free) is not a tunnel verdict — "endpoint ok", never "tunnel up"', async () => {
+  it('a control-plane FALLBACK (no test Mac free) is not a tunnel verdict — "endpoint ok", never "tunnel up"', async () => {
     const { node_id: _dropped, ...cp } = FLEET_OK;
     testAccountProxy.mockResolvedValue({ ...cp, measured_from: 'control_plane' });
     render(<ProxiesView />);
@@ -343,18 +344,20 @@ async function clickTestAll(): Promise<void> {
 describe('(h) — the VPN row says what its check does, and renders what the fleet measured', () => {
   it('CRITICAL the button title, the exit placeholder and the Protocols cell name the CHECK, not a Test the row lacks', async () => {
     render(<ProxiesView />);
-    const btn = await screen.findByRole('button', { name: /check endpoint/i });
+    // (l) #10 / #11 — one name for the action ("Check VPN", as on the card) and
+    // no "fleet Mac" in the customer's sentence.
+    const btn = await screen.findByRole('button', { name: /^check vpn$/i });
     expect(btn.getAttribute('title')).toBe(
-      'Check this VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and measures its exit.',
+      'Check VPN — resolves the endpoint, then the test Mac brings the tunnel up and measures its latency and exit.',
     );
     expect(btn.getAttribute('title')).not.toMatch(/DNS-resolve|verifies at launch/);
-    expect(screen.getByText('run Check for the exit')).toBeInTheDocument();
+    expect(screen.getByText('no exit measured yet — run Check VPN')).toBeInTheDocument();
     expect(screen.queryByText('run Test for exit IP')).toBeNull();
     // The Protocols cell is a QUIC-only chip (UDP is carried by the tunnel, not
     // probed), honest about not having measured yet and naming Check.
     const chip = quicChip();
     expect(chip?.getAttribute('data-ok')).toBe('unmeasured');
-    expect(chip?.getAttribute('title')).toMatch(/run Check/);
+    expect(chip?.getAttribute('title')).toMatch(/run Check VPN/);
     expect(chip?.getAttribute('title')).not.toMatch(/click Test/);
     expect(document.querySelector('[data-component="proxy-capabilities"]')).toBeNull();
   });
@@ -440,7 +443,7 @@ describe('(h) — the VPN row says what its check does, and renders what the fle
 });
 
 describe('(h) — a resolved row whose tunnel nothing measured is "not tested", never "up", "down" or "unresolved"', () => {
-  it('CRITICAL no_node is a muted notice on the row and a "not tested (no fleet Mac free)" in the sweep', async () => {
+  it('CRITICAL no_node is a muted notice on the row and a "not tested (no test Mac free)" in the sweep', async () => {
     testAccountProxy.mockResolvedValue(NO_NODE);
     render(<ProxiesView />);
     await clickTestAll();
@@ -449,7 +452,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     expect(screen.queryByText('tunnel down')).toBeNull();
     expect(screen.getByText('endpoint ok')).toBeInTheDocument();
     expect(
-      await screen.findByText('1 VPN tunnel not tested (no fleet Mac free) — nothing was tested'),
+      await screen.findByText('1 VPN tunnel not tested (no test Mac free) — nothing was tested'),
     ).toBeInTheDocument();
   });
 
@@ -466,7 +469,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        'Tested 3 — 1 VPN tunnel up, 1 down, 1 not tested (no fleet Mac free)',
+        'Tested 3 — 1 VPN tunnel up, 1 down, 1 not tested (no test Mac free)',
       ),
     ).toBeInTheDocument();
   });
@@ -532,7 +535,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN tunnel not tested (measured from the server, not a fleet Mac) — nothing was tested',
+        '1 VPN tunnel not tested (measured from the server, not the test Mac) — nothing was tested',
       ),
     ).toBeInTheDocument();
     first.unmount();
@@ -541,7 +544,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN tunnel not tested (no API key; sign in to test it) — nothing was tested',
+        '1 VPN tunnel not tested (Connect your API key in Settings to test it) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('No proxy results landed — run Test all again.')).toBeNull();
@@ -558,7 +561,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN tunnel skipped (the fleet Mac was busy; try again in a minute) — nothing was tested',
+        '1 VPN tunnel skipped (the test Mac was busy; try again in a minute) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/live session/)).toBeNull();
@@ -572,7 +575,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN check could not run (the endpoint resolver failed; try again) — nothing was tested',
+        '1 VPN check could not run (the address lookup failed; try again) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText('unresolved')).toBeNull();

@@ -80,6 +80,7 @@ function chatWith(adopting: boolean): UseAgentChatResult {
     restore: vi.fn(),
     adopt: vi.fn(),
     adopting,
+    adoptError: null,
     restoredHistoryCount: 0,
     restoredSessionId: null,
   };

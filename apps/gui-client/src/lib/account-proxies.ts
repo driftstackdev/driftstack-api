@@ -19,6 +19,7 @@ import {
   type OsFingerprint,
 } from './os-fingerprint-verdict';
 import { cleanProxyVantage, type ProxyVantage } from './proxy-vantage';
+import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
 
 export type AccountProxyScheme = 'socks5' | 'http' | 'openvpn' | 'wireguard';
 
@@ -582,8 +583,10 @@ export function isTierRefusalDetail(detail: string | undefined): detail is strin
  *  `detail` sentence is the discriminator here too; matched, never reproduced.
  *  The problem+json `detail` is appended so the server's own next step
  *  ("upgrade to an API-enabled tier") survives. */
-export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON =
-  'Fleet tests need an API key from the dashboard.';
+// (l) #9 — the next step is the ONE the whole app gives for a missing key
+// (Settings), never "the dashboard", which the GUI names nowhere as a place
+// the customer can go from here.
+export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON = `Testing the tunnel needs an API key. ${MISSING_API_KEY_NEXT_STEP}.`;
 
 /** The server's route-policy detail — the shared contract's sentence, not a
  *  copy of it. (k) K1 — this used to be a hand-copied phrase in a regex, so a

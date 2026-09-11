@@ -51,6 +51,7 @@ import {
   subscribeProbeCache,
   saveEndpointResult,
   saveProbeResult,
+  clearExitResult,
   saveExitResult,
   verdictMatchesScheme,
   type CachedProbe,
@@ -134,6 +135,8 @@ import {
 // mini-forms that used to live inline (and omitted the VPN auth fields) are gone.
 import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
+import { withProxyProbe } from '../lib/proxy-probe-sweeper';
+import { VPN_NO_API_KEY_CHECK_NOTICE, VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
 import {
   deriveProbeViewWithEndpointRows,
   fleetFailureReasons,
@@ -1977,9 +1980,11 @@ export function ProfilesView({
       // The probe already stored the exit's IANA zone right beside its country; it was
       // simply never handed over, so the device clock showed the host Mac's time
       // (owner 2026-08-30). T-17 — re-probed when older than the exit TTL.
+      // (l) #13 — the cache as it is NOW (a grid Check or the sweeper may have
+      // written since this closure's `probeCache` was captured).
       const reopenExit =
         reopenProxy !== null
-          ? await freshExitIdentity(reopenProxy)
+          ? await freshExitIdentity(reopenProxy, await loadProbeCache().catch(() => undefined))
           : { country: null, timezone: null };
       const reopenCountry = reopenExit.country;
       const reopenTimezone = reopenExit.timezone;
@@ -2507,6 +2512,21 @@ export function ProfilesView({
   // ProxiesView.handleTest flow. Best-effort: a probe failure keeps prior state.
   async function handleTestProxy(px: LocalProxyConfig): Promise<void> {
     setTestingProxyId(px.id);
+    // (h) finding 4 — the previous check's notice belongs to the previous
+    // check: it goes the moment this one starts, whatever this one does
+    // next (an unresolved endpoint, a row the fleet cannot test…). The
+    // failure banner is the cache's and moves only with a cache write —
+    // the unresolved pre-flight below carries nothing over, a verdict
+    // replaces it — so the card and the grid always agree on it.
+    // (l) #16 — for EVERY scheme, not only inside the VPN branch: a proxy
+    // edited vpn→socks5 kept its "No test Mac was free…" notice with no path
+    // that cleared it, because the SOCKS5 Test never reached this line.
+    setVpnNotices((m) => {
+      if (!(px.id in m)) return m;
+      const rest = { ...m };
+      delete rest[px.id];
+      return rest;
+    });
     try {
       // T-20 — a VPN/HTTP row has no honest SOCKS5 handshake: the native probe
       // sends a SOCKS5 greeting to an OpenVPN remote (a UDP endpoint) and can
@@ -2515,18 +2535,6 @@ export function ProfilesView({
       // endpoint; the tunnel itself is verified at launch. Stored as an
       // endpoint verdict, which nothing reads as a SOCKS5 pass.
       if (!isSocks5Probeable(px.scheme)) {
-        // (h) finding 4 — the previous check's notice belongs to the previous
-        // check: it goes the moment this one starts, whatever this one does
-        // next (an unresolved endpoint, a row the fleet cannot test…). The
-        // failure banner is the cache's and moves only with a cache write —
-        // the unresolved pre-flight below carries nothing over, a verdict
-        // replaces it — so the card and the grid always agree on it.
-        setVpnNotices((m) => {
-          if (!(px.id in m)) return m;
-          const rest = { ...m };
-          delete rest[px.id];
-          return rest;
-        });
         const res = await resolveEndpoint(px.host, px.port);
         // (j) J3 — the pre-flight write below carries the previous fleet
         // verdict over ONLY when the endpoint still resolves to the SAME
@@ -2552,13 +2560,19 @@ export function ProfilesView({
         await runFleetTestForRow(px, res.resolved, unansweredCheckNotice(prior, endpointMoved));
         return;
       }
-      const result = await testProxy({
-        host: px.host,
-        port: px.port,
-        username: px.username,
-        password: px.password,
+      // (l) #15 — one handshake per proxy at a time (queues behind a sweep
+      // probing this row; the sweep skips a row this Test holds).
+      const { result, probedAt } = await withProxyProbe(px.id, async () => {
+        const r = await testProxy({
+          host: px.host,
+          port: px.port,
+          username: px.username,
+          password: px.password,
+        });
+        const at = Date.now();
+        setProbeCache(await saveProbeResult(px.id, r, at));
+        return { result: r, probedAt: at };
       });
-      setProbeCache(await saveProbeResult(px.id, result, Date.now()));
       // Exit-IP probing REQUIRES routing — it makes a real request through the
       // proxy. Gating it on auth alone meant a non-routing proxy kept whatever exit
       // geo it had cached, which is the stale-green badge in another costume.
@@ -2569,6 +2583,12 @@ export function ProfilesView({
           username: px.username,
           password: px.password,
         });
+        if (exit === null) {
+          // (l) #14 — same as the grid: a probe that did not complete must not
+          // leave the PREVIOUS exit (carried across by saveProbeResult above)
+          // on the card as if this Test had measured it.
+          setProbeCache(await clearExitResult(px.id, probedAt));
+        }
         if (exit !== null) {
           setProbeCache(
             await saveExitResult(px.id, exit.ip, exit.country, {
@@ -2621,8 +2641,20 @@ export function ProfilesView({
     unansweredNotice: string,
   ): Promise<ProbeCacheMap | null> {
     if (!resolved || !isVpnScheme(px.scheme)) return null;
-    if (px.serverId === undefined || settings.apiKey === null || settings.apiKey.length === 0)
+    // (l) #1 / #9 — the SAME gate the grid's Check VPN has, leaving the SAME
+    // notice: this card used to return here silently, so for one proxy in one
+    // state the grid said why the tunnel was not tested while the card showed
+    // "checked just now" + "no exit measured yet" with no reason and the same
+    // loop the audit described. The key is checked FIRST (a launch stores the
+    // proxy, and stores nothing without a key — the grid orders them the same).
+    if (settings.apiKey === null || settings.apiKey.length === 0) {
+      setVpnNotices((m) => ({ ...m, [px.id]: VPN_NO_API_KEY_CHECK_NOTICE }));
       return null;
+    }
+    if (px.serverId === undefined) {
+      setVpnNotices((m) => ({ ...m, [px.id]: VPN_NOT_STORED_CHECK_NOTICE }));
+      return null;
+    }
     try {
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
       // ⛔ `adoptExit` — this IS the VPN row (gated above), and without it the
@@ -2677,7 +2709,7 @@ export function ProfilesView({
       country: cached?.exitCountry ?? null,
       timezone: cached?.exitTimezone ?? null,
     };
-    if (cached === undefined) return fromCache;
+    const nothing = { country: null, timezone: null };
     // (h) — a VPN row is never exit-probed from this Mac, so its cached exit
     // had NO freshness gate: a list-adopted session exit weeks old was handed
     // to the launch as the device clock's zone and the Dock flag's country. The
@@ -2685,12 +2717,21 @@ export function ProfilesView({
     // reports its own exit seconds after the tunnel is up and the simulator
     // prefers the report (displayTimezone / the Dock flag).
     if (!isSocks5Probeable(px.scheme)) {
-      return isExitIdentityFresh(cached.exitAt, Date.now())
-        ? fromCache
-        : { country: null, timezone: null };
+      if (cached === undefined) return nothing;
+      return isExitIdentityFresh(cached.exitAt, Date.now()) ? fromCache : nothing;
     }
-    if (!isProxyUsable(cached.result)) return fromCache;
-    if (isExitIdentityFresh(cached.exitAt, Date.now())) return fromCache;
+    // (l) #13 — a SOCKS5 row with NO entry used to hand over nothing and probe
+    // nothing (`cached === undefined → fromCache`): a never-tested proxy — or
+    // the ordinary bulk launch, which runs no pre-flight — got a device clock
+    // set from this Mac's zone until the capability report landed. Probe now;
+    // the probe is best-effort and a miss hands over nothing, as before.
+    // An entry whose verdict says UNUSABLE hands over nothing too: its exit
+    // fields are what an earlier, healthier probe measured (`saveProbeResult`
+    // carries them across a failed re-test) and every card already hides them
+    // behind the usable gate — the launch must not hand the simulator a zone
+    // the card refuses to show.
+    if (cached !== undefined && !isProxyUsable(cached.result)) return nothing;
+    if (cached !== undefined && isExitIdentityFresh(cached.exitAt, Date.now())) return fromCache;
     try {
       const exit = await probeProxyExit({
         host: px.host,
@@ -2877,17 +2918,30 @@ export function ProfilesView({
       let verdict: ProxyTestResult | undefined = socks5Gate
         ? matchingProbe(proxy, probeCache)?.result
         : undefined;
+      // (l) #13 — the cache AS WRITTEN by this launch's own pre-flight, for the
+      // exit-identity read below. `probeCache` is render-time state and this is
+      // a plain async function, so that binding never moves: `freshExitIdentity`
+      // read the closure's STALE entry, and when it said "unusable" (a transient
+      // sweep failure) while the fresh probe said usable, the TTL gate was
+      // skipped and an arbitrarily old exit zone/country reached the simulator
+      // (the T-17 owner #3 behaviour the TTL was added to end).
+      let launchCache: ProbeCacheMap | undefined;
       if (!opts.skipProxyDownConfirm && socks5Gate) {
         try {
-          const fresh = await testProxy({
-            host: proxy.host,
-            port: proxy.port,
-            username: proxy.username,
-            password: proxy.password,
+          // (l) #15 — one handshake per proxy at a time, like the card's Test.
+          const probed = await withProxyProbe(proxy.id, async () => {
+            const r = await testProxy({
+              host: proxy.host,
+              port: proxy.port,
+              username: proxy.username,
+              password: proxy.password,
+            });
+            // Persistence is best-effort and separate from the decision.
+            return { result: r, next: await saveProbeResult(proxy.id, r, Date.now()) };
           });
-          verdict = fresh;
-          // Persistence is best-effort and separate from the decision.
-          setProbeCache(await saveProbeResult(proxy.id, fresh, Date.now()));
+          verdict = probed.result;
+          launchCache = probed.next;
+          setProbeCache(probed.next);
         } catch (err) {
           // A probe that could not RUN is not a verdict. Fall through to whatever
           // the cache holds rather than blocking a launch on our own failure.
@@ -2898,7 +2952,8 @@ export function ProfilesView({
         try {
           const res = await resolveEndpoint(proxy.host, proxy.port);
           endpointResolved = res.resolved;
-          setProbeCache(await saveEndpointResult(proxy.id, res, Date.now()));
+          launchCache = await saveEndpointResult(proxy.id, res, Date.now());
+          setProbeCache(launchCache);
           // ⛔ NO fleet test here. A fleet probe brings the tunnel up on a node
           // while the launching session brings up its own, and most VPN accounts
           // allow one connection — the probe could break the launch, and it would
@@ -3100,10 +3155,16 @@ export function ProfilesView({
         // separate simulator app's macOS Dock tile reflects the egress country.
         // T-17 — re-probed when the stored exit identity is older than the TTL,
         // so the device clock is set from the exit's CURRENT zone.
+        // (l) #13 — read the entry THIS launch's pre-flight wrote (or, for a
+        // bulk launch that ran none, the cache as it is on disk), never the
+        // closure's render-time snapshot.
         const launchProxy = pickProxy(profile.id);
         const launchExit =
           launchProxy !== null
-            ? await freshExitIdentity(launchProxy)
+            ? await freshExitIdentity(
+                launchProxy,
+                launchCache ?? (await loadProbeCache().catch(() => undefined)),
+              )
             : { country: null, timezone: null };
         const launchCountry = launchExit.country;
         const launchTimezone = launchExit.timezone;

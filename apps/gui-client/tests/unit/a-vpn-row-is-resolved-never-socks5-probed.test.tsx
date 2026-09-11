@@ -118,7 +118,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
 });
 
 const { state } = vi.hoisted(() => ({
-  state: { boundProxyId: 'vpn1' },
+  // `vpnStored` — whether the VPN row carries a serverId (is stored on the
+  // account); the (l) #1 card arms flip it.
+  state: { boundProxyId: 'vpn1', vpnStored: true },
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -185,7 +187,10 @@ const { testProxy, resolveEndpoint, probeProxyExit } = vi.hoisted(() => ({
 // Partial mock: the pure predicates stay REAL; only the native calls are spies.
 vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof ProxiesModule>()),
-  listProxies: () => Promise.resolve([VPN_PROXY, SOCKS5_PROXY]),
+  listProxies: () => {
+    const { serverId: _stored, ...unstoredVpn } = VPN_PROXY;
+    return Promise.resolve([state.vpnStored ? VPN_PROXY : unstoredVpn, SOCKS5_PROXY]);
+  },
   addProxy: vi.fn(),
   setProxyServerId: vi.fn(() => Promise.resolve()),
   testProxy: (input: unknown) => testProxy(input),
@@ -250,6 +255,7 @@ beforeEach(() => {
   probeProxyExit.mockReset();
   probeProxyExit.mockResolvedValue(null);
   state.boundProxyId = 'vpn1';
+  state.vpnStored = true;
 });
 
 describe('a VPN profile launches through the endpoint resolve, never the SOCKS5 probe', () => {
@@ -686,7 +692,9 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
       FLEET_DOWN,
     );
     expect(screen.queryByText('198.51.100.9')).toBeNull();
-    expect(screen.getByText('no exit IP')).toBeTruthy();
+    // (l) #3 — a VPN card with no exit says why and names the check, never the
+    // dead-end "no exit IP".
+    expect(screen.getByText('no exit measured yet — run Check VPN')).toBeTruthy();
     expect(checkedAt()).toBe(new Date(failedAt).toISOString());
   });
 
@@ -844,11 +852,11 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     // two surfaces cannot drift apart behind one renamed constant.
     await waitFor(() =>
       expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
-        'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+        'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
       ),
     );
     expect(ENDPOINT_MOVED_NO_VERDICT_NOTICE).toBe(
-      'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+      'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
     );
     const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
     expect(notice?.className).toContain('text-ink-muted');
@@ -897,7 +905,7 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
         NO_VERDICT_YET_NOTICE,
       ),
     );
-    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no verdict yet — try again.');
+    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no result yet — try again.');
     const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
     expect(notice?.className).toContain('text-ink-muted');
     expect(screen.queryByText(/Endpoint moved/)).toBeNull();
@@ -1006,5 +1014,121 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     );
     expect(storedProbe('vpn1')?.fleetFailureReason).toBe(FLEET_DOWN);
     expect(storedProbe('vpn1')?.exitSupersededAt).toBe(failedAt);
+  });
+});
+
+// (l) SOCKS5/chat audit — findings #1 / #9 on the CARD (review of the batch).
+//
+// The grid's Check VPN leaves a notice when the test Mac cannot be asked (not
+// stored on the account / no API key); the card's Check VPN ran the same gate
+// in runFleetTestForRow and returned SILENTLY — so for one proxy in one state
+// the grid said why and the card showed "checked just now" + "no exit measured
+// yet — run Check VPN", sending the customer round the loop the audit named.
+// The notices are the grid's own constants (lib/proxy-check-copy).
+import {
+  VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_NOT_STORED_CHECK_NOTICE,
+} from '../../src/lib/proxy-check-copy';
+
+const cardNotice = (): string | null =>
+  document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent ?? null;
+
+describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tested', () => {
+  // MUTATION: restore the silent `return null` for `px.serverId === undefined`
+  // in runFleetTestForRow → no notice on the card → red.
+  it('CRITICAL not stored on the account: the card carries the grid’s notice, and the fleet is never asked', async () => {
+    state.vpnStored = false;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194);
+    expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
+    expect(testProxy).not.toHaveBeenCalled();
+    // A notice, never the red banner: nothing was tested, so nothing failed.
+    expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.className).toContain(
+      'text-ink-muted',
+    );
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    // The exit cell still names the check — beside the reason it did not run.
+    expect(screen.getByText('no exit measured yet — run Check VPN')).toBeTruthy();
+  });
+
+  // MUTATION: restore the silent `return null` for a missing key → red.
+  it('CRITICAL no API key: the card carries the ONE Settings next step, and the fleet is never asked', async () => {
+    seedCache({});
+    const Settings = await import('../../src/lib/SettingsContext');
+    const live = Settings.useSettings().settings as { apiKey: string | null };
+    live.apiKey = null;
+    try {
+      const AccountProxies = await import('../../src/lib/account-proxies');
+      vi.mocked(AccountProxies.testAccountProxy).mockClear();
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await clickCheckVpn();
+      await waitFor(() => expect(cardNotice()).toBe(VPN_NO_API_KEY_CHECK_NOTICE));
+      expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
+    } finally {
+      live.apiKey = 'ds_test_x';
+    }
+  });
+
+  // MUTATION: swap the two gates (not-stored first) → a keyless customer is
+  // told to store the proxy, which a launch without a key never does → red.
+  it('CRITICAL no API key AND not stored: the KEY is the blocker named, on the card as on the grid', async () => {
+    state.vpnStored = false;
+    seedCache({});
+    const Settings = await import('../../src/lib/SettingsContext');
+    const live = Settings.useSettings().settings as { apiKey: string | null };
+    live.apiKey = null;
+    try {
+      render(<ProfilesView onGoToSettings={vi.fn()} />);
+      await clickCheckVpn();
+      await waitFor(() => expect(cardNotice()).toBe(VPN_NO_API_KEY_CHECK_NOTICE));
+      expect(screen.queryByText(VPN_NOT_STORED_CHECK_NOTICE)).toBeNull();
+    } finally {
+      live.apiKey = 'ds_test_x';
+    }
+  });
+
+  it('the notice belongs to THAT check: the next Check VPN drops it the moment it starts', async () => {
+    state.vpnStored = false;
+    seedCache({});
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    let release: (r: { resolved: boolean; ip: string; message: string }) => void = () => undefined;
+    resolveEndpoint.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    await clickCheckVpn();
+    await waitFor(() => expect(cardNotice()).toBeNull());
+    release({ resolved: true, ip: '203.0.113.9', message: 'Resolved' });
+    // The same reason comes back once this check lands: re-derived per check.
+    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+  });
+
+  it('VACUITY CONTROL — a stored row with a key reaches the fleet and gets NO not-tested notice', async () => {
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+      quic_probe: true,
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalledTimes(1),
+    );
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    expect(cardNotice()).toBeNull();
   });
 });

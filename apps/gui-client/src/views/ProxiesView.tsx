@@ -31,6 +31,7 @@ import {
   invalidateProbe,
   loadProbeCache,
   subscribeProbeCache,
+  clearExitResult,
   saveExitResult,
   saveProbeResult,
   saveEndpointResult,
@@ -57,6 +58,7 @@ import {
 } from '../lib/account-proxies';
 import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
+import { withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
   deriveProbeViewWithEndpointRows,
   fleetFailureReasons,
@@ -71,6 +73,21 @@ import { useSettings } from '../lib/SettingsContext';
 import { useConfirm } from '../components/ConfirmProvider';
 import { humanizeError } from '../lib/humanize-error';
 import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
+import {
+  CHECK_ENDPOINT_ACTION,
+  CHECK_ENDPOINT_TITLE,
+  CHECK_VPN_ACTION,
+  CHECK_VPN_TITLE,
+  DESKTOP_CREDENTIAL_NEXT_STEP,
+  HTTP_VERIFIED_AT_LAUNCH,
+  MISSING_API_KEY_NEXT_STEP,
+  RECHECK_ACTION,
+  VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_NO_EXIT_YET,
+  VPN_NO_EXIT_YET_TITLE,
+  VPN_NOT_STORED_CHECK_NOTICE,
+  VPN_NOT_STORED_TALLY_REASON,
+} from '../lib/proxy-check-copy';
 
 interface ListState {
   proxies: ProxyConfig[];
@@ -161,17 +178,19 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
     case 'live_session':
       return 'in use by a live session; end it to test the tunnel';
     case 'node_busy':
-      return 'the fleet Mac was busy; try again in a minute';
+      return 'the test Mac was busy; try again in a minute';
     case 'node_error':
-      return 'the fleet Mac could not complete the test; try again shortly';
+      return 'the test Mac could not complete the test; try again shortly';
     case 'no_node':
-      return 'no fleet Mac free';
+      return 'no test Mac free';
     case 'plan_excluded':
       return 'not included in your plan';
     case 'desktop_credential':
       // (j) J4 — the free-desktop route policy refused the CREDENTIAL, not the
       // plan: the row is "not tested", like a row with no API key at all.
-      return 'needs an API key from the dashboard';
+      // (l) #9 — the same next step that row gets (Settings, never "the
+      // dashboard", which the GUI names nowhere as a place to go from here).
+      return DESKTOP_CREDENTIAL_NEXT_STEP;
   }
 }
 
@@ -210,7 +229,7 @@ function notTestedClause(
 }
 
 function checkFailedClause(n: number): string {
-  return `${String(n)} VPN check${n === 1 ? '' : 's'} could not run (the endpoint resolver failed; try again)`;
+  return `${String(n)} VPN check${n === 1 ? '' : 's'} could not run (the address lookup failed; try again)`;
 }
 
 function formatTestAllSummary(
@@ -471,8 +490,13 @@ export function ProxiesView(): JSX.Element {
         // back to the honest "untested" state until the next Test, rather
         // than advertising the OLD endpoint's reachability/UDP/exit-geo.
         // A label-only rename keeps the probe (same endpoint).
+        // (l) #16 — the SCHEME too: a vpn→socks5 edit with the same host/port
+        // is a different KIND of check (the endpoint verdict, the fleet
+        // failure sentence and its notice describe a tunnel the row no longer
+        // is), so it invalidates and re-tests like a moved endpoint.
         const connChanged =
           prev === undefined ||
+          prev.scheme !== draft.scheme ||
           prev.host !== draft.host ||
           prev.port !== draft.port ||
           prev.username !== draft.username ||
@@ -525,7 +549,17 @@ export function ProxiesView(): JSX.Element {
         // is the one outcome this whole path exists to avoid.
         // handleTest owns its own epoch guard, so an edit or removal landing
         // mid-probe discards the result rather than writing it to the wrong row.
-        if (target !== undefined) void handleTest(target).catch(() => undefined);
+        // (l) #16 — by SCHEME: a row that ends on an OpenVPN/WireGuard/HTTP
+        // scheme gets ITS check (the endpoint pre-flight, then the fleet for a
+        // VPN row), never the native SOCKS5 handshake, which can only answer
+        // "unreachable" to a UDP endpoint — the T-20 false negative this path
+        // wrote into the cache for a moved or re-schemed VPN row (a red failed
+        // row beside an "untested" endpoint pill, and a card that disagreed).
+        if (target !== undefined) {
+          void (
+            isSocks5Probeable(target.scheme) ? handleTest(target) : handleCheckEndpoint(target)
+          ).catch(() => undefined);
+        }
       }
     } catch (err) {
       setState((s) => ({
@@ -766,13 +800,25 @@ export function ProxiesView(): JSX.Element {
         settle();
         return { resolved: true, tunnelOk: null };
       }
-      if (p.serverId === undefined) {
-        settle();
-        return { resolved: true, tunnelOk: null, notTested: 'not stored on your account' };
-      }
+      // (l) #1 — a single-row Check on either row used to `settle()` and
+      // return with the reason reaching ONLY the Test-all tally: the row went
+      // back to "endpoint ok" + "run Check for the exit" + "QUIC untested — run
+      // Check…", nothing saying why the tunnel was not tested, and the customer
+      // was sent round the same loop. The reason is the row's own notice now,
+      // in the slot a `not_run` uses, with the next step in the same sentence.
+      // The KEY first: a proxy is stored on the account only by a launch
+      // through it, and a launch stores nothing without a key — so with
+      // neither, the key is the blocker, and "store it" would name a step the
+      // customer cannot take. The card's runFleetTestForRow orders them the same.
       if (settings.apiKey === null || settings.apiKey.length === 0) {
         settle();
-        return { resolved: true, tunnelOk: null, notTested: 'no API key; sign in to test it' };
+        setVpnNotices((m) => ({ ...m, [p.id]: VPN_NO_API_KEY_CHECK_NOTICE }));
+        return { resolved: true, tunnelOk: null, notTested: MISSING_API_KEY_NEXT_STEP };
+      }
+      if (p.serverId === undefined) {
+        settle();
+        setVpnNotices((m) => ({ ...m, [p.id]: VPN_NOT_STORED_CHECK_NOTICE }));
+        return { resolved: true, tunnelOk: null, notTested: VPN_NOT_STORED_TALLY_REASON };
       }
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
       if (stale()) return null;
@@ -831,7 +877,7 @@ export function ProxiesView(): JSX.Element {
         return {
           resolved: true,
           tunnelOk: null,
-          notTested: 'measured from the server, not a fleet Mac',
+          notTested: 'measured from the server, not the test Mac',
         };
       }
       // (i) I4 — a fleet `ok` with no timing still brought the tunnel UP (the
@@ -946,23 +992,40 @@ export function ProxiesView(): JSX.Element {
   }
 
   async function handleTest(p: ProxyConfig): Promise<ProxyTestResult | null> {
+    // (l) #16 — the gate lives HERE too, not only at the callers: the native
+    // SOCKS5 probe has no honest answer for a VPN/HTTP endpoint (T-20), so a
+    // row of any other scheme is routed to its own check whoever asks.
+    if (!isSocks5Probeable(p.scheme)) {
+      await handleCheckEndpoint(p);
+      return null;
+    }
     const epoch = ++testEpochRef.current; // claim this probe; an edit/remove bumps it
     const stale = (): boolean => testEpochRef.current !== epoch;
     setTestingId(p.id);
     try {
-      const result = await testProxy({
-        host: p.host,
-        port: p.port,
-        username: p.username,
-        password: p.password,
+      // (l) #15 — ONE handshake per proxy at a time: this Test queues behind a
+      // background sweep already probing the same row (and the sweep skips a
+      // row this Test holds), so the two never overlap and skew each other's
+      // latency, and the verdict the customer asked for is the one that lands
+      // last. The cache write rides inside the claim for the same reason.
+      const probed = await withProxyProbe(p.id, async () => {
+        const r = await testProxy({
+          host: p.host,
+          port: p.port,
+          username: p.username,
+          password: p.password,
+        });
+        if (stale()) return null; // proxy endpoint changed/removed mid-probe → discard
+        const at = Date.now();
+        // Night-arc B: persist so profile cards can render egress
+        // capability (UDP badge) without re-probing. Best-effort.
+        await saveProbeResult(p.id, r, at).catch(() => undefined);
+        return { result: r, probedAt: at };
       });
-      if (stale()) return null; // proxy endpoint changed/removed mid-probe → discard
-      const probedAt = Date.now();
+      if (probed === null) return null;
+      const { result, probedAt } = probed;
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setTestedAt((t) => ({ ...t, [p.id]: probedAt }));
-      // Night-arc B: persist so profile cards can render egress
-      // capability (UDP badge) without re-probing. Best-effort.
-      void saveProbeResult(p.id, result, probedAt).catch(() => undefined);
       // E-2: exit-geo through the proxy. A null result is a genuine probe
       // failure (V-857) rather than a missing dependency, and the card says so.
       if (isProxyUsable(result)) {
@@ -974,6 +1037,14 @@ export function ProxiesView(): JSX.Element {
         });
         if (stale()) return null;
         setExitResults((r) => ({ ...r, [p.id]: exit }));
+        if (exit === null) {
+          // (l) #14 — the honest "exit geo unavailable" state must survive
+          // the next cache emit (the fleet test's persist below, the sweeper,
+          // a list adoption): `saveProbeResult` above carried the PREVIOUS
+          // exit across, so without this write the very next emit re-hydrated
+          // that older IP beside "Tested just now" as if THIS Test measured it.
+          void clearExitResult(p.id, probedAt).catch(() => undefined);
+        }
         if (exit !== null) {
           // Persist the FULL geo enrichment (city/region/timezone/asn), not just
           // ip/country — mirrors ProfilesView so the Profiles hub + a reload show
@@ -1899,10 +1970,19 @@ function ProxyRow({
           >
             exit geo unavailable — the probe did not complete
           </span>
-        ) : (
-          <span className="italic text-[10.5px] text-ink-muted">
-            {isSocks5Probeable(p.scheme) ? 'run Test for exit IP' : 'run Check for the exit'}
+        ) : isVpnScheme(p.scheme) ? (
+          // (l) #3 / #10 — a VPN row with no exit MEASURED: says why and names
+          // the check by its one name; the profile card reads the same
+          // constant, so grid and card agree about the same proxy.
+          <span className="italic text-[10.5px] text-ink-muted" title={VPN_NO_EXIT_YET_TITLE}>
+            {VPN_NO_EXIT_YET}
           </span>
+        ) : isSocks5Probeable(p.scheme) ? (
+          <span className="italic text-[10.5px] text-ink-muted">run Test for exit IP</span>
+        ) : (
+          // (l) #2 — an HTTP row: no check here measures an exit, so no prompt
+          // promising one. The proxy itself is verified when a session launches.
+          <span className="italic text-[10.5px] text-ink-muted">{HTTP_VERIFIED_AT_LAUNCH}</span>
         )}
         {/* #6 — exit LOCATION (city, region). The flag already conveys the country;
             city/region is the incremental detail, shown when the probe captured it.
@@ -2067,18 +2147,25 @@ function ProxyRow({
               {/* N4 — a VPN row has no SOCKS5 probe, but its endpoint host CAN be
                   DNS-resolved on demand (endpoint_resolve); the tunnel itself still
                   verifies at launch. Mirrors the in-form endpoint check. */}
+              {/* (l) #2 / #10 — the button is named for what the row's check
+                  DOES: a VPN row's "Check VPN" (the card's menu says the same)
+                  brings the tunnel up on the test Mac; an HTTP row's "Check
+                  endpoint" is the DNS pre-flight alone, and its title must not
+                  promise a tunnel test or an exit the code never runs for it. */}
               <button
                 type="button"
                 className="rounded-md border border-surface-divider px-2 py-1 text-[11px] text-ink-secondary transition-colors hover:border-ink-muted hover:text-ink-primary disabled:opacity-50"
                 onClick={onCheckEndpoint}
                 disabled={testing || testingAll}
-                title="Check this VPN — resolves the endpoint, then a fleet Mac brings the tunnel up and measures its exit."
+                title={isVpnScheme(p.scheme) ? CHECK_VPN_TITLE : CHECK_ENDPOINT_TITLE}
               >
                 {testing
                   ? 'Checking…'
                   : endpointResult !== undefined
-                    ? 'Re-check'
-                    : 'Check endpoint'}
+                    ? RECHECK_ACTION
+                    : isVpnScheme(p.scheme)
+                      ? CHECK_VPN_ACTION
+                      : CHECK_ENDPOINT_ACTION}
               </button>
               {endpointResult !== undefined && (
                 <span
@@ -2181,12 +2268,12 @@ function VpnQuicChip({
         : quicProbe === true
           ? {
               ok: true,
-              hint: 'QUIC relays through this tunnel — measured from a fleet Mac, the kind that runs your profiles.',
+              hint: 'QUIC relays through this tunnel — measured from the test Mac, the kind that runs your profiles.',
             }
           : quicProbe === false
             ? {
                 ok: false,
-                hint: 'QUIC does not relay through this tunnel — measured from a fleet Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+                hint: 'QUIC does not relay through this tunnel — measured from the test Mac. HTTP/3 falls back to HTTP/2 over TCP.',
               }
             : null;
   if (verdict === null) {
@@ -2195,7 +2282,7 @@ function VpnQuicChip({
         className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
         data-component="vpn-quic-chip"
         data-ok="unmeasured"
-        title="Not measured yet — run Check: a fleet Mac brings the tunnel up and probes QUIC through it."
+        title={`Not measured yet — run ${CHECK_VPN_ACTION}: the test Mac brings the tunnel up and probes QUIC through it.`}
       >
         QUIC untested
       </span>
@@ -2246,7 +2333,7 @@ function EndpointHealthPill({
     return (
       <span
         className={`${base} bg-status-ready/12 text-status-ready`}
-        title="A fleet Mac brought this tunnel up and measured through it, but reported no latency."
+        title="The test Mac brought this tunnel up and measured through it, but reported no latency."
       >
         tunnel up · no latency
       </span>
@@ -2275,7 +2362,7 @@ function EndpointHealthPill({
   return (
     <span
       className={`${base} bg-surface-inset text-ink-secondary`}
-      title="The endpoint resolved. The tunnel itself is measured by a fleet Mac when the proxy is stored on your account, and verified at launch."
+      title="The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch."
     >
       endpoint ok
     </span>

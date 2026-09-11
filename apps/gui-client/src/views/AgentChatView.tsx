@@ -32,6 +32,13 @@ import { useFocusTrap } from '../lib/use-focus-trap';
 import { humanizeError } from '../lib/humanize-error';
 import { useToasts } from '../lib/toasts';
 import { useAgentChat, type ChatModel, type ChatTurn } from '../lib/use-agent-chat';
+import { CONNECT_API_KEY_IN_SETTINGS } from '../lib/proxy-check-copy';
+
+/** (l) #8 — the reattach notice: the composer caption, the notice row and the
+ *  disabled Send's title all say the same thing. */
+export const REATTACHING_NOTICE = 'Reattaching to the previous session…';
+/** (l) #8 — appended when Enter was pressed during the reattach. */
+export const SEND_HELD_SUFFIX = 'Your message is kept; Send unlocks when it settles.';
 import { DEFAULT_ASSISTANT_TEMPLATES } from '../lib/assistant-templates';
 import {
   loadChats,
@@ -271,6 +278,9 @@ export function AgentChatView({
   const [profileId, setProfileId] = useState<string>(initialProfileId ?? '');
   const [profiles, setProfiles] = useState<ReadonlyArray<{ id: string; name: string }>>([]);
   const [draft, setDraft] = useState('');
+  // (l) #8 — the customer pressed Enter while a reopened chat was still
+  // reattaching: the send is held, and the caption says so until it settles.
+  const [sendHeldByAdopt, setSendHeldByAdopt] = useState(false);
   // #20 — the composer textarea, so picking a template can focus it, drop the
   // caret at the end, and grow it to fit the inserted prompt (mirrors the
   // onChange auto-grow) instead of leaving a cramped, unfocused box.
@@ -302,6 +312,10 @@ export function AgentChatView({
     ...(proxyId !== undefined ? { proxyId } : {}),
   });
   const started = chat.turns.length > 0;
+  // (l) #8 — the "held" caption belongs to ONE reattach: it goes when that settles.
+  useEffect(() => {
+    if (!chat.adopting) setSendHeldByAdopt(false);
+  }, [chat.adopting]);
 
   /**
    * V-1611 — the badge polls HERE rather than reusing the lifecycle poll in
@@ -500,6 +514,13 @@ export function AgentChatView({
     // THIS selection and drops its answer if the customer moves again.
     if (typeof c.sessionId === 'string' && c.sessionId !== '') chat.adopt(c.sessionId);
   }
+  /** (l) #12 — retry the reattach of the ACTIVE chat's session after a GET that
+   *  failed for a non-404 reason (the hook keeps `adopting` true meanwhile). */
+  function retryAdopt(): void {
+    const active = chats.find((c) => c.id === activeChatId);
+    const sid = active?.sessionId;
+    if (typeof sid === 'string' && sid !== '') chat.adopt(sid);
+  }
   function handleDeleteChat(id: string): void {
     if (chat.sending) return;
     void (async () => {
@@ -650,7 +671,15 @@ export function AgentChatView({
     // NEW session "continuing from" that still-active id, which the server rejects with
     // a 409 surfaced as "The item changed or is busy." Once adopt settles, an active
     // session is adopted (the send messages it) and a closed one is continued cleanly.
-    if (text.length === 0 || chat.sending || chat.adopting || !aiReady) return;
+    if (text.length === 0 || chat.sending || !aiReady) return;
+    // (l) #8 — Enter while the reattach is in flight used to be a silent no-op
+    // whose only explanation was the disabled Send button's hover title. Say
+    // so where the customer is looking: the composer caption (and the notice
+    // row above it) name the hold; the draft is kept for when it settles.
+    if (chat.adopting) {
+      setSendHeldByAdopt(true);
+      return;
+    }
     // Egress gate. Only a settled resolution may start a session: 'pending'
     // means the proxy round-trip is still in flight, and 'blocked' means this
     // profile HAS a proxy we could not resolve. Sending in either state would
@@ -930,6 +959,12 @@ export function AgentChatView({
                     }
                   />
                 ))}
+              {/* (l) #8 — the reattach in flight is visible without hovering the
+                  disabled Send: the same slot the "Starting a session…" row
+                  uses. A failed reattach is a notice with a retry, below. */}
+              {chat.adopting && !chat.sending && chat.adoptError === null && (
+                <TypingRow label={REATTACHING_NOTICE} />
+              )}
             </ol>
           )}
         </div>
@@ -1115,9 +1150,9 @@ export function AgentChatView({
                 }
                 title={
                   !aiReady
-                    ? 'Connect your API key in Settings first'
+                    ? `${CONNECT_API_KEY_IN_SETTINGS} first`
                     : chat.adopting
-                      ? 'Reattaching to the previous session…'
+                      ? (chat.adoptError ?? REATTACHING_NOTICE)
                       : proxyState.kind === 'pending'
                         ? 'Checking this profile’s proxy…'
                         : proxyState.kind === 'blocked'
@@ -1131,7 +1166,31 @@ export function AgentChatView({
             )}
           </div>
           <p className="mx-auto mt-1 flex max-w-3xl items-center gap-2 text-2xs text-ink-muted">
-            {aiReady ? (
+            {aiReady && chat.adopting ? (
+              // (l) #8 / #12 — the held send says why, here, not only in a hover
+              // title; a reattach that could not be answered offers the retry
+              // (adopt() again on the same session) instead of a dead end.
+              <span
+                role="status"
+                data-component="chat-adopt-notice"
+                data-held={sendHeldByAdopt ? 'true' : 'false'}
+                className="flex flex-wrap items-center gap-2"
+              >
+                <span>
+                  {chat.adoptError ?? REATTACHING_NOTICE}
+                  {sendHeldByAdopt && ` ${SEND_HELD_SUFFIX}`}
+                </span>
+                {chat.adoptError !== null && (
+                  <button
+                    type="button"
+                    onClick={retryAdopt}
+                    className="btn-secondary px-2 py-0.5 text-2xs"
+                  >
+                    Try again
+                  </button>
+                )}
+              </span>
+            ) : aiReady ? (
               'Enter to send · Shift+Enter for a new line'
             ) : (
               <>

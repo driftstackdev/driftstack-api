@@ -495,7 +495,7 @@ describe('persistServerProbe — a refusal writes no measurement, adopts the ses
 });
 
 async function clickCheck(): Promise<void> {
-  const btn = await screen.findByRole('button', { name: /check endpoint|re-check/i });
+  const btn = await screen.findByRole('button', { name: /^check vpn$|^re-check$/i });
   fireEvent.click(btn);
 }
 
@@ -542,7 +542,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     testAccountProxy.mockResolvedValue(NODE_BUSY);
     render(<ProxiesView />);
     expect(await screen.findByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
     await clickCheck();
     expect(await screen.findByText(BUSY)).toBeInTheDocument();
     // The pre-flight has been persisted by now (the reply follows it).
@@ -550,7 +550,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
       expect(loadProbeCache().then((c) => c.vpn1?.at)).resolves.not.toBe(NOW - 2),
     );
     expect(screen.getByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
     const entry = (await loadProbeCache()).vpn1;
     expect(entry?.serverLatencyMs).toBe(42);
     expect(entry?.measuredFrom).toBe('fleet');
@@ -764,7 +764,7 @@ describe('(h) the Proxies grid — a failed tunnel stays failed across cache emi
     expect(screen.getByText('tunnel down')).toBeInTheDocument();
     expect(screen.queryByText('42ms')).toBeNull();
     expect(screen.queryByText('203.0.113.9')).toBeNull();
-    expect(screen.queryByText('from a fleet Mac')).toBeNull();
+    expect(screen.queryByText('from the test Mac')).toBeNull();
   });
 
   // Finding 28 — after a refusal the Tested column read "just now" (the
@@ -1038,7 +1038,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     await clickCheck();
     expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
     expect(screen.getByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from a fleet Mac')).toBeInTheDocument();
+    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
     expect(screen.getByText('203.0.113.9')).toBeInTheDocument();
     expect(screen.getByText('tunnel up')).toBeInTheDocument();
   });
@@ -1055,7 +1055,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(screen.queryByText(/VPN tunnels? up/)).toBeNull();
   });
 
-  // (j) J3 — "The last verdict stands" was FALSE when the pre-flight resolved
+  // (j) J3 — "The last result stands" was FALSE when the pre-flight resolved
   // the endpoint to a DIFFERENT address: `saveEndpointResult` carries the fleet
   // fields over only for the same address, so that write had already dropped
   // the verdict the notice claimed was standing. The same-address arm above
@@ -1075,7 +1075,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(await screen.findByText('42ms')).toBeInTheDocument();
     await clickCheck();
     const notice = await screen.findByText(
-      'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+      'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
     );
     expect(notice.className).toContain('text-ink-muted');
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
@@ -1101,7 +1101,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
   });
 });
 
-// (k) K2 — "The last verdict stands" was said of rows that never held one: a
+// (k) K2 — "The last result stands" was said of rows that never held one: a
 // row with no cache entry (first check on this Mac), a row whose previous
 // pre-flight did not resolve (that write carried nothing), and a row the fleet
 // never answered with a verdict (a busy node, a refusal). Beside an "endpoint
@@ -1178,7 +1178,7 @@ describe('(k) K2 — an unanswered check on a row that never held a verdict says
     expect(holdsFleetVerdict(resolvedEntry())).toBe(false);
     expect(holdsFleetVerdict(resolvedEntry({ fleetFailureReason: FLEET_DOWN }))).toBe(true);
     // Three sentences, three states — pinned so a refactor cannot fold two.
-    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no verdict yet — try again.');
+    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no result yet — try again.');
     expect(
       new Set([
         NO_VERDICT_YET_NOTICE,
@@ -1451,8 +1451,10 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
       reason: `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
       not_run: 'desktop_credential',
     });
+    // (l) #9 — the next step is Settings, the one the whole app gives for a
+    // missing key; "the dashboard" is named nowhere in the GUI as a place to go.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).toBe(
-      'Fleet tests need an API key from the dashboard.',
+      'Testing the tunnel needs an API key. Connect your API key in Settings to test it.',
     );
     // The toEqual above pins the whole sentence; this names the claim.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).not.toContain(
@@ -1519,7 +1521,8 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
     // the row) and not the tier's clause.
     expect(
       await screen.findByText(
-        '1 VPN tunnel not tested (needs an API key from the dashboard) — nothing was tested',
+        // (l) #9 — the one Settings next step, never "the dashboard".
+        '1 VPN tunnel not tested (needs an API key — Connect your API key in Settings to test it) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.fleetFailureReason).toBeUndefined();

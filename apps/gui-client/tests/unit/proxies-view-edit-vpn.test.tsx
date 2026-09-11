@@ -292,7 +292,7 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     // No SOCKS5 Test/Re-test button — the tunnel verifies at launch.
     expect(screen.queryByRole('button', { name: /^(Test|Re-test)$/ })).toBeNull();
     // N4 — instead it offers an on-demand DNS endpoint check (the tunnel verifies at launch).
-    expect(screen.getByRole('button', { name: /check endpoint/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^check vpn$/i })).toBeInTheDocument();
     expect(screen.queryByText('Verified at launch')).toBeNull();
   });
 
@@ -315,6 +315,79 @@ describe('ProxiesView — editing a VPN proxy preserves scheme + config', () => 
     // The SOCKS5 probe Test IS offered for a socks5 proxy.
     expect(screen.getByRole('button', { name: 'Test' })).toBeInTheDocument();
     expect(screen.queryByText('Verified at launch')).toBeNull();
+  });
+
+  // (l) #16 (review of the batch) — handleSave re-tested EVERY connection
+  // edit through handleTest, which had no scheme gate: an OpenVPN row whose
+  // remote moved (or a row edited onto a VPN scheme) got the native SOCKS5
+  // handshake against a UDP endpoint — the T-20 "unreachable" false negative
+  // written into the cache as this row's verdict. MUTATION: route the edited
+  // row back to `handleTest` unconditionally AND drop handleTest's own scheme
+  // gate → testProxy is invoked with the VPN host → red.
+  it('CRITICAL editing an OpenVPN row’s remote re-tests with ITS check (the endpoint pre-flight), never the SOCKS5 probe', async () => {
+    stored = [OPENVPN_PROXY];
+    const Proxies = await import('../../src/lib/proxies');
+    vi.mocked(Proxies.testProxy).mockClear();
+    vi.mocked(Proxies.resolveEndpoint).mockClear();
+    render(<ProxiesView />);
+    await screen.findByText('ovpn-paris');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    // The stub registry must reflect the save: handleSave re-lists and tests
+    // the row AS STORED, so a static list would re-check the old remote.
+    updateProxy.mockImplementation((id, patch) => {
+      stored = stored.map((p) => (p.id === id ? { ...p, ...patch } : p));
+      return Promise.resolve({});
+    });
+    const blob = await screen.findByPlaceholderText(/remote vpn\.example\.com 1194 udp/);
+    fireEvent.change(blob, {
+      target: { value: 'client\nremote vpn-moved.example.com 1194 udp\ndev tun\n' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(updateProxy).toHaveBeenCalledTimes(1));
+    const [, patch] = updateProxy.mock.calls[0] as [string, ProxyDraft];
+    expect(patch.host).toBe('vpn-moved.example.com');
+    expect(patch.scheme).toBe('openvpn');
+    // The moved endpoint is re-checked the way a VPN row is checked…
+    await waitFor(() =>
+      expect(Proxies.resolveEndpoint).toHaveBeenCalledWith('vpn-moved.example.com', 1194),
+    );
+    // …and the SOCKS5 greeting is never sent to it.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(Proxies.testProxy).not.toHaveBeenCalled();
+    expect(screen.queryByText(/unreachable/i)).toBeNull();
+  });
+
+  it('CONTROL — editing a SOCKS5 row’s host still re-tests with the native probe', async () => {
+    stored = [
+      {
+        id: 's1',
+        label: 'socks-a',
+        host: '10.0.0.1',
+        port: 1080,
+        username: null,
+        password: null,
+        createdAt: '2026-05-20T00:00:00.000Z',
+        scheme: 'socks5',
+      },
+    ];
+    const Proxies = await import('../../src/lib/proxies');
+    vi.mocked(Proxies.testProxy).mockClear();
+    vi.mocked(Proxies.resolveEndpoint).mockClear();
+    updateProxy.mockImplementation((id, patch) => {
+      stored = stored.map((p) => (p.id === id ? { ...p, ...patch } : p));
+      return Promise.resolve({});
+    });
+    render(<ProxiesView />);
+    await screen.findByText('socks-a');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const host = await screen.findByDisplayValue('10.0.0.1');
+    fireEvent.change(host, { target: { value: '10.0.0.2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(updateProxy).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(Proxies.testProxy).toHaveBeenCalledWith(expect.objectContaining({ host: '10.0.0.2' })),
+    );
+    expect(Proxies.resolveEndpoint).not.toHaveBeenCalled();
   });
 
   it('renders the VPN scheme fields (not the SOCKS5 host/port) when editing a VPN proxy', async () => {

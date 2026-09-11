@@ -99,7 +99,7 @@ export type ServerProbeOutcome =
  *  row's measured fields) stands beside it, and it goes when the next check
  *  starts, like every other notice. */
 export const SERVER_DID_NOT_ANSWER_NOTICE =
-  'The server did not answer, so the tunnel was not tested. The last verdict stands — try again.';
+  'The server did not answer, so the tunnel was not tested. The last result stands — try again.';
 
 /** (j) J3 — the I5 notice when the pre-flight resolved the endpoint to a
  *  DIFFERENT address than the last check's: that cache write already dropped
@@ -109,7 +109,7 @@ export const SERVER_DID_NOT_ANSWER_NOTICE =
  *  grid and the profile card, which run the same pre-flight → fleet sequence
  *  and must say the same thing about the same cache. */
 export const ENDPOINT_MOVED_NO_VERDICT_NOTICE =
-  'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.';
+  'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.';
 
 /** (k) K2 — the I5 notice for a row that has NO verdict to stand: no cache
  *  entry before this check, a prior pre-flight that did not resolve (its write
@@ -117,7 +117,8 @@ export const ENDPOINT_MOVED_NO_VERDICT_NOTICE =
  *  verdict (a busy node, a refusal, a row nobody tested). "The last verdict
  *  stands" was false on every one of them — there was none — and it read as
  *  if the row's "endpoint ok" pill were a tunnel verdict. */
-export const NO_VERDICT_YET_NOTICE = 'The server did not answer; no verdict yet — try again.';
+// (l) #11 — "result", never the internal "verdict", in every customer sentence.
+export const NO_VERDICT_YET_NOTICE = 'The server did not answer; no result yet — try again.';
 
 /** (k) K2 — whether an entry holds a fleet VERDICT about the tunnel: the
  *  cache's failure sentence, or a server-measured field the row shows (a

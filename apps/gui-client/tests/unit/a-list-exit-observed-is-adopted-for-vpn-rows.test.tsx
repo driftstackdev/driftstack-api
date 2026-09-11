@@ -514,7 +514,7 @@ describe('the Proxies grid adopts on refresh', () => {
     nextResponse = () => json({ data: [WG_ROW] });
     render(<ProxiesView />);
     expect(await screen.findByText('203.0.113.9')).toBeTruthy();
-    expect(screen.queryByText('run Check for the exit')).toBeNull();
+    expect(screen.queryByText('no exit measured yet — run Check VPN')).toBeNull();
   });
 
   it('CRITICAL a WireGuard row this Mac has NEVER Tested (no cache entry) shows the session-observed exit', async () => {
@@ -523,17 +523,17 @@ describe('the Proxies grid adopts on refresh', () => {
     nextResponse = () => json({ data: [WG_ROW] });
     render(<ProxiesView />);
     expect(await screen.findByText('203.0.113.9')).toBeTruthy();
-    expect(screen.queryByText('run Check for the exit')).toBeNull();
+    expect(screen.queryByText('no exit measured yet — run Check VPN')).toBeNull();
     // Nothing fabricated: the row wears the pre-flight's own verdict.
     expect((await loadProbeCache()).wg1?.endpoint?.resolved).toBe(true);
   });
 
-  it('control: without an observation the row still says "run Check for the exit"', async () => {
+  it('control: without an observation the row still says "no exit measured yet — run Check VPN"', async () => {
     await seedVpnEntry('wg1');
     stored = [WG];
     nextResponse = () => json({ data: [{ ...WG_ROW, exit_observed: null }] });
     render(<ProxiesView />);
-    expect(await screen.findByText('run Check for the exit')).toBeTruthy();
+    expect(await screen.findByText('no exit measured yet — run Check VPN')).toBeTruthy();
     await waitFor(() => expect(fetchCalls.length).toBe(1));
     expect(screen.queryByText('203.0.113.9')).toBeNull();
   });

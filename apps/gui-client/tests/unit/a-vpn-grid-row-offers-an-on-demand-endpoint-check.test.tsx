@@ -90,13 +90,14 @@ beforeEach(() => {
 });
 
 describe('N4 — a VPN grid row offers an on-demand endpoint check', () => {
-  it('renders "Check endpoint" (not the static "Verified at launch") and resolves on click', async () => {
+  it('renders "Check VPN" (not the static "Verified at launch") and resolves on click', async () => {
     stored = [vpnRow()];
     render(<ProxiesView />);
 
     // The button exists — reverting N4 restores the static "Verified at launch"
     // span with no button, and this query throws.
-    const btn = await screen.findByRole('button', { name: /check endpoint/i });
+    // (l) #10 — the VPN row's check is named "Check VPN" (the card's menu says the same).
+    const btn = await screen.findByRole('button', { name: /^check vpn$/i });
     expect(screen.queryByText(/Verified at launch/i)).toBeNull();
 
     // Clear any mount-time resolution so the click is what we measure.
@@ -115,6 +116,6 @@ describe('N4 — a VPN grid row offers an on-demand endpoint check', () => {
         screen.getByRole('button', { name: /^(test|re-test|testing…)$/i }),
       ).toBeInTheDocument(),
     );
-    expect(screen.queryByRole('button', { name: /check endpoint/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /check vpn|check endpoint/i })).toBeNull();
   });
 });

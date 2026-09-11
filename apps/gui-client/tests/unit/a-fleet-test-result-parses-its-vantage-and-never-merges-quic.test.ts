@@ -340,7 +340,7 @@ describe('the closed set helper', () => {
 
   it("labels 'fleet' as from a fleet Mac and names the node in the hover text", () => {
     const l = vantageLabel({ measuredFrom: 'fleet', nodeId: 'mac-mini-07' });
-    expect(l.label).toBe('from a fleet Mac');
+    expect(l.label).toBe('from the test Mac');
     expect(l.title).toContain('mac-mini-07');
     expect(l.title).toContain('Mac that runs your profiles');
   });
@@ -348,7 +348,7 @@ describe('the closed set helper', () => {
   it("labels 'control_plane' as from the server and says why in the hover text", () => {
     const l = vantageLabel({ measuredFrom: 'control_plane' });
     expect(l.label).toBe('from the server');
-    expect(l.title).toContain('No fleet Mac was free');
+    expect(l.title).toContain('No test Mac was free');
   });
 });
 

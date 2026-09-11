@@ -180,8 +180,18 @@ export interface UseAgentChatResult {
   adopt: (sessionId: string) => void;
   /** True while an `adopt` is in flight. The view holds the "continuing starts
    *  a fresh session" divider back until this settles, because until the GET
-   *  answers we do not yet know whether that sentence is true. */
+   *  answers we do not yet know whether that sentence is true.
+   *
+   *  (l) #12 — and it STAYS true when the GET failed for a reason other than
+   *  404 (`adoptError` is set): the session may still be live, and a send in
+   *  that state would create a session `continue_from` a live one — the 409
+   *  the adopting gate exists to prevent. Only a 404 (closed, reaped,
+   *  cross-account) settles it false without a session. */
   adopting: boolean;
+  /** (l) #12 — the notice when the reattach could not be answered (offline
+   *  blip, 5xx, timeout): null while it is in flight or settled. `adopt()` the
+   *  same session again to retry; a new chat (`reset`/`restore`) clears it. */
+  adoptError: string | null;
   /** Count of leading turns that were RESTORED from saved history and are NOT
    *  backed by the (now-absent) live server session. While > 0 and there is no
    *  live session, continuing the chat starts a FRESH server session that won't
@@ -220,6 +230,17 @@ export function adoptionOutcome(
   // because the question it answers is no longer the one on screen.
   if (generationMoved) return 'stale';
   return status === 'active' ? 'adopt' : 'not-active';
+}
+
+/** (l) #12 — the reattach notice the view shows beside a held Send. */
+export const ADOPT_FAILED_NOTICE =
+  'Couldn’t reattach to the previous session — check your connection and try again.';
+
+/** (l) #12 — a 404 from the reattach GET: the SDK's NotFoundError (and any
+ *  problem+json error) carries its HTTP status; nothing else is a 404. A bare
+ *  network failure has no status and is NOT one — the session may be live. */
+export function isNotFoundError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { status?: unknown }).status === 404;
 }
 
 export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
@@ -294,9 +315,23 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
   // session (see restore()). Drives the view's honest "continuing starts a new
   // session" divider. Cleared once a fresh session is created on the next send.
   const [restoredHistoryCount, setRestoredHistoryCount] = useState(0);
+  // (l) #17 — how many leading turns the Approve/Deny gate must NOT read a halt
+  // from. Set with `restoredHistoryCount` on restore(); cleared when a fresh
+  // session is created (its transcript grows from there) and when an adopt()
+  // attaches a live session AND could seed `lastUserMessage` from the restored
+  // turns — then Approve re-sends that message against the adopted session,
+  // which is the live state the bar claims. Kept when nothing could be seeded:
+  // a bar whose Approve is a silent no-op is worse than no bar.
+  const [restoredGateFloor, setRestoredGateFloor] = useState(0);
   // The user message that produced the current turn — re-sent verbatim on
   // approve() so the executor re-plans + dispatches the now-approved action.
   const [lastUserMessage, setLastUserMessage] = useState<string | null>(null);
+  /** (l) #17 — the last restored USER turn's text, for an adopt() to seed
+   *  `lastUserMessage` from (restore() nulls it, and adopt() runs in a
+   *  `[]`-deps callback that cannot read `turns`). */
+  const restoredUserSeedRef = useRef<string | null>(null);
+  /** (l) #12 — set when the reattach GET failed for a non-404 reason. */
+  const [adoptError, setAdoptError] = useState<string | null>(null);
   const idRef = useRef(0);
   const nextId = useCallback((): number => {
     idRef.current += 1;
@@ -397,23 +432,50 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     const c = clientRef.current;
     if (c === null || typeof c.agentSessions?.get !== 'function') return;
     setAdopting(true);
-    void Promise.resolve(c.agentSessions.get(sid))
-      .then((s) => {
-        if (adoptionOutcome(s.status, cancelGenRef.current !== gen) !== 'adopt') return;
-        // The chat is still LIVE, so there is nothing to continue from — clear the
-        // pending source or the next send would fork a session we already hold.
-        continueFromRef.current = null;
-        setSession(s);
-        // The adopted session's own transcript holds these turns, so they are
-        // no longer history the agent cannot see.
-        setRestoredHistoryCount(0);
-      })
-      // A 404 (closed, reaped, or cross-account) is the ordinary case for an old
-      // chat, not an error worth showing. The divider already says the truth.
-      .catch(() => undefined)
-      .finally(() => {
+    setAdoptError(null);
+    // (l) #12 — the GET is tried twice before the reattach is given up: a
+    // single offline blip or 5xx must not strand a live session behind a
+    // "try again" the customer has to notice. A 404 is never retried.
+    const attempt = (retriesLeft: number): Promise<void> =>
+      Promise.resolve(c.agentSessions.get(sid)).then(
+        (s) => {
+          if (adoptionOutcome(s.status, cancelGenRef.current !== gen) !== 'adopt') return;
+          // The chat is still LIVE, so there is nothing to continue from — clear the
+          // pending source or the next send would fork a session we already hold.
+          continueFromRef.current = null;
+          setSession(s);
+          // The adopted session's own transcript holds these turns, so they are
+          // no longer history the agent cannot see.
+          setRestoredHistoryCount(0);
+          // (l) #17 — a restored halt is now the LAST turn of a live session.
+          // Approve re-sends the message that produced it (with the approval),
+          // so seed that message from the restored turns; only then may the
+          // gate read the halt — otherwise Approve would be a silent no-op.
+          const seed = restoredUserSeedRef.current;
+          setLastUserMessage(seed);
+          if (seed !== null) setRestoredGateFloor(0);
+        },
+        (err: unknown) => {
+          if (cancelGenRef.current !== gen) return;
+          // A 404 (closed, reaped, or cross-account) is the ordinary case for an
+          // old chat, not an error worth showing. The divider already says the truth.
+          if (isNotFoundError(err)) return;
+          if (retriesLeft > 0) return attempt(retriesLeft - 1);
+          // (l) #12 — anything else says NOTHING about whether the session is
+          // live. Falling through used to clear `adopting` with continueFromRef
+          // still naming the session, and the next send created a session
+          // `continue_from` a live one — the 409 ("The item changed or is
+          // busy") the adopting gate was added to stop. Stay adopting (Send
+          // held) and say so; the view offers a retry.
+          setAdoptError(ADOPT_FAILED_NOTICE);
+          throw err;
+        },
+      );
+    void attempt(1)
+      .then(() => {
         if (cancelGenRef.current === gen) setAdopting(false);
-      });
+      })
+      .catch(() => undefined);
   }, []);
 
   const post = useCallback(
@@ -553,6 +615,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
           // boundary no longer applies (the new session's transcript grows from
           // here), so clear the divider marker.
           setRestoredHistoryCount(0);
+          setRestoredGateFloor(0);
           sid = created.id;
         }
         const turnSignature = JSON.stringify({
@@ -649,7 +712,13 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // The restored turns are the first `restoredHistoryCount`; once the customer
       // continues (a fresh session is created, session!==null), new turns gate
       // normally again. (audit: dead safety prompt on a read-only restored chat)
-      if (session === null && i < restoredHistoryCount) return null;
+      // (l) #17 — the floor is its own state, not `session === null &&
+      // restoredHistoryCount`: an adopt() attaches a live session and zeroes
+      // the count, which used to remove BOTH halves of the guard while the
+      // restored halt (and the nulled lastUserMessage) stayed — the same dead
+      // Approve, now on a live session. The floor clears only where Approve
+      // can act: a fresh session, or an adopt that seeded the message.
+      if (i < restoredGateFloor) return null;
       if (turn.id === resolvedTurnId) return null;
       const pc = extractPendingConfirmation(turn.response);
       return pc === null
@@ -657,7 +726,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
         : { turnId: turn.id, category: pc.category, matchedText: pc.matchedText };
     }
     return null;
-  }, [turns, resolvedTurnId, session, restoredHistoryCount]);
+  }, [turns, resolvedTurnId, restoredGateFloor]);
 
   const approve = useCallback(async (): Promise<void> => {
     if (pendingConfirmation === null || lastUserMessage === null) return;
@@ -733,6 +802,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     // synchronous adopt() re-sets it true). Otherwise a stale-generation adopt
     // leaves it stuck true and suppresses the honest restored-history divider.
     setAdopting(false);
+    setAdoptError(null);
     // Best-effort close the chat we're leaving so its server session + any
     // dispatched Mac don't leak until the reaper (sweep2). Read via the ref so we
     // close the CURRENT session, not a stale closure capture.
@@ -749,7 +819,9 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     approvedActionsRef.current = [];
     pendingTurnReceiptRef.current = null;
     setLastUserMessage(null);
+    restoredUserSeedRef.current = null;
     setRestoredHistoryCount(0);
+    setRestoredGateFloor(0);
     setRestoredSessionId(null);
   }, [closeServerSession, clearProfileBinding]);
 
@@ -763,6 +835,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       // leaving), so its `adopting` flag is stale — clear it. handleSelectChat calls
       // restore() then a synchronous adopt(), which re-sets it true, preserving order.
       setAdopting(false);
+      setAdoptError(null);
       // Best-effort close the chat we're switching AWAY from (same leak as reset).
       if (sessionIdRef.current !== null) clearProfileBinding(profileIdRef.current);
       closeServerSession(sessionIdRef.current);
@@ -799,10 +872,15 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
       setApprovedTurnIds(new Set());
       approvedActionsRef.current = [];
       setLastUserMessage(null);
+      // (l) #17 — remembered for an adopt() that attaches this chat's live
+      // session: Approve on a restored halt re-sends THIS message.
+      restoredUserSeedRef.current =
+        [...restoredTurns].reverse().find((t) => t.role === 'user')?.text ?? null;
       // Mark every restored turn as history the (absent) live session won't
       // remember, so the view can draw the honest "continuing starts a new
       // session" divider after them.
       setRestoredHistoryCount(restoredTurns.length);
+      setRestoredGateFloor(restoredTurns.length);
       // Keep new turn ids monotonic above the restored max so React keys + the
       // confirmation lookup stay correct when the customer continues the chat.
       idRef.current = restoredTurns.reduce((m, t) => Math.max(m, t.id), 0);
@@ -826,6 +904,7 @@ export function useAgentChat(opts: UseAgentChatOpts = {}): UseAgentChatResult {
     restore,
     adopt,
     adopting,
+    adoptError,
     cancel,
     restoredHistoryCount,
     restoredSessionId,
