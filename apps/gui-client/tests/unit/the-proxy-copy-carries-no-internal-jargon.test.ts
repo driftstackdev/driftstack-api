@@ -11,12 +11,23 @@
 // ⛔ Scanner discipline (memory: a static scanner must refuse prose fixtures
 // and its own header; a crude scanner generates candidates well and
 // conclusions badly): comments are stripped BEFORE the scan, only quoted
-// literals are read, the scanner is checked against a positive control that
-// must trip it, and the offending lines are printed so a red is a reading
-// list, not a number.
+// literals and JSX text nodes are read, the scanner is checked against a
+// positive control that must trip it (one arm per source of copy), and the
+// offending lines are printed so a red is a reading list, not a number.
+//
+// (m) M2 — JSX TEXT is copy too. `<p>measured from a fleet Mac</p>` renders
+// the sentence without a single quote mark, so a literal-only scan read the
+// three .tsx surfaces as clean whatever their markup said. The text between a
+// tag's `>` and the next `<` is scanned as well — as the TypeScript parser's
+// own JsxText nodes, not a `>…<` regex: measured on ProxiesView, a regex
+// admitted 200+ code runs (`} else {`, `): JSX.Element {`, a ternary between
+// two JSX branches), several naming `verdict`/`vantage` as IDENTIFIERS, and
+// no shape rule told those apart from a sentence. A `{…}` hole splits a text
+// node as it splits the render. Its own positive control is below.
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(__dirname, '../../src');
@@ -58,16 +69,48 @@ function stringLiterals(src: string): Array<{ line: number; text: string }> {
   return out;
 }
 
+/** (m) M2 — every JSX text node with its line, from the TypeScript parser:
+ *  exactly the runs React renders as text (a `{…}` hole ends one and starts
+ *  the next; a `{/* … *\/}` is an expression, never text; a comparison's `>`
+ *  is an operator). The line is the one the TEXT starts on, not the tag's —
+ *  a multi-line `<p>` reports where the sentence is. Reads the UNSTRIPPED
+ *  source: the parser knows a comment from a text node better than a regex. */
+function jsxTextNodes(src: string): Array<{ line: number; text: string }> {
+  const sf = ts.createSourceFile(
+    'surface.tsx',
+    src,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const out: Array<{ line: number; text: string }> = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxText(node)) {
+      const raw = sf.text.slice(node.pos, node.end);
+      const text = raw.trim();
+      if (text.length > 0) {
+        const lead = raw.length - raw.trimStart().length;
+        out.push({ line: sf.getLineAndCharacterOfPosition(node.pos + lead).line + 1, text });
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return out;
+}
+
 /** Not copy: the internal wire query (`?vantage=fleet` names a URL parameter)
  *  and module paths in import specifiers (`'../lib/proxy-vantage'`). A customer
  *  sentence never starts with `./`, `../` or `@`. */
 const ALLOWED = [/\?vantage=fleet/, /^['"`](\.{1,2}\/|@)[^'"`]*['"`]$/];
 
 function jargonHits(src: string): Array<{ line: number; text: string }> {
-  return stringLiterals(stripComments(src)).filter(
+  const literals = stringLiterals(stripComments(src)).filter(
     ({ text }) =>
       JARGON.some((re) => re.test(literalText(text))) && !ALLOWED.some((re) => re.test(text)),
   );
+  const jsx = jsxTextNodes(src).filter(({ text }) => JARGON.some((re) => re.test(text)));
+  return [...literals, ...jsx].sort((a, b) => a.line - b.line);
 }
 
 describe('#11 — the proxy surfaces carry no internal jargon in customer-facing strings', () => {
@@ -91,8 +134,37 @@ describe('#11 — the proxy surfaces carry no internal jargon in customer-facing
     expect(jargonHits(fixture).map((h) => h.line)).toEqual([1, 2, 3, 4, 12]);
   });
 
+  // (m) M2 — the JSX-text arm of the control: the same terms with no quote
+  // mark anywhere near them must trip the scanner; code that merely wears `>`
+  // and `<` (an identifier named `verdict` in a ternary between two JSX
+  // branches, a `data-latency-vantage=` attribute) must not, and a comment
+  // inside JSX is still a comment.
+  it('POSITIVE CONTROL — the scanner trips on jargon in JSX text nodes, split at {…} holes, and not on code between > and <', () => {
+    const fixture = [
+      'const a = <p>measured from a fleet Mac</p>;', // 1 — plain text node
+      'const b = (', // 2
+      '  <span>', // 3
+      '    the {who} vantage', // 4 — the hole splits it; " vantage" is a node
+      '  </span>', // 5
+      ');', // 6
+      'const c = x > verdict.count ? <b>fine</b> : <i>also {vantage.n}</i>;', // 7 — identifiers, not copy
+      'const d = items.map((it) => <li key={it} data-latency-vantage={it}>{it}</li>);', // 8
+      'const e = <p>{/* the fleet Mac is named in a JSX comment only */}clean</p>;', // 9
+      'const f = <p>', // 10
+      '  no verdict yet', // 11 — a multi-line node reports the line the TEXT starts on
+      '</p>;', // 12
+      "const g = <p title='the vantage'>ok</p>;", // 13 — a quoted attribute is the literal scan's
+    ].join('\n');
+    expect(jargonHits(fixture).map((h) => [h.line, h.text])).toEqual([
+      [1, 'measured from a fleet Mac'],
+      [4, 'vantage'],
+      [11, 'no verdict yet'],
+      [13, "'the vantage'"],
+    ]);
+  });
+
   for (const rel of SURFACES) {
-    it(`CRITICAL ${rel} has no jargon in its string literals`, () => {
+    it(`CRITICAL ${rel} has no jargon in its string literals or JSX text`, () => {
       const src = readFileSync(resolve(ROOT, rel), 'utf8');
       expect(src.length).toBeGreaterThan(0);
       const hits = jargonHits(src);

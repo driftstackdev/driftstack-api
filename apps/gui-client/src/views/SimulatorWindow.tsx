@@ -697,8 +697,8 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // (f) — the harness's step tokens, in the order a VPN session emits them. The
     // browser step is announced by its OWN token (browser_spawning); until the
     // harness emits it, `vpn_egress_active` is the LAST thing a VPN session says
-    // before its launch timeout, so that caption states the limit instead of
-    // promising progress that is not coming.
+    // before its launch timeout, so that caption states what is true — tunnel
+    // up, browser not attached — instead of promising progress that is not coming.
     if (t.step === 'vpn_egress_bringing_up') return 'Starting the VPN tunnel…';
     if (t.step === 'egress_geo_resolving') {
       return where !== null
@@ -712,13 +712,16 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     }
     // (h) — a STATE, not a prediction: the harness may emit browser_spawning
     // next (fork-spawn on), or time out (fork-spawn off, the default), and the
-    // client cannot see which. Say what is true either way.
-    // A STATE, not a prediction: whether the session times out or the browser
-    // attaches next is the harness's to know, and it announces the latter with
-    // its own token — so this sentence promises nothing either way.
+    // client cannot see which. Whether the browser attaches next is the
+    // harness's to know, and it announces it with its own token.
+    // (m) M6 — nor can the client see whether the browser step is AVAILABLE
+    // to this session: "isn’t available for VPN sessions yet" was an
+    // availability claim made from the one place that cannot know it. Say
+    // only what the step token says — the tunnel is up and no browser has
+    // attached — with no claim either way about what comes next.
     return where !== null
-      ? `VPN tunnel connected (${where}) — the browser step isn’t available for VPN sessions yet`
-      : 'VPN tunnel connected — the browser step isn’t available for VPN sessions yet';
+      ? `VPN tunnel connected (${where}) — browser not attached`
+      : 'VPN tunnel connected — browser not attached';
   }
   return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
 }
@@ -745,19 +748,21 @@ export function vpnTunnelChipText(t: VpnTunnelUp): string {
   }
   if (!vpnTunnelIsUp(t)) return 'Starting the VPN tunnel…';
   if (t.ip !== null) return `VPN tunnel up · exit ${t.ip}`;
-  if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser attach isn’t available yet';
+  if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser not attached';
   if (t.step === 'egress_geo_resolving') return 'VPN tunnel up · resolving the exit…';
   return 'VPN tunnel up · starting the browser…';
 }
 
 /** (h) — the locked address bar's placeholder for that state: promises only
- *  what the step can deliver. */
+ *  what the step can deliver. (m) M6 — `vpn_egress_active` reads the same
+ *  line as every other tunnel-up step: "unlocks once the browser attaches"
+ *  names the condition, not its likelihood. The branch it had claimed attach
+ *  "isn’t available for VPN sessions yet" — an availability the client
+ *  cannot see — so that state now makes no claim either way. */
 export function vpnAddressPlaceholder(t: VpnTunnelUp): string {
   if (!t.vpn) return 'connecting… — the address bar unlocks once the device is live';
   if (!vpnTunnelIsUp(t))
     return 'Starting the VPN tunnel… — the address bar unlocks once the device is live';
-  if (t.step === 'vpn_egress_active')
-    return 'VPN tunnel is up — browser attach isn’t available for VPN sessions yet';
   return 'VPN tunnel is up — the address bar unlocks once the browser attaches';
 }
 

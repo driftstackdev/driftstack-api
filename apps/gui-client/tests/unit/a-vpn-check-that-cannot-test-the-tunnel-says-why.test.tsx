@@ -206,13 +206,15 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     expect(testAccountProxy).not.toHaveBeenCalled();
   });
 
-  it('the notice belongs to THAT check: the next Check clears it before it answers', async () => {
+  it('the notice belongs to THAT check: it stays through the wait, and is GONE once the next check lands another answer', async () => {
     stored = [vpnRow({ serverId: undefined })];
     render(<ProxiesView />);
     fireEvent.click(await screen.findByRole('button', { name: /^check vpn$/i }));
     await waitFor(() => expect(notice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
-    // Re-check with the resolver held open: the previous notice must be gone
-    // while this check is in flight (it was the previous check's answer).
+    // Re-check with the resolver held open. The notice is dropped when the
+    // check LANDS (`settle()`), not when it starts — (h): clearing at the
+    // start left a bare row for the whole fleet wait — so it is STILL there
+    // while this check is in flight. Asserted, not narrated.
     let release!: (v: { resolved: boolean; ip: string; message: string }) => void;
     resolveEndpoint.mockImplementationOnce(
       () =>
@@ -222,13 +224,27 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     );
     fireEvent.click(screen.getByRole('button', { name: /^re-check$/i }));
     await waitFor(() => expect(screen.getByText('Checking…')).toBeInTheDocument());
-    // The notice is dropped when the check LANDS (`settle()`), so it is still
-    // there during the wait — (h): clearing at the start left a bare row for
-    // the whole fleet wait. Release, and the same reason comes back (nothing
-    // changed), which proves the notice is re-derived per check, not sticky.
-    release({ resolved: true, ip: '198.51.100.1', message: 'Resolved' });
-    await waitFor(() => expect(screen.queryByText('Checking…')).toBeNull());
     expect(notice()).toBe(VPN_NOT_STORED_CHECK_NOTICE);
+    // (m) M1 — the ABSENCE this arm never asserted: land an answer that is not
+    // that reason (the endpoint no longer resolves) and the previous notice is
+    // GONE — nothing replaces it, and the row wears THIS check's own verdict.
+    // With the same answer landing twice, "cleared and re-derived" and "sticky"
+    // read identically; a different answer is what tells them apart.
+    // MUTATION: drop `settle()` from handleCheckEndpoint's unresolved branch →
+    // the not-stored sentence stays beside "unresolved" → red.
+    release({ resolved: false, ip: '', message: 'DNS lookup failed' });
+    await waitFor(() => expect(screen.queryByText('Checking…')).toBeNull());
+    expect(screen.getByText('unresolved')).toBeInTheDocument();
+    expect(notice()).toBeNull();
+    expect(screen.queryByText(VPN_NOT_STORED_CHECK_NOTICE)).toBeNull();
+    expect(screen.queryByText(VPN_NO_API_KEY_CHECK_NOTICE)).toBeNull();
+    // A third check that resolves again brings the same reason back (nothing
+    // about the row changed): re-derived per check — never sticky, never
+    // dropped for good. The fleet was never asked at any point.
+    fireEvent.click(screen.getByRole('button', { name: /^(re-check|check vpn)$/i }));
+    await waitFor(() => expect(notice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    expect(screen.queryByText('unresolved')).toBeNull();
+    expect(testAccountProxy).not.toHaveBeenCalled();
   });
 
   it('VACUITY CONTROL — a stored row with a key reaches the fleet and gets NO not-tested notice', async () => {

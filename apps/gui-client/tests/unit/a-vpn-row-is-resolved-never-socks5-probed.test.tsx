@@ -24,6 +24,12 @@ import {
   NO_VERDICT_YET_NOTICE,
   SERVER_DID_NOT_ANSWER_NOTICE,
 } from '../../src/lib/proxy-server-test';
+import type { SweepDeps } from '../../src/lib/proxy-probe-sweeper';
+import {
+  __resetSweepLatchForTests,
+  isProxyProbeInFlight,
+  runSweep,
+} from '../../src/lib/proxy-probe-sweeper';
 
 const stores = new Map<string, Map<string, unknown>>();
 vi.mock('@tauri-apps/plugin-store', () => ({
@@ -120,7 +126,9 @@ vi.mock('../../src/lib/SettingsContext', () => {
 const { state } = vi.hoisted(() => ({
   // `vpnStored` — whether the VPN row carries a serverId (is stored on the
   // account); the (l) #1 card arms flip it.
-  state: { boundProxyId: 'vpn1', vpnStored: true },
+  // `vpn1Scheme` — (m) M5: the same row (same id/host/port) edited to SOCKS5
+  // and back, as a customer's scheme-only edit does; a Refresh re-lists it.
+  state: { boundProxyId: 'vpn1', vpnStored: true, vpn1Scheme: 'openvpn' },
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
@@ -189,7 +197,9 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof ProxiesModule>()),
   listProxies: () => {
     const { serverId: _stored, ...unstoredVpn } = VPN_PROXY;
-    return Promise.resolve([state.vpnStored ? VPN_PROXY : unstoredVpn, SOCKS5_PROXY]);
+    const vpn1 = state.vpnStored ? VPN_PROXY : unstoredVpn;
+    const { openvpn: _cfg, ...asSocks5 } = { ...vpn1, scheme: 'socks5' as const };
+    return Promise.resolve([state.vpn1Scheme === 'socks5' ? asSocks5 : vpn1, SOCKS5_PROXY]);
   },
   addProxy: vi.fn(),
   setProxyServerId: vi.fn(() => Promise.resolve()),
@@ -256,6 +266,7 @@ beforeEach(() => {
   probeProxyExit.mockResolvedValue(null);
   state.boundProxyId = 'vpn1';
   state.vpnStored = true;
+  state.vpn1Scheme = 'openvpn';
 });
 
 describe('a VPN profile launches through the endpoint resolve, never the SOCKS5 probe', () => {
@@ -1130,5 +1141,143 @@ describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tes
     );
     expect(await screen.findByText('42ms')).toBeTruthy();
     expect(cardNotice()).toBeNull();
+  });
+});
+
+// (m) M4 — the #15 claim at the two ProfilesView call sites. The sweeper test
+// pins `withProxyProbe` itself; nothing pinned that the card's Test and the
+// launch pre-flight run their handshake INSIDE it. A real sweep is driven
+// against the same module state while the user probe is held open: it must
+// skip the row (skippedBusy) and never hand its own handshake to `testProxy`.
+function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+const sweepDeps = (probedBySweep: string[]): SweepDeps => ({
+  loadCache: () => Promise.resolve({ p1: { result: HEALTHY, at: 0 } }), // stale → planned
+  listProxies: () => Promise.resolve([SOCKS5_PROXY]),
+  testProxy: (p) => {
+    probedBySweep.push(p.id);
+    return Promise.resolve(HEALTHY);
+  },
+  saveResult: () => Promise.resolve({}),
+  now: () => Date.now(),
+  sleep: () => Promise.resolve(),
+});
+
+describe('(m) M4 — the card’s Test and the launch pre-flight run their probe inside withProxyProbe', () => {
+  // MUTATION: unwrap the `withProxyProbe(px.id, …)` in handleTestProxy (call
+  // testProxy directly) → no claim → the concurrent sweep probes p1 underneath
+  // the customer's Test → red.
+  it('CRITICAL card Test: while its handshake is open, a concurrent sweep skips that row', async () => {
+    __resetSweepLatchForTests();
+    state.boundProxyId = 'p1';
+    seedCache({ p1: { result: HEALTHY, at: Date.now() } });
+    const held = deferred<ProxyTestResult>();
+    testProxy.mockImplementationOnce(() => held.promise);
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
+    expect(isProxyProbeInFlight('p1')).toBe(true);
+    const probedBySweep: string[] = [];
+    const report = await runSweep(sweepDeps(probedBySweep));
+    expect(report.skippedBusy).toEqual(['p1']);
+    expect(probedBySweep).toEqual([]);
+    held.resolve(HEALTHY);
+    await waitFor(() => expect(isProxyProbeInFlight('p1')).toBe(false));
+  });
+
+  // MUTATION: unwrap the `withProxyProbe(proxy.id, …)` in handleLaunch's
+  // SOCKS5 pre-flight → same double probe → red.
+  it('CRITICAL launch pre-flight: while its handshake is open, a concurrent sweep skips that row', async () => {
+    __resetSweepLatchForTests();
+    state.boundProxyId = 'p1';
+    seedCache({ p1: { result: HEALTHY, at: Date.now() } });
+    const held = deferred<ProxyTestResult>();
+    testProxy.mockImplementationOnce(() => held.promise);
+    await launch();
+    await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
+    expect(isProxyProbeInFlight('p1')).toBe(true);
+    const probedBySweep: string[] = [];
+    const report = await runSweep(sweepDeps(probedBySweep));
+    expect(report.skippedBusy).toEqual(['p1']);
+    expect(probedBySweep).toEqual([]);
+    held.resolve(HEALTHY);
+    await waitFor(() => expect(isProxyProbeInFlight('p1')).toBe(false));
+    // The launch it was holding proceeds on the released verdict.
+    await waitFor(() => expect(agentCreate).toHaveBeenCalledTimes(1));
+  });
+
+  it('VACUITY CONTROL — with no user probe in flight the same sweep probes the row', async () => {
+    __resetSweepLatchForTests();
+    const probedBySweep: string[] = [];
+    const report = await runSweep(sweepDeps(probedBySweep));
+    expect(report.skippedBusy).toEqual([]);
+    expect(probedBySweep).toEqual(['p1']);
+  });
+});
+
+// (m) M5 — the #16 hoist: handleTestProxy drops the row's previous VPN notice
+// for EVERY scheme, before the SOCKS5/VPN fork. The card hides `vpnNotice` on a
+// non-VPN row, so on the SOCKS5 row itself the stale state is invisible; what
+// makes it observable is the edit BACK — the notice map is keyed by id and
+// outlives a re-list, so a notice a SOCKS5 Test failed to clear resurfaces the
+// moment the row is a VPN again (the control below proves that path is live).
+describe('(m) M5 — a SOCKS5 Test clears a stale VPN notice on the card', () => {
+  const refresh = (): void => {
+    fireEvent.click(screen.getByTitle('Refresh now'));
+  };
+  async function openMenu(): Promise<void> {
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+  }
+
+  // MUTATION: move the setVpnNotices clear back inside handleTestProxy's VPN
+  // branch → the SOCKS5 Test leaves the map entry → the notice is back on the
+  // card once the row is a VPN again → red.
+  it('CRITICAL vpn→socks5, Test proxy, →vpn again: the previous not-tested notice does not come back', async () => {
+    state.vpnStored = false;
+    seedCache({});
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    state.vpn1Scheme = 'socks5';
+    refresh();
+    await openMenu();
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+    await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
+    expect(resolveEndpoint).toHaveBeenCalledTimes(1); // the Check VPN's only
+    state.vpn1Scheme = 'openvpn';
+    refresh();
+    await openMenu();
+    await screen.findByLabelText(/^Check VPN/); // the row is a VPN again
+    expect(cardNotice()).toBeNull();
+  });
+
+  // The discriminator's own control: the SAME flip with NO Test in between
+  // brings the notice back. Without this, "cleared" and "never rendered on
+  // the way back" read identically. Pins the fixture path, not a product
+  // wish: if a re-list ever drops per-row notices, this arm and the CRITICAL
+  // above need a new observable together.
+  it('INSTRUMENT CONTROL — the same flip with no Test between brings the notice back', async () => {
+    state.vpnStored = false;
+    seedCache({});
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    state.vpn1Scheme = 'socks5';
+    refresh();
+    await openMenu();
+    await screen.findByLabelText(/Test proxy from this Mac/); // re-listed as SOCKS5; hidden
+    expect(cardNotice()).toBeNull();
+    state.vpn1Scheme = 'openvpn';
+    refresh();
+    await openMenu();
+    await screen.findByLabelText(/^Check VPN/);
+    expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE);
+    expect(testProxy).not.toHaveBeenCalled();
   });
 });

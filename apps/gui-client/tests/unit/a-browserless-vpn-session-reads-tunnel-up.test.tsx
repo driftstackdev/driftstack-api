@@ -338,7 +338,7 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
         step: 'vpn_egress_active',
         vpn: true,
       }),
-    ).toBe('VPN tunnel connected — the browser step isn’t available for VPN sessions yet');
+    ).toBe('VPN tunnel connected — browser not attached');
     expect(
       vpnTunnelUpCaption({
         ip: '203.0.113.7',
@@ -585,7 +585,7 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
       'Starting the VPN tunnel…',
     );
     expect(vpnTunnelChipText(detail('vpn_egress_active'))).toBe(
-      'VPN tunnel up · browser attach isn’t available yet',
+      'VPN tunnel up · browser not attached',
     );
     expect(vpnTunnelChipText(detail('vpn_egress_active', '203.0.113.7'))).toBe(
       'VPN tunnel up · exit 203.0.113.7',
@@ -612,8 +612,11 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     expect(vpnAddressPlaceholder(detail('vpn_egress_bringing_up'))).toBe(
       'Starting the VPN tunnel… — the address bar unlocks once the device is live',
     );
+    // (m) M6 — the same line as every other tunnel-up step: a condition, not
+    // an availability claim (the old branch said attach "isn’t available for
+    // VPN sessions yet", which the client cannot know).
     expect(vpnAddressPlaceholder(detail('vpn_egress_active'))).toBe(
-      'VPN tunnel is up — browser attach isn’t available for VPN sessions yet',
+      'VPN tunnel is up — the address bar unlocks once the browser attaches',
     );
     expect(vpnAddressPlaceholder(detail('browser_spawning'))).toBe(
       'VPN tunnel is up — the address bar unlocks once the browser attaches',
@@ -623,11 +626,20 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     ).toBe('VPN tunnel is up — the address bar unlocks once the browser attaches');
   });
 
-  it('the vpn_egress_active caption states the limit as a state, not a prediction of a timeout the client cannot see', () => {
+  it('the vpn_egress_active caption is a state — tunnel up, browser not attached — with no prediction of a timeout and no claim about availability, neither of which the client can see', () => {
     expect(vpnTunnelUpCaption(detail('vpn_egress_active', '203.0.113.7'))).toBe(
-      'VPN tunnel connected (exit 203.0.113.7) — the browser step isn’t available for VPN sessions yet',
+      'VPN tunnel connected (exit 203.0.113.7) — browser not attached',
     );
     expect(vpnTunnelUpCaption(detail('vpn_egress_active'))).not.toMatch(/will time out$/);
+    // (m) M6 — "isn’t available for VPN sessions yet" was an availability claim
+    // the client cannot make; none of the three surfaces may make one now.
+    for (const s of [
+      vpnTunnelUpCaption(detail('vpn_egress_active')),
+      vpnTunnelUpCaption(detail('vpn_egress_active', '203.0.113.7')),
+      vpnTunnelChipText(detail('vpn_egress_active')),
+      vpnAddressPlaceholder(detail('vpn_egress_active')),
+    ])
+      expect(s).not.toMatch(/available|not yet|isn’t|isn't/i);
   });
 
   it('nextEverLiveLatch is per session: latches, holds, and resets on a swap', () => {
@@ -668,22 +680,22 @@ describe('(h) SimulatorWindow — the address bars during bring-up and the brows
     expect(cue?.textContent).not.toMatch(/exit/);
   });
 
-  it('CRITICAL at vpn_egress_active with no browser step, nothing promises the browser: chip and placeholder say attach isn’t available, the notice is not a green success box', () => {
+  it('CRITICAL at vpn_egress_active with no browser step, nothing promises the browser and nothing claims it is unavailable: chip, placeholder and notice say the tunnel is up and the browser is not attached; the notice is not a green success box', () => {
     manualControlState = STEP('vpn_egress_active');
     const { container } = renderSim();
     fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
     const chip = q(container, '[data-component="simulator-address-vpn-tunnel-up"]');
-    expect(chip?.textContent).toContain('browser attach isn’t available yet');
+    expect(chip?.textContent).toContain('browser not attached');
     expect(addressText(container)).not.toMatch(/starting the browser/i);
-    expect(addressText(container)).not.toMatch(/unlocks once the browser attaches/i);
+    // (m) M6 — no availability claim either way, on any of the three surfaces.
+    expect(addressText(container)).not.toMatch(/available/i);
     const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
     expect(input.getAttribute('placeholder')).toBe(
-      'VPN tunnel is up — browser attach isn’t available for VPN sessions yet',
+      'VPN tunnel is up — the address bar unlocks once the browser attaches',
     );
+    expect(input.getAttribute('placeholder')).not.toMatch(/available/i);
     const notice = q(container, '[data-component="simulator-vpn-tunnel-up-notice"]');
-    expect(notice?.textContent).toBe(
-      'VPN tunnel connected — the browser step isn’t available for VPN sessions yet',
-    );
+    expect(notice?.textContent).toBe('VPN tunnel connected — browser not attached');
     expect(notice?.getAttribute('data-tone')).toBe('neutral');
   });
 

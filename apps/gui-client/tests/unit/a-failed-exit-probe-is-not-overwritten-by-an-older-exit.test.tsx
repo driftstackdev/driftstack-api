@@ -18,6 +18,12 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type * as ProxiesModule from '../../src/lib/proxies';
+import type { SweepDeps } from '../../src/lib/proxy-probe-sweeper';
+import {
+  __resetSweepLatchForTests,
+  isProxyProbeInFlight,
+  runSweep,
+} from '../../src/lib/proxy-probe-sweeper';
 import {
   ProfilePhoneCard,
   type ProfilePhoneCardProps,
@@ -104,18 +110,90 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   testProxy: (input: unknown) => testProxy(input),
   probeProxyExit: (input: unknown) => probeProxyExit(input),
   resolveEndpoint: vi.fn(() => Promise.resolve({ resolved: true, ip: '1.2.3.4', message: 'ok' })),
+  setProxyServerId: vi.fn(() => Promise.resolve()),
 }));
+// (m) M3 — the CARD arm below mounts ProfilesView over the same real cache, so
+// the binding module carries the hub's reads too (one profile bound to socks1).
 vi.mock('../../src/lib/profile-bindings', () => ({
   clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  listBindings: () =>
+    Promise.resolve([
+      {
+        profileId: 'prof_1',
+        defaultProxyId: 'socks1',
+        currentSessionId: null,
+        lastLaunchedAt: null,
+      },
+    ]),
+  getBinding: () => Promise.resolve(null),
+  setDefaultProxy: vi.fn(() => Promise.resolve()),
+  markLaunched: vi.fn(() => Promise.resolve()),
+  clearSession: vi.fn(() => Promise.resolve()),
+  deleteBinding: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('../../src/components/ConfirmProvider', () => ({
   useConfirm: () => vi.fn(() => Promise.resolve(true)),
+  ConfirmProvider: ({ children }: { children: React.ReactNode }) => children,
 }));
-const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+vi.mock('../../src/components/AgentSessionPanel', () => ({
+  AgentSessionPanel: () => <div data-testid="agent-session-panel" />,
+}));
+vi.mock('../../src/lib/agent-session-control', () => ({
+  mintGuiControlKey: vi.fn(() => Promise.resolve(null)),
+}));
+vi.mock('../../src/lib/open-simulator', () => ({
+  openSimulatorWindow: vi.fn(() => Promise.resolve({ opened: true })),
+}));
+function profile() {
+  return {
+    id: 'prof_1',
+    name: 'Demo',
+    archetype: 'iphone16pro_ios18_7_safari26_4',
+    description: null,
+    last_used_at: null,
+    created_at: '2026-06-08T00:00:00Z',
+    updated_at: '2026-06-08T00:00:00Z',
+  };
+}
+// ProxiesView reads `settings` only; the hub reads the client and the account
+// too. No API key: the card's Test never reaches the server step, so the arm
+// isolates the native probe + exit probe + cache write it is about.
+const settingsStub = {
+  client: {
+    profiles: {
+      list: () => Promise.resolve({ data: [profile()] }),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      iterate: async function* () {
+        yield profile();
+      },
+    },
+    sessions: { list: () => Promise.resolve({ data: [] }), create: vi.fn() },
+    agentSessions: {
+      create: vi.fn(),
+      close: vi.fn(() => Promise.resolve({})),
+      livekitToken: vi.fn(),
+      list: () => Promise.resolve({ data: [] }),
+    },
+  },
+  settings: { apiKey: null, baseUrl: 'http://localhost:3000', startUrl: 'https://driftstack.io' },
+  accountMe: {
+    tier: 'solo_manual',
+    concurrent_session_cap: 1,
+    concurrent_session_active: 0,
+    profile_cap: 10,
+    profile_active: 1,
+  },
+  refreshAccountMe: vi.fn(() => Promise.resolve()),
+  loading: false,
+  update: vi.fn(() => Promise.resolve()),
+  activeWorkspace: null,
+  setActiveWorkspace: vi.fn(),
+};
 vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
 
 const cache = await import('../../src/lib/proxy-probe-cache');
 const { ProxiesView } = await import('../../src/views/ProxiesView');
+const { ProfilesView } = await import('../../src/views/ProfilesView');
 
 const STORE = 'proxy-probe-cache.json';
 function seedCache(probes: Record<string, unknown>): void {
@@ -351,5 +429,118 @@ describe('#16 — the profile card gates the VPN banner and notice on `vpn`, as 
     expect(screen.getByText('VPN tunnel down')).toBeTruthy();
     expect(document.querySelector('[data-component="proxy-vpn-notice"]')).not.toBeNull();
     cleanup();
+  });
+});
+
+// (m) M3 — the #14 write on the CARD path. ProfilesView.handleTestProxy has its
+// own copy of the decision (`clearExitResult` on a null exit probe) and only the
+// grid's copy was pinned. The card reads the raw cache entry (`probe.exitIp`),
+// so its honest state after a failed exit probe is the exit line reading
+// "no exit IP" beside the probe's own "checked" — never the exit the PREVIOUS
+// Test measured, which `saveProbeResult` carries across the capability write.
+describe('(m) M3 — the card’s Test whose exit probe fails reads the honest unavailable state', () => {
+  async function clickCardTest(): Promise<void> {
+    fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
+    fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
+  }
+
+  // MUTATION: drop the `clearExitResult` call in ProfilesView.handleTestProxy →
+  // the previous 203.0.113.7 (carried by saveProbeResult) stays on the card
+  // beside a Test that measured no exit → red.
+  it('CRITICAL card Test → failed exit probe → the old exit is gone, the line reads "no exit IP", and a later emit does not bring it back', async () => {
+    seedCache({ socks1: healthyWithExit(NOW - 1000) });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('203.0.113.7')).toBeInTheDocument();
+    await clickCardTest();
+    await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText('203.0.113.7')).toBeNull());
+    expect(screen.getByText('no exit IP')).toBeInTheDocument();
+    await waitFor(async () =>
+      expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeTypeOf('number'),
+    );
+    expect((await cache.loadProbeCache()).socks1?.exitIp).toBeUndefined();
+    // Another writer emits (the sweeper, the grid's persist…): still no old exit.
+    await act(async () => {
+      await cache.saveProbeResult('socks1', OK, Date.now());
+    });
+    expect(screen.queryByText('203.0.113.7')).toBeNull();
+    expect(screen.getByText('no exit IP')).toBeInTheDocument();
+    cleanup();
+  });
+
+  it('VACUITY CONTROL — a card Test whose exit probe SUCCEEDS shows the new exit, and the stamp is not set', async () => {
+    seedCache({ socks1: healthyWithExit(NOW - 1000) });
+    probeProxyExit.mockResolvedValue({
+      ip: '198.51.100.9',
+      country: 'NL',
+      city: null,
+      region: null,
+      timezone: 'Europe/Amsterdam',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await screen.findByText('203.0.113.7');
+    await clickCardTest();
+    expect(await screen.findByText('198.51.100.9')).toBeInTheDocument();
+    await waitFor(async () =>
+      expect((await cache.loadProbeCache()).socks1?.exitIp).toBe('198.51.100.9'),
+    );
+    expect((await cache.loadProbeCache()).socks1?.exitProbeFailedAt).toBeUndefined();
+    cleanup();
+  });
+});
+
+// (m) M4 — the #15 claim at the GRID call site. The sweeper test pins
+// `withProxyProbe` itself; nothing pinned that ProxiesView.handleTest actually
+// runs its handshake INSIDE it. A real sweep is driven against the same module
+// state while the grid's Test holds its probe open: the sweep must skip the
+// row (skippedBusy) and never hand its own handshake to `testProxy`.
+describe('(m) M4 — ProxiesView.handleTest runs its probe inside withProxyProbe', () => {
+  function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  }
+  const sweepDeps = (probedBySweep: string[]): SweepDeps => ({
+    loadCache: () => Promise.resolve({ socks1: { result: OK, at: 0 } }), // stale → planned
+    listProxies: () => Promise.resolve(stored),
+    testProxy: (p) => {
+      probedBySweep.push(p.id);
+      return Promise.resolve(OK);
+    },
+    saveResult: () => Promise.resolve({}),
+    now: () => Date.now(),
+    sleep: () => Promise.resolve(),
+  });
+
+  // MUTATION: unwrap the `withProxyProbe(p.id, …)` in ProxiesView.handleTest
+  // (call the handshake directly) → the claim is never held → the concurrent
+  // sweep probes socks1 underneath the customer's Test → red.
+  it('CRITICAL while the grid’s Test holds the handshake open, a concurrent sweep skips that row', async () => {
+    __resetSweepLatchForTests();
+    seedCache({ socks1: healthyWithExit(NOW - 1000) });
+    const held = deferred<ProxyTestResult>();
+    testProxy.mockImplementationOnce(() => held.promise);
+    render(<ProxiesView />);
+    await screen.findByText('203.0.113.7');
+    fireEvent.click(screen.getByRole('button', { name: /^re-test$/i }));
+    await waitFor(() => expect(testProxy).toHaveBeenCalledTimes(1));
+    expect(isProxyProbeInFlight('socks1')).toBe(true);
+    const probedBySweep: string[] = [];
+    const report = await runSweep(sweepDeps(probedBySweep));
+    expect(report.skippedBusy).toEqual(['socks1']);
+    expect(probedBySweep).toEqual([]);
+    held.resolve(OK);
+    await waitFor(() => expect(isProxyProbeInFlight('socks1')).toBe(false));
+    cleanup();
+  });
+
+  it('VACUITY CONTROL — with no Test in flight the same sweep probes the row', async () => {
+    __resetSweepLatchForTests();
+    const probedBySweep: string[] = [];
+    const report = await runSweep(sweepDeps(probedBySweep));
+    expect(report.skippedBusy).toEqual([]);
+    expect(probedBySweep).toEqual(['socks1']);
   });
 });
