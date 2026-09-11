@@ -6,10 +6,14 @@ non-obvious.
 ## TL;DR — cutting a release
 
 ```sh
-# 1. Bump the version in ALL THREE places (they are guarded to agree).
-#    apps/gui-client/package.json
-#    apps/gui-client/src-tauri/tauri.conf.json
-#    apps/gui-client/src-tauri/Cargo.toml
+# 1. Bump the version. FOUR files carry it and they are guarded to agree:
+#      apps/gui-client/package.json               "version"
+#      apps/gui-client/src-tauri/tauri.conf.json  "version"  <- names the assets + latest.json
+#      apps/gui-client/src-tauri/Cargo.toml       [package] version
+#      apps/gui-client/src-tauri/Cargo.lock       the driftstack-gui [[package]] entry
+#    Use the script. It edits each one by FIELD and validates the lock; see
+#    "Why the bump is a script" below for the release this cost.
+node scripts/bump-gui-version.mjs 0.1.1
 
 # 2. Tag it, ANNOTATED. The tag MUST be gui-v<that exact version> — the workflow
 #    refuses otherwise — and it must be `-a`; policy forbids lightweight tags.
@@ -96,8 +100,37 @@ discovering it after a ten-minute cross-platform build.
 `0.0.1` was told it was already current. A dead updater that looks perfectly healthy.
 
 The workflow now derives the version from `tauri.conf.json` and refuses a mismatched tag
-_before_ building. `apps/server/tests/unit/three-copies-of-the-app-version-must-agree.test.ts`
-guards the three in-repo copies; the tag half can only be checked at release time.
+_before_ building. `apps/server/tests/unit/every-copy-of-the-app-version-must-agree.test.ts`
+guards the four in-repo copies; the tag half can only be checked at release time.
+
+## ⛔ Why the bump is a script: `Cargo.lock` is a copy nobody was checking
+
+`Cargo.lock` carries the app version a fourth time, in the `driftstack-gui` `[[package]]`
+entry. Cargo rewrites it silently at build time, so it drifts without anyone noticing: it
+sat at `0.1.36` from 0.1.37 through 0.1.44 while every other copy moved, and nothing was
+red.
+
+0.1.45 is what that cost. The bump replaced every `version = "0.1.44"` line in the lock.
+The app's own entry did not match (it was still 0.1.36) so it was not touched, and the
+line that DID match belonged to the `tracing` crate, which happened to sit at 0.1.44. That
+pinned `tracing` to a version that does not exist. All three release builds failed at
+dependency resolution, and because the release had been created before the builds ran, an
+**asset-less release became the "latest" release the desktop updater fetches its manifest
+from** — so every installed client's update check 404'd until it was deleted.
+
+Two guards now cover it, and they answer different questions — neither alone is enough:
+
+| guard                                              | asks                                                     | blind to                                                   |
+| -------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------- |
+| `every-copy-of-the-app-version-must-agree.test.ts` | does the lock name the version the other three name?     | a crate pinned to a version that does not exist            |
+| `.husky/pre-push` (`cargo update -w --locked`)     | is the lock consistent with Cargo.toml and the registry? | nothing here — but it is SKIPPED when cargo is not on PATH |
+
+`scripts/bump-gui-version.mjs` edits all four by field, computes every edit before writing
+any of them (one refusal writes nothing), and runs the lock validation itself.
+
+⚠️ If a release does go out broken, `gh release delete gui-vX --cleanup-tag --yes` FIRST.
+That restores the previous release as "latest" for every installed client, which is the
+bleeding edge of the problem; fixing the tree can follow at its own pace.
 
 ## Known gaps
 

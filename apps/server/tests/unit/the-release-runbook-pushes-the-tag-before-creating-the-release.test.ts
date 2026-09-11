@@ -18,7 +18,7 @@
 // the only thing that closes the path, which is why prose alone was never enough
 // and why this asserts the order rather than trusting the sentence.
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -61,6 +61,18 @@ describe('the release runbook pushes the tag before creating the release', () =>
     // how the runbook kept its wrong order through a review that saw the guard.
     expect(HOOK).toMatch(/NOT THE LAST PLACE/i);
     expect(HOOK).toMatch(/gh release create/);
+  });
+
+  it('CRITICAL the bump step names the SCRIPT and all FOUR version carriers, including Cargo.lock. The runbook used to say "ALL THREE places" and omit the lock, which is how 0.1.45 shipped a release whose builds all failed at dependency resolution — and an asset-less release becomes the "latest" one the desktop updater reads its manifest from, so every installed client 404s until it is deleted. A runbook that lists three files trains the next person to do the blanket replace again', () => {
+    expect(RUNBOOK).toContain('node scripts/bump-gui-version.mjs');
+    expect(RUNBOOK).toContain('apps/gui-client/src-tauri/Cargo.lock');
+    expect(RUNBOOK).toMatch(/FOUR files carry it/);
+    // The instruction it replaced must not come back.
+    expect(RUNBOOK).not.toMatch(/ALL THREE places/);
+    // Recovery order: the release comes down FIRST, because that is what restores a
+    // working "latest" for clients already installed.
+    expect(RUNBOOK).toMatch(/gh release delete gui-vX --cleanup-tag --yes` FIRST/);
+    expect(existsSync(resolve(REPO, 'scripts/bump-gui-version.mjs'))).toBe(true);
   });
 
   it('VACUITY CONTROL — the fixtures are the real files and are non-trivial', () => {

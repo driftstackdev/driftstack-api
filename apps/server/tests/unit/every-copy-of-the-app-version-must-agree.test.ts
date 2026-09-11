@@ -1,13 +1,31 @@
 // `gui-v0.1.0` shipped assets called `Driftstack_0.0.1_x64-setup.exe`, and a
 // `latest.json` advertising version `0.0.1`.
 //
-// The GUI version is declared in THREE files and the release tag is a fourth statement
+// The GUI version is declared in FOUR files and the release tag is a fifth statement
 // of the same fact:
 //
 //   apps/gui-client/package.json               "version"
 //   apps/gui-client/src-tauri/tauri.conf.json  "version"   ← names the assets + latest.json
 //   apps/gui-client/src-tauri/Cargo.toml       version
+//   apps/gui-client/src-tauri/Cargo.lock       the driftstack-gui [[package]] entry
 //   the git tag                                gui-v<version>
+//
+// ⛔ The lock entry was added to this guard on 2026-09-11, after it broke a release.
+// It had been a copy nobody checked: cargo rewrites it silently at build time, so it
+// sat at 0.1.36 from 0.1.37 through 0.1.44 while every other copy moved, and nothing
+// went red. The 0.1.45 bump then replaced every `version = "0.1.44"` line in the lock —
+// which hit the `tracing` crate, that release happening to sit at 0.1.44, and left the
+// app entry stale. All three release builds failed at dependency resolution, and the
+// asset-less release became the "latest" release the desktop updater fetches its
+// manifest from, so every installed client's update check 404'd until it was deleted.
+//
+// Two guards, because they answer different questions. This one asks "does the lock
+// name the version the other three name" — pure file reads, no toolchain, runs
+// everywhere. `.husky/pre-push` asks "is the lock internally consistent with Cargo.toml
+// and the registry" (`cargo update -w --locked`), which is the half that catches a crate
+// pinned to a version that does not exist — and it is SKIPPED when cargo is not on PATH,
+// so it cannot be the only guard. `scripts/bump-gui-version.mjs` edits all four by field
+// so neither failure can be reintroduced by a blanket replace.
 //
 // Nothing required them to agree. The first release ever cut was tagged `gui-v0.1.0`
 // against an app version of `0.0.1`, which is worse than cosmetic: the updater compares
@@ -18,7 +36,7 @@
 //
 // ── two guards, because they catch it at different moments ────────────────────
 //
-// This file asserts the three IN-REPO copies agree, which is checkable now and fails the
+// This file asserts the four IN-REPO copies agree, which is checkable now and fails the
 // moment someone bumps one and forgets the others.
 //
 // The tag is not in the repo at test time, so it cannot be checked here. That half lives
@@ -47,17 +65,23 @@ function declaredVersions(): { source: string; version: string | undefined }[] {
   const pkg = JSON.parse(read(resolve(GUI, 'package.json'))) as { version?: string };
   const conf = JSON.parse(read(resolve(GUI, 'src-tauri/tauri.conf.json'))) as { version?: string };
   const cargo = /^version = "([^"]+)"$/m.exec(read(resolve(GUI, 'src-tauri/Cargo.toml')))?.[1];
+  // The app's OWN entry, addressed through its name — never the first `version` line in
+  // the file, which belongs to whichever crate happens to sort first.
+  const lock = /^\[\[package\]\]\nname = "driftstack-gui"\nversion = "([^"\n]+)"$/m.exec(
+    read(resolve(GUI, 'src-tauri/Cargo.lock')),
+  )?.[1];
   return [
     { source: 'apps/gui-client/package.json', version: pkg.version },
     { source: 'apps/gui-client/src-tauri/tauri.conf.json', version: conf.version },
     { source: 'apps/gui-client/src-tauri/Cargo.toml', version: cargo },
+    { source: 'apps/gui-client/src-tauri/Cargo.lock (driftstack-gui)', version: lock },
   ];
 }
 
 describe('three copies of the app version must agree', () => {
-  it('CRITICAL all three declarations were actually FOUND. Every assertion below compares them, so a parse that silently returned undefined for two of the three would agree trivially and prove nothing — which is exactly how a fact stated in three places rots.', () => {
+  it('CRITICAL all four declarations were actually FOUND. Every assertion below compares them, so a parse that silently returned undefined for two of the four would agree trivially and prove nothing — which is exactly how a fact stated in three places rots.', () => {
     const found = declaredVersions();
-    expect(found.length).toBe(3);
+    expect(found.length).toBe(4);
     const missing = found.filter((d) => d.version === undefined).map((d) => d.source);
     expect(missing, `version could not be read from:\n  ${missing.join('\n  ')}`).toEqual([]);
     for (const d of found) {
@@ -67,7 +91,7 @@ describe('three copies of the app version must agree', () => {
     }
   });
 
-  it('CRITICAL the three agree. tauri.conf.json is the one that names the installer and fills latest.json, so a drift between it and the others means the artifact a customer downloads is labelled differently from the app that built it.', () => {
+  it('CRITICAL the four agree. tauri.conf.json is the one that names the installer and fills latest.json, so a drift between it and the others means the artifact a customer downloads is labelled differently from the app that built it.', () => {
     const found = declaredVersions();
     const distinct = [...new Set(found.map((d) => d.version))];
     expect(

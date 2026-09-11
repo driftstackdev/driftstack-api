@@ -23,8 +23,8 @@ function read(p: string): string {
  * ⛔ Both version pins below used to hard-code the number. That made this drift
  * guard fail on every release bump — it went red on 0.1.7 -> 0.1.8 for no reason
  * but its own staleness — and it told nobody anything, because
- * `three-copies-of-the-app-version-must-agree.test.ts` already owns the property
- * that these three files carry the SAME version. Derived, this still asserts what
+ * `every-copy-of-the-app-version-must-agree.test.ts` already owns the property
+ * that these files (and the Cargo.lock entry) carry the SAME version. Derived, this still asserts what
  * belongs here (Cargo.toml and tauri.conf.json carry the real app version) and
  * stops charging a release for the privilege.
  */
