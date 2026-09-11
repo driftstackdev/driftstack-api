@@ -48,6 +48,7 @@ Format: `D-NNN — title (one line)`. Body links the V-log entry, lists the deci
 ## D-006 — `engines: ">=22"` instead of pinning exactly to 22
 
 - **Decision:** `package.json` requires Node `>=22`. Local dev machine has Node v25; CI pins to 22 LTS via `.nvmrc` and `actions/setup-node@v4`.
+- **Amended 2026-09-12:** the gate certifies on CI's major. Node 25's experimental global `localStorage` shadows jsdom's with a stub whose methods throw; the app's try/catch hid it, the whole GUI suite passed against storage that cannot store, and CI (real storage that persists across a file's tests) failed 29 tests the gate had passed twice. `apps/gui-client/tests/setup.ts` now installs a real Storage and empties it per test on every major, and `.husky/pre-push` runs the gate on `/opt/homebrew/opt/node@<CI major>/bin` (read from `ci.yml`) or refuses with the install line. `>=22` stays for the app; the tests are certified on 22.
 - **Reasoning:** local dev machine runs v25, locked stack says v22 LTS. The runtime artifacts are produced and tested against 22 in CI (the source of truth for shippability), and the `>=22` floor lets v25 dev work without warnings. Tightening to `=22` would require nvm dance for every local command and provide no real benefit until v26 ships breaking changes.
 - **Tier:** 1.
 - **V-log:** V-001.

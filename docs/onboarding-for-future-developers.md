@@ -9,13 +9,13 @@ If you're reading this with prior context on Driftstack, you can probably skip t
 
 ## Prerequisites
 
-| Tool           | Version        | Notes                                                                                 |
-| -------------- | -------------- | ------------------------------------------------------------------------------------- |
-| Node.js        | 22 LTS         | `.nvmrc` pins this. Use `nvm use` or fnm. Newer Node 25.x works for local dev too.    |
-| npm            | 10+            | Bundled with Node. We use npm workspaces; do not switch to pnpm/yarn.                 |
-| Docker         | 4.x+           | For Postgres 17 + Redis 7 dev infra (`docker-compose.yml`).                           |
-| Rust toolchain | optional       | Only if touching the GUI client (Tauri). `rustup` + the platform's WebKit / WebView2. |
-| Python         | 3.11+ optional | Only if touching the Python SDK (`packages/sdk-python/`).                             |
+| Tool           | Version        | Notes                                                                                                                                                                                                                                                                                                               |
+| -------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node.js        | 22 LTS         | `.nvmrc` pins this. Use `nvm use` or fnm. Node 25.x runs the app, but do NOT trust its test results: its global `localStorage` is a stub whose methods throw and the GUI suite passed on it while CI (Node 22) failed. The pre-push gate switches itself to Homebrew `node@22` (`brew install node@22`) or refuses. |
+| npm            | 10+            | Bundled with Node. We use npm workspaces; do not switch to pnpm/yarn.                                                                                                                                                                                                                                               |
+| Docker         | 4.x+           | For Postgres 17 + Redis 7 dev infra (`docker-compose.yml`).                                                                                                                                                                                                                                                         |
+| Rust toolchain | optional       | Only if touching the GUI client (Tauri). `rustup` + the platform's WebKit / WebView2.                                                                                                                                                                                                                               |
+| Python         | 3.11+ optional | Only if touching the Python SDK (`packages/sdk-python/`).                                                                                                                                                                                                                                                           |
 
 ## First-run setup
 
