@@ -19,29 +19,29 @@ import {
   capsMode,
   visibleChips,
   visibleMeta,
-  compactAgo,
   terseAgo,
   thumbUsesDarkInk,
   vpnFailureClause,
   vpnNoticeClause,
   DEFAULT_CONTENT_WIDTH,
-  ENDPOINT_OK_PILL,
-  ENDPOINT_OK_TITLE,
   PROBE_ORIGIN_TITLE,
-  RETEST_ACTION,
   SERVER_LATENCY_TITLE,
   type ProfilePhoneCardProps,
 } from '../../src/components/ProfilePhoneCard';
 import { STATES } from '../../src/visual-harness/gallery';
+import { RelativeTime, formatRelativeNarrow } from '../../src/components/RelativeTime';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
+  ENDPOINT_OK_PILL,
+  ENDPOINT_OK_TITLE,
   ENDPOINT_UNRESOLVED,
   ENDPOINT_UNRESOLVED_EXIT_TITLE,
   EXIT_GEO_UNAVAILABLE,
   EXIT_GEO_UNAVAILABLE_SHORT,
   EXIT_GEO_UNAVAILABLE_TITLE,
   RECHECK_ACTION,
+  RETEST_ACTION,
   VPN_LATENCY_NOT_MEASURED,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET,
@@ -882,10 +882,13 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     expect(healthPill(props({ ...ok, vpn: false, probed: true })).text).toBe('not measured');
     expect(healthPill(props({ ...ok, endpoint: null })).text).toBe('not measured');
     expect(healthPill(props({ ...ok, endpoint: undefined })).text).toBe('not measured');
-    // The words are the grid's EndpointHealthPill, verbatim (ProxiesView is
-    // outside this change; hoisting both into lib/proxy-check-copy is its follow-up).
-    expect(source('views/ProxiesView.tsx')).toContain('endpoint ok');
-    expect(source('views/ProxiesView.tsx')).toContain(ENDPOINT_OK_TITLE);
+    // (p) D1 — the words are the grid's EndpointHealthPill: both surfaces read
+    // the SAME constants from lib/proxy-check-copy (the grid once carried the
+    // literals; a retyped sentence there would drift unseen).
+    expect(ENDPOINT_OK_PILL).toBe('endpoint ok');
+    expect(source('views/ProxiesView.tsx')).toContain('{ENDPOINT_OK_PILL}');
+    expect(source('views/ProxiesView.tsx')).toContain('title={ENDPOINT_OK_TITLE}');
+    expect(source('views/ProxiesView.tsx')).not.toContain(ENDPOINT_OK_TITLE);
   });
 
   it('(o) arm 3b — an endpoint pre-flight that did NOT resolve → "unresolved" · broken · error · title = the resolver’s message; outranks testing, untested, the number and arm 7', () => {
@@ -1833,16 +1836,16 @@ describe('B9 — dock + menu', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('P1 — the when row: compact relative forms, the left fact has priority, one case', () => {
   const NOW = Date.parse('2026-09-11T12:00:00.000Z');
-  it('compactAgo: just now · N min ago · N h ago · yesterday · N d ago · N mo ago · N yr ago; a bad or future stamp degrades', () => {
-    expect(compactAgo('2026-09-11T11:59:30.000Z', NOW)).toBe('just now');
-    expect(compactAgo('2026-09-11T11:55:00.000Z', NOW)).toBe('5 min ago');
-    expect(compactAgo('2026-09-11T10:00:00.000Z', NOW)).toBe('2 h ago');
-    expect(compactAgo('2026-09-10T12:00:00.000Z', NOW)).toBe('yesterday');
-    expect(compactAgo('2026-09-09T12:00:00.000Z', NOW)).toBe('2 d ago');
-    expect(compactAgo('2026-06-15T06:30:00.000Z', NOW)).toBe('3 mo ago');
-    expect(compactAgo('2025-08-01T00:00:00.000Z', NOW)).toBe('1 yr ago');
-    expect(compactAgo('2026-09-11T12:05:00.000Z', NOW)).toBe('just now');
-    expect(compactAgo('not a date', NOW)).toBe('—');
+  it('formatRelativeNarrow (RelativeTime’s narrow style, once the card’s compactAgo): just now · N min ago · N h ago · yesterday · N d ago · N mo ago · N yr ago; a bad or future stamp degrades', () => {
+    expect(formatRelativeNarrow('2026-09-11T11:59:30.000Z', NOW)).toBe('just now');
+    expect(formatRelativeNarrow('2026-09-11T11:55:00.000Z', NOW)).toBe('5 min ago');
+    expect(formatRelativeNarrow('2026-09-11T10:00:00.000Z', NOW)).toBe('2 h ago');
+    expect(formatRelativeNarrow('2026-09-10T12:00:00.000Z', NOW)).toBe('yesterday');
+    expect(formatRelativeNarrow('2026-09-09T12:00:00.000Z', NOW)).toBe('2 d ago');
+    expect(formatRelativeNarrow('2026-06-15T06:30:00.000Z', NOW)).toBe('3 mo ago');
+    expect(formatRelativeNarrow('2025-08-01T00:00:00.000Z', NOW)).toBe('1 yr ago');
+    expect(formatRelativeNarrow('2026-09-11T12:05:00.000Z', NOW)).toBe('just now');
+    expect(formatRelativeNarrow('not a date', NOW)).toBe('—');
     // Every form is short enough to share a 144px row with a compact stamp.
     for (const s of ['59 min ago', '23 h ago', '29 d ago', '11 mo ago', '12 yr ago'])
       expect(s.length).toBeLessThanOrEqual(10);
@@ -1854,6 +1857,34 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
     expect(terseAgo('2026-06-15T06:30:00.000Z', NOW)).toBe('3 mo');
     expect(terseAgo('2025-08-01T00:00:00.000Z', NOW)).toBe('1 yr');
     expect(terseAgo('not a date', NOW)).toBe('—');
+  });
+
+  // (p) D3 — the card's row and RelativeTime's narrow style are ONE function.
+  // Rendered for the same instant, the card's "when" row and
+  // `<RelativeTime style="narrow">` print the same words. Mutation: give the
+  // card back a local formatter that prints '5 mins ago' (or drop the narrow
+  // branch in RelativeTime so it falls to Intl's '5 minutes ago') → red.
+  it('the card’s "when" row prints exactly what <RelativeTime style="narrow"> prints for the same instant, and the terse checked form is the same words without "ago"', () => {
+    const now = Date.now();
+    const stamp = new Date(now - 5 * 60_000).toISOString();
+    const { container } = render(
+      <ProfilePhoneCard {...props({ lastUsedIso: stamp, checkedAtIso: stamp })} />,
+    );
+    const when = byRegion(container, 'when') as HTMLElement;
+    const cardWords = (when.children[0] as HTMLElement).textContent;
+    const reference = render(<RelativeTime iso={stamp} nowMs={now} style="narrow" />);
+    const referenceWords = reference.container.querySelector('time')?.textContent;
+    expect(cardWords).toBe('5 min ago');
+    expect(cardWords).toBe(referenceWords);
+    expect(cardWords).toBe(formatRelativeNarrow(stamp, now));
+    // The default style is untouched — the list still reads Intl's long form.
+    const long = render(<RelativeTime iso={stamp} nowMs={now} />);
+    expect(long.container.querySelector('time')?.textContent).toBe('5 minutes ago');
+    // The checked half's terse words are the narrow style's minus 'ago'.
+    const checked = byComponent(when, 'proxy-checked-at') as HTMLElement;
+    expect(checked.querySelector('time')?.textContent).toBe('5 min');
+    expect(`${String(checked.querySelector('time')?.textContent)} ago`).toBe(referenceWords);
+    cleanup();
   });
 
   it('renders "3 mo ago" (never "3 months ago") and a terse "checked 3 mo"; the left is shrink-0 max-w-[60%], the checked half is min-w-0 truncate tracking-tight in ONE case with the absolute stamp as its title; the row gap is 4px', () => {
@@ -2254,7 +2285,9 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
 
   it("the repair row: Re-test (the Proxies tab's word) is OUTLINED red-300, Change / Test are outlined divider buttons, all 10px/600 with transition-colors, enabled-guarded hovers and an inset focus ring; in flight the button is the neutral busy button at full opacity with aria-busy", () => {
     expect(RETEST_ACTION).toBe('Re-test');
-    expect(source('views/ProxiesView.tsx')).toContain("'Re-test'");
+    // (p) D1 — the grid renders the constant, not a literal of its own.
+    expect(source('views/ProxiesView.tsx')).toContain('? RETEST_ACTION :');
+    expect(source('views/ProxiesView.tsx')).not.toContain("'Re-test'");
     const { container, rerender } = render(
       <ProfilePhoneCard
         {...props({ exitIp: null, latencyMs: null, capabilities: CANNOT_ROUTE, onEdit: vi.fn() })}

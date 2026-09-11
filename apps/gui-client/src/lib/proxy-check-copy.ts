@@ -115,3 +115,17 @@ export const VPN_NO_API_KEY_CHECK_NOTICE = `Endpoint resolves. ${MISSING_API_KEY
 /** (j) J4 / #9 — the free-desktop credential cannot reach the test route: the
  *  row is "not tested", with the same next step a row with no key gets. */
 export const DESKTOP_CREDENTIAL_NEXT_STEP = `needs an API key — ${MISSING_API_KEY_NEXT_STEP}`;
+
+/** (p) D1 — the ONE word for re-running a SOCKS5 test once a row holds a
+ *  result, on the Proxies grid's row button AND the profile card's repair row
+ *  (the comp said 'Retest'; the grid rendered a literal, the card a constant
+ *  pinned against it — now both read this). */
+export const RETEST_ACTION = 'Re-test';
+
+/** (p) D1 — the grid's EndpointHealthPill word + title for a VPN/HTTP row whose
+ *  endpoint resolved and whose tunnel was never brought up. The card's health
+ *  pill reads the same cache entry (it once said 'not measured' for it), so
+ *  both surfaces read these two strings. */
+export const ENDPOINT_OK_PILL = 'endpoint ok';
+export const ENDPOINT_OK_TITLE =
+  'The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch.';

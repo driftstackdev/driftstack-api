@@ -17,6 +17,7 @@ import type * as ProxiesModule from '../../src/lib/proxies';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
+import { RETEST_ACTION } from '../../src/lib/proxy-check-copy';
 
 const testProxy = vi.fn<(input: unknown) => Promise<ProxyTestResult>>();
 const listProxies = vi.fn<() => Promise<ProxyConfig[]>>();
@@ -127,6 +128,30 @@ describe('ProxiesView "Test" button result card', () => {
     expect(screen.getByText('WebRTC')).toBeTruthy();
     expect(screen.getByText('QUIC')).toBeTruthy();
     expect(screen.getByText('HTTP/2')).toBeTruthy();
+  });
+
+  // (p) D1 — the row's re-run word is lib/proxy-check-copy's RETEST_ACTION, the
+  // SAME constant the profile card's repair row renders. Mutation: put the
+  // literal 'Re-test' back in ProxiesView with the constant changed to 'Retest'
+  // → the button reads 'Re-test', this lookup by RETEST_ACTION finds nothing, red.
+  it('once a row holds a result, its button reads the imported RETEST_ACTION (the card’s word), not a literal of its own', async () => {
+    testProxy.mockResolvedValue({
+      reachable: true,
+      auth_ok: true,
+      udp_associate: true,
+      can_route: true,
+      connect_reply: 0x00,
+      latency_ms: 42,
+      message: 'ok',
+    });
+    render(<ProxiesView />);
+    const btn = await screen.findByRole('button', { name: 'Test' });
+    fireEvent.click(btn);
+    expect(await screen.findByText('healthy from this Mac')).toBeTruthy();
+    const retest = await screen.findByRole('button', { name: RETEST_ACTION });
+    expect(retest).toBe(btn);
+    expect(retest.textContent).toBe(RETEST_ACTION);
+    expect(screen.queryByRole('button', { name: 'Test' })).toBeNull();
   });
 
   it('reachable + auth ok + UDP but slow (>100ms) → "slow" pill (not "healthy")', async () => {

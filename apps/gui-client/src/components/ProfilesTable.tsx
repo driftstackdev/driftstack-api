@@ -374,7 +374,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
             className="mono mt-0.5 block text-[10px] text-ink-muted"
             title={`Running since ${new Date(r.runningSinceIso).toLocaleString()}`}
           >
-            {formatElapsed(r.runningSinceIso)}
+            {formatRunningFor(r.runningSinceIso)}
           </span>
         )}
       </td>
@@ -734,8 +734,10 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
  *  "2d 3h"). Recomputed on each render; the parent's poll re-renders it.
  *  Phase B (2026-09-11) — exported: the grid card's "when" row renders the same
  *  `running 12m` from the same function, so the two views cannot count
- *  differently for the same session. */
-export function formatElapsed(startIso: string): string {
+ *  differently for the same session. (p) D2 — named for what it prints: the
+ *  simulator's `formatStopwatch(elapsedMs)` (LiveElapsed) takes a duration and
+ *  prints "M:SS"; this takes a start instant and prints "12m" / "1h 2m". */
+export function formatRunningFor(startIso: string): string {
   const start = new Date(startIso).getTime();
   if (Number.isNaN(start)) return '';
   const sec = Math.max(0, Math.floor((Date.now() - start) / 1000));

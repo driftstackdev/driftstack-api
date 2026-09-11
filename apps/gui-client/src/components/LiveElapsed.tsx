@@ -25,8 +25,11 @@ export interface LiveElapsedProps {
 
 /** Format an elapsed duration (ms) as a compact stopwatch string:
  *  "M:SS" under an hour, "H:MM:SS" at/over an hour. A negative input
- *  (clock skew / a start instant in the future) clamps to 0. */
-export function formatElapsed(elapsedMs: number): string {
+ *  (clock skew / a start instant in the future) clamps to 0.
+ *  (p) D2 — named for what it prints: the list's and the card's
+ *  `formatRunningFor(startIso)` (ProfilesTable) takes an instant and prints
+ *  "12m" / "1h 2m"; this takes a duration and prints a ticking stopwatch. */
+export function formatStopwatch(elapsedMs: number): string {
   const totalSec = Math.max(0, Math.floor(elapsedMs / 1000));
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
@@ -57,7 +60,7 @@ export function LiveElapsed({
   }, [nowMs, intervalMs]);
 
   const invalid = Number.isNaN(startMs);
-  const label = invalid ? '—' : formatElapsed(now - startMs);
+  const label = invalid ? '—' : formatStopwatch(now - startMs);
   const absolute = invalid ? iso : new Date(iso).toLocaleString();
   const tooltip =
     tooltipPrefix !== undefined && tooltipPrefix.length > 0

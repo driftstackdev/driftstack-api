@@ -87,10 +87,13 @@ import {
   CHECK_VPN_TITLE,
   DESKTOP_CREDENTIAL_NEXT_STEP,
   EXIT_GEO_UNAVAILABLE,
+  ENDPOINT_OK_PILL,
+  ENDPOINT_OK_TITLE,
   EXIT_GEO_UNAVAILABLE_TITLE,
   HTTP_VERIFIED_AT_LAUNCH,
   MISSING_API_KEY_NEXT_STEP,
   RECHECK_ACTION,
+  RETEST_ACTION,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET,
   VPN_NO_EXIT_YET_TITLE,
@@ -2472,7 +2475,7 @@ function ProxyRow({
               onClick={onTest}
               disabled={testing || testingAll}
             >
-              {testing ? 'Testing…' : result !== undefined ? 'Re-test' : 'Test'}
+              {testing ? 'Testing…' : result !== undefined ? RETEST_ACTION : 'Test'}
             </button>
           ) : (
             <div className="inline-flex items-center gap-1.5">
@@ -2723,11 +2726,8 @@ function EndpointHealthPill({
     );
   }
   return (
-    <span
-      className={`${base} bg-surface-inset text-ink-secondary`}
-      title="The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch."
-    >
-      endpoint ok
+    <span className={`${base} bg-surface-inset text-ink-secondary`} title={ENDPOINT_OK_TITLE}>
+      {ENDPOINT_OK_PILL}
     </span>
   );
 }

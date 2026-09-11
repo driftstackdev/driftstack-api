@@ -63,3 +63,15 @@ describe('RelativeTime', () => {
     expect(time?.title).toMatch(/^Last used: /);
   });
 });
+
+describe('style="narrow" — the card\'s compact words, single-sourced here', () => {
+  it('prints the narrow form the profile card renders ("5 min ago"), while the default style keeps the Intl words', () => {
+    const now = NOW;
+    const iso = new Date(now - 5 * 60_000).toISOString();
+    const narrow = render(<RelativeTime iso={iso} nowMs={now} style="narrow" />);
+    expect(narrow.container.textContent).toBe('5 min ago');
+    narrow.unmount();
+    const long = render(<RelativeTime iso={iso} nowMs={now} />);
+    expect(long.container.textContent).toBe('5 minutes ago');
+  });
+});

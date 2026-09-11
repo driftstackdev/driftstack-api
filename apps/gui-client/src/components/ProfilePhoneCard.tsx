@@ -65,7 +65,8 @@ import {
   proxyCapabilities,
   type ProxyCapability,
 } from './ProxyCapabilities';
-import { formatElapsed } from './ProfilesTable';
+import { formatRunningFor } from './ProfilesTable';
+import { formatRelativeNarrow, relativeNarrowParts } from './RelativeTime';
 import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 
 /** Hover text on the card's probe measurements. The probe runs on this Mac; the
@@ -80,17 +81,10 @@ export const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer
  *  test (one string, two surfaces on the same card). */
 const TEST_PROXY_TITLE = 'Test proxy from this Mac — reachability, latency, exit IP';
 const SAVED_TABS_REOPEN_TITLE = "This profile's saved tabs reopen when you launch it";
-/** Polish — the ONE word for re-running a failed SOCKS5 test is the Proxies
- *  tab's ('Re-test', ProxiesView; the comp said 'Retest'). Pinned verbatim
- *  against that source; hoisting it into lib/proxy-check-copy.ts so the tab
- *  reads the constant too is the grid follow-up. */
-export const RETEST_ACTION = 'Re-test';
-/** Polish — the Proxies grid's EndpointHealthPill word + title for a VPN row
- *  whose endpoint resolved and whose tunnel was never brought up (the card said
- *  'not measured' for the same cache entry). Pinned verbatim against ProxiesView. */
-export const ENDPOINT_OK_PILL = 'endpoint ok';
-export const ENDPOINT_OK_TITLE =
-  'The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch.';
+/** Polish / (p) D1 — the repair row's re-run word (`RETEST_ACTION`) and the
+ *  health pill's 'endpoint ok' word + title (`ENDPOINT_OK_PILL` /
+ *  `ENDPOINT_OK_TITLE`) live in lib/proxy-check-copy.ts, read by this card and
+ *  by the Proxies grid alike. */
 /** Polish — the exit line's title for a proxy whose LAST test measured nothing
  *  (probed, usable, no failure stamp); the text says 'no exit IP', the title
  *  says what fills it. */
@@ -123,11 +117,14 @@ import { vantageLabel, type ServerVantage } from '../lib/proxy-vantage';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
+  ENDPOINT_OK_PILL,
+  ENDPOINT_OK_TITLE,
   ENDPOINT_UNRESOLVED,
   ENDPOINT_UNRESOLVED_EXIT_TITLE,
   EXIT_GEO_UNAVAILABLE_SHORT,
   EXIT_GEO_UNAVAILABLE_TITLE,
   RECHECK_ACTION,
+  RETEST_ACTION,
   VPN_LATENCY_NOT_MEASURED,
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET_SHORT,
@@ -157,7 +154,7 @@ export interface ProfilePhoneCardProps {
   selected: boolean;
   lastUsedIso: string | null;
   /** Phase B — when the bound session started (ISO), so a running card's "when"
-   *  row reads `running 12m` from the SAME formatElapsed the list uses. Null /
+   *  row reads `running 12m` from the SAME formatRunningFor the list uses. Null /
    *  absent → the row falls back to last-used. */
   runningSinceIso?: string | null;
   /** doc-150 item 5 — already-formatted per-profile storage size (e.g. "2.4 MiB"
@@ -805,44 +802,22 @@ export function visibleMeta(
 }
 
 /**
- * Polish — the "when" row's compact relative form. RelativeTime's long form
- * ('3 months ago') truncated to '3 m…' (reads as minutes) on 24 of 27 tiles at
- * the 178px column; both halves of the row now fit: 'just now' · '5 min ago' ·
- * '2 h ago' · 'yesterday' · '2 d ago' · '3 mo ago' · '1 yr ago'. The absolute
- * stamp stays in the title. A future or unparseable stamp degrades honestly.
- */
-type AgoUnit = 'now' | 'min' | 'h' | 'd' | 'mo' | 'yr';
-function agoParts(iso: string, nowMs: number): { n: number; unit: AgoUnit } | null {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return null;
-  const s = Math.round((nowMs - t) / 1000);
-  if (s < 60) return { n: 0, unit: 'now' };
-  const m = Math.round(s / 60);
-  if (m < 60) return { n: m, unit: 'min' };
-  const h = Math.round(m / 60);
-  if (h < 24) return { n: h, unit: 'h' };
-  const d = Math.round(h / 24);
-  if (d < 30) return { n: d, unit: 'd' };
-  const mo = Math.round(d / 30.44);
-  if (mo < 12) return { n: Math.max(1, mo), unit: 'mo' };
-  return { n: Math.max(1, Math.round(d / 365.25)), unit: 'yr' };
-}
-export function compactAgo(iso: string, nowMs: number = Date.now()): string {
-  const a = agoParts(iso, nowMs);
-  if (a === null) return '—';
-  if (a.unit === 'now') return 'just now';
-  if (a.unit === 'd' && a.n === 1) return 'yesterday';
-  return `${a.n.toString()} ${a.unit} ago`;
-}
-/**
+ * Polish — the "when" row's compact relative form ('just now' · '5 min ago' ·
+ * '2 h ago' · 'yesterday' · '2 d ago' · '3 mo ago' · '1 yr ago') is
+ * RelativeTime's NARROW style, `formatRelativeNarrow` — (p) D3 moved it there
+ * (it was this file's `compactAgo`) so the row and `<RelativeTime
+ * style="narrow">` print one set of words. The absolute stamp stays in the
+ * title. A future or unparseable stamp degrades honestly.
+ *
  * Polish — the "checked" stamp's TERSE form ('checked 3 mo' · 'checked 59 min'
  * · 'checked <1 min'): the verb already places it in the past, and beside
  * 'never launched' (70.5px at 9.5px) the 144px row leaves 70px — 'checked
  * 59 min ago' measures 89, 'checked 59 min' 67 (tracking-tight). Measured in
- * the live harness; the absolute stamp is the title.
+ * the live harness; the absolute stamp is the title. Built on the same
+ * `relativeNarrowParts`, so its unit words are the narrow style's.
  */
 export function terseAgo(iso: string, nowMs: number = Date.now()): string {
-  const a = agoParts(iso, nowMs);
+  const a = relativeNarrowParts(iso, nowMs);
   if (a === null) return '—';
   if (a.unit === 'now') return '<1 min';
   return `${a.n.toString()} ${a.unit}`;
@@ -2201,9 +2176,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   title={whenTitle}
                 >
                   {runningSince !== null ? (
-                    <>running {formatElapsed(runningSince)}</>
+                    <>running {formatRunningFor(runningSince)}</>
                   ) : p.lastUsedIso !== null ? (
-                    <time dateTime={p.lastUsedIso}>{compactAgo(p.lastUsedIso)}</time>
+                    <time dateTime={p.lastUsedIso}>{formatRelativeNarrow(p.lastUsedIso)}</time>
                   ) : (
                     'never launched'
                   )}
