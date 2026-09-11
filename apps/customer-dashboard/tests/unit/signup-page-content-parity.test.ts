@@ -90,6 +90,31 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/Signup provider took too long/);
   });
 
+  it('OAuth start is the cookie-free v2 (Item 1 closure): binding_hash on /start, flow secret persisted under ds_oauth_flow.<flow_id> with read-back BEFORE navigating, localStorage pre-flight — the same helpers as login.astro', () => {
+    // Every literal here is the login.astro v2 shape; the live /signup bundle had
+    // 0 `binding_hash` markers vs 4 on /login, which is the owner's Safari 400.
+    expect(body).toMatch(/const OAUTH_FLOW_KEY_PREFIX = 'ds_oauth_flow\.';/);
+    expect(body).toMatch(/const OAUTH_FLOW_MAX_AGE_MS = 10 \* 60 \* 1000;/);
+    expect(body).toMatch(/function canPersistWebSession\(\) \{/);
+    expect(body).toMatch(/function pruneOauthFlows\(nowMs\) \{/);
+    expect(body).toMatch(/function mintOauthBinding\(\) \{/);
+    expect(body).toMatch(/c\.subtle\.digest\('SHA-256', new TextEncoder\(\)\.encode\(secret\)\)/);
+    expect(body).toMatch(/startBody\.binding_hash = binding\.bindingHash;/);
+    expect(body).toMatch(/body: JSON\.stringify\(startBody\),/);
+    expect(body).toMatch(
+      /const key = OAUTH_FLOW_KEY_PREFIX \+ body\.flow_id;\s*const record = JSON\.stringify\(\{ secret: flowSecret, iat: Date\.now\(\) \}\);\s*try \{\s*pruneOauthFlows\(Date\.now\(\)\);\s*localStorage\.setItem\(key, record\);\s*if \(localStorage\.getItem\(key\) !== record\) \{\s*throw new Error\('flow record read-back failed'\);/,
+    );
+    // Persist happens BEFORE the navigation assignment, never after.
+    const persistAt = body.indexOf('localStorage.setItem(key, record);');
+    const navigateAt = body.indexOf('window.location.href = authorizeUrl;');
+    expect(persistAt).toBeGreaterThan(0);
+    expect(navigateAt).toBeGreaterThan(persistAt);
+    expect(body).toMatch(/Enable browser site storage before signing up with a provider\./);
+    expect(body).toMatch(/This browser could not persist the sign-up flow\./);
+    // The legacy two-field body is gone: no fetch on this page serialises {provider, redirect_to} bare.
+    expect(body).not.toMatch(/JSON\.stringify\(\{ provider, redirect_to: redirectTo \}\)/);
+  });
+
   it('email/password and OAuth signup share one mutually exclusive lane', () => {
     expect(body).toMatch(/if \(oauthStartInFlight\) return/);
     expect(body).toMatch(/if \(signupInFlight\) return/);

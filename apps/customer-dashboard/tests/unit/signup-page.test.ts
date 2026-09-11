@@ -17,6 +17,8 @@ import { dirname, resolve } from 'node:path';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { afterEach, describe, expect, it } from 'vitest';
 import { installDashboardDeadline } from './dashboard-test-runtime';
+import { webcrypto } from 'node:crypto';
+import { TextEncoder } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BUILT_PAGE = resolve(HERE, '..', '..', 'dist', 'signup', 'index.html');
@@ -31,23 +33,65 @@ interface SetUpOpts {
   url?: string;
   requestTimeoutImmediately?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
+  storageFault?: 'deny-all' | 'drop-oauth-flow-write';
 }
 
-function setUpDom(
-  html: string,
-  opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+// localStorage faults for the OAuth v2 arms. 'deny-all' is a browser with site
+// storage blocked (every access throws); 'drop-oauth-flow-write' is the quieter
+// failure — setItem returns normally but the ds_oauth_flow.* record never lands,
+// which only the page's read-back can see. Scoped to THIS window's localStorage
+// via the `this === storage` check so sessionStorage keeps working.
+function faultLocalStorage(
+  window: JSDOM['window'],
+  mode: 'deny-all' | 'drop-oauth-flow-write',
+): void {
+  const storage = window.localStorage;
+  const proto = Object.getPrototypeOf(storage) as Storage;
+  const nativeGet = proto.getItem;
+  const nativeSet = proto.setItem;
+  const nativeRemove = proto.removeItem;
+  proto.getItem = function (key: string): string | null {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    return nativeGet.call(this, key);
+  };
+  proto.setItem = function (key: string, value: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    if (this === storage && mode === 'drop-oauth-flow-write' && key.startsWith('ds_oauth_flow.')) {
+      return;
+    }
+    nativeSet.call(this, key, value);
+  };
+  proto.removeItem = function (key: string): void {
+    if (this === storage && mode === 'deny-all') throw new Error('storage denied');
+    nativeRemove.call(this, key);
+  };
+}
+
+interface DomHandle {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  // jsdom cannot navigate: every `window.location.href = …` the page performs
+  // surfaces as a "Not implemented: navigation" jsdomError. Counting them turns
+  // "did the page leave for the IDP?" into an assertable number, so a failure
+  // arm can prove the page did NOT navigate — not merely that a banner showed.
+  navigations: () => number;
+}
+
+function setUpDom(html: string, opts: SetUpOpts): DomHandle {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
     return '';
   });
   const virtualConsole = new VirtualConsole();
+  let navigationCount = 0;
   virtualConsole.on('jsdomError', (err: Error) => {
-    if (!/Not implemented: navigation/.test(String(err && err.message))) {
-      // eslint-disable-next-line no-console
-      console.error(err);
+    if (/Not implemented: navigation/.test(String(err && err.message))) {
+      navigationCount += 1;
+      return;
     }
+    // eslint-disable-next-line no-console
+    console.error(err);
   });
   const dom = new JSDOM(htmlNoScripts, {
     url: opts.url ?? DEFAULT_URL,
@@ -56,6 +100,17 @@ function setUpDom(
     virtualConsole,
   });
   const { window } = dom;
+  // jsdom ships no WebCrypto, so without this the built page's OAuth v2 branch (which
+  // hashes a browser-held flow secret with crypto.subtle) is never exercised and the
+  // click silently falls to the legacy cookie start. Node's webcrypto is the real thing.
+  if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
+    Object.defineProperty(window.crypto, 'subtle', { value: webcrypto.subtle });
+  }
+  // The page encodes the secret with TextEncoder before hashing; jsdom's realm has
+  // none, and the page's own guard turns that into a silent legacy start.
+  if (typeof (window as unknown as { TextEncoder?: unknown }).TextEncoder === 'undefined') {
+    Object.defineProperty(window, 'TextEncoder', { value: TextEncoder });
+  }
   const fetchCalls: MockFetchCall[] = [];
   const plan = [...(opts.fetchPlan ?? [])];
   // @ts-expect-error — jsdom global is loose
@@ -72,6 +127,7 @@ function setUpDom(
     }
     return Promise.resolve(handler(call));
   };
+  if (opts.storageFault) faultLocalStorage(window as JSDOM['window'], opts.storageFault);
   if (opts.requestTimeoutImmediately) {
     const nativeSetTimeout = window.setTimeout.bind(window);
     window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
@@ -90,7 +146,23 @@ function setUpDom(
   if (!pageScript) throw new Error('signup inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return { window: window as JSDOM['window'], fetchCalls, navigations: () => navigationCount };
+}
+
+function base64UrlOf(buf: ArrayBuffer): string {
+  return Buffer.from(buf)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function oauthButton(window: JSDOM['window']): HTMLButtonElement {
+  const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
+  // No skip-on-absence branch: a build that dropped the provider buttons must
+  // red here, not pass vacuously (the previous form of this arm could not fail).
+  expect(btn, 'the built /signup page must render a [data-oauth] button').not.toBeNull();
+  return btn as HTMLButtonElement;
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -339,24 +411,191 @@ describe('signup page — local integration', () => {
     ).toBe('/verify-email/?next=' + encodeURIComponent('/cli/authorize'));
   });
 
-  it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+  it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start and, without a flow_id (old server), stores no flow record and still navigates', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
       fetchPlan: [() => json({ authorize_url: 'https://github.com/login/oauth/authorize?x=1' })],
     });
     win = window;
-    const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
-    if (!btn) {
-      expect(true).toBe(true);
-      return;
-    }
-    btn.click();
+    oauthButton(window).click();
+    await flush();
     await flush();
     const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
     expect(post?.init?.method).toBe('POST');
     const body = JSON.parse(String(post?.init?.body));
     expect(typeof body.provider).toBe('string');
     expect(body.provider.length).toBeGreaterThan(0);
-    expect(typeof body.redirect_to).toBe('string');
+    expect(body.redirect_to).toBe('https://app.driftstack.io/');
+    // Legacy-server control: no flow_id → nothing under ds_oauth_flow.* (the
+    // cookie the old server set is the whole state), and the page still leaves.
+    const flowKeys: string[] = [];
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith('ds_oauth_flow.')) flowKeys.push(k);
+    }
+    expect(flowKeys).toEqual([]);
+    expect(bannerHidden(window)).toBe(true);
+    expect(navigations()).toBe(1);
+  });
+
+  it('OAuth v2 start (Item 1 closure): sends binding_hash = base64url(sha256(flow_secret)) and, given a flow_id, stores the secret under ds_oauth_flow.<flow_id> before navigating — the record the callback page will redeem, so no cross-site PKCE cookie is needed', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'FLOW_ID_TEST',
+          }),
+      ],
+    });
+    win = window;
+    oauthButton(window).click();
+    await flush();
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    const body = JSON.parse(String(post?.init?.body)) as {
+      provider?: unknown;
+      redirect_to?: unknown;
+      binding_hash?: unknown;
+    };
+    expect(body.provider).toBe('google');
+    expect(body.redirect_to).toBe('https://app.driftstack.io/');
+    // The v2 discriminator: 43 base64url chars of a SHA-256, never the secret itself.
+    // This is the field whose absence sent /signup down the cookie path (the 400
+    // "PKCE verifier cookie missing or invalid." in Safari / Incognito / Firefox TCP).
+    expect(typeof body.binding_hash).toBe('string');
+    expect(body.binding_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const raw = window.localStorage.getItem('ds_oauth_flow.FLOW_ID_TEST');
+    expect(raw, 'the flow record must be stored before the page navigates away').not.toBeNull();
+    const record = JSON.parse(String(raw)) as { secret?: unknown; iat?: unknown };
+    expect(typeof record.secret).toBe('string');
+    expect(record.secret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(typeof record.iat).toBe('number');
+    expect(Math.abs(Date.now() - Number(record.iat))).toBeLessThan(60_000);
+    // The stored secret and the sent hash are the SAME flow: hash it here and compare.
+    const digest = await webcrypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(String(record.secret)),
+    );
+    expect(base64UrlOf(digest)).toBe(body.binding_hash);
+    // And the secret itself never leaves the browser in the start body.
+    expect(String(post?.init?.body)).not.toContain(String(record.secret));
+    expect(bannerHidden(window)).toBe(true);
+    expect(navigations()).toBe(1);
+  });
+
+  it('OAuth v2 start prunes a stale ds_oauth_flow.* record (>10 min) and keeps a fresh one from a parallel tab', async () => {
+    const { window } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'FLOW_ID_NEW',
+          }),
+      ],
+    });
+    win = window;
+    window.localStorage.setItem(
+      'ds_oauth_flow.FLOW_ID_STALE',
+      JSON.stringify({ secret: 's', iat: Date.now() - 11 * 60 * 1000 }),
+    );
+    window.localStorage.setItem(
+      'ds_oauth_flow.FLOW_ID_PARALLEL',
+      JSON.stringify({ secret: 's', iat: Date.now() - 60 * 1000 }),
+    );
+    oauthButton(window).click();
+    await flush();
+    await flush();
+    expect(window.localStorage.getItem('ds_oauth_flow.FLOW_ID_STALE')).toBeNull();
+    expect(window.localStorage.getItem('ds_oauth_flow.FLOW_ID_PARALLEL')).not.toBeNull();
+    expect(window.localStorage.getItem('ds_oauth_flow.FLOW_ID_NEW')).not.toBeNull();
+  });
+
+  it('refuses to start a provider sign-up when localStorage is unavailable: no /start request, the banner names storage as the cause, the buttons recover', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      storageFault: 'deny-all',
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'MUST_NOT_BE_MINTED',
+          }),
+      ],
+    });
+    win = window;
+    const btn = oauthButton(window);
+    btn.click();
+    await flush();
+    await flush();
+    // Direction of the real failure: the pre-v2 page fired /start here and the
+    // customer only found out at the callback. Nothing may reach the server.
+    expect(fetchCalls).toHaveLength(0);
+    expect(navigations()).toBe(0);
+    expect(bannerHidden(window)).toBe(false);
+    expect(bannerText(window)).toMatch(
+      /enable browser site storage before signing up with a provider.*nothing has been sent to the provider yet/i,
+    );
+    // The refusal happens BEFORE the busy lease is taken, so the button was never
+    // disabled or marked busy (aria-busy stays unset, never 'true').
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).not.toBe('true');
+  });
+
+  it('does not navigate to the IDP when the flow record write silently drops (read-back fails): banner names the cause, no navigation, buttons recover', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      storageFault: 'drop-oauth-flow-write',
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'FLOW_ID_DROPPED',
+          }),
+      ],
+    });
+    win = window;
+    const btn = oauthButton(window);
+    btn.click();
+    await flush();
+    await flush();
+    // The pre-flight probe passes (only ds_oauth_flow.* writes drop), so /start
+    // IS called with a binding_hash …
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(
+      typeof (JSON.parse(String(post?.init?.body)) as { binding_hash?: unknown }).binding_hash,
+    ).toBe('string');
+    // … but the record never landed, so leaving now would strand the sign-up at
+    // the callback with nothing to redeem. Without the read-back the page would
+    // navigate (navigations() === 1) with the banner still hidden.
+    expect(window.localStorage.getItem('ds_oauth_flow.FLOW_ID_DROPPED')).toBeNull();
+    expect(navigations()).toBe(0);
+    expect(bannerHidden(window)).toBe(false);
+    expect(bannerText(window)).toMatch(
+      /could not persist the sign-up flow.*enable site storage.*start a fresh sign-up/i,
+    );
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('OAuth v2 start carries the sanitized ?next= inside redirect_to (origin-prefixed) alongside the binding_hash', async () => {
+    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+      url: 'https://app.driftstack.io/signup/?next=' + encodeURIComponent('/cli/authorize?x=1'),
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://github.com/login/oauth/authorize?x=1',
+            flow_id: 'FLOW_ID_NEXT',
+          }),
+      ],
+    });
+    win = window;
+    oauthButton(window).click();
+    await flush();
+    await flush();
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    const body = JSON.parse(String(post?.init?.body)) as Record<string, unknown>;
+    expect(body.redirect_to).toBe('https://app.driftstack.io/cli/authorize?x=1');
+    expect(typeof body.binding_hash).toBe('string');
+    expect(Object.keys(body).sort()).toEqual(['binding_hash', 'provider', 'redirect_to']);
   });
 
   it('serializes OAuth starts across providers and restores the group after timeout', async () => {
