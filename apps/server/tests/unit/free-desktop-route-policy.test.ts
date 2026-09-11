@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
 import { ForbiddenError } from '../../src/lib/errors.js';
 import { DEVICE_KEY_DENY_ROUTES } from '../../src/middleware/device-key-deny.js';
 import {
@@ -137,6 +138,40 @@ describe('Free desktop route policy', () => {
   ])('fails closed for the unlisted %s:%s surface', (method, route) => {
     expect(() => requireFreeDesktopRouteAccess(method, route)).toThrowError(
       /Free desktop credential cannot access this API route/,
+    );
+  });
+
+  it('(k) K1 the refusal detail IS the shared api-types constant — the GUI discriminates this 403 by the sentence, so the two must be one value', () => {
+    let thrown: unknown;
+    try {
+      requireFreeDesktopRouteAccess('GET', '/v1/api-keys');
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(ForbiddenError);
+    expect((thrown as ForbiddenError).detail).toBe(FREE_DESKTOP_ROUTE_DENIED_DETAIL);
+    // The constant is a real sentence, not an empty export that toBe would
+    // trivially agree with.
+    expect(FREE_DESKTOP_ROUTE_DENIED_DETAIL).toMatch(
+      /^This Free desktop credential cannot access this API route\. /,
+    );
+  });
+
+  it('(k) K1 the sentence is declared ONCE, in api-types — the server module restates no copy a GUI pin could drift from', () => {
+    const policySource = readFileSync(
+      resolve(HERE, '..', '..', 'src', 'middleware', 'free-desktop-route-policy.ts'),
+      'utf8',
+    );
+    expect(policySource).not.toMatch(/cannot access this API route/);
+    expect(policySource).toMatch(/FREE_DESKTOP_ROUTE_DENIED_DETAIL/);
+    // POSITIVE CONTROL for the absence above: the same reader finds the
+    // sentence where it IS declared.
+    const contractSource = readFileSync(
+      resolve(HERE, '..', '..', '..', '..', 'packages', 'api-types', 'src', 'problem.ts'),
+      'utf8',
+    );
+    expect(contractSource).toMatch(
+      /export const FREE_DESKTOP_ROUTE_DENIED_DETAIL =\s*'This Free desktop credential cannot access this API route\./,
     );
   });
 

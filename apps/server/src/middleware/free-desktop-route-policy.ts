@@ -4,6 +4,7 @@
 // useful for the current GUI while bounding a copied token to the exact route
 // templates the GUI uses.
 
+import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
 import { ForbiddenError } from '../lib/errors.js';
 import { DEVICE_KEY_DENY_ROUTES } from './device-key-deny.js';
 
@@ -100,8 +101,9 @@ export const FREE_DESKTOP_ALLOWED_ROUTES: ReadonlySet<string> = new Set<string>(
 
 const DEVICE_DENIED_DETAIL =
   'This operation is not permitted with a device-provisioned key. Use a dashboard session.';
-const FREE_DESKTOP_ROUTE_DETAIL =
-  'This Free desktop credential cannot access this API route. Use the Driftstack desktop app or upgrade to an API-enabled tier.';
+// (k) K1 — declared ONCE, in the shared contract, so the GUI's discriminator
+// (isDesktopCredentialRefusalDetail) is pinned to the sentence this file throws.
+const FREE_DESKTOP_ROUTE_DETAIL = FREE_DESKTOP_ROUTE_DENIED_DETAIL;
 
 /** Let the existing global deny-gate remain the primary authority for its routes. */
 export function isIndependentDeviceKeyDeniedRoute(

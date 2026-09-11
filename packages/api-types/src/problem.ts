@@ -121,3 +121,14 @@ export const PROBLEM_TYPES = {
 } as const;
 
 export type ProblemType = (typeof PROBLEM_TYPES)[keyof typeof PROBLEM_TYPES];
+
+// (k) K1 — the `detail` sentence the server's Free-desktop route policy puts
+// on its 403 (`type: PROBLEM_TYPES.Forbidden`). The GUI discriminates THIS
+// refusal from every other Forbidden by the sentence, because the problem
+// type and title are shared with the tier / device-key denials. Declared here,
+// in the shared contract, so the server throws it and the GUI's matcher is
+// pinned to the same value: a copy change on the server reds the GUI pin
+// instead of silently un-matching it. The server must not restate the
+// sentence — this constant is its only declaration.
+export const FREE_DESKTOP_ROUTE_DENIED_DETAIL =
+  'This Free desktop credential cannot access this API route. Use the Driftstack desktop app or upgrade to an API-enabled tier.';

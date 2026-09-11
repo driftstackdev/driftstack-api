@@ -1777,6 +1777,53 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect(row.exit_superseded_at).toBeNull();
   });
 
+  it('(k) K3 CRITICAL the LIST is the clear signal a second Mac acts on: a stamp it already adopted (listed as a string) is listed as an EXPLICIT null after a later UP verdict — the key present, its value the literal null, never a dropped key', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    registerUpNode('mac-eu-057', {
+      exit_ip: '198.51.100.44',
+      exit_country: 'DE',
+      exit_timezone: 'Europe/Berlin',
+    });
+    const id = await makeWireGuardProxy();
+    const STAMP = new Date('2026-09-02T00:00:00Z');
+    await seedExit(id, SESSION_EXIT, STAMP);
+    // The second Mac's view BEFORE the verdict: the list carried the stamp as
+    // a string, so its cache now holds it. Asserted so the clear below is a
+    // transition from a SET value, not a null that was null all along.
+    const beforeRow = await listRow(id);
+    expect(beforeRow.exit_superseded_at, 'the adopted stamp').toBe('2026-09-02T00:00:00.000Z');
+    const body = await fleetTest(id);
+    expect(body.ok).toBe(true);
+    // The same list, read RAW: the serialiser must emit `"exit_superseded_at":null`
+    // — the response schema declares the field `.nullable().optional()`, and an
+    // `undefined` on the route (or a serialiser dropping nulls) would strip the
+    // key, which a client that only acts on a PRESENT null reads as "nothing to
+    // clear": the second Mac keeps the failure sentence forever.
+    const res = await fx.app.inject({
+      method: 'GET',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(res.body).toMatch(/"exit_superseded_at":null/);
+    expect(res.body).not.toMatch(/2026-09-02T00:00:00/);
+    const afterRow = res
+      .json<{ data: Array<Record<string, unknown>> }>()
+      .data.find((r) => r.id === id);
+    expect(afterRow).toBeDefined();
+    expect('exit_superseded_at' in afterRow!, 'the key is PRESENT').toBe(true);
+    expect(afterRow!.exit_superseded_at, 'the clear signal').toBeNull();
+    // …and the new exit rides beside it, so the adopting Mac has both the clear
+    // and the observation that spent the contradiction.
+    expect((afterRow!.exit_observed as { ip?: string; observed_via?: string }).ip).toBe(
+      '198.51.100.44',
+    );
+    expect((afterRow!.exit_observed as { observed_via?: string }).observed_via).toBe('probe');
+  });
+
   it('I7 an un-migrated node (ip only) that would DOWNGRADE the stored geo still clears the stamp — seen up is seen up, whatever it could resolve', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
@@ -1793,6 +1840,12 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect(after?.exitObserved, 'the geo-bearing session exit is kept').toEqual(SESSION_EXIT);
     expect(after?.exitObservedAt?.toISOString()).toBe('2026-09-01T00:00:00.000Z');
     expect(after?.exitSupersededAt).toBeNull();
+    // (k) K3 — the clear reaches the LIST on this path too: the exit write was
+    // refused but the stamp was spent, and the second Mac learns it the same way.
+    const row = await listRow(id);
+    expect('exit_superseded_at' in row).toBe(true);
+    expect(row.exit_superseded_at).toBeNull();
+    expect((row.exit_observed as { ip?: string }).ip).toBe('203.0.113.9');
   });
 
   it('I7 CONTROL — a node_busy (nothing ran) does NOT stamp: a wait is not a verdict about the tunnel', async () => {
@@ -1833,7 +1886,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect(after?.exitSupersededAt).toBeNull();
   });
 
-  it('I7 a down verdict on a row with NO stored exit stamps nothing — there is nothing to contradict; the list key is present and null', async () => {
+  it('(k) I7 a down verdict on a row with NO stored exit STAMPS too — the stamp is decided by the verdict, never by a stored exit: a never-stamped row lists null, which a client reads as "seen up again"', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -1845,10 +1898,12 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect('not_run' in body).toBe(false);
     const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
     expect(after?.exitObserved).toBeNull();
-    expect(after?.exitSupersededAt).toBeNull();
+    expect(after?.exitSupersededAt).toBeInstanceOf(Date);
     const row = await listRow(id);
     expect('exit_superseded_at' in row, 'the key is PRESENT on every row').toBe(true);
-    expect(row.exit_superseded_at).toBeNull();
+    expect(typeof row.exit_superseded_at, 'the stamp rides on the list as an ISO string').toBe(
+      'string',
+    );
   });
 
   it('I7 a SECOND down verdict re-stamps with the newer failure — the stamp is the LATEST contradiction', async () => {
@@ -1912,7 +1967,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     expect(typeof row.exit_superseded_at).toBe('string');
   });
 
-  it('I7 a leak verdict on a row with NO stored exit stores nothing — the node IP never becomes an exit, and there is nothing to contradict', async () => {
+  it('(k) I7 a leak verdict on a row with NO stored exit stores no exit — the node IP never becomes one — but STAMPS: the verdict found the tunnel unusable', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
@@ -1925,7 +1980,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     const after = await fx.accountProxiesRepo.findById({ id, accountId: fx.accountId });
     expect(after?.exitObserved).toBeNull();
     expect(after?.exitObservedAt).toBeNull();
-    expect(after?.exitSupersededAt).toBeNull();
+    expect(after?.exitSupersededAt).toBeInstanceOf(Date);
   });
 
   it('I7 a leak verdict does NOT clear an older stamp — it re-stamps with the newer contradiction', async () => {

@@ -1435,7 +1435,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                     exitObservedAt: new Date(),
                     exitSupersededAt: null,
                   }
-              : !usable && probeReachedVerdict(r) && row.exitObserved !== null
+              : // (k) — the stamp is decided by the VERDICT, never by whether an exit is
+                // stored: a never-stamped row lists exit_superseded_at as null, which a
+                // client reads as "seen up again" and would erase its own fresh failure.
+                !usable && probeReachedVerdict(r)
                 ? { exitSupersededAt: new Date() }
                 : null;
           if (stampUpdates !== null) {
