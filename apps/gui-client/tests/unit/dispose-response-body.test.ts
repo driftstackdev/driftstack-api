@@ -44,7 +44,7 @@ describe('disposeResponseBody', () => {
       // then disposes it once (one call now serves both). Every non-ok/stale
       // exit still disposes — verified: the four calls cover failedProxyRequest,
       // the stale-key read, the delete accept/404 path, and the org read.
-      ['../../src/lib/account-proxies.ts', 4],
+      ['../../src/lib/account-proxies.ts', 5],
       ['../../src/lib/account-organization.ts', 2],
       ['../../src/components/SettingsAccountCard.tsx', 2],
       ['../../src/lib/browser-sign-in.ts', 2],
