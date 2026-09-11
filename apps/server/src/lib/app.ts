@@ -1565,6 +1565,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(deps.sessionNetworkLogStore !== undefined
         ? { sessionNetworkLogStore: deps.sessionNetworkLogStore }
         : {}),
+      // #7 — agent-session screenshot read (the chat plan step's thumbnail).
+      // ⛔ This forward was MISSING while every other leg was built: bootstrap
+      // constructs ONE SessionCaptureStore and hands it to the executor (the
+      // writer) and to these deps, the executor minted real captureIds, and the
+      // GUI asked for them — but the reader never received the store, so
+      // `/v1/agent-sessions/:id/captures/:captureId` answered 404 for every
+      // capture that existed. The owner's report was "no way to view captured
+      // screenshots"; three of the four legs were shipped.
+      ...(deps.sessionCaptureStore !== undefined
+        ? { sessionCaptureStore: deps.sessionCaptureStore }
+        : {}),
       ...(deps.byokAnthropicService !== undefined
         ? { byokService: deps.byokAnthropicService }
         : {}),

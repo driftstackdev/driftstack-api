@@ -110,10 +110,25 @@ export function intentResultToCustomer(
 function summarize(intent: AgentIntent, outputData: unknown): string {
   switch (intent.kind) {
     case 'navigate': {
+      // Owner: "the AI says it worked when the page failed to load." The harness
+      // resolves a navigate that never finished loading as a SUCCESS carrying
+      // `loadedAtTimeout: true` (harness-control-protocol.ts:484), and this
+      // summary used to read a bare "navigated to <url>" — a green check
+      // asserting a completed load that nobody measured. Surface the flag, the
+      // way `distance_capped` is surfaced for scroll.
+      //
+      // ⚠️ The suffix is the load-bearing half, so it is reserved OUT of the
+      // truncation budget rather than appended after it: a long URL must lose
+      // its own tail, never the words that say the page did not finish.
       const url = readString(outputData, 'url');
-      return url !== null
-        ? safeResultText(`navigated to ${url}`, RESULT_SUMMARY_MAX_LENGTH)
-        : 'navigated';
+      const unfinished = readBool(outputData, 'loadedAtTimeout')
+        ? ' (page never finished loading)'
+        : '';
+      if (url === null) return `navigated${unfinished}`;
+      return (
+        safeResultText(`navigated to ${url}`, RESULT_SUMMARY_MAX_LENGTH - unfinished.length) +
+        unfinished
+      );
     }
     case 'interact':
       return summarizeInteract(intent);

@@ -152,7 +152,13 @@ export function NetworkListSubscriber({
           <span aria-hidden="true">🌐</span>
           Network
         </span>
-        {entries !== null && note === null && (
+        {/* ⛔ Gated on hasEntries, not on `entries !== null`: the ok-but-empty state
+            (a 200 with an empty ring) sits directly above body copy saying devices do
+            not report per-request logs yet, so a pulsing "live" pill there told the
+            owner the pane was working while the words beneath said it was not. A
+            header may not contradict the body it heads. With rows present, "live"
+            is a true statement about a feed that is delivering. */}
+        {hasEntries && note === null && (
           <span
             data-component="simulator-network-live"
             data-refreshing={refreshing ? 'true' : 'false'}

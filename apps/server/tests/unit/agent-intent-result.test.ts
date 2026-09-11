@@ -484,3 +484,61 @@ describe('intentResultToCustomer — output validity', () => {
     }
   });
 });
+
+// ── Owner item 8: "the AI reports success on a failed load" ──────────────────
+//
+// The harness resolves a navigate that never finished loading as a SUCCESS whose
+// outputData carries `loadedAtTimeout: true` (harness-control-protocol.ts:484 — it is
+// a discriminated variant of NavigateResult, so the flag is part of the contract, not a
+// guess). The customer-facing summary read a bare "navigated to <url>", so the chat
+// plan step showed a green check asserting a completed load that nothing had measured.
+//
+// MUTATION for every arm below: drop the `loadedAtTimeout` read from summarize()'s
+// navigate case in services/agent-intent-result.ts and the suffix disappears → red.
+describe('owner item 8 — a navigate that never finished loading does not read as a clean success', () => {
+  const navigate = { kind: 'navigate' as const, url: 'https://example.com/a' };
+
+  it('CRITICAL says the page never finished loading when the harness reports the timeout', () => {
+    const r = intentResultToCustomer(navigate, {
+      success: true,
+      outputData: { url: 'https://example.com/a', loadedAtTimeout: true },
+    } as Parameters<typeof intentResultToCustomer>[1]);
+    if (r.kind !== 'success') throw new Error('narrow');
+    expect(r.summary).toContain('never finished loading');
+    expect(r.summary).toContain('https://example.com/a');
+  });
+
+  it('VACUITY CONTROL — an ordinary navigate is UNCHANGED and gains no scary suffix. Without this, a summary that always claimed a timeout would pass the arm above while lying in the other direction', () => {
+    const r = intentResultToCustomer(navigate, {
+      success: true,
+      outputData: { url: 'https://example.com/a' },
+    } as Parameters<typeof intentResultToCustomer>[1]);
+    if (r.kind !== 'success') throw new Error('narrow');
+    expect(r.summary).toBe('navigated to https://example.com/a');
+    expect(r.summary).not.toContain('never finished');
+  });
+
+  it('CRITICAL the flag survives a URL long enough to be truncated — the suffix is the load-bearing half, so a long URL must lose its own tail instead', () => {
+    const long = `https://example.com/${'p'.repeat(4000)}`;
+    const r = intentResultToCustomer(navigate, {
+      success: true,
+      outputData: { url: long, loadedAtTimeout: true },
+    } as Parameters<typeof intentResultToCustomer>[1]);
+    if (r.kind !== 'success') throw new Error('narrow');
+    expect(r.summary).toContain('never finished loading');
+    // Anchored at the END: the suffix must be the last thing, i.e. the URL lost its
+    // tail rather than the warning losing its place.
+    expect(r.summary).toMatch(/\(page never finished loading\)$/);
+  });
+
+  it('a non-boolean or absent flag is read as "finished" rather than throwing — the summary must never be the thing that fails a successful step', () => {
+    for (const bad of [undefined, null, 'true', 1, {}]) {
+      const r = intentResultToCustomer(navigate, {
+        success: true,
+        outputData: { url: 'https://example.com/a', loadedAtTimeout: bad },
+      } as Parameters<typeof intentResultToCustomer>[1]);
+      if (r.kind !== 'success') throw new Error('narrow');
+      expect(r.summary).toBe('navigated to https://example.com/a');
+    }
+  });
+});
