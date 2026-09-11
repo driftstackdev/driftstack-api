@@ -931,7 +931,14 @@ function roomAbove(el: HTMLElement): number {
  *  the bezel's 6px padding (Phase A's `left-1.5 right-1.5`), 6px below the
  *  card when it opens downward, 6px above the dock when it opens upward — the
  *  exact offsets the absolute menu had (`top-full mt-1.5` / `bottom-[59px]`),
- *  now in viewport coordinates so no ancestor clip can cut it. */
+ *  now in viewport coordinates so no ancestor clip can cut it.
+ *
+ *  Polish — those absolute offsets resolved against the article's PADDING box
+ *  (inside its 1px border); `getBoundingClientRect` is the BORDER box. Insetting
+ *  the rect by the literal alone made the fixed menu 2px wider than before,
+ *  over the border on both sides, and 1px lower when it opened downward. The
+ *  border is read from the element (`borderInsets`), never spelled as a
+ *  literal, so a bezel change cannot re-open this. */
 export interface MenuBox {
   left: number;
   width: number;
@@ -946,6 +953,19 @@ export interface MenuBox {
 const EMPTY_MENU_BOX: MenuBox = { left: 0, width: 0, top: 0, maxHeight: 350 };
 const MENU_INSET_PX = 6;
 const MENU_GAP_PX = 6;
+/** The element's border widths, from layout: `clientLeft`/`clientTop` are the
+ *  near borders; offset − client is BOTH borders on that axis (the article has
+ *  no scrollbar — its overflow is visible), so the remainder is the far one.
+ *  jsdom reports 0 for all six, so there the padding box IS the rect. */
+function borderInsets(el: HTMLElement): { left: number; right: number; bottom: number } {
+  const left = el.clientLeft;
+  const top = el.clientTop;
+  return {
+    left,
+    right: el.offsetWidth - el.clientWidth - left,
+    bottom: el.offsetHeight - el.clientHeight - top,
+  };
+}
 /** The menu's own height cap (mirrors `max-h-[350px]` on the box). */
 export const MENU_MAX_HEIGHT_PX = 350;
 /** Breathing room kept between the menu and the viewport edge it opens toward. */
@@ -963,11 +983,18 @@ function clampMenuHeight(room: number): number {
 export function menuBoxFor(article: HTMLElement, dock: HTMLElement, below: boolean): MenuBox {
   const a = article.getBoundingClientRect();
   const d = dock.getBoundingClientRect();
-  const base = { left: a.left + MENU_INSET_PX, width: Math.max(0, a.width - 2 * MENU_INSET_PX) };
+  const b = borderInsets(article);
+  // Padding-box edges: the border box's, moved in by the border on each side.
+  const base = {
+    left: a.left + b.left + MENU_INSET_PX,
+    width: Math.max(0, a.width - b.left - b.right - 2 * MENU_INSET_PX),
+  };
   const viewportHeight =
     typeof window !== 'undefined' ? window.innerHeight : document.documentElement.clientHeight;
   if (below) {
-    const top = a.bottom + MENU_GAP_PX;
+    // `top-full mt-1.5` sat 6px under the padding box: the border box's bottom
+    // less the bottom border.
+    const top = a.bottom - b.bottom + MENU_GAP_PX;
     return { ...base, top, maxHeight: clampMenuHeight(viewportHeight - top) };
   }
   const menuBottom = d.top - MENU_GAP_PX;
@@ -1106,7 +1133,13 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       setNoteSaving(false);
     }
   };
-  const openNoteEditor = (): void => {
+  // Polish — the control focus goes back to when the editor closes (Cancel,
+  // Escape, a saved note): the 🗒 glyph, ⋯ for the menu row — and for the
+  // sheet's note row the SHEET's opener (ⓘ or ⋯), the row itself having
+  // unmounted with the sheet. Null when nothing focusable opened it.
+  const noteEditorReturnRef = useRef<HTMLElement | null>(null);
+  const openNoteEditor = (returnTo: HTMLElement | null): void => {
+    noteEditorReturnRef.current = returnTo;
     setNoteDraft(p.note ?? '');
     setNoteError(null);
     // Phase C — exclusive overlays: the editor replaces the sheet (its note
@@ -1202,6 +1235,37 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       detailsOpenerRef.current?.focus({ preventScroll: true });
     }
   }, [detailsOpen]);
+  // Polish — the same rule for the note editor. Its textarea took focus on
+  // open (autoFocus), so when it unmounts focus falls to <body> and a keyboard
+  // user restarted from the top of the page — from the sheet's note row too,
+  // where the sheet's own return had (correctly) stood down for the textarea.
+  // Declared after the sheet's effect: when the sheet REPLACES the editor the
+  // dialog is already focused here, and nothing is stolen back.
+  const editorWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (editingNote) {
+      editorWasOpenRef.current = true;
+      return;
+    }
+    if (!editorWasOpenRef.current) return;
+    editorWasOpenRef.current = false;
+    const returnTo = noteEditorReturnRef.current;
+    noteEditorReturnRef.current = null;
+    const active = document.activeElement;
+    if (active === null || active === document.body) {
+      // The opener can be GONE by now: the 🗒 glyph renders only while the
+      // profile has a note, and the parent applies a save to its state before
+      // `onSaveNote` resolves — so a save that empties the note unmounts the
+      // very control that opened the editor. Focusing a detached node is a
+      // silent no-op (focus stays on <body>); the ⓘ glyph is always rendered
+      // and sits in the same meta row, so it is the fallback.
+      const target =
+        returnTo !== null && returnTo.isConnected
+          ? returnTo
+          : articleRef.current?.querySelector<HTMLElement>('[data-action="open-details"]');
+      target?.focus({ preventScroll: true });
+    }
+  }, [editingNote]);
   // Polish — keyboard: closing the menu (Escape, Enter on a row) made the
   // focused row `invisible` and focus fell to <body>, so the next Tab restarted
   // at the top of the page. Focus returns to ⋯ whenever the menu closes with
@@ -1701,7 +1765,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       aria-label={
                         hasNote ? `Note on ${p.name} — click to edit` : `Add a note to ${p.name}`
                       }
-                      onClick={openNoteEditor}
+                      onClick={() => openNoteEditor(detailsOpenerRef.current)}
                       className="w-full whitespace-pre-wrap break-words rounded-md border border-surface-divider bg-white/[0.03] px-1.5 py-1 text-left text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
                     >
                       {hasNote ? p.note : 'Add note…'}
@@ -2213,7 +2277,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   title={`${p.note ?? ''} — Click to edit note`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    openNoteEditor();
+                    openNoteEditor(e.currentTarget);
                   }}
                   className="grid h-4 w-4 shrink-0 place-items-center rounded text-[11px] leading-none text-ink-secondary transition-colors hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent-hover"
                 >
@@ -2500,7 +2564,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               label={`Edit note for ${p.name}`}
               onClick={() => {
                 setActionsOpen(false);
-                openNoteEditor();
+                openNoteEditor(moreRef.current);
               }}
             />
           ) : null}

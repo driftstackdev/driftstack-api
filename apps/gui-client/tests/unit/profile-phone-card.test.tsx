@@ -1749,6 +1749,9 @@ describe('B9 — dock + menu', () => {
       // Phase C (`menuBoxFor`): a FIXED box from the card's rect — 6px below
       // the card's bottom edge, inset 6px from both card edges (Phase A's
       // "anchored to both edges", now in viewport coordinates); no `bottom`.
+      // Polish: those 6px are from the PADDING box; jsdom lays out no border
+      // (clientLeft/offsetWidth 0), so here the padding box is the rect — the
+      // 1px case is pinned in the sheet file's `menuBoxFor` arms.
       expect(below.style.top).toBe('173px'); // rect bottom 167 + 6
       expect(below.style.bottom).toBe('');
       expect(below.style.left).toBe('6px');

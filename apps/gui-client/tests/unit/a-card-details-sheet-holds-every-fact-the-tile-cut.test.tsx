@@ -15,7 +15,8 @@
 // is a claim about the component, not about the test.
 
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, cleanup, within } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { render, screen, fireEvent, cleanup, within, waitFor } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
@@ -359,6 +360,99 @@ describe('C1 — the sheet opens by CLICK (ⓘ glyph, Details menu row), never b
     cleanup();
   });
 
+  it("sheet → note row → editor → close gives focus back to the SHEET's opener: Escape in the textarea lands on ⓘ, Cancel too, and on ⋯ when the sheet was opened from the menu row — the sheet's own return stood down for the textarea, so without this a keyboard user landed on <body>", () => {
+    // Mutation: `returnTo?.focus({ preventScroll: true })` in the `editingNote`
+    // effect (ProfilePhoneCard.tsx) — drop it and the textarea's unmount leaves
+    // focus on <body>: every landing below reads `document.body`.
+    const { container } = render(<ProfilePhoneCard {...everything()} />);
+    const opener = glyph();
+    opener.focus();
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByLabelText(`Note on ${NAME} — click to edit`));
+    expect(sheetOf(container)).toBeNull();
+    const textarea = screen.getByLabelText(`Note for ${NAME}`);
+    expect(document.activeElement, 'the textarea took focus (autoFocus)').toBe(textarea);
+    fireEvent.keyDown(textarea, { key: 'Escape' });
+    expect(screen.queryByLabelText(`Note for ${NAME}`)).toBeNull();
+    expect(document.activeElement, 'Escape → back to ⓘ').toBe(opener);
+    // Cancel, same path.
+    fireEvent.click(opener);
+    fireEvent.click(screen.getByLabelText(`Note on ${NAME} — click to edit`));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement, 'Cancel → back to ⓘ').toBe(opener);
+    // The sheet opened from the ⋯ menu row: its opener is ⋯, so that is where
+    // the editor's close returns — never ⓘ.
+    const more = screen.getByRole('button', { name: 'More actions' });
+    more.focus();
+    fireEvent.click(more);
+    fireEvent.click(screen.getByLabelText(`Details — every fact about ${NAME}, in full`));
+    fireEvent.click(screen.getByLabelText(`Note on ${NAME} — click to edit`));
+    fireEvent.keyDown(screen.getByLabelText(`Note for ${NAME}`), { key: 'Escape' });
+    expect(document.activeElement, 'via the menu row → back to ⋯').toBe(more);
+    cleanup();
+  });
+
+  it('control — the editor opened WITHOUT the sheet returns focus to ITS opener, not to ⓘ: the ⋯ menu\'s "Edit note" row → ⋯ (where a row that closes the menu sends focus), the meta-row 🗒 glyph → the glyph, a saved note included', async () => {
+    // Measured before the fix: both direct paths landed on <body> as well
+    // (the textarea's unmount), so the rule is one rule for every opener. The
+    // arm above cannot tell "the sheet's opener" from "any control" on its
+    // own; this one pins that the direct paths never touch ⓘ.
+    const onSaveNote = vi.fn(() => Promise.resolve(null));
+    render(<ProfilePhoneCard {...everything({ onSaveNote })} />);
+    const more = screen.getByRole('button', { name: 'More actions' });
+    more.focus();
+    fireEvent.keyDown(more, { key: 'ArrowDown' });
+    const row = screen.getByLabelText(`Edit note for ${NAME}`);
+    row.focus();
+    fireEvent.click(row);
+    expect(document.activeElement).toBe(screen.getByLabelText(`Note for ${NAME}`));
+    fireEvent.keyDown(screen.getByLabelText(`Note for ${NAME}`), { key: 'Escape' });
+    expect(document.activeElement, 'menu row → back to ⋯').toBe(more);
+    // The 🗒 glyph path, closed by a SUCCESSFUL save (the third close path).
+    const noteGlyph = screen.getByLabelText(`Edit the note on ${NAME}`);
+    noteGlyph.focus();
+    fireEvent.click(noteGlyph);
+    expect(document.activeElement).toBe(screen.getByLabelText(`Note for ${NAME}`));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(screen.queryByLabelText(`Note for ${NAME}`)).toBeNull();
+    });
+    expect(onSaveNote).toHaveBeenCalledTimes(1);
+    expect(document.activeElement, 'glyph → back to the glyph').toBe(noteGlyph);
+    expect(noteGlyph).not.toBe(glyph());
+    cleanup();
+  });
+
+  it('a save that EMPTIES the note unmounts the 🗒 glyph that opened the editor; focus then goes to ⓘ (the always-present control in the same row), never to <body>', async () => {
+    // The parent applies the saved note to its state before onSaveNote
+    // resolves (ProfilesView), so by the time the editor closes the glyph is
+    // gone — `focus()` on a detached node is a silent no-op. The fallback in
+    // the editor's close effect (ProfilePhoneCard: `returnTo.isConnected ? … :
+    // the open-details control`) is what this pins; dropping it strands focus.
+    let rerender: ((ui: ReactElement) => void) | null = null;
+    const onSaveNote = vi.fn(() => {
+      rerender?.(<ProfilePhoneCard {...everything({ onSaveNote, note: '' })} />);
+      return Promise.resolve(null);
+    });
+    const r = render(<ProfilePhoneCard {...everything({ onSaveNote })} />);
+    rerender = r.rerender;
+    const noteGlyph = screen.getByLabelText(`Edit the note on ${NAME}`);
+    noteGlyph.focus();
+    fireEvent.click(noteGlyph);
+    const textarea = screen.getByLabelText(`Note for ${NAME}`);
+    expect(document.activeElement).toBe(textarea);
+    fireEvent.change(textarea, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => {
+      expect(screen.queryByLabelText(`Note for ${NAME}`)).toBeNull();
+    });
+    expect(onSaveNote).toHaveBeenCalledWith('');
+    expect(noteGlyph.isConnected, 'the glyph unmounted with the emptied note').toBe(false);
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toBe(glyph());
+    cleanup();
+  });
+
   it('focus is trapped: Tab from the last focusable wraps to ×, Shift+Tab from × wraps to the last, Shift+Tab from the dialog itself lands on the last; clicks inside never toggle selection', () => {
     const onToggleSelect = vi.fn();
     const { container } = render(<ProfilePhoneCard {...everything({ onToggleSelect })} />);
@@ -564,24 +658,44 @@ describe('C2 — the ⋯ menu is a PORTAL: fixed from the card rect, flipped by 
     cleanup();
   });
 
-  it('menuBoxFor: inset 6px from both card edges; below → 6px under the card; above → 6px over the dock, in viewport coordinates', () => {
-    const rect = (top: number, left: number, w: number, h: number): DOMRect => ({
-      top,
-      left,
-      width: w,
-      height: h,
-      right: left + w,
-      bottom: top + h,
-      x: left,
-      y: top,
-      toJSON: () => ({}),
-    });
-    const article = {
-      getBoundingClientRect: () => rect(100, 40, 178, 234),
-    } as unknown as HTMLElement;
-    const dock = {
-      getBoundingClientRect: () => rect(100 + 234 - 7 - 47, 47, 164, 47),
-    } as unknown as HTMLElement;
+  const rectOf = (top: number, left: number, w: number, h: number): DOMRect => ({
+    top,
+    left,
+    width: w,
+    height: h,
+    right: left + w,
+    bottom: top + h,
+    x: left,
+    y: top,
+    toJSON: () => ({}),
+  });
+  /** A layout-only article stand-in: its BORDER box as the rect, plus the six
+   *  layout fields `borderInsets` reads. `right` defaults to `left` (a uniform
+   *  border); pass it to pin the far side separately. */
+  const articleStub = (
+    r: DOMRect,
+    left: number,
+    right: number = left,
+    top: number = left,
+    bottom: number = top,
+  ): HTMLElement =>
+    ({
+      getBoundingClientRect: () => r,
+      clientLeft: left,
+      clientTop: top,
+      offsetWidth: r.width,
+      clientWidth: r.width - left - right,
+      offsetHeight: r.height,
+      clientHeight: r.height - top - bottom,
+    }) as unknown as HTMLElement;
+  const dockStub = (articleTop: number): HTMLElement =>
+    ({
+      getBoundingClientRect: () => rectOf(articleTop + 234 - 7 - 47, 47, 164, 47),
+    }) as unknown as HTMLElement;
+
+  it('menuBoxFor: inset 6px from both card edges; below → 6px under the card; above → 6px over the dock, in viewport coordinates (a 0 border: the padding box IS the rect, as in jsdom)', () => {
+    const article = articleStub(rectOf(100, 40, 178, 234), 0);
+    const dock = dockStub(100);
     // jsdom's innerHeight is 768: 768 − 340 − 8 = 420 ≥ 350 → the class cap.
     expect(menuBoxFor(article, dock, true)).toEqual({
       left: 46,
@@ -597,6 +711,40 @@ describe('C2 — the ⋯ menu is a PORTAL: fixed from the card rect, flipped by 
     expect(above.bottom).toBe(window.innerHeight - 274);
     // 274 − 8 = 266 of room above → the cap drops under 350.
     expect(above.maxHeight).toBe(274 - MENU_VIEWPORT_EDGE_PX);
+  });
+
+  it("menuBoxFor insets from the PADDING box, not the border box: with a 1px border (clientLeft/clientTop 1) the box starts 1px further in, is 2px narrower and, opening below, sits 1px higher — where the absolute menu's `left-1.5 right-1.5` / `top-full mt-1.5` resolved. The border is READ from the element: 2px moves it again, and an asymmetric one is not mirrored", () => {
+    // Mutation (menuBoxFor): drop `b.left` from `left` → 46; drop `b.left - b.right`
+    // from `width` → 166; drop `- b.bottom` from `top` → 340 — each the border-box
+    // number the 0-border arm above pins, so the arm above is this one's control.
+    const article = articleStub(rectOf(100, 40, 178, 234), 1);
+    const dock = dockStub(100);
+    expect(menuBoxFor(article, dock, true)).toEqual({
+      left: 47,
+      width: 164,
+      top: 339,
+      maxHeight: MENU_MAX_HEIGHT_PX,
+    });
+    const above = menuBoxFor(article, dock, false);
+    expect(above.left).toBe(47);
+    expect(above.width).toBe(164);
+    // Opening above is dock-relative (the dock sits inside the padding box),
+    // so the border moves nothing there.
+    expect(above.bottom).toBe(window.innerHeight - 274);
+    expect(above.maxHeight).toBe(274 - MENU_VIEWPORT_EDGE_PX);
+    // A 2px bezel: read, not assumed (a literal 1 would leave 47 / 164 / 339).
+    const thick = menuBoxFor(articleStub(rectOf(100, 40, 178, 234), 2), dock, true);
+    expect([thick.left, thick.width, thick.top]).toEqual([48, 162, 338]);
+    // Asymmetric (left 1, right 3): the far border comes from offset − client,
+    // never mirrored from `clientLeft` (mirroring gives width 164).
+    const uneven = menuBoxFor(articleStub(rectOf(100, 40, 178, 234), 1, 3), dock, true);
+    expect([uneven.left, uneven.width]).toEqual([47, 162]);
+    // Vertically uneven (top 1, bottom 3): the BOTTOM border is what moves the
+    // downward box, read from offsetHeight − clientHeight − clientTop, never
+    // mirrored from `clientTop` (mirroring gives 339). Every fixture above is
+    // vertically symmetric, so without this arm a mirrored bottom passes.
+    const tall = menuBoxFor(articleStub(rectOf(100, 40, 178, 234), 1, 1, 1, 3), dock, true);
+    expect(tall.top).toBe(334 - 3 + 6);
   });
 
   it("menuBoxFor clamps the box to the viewport: at the app's minimum window height (600) a top-row card's menu opening BELOW is capped to the room left, so its last rows scroll inside the menu instead of sitting under the viewport edge, unreachable (a grid scroll closes a fixed menu)", () => {
@@ -615,9 +763,7 @@ describe('C2 — the ⋯ menu is a PORTAL: fixed from the card rect, flipped by 
     try {
       Object.defineProperty(window, 'innerHeight', { configurable: true, value: 600 });
       // First grid row: article 22..256 (card.bottom 256 → menu top 262).
-      const article = {
-        getBoundingClientRect: () => rect(22, 40, 178, 234),
-      } as unknown as HTMLElement;
+      const article = articleStub(rect(22, 40, 178, 234), 0);
       const dock = {
         getBoundingClientRect: () => rect(22 + 234 - 7 - 47, 47, 164, 47),
       } as unknown as HTMLElement;
@@ -634,9 +780,7 @@ describe('C2 — the ⋯ menu is a PORTAL: fixed from the card rect, flipped by 
       expect(above.maxHeight).toBe(196 - MENU_VIEWPORT_EDGE_PX);
       // Never a sliver: with 40px of room the cap stays at the floor (the flip
       // rule, not the clamp, keeps the menu off a short side).
-      const low = {
-        getBoundingClientRect: () => rect(320, 40, 178, 234),
-      } as unknown as HTMLElement;
+      const low = articleStub(rect(320, 40, 178, 234), 0);
       expect(menuBoxFor(low, dock, true).maxHeight).toBe(MENU_MIN_HEIGHT_PX);
       expect(MENU_MIN_HEIGHT_PX).toBeLessThan(MENU_MAX_HEIGHT_PX);
     } finally {

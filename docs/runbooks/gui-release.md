@@ -176,3 +176,38 @@ bleeding edge of the problem; fixing the tree can follow at its own pace.
   Rust toolchain had no `x86_64-apple-darwin` target.
 - **macOS is excluded from the updater** by design — see
   `src-tauri/capabilities/updater-windows-linux.json`.
+
+## After the workflow publishes: put the release notes back
+
+`tauri-action`'s publish step overwrites the draft's title and body with its own
+template ("Driftstack GUI gui-vX" + the install / auto-update boilerplate). The
+`--notes-file` handed to `gh release create --draft` does not survive it, and
+nothing in the workflow warns. Every release from 0.1.46 to 0.1.50 came out with
+the generic page until the notes were re-applied by hand (2026-09-12).
+
+Once the chain reports the release published, re-apply the notes on top of the
+template (keep its install text — it is what a first-time downloader needs):
+
+```sh
+gh release view gui-vX.Y.Z --json body --jq .body > /tmp/template.md
+{ cat relnotes-X.Y.Z.md; echo; echo "---"; echo; cat /tmp/template.md; } > /tmp/final.md
+gh release edit gui-vX.Y.Z --title "Desktop client X.Y.Z" --notes-file /tmp/final.md
+```
+
+Editing the title or notes after publish touches neither `latest.json` nor the
+assets; the updater is unaffected.
+
+## Where the updater actually reads from
+
+`apps/gui-client/src-tauri/tauri.conf.json` → `plugins.updater.endpoints`:
+`https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json`.
+That is the only "what does the updater serve" check that means anything:
+
+```sh
+curl -sL https://github.com/driftstackdev/driftstack-api/releases/latest/download/latest.json | jq .version
+```
+
+It must still read the PREVIOUS version while the draft builds (a draft is not
+"latest"), and the new one after publish. There is no updater route on
+`api.driftstack.dev`; a guess like `/v1/gui/updates/latest.json` returns 404
+and proves nothing.

@@ -96,6 +96,20 @@ vi.mock('@sentry/browser', () => ({
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
+// Polish — measured 2026-09-11, this file alone on an idle Mac: every fake
+// interval the mounted shell registers RUNS through an advance, so an arm's
+// real cost scales with fake hours. One 6 h advance executes 23,066 timer
+// callbacks — the 1 s main-thread stall heartbeat 21,600 of them, the 30 s
+// flight-recorder census and the 30 s connection probe 720 each, the 15 min
+// proxy sweep 24, this loop's own tick 1 (12 h: 46,131). Alone that is
+// ~1.2 s for a 12 h arm and ~0.4 s for a 6 h one; under the full parallel
+// suite on a loaded machine the same arms crossed the project's 10 s
+// testTimeout. Fake timers cannot advance past one interval without executing
+// the others, and stubbing the stall detector would make "through the mounted
+// shell" a smaller shell — so every arm that advances ≥ 6 h carries this
+// budget instead. The assertions are untouched.
+const LONG_ADVANCE = { timeout: 30_000 };
+
 // The suite's own localStorage — jsdom's is not writable here (the onboarding
 // suites install the same Map-backed shim). "Later" persists per version in it,
 // so one arm's dismissal must not leak into the next.
@@ -144,35 +158,39 @@ beforeEach(() => {
 });
 
 describe('the App shell keeps checking for updates while it stays open (T-14)', () => {
-  it('CRITICAL checkForUpdate runs on mount and AGAIN six hours later, through the mounted shell', async () => {
-    const { App } = await import('../../src/App');
-    render(<App />);
-    await waitFor(() => {
-      expect(screen.queryByText('Welcome to Driftstack')).not.toBeInTheDocument();
-    });
-    await waitFor(() => {
-      expect(checkForUpdate, 'the mount-time check is kept').toHaveBeenCalledTimes(1);
-    });
+  it(
+    'CRITICAL checkForUpdate runs on mount and AGAIN six hours later, through the mounted shell',
+    LONG_ADVANCE,
+    async () => {
+      const { App } = await import('../../src/App');
+      render(<App />);
+      await waitFor(() => {
+        expect(screen.queryByText('Welcome to Driftstack')).not.toBeInTheDocument();
+      });
+      await waitFor(() => {
+        expect(checkForUpdate, 'the mount-time check is kept').toHaveBeenCalledTimes(1);
+      });
 
-    // A one-minute margin, not one millisecond: `shouldAdvanceTime` moves the
-    // fake clock with real time, and the waitFor polls above already spent some
-    // of the interval — the exact boundary is pinned in the loop's own file.
-    await vi.advanceTimersByTimeAsync(SIX_HOURS - 60_000);
-    expect(checkForUpdate, 'not before the interval').toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(60_000);
-    await waitFor(() => {
-      expect(
-        checkForUpdate,
-        'the re-check the old mount-only effect never made',
-      ).toHaveBeenCalledTimes(2);
-    });
-    await vi.advanceTimersByTimeAsync(SIX_HOURS);
-    await waitFor(() => {
-      expect(checkForUpdate).toHaveBeenCalledTimes(3);
-    });
-  });
+      // A one-minute margin, not one millisecond: `shouldAdvanceTime` moves the
+      // fake clock with real time, and the waitFor polls above already spent some
+      // of the interval — the exact boundary is pinned in the loop's own file.
+      await vi.advanceTimersByTimeAsync(SIX_HOURS - 60_000);
+      expect(checkForUpdate, 'not before the interval').toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      await waitFor(() => {
+        expect(
+          checkForUpdate,
+          'the re-check the old mount-only effect never made',
+        ).toHaveBeenCalledTimes(2);
+      });
+      await vi.advanceTimersByTimeAsync(SIX_HOURS);
+      await waitFor(() => {
+        expect(checkForUpdate).toHaveBeenCalledTimes(3);
+      });
+    },
+  );
 
-  it('vacuity: with nothing to offer, no banner appears at any tick', async () => {
+  it('vacuity: with nothing to offer, no banner appears at any tick', LONG_ADVANCE, async () => {
     // The control for the arm above: three checks that found nothing must
     // leave the shell exactly as it was — no Install button, no Later.
     const { App } = await import('../../src/App');
@@ -251,55 +269,63 @@ describe("the shell hands the customer's preference and the session veto to the 
     expect(install).not.toHaveBeenCalled();
   });
 
-  it('control: ON and idle installs unattended through the shell — install called once, no banner, and the loop stops', async () => {
-    const { update, install } = offered('0.9.9');
-    checkForUpdate.mockResolvedValue(update);
-    await renderShell();
-    await waitFor(() => {
+  it(
+    'control: ON and idle installs unattended through the shell — install called once, no banner, and the loop stops',
+    LONG_ADVANCE,
+    async () => {
+      const { update, install } = offered('0.9.9');
+      checkForUpdate.mockResolvedValue(update);
+      await renderShell();
+      await waitFor(() => {
+        expect(install).toHaveBeenCalledTimes(1);
+      });
+      await settle();
+      expect(screen.queryByTestId('update-install'), 'installed, so nothing to offer').toBeNull();
+      // After an install the app is on its way to a relaunch; a later tick would
+      // offer the same version against the in-memory one. Through the shell.
+      await vi.advanceTimersByTimeAsync(SIX_HOURS + 60_000);
+      expect(checkForUpdate).toHaveBeenCalledTimes(1);
       expect(install).toHaveBeenCalledTimes(1);
-    });
-    await settle();
-    expect(screen.queryByTestId('update-install'), 'installed, so nothing to offer').toBeNull();
-    // After an install the app is on its way to a relaunch; a later tick would
-    // offer the same version against the in-memory one. Through the shell.
-    await vi.advanceTimersByTimeAsync(SIX_HOURS + 60_000);
-    expect(checkForUpdate).toHaveBeenCalledTimes(1);
-    expect(install).toHaveBeenCalledTimes(1);
-  });
+    },
+  );
 
-  it('"Later" hides the banner for THAT version: the same version re-offered stays hidden, a newer one surfaces again', async () => {
-    tauriStore.set('driftstack', {
-      baseUrl: 'https://api.example.test',
-      telemetryOptIn: null,
-      autoUpdate: false,
-      settingsVersion: SETTINGS_VERSION,
-    });
-    checkForUpdate.mockResolvedValue(offered('0.9.9').update);
-    await renderShell();
-    await screen.findByTestId('update-install');
-    fireEvent.click(screen.getByTestId('update-dismiss'));
-    expect(screen.queryByTestId('update-install')).toBeNull();
-    expect(localStorage.getItem('ds_update_dismissed')).toBe('0.9.9');
+  it(
+    '"Later" hides the banner for THAT version: the same version re-offered stays hidden, a newer one surfaces again',
+    LONG_ADVANCE,
+    async () => {
+      tauriStore.set('driftstack', {
+        baseUrl: 'https://api.example.test',
+        telemetryOptIn: null,
+        autoUpdate: false,
+        settingsVersion: SETTINGS_VERSION,
+      });
+      checkForUpdate.mockResolvedValue(offered('0.9.9').update);
+      await renderShell();
+      await screen.findByTestId('update-install');
+      fireEvent.click(screen.getByTestId('update-dismiss'));
+      expect(screen.queryByTestId('update-install')).toBeNull();
+      expect(localStorage.getItem('ds_update_dismissed')).toBe('0.9.9');
 
-    // Re-check finds the SAME version: the dismissal holds (M16 — no re-nag).
-    await vi.advanceTimersByTimeAsync(SIX_HOURS + 60_000);
-    await waitFor(() => {
-      expect(checkForUpdate).toHaveBeenCalledTimes(2);
-    });
-    await settle();
-    expect(screen.queryByTestId('update-install'), 'the same version does not re-nag').toBeNull();
+      // Re-check finds the SAME version: the dismissal holds (M16 — no re-nag).
+      await vi.advanceTimersByTimeAsync(SIX_HOURS + 60_000);
+      await waitFor(() => {
+        expect(checkForUpdate).toHaveBeenCalledTimes(2);
+      });
+      await settle();
+      expect(screen.queryByTestId('update-install'), 'the same version does not re-nag').toBeNull();
 
-    // Re-check finds a NEWER version: it is not the one that was dismissed, so
-    // it surfaces — the positive control for every "no banner" assertion in
-    // this file, and the arm that pins the re-surface rule in onOffered.
-    checkForUpdate.mockResolvedValue(offered('0.9.10').update);
-    await vi.advanceTimersByTimeAsync(SIX_HOURS);
-    await waitFor(() => {
-      expect(checkForUpdate).toHaveBeenCalledTimes(3);
-    });
-    await screen.findByTestId('update-install');
-    expect(screen.getByText('0.9.10')).toBeInTheDocument();
-    // Still nothing installed: OFF stayed OFF across three passes.
-    expect(screen.queryByTestId('update-download')).toBeNull();
-  });
+      // Re-check finds a NEWER version: it is not the one that was dismissed, so
+      // it surfaces — the positive control for every "no banner" assertion in
+      // this file, and the arm that pins the re-surface rule in onOffered.
+      checkForUpdate.mockResolvedValue(offered('0.9.10').update);
+      await vi.advanceTimersByTimeAsync(SIX_HOURS);
+      await waitFor(() => {
+        expect(checkForUpdate).toHaveBeenCalledTimes(3);
+      });
+      await screen.findByTestId('update-install');
+      expect(screen.getByText('0.9.10')).toBeInTheDocument();
+      // Still nothing installed: OFF stayed OFF across three passes.
+      expect(screen.queryByTestId('update-download')).toBeNull();
+    },
+  );
 });
