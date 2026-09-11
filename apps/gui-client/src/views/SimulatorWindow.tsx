@@ -593,6 +593,11 @@ export interface VpnTunnelUp {
   source: 'report' | 'detail';
   /** The step token when source is 'detail' (vpn_egress_bringing_up | vpn_egress_active | egress_geo_resolving). */
   step?: VpnProvisioningStep;
+  /** Whether the SESSION is a VPN one — from a `vpn_`-prefixed step (only the VPN
+   *  tail emits those) or the report's kind. The shared tokens
+   *  (egress_geo_resolving, browser_spawning) are emitted for SOCKS5 sessions
+   *  too; on those every word is scheme-neutral and no tunnel is claimed. */
+  vpn: boolean;
 }
 
 /** The harness's provisioning step tokens the simulator knows how to phrase. */
@@ -643,19 +648,33 @@ export function vpnTunnelUpNotice(
   // (c) — the harness's own word (agent_sessions.provisioning_detail, set from its
   // `provisioning` frame) beats the (b) heuristic below, and needs no report at
   // all: the node said the tunnel is up and is not claiming active on purpose.
+  const reportVpn =
+    report !== null && (report.proxy_kind === 'openvpn' || report.proxy_kind === 'wireguard');
   const step = vpnStepOf(state.provisioningDetail);
   if (step !== null) {
+    // ⛔ A step token alone is NOT proof of a VPN session: the harness emits
+    // `egress_geo_resolving` on the SOCKS5 path too (its egress probe is on in
+    // prod), and the browser step will carry the same token for every scheme.
+    // Only a `vpn_`-prefixed token — emitted by the VPN tail alone — or the
+    // report's own kind makes this a VPN session; otherwise the notice stays
+    // scheme-neutral and claims no tunnel.
     return {
       ip: report?.exit_ip ?? null,
       timezone: report?.exit_timezone ?? null,
       source: 'detail',
       step,
+      vpn: step.startsWith('vpn_') || reportVpn,
     };
   }
   if (report === null) return null;
   if (report.proxy_kind !== 'openvpn' && report.proxy_kind !== 'wireguard') return null;
   if (report.exit_ip === undefined) return null;
-  return { ip: report.exit_ip, timezone: report.exit_timezone ?? null, source: 'report' };
+  return {
+    ip: report.exit_ip,
+    timezone: report.exit_timezone ?? null,
+    source: 'report',
+    vpn: true,
+  };
 }
 
 /** The one sentence for that state. `tz` is omitted when the report had none. */
@@ -665,6 +684,16 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
   // (c) — the harness's own word: the node reported the tunnel up and is deliberately
   // not claiming the session active until the browser exists.
   if (t.source === 'detail') {
+    if (!t.vpn) {
+      // A SOCKS5 (or unknown) session on a shared token: say the step, never a tunnel.
+      if (t.step === 'egress_geo_resolving') {
+        return where !== null
+          ? `Resolving the exit location (${where})…`
+          : 'Resolving the exit location…';
+      }
+      if (t.step === 'browser_spawning') return 'Starting the browser…';
+      return 'connecting…';
+    }
     // (f) — the harness's step tokens, in the order a VPN session emits them. The
     // browser step is announced by its OWN token (browser_spawning); until the
     // harness emits it, `vpn_egress_active` is the LAST thing a VPN session says
@@ -684,9 +713,12 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // (h) — a STATE, not a prediction: the harness may emit browser_spawning
     // next (fork-spawn on), or time out (fork-spawn off, the default), and the
     // client cannot see which. Say what is true either way.
+    // A STATE, not a prediction: whether the session times out or the browser
+    // attaches next is the harness's to know, and it announces the latter with
+    // its own token — so this sentence promises nothing either way.
     return where !== null
-      ? `VPN tunnel connected (${where}) — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout`
-      : 'VPN tunnel connected — the browser step isn’t available for VPN sessions yet; this session will stop after its timeout';
+      ? `VPN tunnel connected (${where}) — the browser step isn’t available for VPN sessions yet`
+      : 'VPN tunnel connected — the browser step isn’t available for VPN sessions yet';
   }
   return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
 }
@@ -699,13 +731,18 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
  * under a chip claiming the opposite.
  */
 export function vpnTunnelIsUp(t: VpnTunnelUp): boolean {
-  return t.step !== 'vpn_egress_bringing_up';
+  return t.vpn && t.step !== 'vpn_egress_bringing_up';
 }
 
 /** (h) — the short chip beside "Address" and in the browser bar, from the STEP
  *  (never from `ip === null` alone, which read "starting the browser…" while
  *  the tunnel was still coming up, and printed a dangling "· exit "). */
 export function vpnTunnelChipText(t: VpnTunnelUp): string {
+  if (!t.vpn) {
+    if (t.step === 'egress_geo_resolving') return 'Resolving the exit…';
+    if (t.step === 'browser_spawning') return 'Starting the browser…';
+    return 'connecting…';
+  }
   if (!vpnTunnelIsUp(t)) return 'Starting the VPN tunnel…';
   if (t.ip !== null) return `VPN tunnel up · exit ${t.ip}`;
   if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser attach isn’t available yet';
@@ -716,6 +753,7 @@ export function vpnTunnelChipText(t: VpnTunnelUp): string {
 /** (h) — the locked address bar's placeholder for that state: promises only
  *  what the step can deliver. */
 export function vpnAddressPlaceholder(t: VpnTunnelUp): string {
+  if (!t.vpn) return 'connecting… — the address bar unlocks once the device is live';
   if (!vpnTunnelIsUp(t))
     return 'Starting the VPN tunnel… — the address bar unlocks once the device is live';
   if (t.step === 'vpn_egress_active')
