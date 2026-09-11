@@ -5,6 +5,12 @@
 // - UDP badge is explicitly red (no relay) / green (relay verified);
 // - the device label is a readable chip, no longer colliding with the select
 //   checkbox or washing out over the identity gradient.
+// Phase A (2026-09-11) — "nothing outside the box": the body clips horizontally
+// (overflow-x-hidden, min-w-0 on every row), the egress widget clips its own
+// children, the latency row wraps, the ⋯ menu is anchored to BOTH card edges
+// instead of a fixed 176px, and every truncated/clamped text carries a title.
+// Measured, not eyeballed: scripts/gui-visual-check.mjs renders the harness at
+// 178/240/260px and fails on any descendant painting past the card.
 // Pure presentational; ProfilesView passes data/display strings + handlers + an
 // organize slot. flag covers every ISO country via flagEmoji (regional-indicator
 // transform — no hardcoded list).
@@ -321,7 +327,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       style={{ background: 'linear-gradient(160deg,#161b24,#0a0e14)' }}
     >
       {/* SCREEN — taller (height-only bump) so the body has room. */}
-      <div className="relative flex aspect-[9/18.5] flex-col overflow-hidden rounded-[17px] bg-surface-raised">
+      <div
+        data-component="phone-screen"
+        className="relative flex aspect-[9/18.5] min-w-0 flex-col overflow-hidden rounded-[17px] bg-surface-raised"
+      >
         {/* F3 — inline note editor overlay. Floats over the screen so it never
             reshapes the card; stops propagation so typing/saving never toggles
             selection. Enter saves, Shift+Enter newlines, Escape cancels. */}
@@ -440,7 +449,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         {/* status bar — readable device chip (left) + Live/Idle (right). Sits
             BELOW the dynamic island (pt clears it) so neither overlaps the label. */}
         <div className="relative z-20 flex items-center justify-between gap-1 px-2.5 pb-1 pt-[26px]">
-          <span className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[11px] font-semibold tracking-tight text-ink-primary">
+          <span
+            className="truncate rounded bg-black/35 px-1.5 py-0.5 text-[11px] font-semibold tracking-tight text-ink-primary"
+            title={p.deviceLabel}
+          >
             {p.deviceLabel}
           </span>
           {p.running ? (
@@ -457,7 +469,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
         </div>
 
         {/* body */}
-        <div className="relative z-10 flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto px-2.5 pb-2 pt-1.5">
+        <div
+          data-component="card-body"
+          className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden px-2.5 pb-2 pt-1.5"
+        >
           {/* identity */}
           <div className="flex flex-col items-center gap-1 pt-1">
             <span
@@ -470,17 +485,116 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
             >
               {p.icon ? p.icon : p.monogram}
             </span>
-            <p className="line-clamp-1 text-center text-sm font-semibold leading-tight text-ink-primary">
+            <p
+              className="line-clamp-1 max-w-full text-center text-sm font-semibold leading-tight text-ink-primary"
+              title={p.name}
+            >
               {p.name}
             </p>
           </div>
 
           {/* egress widget */}
-          <div className="flex flex-col gap-1.5 rounded-[12px] border border-surface-divider bg-surface-inset px-2 py-2">
+          {/* Phase A — `overflow-hidden` clips children that would paint past
+              the border, but it also zeroes the widget's automatic min-height,
+              and in the scrolling body that let the WIDGET shrink and swallow
+              its own last rows instead of the body scrolling (measured: the
+              UDP badge half-cut at 178px). `shrink-0` keeps its content height
+              so vertical overflow goes to the body's scroll, where it belongs. */}
+          <div
+            data-component="egress-widget"
+            className="flex min-w-0 shrink-0 flex-col gap-1.5 overflow-hidden rounded-[12px] border border-surface-divider bg-surface-inset px-2 py-2"
+          >
             {p.hasProxy ? (
               <>
+                {/* Phase A (2026-09-11, grid "nothing outside the box") — the
+                    broken-proxy banner renders FIRST in the widget. At the grid's
+                    178px minimum the phone screen's aspect ratio leaves the body
+                    ~228px for content that needs more, and the body scrolls, so
+                    the LAST rows are the ones that vanish; the verdict a customer
+                    must not miss belongs above the fold, not under it. */}
+                {/* A proxy that FAILED its last test says so, in place, with the
+                    reason and a one-click retest.
+                    Before this the card rendered a broken proxy almost exactly
+                    like an untested one — "no exit IP" and a blank latency —
+                    which reads as "not checked yet", not "this will not work".
+                    The only retest lived in the overflow menu, so the customer
+                    had to already suspect the proxy to find out it was dead. */}
+                {/* (h) — a VPN row has no SOCKS5 caps to trip this banner, so a
+                    tunnel the fleet just could not bring up rendered exactly like
+                    a healthy one. The fleet's failure sentence drives it now. */}
+                {/* (l) #16 — the VPN failure/notice are gated on `vpn`, as the
+                    grid gates them on scheme: a proxy edited vpn→socks5 kept a
+                    "VPN tunnel down" banner from the cache entry the edit had
+                    not yet dropped, and a notice nothing would ever clear. */}
+                {((caps !== null && !proxyOk) ||
+                  (p.vpn === true && p.vpnFailure !== undefined)) && (
+                  <div
+                    data-component="proxy-broken-banner"
+                    data-vpn-failure={
+                      p.vpn === true && p.vpnFailure !== undefined ? 'true' : 'false'
+                    }
+                    role="status"
+                    className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
+                  >
+                    {/* `flex-auto`, not `flex-1`: a 0% basis let the action pair
+                        share the first line and starve the label to "C…"; with a
+                        content basis the pair wraps under the label instead, and
+                        the label still grows to fill (and truncates if it must). */}
+                    <span
+                      className="min-w-0 flex-auto truncate text-[10px] font-semibold text-status-error"
+                      title={p.vpnFailure ?? p.capabilities?.message}
+                    >
+                      {p.vpn === true && p.vpnFailure !== undefined
+                        ? 'VPN tunnel down'
+                        : proxyLabel}
+                    </span>
+                    {/* Phase A — the two actions travel as ONE non-shrinking unit
+                        (ml-auto pushes the pair right; whitespace-nowrap keeps each
+                        label on one line) so a 128px-wide banner wraps the PAIR
+                        under the label instead of pushing Change past the box. */}
+                    <span className="ml-auto flex shrink-0 gap-1.5 whitespace-nowrap">
+                      <button
+                        type="button"
+                        data-action="retest-proxy"
+                        disabled={p.testing || p.testDisabled}
+                        onClick={(e) => {
+                          // The card body is itself clickable (select/expand), so a
+                          // bare click here would also toggle the row.
+                          e.stopPropagation();
+                          p.onTest();
+                        }}
+                        className="rounded bg-status-error/20 px-1.5 py-px text-[9.5px] font-semibold text-status-error hover:bg-status-error/30 disabled:opacity-50"
+                      >
+                        {p.testing
+                          ? p.vpn === true
+                            ? 'Checking…'
+                            : 'Testing…'
+                          : p.vpn === true
+                            ? 'Re-check'
+                            : 'Retest'}
+                      </button>
+                      {p.onEdit !== undefined && (
+                        // Straight to the edit modal, which is where the proxy is
+                        // chosen — "retest or change more conveniently" needs both
+                        // to be one click from the card that reports the problem.
+                        <button
+                          type="button"
+                          data-action="change-proxy"
+                          disabled={p.anyBusy}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            p.onEdit?.();
+                          }}
+                          className="rounded bg-surface-divider/60 px-1.5 py-px text-[9.5px] font-semibold text-ink-secondary hover:bg-surface-divider disabled:opacity-50"
+                        >
+                          Change
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {/* country + exit IP */}
-                <div className="flex items-center gap-1.5">
+                <div data-component="exit-row" className="flex min-w-0 items-center gap-1.5">
                   <span aria-hidden="true" className="text-[15px] leading-none">
                     {p.flag}
                   </span>
@@ -495,13 +609,13 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     <span
                       data-component="proxy-inherited-badge"
                       title="No proxy chosen for this profile — it uses the first saved proxy, and will follow whichever that is."
-                      className="rounded bg-surface-divider/40 px-1 text-[9px] font-medium uppercase tracking-wide text-ink-muted"
+                      className="shrink-0 rounded bg-surface-divider/40 px-1 text-[9px] font-medium uppercase tracking-wide text-ink-muted"
                     >
                       default
                     </span>
                   )}
                   <span
-                    className={`min-w-0 flex-1 truncate text-right text-[11.5px] ${
+                    className={`min-w-[3ch] flex-1 truncate text-right text-[11.5px] ${
                       p.exitIp !== null ? 'mono text-ink-primary' : 'italic text-ink-muted'
                     }`}
                     title={
@@ -510,7 +624,9 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         ? VPN_NO_EXIT_YET_TITLE
                         : p.exitProbeFailed === true
                           ? EXIT_GEO_UNAVAILABLE_TITLE
-                          : undefined)
+                          : p.probed
+                            ? 'no exit IP'
+                            : 'run Test')
                     }
                   >
                     {/* (l) #3 — a VPN row with no exit is "no exit measured yet —
@@ -549,7 +665,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     tells two otherwise-identical cards apart. */}
                 {p.proxyName !== null && p.proxyName !== undefined && p.proxyName !== '' && (
                   <div
-                    className="flex items-center gap-1.5"
+                    className="flex min-w-0 items-center gap-1.5"
                     data-component="profile-card-proxy-name"
                   >
                     <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-muted">
@@ -564,12 +680,15 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   </div>
                 )}
                 {/* latency + UDP badge (red/green) */}
-                <div className="flex items-center gap-1.5">
-                  <span className="flex items-center gap-1 text-[9.5px] text-ink-muted">
+                <div
+                  data-component="latency-row"
+                  className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1"
+                >
+                  <span className="flex min-w-0 flex-wrap items-center gap-1 text-[9.5px] text-ink-muted">
                     {p.latencyMs !== null ? (
                       <>
                         <span
-                          className="mono"
+                          className="mono text-[10.5px] whitespace-nowrap"
                           title={
                             p.latencyFromServer === true
                               ? (latVantage?.title ?? SERVER_LATENCY_TITLE)
@@ -587,7 +706,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                             fleet Mac, or the server when none was free) so it is
                             never read as the laptop's number. */}
                         {p.latencyFromServer === true && (
-                          <span className="text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                          <span className="whitespace-nowrap text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
                             {latVantage?.label ?? 'server'}
                           </span>
                         )}
@@ -608,7 +727,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                       // SOCKS5 result is null by design), so "stale" beside
                       // "checked just now" described a number that was never
                       // measured. Say that instead.
-                      <span className="mono opacity-60">
+                      <span className="mono text-[10.5px] whitespace-nowrap opacity-60">
                         {p.vpn === true
                           ? VPN_LATENCY_NOT_MEASURED
                           : p.probed
@@ -627,7 +746,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     <span
                       data-component="proxy-checked-at"
                       data-checked-at={p.checkedAtIso}
-                      className="flex items-center gap-1 text-[9px] text-ink-muted"
+                      className="flex shrink-0 items-center gap-1 whitespace-nowrap text-[9px] text-ink-muted"
                     >
                       <span className="uppercase tracking-wide">checked</span>
                       <RelativeTime iso={p.checkedAtIso} tooltipPrefix="Checked" />
@@ -636,7 +755,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <span
                     title={udpTitle}
                     data-udp={p.vpn === true ? 'tunnel' : udpOk ? 'true' : 'false'}
-                    className={`ml-auto inline-flex cursor-help items-center gap-0.5 rounded px-1.5 py-px text-[9.5px] font-bold ${
+                    className={`ml-auto inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-px text-[9.5px] font-bold ${
                       p.vpn === true || caps === null
                         ? 'bg-surface-divider/60 text-ink-muted'
                         : udpOk
@@ -677,81 +796,10 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     />
                   </div>
                 )}
-                {/* A proxy that FAILED its last test says so, in place, with the
-                    reason and a one-click retest.
-                    Before this the card rendered a broken proxy almost exactly
-                    like an untested one — "no exit IP" and a blank latency —
-                    which reads as "not checked yet", not "this will not work".
-                    The only retest lived in the overflow menu, so the customer
-                    had to already suspect the proxy to find out it was dead. */}
-                {/* (h) — a VPN row has no SOCKS5 caps to trip this banner, so a
-                    tunnel the fleet just could not bring up rendered exactly like
-                    a healthy one. The fleet's failure sentence drives it now. */}
-                {/* (l) #16 — the VPN failure/notice are gated on `vpn`, as the
-                    grid gates them on scheme: a proxy edited vpn→socks5 kept a
-                    "VPN tunnel down" banner from the cache entry the edit had
-                    not yet dropped, and a notice nothing would ever clear. */}
-                {((caps !== null && !proxyOk) ||
-                  (p.vpn === true && p.vpnFailure !== undefined)) && (
-                  <div
-                    data-component="proxy-broken-banner"
-                    data-vpn-failure={
-                      p.vpn === true && p.vpnFailure !== undefined ? 'true' : 'false'
-                    }
-                    role="status"
-                    className="flex flex-wrap items-center gap-1.5 gap-y-1 rounded-[8px] border border-status-error/40 bg-status-error/10 px-1.5 py-1"
-                  >
-                    <span
-                      className="min-w-0 truncate text-[10px] font-semibold text-status-error"
-                      title={p.vpnFailure ?? p.capabilities?.message}
-                    >
-                      {p.vpn === true && p.vpnFailure !== undefined
-                        ? 'VPN tunnel down'
-                        : proxyLabel}
-                    </span>
-                    <button
-                      type="button"
-                      data-action="retest-proxy"
-                      disabled={p.testing || p.testDisabled}
-                      onClick={(e) => {
-                        // The card body is itself clickable (select/expand), so a
-                        // bare click here would also toggle the row.
-                        e.stopPropagation();
-                        p.onTest();
-                      }}
-                      className="ml-auto rounded bg-status-error/20 px-1.5 py-px text-[9.5px] font-semibold text-status-error hover:bg-status-error/30 disabled:opacity-50"
-                    >
-                      {p.testing
-                        ? p.vpn === true
-                          ? 'Checking…'
-                          : 'Testing…'
-                        : p.vpn === true
-                          ? 'Re-check'
-                          : 'Retest'}
-                    </button>
-                    {p.onEdit !== undefined && (
-                      // Straight to the edit modal, which is where the proxy is
-                      // chosen — "retest or change more conveniently" needs both
-                      // to be one click from the card that reports the problem.
-                      <button
-                        type="button"
-                        data-action="change-proxy"
-                        disabled={p.anyBusy}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          p.onEdit?.();
-                        }}
-                        className="rounded bg-surface-divider/60 px-1.5 py-px text-[9.5px] font-semibold text-ink-secondary hover:bg-surface-divider disabled:opacity-50"
-                      >
-                        Change
-                      </button>
-                    )}
-                  </div>
-                )}
                 {p.vpn === true && p.vpnFailure !== undefined && (
                   <div
                     data-component="proxy-vpn-failure"
-                    className="text-[9.5px] leading-tight text-status-error"
+                    className="line-clamp-2 text-[9.5px] leading-tight text-status-error"
                     title={p.vpnFailure}
                   >
                     {p.vpnFailure}
@@ -766,7 +814,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                   <div
                     data-component="proxy-vpn-notice"
                     role="status"
-                    className="rounded-[8px] bg-surface-divider/40 px-1.5 py-1 text-[9.5px] leading-tight text-ink-muted"
+                    className="line-clamp-2 rounded-[8px] bg-surface-divider/40 px-1.5 py-1 text-[9.5px] leading-tight text-ink-muted"
                     title={p.vpnNotice}
                   >
                     {p.vpnNotice}
@@ -774,7 +822,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 )}
                 {/* WebRTC/QUIC detail — on hover (founder: hover shows them) */}
                 {caps !== null && (
-                  <div className="hidden gap-1 group-hover:flex">
+                  <div className="hidden flex-wrap gap-1 group-hover:flex">
                     <span
                       className={`rounded px-1 text-[8.5px] ${webrtc ? 'bg-status-ready/15 text-status-ready' : 'bg-status-error/15 text-status-error'}`}
                     >
@@ -812,16 +860,27 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           </div>
 
           {(p.folder !== '' || p.tags.length > 0) && (
-            <div className="flex flex-wrap justify-center gap-1">
+            // Phase A — capped at exactly TWO pill lines (measured: a pill is
+            // 19.5px tall, gap 4px → 43px; the judge's 38px cut the second line
+            // through its glyphs). A third line is clipped whole; the "+N" tail
+            // that names what was hidden is Phase B's.
+            <div
+              data-component="tags-row"
+              className="flex max-h-[43px] shrink-0 flex-wrap justify-center gap-1 overflow-hidden"
+            >
               {p.folder !== '' && (
-                <span className="rounded-full border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-[9px] text-ink-secondary">
+                <span
+                  className="max-w-full truncate rounded-full border border-surface-divider bg-surface-inset px-1.5 py-0.5 text-[9px] text-ink-secondary"
+                  title={p.folder}
+                >
                   📁 {p.folder}
                 </span>
               )}
               {p.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-surface-divider px-1.5 py-0.5 text-[9px] text-ink-muted"
+                  className="max-w-full truncate rounded-full border border-surface-divider px-1.5 py-0.5 text-[9px] text-ink-muted"
+                  title={tag}
                 >
                   {tag}
                 </span>
@@ -841,9 +900,14 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 setEditingNote(true);
               }}
               title="Click to edit note"
-              className="line-clamp-2 rounded-md border border-surface-divider/70 bg-surface-inset/60 px-1.5 py-1 text-left text-[9.5px] italic text-ink-secondary transition-colors hover:text-ink-primary"
+              className="min-w-0 rounded-md border border-surface-divider/70 bg-surface-inset/60 px-1.5 py-1 text-left text-[9.5px] italic text-ink-secondary transition-colors hover:text-ink-primary"
             >
-              🗒 {p.note}
+              {/* Phase A — the clamp lives on an inner block, not the <button>:
+                  a line-clamped button is display:-webkit-box, which drops the
+                  button's own box sizing and let its text paint past the card. */}
+              <span data-component="profile-note" className="line-clamp-2">
+                🗒 {p.note}
+              </span>
             </button>
           ) : null}
 
@@ -892,7 +956,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
           <div
             data-component="card-actions-menu"
             role="menu"
-            className={`absolute bottom-full right-1.5 z-20 mb-1.5 w-44 overflow-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
+            className={`absolute bottom-full left-1.5 right-1.5 z-20 mb-1.5 max-h-[260px] w-auto overflow-y-auto overflow-x-hidden rounded-xl border border-surface-divider bg-surface-raised py-1 shadow-[0_12px_30px_rgba(0,0,0,0.5)] transition-opacity duration-150 ${
               actionsOpen ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
             }`}
           >

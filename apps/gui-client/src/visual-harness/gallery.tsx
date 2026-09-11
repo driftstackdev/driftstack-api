@@ -66,8 +66,27 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
   };
 }
 
+/** One SOCKS5 result that FAILS `proxyVerdict` (reaches + authenticates, cannot
+ *  route) — the shape that trips the broken-proxy banner. */
+const CANNOT_ROUTE = {
+  reachable: true,
+  auth_ok: true,
+  udp_associate: false,
+  can_route: false,
+  connect_reply: 0x05,
+  latency_ms: 0,
+  message: 'CONNECT refused by the proxy (reply 0x05 — connection refused)',
+} as const;
+
+const SIXTY_CHAR_NAME = 'amsterdam shopper for the netherlands christmas campaigns 26';
+const EIGHTY_CHAR_NOTE =
+  'Warm this one every Monday before 09:00 CET; the checkout flow rejects cold ones';
+
 // The meaningful visual states. Label each so the screenshot is self-describing.
-const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
+// ⛔ EXPORTED: the jsdom guard in tests/unit/profile-phone-card.test.tsx renders
+// EVERY state here and asserts the Launch control survives each one — a state
+// added here is a state that guard covers, with no second list to keep in sync.
+export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
   { label: 'idle · UDP ok', props: base({}) },
   {
     label: 'MAX · full egress + folder + tags + saved-tabs (overflow repro)',
@@ -163,9 +182,148 @@ const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
       tags: ['aged', 'verified'],
     }),
   },
+  // ── Phase A (2026-09-11) — the states the grid measurement named. Each one
+  // exists because a row in it painted past the 178px card before the fix.
+  {
+    label: 'failed · socks5 (Retest + Change)',
+    props: base({
+      name: 'lisbon returns',
+      monogram: 'LR',
+      hue: 350,
+      flag: '🇵🇹',
+      countryCode: 'PT',
+      exitIp: null,
+      latencyMs: null,
+      capabilities: CANNOT_ROUTE,
+      onEdit: noop,
+    }),
+  },
+  {
+    label: 'failed · socks5 · testing',
+    props: base({
+      name: 'lisbon returns',
+      monogram: 'LR',
+      hue: 350,
+      flag: '🇵🇹',
+      countryCode: 'PT',
+      exitIp: null,
+      latencyMs: null,
+      capabilities: CANNOT_ROUTE,
+      testing: true,
+      onEdit: noop,
+    }),
+  },
+  { label: 'healthy · testing', props: base({ testing: true }) },
+  {
+    label: 'vpn · idle (fleet latency)',
+    props: base({
+      name: 'zurich banking',
+      monogram: 'ZB',
+      hue: 190,
+      flag: '🇨🇭',
+      countryCode: 'CH',
+      exitIp: '185.22.1.9',
+      locationLabel: 'Zürich, Zurich',
+      vpn: true,
+      proxyName: 'ProtonVPN CH#42',
+      capabilities: null,
+      latencyMs: 61,
+      latencyFillPct: 40,
+      latencyFromServer: true,
+      latencyVantage: { measuredFrom: 'fleet', nodeId: 'mac-mini-01' },
+    }),
+  },
+  {
+    label: 'vpn · tunnel down (failure + notice + 4 tags)',
+    props: base({
+      name: 'oslo classifieds',
+      monogram: 'OC',
+      hue: 80,
+      flag: '🇳🇴',
+      countryCode: 'NO',
+      exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      capabilities: null,
+      vpn: true,
+      proxyName: 'Mullvad no-osl-wg-001',
+      vpnFailure:
+        'The test Mac could not bring the tunnel up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
+      vpnNotice:
+        'Tunnel test not run this time — a live session holds the tunnel. Showing the last result.',
+      folder: 'Marketplaces',
+      tags: ['classifieds', 'norway', 'aged', 'warm'],
+      onEdit: noop,
+    }),
+  },
+  {
+    label: 'vpn · no verdict yet',
+    props: base({
+      name: 'madrid tickets',
+      monogram: 'MT',
+      hue: 40,
+      flag: '🇪🇸',
+      countryCode: 'ES',
+      exitIp: null,
+      locationLabel: null,
+      latencyMs: null,
+      capabilities: null,
+      vpn: true,
+      checkedAtIso: null,
+    }),
+  },
+  {
+    label: 'exit probe failed',
+    props: base({
+      name: 'dublin support',
+      monogram: 'DS',
+      hue: 120,
+      flag: '🇮🇪',
+      countryCode: 'IE',
+      exitIp: null,
+      exitProbeFailed: true,
+      locationLabel: null,
+      latencyMs: 77,
+      latencyFillPct: 50,
+    }),
+  },
+  {
+    label: 'socks5 · server vantage',
+    props: base({ latencyFromServer: true, latencyVantage: { measuredFrom: 'control_plane' } }),
+  },
+  {
+    label: 'inherited default · 15-char IPv4',
+    props: base({ proxyExplicit: false, exitIp: '255.255.255.255' }),
+  },
+  { label: 'ipv6 exit', props: base({ exitIp: '2001:0db8:85a3:0000:0000:8a2e:0370:7334' }) },
+  {
+    label: 'long proxy label',
+    props: base({
+      proxyName: 'Residential rotating pool — Amsterdam #04 (sticky 10 min, nodemaven)',
+    }),
+  },
+  { label: 'note · 80 chars', props: base({ note: EIGHTY_CHAR_NOTE, onSaveNote: noop }) },
+  { label: '60-char name', props: base({ name: SIXTY_CHAR_NAME, monogram: 'AS' }) },
 ];
 
+/** Phase A — `?w=178|240|260` pins every phone card to that exact width, so the
+ *  measurement gate (scripts/gui-visual-check.mjs) can assert geometry at the
+ *  grid's real minimum instead of at whatever the viewport happens to divide
+ *  into. The classes are spelled out so Tailwind's scanner emits them. */
+const FIXED_WIDTH_CLASS: Readonly<Record<string, string>> = {
+  '178': 'w-[178px]',
+  '240': 'w-[240px]',
+  '260': 'w-[260px]',
+};
+function fixedWidthClass(): string | null {
+  if (typeof window === 'undefined') return null;
+  const w = new URLSearchParams(window.location.search).get('w');
+  if (w === null) return null;
+  return FIXED_WIDTH_CLASS[w] ?? null;
+}
+
 export function Gallery(): JSX.Element {
+  const fixedWidth = fixedWidthClass();
   return (
     <div className="min-h-screen bg-surface-base p-8">
       <h1 className="mb-1 text-lg font-semibold text-ink-primary">
@@ -175,10 +333,24 @@ export function Gallery(): JSX.Element {
         Automated render for self-review (scripts/visual-check.mjs). Hover states are forced on via
         the harness so the action strip + WebRTC/QUIC detail are visible in the static shot.
       </p>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3">
+      <div
+        data-harness="phone-cards"
+        data-fixed-width={fixedWidth ?? 'auto'}
+        className={
+          fixedWidth === null
+            ? 'grid grid-cols-[repeat(auto-fill,minmax(178px,1fr))] gap-3'
+            : 'flex flex-wrap items-start gap-3'
+        }
+      >
         {STATES.map((s) => (
-          <div key={s.label} className="flex flex-col gap-1">
-            <span className="text-2xs uppercase tracking-wide text-ink-muted">{s.label}</span>
+          <div
+            key={s.label}
+            data-state={s.label}
+            className={`flex flex-col gap-1 ${fixedWidth ?? ''}`}
+          >
+            <span className="truncate text-2xs uppercase tracking-wide text-ink-muted">
+              {s.label}
+            </span>
             <ProfilePhoneCard {...s.props} />
           </div>
         ))}

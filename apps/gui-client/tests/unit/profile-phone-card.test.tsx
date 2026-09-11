@@ -8,6 +8,7 @@ import {
   ProfilePhoneCard,
   type ProfilePhoneCardProps,
 } from '../../src/components/ProfilePhoneCard';
+import { STATES } from '../../src/visual-harness/gallery';
 
 function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps {
   return {
@@ -381,5 +382,285 @@ describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
     expect(opened.className).toMatch(/pointer-events-auto/);
     expect(opened.className).toMatch(/opacity-100/);
     cleanup();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase A (2026-09-11) — "nothing outside the box". The owner's grid at its
+// 178px minimum had 5–12 descendants of the card painting PAST the card in
+// every state (measured over the real component: scratchpad measure-grid.mjs,
+// now scripts/gui-visual-check.mjs). jsdom has no layout, so these arms freeze
+// the CLASSES and DOM ORDER that the Playwright gate proved sufficient; the
+// gate is the geometry proof, these are the tripwires that name the line.
+//
+// Every arm names its production line. Reverting that line removes the token
+// (or the order) the arm reads, so the arm reds — that is the mutation each
+// was reasoned against.
+// ─────────────────────────────────────────────────────────────────────────────
+const classes = (el: Element | null | undefined): string[] =>
+  (el?.getAttribute('class') ?? '').split(/\s+/).filter((c) => c.length > 0);
+const byComponent = (root: ParentNode, name: string): HTMLElement | null =>
+  root.querySelector<HTMLElement>(`[data-component="${name}"]`);
+
+const CANNOT_ROUTE = {
+  reachable: true,
+  auth_ok: true,
+  udp_associate: false,
+  can_route: false,
+  connect_reply: 0x05,
+  latency_ms: 0,
+  message: 'CONNECT refused',
+} as const;
+
+describe('Phase A — the phone card keeps every row inside its box', () => {
+  it('R2/A2: the body clips X and keeps scrolling Y; screen, egress widget and both egress rows carry min-w-0', () => {
+    // ProfilePhoneCard.tsx body div (`data-component="card-body"`): removing
+    // `overflow-x-hidden` (the R2 root cause — `overflow-y-auto` alone forces
+    // overflow-x:auto, and macOS overlay scrollbars hide the sideways scroll)
+    // reds the first expectation; removing `min-w-0` from any of the four
+    // containers reds the matching one.
+    const { container } = render(<ProfilePhoneCard {...props({ proxyName: 'pool-04' })} />);
+    const body = byComponent(container, 'card-body');
+    expect(body, 'the scrolling body must be addressable').not.toBeNull();
+    expect(classes(body)).toEqual(
+      expect.arrayContaining(['overflow-x-hidden', 'overflow-y-auto', 'min-w-0', 'min-h-0']),
+    );
+    expect(classes(byComponent(container, 'phone-screen'))).toEqual(
+      expect.arrayContaining(['overflow-hidden', 'min-w-0']),
+    );
+    expect(classes(byComponent(container, 'egress-widget'))).toEqual(
+      expect.arrayContaining(['min-w-0', 'overflow-hidden', 'shrink-0']),
+    );
+    expect(classes(byComponent(container, 'exit-row'))).toContain('min-w-0');
+    expect(classes(byComponent(container, 'profile-card-proxy-name'))).toContain('min-w-0');
+    cleanup();
+  });
+
+  it('A1/A3: the latency row WRAPS; the number, vantage, checked stamp and UDP badge never break mid-line and never shrink', () => {
+    // Latency row div (`data-component="latency-row"`): `flex-wrap` gone →
+    // arm 1 reds; `gap-1.5` back in place of `gap-x-1.5 gap-y-1` → arm 2 reds.
+    // The `.mono` span was 13px (bare .mono); `text-[10.5px]` gone → arm 3.
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({
+          latencyFromServer: true,
+          latencyVantage: { measuredFrom: 'fleet', nodeId: 'mac-mini-01' },
+          checkedAtIso: '2026-06-15T06:30:00.000Z',
+        })}
+      />,
+    );
+    const row = byComponent(container, 'latency-row');
+    expect(classes(row)).toEqual(
+      expect.arrayContaining(['flex', 'flex-wrap', 'min-w-0', 'gap-x-1.5', 'gap-y-1']),
+    );
+    expect(classes(row)).not.toContain('gap-1.5');
+    const number = container.querySelector('[data-latency-vantage]');
+    expect(classes(number)).toEqual(
+      expect.arrayContaining(['mono', 'text-[10.5px]', 'whitespace-nowrap']),
+    );
+    const vantage = screen.getByText('from the test Mac');
+    expect(classes(vantage)).toContain('whitespace-nowrap');
+    const checked = byComponent(container, 'proxy-checked-at');
+    expect(classes(checked)).toEqual(expect.arrayContaining(['shrink-0', 'whitespace-nowrap']));
+    const udp = container.querySelector('[data-udp]');
+    expect(classes(udp)).toEqual(
+      expect.arrayContaining(['shrink-0', 'whitespace-nowrap', 'ml-auto']),
+    );
+    cleanup();
+
+    // The null-latency arm renders a sibling `.mono` ("stale"/"untested") that
+    // had the same bare 13px problem (L611 on main).
+    render(<ProfilePhoneCard {...props({ latencyMs: null, probed: true })} />);
+    expect(classes(screen.getByText('stale'))).toEqual(
+      expect.arrayContaining(['mono', 'text-[10.5px]', 'whitespace-nowrap']),
+    );
+    cleanup();
+  });
+
+  it('A4: the broken-proxy banner renders FIRST in the egress widget, its label flexes, and Retest+Change travel as one non-shrinking unit', () => {
+    // Banner block moved above the exit row: swapping it back reds the
+    // compareDocumentPosition arm. Label span without `flex-1` reds arm 2; the
+    // wrapper `<span className="ml-auto flex shrink-0 gap-1.5 whitespace-nowrap">`
+    // removed (buttons back as direct children, Retest with `ml-auto`) reds 3–4.
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({ exitIp: null, latencyMs: null, capabilities: CANNOT_ROUTE, onEdit: vi.fn() })}
+      />,
+    );
+    const banner = byComponent(container, 'proxy-broken-banner') as HTMLElement;
+    const exitRow = byComponent(container, 'exit-row') as HTMLElement;
+    const widget = byComponent(container, 'egress-widget') as HTMLElement;
+    expect(banner).not.toBeNull();
+    expect(widget.contains(banner)).toBe(true);
+    expect(
+      banner.compareDocumentPosition(exitRow) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'the verdict must come before the exit row — the body scrolls, so the last rows are the ones that vanish',
+    ).toBeTruthy();
+    expect(widget.firstElementChild).toBe(banner);
+
+    const label = screen.getByText('Cannot route');
+    expect(classes(label)).toEqual(expect.arrayContaining(['min-w-0', 'flex-auto', 'truncate']));
+    expect(classes(label)).not.toContain('flex-1');
+    expect(label.getAttribute('title')).toBe('CONNECT refused');
+
+    const retest = screen.getByRole('button', { name: 'Retest' });
+    const change = screen.getByRole('button', { name: 'Change' });
+    expect(retest.parentElement).toBe(change.parentElement);
+    expect(classes(retest.parentElement)).toEqual(
+      expect.arrayContaining(['ml-auto', 'flex', 'shrink-0', 'whitespace-nowrap']),
+    );
+    expect(classes(retest)).not.toContain('ml-auto');
+    cleanup();
+  });
+
+  it('A5: the ⋯ menu is anchored to BOTH card edges (no fixed 176px), capped in height and scrolls', () => {
+    // Menu div (`data-component="card-actions-menu"`): `w-44` back → arm 1
+    // reds (176px on a 178px card started 10px left of the card in all 8 states);
+    // `left-1.5` dropped → arm 2; `max-h-[260px]`/`overflow-y-auto` dropped → 3.
+    const { container } = render(<ProfilePhoneCard {...props()} />);
+    const menu = classes(byComponent(container, 'card-actions-menu'));
+    expect(menu).not.toContain('w-44');
+    expect(menu.some((c) => /^w-(\d|\[)/.test(c) && c !== 'w-auto')).toBe(false);
+    expect(menu).toEqual(expect.arrayContaining(['left-1.5', 'right-1.5', 'absolute']));
+    expect(menu).toEqual(expect.arrayContaining(['max-h-[260px]', 'overflow-y-auto']));
+    cleanup();
+  });
+
+  it('A6: a 60-char name is clamped inside the card and carries the full name as its title', () => {
+    // Name `<p>`: `title={p.name}` removed → arm 1 reds; `max-w-full` removed →
+    // arm 2 (a flex-column child sized by its content could still exceed 144px).
+    const name = 'amsterdam shopper for the netherlands christmas campaigns 26';
+    expect(name).toHaveLength(60);
+    render(<ProfilePhoneCard {...props({ name })} />);
+    const p = screen.getByText(name);
+    expect(p.getAttribute('title')).toBe(name);
+    expect(classes(p)).toEqual(expect.arrayContaining(['line-clamp-1', 'max-w-full']));
+    cleanup();
+  });
+
+  it('A7: the note clamp lives on an inner span, never on the <button>', () => {
+    // Note button: a line-clamped <button> is display:-webkit-box, which drops
+    // its own box sizing and let the note paint past the card. Moving the class
+    // back onto the button reds both arms.
+    const { container } = render(
+      <ProfilePhoneCard {...props({ note: 'x '.repeat(40).trim(), onSaveNote: vi.fn() })} />,
+    );
+    const button = screen.getByTitle('Click to edit note');
+    expect(classes(button)).not.toContain('line-clamp-2');
+    const inner = byComponent(container, 'profile-note') as HTMLElement;
+    expect(button.contains(inner)).toBe(true);
+    expect(classes(inner)).toContain('line-clamp-2');
+    cleanup();
+  });
+
+  it('A8: the VPN failure sentence and the VPN notice are clamped to two lines, titled with the full text', () => {
+    // vpnFailure div / vpnNotice div: `line-clamp-2` removed from either reds it.
+    const failure = 'The test Mac could not bring the tunnel up: handshake timed out after 20 s.';
+    const notice = 'Tunnel test not run this time — a live session holds the tunnel.';
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({
+          vpn: true,
+          exitIp: null,
+          latencyMs: null,
+          capabilities: null,
+          vpnFailure: failure,
+          vpnNotice: notice,
+        })}
+      />,
+    );
+    const f = byComponent(container, 'proxy-vpn-failure');
+    const n = byComponent(container, 'proxy-vpn-notice');
+    expect(classes(f)).toContain('line-clamp-2');
+    expect(f?.getAttribute('title')).toBe(failure);
+    expect(classes(n)).toContain('line-clamp-2');
+    expect(n?.getAttribute('title')).toBe(notice);
+    cleanup();
+  });
+
+  it('A9: the folder/tag row is height-capped and clipped; every pill truncates within the row and is titled', () => {
+    // Tags row (`data-component="tags-row"`): `max-h-[43px]`/`overflow-hidden`
+    // removed → arm 1 (47px below the card in the busiest state). Pill without
+    // `max-w-full truncate` / title → arms 2–3.
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({ folder: 'Shopping / Netherlands', tags: ['retail', 'a-very-long-tag-name-x'] })}
+      />,
+    );
+    const row = byComponent(container, 'tags-row') as HTMLElement;
+    expect(classes(row)).toEqual(
+      expect.arrayContaining(['max-h-[43px]', 'overflow-hidden', 'shrink-0']),
+    );
+    const pills = Array.from(row.children);
+    expect(pills).toHaveLength(3);
+    for (const pill of pills) {
+      expect(classes(pill)).toEqual(expect.arrayContaining(['max-w-full', 'truncate']));
+      expect(pill.getAttribute('title')).toBeTruthy();
+    }
+    expect(screen.getByText('📁 Shopping / Netherlands').getAttribute('title')).toBe(
+      'Shopping / Netherlands',
+    );
+    expect(screen.getByText('a-very-long-tag-name-x').getAttribute('title')).toBe(
+      'a-very-long-tag-name-x',
+    );
+    cleanup();
+  });
+
+  it('A10: the exit slot keeps a 3ch floor and the "default" badge never shrinks', () => {
+    // Exit span: `min-w-[3ch]` → `min-w-0` reds arm 1 (a 15-char IPv4 beside
+    // flag + code + badge collapsed the slot to nothing). Badge without
+    // `shrink-0` reds arm 2.
+    const { container } = render(
+      <ProfilePhoneCard {...props({ proxyExplicit: false, exitIp: '255.255.255.255' })} />,
+    );
+    expect(classes(screen.getByText('255.255.255.255'))).toContain('min-w-[3ch]');
+    expect(classes(byComponent(container, 'proxy-inherited-badge'))).toContain('shrink-0');
+    cleanup();
+  });
+
+  it('A11: the hover WebRTC/QUIC row wraps instead of pushing its second chip past the widget', () => {
+    // Hover row div: `flex-wrap` removed reds it (it stays `hidden group-hover:flex`).
+    render(<ProfilePhoneCard {...props()} />);
+    const row = screen.getByText(/^WebRTC/).parentElement;
+    expect(classes(row)).toEqual(
+      expect.arrayContaining(['flex-wrap', 'hidden', 'group-hover:flex']),
+    );
+    cleanup();
+  });
+
+  it('CONTROL — in EVERY gallery state the Launch control is present, unhidden and OUTSIDE the scrolling body; every truncate/line-clamp element has a title on itself or an ancestor', () => {
+    // Renders the harness's own STATES (imported, not copied) so a state added
+    // for the screenshot is a state this arm covers. The dock is a sibling of
+    // the body, so a scroll can never hide Launch — moving the footer inside
+    // `card-body` reds the containment arm for all states at once.
+    expect(STATES.length).toBeGreaterThanOrEqual(20);
+    for (const state of STATES) {
+      const { container, unmount } = render(<ProfilePhoneCard {...state.props} />);
+      const article = container.querySelector('article') as HTMLElement;
+      const body = byComponent(container, 'card-body') as HTMLElement;
+      expect(body, `${state.label}: card-body missing`).not.toBeNull();
+      const launch = screen.getByRole('button', { name: /^(Launch|Open session|Starting…)$/ });
+      expect(launch.hidden, `${state.label}: Launch hidden`).toBe(false);
+      expect(classes(launch), `${state.label}: Launch hidden by class`).not.toContain('hidden');
+      expect(
+        launch.closest('[aria-hidden="true"]'),
+        `${state.label}: Launch aria-hidden`,
+      ).toBeNull();
+      expect(article.contains(launch), `${state.label}: Launch outside the card`).toBe(true);
+      expect(body.contains(launch), `${state.label}: Launch inside the scrolling body`).toBe(false);
+
+      const clamped = article.querySelectorAll('.truncate, [class*="line-clamp-"]');
+      expect(
+        clamped.length,
+        `${state.label}: no clamped text at all — selector broke`,
+      ).toBeGreaterThan(0);
+      for (const el of clamped) {
+        expect(
+          el.closest('[title]'),
+          `${state.label}: clamped text without a title — ${el.tagName} "${(el.textContent ?? '').trim().slice(0, 40)}"`,
+        ).not.toBeNull();
+      }
+      unmount();
+    }
   });
 });
