@@ -452,17 +452,24 @@ export type AccountProxyTestResult =
  *  is dropped (the reply then reads as a plain failure, never as a refusal it
  *  did not earn). (i) I6 — `plan_excluded` is minted by THIS client from a 403
  *  (the route's tier refusal); it is never read off the wire, so
- *  `cleanTestNotRun` does not admit it. */
+ *  `cleanTestNotRun` does not admit it. (j) J4 — `desktop_credential` likewise:
+ *  minted from the 403 the free-desktop ROUTE POLICY answers a Free `cli_device`
+ *  credential with (the /test route is not in FREE_DESKTOP_ALLOWED_ROUTES), so
+ *  the row is "not tested" — it needs an API key — never "not in your plan". */
 export type AccountProxyTestNotRun =
   | 'live_session'
   | 'node_busy'
   | 'node_error'
   | 'no_node'
-  | 'plan_excluded';
+  | 'plan_excluded'
+  | 'desktop_credential';
+
+/** The `not_run` values this client mints from a 403 — never read off the wire. */
+export type ClientMintedTestNotRun = 'plan_excluded' | 'desktop_credential';
 
 export function cleanTestNotRun(
   raw: unknown,
-): Exclude<AccountProxyTestNotRun, 'plan_excluded'> | undefined {
+): Exclude<AccountProxyTestNotRun, ClientMintedTestNotRun> | undefined {
   // (h) `no_node` — no fleet Mac was free to bring a VPN tunnel up, and the
   // control plane cannot measure a tunnel itself (it never falls back to a
   // TCP connect for a VPN row). Not a verdict; the row is "not tested".
@@ -562,6 +569,30 @@ export function isTierRefusalDetail(detail: string | undefined): detail is strin
   return detail !== undefined && TIER_REFUSAL_DETAIL.test(detail);
 }
 
+/** (j) J4 — a 403 on /test from the free-desktop ROUTE POLICY: a Free tier's
+ *  browser-authorised `cli_device` credential is bounded to the exact route
+ *  templates the GUI manifest lists (`FREE_DESKTOP_ALLOWED_ROUTES`, server
+ *  middleware/free-desktop-route-policy), and `POST …/proxies/:id/test` is not
+ *  one of them. It used to throw like any non-2xx → `unavailable` → "the
+ *  server did not answer" — or, read by its status alone, the TIER notice, which
+ *  is a different fact (a plan that never includes the feature vs a credential
+ *  that cannot reach the route). ⛔ Both 403s carry the SAME problem `type`
+ *  (`ForbiddenError` → PROBLEM_TYPES.Forbidden) and title, so the server's
+ *  `detail` sentence is the discriminator here too; matched, never reproduced.
+ *  The problem+json `detail` is appended so the server's own next step
+ *  ("upgrade to an API-enabled tier") survives. */
+export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON =
+  'Fleet tests need an API key from the dashboard.';
+
+/** The server's route-policy detail: `This Free desktop credential cannot
+ *  access this API route. …` */
+const DESKTOP_CREDENTIAL_REFUSAL_DETAIL =
+  /\bFree desktop credential cannot access this API route\b/;
+
+export function isDesktopCredentialRefusalDetail(detail: string | undefined): detail is string {
+  return detail !== undefined && DESKTOP_CREDENTIAL_REFUSAL_DETAIL.test(detail);
+}
+
 /**
  * @param opts.vantage T-1 — 'fleet' asks the server to measure from the Mac
  *   that will run the profile (the response then carries `measured_from`, and
@@ -596,11 +627,28 @@ export async function testAccountProxy(
         /* status is all that is known */
       }
       await disposeResponseBody(res);
-      if (isTierRefusalDetail(detail)) {
+      // Each predicate is applied to the UN-narrowed detail: a `detail is
+      // string` predicate's false branch narrows `detail` to `undefined`, so a
+      // second predicate tested after the first's early return would see
+      // `never` — the two sentences are disjoint, but the compiler cannot know.
+      const tierDetail = isTierRefusalDetail(detail) ? detail : undefined;
+      const policyDetail = isDesktopCredentialRefusalDetail(detail) ? detail : undefined;
+      if (tierDetail !== undefined) {
         return {
           ok: false,
-          reason: `${PLAN_EXCLUDES_FLEET_TEST_REASON} ${detail}`,
+          reason: `${PLAN_EXCLUDES_FLEET_TEST_REASON} ${tierDetail}`,
           not_run: 'plan_excluded',
+        };
+      }
+      // (j) J4 — the free-desktop ROUTE-POLICY refusal is an answer of the same
+      // shape (nothing ran; retrying with this credential cannot change it) but
+      // a different fact: the credential, not the plan. Its own `not_run`, so
+      // no view can render it under the tier sentence.
+      if (policyDetail !== undefined) {
+        return {
+          ok: false,
+          reason: `${DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${policyDetail}`,
+          not_run: 'desktop_credential',
         };
       }
       throw new Error(`proxy test failed: ${status.toString()}`);

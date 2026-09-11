@@ -136,6 +136,7 @@ import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
+  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
   fleetFailureReasons,
   persistServerProbe,
   SERVER_DID_NOT_ANSWER_NOTICE,
@@ -2528,13 +2529,25 @@ export function ProfilesView({
           return rest;
         });
         const res = await resolveEndpoint(px.host, px.port);
+        // (j) J3 — the pre-flight write below carries the previous fleet
+        // verdict over ONLY when the endpoint still resolves to the SAME
+        // address (`saveEndpointResult`); a different address drops it. Read
+        // the prior from the cache the write reads (the `probeCache` state this
+        // closure holds may predate a grid write), so the `unavailable` notice
+        // in runFleetTestForRow says what is true AFTER the write — the grid
+        // picks its notice the same way, so the two surfaces agree.
+        const priorEndpoint = await loadProbeCache()
+          .then((cache) => cache[px.id]?.endpoint)
+          .catch(() => undefined);
+        const endpointMoved =
+          res.resolved && priorEndpoint?.resolved === true && priorEndpoint.ip !== res.ip;
         setProbeCache(await saveEndpointResult(px.id, res, Date.now()));
         // VPN exit parity (b) — a resolved VPN row stored on the account gets the
         // SAME fleet test a SOCKS5 row gets below: a fleet Mac brings the tunnel
         // up, measures latency and observes the exit, which is the only exit
         // identity a VPN row can ever have (the native exit probe is a SOCKS5
         // request from this Mac). Best-effort, after the pre-flight's write.
-        await runFleetTestForRow(px, res.resolved);
+        await runFleetTestForRow(px, res.resolved, endpointMoved);
         return;
       }
       const result = await testProxy({
@@ -2599,6 +2612,9 @@ export function ProfilesView({
   async function runFleetTestForRow(
     px: LocalProxyConfig,
     resolved: boolean,
+    /** (j) J3 — the pre-flight resolved a DIFFERENT address than the last
+     *  check's, so its write already dropped the fleet verdict. */
+    endpointMoved: boolean,
   ): Promise<ProbeCacheMap | null> {
     if (!resolved || !isVpnScheme(px.scheme)) return null;
     if (px.serverId === undefined || settings.apiKey === null || settings.apiKey.length === 0)
@@ -2621,7 +2637,13 @@ export function ProfilesView({
         // (i) I5 — the server did not answer: nothing was written above, so
         // the cache's failure banner (and the fields the row holds) stand;
         // this card says why THIS check measured nothing, as a notice.
-        setVpnNotices((m) => ({ ...m, [px.id]: SERVER_DID_NOT_ANSWER_NOTICE }));
+        // (j) J3 — unless the pre-flight moved the endpoint: then the verdict
+        // is already gone and the notice must not claim it stands (the grid's
+        // pick, same constant, same cache).
+        setVpnNotices((m) => ({
+          ...m,
+          [px.id]: endpointMoved ? ENDPOINT_MOVED_NO_VERDICT_NOTICE : SERVER_DID_NOT_ANSWER_NOTICE,
+        }));
       }
       return next;
     } catch {

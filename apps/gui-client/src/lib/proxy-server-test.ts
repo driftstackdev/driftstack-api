@@ -100,6 +100,16 @@ export type ServerProbeOutcome =
 export const SERVER_DID_NOT_ANSWER_NOTICE =
   'The server did not answer, so the tunnel was not tested. The last verdict stands — try again.';
 
+/** (j) J3 — the I5 notice when the pre-flight resolved the endpoint to a
+ *  DIFFERENT address than the last check's: that cache write already dropped
+ *  the fleet verdict (`saveEndpointResult` carries it over only for the SAME
+ *  address — nothing measured through the old address describes the new one),
+ *  so "the last verdict stands" would be false: there is none. Shared by the
+ *  grid and the profile card, which run the same pre-flight → fleet sequence
+ *  and must say the same thing about the same cache. */
+export const ENDPOINT_MOVED_NO_VERDICT_NOTICE =
+  'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.';
+
 /**
  * T-27 drop 5 — the stamp a measured QUIC verdict carries.
  *

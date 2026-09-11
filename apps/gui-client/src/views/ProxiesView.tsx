@@ -59,6 +59,7 @@ import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
+  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
   fleetFailureReasons,
   persistServerProbe,
   SERVER_DID_NOT_ANSWER_NOTICE,
@@ -168,6 +169,10 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
       return 'no fleet Mac free';
     case 'plan_excluded':
       return 'not included in your plan';
+    case 'desktop_credential':
+      // (j) J4 — the free-desktop route policy refused the CREDENTIAL, not the
+      // plan: the row is "not tested", like a row with no API key at all.
+      return 'needs an API key from the dashboard';
   }
 }
 
@@ -725,6 +730,16 @@ export function ProxiesView(): JSX.Element {
       // server field from the previous check — lands BEFORE the fleet result is
       // persisted on top of it; the two writes are serialised by the cache's
       // write lock, but the order is what makes the second one survive.
+      //
+      // (j) J3 — that write carries the previous fleet verdict over ONLY when
+      // the endpoint still resolves to the SAME address (`saveEndpointResult`);
+      // a different address drops it. Read the prior from the cache the write
+      // reads, so the `unavailable` notice below says what is true AFTER it.
+      const priorEndpoint = await loadProbeCache()
+        .then((cache) => cache[p.id]?.endpoint)
+        .catch(() => undefined);
+      const endpointMoved =
+        r.resolved && priorEndpoint?.resolved === true && priorEndpoint.ip !== r.ip;
       await saveEndpointResult(
         p.id,
         { resolved: r.resolved, ip: r.ip, message: r.message },
@@ -781,13 +796,20 @@ export function ProxiesView(): JSX.Element {
         // fields) is untouched — `settle()` above cleared only the previous
         // check's NOTICE — and this check leaves its own notice in its place,
         // transient like every other: the next check clears it.
-        setVpnNotices((m) => ({ ...m, [p.id]: SERVER_DID_NOT_ANSWER_NOTICE }));
+        // (j) J3 — unless the pre-flight above moved the endpoint: then the
+        // verdict is already gone and the notice must not claim it stands.
+        setVpnNotices((m) => ({
+          ...m,
+          [p.id]: endpointMoved ? ENDPOINT_MOVED_NO_VERDICT_NOTICE : SERVER_DID_NOT_ANSWER_NOTICE,
+        }));
       }
       void persistServerProbe(p.id, outcome, { adoptExit: true });
       if (outcome.kind === 'not_run') {
         // (h) — `no_node` is "not tested" (no fleet Mac was free to bring the
         // tunnel up), not a refusal: the row was never in anyone's hands.
-        return outcome.why === 'no_node'
+        // (j) J4 — `desktop_credential` too: the credential cannot reach the
+        // route, the same "not tested" a row with no API key gets above.
+        return outcome.why === 'no_node' || outcome.why === 'desktop_credential'
           ? { resolved: true, tunnelOk: null, notTested: notRunPhrase(outcome.why) }
           : { resolved: true, tunnelOk: null, skipped: notRunPhrase(outcome.why) };
       }

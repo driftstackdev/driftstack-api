@@ -19,6 +19,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type * as ProxiesModule from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
+import {
+  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
+  SERVER_DID_NOT_ANSWER_NOTICE,
+} from '../../src/lib/proxy-server-test';
 
 const stores = new Map<string, Map<string, unknown>>();
 vi.mock('@tauri-apps/plugin-store', () => ({
@@ -771,5 +775,183 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
     seedCache({ p1: { result: HEALTHY, at } });
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await waitFor(() => expect(checkedAt()).toBe(new Date(at).toISOString()));
+  });
+});
+
+// (j) J2 — the card's `unavailable` branch (I5). A card Test whose fleet request
+// the server does not answer (the transport threw: network, auth, a malformed
+// body) measured nothing: the shared step wrote nothing, so the latency, exit
+// and any failure banner the card holds STAND, and the card says why THIS check
+// measured nothing — as a notice in muted ink, transient like every other. The
+// branch was unguarded: the grid's arm (a-refused-vpn-probe…) exercised
+// ProxiesView only, and this card has its own copy of the decision.
+describe('(j) J2 — a card Test the server does not answer leaves the I5 notice beside the standing measurement', () => {
+  // MUTATION: drop the `unavailable` arm in runFleetTestForRow (or route it to
+  // the not_run arm) → no notice / the wrong one → red.
+  it('CRITICAL testAccountProxy rejects → SERVER_DID_NOT_ANSWER_NOTICE on the card in muted ink; latency + exit stand, no banner, the cache keeps the fleet fields', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-vpn-notice"]')).toBeNull();
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        SERVER_DID_NOT_ANSWER_NOTICE,
+      ),
+    );
+    const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
+    expect(notice?.className).toContain('text-ink-muted');
+    expect(notice?.className).not.toContain('text-status-error');
+    // Nothing was learned, so nothing moved: the measurement the card showed
+    // before the check is the measurement it shows after it.
+    expect(screen.getByText('42ms')).toBeTruthy();
+    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
+    expect(storedProbe('vpn1')?.serverLatencyMs).toBe(42);
+    expect(storedProbe('vpn1')?.exitIp).toBe('198.51.100.9');
+    expect(storedProbe('vpn1')?.fleetFailureReason).toBeUndefined();
+    expect(storedProbe('vpn1')?.exitSupersededAt).toBeUndefined();
+  });
+
+  // (j) J3 on the card — the arm above resolves the SAME address the seed
+  // holds (203.0.113.9), so the pre-flight write carried the fleet fields over
+  // and "the last verdict stands" was true. When the pre-flight resolves a
+  // DIFFERENT address, `saveEndpointResult` drops serverLatencyMs / exit (the
+  // old address's measurement says nothing about the new one) BEFORE the
+  // fleet is asked — so an unanswered check has no verdict to stand, and the
+  // card must say what the grid says for the same cache state.
+  // MUTATION: drop `endpointMoved` from the card's notice pick → the
+  // standing-verdict sentence renders beside a card whose 42ms and exit just
+  // vanished → red.
+  it('CRITICAL after the endpoint MOVES, an unanswered card check says "Endpoint moved; no verdict yet" — never that the last verdict stands (it is gone)', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) }); // endpoint 203.0.113.9, fleet 42ms, exit 198.51.100.9
+    resolveEndpoint.mockResolvedValueOnce({
+      resolved: true,
+      ip: '203.0.113.10',
+      message: 'Resolved',
+    });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    expect(screen.getByText('198.51.100.9')).toBeTruthy();
+    await clickCheckVpn();
+    // Pinned as the literal the grid's arm pins (a-refused-vpn-probe…), so the
+    // two surfaces cannot drift apart behind one renamed constant.
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+      ),
+    );
+    expect(ENDPOINT_MOVED_NO_VERDICT_NOTICE).toBe(
+      'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+    );
+    const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
+    expect(notice?.className).toContain('text-ink-muted');
+    expect(notice?.className).not.toContain('text-status-error');
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    // The verdict really is gone — the notice describes the card it sits on.
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(screen.queryByText('198.51.100.9')).toBeNull();
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
+    expect(storedProbe('vpn1')?.endpoint).toEqual({
+      resolved: true,
+      ip: '203.0.113.10',
+      message: 'Resolved',
+    });
+    expect(storedProbe('vpn1')?.serverLatencyMs).toBeUndefined();
+    expect(storedProbe('vpn1')?.exitIp).toBeUndefined();
+    // The fleet WAS asked (the pre-flight resolved); it just did not answer.
+    expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalled();
+  });
+
+  // The same-address arm above is this arm's CONTROL: SERVER_DID_NOT_ANSWER_NOTICE
+  // with 42ms + exit standing — the pick is on the address, not on the check.
+  // MUTATION: make the card read `endpointMoved` from the UNRESOLVED branch
+  // too (`priorEndpoint.ip !== res.ip` without `res.resolved`) → the seeded
+  // entry below has no prior address to move FROM, so nothing changes here;
+  // the arm above is what catches a pick that ignores `resolved`.
+  it('CONTROL — a first-ever pre-flight (no prior address) that the server then does not answer says the last verdict stands, not "moved": nothing moved', async () => {
+    seedCache({
+      vpn1: {
+        result: ENDPOINT_PLACEHOLDER,
+        at: Date.now() - 5000,
+        endpoint: { resolved: false, ip: '', message: 'The endpoint host could not be resolved.' },
+      },
+    });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        SERVER_DID_NOT_ANSWER_NOTICE,
+      ),
+    );
+    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(storedProbe('vpn1')?.endpoint).toEqual({
+      resolved: true,
+      ip: '203.0.113.9',
+      message: 'Resolved',
+    });
+  });
+
+  it('CONTROL — the notice is transient: the next check that answers (a not_run) replaces it with the fleet’s own sentence', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        SERVER_DID_NOT_ANSWER_NOTICE,
+      ),
+    );
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: false,
+      reason: BUSY,
+      measured_from: 'fleet',
+      not_run: 'node_busy',
+    });
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(BUSY),
+    );
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+  });
+
+  it('VACUITY CONTROL — a standing FAILURE banner survives the unanswered check too (the notice sits beside it, the sentence stays red)', async () => {
+    const failedAt = Date.now() - 90_000;
+    seedCache({
+      vpn1: {
+        result: ENDPOINT_PLACEHOLDER,
+        at: failedAt - 5,
+        endpoint: { resolved: true, ip: '203.0.113.9', message: 'Resolved' },
+        exitSupersededAt: failedAt,
+        fleetFailureReason: FLEET_DOWN,
+      },
+    });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull(),
+    );
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        SERVER_DID_NOT_ANSWER_NOTICE,
+      ),
+    );
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).not.toBeNull();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')?.textContent).toBe(
+      FLEET_DOWN,
+    );
+    expect(storedProbe('vpn1')?.fleetFailureReason).toBe(FLEET_DOWN);
+    expect(storedProbe('vpn1')?.exitSupersededAt).toBe(failedAt);
   });
 });

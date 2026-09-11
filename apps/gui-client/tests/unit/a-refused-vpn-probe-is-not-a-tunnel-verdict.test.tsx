@@ -1043,6 +1043,51 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     ).toBeInTheDocument();
     expect(screen.queryByText(/VPN tunnels? up/)).toBeNull();
   });
+
+  // (j) J3 — "The last verdict stands" was FALSE when the pre-flight resolved
+  // the endpoint to a DIFFERENT address: `saveEndpointResult` carries the fleet
+  // fields over only for the same address, so that write had already dropped
+  // the verdict the notice claimed was standing. The same-address arm above
+  // ('a standing fleet measurement survives it too') is the control.
+  // MUTATION: drop `endpointMoved` from the notice pick → the standing-verdict
+  // sentence renders beside a row that has none → red.
+  it('CRITICAL after the endpoint MOVES, an unanswered check says "Endpoint moved; no verdict yet" — never that the last verdict stands (it is gone)', async () => {
+    await seedMeasured(); // endpoint 198.51.100.1, fleet 42ms, exit 203.0.113.9
+    const Proxies = await import('../../src/lib/proxies');
+    vi.mocked(Proxies.resolveEndpoint).mockResolvedValueOnce({
+      resolved: true,
+      ip: '198.51.100.2',
+      message: 'Resolved',
+    });
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    await clickCheck();
+    const notice = await screen.findByText(
+      'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.',
+    );
+    expect(notice.className).toContain('text-ink-muted');
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    // The verdict really is gone — the notice describes the row it sits beside.
+    expect(screen.queryByText('42ms')).toBeNull();
+    expect(screen.queryByText('tunnel up')).toBeNull();
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '198.51.100.2', message: 'Resolved' });
+    expect(entry?.serverLatencyMs).toBeUndefined();
+    expect(entry?.exitIp).toBeUndefined();
+  });
+
+  it('CONTROL — the SAME address keeps the verdict, and the notice says so (the pick is on the address, not on the check)', async () => {
+    await seedMeasured();
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.getByText('42ms')).toBeInTheDocument();
+    expect((await loadProbeCache()).vpn1?.serverLatencyMs).toBe(42);
+  });
 });
 
 // (i) I6 — a 403 on /test is the route's TIER refusal (finding 2 made the
@@ -1079,13 +1124,18 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
   });
 
   // (i) I6 follow-up (review) — the route answers 403 for a key without the
-  // `account_owner` scope, a suspended account, a device the free-desktop
-  // policy denies… none of which is a plan exclusion. Only the TIER detail is.
-  it('CRITICAL a 403 that is NOT the tier refusal (scope / suspended / policy / unreadable body) throws like any other non-2xx — never a plan exclusion', async () => {
+  // `account_owner` scope, a suspended account, the device-key deny gate…
+  // none of which is a plan exclusion. Only the TIER detail is. ((j) J4 — the
+  // free-desktop ROUTE-POLICY 403 is its own not_run now; see below.)
+  it('CRITICAL a 403 that is NOT the tier refusal (scope / suspended / device-key gate / unreadable body) throws like any other non-2xx — never a plan exclusion', async () => {
     const notTier = [
       JSON.stringify({ status: 403, detail: 'This action requires the "account_owner" scope.' }),
       JSON.stringify({ status: 403, detail: 'Account is suspended.' }),
-      JSON.stringify({ status: 403, detail: 'This device is not allowed to use this route.' }),
+      JSON.stringify({
+        status: 403,
+        detail:
+          'This operation is not permitted with a device-provisioned key. Use a dashboard session.',
+      }),
       '<html>forbidden</html>',
       '{}',
       '',
@@ -1128,6 +1178,19 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
       reason: 'x',
       measured_from: 'control_plane',
     });
+    // (j) J4 — nor the other client-minted value.
+    nextResponse = () =>
+      json({
+        ok: false,
+        reason: 'x',
+        measured_from: 'control_plane',
+        not_run: 'desktop_credential',
+      });
+    expect(await real.testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' })).toEqual({
+      ok: false,
+      reason: 'x',
+      measured_from: 'control_plane',
+    });
   });
 
   it('serverProbeOutcome carries it as not_run / plan_excluded with the sentence', () => {
@@ -1160,6 +1223,84 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
     expect(
       await screen.findByText(
         '1 VPN tunnel skipped (not included in your plan) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect((await loadProbeCache()).vpn1?.fleetFailureReason).toBeUndefined();
+  });
+});
+
+// (j) J4 — a 403 on /test from the free-desktop ROUTE POLICY (a Free tier's
+// browser-authorised `cli_device` credential; `POST …/proxies/:id/test` is not
+// in FREE_DESKTOP_ALLOWED_ROUTES). Both 403s are `ForbiddenError`s with the
+// same problem `type` and title, so the server's detail sentence discriminates:
+// the route-policy one is its own not_run ('desktop_credential') — "needs an
+// API key from the dashboard" — never the TIER notice ("not included in your
+// plan") and never "the server did not answer".
+const ROUTE_POLICY_DETAIL =
+  'This Free desktop credential cannot access this API route. Use the Driftstack desktop app or upgrade to an API-enabled tier.';
+
+describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", never the tier notice', () => {
+  // MUTATION: route the policy detail through the tier arm (or drop the arm) →
+  // plan_excluded / a throw → red.
+  it('CRITICAL the wire: 403 + the route-policy detail → not_run desktop_credential with the API-key sentence and the detail — not plan_excluded', async () => {
+    nextResponse = () =>
+      problem403(
+        JSON.stringify({
+          type: 'https://errors.driftstack.dev/forbidden',
+          title: 'Forbidden',
+          status: 403,
+          detail: ROUTE_POLICY_DETAIL,
+        }),
+      );
+    const r = await real.testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
+    expect(r).toEqual({
+      ok: false,
+      reason: `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
+      not_run: 'desktop_credential',
+    });
+    expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).toBe(
+      'Fleet tests need an API key from the dashboard.',
+    );
+    // The toEqual above pins the whole sentence; this names the claim.
+    expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).not.toContain(
+      real.PLAN_EXCLUDES_FLEET_TEST_REASON,
+    );
+  });
+
+  it('the two discriminators are disjoint: neither sentence matches the other arm', () => {
+    expect(real.isDesktopCredentialRefusalDetail(ROUTE_POLICY_DETAIL)).toBe(true);
+    expect(real.isTierRefusalDetail(ROUTE_POLICY_DETAIL)).toBe(false);
+    expect(real.isDesktopCredentialRefusalDetail(TIER_DETAIL)).toBe(false);
+    expect(real.isTierRefusalDetail(TIER_DETAIL)).toBe(true);
+    expect(
+      real.isDesktopCredentialRefusalDetail(
+        'This operation is not permitted with a device-provisioned key. Use a dashboard session.',
+      ),
+    ).toBe(false);
+    expect(real.isDesktopCredentialRefusalDetail(undefined)).toBe(false);
+  });
+
+  it('CRITICAL the grid: the API-key sentence as a muted notice beside "endpoint ok" — never "not included in your plan", "tunnel down" or "did not answer"; Test all counts the row NOT TESTED (needs an API key from the dashboard)', async () => {
+    testAccountProxy.mockResolvedValue({
+      ok: false,
+      reason: `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
+      not_run: 'desktop_credential',
+    });
+    render(<ProxiesView />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
+    const notice = await screen.findByText(
+      `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
+    );
+    expect(notice.className).toContain('text-ink-muted');
+    expect(screen.queryByText(/not included in your plan/)).toBeNull();
+    expect(screen.queryByText('tunnel down')).toBeNull();
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    // "not tested", like a row with no API key — not "skipped" (a refusal of
+    // the row) and not the tier's clause.
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel not tested (needs an API key from the dashboard) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.fleetFailureReason).toBeUndefined();
