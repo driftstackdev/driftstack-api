@@ -158,10 +158,16 @@ describe('Network pane — protocol badges never green an unknown value', () => 
     expect(queryByText(/credential expired/)).not.toBeNull();
   });
 
-  it('CRITICAL does not claim "live" while a note is standing', () => {
+  it('CRITICAL does not claim "live" while a note is standing, nor over an empty table', () => {
     // The badge was gated on `entries !== null` alone, so after one empty poll it
     // pulsed "live" over an empty table forever — including while the server was
     // saying the session was not connected to a browser.
+    //
+    // The gate is now `hasEntries && note === null`, which closes a second case the
+    // note-only gate left open: an ok-but-EMPTY poll renders the badge directly
+    // above body copy saying devices do not report per-request logs yet. A header
+    // may not contradict the body it heads, so the control below seeds a row —
+    // "live" is only ever a claim about a feed that is delivering.
     const store = createNetworkLogStore();
     store.append([], null);
     const withNote = render(
@@ -177,10 +183,22 @@ describe('Network pane — protocol badges never green an unknown value', () => 
       'a pane that cannot fetch must not advertise itself as live',
     ).toBeNull();
     withNote.unmount();
-    // Control: with no note, the badge DOES appear — so the arm above measures the
-    // note and not a badge that never renders.
-    const healthy = render(
+    // An ok-but-empty poll with NO note: still no badge, because the body copy in
+    // that state says devices do not report these yet.
+    const empty = render(
       <NetworkListSubscriber store={store} sessionId="agt_x" note={null} refreshing={false} />,
+    );
+    expect(
+      empty.container.querySelector('[data-component="simulator-network-live"]'),
+      'an empty table must not advertise itself as live',
+    ).toBeNull();
+    empty.unmount();
+    // VACUITY CONTROL: with rows AND no note the badge DOES appear — so both arms
+    // above measure their own condition rather than a badge that never renders.
+    const delivering = createNetworkLogStore();
+    delivering.append([makeEntry('a', 'h2')], null);
+    const healthy = render(
+      <NetworkListSubscriber store={delivering} sessionId="agt_x" note={null} refreshing={false} />,
     );
     expect(
       healthy.container.querySelector('[data-component="simulator-network-live"]'),
