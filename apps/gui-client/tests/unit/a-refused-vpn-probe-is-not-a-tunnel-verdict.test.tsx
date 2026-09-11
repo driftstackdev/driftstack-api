@@ -22,6 +22,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 
@@ -112,18 +113,24 @@ vi.mock('../../src/lib/SettingsContext', () => ({
 // The REAL wire parse, for the parse arms (the grid arms use the mock above).
 const real = await vi.importActual<typeof AccountProxiesModule>('../../src/lib/account-proxies');
 import {
+  endpointPlaceholderResult,
   loadProbeCache,
   saveEndpointResult,
   saveExitResult,
   saveOsFingerprint,
   saveServerProbeResult,
+  type CachedProbe,
 } from '../../src/lib/proxy-probe-cache';
 import {
   adoptListExitObserved,
+  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
+  holdsFleetVerdict,
   LIST_TUNNEL_DOWN_REASON,
+  NO_VERDICT_YET_NOTICE,
   persistServerProbe,
   SERVER_DID_NOT_ANSWER_NOTICE,
   serverProbeOutcome,
+  unansweredCheckNotice,
 } from '../../src/lib/proxy-server-test';
 const { ProxiesView } = await import('../../src/views/ProxiesView');
 
@@ -1011,11 +1018,15 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     testAccountProxy.mockRejectedValue(new Error('offline'));
     render(<ProxiesView />);
     await clickCheck();
-    expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
+    // (k) K2 — this row had no entry before the check, so the notice is the
+    // no-verdict one (the K2 describe below pins the pick); transience is the
+    // claim here.
+    expect(await screen.findByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
     expect(screen.getByText('endpoint ok')).toBeInTheDocument();
     testAccountProxy.mockResolvedValue(NODE_BUSY);
     await clickCheck();
     expect(await screen.findByText(BUSY)).toBeInTheDocument();
+    expect(screen.queryByText(NO_VERDICT_YET_NOTICE)).toBeNull();
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
   });
 
@@ -1087,6 +1098,185 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(screen.queryByText(/Endpoint moved/)).toBeNull();
     expect(screen.getByText('42ms')).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.serverLatencyMs).toBe(42);
+  });
+});
+
+// (k) K2 — "The last verdict stands" was said of rows that never held one: a
+// row with no cache entry (first check on this Mac), a row whose previous
+// pre-flight did not resolve (that write carried nothing), and a row the fleet
+// never answered with a verdict (a busy node, a refusal). Beside an "endpoint
+// ok" pill the sentence read as if the pre-flight were the tunnel verdict. The
+// pick is now ONE function of the entry before the pre-flight write
+// (`unansweredCheckNotice`), shared by the grid and the card.
+describe('(k) K2 — an unanswered check on a row that never held a verdict says "no verdict yet", never that one stands', () => {
+  it('(k) review — an entry holding ONLY a list-adopted exit (no fleet field) holds no verdict; one with a fleet latency does', () => {
+    type Entry = Parameters<typeof holdsFleetVerdict>[0];
+    const base = {
+      at: 1,
+      endpoint: { resolved: true, ip: '198.51.100.1', message: 'ok' },
+      exitIp: '203.0.113.9',
+      exitAt: 2,
+    } as unknown as Entry;
+    expect(holdsFleetVerdict(base)).toBe(false);
+    expect(
+      holdsFleetVerdict({ ...(base as object), serverLatencyMs: 42 } as unknown as Entry),
+    ).toBe(true);
+    expect(holdsFleetVerdict(undefined)).toBe(false);
+  });
+
+  const RESOLVED = { resolved: true, ip: '198.51.100.1', message: 'Resolved' };
+  const resolvedEntry = (extra: Partial<CachedProbe> = {}): CachedProbe => ({
+    result: endpointPlaceholderResult(RESOLVED),
+    at: NOW - 3,
+    endpoint: RESOLVED,
+    ...extra,
+  });
+
+  it('the pick: no entry / unresolved pre-flight / resolved but never a fleet verdict → "no verdict yet"; a standing failure sentence or measured field → "the last verdict stands"; a moved endpoint wins over both', () => {
+    expect(unansweredCheckNotice(undefined, false)).toBe(NO_VERDICT_YET_NOTICE);
+    expect(
+      unansweredCheckNotice(
+        resolvedEntry({ endpoint: { resolved: false, ip: '', message: 'no' } }),
+        false,
+      ),
+    ).toBe(NO_VERDICT_YET_NOTICE);
+    expect(unansweredCheckNotice(resolvedEntry(), false)).toBe(NO_VERDICT_YET_NOTICE);
+    expect(
+      unansweredCheckNotice(
+        resolvedEntry({ exitSupersededAt: NOW - 2, fleetFailureReason: FLEET_DOWN }),
+        false,
+      ),
+    ).toBe(SERVER_DID_NOT_ANSWER_NOTICE);
+    expect(
+      unansweredCheckNotice(
+        resolvedEntry({ serverLatencyMs: 42, measuredFrom: 'fleet', serverProbeAt: NOW - 2 }),
+        false,
+      ),
+    ).toBe(SERVER_DID_NOT_ANSWER_NOTICE);
+    // A list-adopted exit (a second Mac) is a measured field the row shows.
+    expect(
+      unansweredCheckNotice(
+        resolvedEntry({ exitIp: '203.0.113.9', exitCountry: 'NL', exitAt: NOW - 2 }),
+        false,
+      ),
+    ).toBe(NO_VERDICT_YET_NOTICE);
+    // A measurement on an UNRESOLVED prior cannot have been carried over.
+    expect(
+      unansweredCheckNotice(
+        resolvedEntry({
+          endpoint: { resolved: false, ip: '', message: 'no' },
+          serverLatencyMs: 42,
+          serverProbeAt: NOW - 2,
+        }),
+        false,
+      ),
+    ).toBe(NO_VERDICT_YET_NOTICE);
+    for (const prior of [undefined, resolvedEntry(), resolvedEntry({ serverProbeAt: NOW })]) {
+      expect(unansweredCheckNotice(prior, true)).toBe(ENDPOINT_MOVED_NO_VERDICT_NOTICE);
+    }
+    expect(holdsFleetVerdict(undefined)).toBe(false);
+    expect(holdsFleetVerdict(resolvedEntry())).toBe(false);
+    expect(holdsFleetVerdict(resolvedEntry({ fleetFailureReason: FLEET_DOWN }))).toBe(true);
+    // Three sentences, three states — pinned so a refactor cannot fold two.
+    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no verdict yet — try again.');
+    expect(
+      new Set([
+        NO_VERDICT_YET_NOTICE,
+        SERVER_DID_NOT_ANSWER_NOTICE,
+        ENDPOINT_MOVED_NO_VERDICT_NOTICE,
+      ]).size,
+    ).toBe(3);
+    expect(NO_VERDICT_YET_NOTICE).not.toMatch(/last verdict/);
+  });
+
+  // MUTATION: pick SERVER_DID_NOT_ANSWER_NOTICE whenever `endpointMoved` is
+  // false (the (j) pick) → the standing-verdict sentence renders beside a row
+  // that has no entry → red.
+  it('CRITICAL the grid, first check on this Mac (no cache entry), server does not answer: "no verdict yet" in muted ink beside "endpoint ok" — never "the last verdict stands"', async () => {
+    expect((await loadProbeCache()).vpn1).toBeUndefined();
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    await clickCheck();
+    const notice = await screen.findByText(NO_VERDICT_YET_NOTICE);
+    expect(notice.className).toContain('text-ink-muted');
+    expect(notice.className).not.toContain('text-status-error');
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.queryByText('tunnel down')).toBeNull();
+    // The entry the check left holds the pre-flight and nothing measured.
+    const entry = (await loadProbeCache()).vpn1;
+    expect(entry?.endpoint?.resolved).toBe(true);
+    expect(holdsFleetVerdict(entry)).toBe(false);
+  });
+
+  it('CRITICAL the grid, a prior UNRESOLVED pre-flight (its write carried nothing), server does not answer: "no verdict yet"', async () => {
+    await saveEndpointResult(
+      'vpn1',
+      { resolved: false, ip: '', message: 'The endpoint host could not be resolved.' },
+      NOW - 3,
+    );
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect((await loadProbeCache()).vpn1?.endpoint).toEqual({
+      resolved: true,
+      ip: '198.51.100.1',
+      message: 'Resolved',
+    });
+  });
+
+  it('the grid, a resolved row the fleet never answered with a verdict (a busy node), then no answer: "no verdict yet" — a wait was not a verdict either', async () => {
+    testAccountProxy.mockResolvedValue(NODE_BUSY);
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText(BUSY)).toBeInTheDocument();
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    await clickCheck();
+    expect(await screen.findByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(BUSY)).toBeNull();
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+  });
+
+  it('CONTROL — a standing failure sentence, then no answer: "the last verdict stands" (it does), never "no verdict yet"', async () => {
+    await seedMeasured();
+    testAccountProxy.mockResolvedValue(FLEET_FAILED);
+    render(<ProxiesView />);
+    await clickCheck();
+    expect(await screen.findByText('tunnel down')).toBeInTheDocument();
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    await clickCheck();
+    expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(NO_VERDICT_YET_NOTICE)).toBeNull();
+    expect(screen.getByText('tunnel down')).toBeInTheDocument();
+    expect(screen.getByText(FLEET_DOWN)).toBeInTheDocument();
+  });
+
+  it('CONTROL — a standing fleet measurement, then no answer: "the last verdict stands" beside the 42ms it describes', async () => {
+    await seedMeasured();
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    expect(await screen.findByText('42ms')).toBeInTheDocument();
+    await clickCheck();
+    expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
+    expect(screen.queryByText(NO_VERDICT_YET_NOTICE)).toBeNull();
+    expect(screen.getByText('42ms')).toBeInTheDocument();
+  });
+
+  it('Test all still tallies the unanswered no-entry row as "not tested (the server did not answer)"', async () => {
+    testAccountProxy.mockRejectedValue(new Error('offline'));
+    render(<ProxiesView />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
+    expect(
+      await screen.findByText(
+        '1 VPN tunnel not tested (the server did not answer) — nothing was tested',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
   });
 });
 
@@ -1236,8 +1426,11 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
 // the route-policy one is its own not_run ('desktop_credential') — "needs an
 // API key from the dashboard" — never the TIER notice ("not included in your
 // plan") and never "the server did not answer".
-const ROUTE_POLICY_DETAIL =
-  'This Free desktop credential cannot access this API route. Use the Driftstack desktop app or upgrade to an API-enabled tier.';
+// (k) K1 — READ from the shared contract, never copied: the server throws
+// `FREE_DESKTOP_ROUTE_DENIED_DETAIL` verbatim (its unit test pins that), the
+// GUI's discriminator is equality with the same declaration, and the literal
+// text is pinned once, in the K1 arm below, so a copy change reds there.
+const ROUTE_POLICY_DETAIL: string = FREE_DESKTOP_ROUTE_DENIED_DETAIL;
 
 describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", never the tier notice', () => {
   // MUTATION: route the policy detail through the tier arm (or drop the arm) →
@@ -1278,6 +1471,32 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
       ),
     ).toBe(false);
     expect(real.isDesktopCredentialRefusalDetail(undefined)).toBe(false);
+  });
+
+  // (k) K1 — the pin. The matcher used to be a hand-copied phrase in a regex,
+  // and the fixture above a hand-copied sentence: a copy change on the server
+  // would have un-matched the refusal SILENTLY (it would have fallen through
+  // to "the server did not answer") with every test on both sides green. Now
+  // the GUI matches the contract's declaration, and this arm pins that
+  // declaration's TEXT — a shipped GUI keeps matching the sentence it was
+  // built against, so a copy change is a GUI release decision, made red here.
+  // MUTATION: change one character of FREE_DESKTOP_ROUTE_DENIED_DETAIL in
+  // packages/api-types/src/problem.ts (dist rebuilt) → the literal pin reds.
+  it('CRITICAL the GUI discriminator IS the contract sentence (api-types), and the sentence is pinned literally', () => {
+    expect(real.DESKTOP_CREDENTIAL_REFUSAL_DETAIL).toBe(FREE_DESKTOP_ROUTE_DENIED_DETAIL);
+    expect(FREE_DESKTOP_ROUTE_DENIED_DETAIL).toBe(
+      'This Free desktop credential cannot access this API route. Use the Driftstack desktop app or upgrade to an API-enabled tier.',
+    );
+    expect(real.isDesktopCredentialRefusalDetail(FREE_DESKTOP_ROUTE_DENIED_DETAIL)).toBe(true);
+    // The match is the declaration, not a phrase inside it: the old regex's
+    // key phrase on its own, or the sentence with something appended, is not
+    // the refusal the server declares (the server's own pin is equality too).
+    expect(
+      real.isDesktopCredentialRefusalDetail('Free desktop credential cannot access this API route'),
+    ).toBe(false);
+    expect(
+      real.isDesktopCredentialRefusalDetail(`${FREE_DESKTOP_ROUTE_DENIED_DETAIL} (POST /test)`),
+    ).toBe(false);
   });
 
   it('CRITICAL the grid: the API-key sentence as a muted notice beside "endpoint ok" — never "not included in your plan", "tunnel down" or "did not answer"; Test all counts the row NOT TESTED (needs an API key from the dashboard)', async () => {

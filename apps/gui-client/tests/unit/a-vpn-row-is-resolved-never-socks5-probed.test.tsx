@@ -21,6 +21,7 @@ import type * as AccountProxiesModule from '../../src/lib/account-proxies';
 import type { ProxyConfig, ProxyTestResult } from '../../src/lib/proxies';
 import {
   ENDPOINT_MOVED_NO_VERDICT_NOTICE,
+  NO_VERDICT_YET_NOTICE,
   SERVER_DID_NOT_ANSWER_NOTICE,
 } from '../../src/lib/proxy-server-test';
 
@@ -875,7 +876,11 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
   // too (`priorEndpoint.ip !== res.ip` without `res.resolved`) → the seeded
   // entry below has no prior address to move FROM, so nothing changes here;
   // the arm above is what catches a pick that ignores `resolved`.
-  it('CONTROL — a first-ever pre-flight (no prior address) that the server then does not answer says the last verdict stands, not "moved": nothing moved', async () => {
+  // (k) K2 — this card's prior pre-flight did NOT resolve, so its write carried
+  // nothing over: there is no verdict to stand, and the notice must not say
+  // one does (that sentence was FALSE here until K2). Still "nothing moved":
+  // a first-ever address is not a moved one.
+  it('CONTROL — a first-ever pre-flight (prior UNRESOLVED) that the server then does not answer says "no verdict yet" — not "moved" (nothing moved), not that the last verdict stands (there is none)', async () => {
     seedCache({
       vpn1: {
         result: ENDPOINT_PLACEHOLDER,
@@ -889,15 +894,63 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     await clickCheckVpn();
     await waitFor(() =>
       expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
-        SERVER_DID_NOT_ANSWER_NOTICE,
+        NO_VERDICT_YET_NOTICE,
       ),
     );
+    expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no verdict yet — try again.');
+    const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
+    expect(notice?.className).toContain('text-ink-muted');
     expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
     expect(storedProbe('vpn1')?.endpoint).toEqual({
       resolved: true,
       ip: '203.0.113.9',
       message: 'Resolved',
     });
+  });
+
+  // (k) K2 on the card — the same pick from the same prior, for a card with NO
+  // entry at all (first check on this Mac). MUTATION: make the card pass the
+  // (j) two-way pick to runFleetTestForRow → "the last verdict stands" renders
+  // on a card that never held one → red.
+  it('CRITICAL a card with NO cache entry (first check on this Mac) the server does not answer says "no verdict yet"', async () => {
+    seedCache({});
+    expect(storedProbe('vpn1')).toBeUndefined();
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        NO_VERDICT_YET_NOTICE,
+      ),
+    );
+    expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+    expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
+    expect(storedProbe('vpn1')?.endpoint).toEqual({
+      resolved: true,
+      ip: '203.0.113.9',
+      message: 'Resolved',
+    });
+    expect(storedProbe('vpn1')?.serverLatencyMs).toBeUndefined();
+    expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalled();
+  });
+
+  it('CONTROL — the card holding a fleet measurement keeps "the last verdict stands" (the K2 pick is on the prior, not on the check)', async () => {
+    seedCache({ vpn1: measuredVpnEntry(5000) });
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockRejectedValueOnce(new Error('offline'));
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    await clickCheckVpn();
+    await waitFor(() =>
+      expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
+        SERVER_DID_NOT_ANSWER_NOTICE,
+      ),
+    );
+    expect(screen.queryByText(NO_VERDICT_YET_NOTICE)).toBeNull();
+    expect(screen.getByText('42ms')).toBeTruthy();
   });
 
   it('CONTROL — the notice is transient: the next check that answers (a not_run) replaces it with the fleet’s own sentence', async () => {

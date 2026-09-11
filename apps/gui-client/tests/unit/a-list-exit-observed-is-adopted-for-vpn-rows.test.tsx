@@ -90,13 +90,18 @@ vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStu
 import { cleanListExitObserved, listProxies } from '../../src/lib/account-proxies';
 import { resolveEndpoint } from '../../src/lib/proxies';
 import {
+  clearFleetFailure,
   loadProbeCache,
   saveEndpointResult,
+  saveExitResult,
+  saveFleetFailure,
   saveProbeResult,
+  saveServerProbeResult,
 } from '../../src/lib/proxy-probe-cache';
 import {
   adoptListExitObserved,
   deriveProbeViewWithEndpointRows,
+  LIST_TUNNEL_DOWN_REASON,
   syncListExitObserved,
 } from '../../src/lib/proxy-server-test';
 const { ProxiesView } = await import('../../src/views/ProxiesView');
@@ -531,5 +536,248 @@ describe('the Proxies grid adopts on refresh', () => {
     expect(await screen.findByText('run Check for the exit')).toBeTruthy();
     await waitFor(() => expect(fetchCalls.length).toBe(1));
     expect(screen.queryByText('203.0.113.9')).toBeNull();
+  });
+});
+
+// (k) K3 — the server clears `exit_superseded_at` when a later fleet verdict
+// finds the tunnel UP, and the /proxies list carries that as an EXPLICIT null.
+// This is the consumer. Until now the only thing that could lift a fleet
+// failure on a Mac that did not run the UP test was an ADOPTABLE exit dated
+// after the stamp (`saveExitResult`); a clear whose exit this Mac refuses —
+// the server kept its stored geo and re-dated nothing, so the observation is
+// still dated before the failure — left "tunnel down" standing on every Mac
+// but one, while the server's own row said the contradiction was spent.
+describe('(k) K3 — the list adoption acts on an EXPLICIT exit_superseded_at: null as the clear signal', () => {
+  const STAMP = NOW; // the failing fleet verdict's time, as the server carries it
+  const FLEET_DOWN = 'The Mac that runs your profiles could not bring this tunnel up.';
+  /** The list row as the server emits it: an observation dated `observedAt`,
+   *  and the stamp as a string (contradicted), the literal null (cleared /
+   *  never contradicted), or absent (an older server). */
+  const row = (observedAt: number, supersededAt: number | null | undefined) => ({
+    id: 'aprx_wg',
+    exit_observed: { ...EXIT, observed_at: new Date(observedAt).toISOString() },
+    ...(supersededAt === undefined
+      ? {}
+      : {
+          exit_superseded_at: supersededAt === null ? null : new Date(supersededAt).toISOString(),
+        }),
+  });
+  /** A Mac that saw the tunnel up (fleet fields + exit), never a stamp.
+   *  `base` is the clock the seed is dated against — NOW for the pure arms,
+   *  and a REAL past time for the grid arms, whose refresh fetches the list
+   *  at the real `Date.now()` and must find the stamp before it. */
+  async function seedMeasured(base: number = NOW): Promise<void> {
+    await saveEndpointResult(
+      'wg1',
+      { resolved: true, ip: '198.51.100.7', message: 'ok' },
+      base - 3,
+    );
+    await saveServerProbeResult(
+      'wg1',
+      { latencyMs: 42, measuredFrom: 'fleet', nodeId: 'mac-07', quicProbe: true },
+      base - 2,
+    );
+    await saveExitResult('wg1', '203.0.113.9', 'NL', { timezone: 'Europe/Amsterdam' }, base - 2);
+  }
+  /** The second Mac's state: it adopted the server's stamp from the list
+   *  (the I7 path) and holds the plain sentence, no exit, no fleet fields. */
+  async function seedSecondMacStamped(base: number = NOW): Promise<void> {
+    await seedMeasured(base);
+    expect(await adoptListExitObserved([row(base - 1, base)], [WG], base + 5)).toEqual([]);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt, 'the I7 precondition').toBe(base);
+    expect(entry?.fleetFailureReason).toBe(LIST_TUNNEL_DOWN_REASON);
+    expect(entry?.exitIp).toBeUndefined();
+  }
+
+  // MUTATION: drop the K3 clear in adoptListExitObserved → the observation
+  // (dated BEFORE the stamp: the server kept its stored exit and cleared only
+  // the stamp) is refused by the local stamp, nothing is written, and the
+  // sentence stands → red.
+  it('CRITICAL second Mac: the list now says null (key present) beside an observation this Mac would REFUSE — the stamp and the sentence are cleared, and the server’s uncontradicted exit is then adopted', async () => {
+    await seedSecondMacStamped();
+    const written = await adoptListExitObserved([row(NOW + 1, null)], [WG], NOW + 20);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt, 'the stamp is cleared').toBeUndefined();
+    expect(entry?.fleetFailureReason, 'the sentence is cleared').toBeUndefined();
+    // The server's row says this exit is current and uncontradicted: adopted,
+    // dated by the observation, exactly as a never-stamped row would adopt it.
+    expect(written).toEqual(['wg1']);
+    expect(entry?.exitIp).toBe('203.0.113.9');
+    expect(entry?.exitAt).toBe(NOW + 1);
+    // The verdict triple (the endpoint DID resolve) is untouched.
+    expect(entry?.at).toBe(NOW - 3);
+    expect(entry?.endpoint).toEqual({ resolved: true, ip: '198.51.100.7', message: 'ok' });
+  });
+
+  it('CRITICAL the Mac that ran the failing test (its own sentence, its own stamp) is cleared by the list too', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    expect((await loadProbeCache()).wg1?.fleetFailureReason).toBe(FLEET_DOWN);
+    // The UP verdict on another Mac wrote a new exit, dated after the stamp.
+    const written = await adoptListExitObserved([row(STAMP + 30_000, null)], [WG], STAMP + 35_000);
+    expect(written).toEqual(['wg1']);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBeUndefined();
+    expect(entry?.fleetFailureReason).toBeUndefined();
+    expect(entry?.exitAt).toBe(STAMP + 30_000);
+  });
+
+  it('(k) review — a null beside NO observation does NOT lift the stamp: null there means "never stamped", not "seen up" (this Mac\'s own fresh failure must survive the next poll)', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    const written = await adoptListExitObserved(
+      [{ id: 'aprx_wg', exit_observed: null, exit_superseded_at: null }],
+      [WG],
+      STAMP + 5000,
+    );
+    expect(written).toEqual([]);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBe(STAMP);
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+    expect(
+      await adoptListExitObserved(
+        [{ id: 'aprx_wg', exit_observed: null, exit_superseded_at: null }],
+        [{ ...WG, id: 'wg-fresh' }],
+        STAMP + 5000,
+      ),
+    ).toEqual([]);
+    expect((await loadProbeCache())['wg-fresh']).toBeUndefined();
+  });
+
+  it('(k) review — CRITICAL the clear needs POSITIVE evidence: an observation the server dated AFTER the local stamp lifts it (the tunnel was seen up since)', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    await adoptListExitObserved([row(STAMP + 1000, null)], [WG], STAMP + 5000);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBeUndefined();
+    expect(entry?.fleetFailureReason).toBeUndefined();
+  });
+
+  it('(k) review — CONTROL an observation dated BEFORE the local stamp is not evidence: the failure stands', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    await adoptListExitObserved([row(STAMP - 1000, null)], [WG], STAMP + 5000);
+    const entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBe(STAMP);
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+  });
+
+  // The guard. A list fetched at F is a snapshot from no later than F; a stamp
+  // this Mac wrote at or after F — its own failing test landed while the poll
+  // was in flight — is not something the list could know about. Without it a
+  // poll racing the failing test cleared the sentence the moment it appeared,
+  // and the next poll re-stamped it with the plain sentence, the node's reason
+  // lost. MUTATION: drop `existing.exitSupersededAt < nowMs` → red.
+  it('CRITICAL CONTROL — a list fetched BEFORE this Mac’s own failure landed (its null predates the stamp) clears nothing: the sentence and the stamp stand, the pre-failure exit stays refused', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    for (const fetchedAt of [STAMP - 1, STAMP]) {
+      const written = await adoptListExitObserved([row(NOW - 1, null)], [WG], fetchedAt);
+      expect(written, `fetched at ${fetchedAt - STAMP}ms`).toEqual([]);
+      const entry = (await loadProbeCache()).wg1;
+      expect(entry?.exitSupersededAt, `fetched at ${fetchedAt - STAMP}ms`).toBe(STAMP);
+      expect(entry?.fleetFailureReason, 'the node’s own sentence survives').toBe(FLEET_DOWN);
+      expect(entry?.exitIp).toBeUndefined();
+    }
+    // The same list, fetched AFTER the stamp: the clear is real.
+    await adoptListExitObserved([row(NOW + 1, null)], [WG], STAMP + 1);
+    expect((await loadProbeCache()).wg1?.fleetFailureReason).toBeUndefined();
+  });
+
+  it('CONTROL — an ABSENT key (an older server) is not a clear; a string stamp older than the local one changes nothing either', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    expect(await adoptListExitObserved([row(NOW - 1, undefined)], [WG], STAMP + 5000)).toEqual([]);
+    let entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBe(STAMP);
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+    expect(await adoptListExitObserved([row(NOW - 1, STAMP - 60_000)], [WG], STAMP + 6000)).toEqual(
+      [],
+    );
+    entry = (await loadProbeCache()).wg1;
+    expect(entry?.exitSupersededAt).toBe(STAMP);
+    expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
+  });
+
+  it('VACUITY CONTROL — an entry with no stamp sees a null and nothing is written for it (byte-identical cache, no churn every 15s)', async () => {
+    await seedMeasured();
+    // Same observation as the stored exit at the same stamp: the adoption is a
+    // no-op too, so the only possible write here would be a spurious clear.
+    const before = JSON.stringify(await loadProbeCache());
+    const writesBefore = storeWrites;
+    expect(await adoptListExitObserved([row(NOW - 2, null)], [WG], NOW + 20)).toEqual([]);
+    expect(JSON.stringify(await loadProbeCache())).toBe(before);
+    expect(storeWrites).toBe(writesBefore);
+    // …and a cleared entry polled again with the same null: idempotent.
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    await adoptListExitObserved([row(NOW - 1, null)], [WG], STAMP + 5000);
+    const cleared = JSON.stringify(await loadProbeCache());
+    const writesAfterClear = storeWrites;
+    await adoptListExitObserved([row(NOW - 1, null)], [WG], STAMP + 20_000);
+    expect(JSON.stringify(await loadProbeCache())).toBe(cleared);
+    expect(storeWrites).toBe(writesAfterClear);
+  });
+
+  it('clearFleetFailure (the writer): drops only the stamp and the sentence, keeps the verdict triple; a no-op without either; none invented', async () => {
+    await seedMeasured();
+    await saveFleetFailure('wg1', STAMP, FLEET_DOWN);
+    const stamped = (await loadProbeCache()).wg1;
+    expect(stamped?.fleetFailureReason).toBe(FLEET_DOWN);
+    const cache = await clearFleetFailure('wg1');
+    expect(cache.wg1).toEqual({
+      result: stamped?.result,
+      at: NOW - 3,
+      endpoint: { resolved: true, ip: '198.51.100.7', message: 'ok' },
+    });
+    const writes = storeWrites;
+    await clearFleetFailure('wg1');
+    await clearFleetFailure('never-seen');
+    expect(storeWrites, 'no store write for a no-op').toBe(writes);
+    expect((await loadProbeCache())['never-seen']).toBeUndefined();
+  });
+
+  // The grid arms are dated against the REAL clock: the refresh's sync takes
+  // `Date.now()` as the fetch time, and the K3 guard clears only a stamp that
+  // PREDATES the fetch — the fixture NOW (2027) would be refused as a stamp
+  // the list could not know about, which is the guard working, not the clear.
+  it('CRITICAL the grid: a second Mac showing "tunnel down" from the list’s stamp shows "endpoint ok" once the list says null', async () => {
+    const base = Date.now() - 120_000;
+    stored = [WG];
+    await seedSecondMacStamped(base);
+    nextResponse = () => json({ data: [{ ...WG_ROW, ...row(base + 1, null) }] });
+    render(<ProxiesView />);
+    // The refresh's sync adopts the clear (and then the uncontradicted exit).
+    expect(await screen.findByText('203.0.113.9')).toBeTruthy();
+    expect(screen.queryByText(LIST_TUNNEL_DOWN_REASON)).toBeNull();
+    expect(screen.queryByText('tunnel down')).toBeNull();
+    expect(screen.getByText('endpoint ok')).toBeTruthy();
+    expect((await loadProbeCache()).wg1?.fleetFailureReason).toBeUndefined();
+  });
+
+  it('CONTROL — the grid keeps "tunnel down" while the list still carries the stamp', async () => {
+    const base = Date.now() - 120_000;
+    stored = [WG];
+    await seedSecondMacStamped(base);
+    nextResponse = () => json({ data: [{ ...WG_ROW, ...row(base - 1, base) }] });
+    render(<ProxiesView />);
+    expect(await screen.findByText(LIST_TUNNEL_DOWN_REASON)).toBeTruthy();
+    await waitFor(() => expect(fetchCalls.length).toBeGreaterThanOrEqual(1));
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    expect((await loadProbeCache()).wg1?.fleetFailureReason).toBe(LIST_TUNNEL_DOWN_REASON);
+  });
+
+  it('CONTROL — the grid’s own guard: a stamp dated AFTER the refresh’s fetch (a failure that landed while the poll was in flight) is kept, null or not', async () => {
+    const base = Date.now() + 120_000; // a stamp the list fetched now cannot know about
+    stored = [WG];
+    await seedSecondMacStamped(base);
+    nextResponse = () => json({ data: [{ ...WG_ROW, ...row(base - 1, null) }] });
+    render(<ProxiesView />);
+    expect(await screen.findByText(LIST_TUNNEL_DOWN_REASON)).toBeTruthy();
+    await waitFor(() => expect(fetchCalls.length).toBeGreaterThanOrEqual(1));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(screen.getByText(LIST_TUNNEL_DOWN_REASON)).toBeTruthy();
+    expect(screen.queryByText('203.0.113.9')).toBeNull();
+    expect((await loadProbeCache()).wg1?.exitSupersededAt).toBe(base);
   });
 });

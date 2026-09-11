@@ -9,6 +9,7 @@
 // widening for a GUI feature. The local Tauri proxy store stays as the OFFLINE
 // cache; ProfilesView/ProxiesView reconcile (server wins on a successful load).
 
+import { FREE_DESKTOP_ROUTE_DENIED_DETAIL } from '@driftstack/api-types';
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson } from './read-bounded-json';
@@ -584,13 +585,20 @@ export function isTierRefusalDetail(detail: string | undefined): detail is strin
 export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON =
   'Fleet tests need an API key from the dashboard.';
 
-/** The server's route-policy detail: `This Free desktop credential cannot
- *  access this API route. …` */
-const DESKTOP_CREDENTIAL_REFUSAL_DETAIL =
-  /\bFree desktop credential cannot access this API route\b/;
+/** The server's route-policy detail — the shared contract's sentence, not a
+ *  copy of it. (k) K1 — this used to be a hand-copied phrase in a regex, so a
+ *  copy change on the server would have un-matched it SILENTLY: the refusal
+ *  would have fallen through to "the server did not answer" and no test on
+ *  either side would have gone red. The server throws
+ *  `FREE_DESKTOP_ROUTE_DENIED_DETAIL` verbatim (its unit test pins that), so
+ *  the discriminator is equality with that one declaration, and the GUI arm
+ *  pins the constant's TEXT so a copy change reds there too (a GUI already
+ *  shipped keeps matching the sentence it was built against — a change is a
+ *  release decision, not a silent drift). */
+export const DESKTOP_CREDENTIAL_REFUSAL_DETAIL: string = FREE_DESKTOP_ROUTE_DENIED_DETAIL;
 
 export function isDesktopCredentialRefusalDetail(detail: string | undefined): detail is string {
-  return detail !== undefined && DESKTOP_CREDENTIAL_REFUSAL_DETAIL.test(detail);
+  return detail === DESKTOP_CREDENTIAL_REFUSAL_DETAIL;
 }
 
 /**

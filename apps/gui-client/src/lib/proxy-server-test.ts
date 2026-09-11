@@ -27,6 +27,7 @@ import type { OsFingerprint } from './os-fingerprint-verdict';
 import { isProxyUsable, resolveEndpoint } from './proxies';
 import { isVpnScheme } from './proxy-scheme';
 import {
+  clearFleetFailure,
   deriveProbeViewState,
   isQuicVerdictFresh,
   loadProbeCache,
@@ -109,6 +110,53 @@ export const SERVER_DID_NOT_ANSWER_NOTICE =
  *  and must say the same thing about the same cache. */
 export const ENDPOINT_MOVED_NO_VERDICT_NOTICE =
   'The server did not answer, so the tunnel was not tested. Endpoint moved; no verdict yet — try again.';
+
+/** (k) K2 — the I5 notice for a row that has NO verdict to stand: no cache
+ *  entry before this check, a prior pre-flight that did not resolve (its write
+ *  carried nothing), or a resolved entry the fleet never answered with a
+ *  verdict (a busy node, a refusal, a row nobody tested). "The last verdict
+ *  stands" was false on every one of them — there was none — and it read as
+ *  if the row's "endpoint ok" pill were a tunnel verdict. */
+export const NO_VERDICT_YET_NOTICE = 'The server did not answer; no verdict yet — try again.';
+
+/** (k) K2 — whether an entry holds a fleet VERDICT about the tunnel: the
+ *  cache's failure sentence, or a server-measured field the row shows (a
+ *  fleet latency / vantage, an observed exit). The pre-flight verdict
+ *  (`endpoint.resolved`) is not one — "endpoint ok" says the name resolves,
+ *  not that the tunnel came up. */
+export function holdsFleetVerdict(entry: CachedProbe | undefined): boolean {
+  return (
+    entry !== undefined &&
+    (entry.fleetFailureReason !== undefined ||
+      entry.serverProbeAt !== undefined ||
+      entry.serverLatencyMs !== undefined ||
+      entry.measuredFrom !== undefined)
+  );
+}
+
+/**
+ * (k) K2 — the ONE pick of the `unavailable` notice, for the grid and the
+ * card alike, from what the row holds AFTER its pre-flight write:
+ *   * the pre-flight resolved a DIFFERENT address → the write dropped the
+ *     verdict (J3): "Endpoint moved; no verdict yet";
+ *   * the entry before the write held no fleet verdict, or its pre-flight had
+ *     not resolved (so the write carried nothing over) → "no verdict yet";
+ *   * otherwise the write carried the verdict over, and it stands.
+ * `prior` is the entry as it was BEFORE the pre-flight write — the write's
+ * carry rule is deterministic (same resolved address → every server field
+ * survives), so the prior decides exactly what the row shows beside the
+ * notice.
+ */
+export function unansweredCheckNotice(
+  prior: CachedProbe | undefined,
+  endpointMoved: boolean,
+): string {
+  if (endpointMoved) return ENDPOINT_MOVED_NO_VERDICT_NOTICE;
+  if (prior?.endpoint?.resolved !== true || !holdsFleetVerdict(prior)) {
+    return NO_VERDICT_YET_NOTICE;
+  }
+  return SERVER_DID_NOT_ANSWER_NOTICE;
+}
 
 /**
  * T-27 drop 5 — the stamp a measured QUIC verdict carries.
@@ -458,6 +506,11 @@ export interface ListExitProxyLike {
 export async function adoptListExitObserved(
   rows: ReadonlyArray<ListExitRow>,
   proxies: ReadonlyArray<ListExitProxyLike>,
+  /** The clock for an undated observation — and (k) K3 — the time the list
+   *  was FETCHED, or earlier: the list is a snapshot from no later than this,
+   *  so a local stamp at or after it postdates everything the list says.
+   *  `syncListExitObserved` takes it before the request; a caller handing in
+   *  a list it fetched earlier must pass that earlier time, not "now". */
   nowMs: number = Date.now(),
 ): Promise<string[]> {
   const written: string[] = [];
@@ -472,10 +525,52 @@ export async function adoptListExitObserved(
   for (const p of proxies) {
     if (p.serverId === undefined || !isVpnScheme(p.scheme)) continue;
     const row = byServerId.get(p.serverId);
-    const e = row?.exit_observed;
-    if (e === null || e === undefined) continue;
-    const serverSupersededAt = listSupersededStamp(row?.exit_superseded_at);
+    if (row === undefined) continue;
     let existing = cache[p.id];
+    // (k) K3 — the server's EXPLICIT clear reaches this Mac. The list carries
+    // `exit_superseded_at: null` (the key present, the value the literal null
+    // — an absent key is an older server and says nothing) beside an entry
+    // that still holds a stamp: a later fleet verdict found the tunnel UP and
+    // the server spent the contradiction. Until now only an ADOPTABLE exit
+    // dated after the stamp could lift the sentence here, so a clear whose
+    // exit this Mac refuses (the server kept its stored geo and re-dated
+    // nothing) left "tunnel down" standing on every Mac but the one that ran
+    // the UP test. Guarded by the fetch: a list fetched at `nowMs` is a
+    // snapshot from no later than that, so a stamp this Mac wrote at or after
+    // it (its own failing test landed while the poll was in flight) is not
+    // something the list could know about, and is kept. Runs before the
+    // observation gate below so a row whose exit this Mac then refuses is
+    // still cleared, and before the adoption so the exit it carries is dated
+    // against no stamp.
+    // (k) review — a null stamp alone is NOT evidence: a row the server never
+    // stamped (or whose stamp write failed) lists null too, and honouring it
+    // erased this Mac's own fresh failure on the next poll. Clear only beside
+    // POSITIVE evidence: an observation the server dated AFTER the local stamp
+    // (the tunnel was seen up since). The lock re-checks against that stamp.
+    const stampMs = existing?.exitSupersededAt;
+    const seenUpAt =
+      row.exit_observed !== null &&
+      row.exit_observed !== undefined &&
+      row.exit_observed.observed_at !== null
+        ? Date.parse(row.exit_observed.observed_at)
+        : Number.NaN;
+    if (
+      existing !== undefined &&
+      stampMs !== undefined &&
+      row.exit_superseded_at === null &&
+      Number.isFinite(seenUpAt) &&
+      seenUpAt > stampMs
+    ) {
+      try {
+        cache = await clearFleetFailure(p.id, stampMs);
+        existing = cache[p.id] ?? existing;
+      } catch {
+        /* best-effort — the next poll carries the same null */
+      }
+    }
+    const e = row.exit_observed;
+    if (e === null || e === undefined) continue;
+    const serverSupersededAt = listSupersededStamp(row.exit_superseded_at);
     if (existing === undefined) {
       try {
         const r = await resolveEndpoint(p.host, p.port);
@@ -567,6 +662,8 @@ export async function syncListExitObserved(
 ): Promise<string[]> {
   if (apiKey === null || apiKey.length === 0) return [];
   if (!proxies.some((p) => p.serverId !== undefined && isVpnScheme(p.scheme))) return [];
+  // `nowMs` is taken BEFORE the request (the default binds at the call), so
+  // the adoption's K3 guard compares a local stamp with the fetch's start.
   const rows = await listAccountProxies(baseUrl, apiKey);
   return adoptListExitObserved(rows, proxies, nowMs);
 }

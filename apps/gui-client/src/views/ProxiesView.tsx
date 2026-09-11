@@ -59,13 +59,12 @@ import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
-  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
   fleetFailureReasons,
   persistServerProbe,
-  SERVER_DID_NOT_ANSWER_NOTICE,
   serverProbeStamps,
   syncListExitObserved,
   testProxyOnServer,
+  unansweredCheckNotice,
   type ServerProbeOutcome,
 } from '../lib/proxy-server-test';
 import { useSettings } from '../lib/SettingsContext';
@@ -735,9 +734,15 @@ export function ProxiesView(): JSX.Element {
       // the endpoint still resolves to the SAME address (`saveEndpointResult`);
       // a different address drops it. Read the prior from the cache the write
       // reads, so the `unavailable` notice below says what is true AFTER it.
-      const priorEndpoint = await loadProbeCache()
-        .then((cache) => cache[p.id]?.endpoint)
+      // (k) K2 — and read the whole prior entry, not just its address: the
+      // `unavailable` notice must also know whether the row held a fleet
+      // verdict at all (no entry, an unresolved pre-flight, a fleet that never
+      // answered with one) — "the last verdict stands" is false when there is
+      // none. One pick (`unansweredCheckNotice`) for the grid and the card.
+      const prior = await loadProbeCache()
+        .then((cache) => cache[p.id])
         .catch(() => undefined);
+      const priorEndpoint = prior?.endpoint;
       const endpointMoved =
         r.resolved && priorEndpoint?.resolved === true && priorEndpoint.ip !== r.ip;
       await saveEndpointResult(
@@ -798,9 +803,10 @@ export function ProxiesView(): JSX.Element {
         // transient like every other: the next check clears it.
         // (j) J3 — unless the pre-flight above moved the endpoint: then the
         // verdict is already gone and the notice must not claim it stands.
+        // (k) K2 — nor when the row never held one (`unansweredCheckNotice`).
         setVpnNotices((m) => ({
           ...m,
-          [p.id]: endpointMoved ? ENDPOINT_MOVED_NO_VERDICT_NOTICE : SERVER_DID_NOT_ANSWER_NOTICE,
+          [p.id]: unansweredCheckNotice(prior, endpointMoved),
         }));
       }
       void persistServerProbe(p.id, outcome, { adoptExit: true });

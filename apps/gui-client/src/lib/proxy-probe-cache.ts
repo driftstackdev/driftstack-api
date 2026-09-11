@@ -1032,6 +1032,45 @@ export async function recordLiveH3Observations(
   return written;
 }
 
+/**
+ * (k) K3 — the server's EXPLICIT clear of a fleet failure, adopted from the
+ * account list: `exit_superseded_at: null` beside a stamp this entry holds.
+ *
+ * ⛔ Until this writer existed the only thing that could lift a fleet-failure
+ * sentence on a Mac that did not run the next (UP) test was `saveExitResult`
+ * with an observation dated after the stamp — so a later UP verdict whose exit
+ * the list adoption REFUSES (the server kept its stored geo and only cleared
+ * the stamp; the observation is still dated before the failure) left the
+ * second Mac reading "tunnel down" indefinitely, while the server's own row
+ * said the contradiction was spent. This drops the stamp and its sentence and
+ * touches nothing else: the verdict triple stays, and there is no exit or
+ * latency to restore — the list adoption that follows writes those if the
+ * list carries them. Rides on an existing entry; none is invented. Idempotent:
+ * an entry with no stamp is returned unchanged, with no store write.
+ */
+export function clearFleetFailure(proxyId: string, notAfterMs?: number): Promise<ProbeCacheMap> {
+  return writeLock(async () => {
+    const all = await loadProbeCache();
+    const prior = all[proxyId];
+    if (prior === undefined) return all;
+    if (prior.exitSupersededAt === undefined && prior.fleetFailureReason === undefined) return all;
+    // (k) review — the caller decided on a SNAPSHOT; a failure this Mac wrote
+    // since (a newer stamp) must survive the clear it did not know about.
+    if (
+      notAfterMs !== undefined &&
+      prior.exitSupersededAt !== undefined &&
+      prior.exitSupersededAt > notAfterMs
+    )
+      return all;
+    const { exitSupersededAt: _superseded, fleetFailureReason: _failure, ...kept } = prior;
+    all[proxyId] = kept;
+    await getStore().set(KEY, all);
+    await getStore().save();
+    emitProbeCache(all);
+    return all;
+  });
+}
+
 /** Drop a proxy's cached probe (capability + exit-geo). Called when the
  *  proxy's connection details change — the cached reachability/UDP/exit-IP
  *  no longer describes the live endpoint, so showing it on profile cards

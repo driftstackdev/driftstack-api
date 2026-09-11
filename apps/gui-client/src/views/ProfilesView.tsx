@@ -136,14 +136,13 @@ import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import {
   deriveProbeViewWithEndpointRows,
-  ENDPOINT_MOVED_NO_VERDICT_NOTICE,
   fleetFailureReasons,
   persistServerProbe,
-  SERVER_DID_NOT_ANSWER_NOTICE,
   serverProbeStamps,
   serverVerdictUsable,
   syncListExitObserved,
   testProxyOnServer,
+  unansweredCheckNotice,
 } from '../lib/proxy-server-test';
 import {
   createProxy as createAccountProxy,
@@ -2536,9 +2535,12 @@ export function ProfilesView({
         // closure holds may predate a grid write), so the `unavailable` notice
         // in runFleetTestForRow says what is true AFTER the write — the grid
         // picks its notice the same way, so the two surfaces agree.
-        const priorEndpoint = await loadProbeCache()
-          .then((cache) => cache[px.id]?.endpoint)
+        // (k) K2 — the whole prior entry, not just its address: the notice
+        // must also know whether the card held a fleet verdict at all.
+        const prior = await loadProbeCache()
+          .then((cache) => cache[px.id])
           .catch(() => undefined);
+        const priorEndpoint = prior?.endpoint;
         const endpointMoved =
           res.resolved && priorEndpoint?.resolved === true && priorEndpoint.ip !== res.ip;
         setProbeCache(await saveEndpointResult(px.id, res, Date.now()));
@@ -2547,7 +2549,7 @@ export function ProfilesView({
         // up, measures latency and observes the exit, which is the only exit
         // identity a VPN row can ever have (the native exit probe is a SOCKS5
         // request from this Mac). Best-effort, after the pre-flight's write.
-        await runFleetTestForRow(px, res.resolved, endpointMoved);
+        await runFleetTestForRow(px, res.resolved, unansweredCheckNotice(prior, endpointMoved));
         return;
       }
       const result = await testProxy({
@@ -2612,9 +2614,11 @@ export function ProfilesView({
   async function runFleetTestForRow(
     px: LocalProxyConfig,
     resolved: boolean,
-    /** (j) J3 — the pre-flight resolved a DIFFERENT address than the last
-     *  check's, so its write already dropped the fleet verdict. */
-    endpointMoved: boolean,
+    /** (j) J3 / (k) K2 — the notice an `unavailable` outcome leaves, picked by
+     *  the caller from the entry BEFORE its pre-flight write
+     *  (`unansweredCheckNotice`): whether that write moved the endpoint, and
+     *  whether the card held a fleet verdict at all. */
+    unansweredNotice: string,
   ): Promise<ProbeCacheMap | null> {
     if (!resolved || !isVpnScheme(px.scheme)) return null;
     if (px.serverId === undefined || settings.apiKey === null || settings.apiKey.length === 0)
@@ -2639,11 +2643,9 @@ export function ProfilesView({
         // this card says why THIS check measured nothing, as a notice.
         // (j) J3 — unless the pre-flight moved the endpoint: then the verdict
         // is already gone and the notice must not claim it stands (the grid's
-        // pick, same constant, same cache).
-        setVpnNotices((m) => ({
-          ...m,
-          [px.id]: endpointMoved ? ENDPOINT_MOVED_NO_VERDICT_NOTICE : SERVER_DID_NOT_ANSWER_NOTICE,
-        }));
+        // pick, same constant, same cache). (k) K2 — nor when the card never
+        // held one; the caller made the pick from the same prior entry.
+        setVpnNotices((m) => ({ ...m, [px.id]: unansweredNotice }));
       }
       return next;
     } catch {
