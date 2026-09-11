@@ -75,6 +75,18 @@ describe('the release runbook pushes the tag before creating the release', () =>
     expect(existsSync(resolve(REPO, 'scripts/bump-gui-version.mjs'))).toBe(true);
   });
 
+  it('CRITICAL the release is created as a DRAFT and verified before it is trusted. An asset-less published release is "latest" for every installed updater (0.1.45); a draft is not. The build workflow publishes the draft on success (measured twice), so the manual publish is the fallback, after the asset + manifest check', () => {
+    expect(RUNBOOK).toMatch(/gh release create gui-v[\d.]+ --draft/);
+    expect(RUNBOOK).toMatch(/gh release view gui-v[\d.]+ --json assets,isDraft/);
+    expect(RUNBOOK).toMatch(/gh release edit gui-v[\d.]+ --draft=false/);
+    expect(RUNBOOK).toMatch(/Why a draft: an asset-less release is "latest"/);
+    // The order still holds with the draft: push the tag, THEN create.
+    const push = RUNBOOK.indexOf('git push origin gui-v');
+    const create = RUNBOOK.indexOf('gh release create gui-v');
+    expect(push).toBeGreaterThan(-1);
+    expect(create).toBeGreaterThan(push);
+  });
+
   it('VACUITY CONTROL — the fixtures are the real files and are non-trivial', () => {
     // Proves the arms above read the runbook and the hook rather than empty
     // strings, which would satisfy several of them by absence.
