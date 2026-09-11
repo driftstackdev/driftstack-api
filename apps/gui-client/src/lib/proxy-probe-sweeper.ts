@@ -11,7 +11,7 @@
 // cache-trusting path safe.
 
 import type { ProxyConfig, ProxyTestResult } from './proxies';
-import { isProbeStale, type ProbeCacheMap } from './proxy-probe-cache';
+import { isProbeStaleAfter, PROBE_TTL_MS, type ProbeCacheMap } from './proxy-probe-cache';
 import { isSocks5Probeable } from './proxy-scheme';
 
 /** Proxies re-probed per sweep. Each is a real TCP + SOCKS5 handshake against
@@ -58,44 +58,78 @@ export const SWEEP_FAILURE_RETRY_MS = 15 * 60 * 1000;
  *
  * Pure — `now` injected, no I/O — so every exclusion below is testable.
  *
- * ⛔ SOCKS5 ONLY, and this is a correctness rule rather than a preference.
- * `testProxy` performs a SOCKS5 handshake. An `openvpn` or `wireguard` proxy
- * exposes its endpoint on `host`/`port` for DISPLAY, and a SOCKS5 handshake
- * against it does not fail informatively — it fails as "unreachable". A manual
- * Test does that too, but that is one deliberate click on one proxy; a
- * background sweep would silently mark a customer's entire VPN fleet dead, on
- * its own initiative, with no one having asked for it. `http` is excluded for
- * the same reason.
+ * ⛔ The native SOCKS5 handshake (`testProxy`) is sent to SOCKS5 rows ONLY, and
+ * this is a correctness rule rather than a preference. An `openvpn` or
+ * `wireguard` proxy exposes its endpoint on `host`/`port` for DISPLAY, and a
+ * SOCKS5 handshake against it does not fail informatively — it fails as
+ * "unreachable"; a background sweep that sent it would silently mark a
+ * customer's entire VPN fleet dead, unasked. `http` fails the greeting the
+ * same way.
+ *
+ * (q) Item 13(c) — those rows are NOT dropped any more; they are planned for
+ * THEIR OWN check (the endpoint pre-flight + the fleet tunnel test — the same
+ * routine the grid's Check runs) when the runner has one (`endpointRows`),
+ * and the runner dispatches by scheme. MEASURED before this: `planSweep`
+ * dropped every non-SOCKS5 row and nothing else ever re-checked one, so for a
+ * customer whose proxies are all VPN rows (the owner's) the app-open, focus and
+ * 15-min refresh did nothing at all. Without a checker they stay out of the
+ * plan, so they can never consume the budget of a sweep that cannot check them.
+ *
+ * `staleAfterMs` (default `PROBE_TTL_MS`) is the age past which a verdict is
+ * refreshed. The steady interval keeps the TTL; the app-open / focus triggers
+ * pass a SHORT window (`ACTIVE_SWEEP_STALE_MS`), because a green row probed 5 h
+ * ago that has since gone down stayed green on every open and focus until the
+ * 6 h TTL — "auto update proxy states when opening the application" refreshed
+ * nothing a customer could see. The failure retry window is unchanged.
  *
  * ⛔ NEVER-TESTED proxies are excluded. This refreshes verdicts that have gone
  * off; a proxy with no verdict has nothing to have gone off, and probing one
  * unasked would turn "untested" into a result the customer did not request and
  * may not want (an unpaid or lapsed endpoint answers a probe with an auth
- * failure that then shows as a hard red).
+ * failure that then shows as a hard red). For an endpoint row that means an
+ * entry with a pre-flight verdict (`endpoint`) — one the customer once checked.
  *
  * ⛔ Cache entries for proxies that no longer exist are excluded — a deleted
  * proxy's entry can linger between an `invalidateProbe` failure and a reload,
  * and probing a host the customer has removed is indefensible.
  */
+export interface PlanSweepOptions {
+  /** Age past which a verdict is refreshed. Default `PROBE_TTL_MS`. */
+  staleAfterMs?: number;
+  /** Plan VPN/HTTP rows for their endpoint/fleet check (the runner has one). Default false. */
+  endpointRows?: boolean;
+}
+
 export function planSweep(
   cache: ProbeCacheMap,
   proxies: ReadonlyArray<ProxyConfig>,
   now: number,
   max: number = SWEEP_MAX_PER_RUN,
+  opts: PlanSweepOptions = {},
 ): ProxyConfig[] {
   if (max <= 0) return [];
+  const staleAfterMs = opts.staleAfterMs ?? PROBE_TTL_MS;
   const byId = new Map(proxies.map((p) => [p.id, p]));
   return Object.entries(cache)
     .filter(([id, c]) => {
       const p = byId.get(id);
       if (p === undefined) return false; // deleted proxy, lingering entry
-      if (!isSocks5Probeable(p.scheme)) return false; // T-20 — the one shared predicate
+      if (!isSocks5Probeable(p.scheme)) {
+        // T-20 — never the SOCKS5 handshake for these; their own check, or nothing.
+        if (opts.endpointRows !== true) return false;
+        if (c.endpoint === undefined) return false; // never checked → not refreshed unasked
+        // An unresolved endpoint or a fleet "tunnel down" is this row's failing
+        // verdict, retried on the failure window like a SOCKS5 "unreachable".
+        const failing = !c.endpoint.resolved || c.fleetFailureReason !== undefined;
+        if (failing && now - c.at >= SWEEP_FAILURE_RETRY_MS) return true;
+        return isProbeStaleAfter(c.at, now, staleAfterMs);
+      }
       // A failing verdict is retried after SWEEP_FAILURE_RETRY_MS instead of
       // waiting out the full positive TTL — see the constant above. Display
       // freshness is untouched: the badge keeps showing the failure until a
       // retry actually overturns it.
       if (c.result.reachable === false && now - c.at >= SWEEP_FAILURE_RETRY_MS) return true;
-      return isProbeStale(c.at, now);
+      return isProbeStaleAfter(c.at, now, staleAfterMs);
     })
     .sort((a, b) => a[1].at - b[1].at) // oldest verdict first
     .slice(0, max)
@@ -111,6 +145,13 @@ export interface SweepDeps {
   saveResult: (id: string, result: ProxyTestResult, at: number) => Promise<ProbeCacheMap>;
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  /** (q) Item 13(c) — the check for a VPN/HTTP row (the endpoint pre-flight +
+   *  the fleet tunnel test, persisting its own writes —
+   *  `checkEndpointRowForSweep` in lib/proxy-server-test). When absent, those
+   *  rows are not planned at all; they are never handed to `testProxy`. */
+  checkEndpoint?: (p: ProxyConfig) => Promise<void>;
+  /** (q) Item 13(c) — the trigger's staleness window (see `planSweep`). */
+  staleAfterMs?: number;
 }
 
 export interface SweepReport {
@@ -204,7 +245,11 @@ export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
   const skippedBusy: string[] = [];
   try {
     const [cache, proxies] = await Promise.all([deps.loadCache(), deps.listProxies()]);
-    const plan = planSweep(cache, proxies, deps.now());
+    const checkEndpoint = deps.checkEndpoint;
+    const plan = planSweep(cache, proxies, deps.now(), SWEEP_MAX_PER_RUN, {
+      ...(deps.staleAfterMs !== undefined ? { staleAfterMs: deps.staleAfterMs } : {}),
+      endpointRows: checkEndpoint !== undefined,
+    });
     for (let i = 0; i < plan.length; i += 1) {
       const p = plan[i] as ProxyConfig;
       // Pause BETWEEN probes, never before the first — a sweep should not sit
@@ -215,6 +260,15 @@ export async function runSweep(deps: SweepDeps): Promise<SweepReport> {
         continue;
       }
       try {
+        // (q) Item 13(c) — dispatch by SCHEME, under the same claim and budget:
+        // a VPN/HTTP row goes to its own check (planned only when one exists),
+        // never to the SOCKS5 handshake.
+        if (!isSocks5Probeable(p.scheme)) {
+          if (checkEndpoint === undefined) continue; // unreachable: not planned without one
+          await withProxyProbe(p.id, () => checkEndpoint(p));
+          refreshed.push(p.id);
+          continue;
+        }
         await withProxyProbe(p.id, async () => {
           const result = await deps.testProxy(p);
           await deps.saveResult(p.id, result, deps.now());
@@ -256,16 +310,49 @@ export interface SweepScheduleHost {
  *   3. a sweep whenever the window regains focus / the document becomes visible.
  *
  * The focus trigger is safe because `planSweep` only refreshes entries already
- * past their TTL (or a due failure retry): a sweep on focus therefore touches
+ * past their window (or a due failure retry): a sweep on focus therefore touches
  * genuinely-stale rows only, never fresh or unlooked-at ones — the concern that
  * removed an earlier unconditional onFocus refresh. Returns a cleanup that clears
  * both timers and removes both listeners.
+ *
+ * (q) Item 13(c) — each trigger hands the sweep ITS staleness window
+ * (`SweepRun`): the startup and focus/visibility triggers a SHORT one
+ * (`ACTIVE_SWEEP_STALE_MS`), the steady interval the full `PROBE_TTL_MS`.
+ * MEASURED before this: all three gated on the 6 h TTL, so a SOCKS5 row tested
+ * under 6 h ago refreshed on neither open nor focus — the owner-visible refresh
+ * of a healthy-looking row was unchanged at 6 h by the three triggers. A
+ * zero-arg `sweep` still type-checks and keeps the TTL on every trigger.
  */
-export function installProxySweepSchedule(sweep: () => void, host: SweepScheduleHost): () => void {
-  const startup = host.setTimeout(sweep, STARTUP_SWEEP_DELAY_MS);
-  const interval = host.setInterval(sweep, SWEEP_INTERVAL_MS);
+export type SweepTrigger = 'startup' | 'interval' | 'focus';
+
+export interface SweepRun {
+  trigger: SweepTrigger;
+  /** The window `planSweep` should use for this run (→ `SweepDeps.staleAfterMs`). */
+  staleAfterMs: number;
+}
+
+/** (q) Item 13(c) — how old a verdict may be before an app-open / focus sweep
+ *  refreshes it. Between the 15-min failure-retry floor and the 6 h TTL: a
+ *  customer returning to the app sees rows re-checked when the last check is
+ *  older than a coffee break, without a handshake storm on every alt-tab. */
+export const ACTIVE_SWEEP_STALE_MS = 20 * 60 * 1000;
+
+/** The staleness window each trigger passes — the interval keeps the TTL. */
+export function staleAfterForTrigger(trigger: SweepTrigger): number {
+  return trigger === 'interval' ? PROBE_TTL_MS : ACTIVE_SWEEP_STALE_MS;
+}
+
+export function installProxySweepSchedule(
+  sweep: (run: SweepRun) => void,
+  host: SweepScheduleHost,
+): () => void {
+  const fire = (trigger: SweepTrigger): void => {
+    sweep({ trigger, staleAfterMs: staleAfterForTrigger(trigger) });
+  };
+  const startup = host.setTimeout(() => fire('startup'), STARTUP_SWEEP_DELAY_MS);
+  const interval = host.setInterval(() => fire('interval'), SWEEP_INTERVAL_MS);
   const onActive = (): void => {
-    if (host.isVisible()) sweep();
+    if (host.isVisible()) fire('focus');
   };
   host.addFocus(onActive);
   host.addVisibility(onActive);

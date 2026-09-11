@@ -23,7 +23,7 @@
 import { disposeResponseBody } from './dispose-response-body';
 import { fetchWithDeadline } from './fetch-with-deadline';
 import { readBoundedApiJson, readBoundedDiagnosticJson } from './read-bounded-json';
-import { parseH3Observation } from './session-h3-observation';
+import { parseH3Count, parseH3Observation } from './session-h3-observation';
 import { loadBaseUrl, loadSettings } from './settings';
 
 export type SessionMode = 'ai' | 'manual' | 'pair';
@@ -250,6 +250,12 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
   // the report carried them, so a report without them is byte-identical to
   // before and an absent signal never collapses into a false negative.
   const h3 = parseH3Observation(report);
+  // (q) Item 11 residual — a MEASURED count of 0 is kept even though it is not an
+  // observation (parseH3Observation returns null for it on purpose: a zero is no
+  // evidence the proxy carries QUIC, so the ledger stamps nothing). The readout
+  // needs the zero to say "none yet (0 connections)" instead of folding a
+  // measurement back into "not observed"; an ABSENT count still adds no key.
+  const h3Count = parseH3Count(report);
   // T-26 (owner #12) — the live exit-identity fields ride the SAME envelope and
   // follow the same additive rule as h3: a key is present ONLY when the report
   // carried a well-typed value, so a report without them stays byte-identical to
@@ -283,7 +289,7 @@ function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | un
         : null,
     egress_state: egress === 'live' || egress === 'dead_proxy' ? egress : null,
     ...(h3 !== null ? { h3_connection_observed: true as const } : {}),
-    ...(h3?.count !== undefined ? { h3_connection_count: h3.count } : {}),
+    ...(h3Count !== undefined ? { h3_connection_count: h3Count } : {}),
     ...(h3?.at !== undefined ? { reported_at: h3.at } : {}),
     ...(exitIp !== undefined ? { exit_ip: exitIp } : {}),
     ...(exitCountry !== undefined ? { exit_country: exitCountry } : {}),

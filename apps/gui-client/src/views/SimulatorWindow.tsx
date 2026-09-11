@@ -579,6 +579,8 @@ export function reportHasEgressReadout(report: AgentSessionCapabilityReport | nu
     report.webrtc_candidate_ips !== undefined ||
     report.observed_at !== undefined ||
     report.h3_connection_observed === true ||
+    // (q) Item 11 residual — a measured count (a zero included) is a readout too.
+    report.h3_connection_count !== undefined ||
     report.os_fingerprint !== undefined
   );
 }

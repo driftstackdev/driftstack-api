@@ -362,7 +362,18 @@ export function probeFreshness(at: number | undefined, now: number): ProbeFreshn
 /** True when a cached verdict is too old to present as current. `untested` is
  *  NOT stale — there is nothing to have gone off. */
 export function isProbeStale(at: number | undefined, now: number): boolean {
-  return probeFreshness(at, now) === 'stale';
+  return isProbeStaleAfter(at, now, PROBE_TTL_MS);
+}
+
+/** (q) Item 13(c) — the same rule under a caller-chosen age: the sweep's
+ *  app-open / focus triggers refresh rows older than a SHORT window (a green
+ *  row probed 5 h ago that has since gone down stayed green on every open),
+ *  while the steady interval and the display keep `PROBE_TTL_MS`. Same three
+ *  answers as `probeFreshness`: undated / non-finite is NOT stale (nothing to
+ *  have gone off), a future stamp is fresh (the clock moved, not the proxy). */
+export function isProbeStaleAfter(at: number | undefined, now: number, ttlMs: number): boolean {
+  if (at === undefined || !Number.isFinite(at)) return false;
+  return now - at >= ttlMs;
 }
 
 // The "which proxies should a sweep refresh" selection lives ONLY in
@@ -852,7 +863,19 @@ export function saveServerProbeResult(
         : {}),
       ...(vantage !== undefined ? { measuredFrom: vantage.measuredFrom } : {}),
       ...(vantage?.nodeId !== undefined ? { nodeId: vantage.nodeId } : {}),
-      ...(typeof server.quicProbe === 'boolean' ? { quicProbe: server.quicProbe } : {}),
+      // (q) Item 3 residual — the relay verdict is REPLACED by a fleet answer
+      // (present → stored, absent → the Mac ran and produced none → removed),
+      // but a CONTROL-PLANE fallback measured nothing about QUIC: the server
+      // never emits `quic_ok` off that path, so erasing here turned a green
+      // relay chip back to '~' with no cause named, on a fleet miss the
+      // customer did not cause. The fleet's last relay fact stands; the
+      // vantage/node above still flip to the control plane, so the fallback
+      // itself is never silent.
+      ...(typeof server.quicProbe === 'boolean'
+        ? { quicProbe: server.quicProbe }
+        : vantage?.measuredFrom === 'control_plane' && typeof prior.quicProbe === 'boolean'
+          ? { quicProbe: prior.quicProbe }
+          : {}),
       // (h) — when THIS server test ran, so a VPN row's "Tested" can date the
       // fleet number it shows rather than the pre-flight that preceded a
       // refusal.

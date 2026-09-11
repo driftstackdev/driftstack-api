@@ -36,10 +36,7 @@ export interface H3Observation {
 export function parseH3Observation(report: unknown): H3Observation | null {
   if (report === null || typeof report !== 'object' || Array.isArray(report)) return null;
   const r = report as Record<string, unknown>;
-  const count =
-    typeof r.h3_connection_count === 'number' && Number.isFinite(r.h3_connection_count)
-      ? r.h3_connection_count
-      : undefined;
+  const count = parseH3Count(report);
   const observed = r.h3_connection_observed === true || (count !== undefined && count > 0);
   if (!observed) return null;
   const at = typeof r.timestamp === 'string' ? Date.parse(r.timestamp) : Number.NaN;
@@ -47,6 +44,51 @@ export function parseH3Observation(report: unknown): H3Observation | null {
     ...(Number.isFinite(at) ? { at } : {}),
     ...(count !== undefined ? { count } : {}),
   };
+}
+
+/**
+ * The report's `h3_connection_count` when it carried a finite number — a ZERO
+ * included. The store projects `frame.h3ConnectionCount ?? null` (never `?? 0`)
+ * precisely so that a zero stays what the node measured ("this session has
+ * carried no HTTP/3 connection yet") and an absent key stays "nothing measured";
+ * this reader keeps both apart the same way. `undefined` for absent / null /
+ * non-finite / a non-object report.
+ */
+export function parseH3Count(report: unknown): number | undefined {
+  if (report === null || typeof report !== 'object' || Array.isArray(report)) return undefined;
+  const v = (report as Record<string, unknown>).h3_connection_count;
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/**
+ * (q) Item 11 residual — the three states the cockpit's HTTP/3 readout can be in.
+ *
+ *   'observed'     the latched flag is `true`, or a positive count crossed —
+ *                  HTTP/3 was carried this session (the green verdict);
+ *   'none-yet'     a MEASURED count of 0 without the flag — the node counted and
+ *                  found no HTTP/3 connection so far. This is a measurement, not
+ *                  an absence: the store's own contract (session-capability-
+ *                  report-store.ts) says a zero is one, and `parseH3Observation`
+ *                  deliberately returns null for it (a zero is not evidence that
+ *                  the PROXY carries QUIC, so the ledger stamps nothing) — but
+ *                  the READOUT must not fold it back into "not observed";
+ *   'not-observed' the report carried neither — nothing in this repo can prove
+ *                  the fork build is measuring, so this says "not observed",
+ *                  never "measuring…" (the (o) O4 argument that renamed the OS
+ *                  readout), and never "no HTTP/3".
+ */
+export type H3ReadoutState = 'observed' | 'none-yet' | 'not-observed';
+
+export function h3ReadoutState(
+  report: { h3_connection_observed?: true; h3_connection_count?: number } | null,
+): H3ReadoutState {
+  if (report === null) return 'not-observed';
+  const count = report.h3_connection_count;
+  if (report.h3_connection_observed === true || (count !== undefined && count > 0)) {
+    return 'observed';
+  }
+  if (count === 0) return 'none-yet';
+  return 'not-observed';
 }
 
 /** The slice of a profile binding the attribution needs. */

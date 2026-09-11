@@ -14,18 +14,29 @@
 // the decision between them, made once.
 
 import {
+  createProxy as createAccountProxy,
   listProxies as listAccountProxies,
   testAccountProxy,
+  updateProxy as updateAccountProxy,
   type AccountProxyExitObserved,
+  type AccountProxyInput,
   type AccountProxyMeta,
   type AccountProxyScheme,
   type AccountProxyTestNotRun,
   type AccountProxyTestResult,
   type MeasuredQuic,
 } from './account-proxies';
+import { openvpnAutoStrip } from './openvpn-refusal';
 import type { OsFingerprint } from './os-fingerprint-verdict';
-import { isProxyUsable, resolveEndpoint } from './proxies';
-import { isVpnScheme } from './proxy-scheme';
+import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
+import {
+  isProxyUsable,
+  resolveEndpoint,
+  setProxyServerId,
+  updateProxy as updateLocalProxy,
+  type ProxyConfig,
+} from './proxies';
+import { isSocks5Probeable, isVpnScheme } from './proxy-scheme';
 import {
   clearFleetFailure,
   deriveProbeViewState,
@@ -781,4 +792,178 @@ export function fleetFailureReasons(cache: ProbeCacheMap): Record<string, string
     out[id] = c.fleetFailureReason;
   }
   return out;
+}
+
+// ─── (q) Items 2 / 12-memory (A) / 13(a)(c)(d) — the account row every proxy
+// surface shares, and the background check for a VPN/HTTP row ───────────────
+
+/**
+ * (q) Items 2 / 13(a) — the wire body for a local proxy's account_proxies row,
+ * with a STORED refusable OpenVPN blob normalised the way the paste / upload
+ * path already normalises a NEW one (`openvpnAutoStrip`: `script-security >= 2`
+ * lowered to 1, script directives removed — inert on Driftstack, where the
+ * fleet forces `--script-security 1` and never runs user scripts).
+ *
+ * ⛔ MEASURED: the three launch/sync chokepoints (ProfilesView.ensureServerProxy,
+ * AgentChatView.ensureServerProxyId, ProxiesView.pushLocalMaterialToAccount)
+ * each forwarded `p.openvpn` VERBATIM, so a row pasted on a build before the
+ * strip existed — the owner's own `72.65.206.209_…_resvpn.ovpn` with
+ * `script-security 2` on line 46 — 400'd on EVERY launch from the grid and the
+ * chat (`Line 46: "script-security 2" — Driftstack does not run scripts…`) until
+ * it was opened in Edit AND re-saved; the editor's mount heal rewrote only the
+ * draft. One builder for all three, so the body a launch PUTs is the body a
+ * Check PUTs is the body a paste would have saved.
+ *
+ * `healedOpenvpn` is the stripped blob when the strip CHANGED it — the caller
+ * persists it to the local row once, so the next launch is byte-identical and
+ * the heal is not repeated on every sync. Null when the stored blob is already
+ * what the control plane accepts (a clean row is forwarded byte for byte — the
+ * vacuity the mount heal already pins) and for every other scheme. The strip
+ * never invents missing material: an external cert/key reference is untouched
+ * and still earns the server's own honest refusal.
+ */
+export function accountProxyInputFor(p: ProxyConfig): {
+  input: AccountProxyInput;
+  healedOpenvpn: string | null;
+} {
+  const healed = p.openvpn !== undefined ? openvpnAutoStrip(p.scheme, p.openvpn.config_blob) : null;
+  const openvpn =
+    p.openvpn === undefined
+      ? undefined
+      : healed === null
+        ? p.openvpn
+        : { ...p.openvpn, config_blob: healed.config };
+  return {
+    input: {
+      label: p.label,
+      scheme: p.scheme ?? 'socks5',
+      host: p.host,
+      port: p.port,
+      username: p.username,
+      password: p.password,
+      ...(openvpn !== undefined ? { openvpn } : {}),
+      ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
+    },
+    healedOpenvpn: healed === null ? null : healed.config,
+  };
+}
+
+/** (q) — write the healed blob back to the LOCAL row (same fields, only the
+ *  OpenVPN block changes), so the heal happens once. */
+export function persistHealedOpenvpn(p: ProxyConfig, config: string): Promise<ProxyConfig | null> {
+  return updateLocalProxy(p.id, {
+    label: p.label,
+    host: p.host,
+    port: p.port,
+    username: p.username,
+    password: p.password,
+    ...(p.scheme !== undefined ? { scheme: p.scheme } : {}),
+    ...(p.openvpn !== undefined ? { openvpn: { ...p.openvpn, config_blob: config } } : {}),
+    ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
+  });
+}
+
+export interface EnsuredAccountProxy {
+  /** The account_proxies row id — the `proxy_id` a launch passes, the id a Test asks the fleet about. */
+  id: string;
+  /** True when this call CREATED the row (the local row now carries `serverId`). */
+  created: boolean;
+  /** True when a stored refusable OpenVPN blob was normalised on the way (and persisted locally). */
+  healed: boolean;
+}
+
+/**
+ * (q) Item 12-memory (A) — ensure the local proxy has a server-side
+ * account_proxies row (encrypted under the account TMK, owner-scoped) and
+ * return its id. ONE implementation for the launch (ProfilesView), the chat's
+ * launch (AgentChatView) and — new — the Test paths of the grid and the card.
+ *
+ * ⛔ MEASURED: the row was created ONLY by a launch, so a SOCKS5 proxy added on
+ * the Proxies tab and Tested before its first launch greened natively and then
+ * skipped the fleet leg in silence (`p.serverId === undefined`, no else): no
+ * QUIC relay verdict, no OS fingerprint, no fleet latency, and a chip telling
+ * the customer to "run Test … to confirm" — the owner's "my proxy has QUIC but
+ * it's not detecting it". A Test with an API key now stores the row first.
+ *
+ * Creates on first use (caching the id on the local proxy), refreshes on later
+ * calls so an edited host/credential/config stays current server-side, and
+ * self-heals a stale cached id (the row was deleted server-side → the PUT
+ * 404s) by re-creating. Any other error is real and is thrown. Returns
+ * undefined when there is no API key (nothing can be stored without one).
+ */
+export async function ensureAccountProxyRow(
+  p: ProxyConfig,
+  baseUrl: string,
+  apiKey: string | null,
+): Promise<EnsuredAccountProxy | undefined> {
+  if (apiKey === null || apiKey.length === 0) return undefined;
+  const { input, healedOpenvpn } = accountProxyInputFor(p);
+  // Heal ONCE, locally, before the wire. Best-effort: the body below carries
+  // the stripped blob whether or not the local write landed, so a launch never
+  // 400s on a line the fleet would have ignored anyway.
+  if (healedOpenvpn !== null) await persistHealedOpenvpn(p, healedOpenvpn).catch(() => null);
+  const healed = healedOpenvpn !== null;
+  if (p.serverId !== undefined) {
+    try {
+      await updateAccountProxy(baseUrl, apiKey, p.serverId, input);
+      return { id: p.serverId, created: false, healed };
+    } catch (err) {
+      // Stale cached serverId: the account_proxies row was deleted server-side
+      // (e.g. during a DB recovery), so the PUT 404s. Self-heal by clearing the
+      // stale id and re-creating below, instead of failing the sync forever.
+      if ((err as { status?: number }).status !== 404) throw err;
+    }
+  }
+  const created = await createAccountProxy(baseUrl, apiKey, input);
+  await setProxyServerId(p.id, created.id);
+  return { id: created.id, created: true, healed };
+}
+
+/** (q) Item 12-memory (A) — the SOCKS5 Test's notice when there is no API key:
+ *  the native verdict stands, and the row says which legs did NOT run and why,
+ *  instead of a silent '~' QUIC chip whose hint says "run Test" — the loop the
+ *  customer was already in. The next step is the one control the GUI has. */
+export const SOCKS5_TEST_NO_API_KEY_NOTICE = `Tested from this Mac only. ${MISSING_API_KEY_NEXT_STEP} from the test Mac too — that is where QUIC, the OS fingerprint and the fleet latency are measured.`;
+
+/** (q) Item 12-memory (A) — the SOCKS5 Test's notice when the row could not be
+ *  stored on the account (the create/refresh threw), so the fleet leg did not
+ *  run. Names the cause in the server's words when it gave one; never "check
+ *  your address" for a call that did not reach the server. */
+export function socks5FleetTestNotStoredNotice(err: unknown): string {
+  const detail = (err as { detail?: unknown } | null)?.detail;
+  const said =
+    typeof detail === 'string' && detail.length > 0
+      ? ` Driftstack said: ${detail}`
+      : ' The server did not answer; try Test again.';
+  return `Tested from this Mac only. Couldn't store this proxy on your account, so the test Mac did not test it (QUIC, OS fingerprint, fleet latency).${said}`;
+}
+
+/**
+ * (q) Item 13(c) — the background sweep's check for a VPN / HTTP row: the SAME
+ * two legs the grid's Check runs (`ProxiesView.handleCheckEndpoint`) — the DNS
+ * pre-flight of the endpoint, persisted as the row's endpoint verdict, then for
+ * a resolved VPN row stored on the account the fleet test, persisted with the
+ * observed exit adopted (VPN rows have no other exit). Never the native SOCKS5
+ * handshake (T-20 — it can only read "unreachable" against a UDP endpoint).
+ *
+ * ⛔ MEASURED: `planSweep` dropped every non-SOCKS5 row, and no timer or focus
+ * trigger ever called the endpoint check — so for a customer whose proxies are
+ * VPN rows (the owner's), the app-open / focus / 15-min refresh did nothing at
+ * all. Same preconditions as the grid, silently: a sweep the customer did not
+ * ask for must not write a notice (it writes only what it measured). An HTTP
+ * row gets the pre-flight alone, as on the grid. Errors propagate so the sweep
+ * counts the row as `failed` (a check that could not run is not a verdict).
+ */
+export async function checkEndpointRowForSweep(
+  p: ProxyConfig,
+  creds: { baseUrl: string; apiKey: string | null },
+  now: () => number = () => Date.now(),
+): Promise<void> {
+  if (isSocks5Probeable(p.scheme)) return; // a SOCKS5 row has its own probe
+  const r = await resolveEndpoint(p.host, p.port);
+  await saveEndpointResult(p.id, { resolved: r.resolved, ip: r.ip, message: r.message }, now());
+  if (!r.resolved || !isVpnScheme(p.scheme)) return;
+  if (creds.apiKey === null || creds.apiKey.length === 0 || p.serverId === undefined) return;
+  const outcome = await testProxyOnServer(creds.baseUrl, creds.apiKey, p.serverId);
+  await persistServerProbe(p.id, outcome, { adoptExit: true });
 }

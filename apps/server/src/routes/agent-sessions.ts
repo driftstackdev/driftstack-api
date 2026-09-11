@@ -1258,14 +1258,55 @@ export async function dispatchSessionAssignOnCreate(args: {
       accountId !== undefined && proxyId !== undefined && exitIdentityCache !== undefined
         ? await exitIdentityCache.get(accountId, proxyId)
         : undefined;
+    // (q) Item 14 (B) — for an openvpn/wireguard wire the cache is NEVER warm:
+    // `runProxyPrelaunchGate` returns before dialling a VPN row (the control
+    // plane cannot bring a tunnel up), so `exitIdentityCache.set` never runs for
+    // it and every VPN launch dispatched with NO `exit_identity` — the box then
+    // started on the archetype-zone fallback (exit-timezone.ts) while a socks5
+    // session got its block from the pre-launch probe. A VPN row's exit lives on
+    // the ROW (`exitObserved`, written by the fleet-vantage Check and by a live
+    // session's capability report), and the mid-session swap already reads it
+    // there (`storedVpnExitAsSwapIdentity`, N14). Read it here for the START
+    // path too, under the same refusals (superseded / no country / undated).
+    // A socks5 row keeps the cache as its only source — its exit is probed on
+    // every launch, and a stored row exit must not stand in for a probe that
+    // measured nothing. Best-effort: a row-read failure degrades to "no block",
+    // never to a dropped dispatch.
+    const vpnWireType =
+      inlineProxyConfig !== undefined &&
+      'type' in inlineProxyConfig &&
+      (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
+        ? inlineProxyConfig.type
+        : null;
+    let storedVpnExit: { identity: ProbeExitIdentity; probedAt: string } | undefined;
+    if (
+      cachedExit === undefined &&
+      vpnWireType !== null &&
+      accountId !== undefined &&
+      proxyId !== undefined &&
+      accountProxiesService !== undefined
+    ) {
+      try {
+        storedVpnExit = storedVpnExitAsSwapIdentity(
+          await accountProxiesService.findOwned(proxyId, accountId),
+        );
+      } catch (err) {
+        logger?.warn(
+          { component: 'agent-session-dispatch', sessionId, proxyId, err },
+          'stored VPN exit read failed; dispatching without exit_identity',
+        );
+        storedVpnExit = undefined;
+      }
+    }
+    const exitSource = cachedExit ?? storedVpnExit;
     const exitIdentity =
-      cachedExit !== undefined
+      exitSource !== undefined
         ? {
-            ip: cachedExit.identity.ip,
-            country: cachedExit.identity.country,
-            region: cachedExit.identity.region,
-            city: cachedExit.identity.city,
-            timezone: cachedExit.identity.timezone,
+            ip: exitSource.identity.ip,
+            country: exitSource.identity.country,
+            region: exitSource.identity.region,
+            city: exitSource.identity.city,
+            timezone: exitSource.identity.timezone,
             // With no egress configured there is no proxy to be UDP-capable,
             // so quicOk is false rather than a claim about a config that does
             // not exist. (A cached exit identity can outlive the proxy that
@@ -1277,12 +1318,12 @@ export async function dispatchSessionAssignOnCreate(args: {
                     (inlineProxyConfig.type === 'openvpn' || inlineProxyConfig.type === 'wireguard')
                   ? true
                   : (inlineProxyConfig as { udp_capable?: boolean | null }).udp_capable === true,
-            probedAt: cachedExit.probedAt,
+            probedAt: exitSource.probedAt,
           }
         : undefined;
     // T-11 — when the customer set no explicit override, spoof geolocation to
     // the exit's measured coordinates so navigator.geolocation matches the IP.
-    const resolvedGeolocation = resolveDispatchGeolocation(geolocation, cachedExit?.identity);
+    const resolvedGeolocation = resolveDispatchGeolocation(geolocation, exitSource?.identity);
     const assign = serializeSessionAssign({
       sessionId,
       archetype: resolveDispatchArchetype({
@@ -1976,7 +2017,8 @@ export function resolveDispatchGeolocation(
 
 /**
  * (n) N14 — a VPN row's STORED exit (`exitObserved`) as the identity a mid-session
- * egress swap hands the node, or `undefined` when there is none the swap may use:
+ * egress swap — and, since (q) Item 14 (B), the create-time dispatch — hands the
+ * node, or `undefined` when there is none either may use:
  *   * no row / never observed → nothing to show the device;
  *   * `exitSupersededAt` set → the last fleet verdict found the tunnel DOWN
  *     behind this exit, so it is contradicted: the /test reply refuses to attach

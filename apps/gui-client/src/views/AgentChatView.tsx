@@ -50,12 +50,9 @@ import {
   type StoredChat,
 } from '../lib/chat-history';
 import { RelativeTime } from '../components/RelativeTime';
-import { listProxies, setProxyServerId, type ProxyConfig } from '../lib/proxies';
+import { listProxies, type ProxyConfig } from '../lib/proxies';
 import { listBindings } from '../lib/profile-bindings';
-import {
-  createProxy as createAccountProxy,
-  updateProxy as updateAccountProxy,
-} from '../lib/account-proxies';
+import { ensureAccountProxyRow } from '../lib/proxy-server-test';
 
 const MODELS: ReadonlyArray<{ id: ChatModel; label: string }> = [
   { id: 'claude-opus-5', label: 'Opus 5' },
@@ -109,37 +106,21 @@ function pickProxyFor(
  *  its id to pass as proxy_id. Creates on first use (caching the id on the local
  *  proxy), refreshes on later launches so an edited host/credential stays current.
  *  Returns undefined when there's no API key (caller launches without proxy_id →
- *  operator-default egress, same as today). */
+ *  operator-default egress, same as today).
+ *
+ *  (q) Items 2 / 13(a) — no longer a copy: the SAME step the Profiles launch
+ *  runs (lib/proxy-server-test.ensureAccountProxyRow), which normalises a
+ *  STORED refusable OpenVPN blob before the PUT. The chat launch of an unopened
+ *  legacy `script-security 2` row used to block identically to the grid's
+ *  (`Line 46: …` from the server), because this copy forwarded `p.openvpn`
+ *  verbatim too. */
 async function ensureServerProxyId(
   p: ProxyConfig,
   baseUrl: string,
   apiKey: string | null,
 ): Promise<string | undefined> {
-  if (apiKey === null || apiKey.length === 0) return undefined;
-  const input = {
-    label: p.label,
-    scheme: p.scheme ?? ('socks5' as const),
-    host: p.host,
-    port: p.port,
-    username: p.username,
-    password: p.password,
-    ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
-    ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
-  };
-  if (p.serverId !== undefined) {
-    try {
-      await updateAccountProxy(baseUrl, apiKey, p.serverId, input);
-      return p.serverId;
-    } catch (err) {
-      // Stale cached serverId (the account_proxies row was deleted server-side):
-      // the PUT 404s. Self-heal by re-creating below instead of failing forever.
-      // Any other error is real — re-throw it.
-      if ((err as { status?: number }).status !== 404) throw err;
-    }
-  }
-  const created = await createAccountProxy(baseUrl, apiKey, input);
-  await setProxyServerId(p.id, created.id);
-  return created.id;
+  const ensured = await ensureAccountProxyRow(p, baseUrl, apiKey);
+  return ensured?.id;
 }
 
 /** Outcome of resolving a profile's egress proxy.

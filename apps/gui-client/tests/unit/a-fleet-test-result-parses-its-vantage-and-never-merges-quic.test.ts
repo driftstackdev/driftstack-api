@@ -389,7 +389,7 @@ describe('the cache', () => {
     expect(c).not.toHaveProperty('quicProbe');
   });
 
-  it('a control-plane fallback REPLACES a prior fleet label — the fallback is never silent', async () => {
+  it('a control-plane fallback REPLACES a prior fleet label — the fallback is never silent — but KEEPS the fleet relay verdict it did not re-measure', async () => {
     await saveProbeResult('p1', OK, 1);
     await saveServerProbeResult(
       'p1',
@@ -401,7 +401,38 @@ describe('the cache', () => {
     expect(c?.serverLatencyMs).toBe(90);
     expect(c?.measuredFrom).toBe('control_plane');
     expect(c).not.toHaveProperty('nodeId'); // no Mac measured this number
-    expect(c).not.toHaveProperty('quicProbe'); // no fleet relay verdict either
+    // (q) Item 3 residual — the relay verdict is the FLEET's fact about the
+    // proxy, and the control plane never emits `quic_ok` (only a fleet Mac runs
+    // the relay leg): a fleet miss the customer did not cause used to turn a
+    // green relay chip back to '~' with no cause named. The vantage above still
+    // flips, so the fallback stays visible; the relay fact stands.
+    // MUTATION: drop the `measuredFrom === 'control_plane'` keep in
+    // saveServerProbeResult → quicProbe is erased here → red.
+    expect(c?.quicProbe).toBe(true);
+  });
+
+  it('CONTROL — a FLEET answer without a relay verdict DROPS the prior one: that Mac ran and produced none', async () => {
+    // The direction the real failure goes for the keep above: widened to every
+    // vantage, a fleet re-test that measured no relay would keep wearing last
+    // week's green chip. Only the control-plane fallback keeps it.
+    await saveProbeResult('p1', OK, 1);
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 31, measuredFrom: 'fleet', nodeId: 'mac-mini-07', quicProbe: true },
+      2,
+    );
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 35, measuredFrom: 'fleet', nodeId: 'mac-mini-08' },
+      3,
+    );
+    const c = (await loadProbeCache()).p1;
+    expect(c?.nodeId).toBe('mac-mini-08');
+    expect(c).not.toHaveProperty('quicProbe');
+    // And a control-plane fallback with NO prior relay verdict invents none.
+    await saveProbeResult('p2', OK, 1);
+    await saveServerProbeResult('p2', { latencyMs: 90, measuredFrom: 'control_plane' }, 3);
+    expect((await loadProbeCache()).p2).not.toHaveProperty('quicProbe');
   });
 
   it('a server result without a vantage leaves the number unlabelled, not fleet-labelled', async () => {

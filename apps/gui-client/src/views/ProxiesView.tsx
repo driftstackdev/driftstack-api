@@ -62,10 +62,15 @@ import { clearBindingsForProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
+  accountProxyInputFor,
   deriveProbeViewWithEndpointRows,
+  ensureAccountProxyRow,
   fleetFailureReasons,
+  persistHealedOpenvpn,
   persistServerProbe,
   serverProbeStamps,
+  SOCKS5_TEST_NO_API_KEY_NOTICE,
+  socks5FleetTestNotStoredNotice,
   syncListExitObserved,
   testProxyOnServer,
   unansweredCheckNotice,
@@ -816,16 +821,25 @@ export function ProxiesView(): JSX.Element {
     if (p.serverId === undefined) return;
     // The SAME body ensureServerProxy builds at launch, so the account row after a
     // Check is byte-identical to the one a launch would have written.
-    await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, {
-      label: p.label,
-      scheme: p.scheme ?? 'socks5',
-      host: p.host,
-      port: p.port,
-      username: p.username,
-      password: p.password,
-      ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
-      ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
-    });
+    // (q) Items 2 / 13(a) — built by the shared step, so a STORED refusable
+    // OpenVPN blob (`script-security 2` from a pre-strip build) is normalised
+    // here exactly as at launch: this PUT used to carry the raw blob, 400, and
+    // — being best-effort — swallow it, so Check never said why the row kept
+    // failing. The healed blob is persisted to the local row once (and mirrored
+    // into this grid's list), so the next Check or launch sends the same bytes.
+    const { input, healedOpenvpn } = accountProxyInputFor(p);
+    if (healedOpenvpn !== null) {
+      await persistHealedOpenvpn(p, healedOpenvpn).catch(() => null);
+      setState((s) => ({
+        ...s,
+        proxies: s.proxies.map((x) =>
+          x.id === p.id && x.openvpn !== undefined
+            ? { ...x, openvpn: { ...x.openvpn, config_blob: healedOpenvpn } }
+            : x,
+        ),
+      }));
+    }
+    await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
   }
 
   // N4 (owner: "Proxy check OVPN also not working") — a saved VPN row's on-demand
@@ -1072,8 +1086,17 @@ export function ProxiesView(): JSX.Element {
       setServerVantage((m) => (vantage !== undefined ? { ...m, [id]: vantage } : dropKey(m, id)));
       // The fleet QUIC-relay verdict is its own chip; it never becomes a
       // quicMeasured value.
+      // (q) Item 3 residual — a CONTROL-PLANE fallback measured nothing about
+      // QUIC (only a fleet Mac runs the relay leg), so it keeps the relay
+      // verdict the last fleet run left, exactly as the cache write does
+      // (`saveServerProbeResult`); the vantage above still flips to "server",
+      // so the fallback is visible. A FLEET answer without a relay verdict
+      // still drops it — that Mac ran and produced none.
       const relay = outcome.quicProbe;
-      setQuicProbe((m) => (relay !== undefined ? { ...m, [id]: relay } : dropKey(m, id)));
+      const cpFallback = vantage?.measuredFrom === 'control_plane';
+      setQuicProbe((m) =>
+        relay !== undefined ? { ...m, [id]: relay } : cpFallback ? m : dropKey(m, id),
+      );
       // VPN exit parity (b) — the exit the fleet Mac observed is the exit the
       // profile will have; it lands in the same row cell as the native probe's
       // exit, and for a VPN row it is the only exit there can be.
@@ -1152,6 +1175,11 @@ export function ProxiesView(): JSX.Element {
       const { result, probedAt } = probed;
       setTestResults((r) => ({ ...r, [p.id]: result }));
       setTestedAt((t) => ({ ...t, [p.id]: probedAt }));
+      // (q) Item 12-memory (A) — the previous Test's notice ("tested from this
+      // Mac only…") belongs to the previous Test: it goes the moment THIS one
+      // has its native verdict, and is re-written below only if the fleet leg
+      // is skipped again.
+      setVpnNotices((m) => dropKey(m, p.id));
       // E-2: exit-geo through the proxy. A null result is a genuine probe
       // failure (V-857) rather than a missing dependency, and the card says so.
       if (isProxyUsable(result)) {
@@ -1188,24 +1216,58 @@ export function ProxiesView(): JSX.Element {
         // client, not its destination. Only a proxy stored on the account can
         // be tested there. Best-effort: a miss keeps the prior verdict, and
         // nothing here can change the connectivity result above.
-        if (p.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
-          // The control plane's own test is the ONLY source of the passive OS
-          // fingerprint AND the honest fleet-side latency/QUIC verdict — only a
-          // proxy stored on the account can be tested there. Best-effort: a miss
-          // keeps the prior verdicts, and nothing here changes the connectivity
-          // result measured above.
-          // T-1 — ask for the FLEET vantage: the Mac that will run the profile
-          // measures it; the server says so (or says it fell back) in the reply.
-          // T-27 — the fetch, the parse of the verdicts and the cache write are
-          // ONE shared step (lib/proxy-server-test) with the profile card's Test,
-          // so the two cannot drift again; only the grid's own state is applied
-          // here. The QUIC stamp inside it is the SERVER's `quic_measured_at`
-          // (drop 5) — not this Mac's clock at reply time.
-          const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, p.serverId);
-          if (stale()) return null;
-          // The ok / failed application is shared with the VPN row's check (b).
-          applyServerProbeOutcome(p.id, outcome);
-          void persistServerProbe(p.id, outcome);
+        //
+        // (q) Item 12-memory (A) — the row is STORED here when it is not yet
+        // (an API key is the only precondition, and it is checked FIRST: a
+        // customer with no key cannot store anything). This leg used to sit
+        // behind `p.serverId !== undefined` with no else, so a SOCKS5 proxy
+        // added on this tab and Tested before its first launch greened natively
+        // and silently skipped the fleet: no relay verdict, no OS fingerprint,
+        // and a '~' QUIC chip whose hint said "run Test" — the loop the owner
+        // read as "it's not detecting my QUIC". Each way the leg does NOT run
+        // now leaves the row a notice naming the cause and the next step.
+        if (settings.apiKey === null || settings.apiKey.length === 0) {
+          setVpnNotices((m) => ({ ...m, [p.id]: SOCKS5_TEST_NO_API_KEY_NOTICE }));
+        } else {
+          let serverId: string | undefined = p.serverId;
+          if (serverId === undefined) {
+            try {
+              const ensured = await ensureAccountProxyRow(p, settings.baseUrl, settings.apiKey);
+              if (stale()) return null;
+              serverId = ensured?.id;
+              if (ensured?.created === true) {
+                // Mirror the persisted `serverId` into this grid's list, so the
+                // next Test / Check of the row takes the stored path at once.
+                const storedId = ensured.id;
+                setState((s) => ({
+                  ...s,
+                  proxies: s.proxies.map((x) => (x.id === p.id ? { ...x, serverId: storedId } : x)),
+                }));
+              }
+            } catch (err) {
+              if (stale()) return null;
+              setVpnNotices((m) => ({ ...m, [p.id]: socks5FleetTestNotStoredNotice(err) }));
+            }
+          }
+          if (serverId !== undefined) {
+            // The control plane's own test is the ONLY source of the passive OS
+            // fingerprint AND the honest fleet-side latency/QUIC verdict — only a
+            // proxy stored on the account can be tested there. Best-effort: a miss
+            // keeps the prior verdicts, and nothing here changes the connectivity
+            // result measured above.
+            // T-1 — ask for the FLEET vantage: the Mac that will run the profile
+            // measures it; the server says so (or says it fell back) in the reply.
+            // T-27 — the fetch, the parse of the verdicts and the cache write are
+            // ONE shared step (lib/proxy-server-test) with the profile card's Test,
+            // so the two cannot drift again; only the grid's own state is applied
+            // here. The QUIC stamp inside it is the SERVER's `quic_measured_at`
+            // (drop 5) — not this Mac's clock at reply time.
+            const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
+            if (stale()) return null;
+            // The ok / failed application is shared with the VPN row's check (b).
+            applyServerProbeOutcome(p.id, outcome);
+            void persistServerProbe(p.id, outcome);
+          }
         }
       } else {
         // Proxy is no longer usable (not reachable / auth failed) — drop any
@@ -1840,9 +1902,18 @@ function ProxyTable({
   // one; now a row click toggles, and shift+row-click selects the whole range.
   const lastClickedIdRef = useRef<string | null>(null);
   function toggleOne(id: string, shiftKey = false): void {
+    // (q) Item 4 — the anchor is read BEFORE the state update is queued, not
+    // inside the updater. The updater ran lazily (at render, whenever this
+    // view had another update pending — a probe-cache emit, a Test in flight),
+    // by which time `lastClickedIdRef.current` had already been moved to the
+    // row being shift-clicked; `anchor === id` then skipped the range and the
+    // click toggled ONE row. MEASURED in jsdom: shift-clicking the row body
+    // after clicking A selected only A and E — so this was never only the
+    // checkbox handler's dropped modifier.
+    const anchor = lastClickedIdRef.current;
+    lastClickedIdRef.current = id;
     setSelected((prev) => {
       const next = new Set(prev);
-      const anchor = lastClickedIdRef.current;
       if (shiftKey && anchor !== null && anchor !== id) {
         const order = sorted.map((p) => p.id);
         const a = order.indexOf(anchor);
@@ -1860,7 +1931,6 @@ function ProxyTable({
       else next.add(id);
       return next;
     });
-    lastClickedIdRef.current = id;
   }
 
   const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
@@ -1946,7 +2016,7 @@ function ProxyTable({
                   onChange={() =>
                     setSelected(allSelected ? new Set() : new Set(proxies.map((p) => p.id)))
                   }
-                  className="accent-[rgb(var(--accent-rgb))]"
+                  className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
                 />
               </th>
               <Th label="Proxy" sortKey="label" />
@@ -2147,7 +2217,7 @@ function ProxyRow({
         }
         onToggle(e.shiftKey);
       }}
-      className={`cursor-pointer border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
+      className={`cursor-pointer select-none border-b border-surface-divider/40 transition-colors last:border-b-0 hover:bg-surface-inset/50 ${
         selected ? 'bg-[rgb(var(--accent-rgb)/0.07)]' : ''
       }`}
     >
@@ -2158,7 +2228,13 @@ function ProxyRow({
           type="checkbox"
           aria-label={`Select ${p.label}`}
           checked={selected}
-          onChange={() => onToggle(false)}
+          // (q) Item 4 — the modifier SURVIVES a shift+click on the checkbox
+          // itself: the row handler returns early for a click on the input, and
+          // this handler used to call `onToggle(false)`, so shift-clicking A's
+          // box then E's box selected only A and E; the range worked only when
+          // the shift-click landed on the row body. React drives a checkbox's
+          // onChange from the native click, so its modifier keys are here.
+          onChange={(e) => onToggle((e.nativeEvent as MouseEvent).shiftKey === true)}
           className="h-4 w-4 cursor-pointer accent-[rgb(var(--accent-rgb))]"
         />
       </td>
@@ -2353,8 +2429,12 @@ function ProxyRow({
           {/* (h) finding 3 — the notice sits beside a standing failure too: the
               failure is the LAST verdict (the cache's), the notice is what THIS
               check did not do; hiding one behind the other lost either. */}
-          {vpnNotice !== undefined && !isSocks5Probeable(p.scheme) && (
+          {/* (q) Item 12-memory (A) — on a SOCKS5 row too: the notice is what
+              the Test did NOT do (no key / not storable → no fleet leg), which
+              the native pill alone cannot say. */}
+          {vpnNotice !== undefined && (
             <span
+              data-component="proxy-row-notice"
               className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-ink-muted"
               title={vpnNotice}
             >

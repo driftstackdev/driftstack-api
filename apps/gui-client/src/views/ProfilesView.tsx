@@ -121,7 +121,6 @@ import {
   isProxyUsable,
   addProxy,
   listProxies,
-  setProxyServerId,
   testProxy,
   probeProxyExit,
   resolveEndpoint,
@@ -139,19 +138,18 @@ import { withProxyProbe } from '../lib/proxy-probe-sweeper';
 import { VPN_NO_API_KEY_CHECK_NOTICE, VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
 import {
   deriveProbeViewWithEndpointRows,
+  ensureAccountProxyRow,
   fleetFailureReasons,
   persistServerProbe,
   serverProbeStamps,
   serverVerdictUsable,
+  SOCKS5_TEST_NO_API_KEY_NOTICE,
+  socks5FleetTestNotStoredNotice,
   syncListExitObserved,
   testProxyOnServer,
   unansweredCheckNotice,
 } from '../lib/proxy-server-test';
-import {
-  createProxy as createAccountProxy,
-  updateProxy as updateAccountProxy,
-  type AccountProxyScheme,
-} from '../lib/account-proxies';
+import { type AccountProxyScheme } from '../lib/account-proxies';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
 
 /** Which proxy a freshly created profile should be auto-probed through.
@@ -2607,13 +2605,32 @@ export function ProfilesView({
         // matter how many times it was pressed. Same shared step as the grid
         // (lib/proxy-server-test), same preconditions: a proxy stored on the
         // account, an API key, and a native verdict that says usable.
-        if (px.serverId !== undefined && settings.apiKey !== null && settings.apiKey.length > 0) {
-          try {
-            const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
-            const next = await persistServerProbe(px.id, outcome);
-            if (next !== null) setProbeCache(next);
-          } catch {
-            /* best-effort — the native verdict above stands */
+        //
+        // (q) Item 12-memory (A) — the row is STORED here when it is not yet
+        // (an API key is the only precondition): a SOCKS5 proxy added on the
+        // Proxies tab and Tested before its first launch used to skip this leg
+        // in silence (`serverId === undefined`, no else), so the QUIC chip
+        // stayed '~' with a hint saying "run Test" — the loop the owner reported.
+        // Each way the leg does NOT run now leaves the row a notice naming it.
+        if (settings.apiKey === null || settings.apiKey.length === 0) {
+          setVpnNotices((m) => ({ ...m, [px.id]: SOCKS5_TEST_NO_API_KEY_NOTICE }));
+        } else {
+          let serverId: string | undefined = px.serverId;
+          if (serverId === undefined) {
+            try {
+              serverId = await ensureServerProxy(px);
+            } catch (err) {
+              setVpnNotices((m) => ({ ...m, [px.id]: socks5FleetTestNotStoredNotice(err) }));
+            }
+          }
+          if (serverId !== undefined) {
+            try {
+              const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
+              const next = await persistServerProbe(px.id, outcome);
+              if (next !== null) setProbeCache(next);
+            } catch {
+              /* best-effort — the native verdict above stands */
+            }
           }
         }
       }
@@ -2657,6 +2674,12 @@ export function ProfilesView({
       return null;
     }
     try {
+      // (q) 13(d) — the account row is refreshed FIRST (the grid's Check does
+      // the same at its :927), so the tunnel the fleet brings up is the config
+      // this Mac holds — not the one the last launch stored — and a stored
+      // legacy blob is normalised on the way. Best-effort: an unedited row
+      // already matches, and a transient failure must not block the check.
+      await ensureServerProxy(px).catch(() => undefined);
       const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
       // ⛔ `adoptExit` — this IS the VPN row (gated above), and without it the
       // shared step writes the fleet number but never the observed exit, so the
@@ -2832,37 +2855,20 @@ export function ProfilesView({
   // refreshes on later launches so an edited host/credential stays current
   // server-side. Returns undefined when there's no API key (caller launches
   // without proxy_id → operator-default egress).
+  //
+  // (q) Items 2 / 12-memory (A) / 13(a) — ONE implementation with the chat's
+  // launch and the Test paths (lib/proxy-server-test.ensureAccountProxyRow):
+  // it normalises a STORED refusable OpenVPN blob (`script-security 2` from a
+  // row saved before the strip existed) on the way to the wire, so a grid /
+  // chat launch of an unopened legacy row no longer 400s on `Line 46: …`, and
+  // persists the healed blob locally once. The local list is re-read after a
+  // create (the row now carries `serverId`) and after a heal (the row's blob is
+  // now the one the account holds), so the next launch is byte-identical.
   async function ensureServerProxy(p: LocalProxyConfig): Promise<string | undefined> {
-    const apiKey = settings.apiKey;
-    if (apiKey === null || apiKey.length === 0) return undefined;
-    const input = {
-      label: p.label,
-      scheme: p.scheme ?? ('socks5' as const),
-      host: p.host,
-      port: p.port,
-      username: p.username,
-      password: p.password,
-      // OVPN/WG — forward the VPN config block when present so the server wraps
-      // the secret (config_blob / private_key) under the account TMK.
-      ...(p.openvpn !== undefined ? { openvpn: p.openvpn } : {}),
-      ...(p.wireguard !== undefined ? { wireguard: p.wireguard } : {}),
-    };
-    if (p.serverId !== undefined) {
-      try {
-        await updateAccountProxy(settings.baseUrl, apiKey, p.serverId, input);
-        return p.serverId;
-      } catch (err) {
-        // Stale cached serverId: the account_proxies row was deleted server-side
-        // (e.g. during a DB recovery), so the PUT 404s. Self-heal by clearing the
-        // stale id and re-creating below, instead of failing the launch-sync
-        // forever. Any other error is real — re-throw it.
-        if ((err as { status?: number }).status !== 404) throw err;
-      }
-    }
-    const created = await createAccountProxy(settings.baseUrl, apiKey, input);
-    await setProxyServerId(p.id, created.id);
-    setProxies(await listProxies());
-    return created.id;
+    const ensured = await ensureAccountProxyRow(p, settings.baseUrl, settings.apiKey);
+    if (ensured === undefined) return undefined;
+    if (ensured.created || ensured.healed) setProxies(await listProxies());
+    return ensured.id;
   }
 
   async function handleLaunch(
