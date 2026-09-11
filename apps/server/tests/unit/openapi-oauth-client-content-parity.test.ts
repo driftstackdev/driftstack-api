@@ -60,14 +60,18 @@ describe('OpenAPI — OAuth-client IDP signin endpoints (V-667.C)', () => {
     );
   });
 
-  it('all three endpoints tagged "auth" (consistent with the rest of /v1/auth/*)', () => {
+  it('every oauth-client endpoint in the slice is tagged "auth" (consistent with the rest of /v1/auth/*)', () => {
     const slice = src.slice(
       src.indexOf('OAuth-client IDP signin'),
       src.indexOf('OAuth 2.0 public dance'),
     );
+    // Derived, not frozen: the number of registrations in the slice is what the
+    // tag count must equal, so adding a route cannot leave a stale "3" behind and
+    // a route registered WITHOUT the tag reds this by the difference.
+    const registrations = (slice.match(/registerRoute\(/g) ?? []).length;
     const tagOccurrences = (slice.match(/tags:\s*\['auth'\]/g) ?? []).length;
-    // 3 since 2026-09-11: /start, /redeem, /confirm-merge.
-    expect(tagOccurrences).toBe(3);
+    expect(registrations, 'the slice must hold a real population').toBeGreaterThanOrEqual(2);
+    expect(tagOccurrences).toBe(registrations);
   });
 
   it('callback endpoint (IDP-redirect target) intentionally absent from the spec', () => {

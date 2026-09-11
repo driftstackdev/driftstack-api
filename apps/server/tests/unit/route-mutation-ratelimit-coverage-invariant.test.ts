@@ -366,7 +366,10 @@ describe('mutation-route rate-limit coverage invariant', () => {
     // 175 since P-17: the live egress route AND its disabled twin are both
     // mutation registrations, so this moves by two where the route counts moved
     // by one each.
-    expect(routes).toHaveLength(175);
+    // 176 since the OAuth v2 hand-off: `POST /v1/auth/oauth-client/redeem` is a
+    // mutation registration (it burns a single-use code and mints a session), gated
+    // by its own IP limiter. Refreshed with violations() proven empty first.
+    expect(routes).toHaveLength(176);
     // +1: `app.patch<{ Params: { id: string } }>('/v1/teams/:id', ...)` is the only
     // one of the two new routes carrying type arguments.
     // T-1 — 77 since `POST /v1/account/me/proxies/:id/test` gained a

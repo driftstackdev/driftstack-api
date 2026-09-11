@@ -332,18 +332,15 @@ export function registerOAuthClientRoutes(
   // 30-day web session for a never-seen IDP identity.
   const startGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_start',
-    capacity: AUTH_IP_LIMITS.oauthClientStart.capacity,
-    refillPerSecond: AUTH_IP_LIMITS.oauthClientStart.refillPerSecond,
+    ...AUTH_IP_LIMITS.oauthClientStart,
   });
   const callbackGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_callback',
-    capacity: AUTH_IP_LIMITS.oauthClientCallback.capacity,
-    refillPerSecond: AUTH_IP_LIMITS.oauthClientCallback.refillPerSecond,
+    ...AUTH_IP_LIMITS.oauthClientCallback,
   });
   const confirmMergeGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_confirm_merge',
-    capacity: AUTH_IP_LIMITS.oauthClientConfirmMerge.capacity,
-    refillPerSecond: AUTH_IP_LIMITS.oauthClientConfirmMerge.refillPerSecond,
+    ...AUTH_IP_LIMITS.oauthClientConfirmMerge,
   });
   // 2026-09-11 — the top-level IDP-return route now makes outbound IDP
   // calls (v2) and /redeem is where the account row + session are minted,
@@ -353,13 +350,11 @@ export function registerOAuthClientRoutes(
   // API host after a couple of quick retries. Same 5/min/IP budget.
   const topLevelGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_toplevel',
-    capacity: AUTH_IP_LIMITS.oauthClientCallback.capacity,
-    refillPerSecond: AUTH_IP_LIMITS.oauthClientCallback.refillPerSecond,
+    ...AUTH_IP_LIMITS.oauthClientCallback,
   });
   const redeemGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_redeem',
-    capacity: AUTH_IP_LIMITS.oauthClientCallback.capacity,
-    refillPerSecond: AUTH_IP_LIMITS.oauthClientCallback.refillPerSecond,
+    ...AUTH_IP_LIMITS.oauthClientCallback,
   });
 
   /**

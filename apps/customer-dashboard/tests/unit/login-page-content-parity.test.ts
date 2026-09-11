@@ -54,7 +54,11 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/localStorage\.setItem\('ds_web_session_token', session\.token\)/);
     expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
     expect(body).toContain("['ds_act_as_account', 'ds_is_team_user', 'ds_is_staff_user']");
-    expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(2);
+    // 3 since the OAuth v2 start: the flow-secret record is written to localStorage
+    // under the server-issued flow_id BEFORE the page leaves for the IDP, and it
+    // goes through the same persistence guard as a session token — a write that
+    // cannot land would strand the sign-in at the callback with nothing to redeem.
+    expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(3);
   });
 
   it('password login has a real single-flight lease and bounded network deadline', () => {
