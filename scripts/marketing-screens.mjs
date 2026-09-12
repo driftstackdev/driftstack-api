@@ -13,8 +13,10 @@
 //                    (8 curated states, ≥ 3 columns) — also cropped to a hero
 //   profiles-list    the same framing around ProfilesTable (the grid's 8 profiles)
 //   proxies          the Proxies view framing around the three ProxyForm editors
-//   simulator        the simulator window: DeviceToolbar + phone screen host +
-//                    on-screen iOS keyboard + the Egress readouts
+//   simulator        the desktop app window with the floating device window
+//                    lifted over it: DeviceToolbar + the phone screen showing
+//                    an example shop page under the on-screen iOS keyboard +
+//                    the Egress readouts
 //   billing          Usage & cost (CostPanel) in the Billing framing
 //   command-center   the Command Center header band + KPI strip
 //
@@ -71,6 +73,9 @@ const DPR = 2;
 const WEBP_QUALITY = 90;
 /** CSS px of breathing room around the grid in the hero crop. */
 const HERO_PAD = 12;
+/** CSS px of slack the `above` geometry fact allows at a shared edge between
+ *  two flush siblings — a fractional layout boundary is not an overlay. */
+const SEAM_PX = 1;
 const MAC_UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
@@ -115,11 +120,123 @@ const SCENES = [
   },
   {
     name: 'simulator',
-    guard: {
-      selector:
-        '[data-component="simulator-toolbar"], [data-component="sim-exit-ip-chip"][data-state="observed"], [data-component="sim-quic-readout"][data-state="observed"], [data-component="sim-os-readout"][data-state="observed"]',
-      count: 4,
-    },
+    // 2026-09-12 — the scene is now TWO windows: the desktop app's own window
+    // filling the stage, with the floating device window lifted over it.
+    // ⚠️ The guard this replaces was ONE 4-selector union with `count: 4`, a
+    // sum: two toolbars plus a missing readout also totals 4, and the failure
+    // message could only name the whole union. Every fact below is its own
+    // selector with its own count, so a red says which half went.
+    guard: { selector: '[data-component="scene-simulator-window"]', count: 1 },
+    also: [
+      // The desktop app itself — the same chrome every other scene wears —
+      // with a real view behind, not an empty frame around the device window.
+      { selector: '[data-scene="simulator"] aside nav[aria-label="Primary"]', count: 1 },
+      { selector: '[data-scene="simulator"] main', count: 1, minText: 120 },
+      // …and the view inside that pane is really the profiles grid. `main`'s
+      // minText is NOT that fact: measured on the live harness, main renders
+      // 1203 characters of which the grid is 1017 — delete every card and the
+      // ProfilesFrame header alone still leaves 186, so an EMPTY grid clears a
+      // 120 floor. This count is the "the app half was not emptied" assertion.
+      { selector: '[data-scene="simulator"] [data-scene-region="grid"] article', count: 8 },
+      // The floating window's own parts, unchanged by the recomposition.
+      { selector: '[data-component="simulator-toolbar"]', count: 1 },
+      { selector: '[data-component="simulator-running-indicator"]', count: 1 },
+      { selector: '[data-component="ios-keyboard"]', count: 1 },
+      // ⛔ The phone screen shows a PAGE. The capture that shipped 2026-09-11
+      // had `simulator-screen-host` empty and `bg-black`, which on the
+      // marketing page read as a broken app — "present" is not enough, so
+      // minText measures what it renders (and that the box is painted at all).
+      // The floor is set from the DEGRADED state, not from zero: measured, the
+      // page renders 205 characters, of which the four product tiles are 151 —
+      // its chrome alone (the address bar, the search term, the store name and
+      // the result count) is 54, so a 40 floor passed with NO products on the
+      // page, which is the one thing the alt text and S2 promise it shows.
+      // (The tiles themselves — four, priced, in one currency, exactly what
+      // SIMULATOR_ALT reads aloud — are counted in marketing-scenes.test.tsx.)
+      {
+        selector:
+          '[data-component="simulator-screen-host"] [data-component="simulator-screen-page"]',
+        count: 1,
+        minText: 150,
+      },
+      // The Egress readouts, one assertion each.
+      { selector: '[data-component="sim-exit-ip-chip"][data-state="observed"]', count: 1 },
+      { selector: '[data-component="sim-webrtc-candidates"][data-leak="false"]', count: 1 },
+      { selector: '[data-component="sim-quic-readout"][data-state="observed"]', count: 1 },
+      { selector: '[data-component="sim-os-readout"][data-state="observed"]', count: 1 },
+    ],
+    // The app window's pane must not scroll on either axis: what scrolls in
+    // the app is simply CUT OFF in a screenshot (this is how the profiles-list
+    // clipping was caught).
+    fits: '[data-scene="simulator"] main',
+    fitsY: '[data-scene="simulator"] main',
+    geometry: [
+      // The device window sits OVER the app window — the fact that separates
+      // this composition from the old one (a lone window on empty ground).
+      // ⚠️ It does NOT also prove the app half survived: `b` is the app's
+      // pane, whose rect is fixed by flex layout and identical whether it
+      // holds the grid or nothing. "Not replaced" is the 8-article count above.
+      {
+        kind: 'overlaps',
+        a: '[data-component="scene-simulator-window"]',
+        b: '[data-scene="simulator"] main',
+        minPx: 80,
+      },
+      // …and does not SWALLOW it. `overlaps` is only a lower bound: a window
+      // grown to fill the stage overlaps by 1056×764 and still passes every
+      // count, minText and overflow guard here, because none of them can see
+      // what is painted over. The section's picture is both halves at once.
+      // Measured today: 600×728 of main's 1056×764 = 54.1% (it was 47.5% at
+      // 552×694, before the window grew by the drawer rail — which is why the
+      // ceiling is not pinned tight to today's number: the regression it
+      // exists to catch is a window filling the pane, at ~100%).
+      {
+        kind: 'maxCover',
+        a: '[data-component="scene-simulator-window"]',
+        b: '[data-scene="simulator"] main',
+        maxPct: 70,
+      },
+      // …and wholly inside the stage. The stage clips (overflow-hidden) and
+      // `fits`/`fitsY` measure scroll extent, which only ever grows right and
+      // down — a window pushed off the TOP or LEFT edge is cropped in the
+      // frame and no scroll measurement ever sees it.
+      {
+        kind: 'inside',
+        a: '[data-component="scene-simulator-window"]',
+        b: '[data-scene="simulator"]',
+      },
+      // The SAME hazard one level in: the floating window is overflow-hidden
+      // around a fixed-height body, so a drawer that outgrows it is cropped at
+      // the window edge — and a cropped element still matches its `count`
+      // guard above. The last readout in the drawer stands for the column.
+      // (Measured: it ends at y674, the window at y776 — 102px of slack.)
+      {
+        kind: 'inside',
+        a: '[data-component="sim-os-readout"]',
+        b: '[data-component="scene-simulator-window"]',
+      },
+      // The drawn page sits UNDER the keyboard exactly as the real video host
+      // does — the keyboard is the host's sibling, never a layer over it.
+      // ORDERED on purpose: "they do not overlap" is also true of a keyboard
+      // moved ABOVE the screen, which is not what this sentence claims.
+      {
+        kind: 'above',
+        a: '[data-component="simulator-screen-host"]',
+        b: '[data-component="ios-keyboard"]',
+      },
+      // …and the seam between the two windows lands BETWEEN the app's
+      // controls, never through one. This is the guard the composition was
+      // missing: every fact above is about the two window rects, and a
+      // half-covered Launch button satisfies all of them. The minCount is the
+      // vacuity control — a selector that stops matching would otherwise
+      // report "no sliced controls" with perfect confidence.
+      {
+        kind: 'noPartialCover',
+        a: '[data-component="scene-simulator-window"]',
+        b: '[data-scene="simulator"] main button',
+        minCount: 12,
+      },
+    ],
   },
   {
     name: 'billing',
@@ -209,6 +326,49 @@ function measureFits(selector) {
 function readValues(selector) {
   return Array.from(document.querySelectorAll(selector)).map((el) => el.value ?? '');
 }
+/** Runs INSIDE the page: what each match actually RENDERS — its text and its
+ *  painted box. "Present" is not "painted": an element that is empty, 0×0 or
+ *  display:none screenshots exactly like the empty ground it was meant to
+ *  replace, and a `count` guard on it passes either way. */
+function measureRendered(selector) {
+  return Array.from(document.querySelectorAll(selector)).map((el) => {
+    const r = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    return {
+      chars: (el.textContent ?? '').replace(/\s+/g, ' ').trim().length,
+      width: Math.round(r.width),
+      height: Math.round(r.height),
+      hidden: cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0,
+    };
+  });
+}
+/** Runs INSIDE the page: one element's rectangle in CSS px (null when the
+ *  selector matches nothing — the caller fails loudly rather than comparing
+ *  against a default). */
+function measureRect(selector) {
+  const el = document.querySelector(selector);
+  if (el === null) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, width: r.width, height: r.height };
+}
+/** Runs INSIDE the page: EVERY match, not the first. `noPartialCover` asks a
+ *  question about a whole set of controls, and a set read as one element is
+ *  the guard silently narrowing to whichever button happens to come first. */
+function measureAllRects(selector) {
+  return Array.from(document.querySelectorAll(selector)).map((el) => {
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.x,
+      y: r.y,
+      right: r.right,
+      bottom: r.bottom,
+      width: r.width,
+      height: r.height,
+      label: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 32),
+    };
+  });
+}
+
 /** Runs INSIDE the page: what the stage says about itself. */
 function readStageAttrs(selector) {
   const el = document.querySelector(selector);
@@ -218,6 +378,110 @@ function readStageAttrs(selector) {
     width: Number(el.getAttribute('data-stage-width')),
     height: Number(el.getAttribute('data-stage-height')),
   };
+}
+
+/** The geometry a screenshot cannot prove about itself, and jsdom cannot
+ *  measure at all (tests/unit/marketing-scenes.test.tsx has no layout): which
+ *  box sits over which, and whether anything is about to be cropped at the
+ *  frame edge. Each fact names ONE pair and fails with its own message. */
+async function checkGeometry(page, scene) {
+  for (const fact of scene.geometry ?? []) {
+    const [a, b] = await Promise.all([
+      page.evaluate(measureRect, fact.a),
+      page.evaluate(measureRect, fact.b),
+    ]);
+    if (a === null) {
+      throw new Error(`${scene.name}: nothing matches "${fact.a}" (${fact.kind} guard)`);
+    }
+    if (b === null) {
+      throw new Error(`${scene.name}: nothing matches "${fact.b}" (${fact.kind} guard)`);
+    }
+    const overlapX = Math.round(Math.min(a.right, b.right) - Math.max(a.x, b.x));
+    const overlapY = Math.round(Math.min(a.bottom, b.bottom) - Math.max(a.y, b.y));
+    if (fact.kind === 'overlaps') {
+      const min = fact.minPx ?? 1;
+      if (overlapX < min || overlapY < min) {
+        throw new Error(
+          `${scene.name}: "${fact.a}" overlaps "${fact.b}" by ${overlapX}×${overlapY}px, expected ≥ ${min}px on both axes — it is meant to sit OVER it, not beside it`,
+        );
+      }
+    } else if (fact.kind === 'maxCover') {
+      // The upper bound `overlaps` cannot express: how much of b the overlay
+      // HIDES. b's own area, not the intersection of the two rects, is the
+      // denominator — a 0-area b means the measurement is broken, so it reads
+      // as fully covered and fails rather than dividing to a quiet 0%.
+      const area = Math.round(b.width) * Math.round(b.height);
+      const covered = Math.max(0, overlapX) * Math.max(0, overlapY);
+      const pct = area === 0 ? 100 : Math.round((covered / area) * 1000) / 10;
+      if (pct > fact.maxPct) {
+        throw new Error(
+          `${scene.name}: "${fact.a}" covers ${pct}% of "${fact.b}" (${overlapX}×${overlapY}px of ${Math.round(b.width)}×${Math.round(b.height)}), more than the ${fact.maxPct}% this composition allows — the frame is meant to show BOTH, and a count guard cannot see what is painted over`,
+        );
+      }
+    } else if (fact.kind === 'above') {
+      // Ordered, not merely disjoint. SEAM_PX of tolerance because flush
+      // siblings can land on a fractional boundary (the two boxes measured
+      // here share an edge exactly today, y576); anything actually painting
+      // over the other does so by hundreds of px, never by one.
+      if (a.bottom > b.y + SEAM_PX) {
+        throw new Error(
+          `${scene.name}: "${fact.a}" ends at y${Math.round(a.bottom)} but "${fact.b}" starts at y${Math.round(b.y)} (overlap ${overlapX}×${overlapY}px) — the first is meant to sit entirely ABOVE the second, not over or under it`,
+        );
+      }
+    } else if (fact.kind === 'inside') {
+      const outside = [
+        ['left', Math.round(b.x - a.x)],
+        ['top', Math.round(b.y - a.y)],
+        ['right', Math.round(a.right - b.right)],
+        ['bottom', Math.round(a.bottom - b.bottom)],
+      ].filter(([, px]) => px > 0);
+      if (outside.length > 0) {
+        throw new Error(
+          `${scene.name}: "${fact.a}" hangs ${outside.map(([side, px]) => `${px}px off the ${side}`).join(', ')} of "${fact.b}" — that container is overflow-hidden, so it is cropped out of the frame, not scrolled`,
+        );
+      }
+    } else if (fact.kind === 'noPartialCover') {
+      // A window laid over an app either covers a control or it does not.
+      // HALF a control is the one state the app itself can never produce, and
+      // it is what every other guard here is blind to: `inside`, `overlaps`
+      // and `maxCover` all measure the two WINDOW rects and say nothing about
+      // where the seam between them lands. Shrink the floating window by 34px
+      // and its top edge slices the Import / New profile buttons clean in
+      // half; counts, minText, fits, fitsY and all three geometry facts above
+      // stay green (measured 2026-09-12 by mutating bodyH 694 → 660).
+      const controls = await page.evaluate(measureAllRects, fact.b);
+      if (controls.length < (fact.minCount ?? 1)) {
+        throw new Error(
+          `${scene.name}: "${fact.b}" matched ${controls.length} element(s), fewer than the ${fact.minCount ?? 1} this guard is meant to be watching — it cannot report a sliced control it never measured`,
+        );
+      }
+      const sliced = controls
+        .map((c) => {
+          const ox = Math.min(a.right, c.right) - Math.max(a.x, c.x);
+          const oy = Math.min(a.bottom, c.bottom) - Math.max(a.y, c.y);
+          if (ox <= SEAM_PX || oy <= SEAM_PX) return null; // clear of the window
+          const whole = ox >= c.width - SEAM_PX && oy >= c.height - SEAM_PX;
+          return whole ? null : { c, ox: Math.round(ox), oy: Math.round(oy) };
+        })
+        .filter((x) => x !== null);
+      if (sliced.length > 0) {
+        throw new Error(
+          `${scene.name}: "${fact.a}" cuts ${String(sliced.length)} control(s) of "${fact.b}" in half — ` +
+            sliced
+              .map(
+                ({ c, ox, oy }) =>
+                  `"${c.label}" (${Math.round(c.width)}×${Math.round(c.height)}, ${ox}×${oy}px covered)`,
+              )
+              .join(', ') +
+            ' — a window over an app covers a control or clears it; half of one is a state the app cannot produce',
+        );
+      }
+    } else {
+      // An unknown kind is a typo in the table above; it must not read as "no
+      // geometry to check".
+      throw new Error(`${scene.name}: unknown geometry guard kind "${String(fact.kind)}"`);
+    }
+  }
 }
 
 async function renderScene(context, scene) {
@@ -260,6 +524,13 @@ async function renderScene(context, scene) {
       );
     }
     const g = scene.guard;
+    // …and the same on the scene's own guard: `{ selector, cont: 8 }` would
+    // run the query below and compare nothing.
+    if (g.count === undefined && g.min === undefined && g.minColumns === undefined) {
+      throw new Error(
+        `${scene.name}: guard "${String(g.selector)}" asserts nothing (keys: ${Object.keys(g).join(', ')})`,
+      );
+    }
     const m = await page.evaluate(measureGuard, g.selector);
     if (g.count !== undefined && m.count !== g.count) {
       throw new Error(
@@ -296,7 +567,12 @@ async function renderScene(context, scene) {
       }
     }
     for (const extra of scene.also ?? []) {
+      // A typo'd key ( minChars for minText, cout for count ) would otherwise
+      // fall through all three branches and read as "checked, fine" — the same
+      // hazard the unknown-`kind` throw in checkGeometry closes.
+      let asserted = false;
       if (extra.count !== undefined) {
+        asserted = true;
         const em = await page.evaluate(measureGuard, extra.selector);
         if (em.count !== extra.count) {
           throw new Error(
@@ -305,6 +581,7 @@ async function renderScene(context, scene) {
         }
       }
       if (extra.minValueMatch !== undefined) {
+        asserted = true;
         const values = await page.evaluate(readValues, extra.selector);
         if (!values.some((v) => extra.minValueMatch.test(v))) {
           throw new Error(
@@ -312,7 +589,32 @@ async function renderScene(context, scene) {
           );
         }
       }
+      if (extra.minText !== undefined) {
+        asserted = true;
+        const rendered = await page.evaluate(measureRendered, extra.selector);
+        if (rendered.length === 0) {
+          throw new Error(`${scene.name}: nothing matches minText guard "${extra.selector}"`);
+        }
+        const painted = rendered.filter((r) => !r.hidden && r.width > 0 && r.height > 0);
+        if (painted.length === 0) {
+          throw new Error(
+            `${scene.name}: "${extra.selector}" is in the DOM but paints nothing (${JSON.stringify(rendered)}) — a 0×0 or hidden box screenshots as empty ground`,
+          );
+        }
+        const chars = Math.max(...painted.map((r) => r.chars));
+        if (chars < extra.minText) {
+          throw new Error(
+            `${scene.name}: "${extra.selector}" renders ${chars} character(s) of text, expected ≥ ${extra.minText} — an empty box screenshots just fine`,
+          );
+        }
+      }
+      if (!asserted) {
+        throw new Error(
+          `${scene.name}: also entry "${String(extra.selector)}" asserts nothing (keys: ${Object.keys(extra).join(', ')})`,
+        );
+      }
     }
+    await checkGeometry(page, scene);
     if (problems.length > 0) {
       throw new Error(`${scene.name}: the page reported errors:\n  ${problems.join('\n  ')}`);
     }

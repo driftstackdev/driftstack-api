@@ -56,11 +56,16 @@ const HERO_ALT =
   'or Idle, the city it browses from (Amsterdam, Tokyo, Zurich, Berlin, London, ' +
   'Paris), the connection it uses, and a Launch button.';
 const SIMULATOR_ALT =
-  'A floating device window in the Driftstack desktop app: the toolbar names the ' +
-  'profile (amsterdam shopper) and the device (iPhone 17) with a Live badge; ' +
-  'below it the phone screen with the iPhone keyboard open, and beside it a panel ' +
-  'listing the session link, its exit — a residential connection in Amsterdam, ' +
-  'with the time zone to match — and the device identity readouts.';
+  'A floating device window in the Driftstack desktop app, lifted over the app ' +
+  'behind it — the Profiles view, its grid of iPhone profile cards showing ' +
+  'around the window. The window toolbar names the profile (tokyo sneakers) ' +
+  'and the device (iPhone 17) with a Live badge, the same profile the grid ' +
+  'behind shows running. On the phone screen an example shop page, searched ' +
+  'for a rain jacket, showing four jackets with their prices in euros, and ' +
+  'the iPhone keyboard open below it. Beside the screen a panel lists the ' +
+  'session link, how fast the video is running, its exit — a residential ' +
+  'connection in Tokyo, with the time zone to match — and the device identity ' +
+  'readouts.';
 const PROFILES_LIST_ALT =
   'The Driftstack desktop app, Profiles view as a list: eight rows sorted by ' +
   'name, one per iPhone profile — its name and iPhone model, tags, Live or Idle ' +
@@ -259,19 +264,21 @@ const PROXIES_ALT =
 
   <!-- ═══ 5 · TWO WAYS TO DRIVE + the floating device window (Band A
        headline; founder 2026-06-12: show the GUI itself, no live-session
-       implication — since 2026-09-11 the GUI is shown as a real capture of
-       the simulator window, not a hand-drawn cockpit). ═══ -->
+       implication — since 2026-09-11 the GUI is shown as a real capture, not
+       a hand-drawn cockpit; since 2026-09-12 that capture is the app window
+       itself with the device window floating over it). ═══ -->
   <Section
     label="Two ways to drive it"
     title="Point and click — or just say what you want."
     lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch."
   >
-      {/* The floating device window — the REAL simulator window of the
-          desktop app (a capture of its toolbar + iPhone-shaped stage; see
-          AppScreen.astro), replacing the hand-drawn cockpit + floating
-          simulator. No live-session implication: the harness renders the
-          window with fixture data. The explanatory copy below stays real
-          copy, outside the decorative frame. */}
+      {/* The desktop app with its floating device window lifted over it —
+          a REAL capture of both (the app's own Profiles view behind, the
+          popped-out simulator window over it, an example shop page on the
+          phone screen; see AppScreen.astro), replacing the hand-drawn
+          cockpit + floating simulator. No live-session implication: the
+          harness renders both from fixture data. The explanatory copy below
+          stays real copy, outside the decorative frame. */}
       <div class="mt-10">
         <AppScreen src={simulatorScreen} alt={SIMULATOR_ALT} />
       </div>

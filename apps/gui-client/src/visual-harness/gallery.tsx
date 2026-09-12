@@ -1308,17 +1308,23 @@ export const MARKETING_TABLE_ROWS: ReadonlyArray<ProfileTableRow> = [
 ];
 
 /** The simulator cockpit's Egress readouts read the session's capability
- *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit. */
+ *  report; this is a fully-observed one (exit + HTTP/3 + OS), TEST-NET exit.
+ *  ⛔ It is the SIMULATOR SCENE's session, so it must agree with that scene's
+ *  profile — `tokyo sneakers`, whose grid card is the one card marked `Live`
+ *  and reads `via Residential JP #1` / `Tokyo, Tokyo`. The WebRTC candidate
+ *  tracks the exit deliberately: equal means no leak, and `sim-webrtc-candidates
+ *  [data-leak="false"]` is a capture guard. Consumed ONLY by SimulatorScene
+ *  (grep: this file), so the six pinned captures never see it. */
 export const MARKETING_CAPABILITY_REPORT: AgentSessionCapabilityReport = {
   manual_input_available: true,
   streaming_state: 'live',
   egress_state: 'live',
   h3_connection_observed: true,
   h3_connection_count: 4,
-  exit_ip: TEST_NET.nl,
-  exit_country: 'NL',
-  exit_timezone: 'Europe/Amsterdam',
-  webrtc_candidate_ips: [TEST_NET.nl],
+  exit_ip: TEST_NET.jp,
+  exit_country: 'JP',
+  exit_timezone: 'Asia/Tokyo',
+  webrtc_candidate_ips: [TEST_NET.jp],
   observed_at: '2026-06-15T06:41:30.000Z',
   os_fingerprint: { os: 'Linux', confidence: 'high' },
   proxy_kind: 'socks5',
@@ -1447,6 +1453,11 @@ export type HarnessSettingsValue = NonNullable<ContextType<typeof SettingsContex
 /** The main window's chrome around one view: the real TitleBar (with the slot
  *  App.tsx fills) and the real Sidebar, fed the fixture account through the
  *  real SettingsContext. 1280×800, overflow hidden — nothing escapes the stage.
+ *  `overlay` is the one slot ABOVE the window's own layers — what the simulator
+ *  scene floats its popped-out device window in. A scene that passes nothing
+ *  renders `undefined`, i.e. NO node at all, so the five other SCENES — six
+ *  captures, `profiles-grid-hero` being a crop of `profiles-grid` — stay
+ *  byte-identical (scripts/marketing-screens.mjs --verify pins all six).
  *  Audit scenes (audit-scenes.tsx) pass `settingsOverrides` (a fixture SDK
  *  client, an example.com base URL) and the matching title-bar `subtitle`; the
  *  marketing scenes pass neither, so their output is byte-for-byte what it was
@@ -1455,12 +1466,14 @@ export function AppWindow({
   scene,
   current,
   children,
+  overlay,
   settingsOverrides,
   subtitle = 'cloud',
 }: {
   scene: SceneName;
   current: SidebarViewKind;
   children: ReactNode;
+  overlay?: ReactNode;
   settingsOverrides?: Partial<HarnessSettingsValue>;
   subtitle?: string;
 }): JSX.Element {
@@ -1518,6 +1531,7 @@ export function AppWindow({
             <Sidebar current={current} onNavigate={noop} onSignOut={noop} onOpenPalette={noop} />
             <main className="min-w-0 flex-1 overflow-auto bg-surface-base">{children}</main>
           </div>
+          {overlay}
         </div>
       </RecordingsProvider>
     </SettingsContext.Provider>
@@ -1683,102 +1697,556 @@ function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-/** The simulator is its own borderless window: the real DeviceToolbar over the
- *  phone's screen host, the real on-screen iOS keyboard, and the docked pane
- *  with the Egress card's real readouts (ExitIpChip / QuicReadout / OsReadout)
- *  fed a fixture report. The live video needs a session, so the screen host is
- *  the app's own black host with nothing attached. */
+/** What the phone screen shows (S2): a DRAWN stand-in for the page a live
+ *  session is looking at. EXTERNAL web content is the one thing in these
+ *  scenes that must NOT be a real component — app chrome always is, a third
+ *  party's page never can be — so this is deliberately an example shop.
+ *
+ *  ⛔ Every name here is a plain CATEGORY phrase ("Packable Rain Coat"), never
+ *  a product someone sells. The first draft shipped `Harbour Parka`, which is
+ *  Helly Hansen's — an invented-sounding phrase that happens to name a real
+ *  SKU is exactly what this rule exists to catch, so a name added here gets
+ *  SEARCHED before it ships, not judged by how invented it sounds.
+ *
+ *  FOUR products, prices `€NN.NN`: SIMULATOR_ALT (apps/marketing-site/src/
+ *  pages/index.astro) promises a reader "four jackets with their prices in
+ *  euros" and marketing-scenes.test.tsx counts them. Changing the count or the
+ *  currency here silently makes the alt text — which is read ALOUD to someone
+ *  who cannot see the picture — a lie. See the batch report for the one
+ *  coherence argument against euros (the session's exit is Tokyo).
+ *
+ *  The art is a drawn silhouette over a flat CSS wash, never an image: the
+ *  first draft's neutral-gray washes read as unloaded images / loading
+ *  skeletons at the page's downscale — a placeholder look, on the one capture
+ *  that exists to prove the phone screen is NOT broken. */
+const SHOP_PAGE_PRODUCTS: ReadonlyArray<{
+  name: string;
+  detail: string;
+  price: string;
+  wash: string;
+  ink: string;
+}> = [
+  {
+    name: 'Coastal Rain Jacket',
+    detail: 'Unisex · Navy',
+    price: '€89.00',
+    wash: 'linear-gradient(150deg,#cfe0f5,#9db9de)',
+    ink: '#2f5486',
+  },
+  {
+    name: 'Hooded Shell Jacket',
+    detail: 'Unisex · Moss',
+    price: '€124.00',
+    wash: 'linear-gradient(150deg,#d8e6d4,#a7c2a2)',
+    ink: '#3f6042',
+  },
+  {
+    name: 'Quilted Rain Parka',
+    detail: 'Unisex · Clay',
+    price: '€149.00',
+    wash: 'linear-gradient(150deg,#f0dfd0,#d5b295)',
+    ink: '#8a5a3b',
+  },
+  {
+    name: 'Packable Rain Coat',
+    detail: 'Unisex · Ink',
+    price: '€79.00',
+    wash: 'linear-gradient(150deg,#dfe4ea,#9aa3b2)',
+    ink: '#3a3f52',
+  },
+];
+
+/** One product tile's art: a hooded jacket drawn over the tile's wash.
+ *  Invented geometry — no brand mark, no logo, no person, no photograph. */
+function ShopTileArt({ wash, ink }: { wash: string; ink: string }): JSX.Element {
+  return (
+    <div aria-hidden="true" className="relative min-h-0 flex-1" style={{ backgroundImage: wash }}>
+      <svg
+        viewBox="0 0 64 40"
+        preserveAspectRatio="xMidYMid meet"
+        className="absolute inset-0 h-full w-full p-[6%]"
+      >
+        {/* hood */}
+        <path d="M26 10c0-5.5 12-5.5 12 0l-1.4 3h-9.2z" fill={ink} />
+        {/* body + sleeves */}
+        <path
+          d="M26.5 10.5 21 13l-4.5 15 4.6 1.4L24 19v17h16V19l2.9 10.4 4.6-1.4L43 13l-5.5-2.5z"
+          fill={ink}
+        />
+        {/* zip */}
+        <path
+          d="M32 13.5V36"
+          stroke="#ffffff"
+          strokeOpacity="0.5"
+          strokeWidth="1.1"
+          strokeLinecap="round"
+          fill="none"
+        />
+      </svg>
+    </div>
+  );
+}
+
+/** One button of the device window's drawer RAIL — a static mirror of
+ *  SimulatorWindow's `DrawerRailButton` (private to that module, and it needs
+ *  the live pane store). Icons are that component's own `SIM_PANE_ICONS`
+ *  paths.
+ *
+ *  ⚠️ ONE deliberate divergence: the real rail's label is 7.5px, and this
+ *  capture's own text-quality gate refuses readable text under 9px
+ *  (scripts/gui-text-quality.mjs MIN_PX) — a marketing PNG must not ship text
+ *  it calls illegible. The label is 9px here; everything else (h-10 w-11, the
+ *  active accent state, the 18px icon, truncate under the button's aria-label)
+ *  is the real button's. */
+function SimRailButton({
+  pane,
+  label,
+  title,
+  active = false,
+  children,
+}: {
+  pane: string;
+  label: string;
+  title: string;
+  active?: boolean;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      data-component={`sim-rail-${pane}`}
+      aria-label={title}
+      aria-pressed={active}
+      onClick={noop}
+      className={`relative flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg ${
+        active ? 'bg-accent/20 text-accent-text ring-1 ring-accent/40' : 'text-ink-secondary'
+      }`}
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        {children}
+      </svg>
+      <span
+        aria-hidden="true"
+        // The size divergence must not also change the WORDS. MEASURED in the
+        // harness at 9px: "Downloads" is 47.25px at the real `tracking-tight`
+        // and 45.2px at `tracking-tighter`, against the real button's 42px cap
+        // — so the cap is 47 and the tracking one step tighter, and all eight
+        // labels render whole inside the 48px rail exactly as the real 7.5px
+        // rail's do. ⚠️ An ellipsis here is invisible to every gate: a
+        // max-width-clamped `truncate` span reports scrollWidth == clientWidth,
+        // so gui-text-quality's CUT check cannot see it. Re-render and LOOK.
+        className="max-w-[47px] truncate text-[9px] font-medium leading-none tracking-tighter"
+      >
+        {label}
+      </span>
+    </button>
+  );
+}
+
+/** §5's picture, in one frame: the desktop app you point and click — its real
+ *  window chrome around the real profiles grid — with the popped-out device
+ *  window floating OVER it, bottom-right, lifted on the shadow it already had.
+ *  The floating window's parts are real components wherever one exists without
+ *  a live session (the app's DeviceToolbar, its on-screen iOS keyboard, the
+ *  Egress card's ExitIpChip / QuicReadout / OsReadout fed the fixture
+ *  capability report); the drawer's rail, status strip and Diagnostics pane are
+ *  static mirrors of SimulatorWindow's, which need the live stores.
+ *
+ *  ⛔ ONE session, ONE story. The window drives `tokyo sneakers` — the profile
+ *  whose card in the grid behind says `Live · running 12m · Open session`, the
+ *  one session `1 live` and `Active sessions 1 / 3` count. It used to say
+ *  `amsterdam shopper`, whose card (top-left, uncovered) says `Idle · Launch`:
+ *  the shipped app cannot produce a popped-out live window for an idle profile,
+ *  and both halves were visible in the same frame. The egress follows that
+ *  profile: the JP exit in MARKETING_CAPABILITY_REPORT and the
+ *  `Residential JP #1 · Asia/Tokyo` readouts, matching the card's
+ *  `via Residential JP #1` / `Tokyo, Tokyo`. The shop page stays in euros —
+ *  SIMULATOR_ALT and marketing-scenes.test.tsx pin that, and a store is not
+ *  obliged to price in its visitor's currency (see SHOP_PAGE_PRODUCTS).
+ *
+ *  ⛔ The screen host is no longer an empty black rectangle. A capture of the
+ *  product's flagship surface showing a blank screen reads as a broken app, and
+ *  the live video needs a session no capture can have, so the host holds the
+ *  drawn page (S2) and the keyboard stays its sibling below — the same
+ *  host/keyboard stack SimulatorWindow builds. The ONE divergence: this host is
+ *  `overflow-hidden` (the real one, SimulatorWindow.tsx ~9530, is not — it
+ *  holds a video that is already aspect-locked, while a drawn page must be
+ *  clipped to the screen rather than painted over the bezel).
+ *
+ *  ⛔ The app half is NOT the agent mid-task, which §5's copy would have
+ *  preferred: AgentChatView's transcript is useAgentChat's own
+ *  `useState<ChatTurn[]>([])` and its ONLY seeding path is `chat.restore(...)`
+ *  inside the history rail's click handler — no prop, context or store key
+ *  reaches it — so a fixture client cannot render one; a rail click renders the
+ *  view's own "continuing starts a new session — the agent won't remember it"
+ *  divider (the wrong sentence for this frame) and cannot be synchronous with
+ *  the static `data-ready="1"` the capture waits on. (The view's
+ *  `useConnectionStatus` probe is NOT part of the blocker: it returns without
+ *  fetching when `baseUrl` is blank, so the console error a capture fails on is
+ *  avoidable — the transcript is what a fixture client cannot reach.) Measured,
+ *  then taken to the brief's stated fallback: the profiles grid, which is real
+ *  and needs no client, no Tauri stub and no network. ⚠️ That fallback makes
+ *  this picture rhyme with `profiles-grid-hero`; the orchestrator owns that
+ *  call, see the batch report. */
 function SimulatorScene(): JSX.Element {
+  // The real window's own sizing math (SimulatorWindow.tsx RAIL_W / PANE_W):
+  // the icon rail is docked beside the phone at ALL times and the pane adds
+  // 252 while it is open. 300 + 48 + 252 = 600 puts the window's left edge at
+  // x 656 on this stage — exactly the profile grid's third column boundary, so
+  // the columns it covers are covered WHOLE. The 552px it was (no rail) landed
+  // 48px inside that column and left two cards as sliced fragments.
   const phoneW = 300;
-  const simSize = sceneSize('simulator');
+  const railW = 48;
+  const paneW = 252;
+  // 34 (DeviceToolbar) + 694 puts the window's top edge at y 48: 12px below the
+  // app's own title bar, and ABOVE the profiles header's `⤒ Import` / `+ New
+  // profile` buttons (y 60–92) instead of through them. At the old 660 the edge
+  // fell at y 82 and cut both buttons' bottom 10px, amputating the descenders —
+  // which reads as a rendering bug, not as one window over another.
+  const bodyH = 694;
   const infoCard = 'rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2';
   // Mirrors SimulatorWindow's drawer captions (S1: text-white/50 = 4.9 on #1d1e24;
   // /40 was 3.77). A replica that lags the real drawer is what the text-quality
   // gate measures, so it must move with it.
   const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/50';
   return (
-    <div
-      data-scene="simulator"
-      data-ready="1"
-      data-frozen-now={FROZEN_NOW_ISO}
-      data-stage-width={simSize.width}
-      data-stage-height={simSize.height}
-      style={{ width: simSize.width, height: simSize.height }}
-      className="relative flex shrink-0 items-center justify-center overflow-hidden bg-surface-base font-sans text-ink-primary antialiased"
-    >
-      <div
-        data-component="scene-simulator-window"
-        // The real simulator-shell scopes its fixed-dark chrome to the dark
-        // tokens in both themes (SimulatorWindow.tsx); the scene's window does
-        // the same so the light-theme measurement is of the chrome as shipped.
-        data-mode="dark"
-        className="flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12]"
-        style={{ width: phoneW + 252 }}
-      >
-        <DeviceToolbar
-          deviceName="iPhone 17"
-          profileName="amsterdam shopper"
-          running
-          keyboardVisible
-          onToggleKeyboard={noop}
-        />
-        <div className="flex min-h-0" style={{ height: 660 }}>
-          <div className="flex flex-col" style={{ width: phoneW }}>
-            <div
-              data-component="simulator-screen-host"
-              className="relative min-h-0 flex-1 bg-black"
-            />
-            <IOSKeyboard room={null} width={phoneW} onDismiss={noop} />
-          </div>
-          <div
-            data-component="sim-drawer-panel"
-            data-state="open"
-            className="flex w-[252px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12]"
-          >
-            <div
-              data-component="sim-drawer-status"
-              className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
+    <AppWindow
+      scene="simulator"
+      current="profiles"
+      overlay={
+        // 600×728, anchored 24px clear of the stage's bottom-right corner
+        // (x 656–1256, y 48–776 of 1280×800). The stage is `overflow-hidden`,
+        // so anything that outgrows that is CUT, not shipped — which is what
+        // the capture script's fits / fitsY guards are there to catch.
+        <div
+          data-component="scene-simulator-window"
+          // The real simulator-shell scopes its fixed-dark chrome to the dark
+          // tokens in both themes (SimulatorWindow.tsx); the scene's window does
+          // the same so the light-theme measurement is of the chrome as shipped.
+          data-mode="dark"
+          className="absolute bottom-6 right-6 z-20 flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12]"
+          style={{ width: phoneW + railW + paneW }}
+        >
+          <DeviceToolbar
+            deviceName="iPhone 17"
+            profileName="tokyo sneakers"
+            running
+            keyboardVisible
+            onToggleKeyboard={noop}
+          />
+          <div className="flex min-h-0" style={{ height: bodyH }}>
+            <div className="flex flex-col" style={{ width: phoneW }}>
+              <div
+                data-component="simulator-screen-host"
+                className="relative min-h-0 flex-1 overflow-hidden bg-black"
+              >
+                {/* EXTERNAL web content, so: FIXED colours, never theme tokens
+                    — a web page inside a device looks the same in both themes,
+                    and the text-quality gate measures it in both. */}
+                <div
+                  data-component="simulator-screen-page"
+                  className="absolute inset-0 flex flex-col overflow-hidden bg-[#ffffff] text-[#111827]"
+                >
+                  <div className="flex shrink-0 items-center gap-1.5 border-b border-[#d5d8de] bg-[#eef0f3] px-2.5 py-1.5">
+                    <span aria-hidden="true" className="text-[10px]">
+                      🔒
+                    </span>
+                    <span className="text-[10px] text-[#3f4653]">shop.example.com</span>
+                  </div>
+                  {/* The field the on-screen keyboard below is open for. */}
+                  <div className="shrink-0 px-2.5 pt-2.5">
+                    <div className="flex items-center gap-1.5 rounded-[8px] border-2 border-[#1d4ed8] bg-[#ffffff] px-2 py-1">
+                      <span aria-hidden="true" className="text-[11px]">
+                        🔍
+                      </span>
+                      <span className="text-[11px] leading-[15px] text-[#111827]">rain jacket</span>
+                      <span aria-hidden="true" className="h-[13px] w-px bg-[#1d4ed8]" />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-baseline justify-between px-2.5 pt-2.5">
+                    <span className="text-[13px] font-semibold leading-[16px] text-[#111827]">
+                      Example Store
+                    </span>
+                    <span className="text-[10px] text-[#3f4653]">24 results</span>
+                  </div>
+                  <div className="grid min-h-0 flex-1 grid-cols-2 grid-rows-2 gap-2 px-2.5 pb-2.5 pt-2">
+                    {SHOP_PAGE_PRODUCTS.map((item) => (
+                      <div
+                        key={item.name}
+                        className="flex min-h-0 flex-col overflow-hidden rounded-[10px] border border-[#e1e4e9] bg-[#ffffff]"
+                      >
+                        <ShopTileArt wash={item.wash} ink={item.ink} />
+                        <div className="shrink-0 px-2 py-1.5">
+                          <div className="text-[10.5px] leading-[13px] text-[#111827]">
+                            {item.name}
+                          </div>
+                          <div className="mt-0.5 text-[9.5px] leading-[12px] text-[#3f4653]">
+                            {item.detail}
+                          </div>
+                          <div className="mt-1 text-[11px] font-semibold leading-[13px] text-[#111827]">
+                            {item.price}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <IOSKeyboard room={null} width={phoneW} onDismiss={noop} />
+            </div>
+            {/* The drawer: the icon RAIL (always docked, SimulatorWindow.tsx
+                ~9738) and the open pane beside it. The scene used to draw the
+                pane with no rail — a shape the shipped app cannot produce,
+                since the rail is what opens and closes that pane. The real
+                aside carries the phone/rail hairline on itself; here it rides
+                on the rail so the drawer is exactly railW + paneW and nothing
+                inside the window overflows. */}
+            <aside
+              data-component="simulator-drawer"
+              className="flex shrink-0 flex-row bg-[#1d1e24] text-[11.5px]"
             >
-              <div className="truncate">
-                <span className="text-white/90">Manual</span> · ws ✓ · webrtc
-              </div>
-              <div className="truncate">60 fps · 38 ms · egress live</div>
-            </div>
-            <div className="flex flex-col gap-2 p-2.5 text-[11px] text-white/80">
-              <div className={infoCard}>
-                <div className={infoLabel}>Profile</div>
-                <div className="mt-0.5 truncate">amsterdam shopper</div>
-              </div>
-              <div className={infoCard}>
-                <div className={infoLabel}>Device</div>
-                <div className="mt-0.5 truncate">iPhone 17</div>
-              </div>
-              <div className={infoCard}>
-                <div className={infoLabel}>Link</div>
-                <div className="mt-0.5 truncate">
-                  eu-1.fleet.example.com<span className="text-white/50"> · ws ✓</span>
+              <nav
+                data-component="sim-drawer-rail"
+                aria-label="Drawer sections"
+                className="flex w-12 shrink-0 flex-col items-center gap-1 border-l border-white/[0.12] py-2"
+              >
+                <SimRailButton pane="session" label="Session" title="Session">
+                  <circle cx="12" cy="12" r="3.2" />
+                  <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+                </SimRailButton>
+                <SimRailButton pane="controls" label="Controls" title="Controls">
+                  <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h13M21 18h-1" />
+                  <circle cx="16" cy="6" r="2" />
+                  <circle cx="8" cy="12" r="2" />
+                  <circle cx="19" cy="18" r="2" />
+                </SimRailButton>
+                {/* The ACTIVE one — the pane beside it is Diagnostics. An
+                    inactive rail beside an open pane is another impossible
+                    state. */}
+                <SimRailButton pane="diagnostics" label="Health" title="Diagnostics" active>
+                  <path d="M3 12h4l2-6 4 12 2-6h6" />
+                </SimRailButton>
+                <SimRailButton pane="cookies" label="Cookies" title="Cookies">
+                  <path d="M12 3a9 9 0 1 0 9 9 3 3 0 0 1-3-3 3 3 0 0 1-3-3 3 3 0 0 1-3-3z" />
+                  <circle cx="9" cy="11" r="0.6" />
+                  <circle cx="13" cy="15" r="0.6" />
+                  <circle cx="16" cy="11.5" r="0.6" />
+                </SimRailButton>
+                <SimRailButton pane="network" label="Network" title="Network">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M3 12h18M12 3v18M5 6.5c2 1.4 12 1.4 14 0M5 17.5c2-1.4 12-1.4 14 0" />
+                </SimRailButton>
+                <SimRailButton pane="files" label="Files" title="Files">
+                  <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+                  <path d="M12 15V4M8 8l4-4 4 4" />
+                </SimRailButton>
+                <SimRailButton pane="downloads" label="Downloads" title="Downloads">
+                  <path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+                  <path d="M12 4v11M8 11l4 4 4-4" />
+                </SimRailButton>
+                <SimRailButton pane="recording" label="Record" title="Recording">
+                  <circle cx="12" cy="12" r="9" />
+                  <circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none" />
+                </SimRailButton>
+                {/* The always-reachable Stop, pinned to the rail's bottom under
+                    its separator — the real rail draws it whenever a session is
+                    bound, and this window is a bound, running session. */}
+                <div aria-hidden="true" className="mx-auto mb-1 mt-auto h-px w-6 bg-white/10" />
+                <button
+                  type="button"
+                  data-component="sim-rail-end"
+                  aria-label="End session"
+                  title="End the session — stops the worker and tears down the browser"
+                  onClick={noop}
+                  className="flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg text-red-400"
+                >
+                  <span aria-hidden="true">◼</span>
+                  <span aria-hidden="true" className="text-[9px] font-medium leading-none">
+                    End
+                  </span>
+                </button>
+              </nav>
+              <div
+                data-component="sim-drawer-panel"
+                data-state="open"
+                className="flex w-[252px] shrink-0 flex-col overflow-hidden border-l border-white/[0.12]"
+              >
+                <div
+                  data-component="sim-drawer-status"
+                  className="shrink-0 border-b border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-tight text-white/70"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      {/* The real strip's own shape: mode · ws host · transport,
+                          then fps · rtt · 🌍 proxy · timezone (SimulatorWindow.tsx
+                          ~9817). It used to read `Manual · ws ✓ · webrtc` /
+                          `60 fps · 38 ms · egress live` — three readouts the app
+                          never renders (`egress live` exists nowhere in src, and
+                          `· ws ✓` belongs to the Link card below). */}
+                      {/* BOTH lines WRAP where the real strip truncates. The
+                          real strip hangs no `title` on either, and a title is
+                          invisible in a PNG anyway; a clipped untitled element
+                          is exactly what the capture's text-quality gate fails
+                          (measured: line 1 clipped 12px, line 2 ~80px). Same
+                          tokens, same text, nothing hidden — the app's own
+                          Transport row wraps rather than clips for this reason
+                          (SimulatorWindow.tsx "Finding #4"). */}
+                      <div className="break-words">
+                        <span className="text-white/90">Manual</span>
+                        <span className="text-white/30"> · </span>
+                        <span>eu-1.fleet.example.com</span>
+                        <span className="text-white/30"> · </span>
+                        <span className="text-ink-secondary">udp</span>
+                      </div>
+                      <div className="break-words">
+                        <span>60fps · </span>
+                        <span className="text-ink-secondary">38ms</span>
+                        <span className="text-white/60">
+                          {' · 🌍 Residential JP #1'}
+                          <span data-component="sim-proxy-timezone"> · Asia/Tokyo</span>
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label="Close drawer"
+                      title="Collapse"
+                      onClick={noop}
+                      className="-mr-1 -mt-0.5 shrink-0 rounded px-1 text-[13px] leading-none text-white/50"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {/* The Diagnostics pane, in the real pane's own order: header,
+                    the 2-up Render/Latency tiles, Transport, then the info
+                    cards. The scene used to start at the info cards, which left
+                    a 252×228 flat rectangle at the panel's bottom — the largest
+                    dead area in the whole frame, inside the subject the capture
+                    exists to show. */}
+                <div
+                  data-component="sim-drawer-pane"
+                  className="min-w-0 flex-1 space-y-2.5 overflow-y-auto p-2.5 text-[11px] text-white/80"
+                >
+                  <div className="flex items-center gap-2 font-sans text-[11px] font-semibold text-white">
+                    <span aria-hidden="true" className="text-accent">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <polyline points="3,13 8,13 11,5 14,19 16,13 21,13" />
+                      </svg>
+                    </span>
+                    <span>Diagnostics</span>
+                    <button
+                      type="button"
+                      onClick={noop}
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-white/80"
+                    >
+                      <span aria-hidden="true">⧉</span>
+                      Copy
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className={infoCard}>
+                      <div className={infoLabel}>Render</div>
+                      <div className="mt-0.5 text-[16px] font-bold leading-none">
+                        60
+                        {/* The real tile's unit is text-white/45, MEASURED at
+                            4.49:1 on this card (need 4.5) by
+                            scripts/gui-text-quality.mjs — so it is /50 here,
+                            the same bump the drawer captions took. The real
+                            component still ships /45; see the batch report. */}
+                        <span className="ml-0.5 text-[10px] font-medium text-white/50">fps</span>
+                      </div>
+                    </div>
+                    <div className={infoCard}>
+                      <div className={infoLabel}>Latency</div>
+                      <div className="mt-0.5 text-[16px] font-bold leading-none text-ink-secondary">
+                        38
+                        <span className="ml-0.5 text-[10px] font-medium text-white/50">ms</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
+                    <div className={`font-sans ${infoLabel}`}>Transport</div>
+                    <div className="mt-0.5 truncate text-ink-secondary">udp · direct</div>
+                    <div className="mt-1 flex flex-wrap gap-x-2 text-white/70">
+                      <span>decode 60 fps</span>
+                      <span>loss 0%</span>
+                      <span>jitter 8ms</span>
+                      <span>freezes 0</span>
+                      <span>frames 60 dec / 60 shown / 0 dropped</span>
+                    </div>
+                  </div>
+                  <div className={infoCard}>
+                    <div className={infoLabel}>Profile</div>
+                    <div className="mt-0.5 truncate">tokyo sneakers</div>
+                  </div>
+                  <div className={infoCard}>
+                    <div className={infoLabel}>Device</div>
+                    <div className="mt-0.5 truncate">iPhone 17</div>
+                  </div>
+                  <div className={infoCard}>
+                    {/* The fleet node that RUNS the device — deliberately not the
+                        exit's region: the Mac hosting the session and the proxy
+                        it egresses through are independent by design, which is
+                        why the drawer labels them Link and Egress separately. */}
+                    <div className={infoLabel}>Link</div>
+                    <div className="mt-0.5 truncate">
+                      eu-1.fleet.example.com<span className="text-white/50"> · ws ✓</span>
+                    </div>
+                  </div>
+                  <div className={infoCard}>
+                    <div className={infoLabel}>Egress</div>
+                    <div className="mt-0.5 truncate" title="🌍 Residential JP #1 · Asia/Tokyo">
+                      🌍 Residential JP #1
+                      <span data-component="sim-proxy-timezone"> · Asia/Tokyo</span>
+                    </div>
+                    <ExitIpChip report={MARKETING_CAPABILITY_REPORT} />
+                    <QuicReadout report={MARKETING_CAPABILITY_REPORT} />
+                    <OsReadout report={MARKETING_CAPABILITY_REPORT} />
+                  </div>
+                  <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
+                    <div className={`font-sans ${infoLabel}`}>Identity</div>
+                    <div className="mt-0.5 truncate">engine-deep · bit-exact device</div>
+                    {/* The real card's 4th line is `build {__BUILD_STAMP__}`.
+                        Omitted: in the harness that define is absent, so it
+                        renders `build dev` — and any value I typed instead
+                        would be a build stamp nobody built. */}
+                    <div className="truncate">input human-cadence native</div>
+                  </div>
                 </div>
               </div>
-              <div className={infoCard}>
-                <div className={infoLabel}>Egress</div>
-                <div className="mt-0.5 truncate" title="🌍 Residential NL #3 · Europe/Amsterdam">
-                  🌍 Residential NL #3
-                  <span data-component="sim-proxy-timezone"> · Europe/Amsterdam</span>
-                </div>
-                <ExitIpChip report={MARKETING_CAPABILITY_REPORT} />
-                <QuicReadout report={MARKETING_CAPABILITY_REPORT} />
-                <OsReadout report={MARKETING_CAPABILITY_REPORT} />
-              </div>
-              <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
-                <div className={`font-sans ${infoLabel}`}>Identity</div>
-                <div className="mt-0.5 truncate">engine-deep · bit-exact device</div>
-                <div className="truncate">input human-cadence native</div>
-              </div>
-            </div>
+            </aside>
           </div>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <ProfilesFrame viewMode="grid" liveCount={1} total={MARKETING_CARDS.length}>
+        <div data-scene-region="grid" className={PROFILES_GRID_CLASS_MIRROR}>
+          {MARKETING_CARDS.map((c) => (
+            <ProfilePhoneCard key={c.label} {...c.props} />
+          ))}
+        </div>
+      </ProfilesFrame>
+    </AppWindow>
   );
 }
 

@@ -644,23 +644,126 @@ describe('scene shapes — what scripts/marketing-screens.mjs guards at capture'
     });
   });
 
-  it('simulator: the real toolbar (live) and the observed Egress readouts', () => {
+  /* 2026-09-12 — the scene was recomposed. It used to be the device window
+   * ALONE, centred on an otherwise empty 1280×800 stage (552px of subject,
+   * 364px of dead ground on each side) with `simulator-screen-host` left
+   * `bg-black` and empty, which on the marketing page read as a broken app.
+   * It is now the desktop app's own window FILLING the stage with the
+   * floating device window lifted over it, and a page drawn on the phone
+   * screen. The arm below pins both new facts structurally; their pixel form
+   * (the windows really overlap, nothing hangs off the stage edge, the
+   * keyboard does not cover the page) is measured at capture by the
+   * `geometry` guards in scripts/marketing-screens.mjs — jsdom has no layout
+   * and cannot see any of it. */
+  it('simulator: the desktop app window, the floating device window over it, and a page on the phone screen', () => {
     const { container } = render(<MarketingScene name="simulator" />);
-    expect(container.querySelector('[data-component="simulator-toolbar"]')).not.toBeNull();
-    expect(
-      container.querySelector('[data-component="simulator-running-indicator"]'),
-    ).not.toBeNull();
+    const stage = container.querySelector<HTMLElement>('[data-scene="simulator"]');
+    expect(stage).not.toBeNull();
+    if (stage === null) return;
+
+    // 1 · The picture is the DESKTOP APP — the same chrome every other scene
+    //     wears — with a real view behind, not an empty frame. The pane's text
+    //     length is NOT that fact on its own: measured on the live harness,
+    //     `main` renders 1203 characters of which the grid is 1017, so the
+    //     ProfilesFrame header alone (186) clears any floor worth setting. The
+    //     card count is what says the view behind was not emptied.
+    expect(stage.querySelector('aside nav[aria-label="Primary"]')).not.toBeNull();
+    const main = stage.querySelector<HTMLElement>('main');
+    expect(main).not.toBeNull();
+    if (main === null) return;
+    expect((main.textContent ?? '').trim().length).toBeGreaterThan(120);
+    const cards = Array.from(
+      stage.querySelectorAll<HTMLElement>('[data-scene-region="grid"] article'),
+    );
+    expect(cards).toHaveLength(MARKETING_CARDS.length);
+
+    // 2 · …with the floating device window OVER it: a separate layer inside
+    //     the same stage. Neither contains the other — the window overlaps the
+    //     app, it does not replace the app's pane and is not swallowed by it.
+    const win = stage.querySelector<HTMLElement>('[data-component="scene-simulator-window"]');
+    expect(win).not.toBeNull();
+    if (win === null) return;
+    expect(main.contains(win)).toBe(false);
+    expect(win.contains(main)).toBe(false);
+    // Its chrome stays fixed-dark whatever the theme (the real simulator shell).
+    expect(win.getAttribute('data-mode')).toBe('dark');
+
+    // 3 · The window's own parts are unchanged: the real toolbar, live.
+    expect(win.querySelector('[data-component="simulator-toolbar"]')).not.toBeNull();
+    expect(win.querySelector('[data-component="simulator-running-indicator"]')).not.toBeNull();
+
+    // 4 · ⛔ The phone screen shows a PAGE, drawn INSIDE the screen host (the
+    //     same box the live video fills) — obviously an example, never a real
+    //     shop — with the on-screen keyboard as the host's SIBLING, after it in
+    //     document order: below the screen, not a layer over the page.
+    const host = win.querySelector<HTMLElement>('[data-component="simulator-screen-host"]');
+    const page = win.querySelector<HTMLElement>('[data-component="simulator-screen-page"]');
+    const keyboard = win.querySelector<HTMLElement>('[data-component="ios-keyboard"]');
+    expect(host).not.toBeNull();
+    expect(page).not.toBeNull();
+    expect(keyboard).not.toBeNull();
+    if (host === null || page === null || keyboard === null) return;
+    expect(host.contains(page)).toBe(true);
+    expect((page.textContent ?? '').trim().length).toBeGreaterThan(20);
+    expect(page.textContent).toMatch(/example\.com/i);
+    //     …and it is a SHOP: FOUR products, each priced, all in one currency.
+    //     That is SIMULATOR_ALT's own sentence in apps/marketing-site/src/
+    //     pages/index.astro — "four jackets with their prices in euros" — read
+    //     ALOUD to someone who cannot see the picture, so changing the count
+    //     or the currency in SHOP_PAGE_PRODUCTS without changing the alt makes
+    //     the alt a lie with every other gate still green. The capture script
+    //     can only measure the page's total text (≥ 150 chars); the count and
+    //     the currency are pinned here, where they can be counted.
+    const prices = (page.textContent ?? '').match(/[€$¥£][\d,]+(?:\.\d{2})?/g) ?? [];
+    expect(prices, "SIMULATOR_ALT says 'four jackets with their prices'").toHaveLength(4);
+    expect(new Set(prices.map((p) => p[0])), 'SIMULATOR_ALT says euros').toEqual(new Set(['€']));
+    expect(host.contains(keyboard)).toBe(false);
+    const order = Array.from(win.querySelectorAll('[data-component]'));
+    expect(order.indexOf(host)).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf(host)).toBeLessThan(order.indexOf(keyboard));
+
+    // 5 · Every Egress readout survives the recomposition — they are what the
+    //     privacy scan's EXIT_SCENES positive control reads on this scene.
     for (const c of ['sim-exit-ip-chip', 'sim-quic-readout', 'sim-os-readout']) {
-      const el = container.querySelector(`[data-component="${c}"]`);
+      const el = win.querySelector(`[data-component="${c}"]`);
       expect(el, c).not.toBeNull();
       expect(el?.getAttribute('data-state'), c).toBe('observed');
     }
     // A coherent exit: the WebRTC candidate equals the exit, so no leak is cried.
     expect(
-      container
-        .querySelector('[data-component="sim-webrtc-candidates"]')
-        ?.getAttribute('data-leak'),
+      win.querySelector('[data-component="sim-webrtc-candidates"]')?.getAttribute('data-leak'),
     ).toBe('false');
+
+    // 6 · ⛔ ONE story, not two. The floating window IS a session, so the app
+    //     behind it must show that profile running: in the real app a running
+    //     profile's dock reads "Open session", never "Launch". Nothing above
+    //     ties the two windows together — containment, overlap and the
+    //     readouts are all true of a window claiming a LIVE session on a card
+    //     the same frame shows Idle with a Launch button, which is a state the
+    //     product cannot produce and a stranger reads as a broken screenshot.
+    const nameOf = (card: HTMLElement): string =>
+      (card.getAttribute('aria-label') ?? '').replace(/^Select /, '');
+    const dockLabel = (card: HTMLElement): string =>
+      card.querySelector('[data-component="card-dock"] button')?.textContent?.trim() ?? '';
+    const liveNames = cards.filter((c) => dockLabel(c) === 'Open session').map(nameOf);
+    expect(liveNames, 'exactly one card in the grid is the running session').toHaveLength(1);
+    const liveName = liveNames[0];
+    expect(liveName).toBeDefined();
+    if (liveName === undefined) return;
+    // …and the header's tally counts that same one.
+    expect(stage.querySelector('[data-component="profiles-hero"]')?.textContent).toContain(
+      `${String(liveNames.length)} live`,
+    );
+    const toolbarText =
+      win.querySelector('[data-component="simulator-toolbar"]')?.textContent ?? '';
+    expect(toolbarText, 'the window toolbar names the profile the grid shows as live').toContain(
+      liveName,
+    );
+    for (const idle of cards.map(nameOf).filter((n) => n !== liveName)) {
+      expect(toolbarText, `the toolbar must not name an idle profile (${idle})`).not.toContain(
+        idle,
+      );
+    }
   });
 
   it('billing + command-center: the app chrome frames the real panels', () => {
