@@ -312,7 +312,22 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
     // has no fleet — `reason` says which), and the control plane cannot measure a
     // tunnel itself (it never falls back to a TCP connect for a VPN row). A
     // client branches on THIS, never on the `reason` prose.
-    not_run: z.enum(['live_session', 'node_busy', 'node_error', 'no_node']).optional(),
+    // ⛔ (V4 follow-up 2026-09-12) — `unresolvable` = the STORED ROW could not be
+    // turned into anything a node could be handed (see the server's
+    // `ProxyUnresolvableReason`: an unreadable secret, a refused
+    // `script-security 2` directive, an external `ca ca.crt` reference, an
+    // unsafe tunnel target, a WireGuard row with no `Address`, a downgraded
+    // tier…). It belongs in THIS enum and not outside it because the test of
+    // membership is the one written above — *did anything run* — and for every
+    // one of those causes nothing did: no node was dispatched, no tunnel was
+    // brought up, no packet left. Emitting it as a bare `ok:false` made clients
+    // classify a CONFIG problem as a tunnel verdict, drop the row's measured
+    // exit/QUIC/OS and render a red "tunnel down" for a tunnel nobody touched.
+    // `reason` carries the cause's own sentence beside it, and the row's stored
+    // exit rides along as it does for `live_session` / `no_node`.
+    not_run: z
+      .enum(['live_session', 'node_busy', 'node_error', 'no_node', 'unresolvable'])
+      .optional(),
     // (d) 2026-09-10 — beside `not_run: 'live_session'` / `'no_node'`: the STORED
     // exit a session observed, surfaced so the client can still show where the
     // tunnel exits. `region`/`city` are null (the stored observation carries neither).

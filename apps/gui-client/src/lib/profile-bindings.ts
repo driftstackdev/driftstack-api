@@ -115,23 +115,34 @@ export async function deleteBinding(profileId: string): Promise<void> {
 }
 
 /**
- * Clear every binding's default-proxy reference that points at `proxyId`,
- * leaving the binding itself (session/launch history) intact. Called when a
- * proxy is DELETED so a profile bound to it doesn't keep a dangling
- * defaultProxyId that would silently reroute its egress to a different proxy
- * (an anti-detect privacy hazard). Returns the profile ids that were unbound
- * so the caller can surface "these profiles no longer have a default proxy".
+ * The profiles whose DEFAULT proxy is `proxyId`. A READ — it writes nothing,
+ * and the proxy-delete path depends on that.
+ *
+ * ⛔ 2026-09-12 (owner, P1) — READ THIS BEFORE "CLEANING UP" A DANGLING BINDING.
+ * This was `clearBindingsForProxy`, which set `defaultProxyId = null` on every
+ * binding naming the deleted proxy. A null default is NOT "no proxy": every
+ * resolver reads it as "this profile never chose one" and falls back to the
+ * FIRST saved proxy —
+ *   • `ProfilesView.pickProxy`            → `return proxies[0] ?? null`
+ *   • `AgentChatView.pickProxyFor`        → `return proxies[0] ?? null`
+ *   • `session-h3-observation.attributeSessionProxy` → `proxies[0]?.id ?? null`
+ * So deleting proxy B re-pointed B's profiles at proxy A, and the next session
+ * left from a country the customer never chose. Reported verbatim: "when a proxy
+ * is removed, and it still has existing profiles on that proxy, currently it
+ * switches to another proxy which is available, i think it would be better, if
+ * proxy was simply removed".
+ *
+ * So the binding KEEPS naming the deleted proxy, and that IS the app's
+ * "no proxy configured" state for a profile that once had one: all three
+ * resolvers already treat an EXPLICIT default whose proxy is gone as nothing
+ * (never `proxies[0]`), the profile card renders its no-proxy state
+ * (`hasProxy={px !== null}`), and the launch path refuses with "This profile's
+ * configured proxy was deleted" rather than rerouting the egress. Nulling these
+ * bindings re-opens the privacy hazard; pointing them at another proxy is the
+ * defect itself. If a future cleanup really needs the dangling id gone, it must
+ * first give the resolvers a way to tell "detached" from "never chose".
  */
-export async function clearBindingsForProxy(proxyId: string): Promise<string[]> {
-  return writeLock(async () => {
-    const all = await listBindings();
-    const affected = all.filter((b) => b.defaultProxyId === proxyId).map((b) => b.profileId);
-    if (affected.length === 0) return [];
-    const next = all.map((b) =>
-      b.defaultProxyId === proxyId ? { ...b, defaultProxyId: null } : b,
-    );
-    await getStore().set(KEY, next);
-    await getStore().save();
-    return affected;
-  });
+export async function profilesUsingProxy(proxyId: string): Promise<string[]> {
+  const all = await listBindings();
+  return all.filter((b) => b.defaultProxyId === proxyId).map((b) => b.profileId);
 }

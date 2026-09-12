@@ -18,6 +18,11 @@ import {
 import { encryptAccountProxySecret } from '../../src/lib/account-proxy-secret-encryption.js';
 
 const MASTER = Buffer.alloc(32, 7);
+/** (V4 follow-up) — a DIFFERENT deployment key, so a row encrypted under MASTER
+ *  fails GCM for its own owner. That is the wrong-TMK / post-rotation /
+ *  corrupted-blob case (`secret_unreadable`), and it is NOT the same thing as a
+ *  cross-account read (which the repo refuses first, as `not_found`). */
+const OTHER_MASTER = Buffer.alloc(32, 9);
 const ACCT_A = '11111111-1111-1111-1111-111111111111';
 const ACCT_B = '22222222-2222-2222-2222-222222222222';
 
@@ -369,5 +374,379 @@ describe('AccountProxiesService.findOwned', () => {
     const row = await seed(repo, ACCT_A);
     expect((await svc.findOwned(row.id, ACCT_A))?.id).toBe(row.id);
     expect(await svc.findOwned(row.id, ACCT_B)).toBeNull();
+  });
+});
+
+// ─── (V3 2026-09-12) — resolveForDispatchWithReason: a null carries its CAUSE ──
+//
+// Owner: "openvpn (possibily wireguard too) … session not starting still".
+// MEASURED before this: nine distinct causes reached the launch-blocking call
+// sites as one `null`, and both of them answered it with ONE sentence — "its
+// stored configuration could not be read. Re-add it and try again." For the two
+// POLICY refusals (a `script-security 2` line the control plane will not run; a
+// `ca ca.crt` reference no session can resolve) and for a config missing a
+// required field, that sentence is FALSE: nothing failed to decrypt, and a
+// re-add of the same file is refused again. The launch failure could therefore
+// be neither explained to the customer nor triaged from the log.
+//
+// These arms pin: each cause names itself; the three genuinely-unreadable causes
+// KEEP the shipped sentence (the customer's action is unchanged and the code is
+// what separates them); a healthy row reports NO reason (the vacuity control —
+// a resolver that returned a reason unconditionally would pass every arm above);
+// and `resolveForDispatch` is still exactly `.config`, so every existing caller
+// and every test that reads it is unaffected.
+
+/** A stored OpenVPN row with an arbitrary blob — the shape a row written by an
+ *  older build (or any other writer) has: the create route's guards never ran. */
+async function seedOpenvpn(
+  repo: InMemoryAccountProxiesRepo,
+  accountId: string,
+  configBlob: string,
+) {
+  const id = randomUUID();
+  return repo.create(accountId, {
+    id,
+    label: 'ovpn',
+    scheme: 'openvpn',
+    host: 'vpn.example.com',
+    port: 1194,
+    username: null,
+    wrappedPassword: null,
+    wrappedSecret: encryptAccountProxySecret(
+      MASTER,
+      { accountId, proxyId: id, slot: 'openvpn-config' },
+      JSON.stringify({ config_blob: configBlob }),
+    ),
+    config: {},
+  });
+}
+
+const CLEAN_OVPN = 'client\nremote vpn.example.com 1194\n<ca>\nPEM\n</ca>\n';
+const UNREADABLE_SENTENCE = 'could not be read. Re-add it and try again.';
+
+describe('AccountProxiesService.resolveForDispatchWithReason — the cause of a null', () => {
+  it('a script-executing directive is a POLICY refusal that names the line, never "could not be read"', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(
+      repo,
+      ACCT_A,
+      'client\nremote vpn.example.com 1194\nscript-security 2\n<ca>\nPEM\n</ca>\n',
+    );
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_refused_directive');
+    // The SAME sentence the create/update route answers the same blob with,
+    // naming the same line — so a customer who reads one and then the other is
+    // not told two different stories.
+    expect(r.detail).toContain('Line 3: "script-security 2"');
+    expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
+  });
+
+  it('an external cert/key reference is refused HERE (cross-pinned with the node parse-reject), naming the line', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(repo, ACCT_A, 'client\nremote vpn.example.com 1194\nca ca.crt\n');
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_refused_file_reference');
+    expect(r.detail).toContain('ca ca.crt');
+    expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
+  });
+
+  it('a VPN config missing a required field names the field AS THE FILE NAMES IT (WireGuard `Address`)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const id = randomUUID();
+    const row = await repo.create(ACCT_A, {
+      id,
+      label: 'wg',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: encryptAccountProxySecret(
+        MASTER,
+        { accountId: ACCT_A, proxyId: id, slot: 'wireguard-private-key' },
+        'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=',
+      ),
+      // `address` absent — the row shape a WG proxy stored before it was
+      // captured has, which fails closed on EVERY launch.
+      config: {
+        peer_public_key: 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=',
+        endpoint: 'vpn.example.com:51820',
+        allowed_ips: '0.0.0.0/0',
+      },
+    });
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_incomplete');
+    expect(r.detail).toContain('Address');
+    expect(r.detail).not.toContain('address)'); // the WIRE name is never shown
+    expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
+  });
+
+  it('the three UNREADABLE causes keep the shipped sentence (the action is the same; the CODE separates them)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const id = randomUUID();
+    const noSecret = await repo.create(ACCT_A, {
+      id,
+      label: 'wg',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: null,
+      config: {},
+    });
+    const missing = await svc.resolveForDispatchWithReason({
+      proxyId: noSecret.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(missing.config).toBeNull();
+    expect(missing.reason).toBe('secret_missing');
+    expect(missing.detail).toContain(UNREADABLE_SENTENCE);
+
+    // ⛔ (V4 follow-up 2026-09-12) — THIS LEG USED TO ASSERT A DIFFERENT CAUSE
+    // THAN THE ARM'S TITLE. It read the row as ACCT_B and its own comment
+    // conceded the consequence — "ACCT_B does not own the row at all, so the
+    // repo answers first" — so it asserted `not_found`, and the wrong-TMK /
+    // corrupted-blob case (`secret_unreadable`) the arm was written for was
+    // never reached. Measured by mutation: replacing the `secret_unreadable`
+    // sentence read GREEN against 23 server files. The cross-account leg is a
+    // real property and keeps its own arm below; THIS is the GCM failure —
+    // the row's own owner, a deployment key that cannot unwrap it.
+    const ovpn = await seedOpenvpn(repo, ACCT_A, CLEAN_OVPN);
+    const rotated = new AccountProxiesService(repo, OTHER_MASTER);
+    const gcmFailed = await rotated.resolveForDispatchWithReason({
+      proxyId: ovpn.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(gcmFailed.config).toBeNull();
+    expect(gcmFailed.reason).toBe('secret_unreadable');
+    expect(gcmFailed.detail).toContain(UNREADABLE_SENTENCE);
+    // …and it is the VPN wording, not the socks5 one (the two differ by a noun
+    // the customer reads).
+    expect(gcmFailed.detail).toContain('VPN');
+
+    // No master key on the deployment: nothing here can be unwrapped.
+    const noKey = new AccountProxiesService(repo, null);
+    const unkeyed = await noKey.resolveForDispatchWithReason({
+      proxyId: ovpn.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(unkeyed.config).toBeNull();
+    expect(unkeyed.reason).toBe('encryption_unavailable');
+    expect(unkeyed.detail).toContain(UNREADABLE_SENTENCE);
+  });
+
+  it('an http row says an HTTP proxy cannot carry a session — not that its config is unreadable', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seed(repo, ACCT_A, { scheme: 'http' });
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('scheme_not_dispatchable');
+    expect(r.detail).toContain('HTTP proxy');
+  });
+
+  it('VACUITY CONTROL — a healthy row resolves with NO reason, and `resolveForDispatch` is exactly `.config`', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const ovpn = await seedOpenvpn(repo, ACCT_A, CLEAN_OVPN);
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: ovpn.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.reason).toBeUndefined();
+    expect(r.detail).toBeUndefined();
+    expect(r.config).toEqual({ type: 'openvpn', config_blob: CLEAN_OVPN });
+    // The compatibility pin: the old signature returns the same object, and a
+    // null for a refused row (so every existing caller is unchanged).
+    expect(
+      await svc.resolveForDispatch({ proxyId: ovpn.id, accountId: ACCT_A, tier: 'api_builder' }),
+    ).toEqual(r.config);
+    const refused = await seedOpenvpn(repo, ACCT_A, `${CLEAN_OVPN}up /etc/openvpn/up.sh\n`);
+    expect(
+      await svc.resolveForDispatch({ proxyId: refused.id, accountId: ACCT_A, tier: 'api_builder' }),
+    ).toBeNull();
+  });
+});
+
+// ⛔ (V4 follow-up 2026-09-12) — THE REASON CODES NOTHING WAS ASSERTING.
+//
+// `ProxyUnresolvableReason` exists so triage picks the cause out of a log line
+// without a repro. MEASURED by mutation against 23 server files / 373 tests:
+// mislabelling `secret_unreadable`, `config_refused_target` (both producers) and
+// the socks5 `encryption_unavailable` — and rewriting their sentences — read
+// GREEN. A mislabel is exactly the defect the closed set exists to prevent, and
+// `config_refused_target` is the SSRF case an on-call engineer most needs to be
+// true.
+//
+// Table-driven, one fixture per reachable code, asserting the pair {reason,
+// detail}. MUTATION (run): swap any row's emitted `reason` in the service → that
+// row reds by name.
+//
+// ⚠️ NOT IN THE TABLE, and why — measured, not assumed:
+//   * `config_unreadable` (the JSON.parse / non-string `config_blob` arms) is
+//     UNREACHABLE through the encryption module. `validatePlaintext` parses and
+//     re-serialises the OpenVPN secret on BOTH write and read
+//     (`decryptPayload`'s last statement), so a stored blob that is not the
+//     canonical `{config_blob[,password]}` JSON cannot exist, and one corrupted
+//     at rest throws on read → `secret_unreadable`. It is defence-in-depth with
+//     no producer; a fixture for it would have to fabricate a row the system
+//     cannot make. Named here so the next reader does not re-derive it.
+//   * `not_found`, `scheme_not_dispatchable`, `secret_missing`,
+//     `encryption_unavailable` (VPN), `config_refused_directive`,
+//     `config_refused_file_reference`, `config_incomplete` each have their own
+//     arm above.
+describe('(V4) every REACHABLE ProxyUnresolvableReason is asserted by code AND sentence', () => {
+  const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
+  const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
+
+  async function seedWireguard(repo: InMemoryAccountProxiesRepo, config: Record<string, unknown>) {
+    const id = randomUUID();
+    return repo.create(ACCT_A, {
+      id,
+      label: 'wg',
+      scheme: 'wireguard',
+      host: 'vpn.example.com',
+      port: 51820,
+      username: null,
+      wrappedPassword: null,
+      wrappedSecret: encryptAccountProxySecret(
+        MASTER,
+        { accountId: ACCT_A, proxyId: id, slot: 'wireguard-private-key' },
+        WG_PRIV,
+      ),
+      config,
+    });
+  }
+
+  const HEALTHY_WG = {
+    peer_public_key: WG_PUB,
+    endpoint: 'vpn.example.com:51820',
+    allowed_ips: '0.0.0.0/0',
+    address: '10.7.0.2/32',
+  };
+
+  it('CRITICAL socks5 encryption_unavailable — the deployment has no master key, so a stored password cannot be unwrapped', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const row = await seed(repo, ACCT_A); // socks5 WITH a wrapped password
+    const r = await new AccountProxiesService(repo, null).resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('encryption_unavailable');
+    // The PROXY wording, not the VPN one.
+    expect(r.detail).toBe(
+      'This proxy’s stored configuration could not be read. Re-add it and try again.',
+    );
+  });
+
+  it('CRITICAL socks5 secret_unreadable — the row is the owner’s, the key cannot unwrap it (rotation / corruption)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const row = await seed(repo, ACCT_A);
+    const r = await new AccountProxiesService(repo, OTHER_MASTER).resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('secret_unreadable');
+    expect(r.detail).toContain(UNREADABLE_SENTENCE);
+    expect(r.detail).not.toContain('VPN');
+  });
+
+  it('CRITICAL WireGuard config_refused_target — the tunnel’s own endpoint is a loopback address (SSRF re-guard at dispatch)', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    // The DISPLAY host is public and passes `classifyUnsafeHost`; the real
+    // egress is the endpoint, which is the one this code re-guards.
+    const row = await seedWireguard(repo, { ...HEALTHY_WG, endpoint: '127.0.0.1:51820' });
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_refused_target');
+    expect(r.detail).toContain('private, loopback, link-local, or metadata address');
+    expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
+  });
+
+  it('CRITICAL OpenVPN config_refused_target — the blob’s `remote` is a loopback address', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(
+      repo,
+      ACCT_A,
+      'client\nremote 127.0.0.1 1194\n<ca>\nPEM\n</ca>\n',
+    );
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_refused_target');
+    expect(r.detail).toContain('private, loopback, link-local, or metadata address');
+  });
+
+  it('VACUITY CONTROL — the same WireGuard fixture with a PUBLIC endpoint resolves, with no reason at all', async () => {
+    // Without this, a service that returned `config_refused_target` for every
+    // WireGuard row would pass the arm above.
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedWireguard(repo, HEALTHY_WG);
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.reason).toBeUndefined();
+    expect(r.detail).toBeUndefined();
+    expect(r.config).toMatchObject({ type: 'wireguard', endpoint: 'vpn.example.com:51820' });
+  });
+
+  it('the cross-account read is `not_found`, NOT a decrypt failure — the repo refuses before any key is touched', async () => {
+    // The property the mislabelled leg above was actually measuring. It is real
+    // and worth pinning; it is just not the GCM case.
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(repo, ACCT_A, CLEAN_OVPN);
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_B,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('not_found');
+    expect(r.detail).toContain('no longer on your account');
   });
 });
