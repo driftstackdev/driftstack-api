@@ -622,3 +622,47 @@ describe("review follow-ups — the simulator's accent-as-text sites and the sig
     }
   });
 });
+
+describe('audit-scene follow-ups — the error hue as text, and the saved-chat rail titles', () => {
+  const readSource2 = (rel: string): string => readFileSync(join(SRC, rel), 'utf8');
+  it('--status-error-text-rgb clears 4.5 on the error /15 wash over raised in both modes; .btn-danger and the log error pill wear it (the error token read 4.27 in dark)', () => {
+    const mix = (
+      c: [number, number, number],
+      a: number,
+      bg: [number, number, number],
+    ): [number, number, number] => [
+      c[0] * a + bg[0] * (1 - a),
+      c[1] * a + bg[1] * (1 - a),
+      c[2] * a + bg[2] * (1 - a),
+    ];
+    for (const block of [LIGHT, DARK]) {
+      const err = token(block, 'status-error-rgb');
+      const text = token(block, 'status-error-text-rgb');
+      const raised = token(block, 'surface-raised-rgb');
+      expect(contrast(text, mix(err, 0.15, raised)), 'text on the /15 wash').toBeGreaterThanOrEqual(
+        4.5,
+      );
+      expect(
+        contrast(text, mix(err, 0.2, raised)),
+        'text on the /20 hover wash',
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(text, raised)).toBeGreaterThanOrEqual(4.5);
+    }
+    // control: the dark error token itself fails on the wash (what shipped)
+    const dErr = token(DARK, 'status-error-rgb');
+    expect(contrast(dErr, mix(dErr, 0.15, token(DARK, 'surface-raised-rgb')))).toBeLessThan(4.5);
+    expect(CSS).toMatch(/\.btn-danger \{[^}]*bg-status-error\/15 text-status-error-text/);
+    expect(CSS).toMatch(/\.btn-danger \{[^}]*hover:bg-status-error\/20/);
+    expect(readSource2('views/LogsView.tsx')).toContain(
+      "error: 'bg-status-error/15 text-status-error-text'",
+    );
+    expect(readFileSync(join(SRC, '..', 'tailwind.config.ts'), 'utf8')).toMatch(
+      /'error-text':\s*'rgb\(var\(--status-error-text-rgb\) \/ <alpha-value>\)'/,
+    );
+  });
+
+  it('the saved-chat rail names a clipped title: the truncating span carries title={c.title}', () => {
+    const src = readSource2('views/AgentChatView.tsx');
+    expect(src).toMatch(/className="block truncate text-xs text-ink-primary" title=\{c\.title\}>/);
+  });
+});

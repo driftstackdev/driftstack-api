@@ -1709,7 +1709,9 @@ function ChatRail({
                     title={busy ? 'Finish or stop the current reply first' : undefined}
                     className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
                   >
-                    <span className="block truncate text-xs text-ink-primary">{c.title}</span>
+                    <span className="block truncate text-xs text-ink-primary" title={c.title}>
+                      {c.title}
+                    </span>
                     <span className="block text-2xs text-ink-muted">
                       {/* V-1611 — the rail showed a title and a timestamp and
                           discarded the rest. `turns` has been persisted in full

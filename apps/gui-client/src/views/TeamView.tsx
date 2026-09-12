@@ -62,6 +62,12 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
   const refreshSeqRef = useRef(0);
   const mountedRef = useRef(true);
   useEffect(() => {
+    // Set on EVERY mount, not only at ref creation: React.StrictMode (main.tsx)
+    // simulates an unmount → remount in development, the cleanup below set the
+    // ref false, and nothing set it back — every refresh() result was then
+    // dropped as "unmounted" and the skeleton never cleared (found by the
+    // audit-team harness scene, 2026-09-12).
+    mountedRef.current = true;
     return () => {
       mountedRef.current = false;
     };
@@ -231,7 +237,7 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleInvite();
             }}
-            placeholder="teammate@company.com"
+            placeholder="teammate@example.com"
             aria-label="Invitee email"
             className="min-w-0 flex-1 rounded-lg border border-surface-divider bg-surface-inset px-3 py-1.5 text-sm text-ink-primary placeholder:text-ink-muted focus:border-accent focus:outline-none"
           />

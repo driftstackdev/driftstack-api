@@ -108,8 +108,8 @@
   .btn-danger {
     @apply inline-flex items-center justify-center rounded
            px-3 py-1.5 text-sm font-medium
-           bg-status-error/15 text-status-error
-           hover:bg-status-error/25
+           bg-status-error/15 text-status-error-text
+           hover:bg-status-error/20
            focus-visible:ring-2 focus-visible:ring-status-error/40
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors;
@@ -391,6 +391,10 @@
   --status-ready-rgb: 8 106 64;
   --status-busy-rgb: 123 84 11;
   --status-error-rgb: 166 53 46;
+  /* the error hue AS TEXT on its own 15% wash (.btn-danger, log level pills):
+     in light the error token already clears 4.5 there (4.98), so it is the
+     same value; dark needs a lighter tint (below). */
+  --status-error-text-rgb: 166 53 46;
   --status-idle-rgb: 138 141 153;
   /* T2 — the accent AS TEXT. In light mode the accent itself clears AA on the
      plain surfaces (#a83b4d: 5.87 raised, 5.28 base, 4.81 inset) but NOT on the
@@ -426,6 +430,12 @@
   --status-ready-rgb: 52 211 153;
   --status-busy-rgb: 251 191 36;
   --status-error-rgb: 248 113 113;
+  /* the error hue AS TEXT on its own 15% wash over raised (#3f3443): the
+     token above reads 4.27:1 there (Stop, Delete, the log 'error' pill —
+     measured by scripts/gui-text-quality.mjs on the audit scenes,
+     2026-09-12); this tint reads 5.21 on the /15 wash, 4.8 on the /20 hover
+     wash and 6.46 on raised. */
+  --status-error-text-rgb: 253 140 140;
   --status-idle-rgb: 107 114 128;
   /* T2 — the accent AS TEXT in dark mode. Oxblood-500 (#a83b4d) as 10–14px text
      on slate is 2.37:1 on raised (#1e293b) and 2.89 on base (#0f172a): every

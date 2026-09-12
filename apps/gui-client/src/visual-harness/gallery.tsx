@@ -6,7 +6,7 @@
 // not a build input (vite/Tauri bundle index.html only). Add new states here as
 // the card grows so the visual review stays representative.
 
-import { useMemo, type JSX, type ReactNode } from 'react';
+import { useMemo, type ContextType, type JSX, type ReactNode } from 'react';
 import type { AccountSelfProfile } from '@driftstack/sdk';
 import { ProfilePhoneCard, type ProfilePhoneCardProps } from '../components/ProfilePhoneCard';
 import { ProfilesTable, type ProfileTableRow } from '../components/ProfilesTable';
@@ -33,6 +33,14 @@ import { DEFAULT_SETTINGS, type DriftstackSettings } from '../lib/settings';
 import type { ProxyDraft } from '../lib/proxies';
 import type { ConnectionStatus } from '../lib/use-connection-status';
 import type { AgentSessionCapabilityReport } from '../lib/agent-session-control';
+// Audit scenes (2026-09-12) — one composition per view the marketing scenes do
+// not cover, for scripts/gui-text-quality.mjs. ⚠️ CYCLE: audit-scenes.tsx
+// imports AppWindow / the fixtures from THIS module; it therefore touches no
+// gallery export at its own top level, and this module touches AuditScene /
+// auditSceneSizes only inside functions (Gallery, sceneSize) — whichever of
+// the two a test imports first, both finish evaluating before either binding
+// is read. The NAMES live here so `ALL_SCENES` is a plain top-level constant.
+import { AuditScene, auditSceneSizes } from './audit-scenes';
 
 const noop = (): void => undefined;
 
@@ -56,6 +64,31 @@ export const MARKETING_SCENES = [
   'command-center',
 ] as const;
 export type MarketingSceneName = (typeof MARKETING_SCENES)[number];
+/** Audit scenes — `?scene=audit-<view>`: the REAL view in the same window
+ *  chrome, fed fixture data, for the text-quality gate (compositions + sizes in
+ *  audit-scenes.tsx; the names are here so ALL_SCENES is a top-level constant,
+ *  see the import note above). Not captured for marketing. */
+export const AUDIT_SCENES = [
+  'audit-sessions',
+  'audit-fleet',
+  'audit-recordings',
+  'audit-logs',
+  'audit-connectivity',
+  'audit-settings',
+  'audit-first-run',
+  'audit-recipes',
+  'audit-agent-chat',
+  'audit-team',
+] as const;
+export type AuditSceneName = (typeof AUDIT_SCENES)[number];
+export type SceneName = MarketingSceneName | AuditSceneName;
+/** Every scene the harness renders — what scripts/gui-text-quality.mjs reads
+ *  (marketing first, in capture order; the gate's positive control checks the
+ *  six marketing names are present). */
+export const ALL_SCENES: ReadonlyArray<SceneName> = [...MARKETING_SCENES, ...AUDIT_SCENES];
+export function isAuditScene(name: SceneName): name is AuditSceneName {
+  return (AUDIT_SCENES as ReadonlyArray<string>).includes(name);
+}
 /** The default stage (CSS px); `sceneSize` is the per-scene truth. */
 export const SCENE_WIDTH = 1280;
 export const SCENE_HEIGHT = 800;
@@ -68,19 +101,20 @@ export const SCENE_HEIGHT = 800;
  *  'Open session', and at 800 the last row ran past the frame. scripts/
  *  marketing-screens.mjs declares the same sizes, fails when they differ, and
  *  fails when the table does not fit its shell. */
-export function sceneSize(name: MarketingSceneName): { width: number; height: number } {
+export function sceneSize(name: SceneName): { width: number; height: number } {
+  if (isAuditScene(name)) return auditSceneSizes()[name];
   return name === 'profiles-list'
     ? { width: 1800, height: 880 }
     : { width: SCENE_WIDTH, height: SCENE_HEIGHT };
 }
 
-/** `?scene=<name>` → the scene, or null for anything else (the plain gallery). */
-export function sceneFromSearch(search: string): MarketingSceneName | null {
+/** `?scene=<name>` → the scene (marketing or audit), or null for anything else
+ *  (the plain gallery). The clock freeze below keys on this, so an audit scene
+ *  renders at FROZEN_NOW_ISO like a marketing one. */
+export function sceneFromSearch(search: string): SceneName | null {
   const raw = new URLSearchParams(search).get('scene');
   if (raw === null) return null;
-  return (MARKETING_SCENES as ReadonlyArray<string>).includes(raw)
-    ? (raw as MarketingSceneName)
-    : null;
+  return (ALL_SCENES as ReadonlyArray<string>).includes(raw) ? (raw as SceneName) : null;
 }
 
 /** Pin `Date.now` to FROZEN_NOW_ISO. Returns the restore function. */
@@ -613,7 +647,9 @@ export function Gallery(): JSX.Element {
   // (see the Marketing scenes block at the end of this file). Anything else
   // renders the state gallery below, unchanged.
   const scene = typeof window === 'undefined' ? null : sceneFromSearch(window.location.search);
-  if (scene !== null) return <MarketingScene name={scene} />;
+  if (scene !== null) {
+    return isAuditScene(scene) ? <AuditScene name={scene} /> : <MarketingScene name={scene} />;
+  }
   const fixedWidth = fixedWidthClass();
   return (
     <div className="min-h-screen bg-surface-base p-8">
@@ -1045,7 +1081,7 @@ export const FIXTURE_ACCOUNT: AccountSelfProfile = {
   teams: [],
 };
 
-const FIXTURE_SETTINGS: DriftstackSettings = {
+export const FIXTURE_SETTINGS: DriftstackSettings = {
   ...DEFAULT_SETTINGS,
   apiKey: 'ds_live_example',
   baseUrl: 'https://driftstack.io',
@@ -1405,19 +1441,31 @@ function TrafficLights(): JSX.Element {
   );
 }
 
+/** What the window hands the tree through SettingsContext (the provider's own
+ *  value type is not exported). Audit scenes override `client` / `settings`. */
+export type HarnessSettingsValue = NonNullable<ContextType<typeof SettingsContext>>;
+
 /** The main window's chrome around one view: the real TitleBar (with the slot
  *  App.tsx fills) and the real Sidebar, fed the fixture account through the
- *  real SettingsContext. 1280×800, overflow hidden — nothing escapes the stage. */
-function AppWindow({
+ *  real SettingsContext. 1280×800, overflow hidden — nothing escapes the stage.
+ *  Audit scenes (audit-scenes.tsx) pass `settingsOverrides` (a fixture SDK
+ *  client, an example.com base URL) and the matching title-bar `subtitle`; the
+ *  marketing scenes pass neither, so their output is byte-for-byte what it was
+ *  (scripts/marketing-screens.mjs --verify pins that). */
+export function AppWindow({
   scene,
   current,
   children,
+  settingsOverrides,
+  subtitle = 'cloud',
 }: {
-  scene: MarketingSceneName;
+  scene: SceneName;
   current: SidebarViewKind;
   children: ReactNode;
+  settingsOverrides?: Partial<HarnessSettingsValue>;
+  subtitle?: string;
 }): JSX.Element {
-  const settingsValue = useMemo(
+  const settingsValue = useMemo<HarnessSettingsValue>(
     () => ({
       settings: FIXTURE_SETTINGS,
       loading: false,
@@ -1429,8 +1477,9 @@ function AppWindow({
       authExpired: false,
       dismissAuthExpired: noop,
       update: noopAsync,
+      ...settingsOverrides,
     }),
-    [],
+    [settingsOverrides],
   );
   const size = sceneSize(scene);
   const status: ConnectionStatus = {
@@ -1455,12 +1504,12 @@ function AppWindow({
           <div className="relative shrink-0">
             <TrafficLights />
             <TitleBar
-              subtitle="cloud"
+              subtitle={subtitle}
               right={
                 <>
                   <ThemeSwitcher />
                   <span className="text-surface-divider">|</span>
-                  <ConnectionPill status={status} baseUrl={FIXTURE_SETTINGS.baseUrl} />
+                  <ConnectionPill status={status} baseUrl={settingsValue.settings.baseUrl} />
                   <span className="section-label">v0.1.49</span>
                 </>
               }

@@ -50,7 +50,7 @@ function matchesFilter(level: LogLevel, filter: LevelFilter): boolean {
 // Level → pill styling, using the shared status tokens (accent reserved
 // for primary actions / active state, per the Console aesthetic).
 const LEVEL_PILL: Record<LogLevel, string> = {
-  error: 'bg-status-error/15 text-status-error',
+  error: 'bg-status-error/15 text-status-error-text',
   warn: 'bg-status-busy/15 text-status-busy',
   info: 'bg-surface-inset text-ink-secondary',
   log: 'bg-surface-inset text-ink-muted',

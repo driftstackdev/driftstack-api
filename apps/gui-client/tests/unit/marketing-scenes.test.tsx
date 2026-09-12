@@ -27,30 +27,69 @@
 // mount effects touch the store / invoke.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { cleanup, render, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
+import type * as TauriCore from '@tauri-apps/api/core';
+import type * as TauriStore from '@tauri-apps/plugin-store';
+import type * as TauriFs from '@tauri-apps/plugin-fs';
 
-vi.mock('@tauri-apps/api/core', () => ({
-  invoke: vi.fn(async () => null),
-}));
-vi.mock('@tauri-apps/plugin-store', () => ({
-  LazyStore: class {
-    async get(): Promise<null> {
-      return null;
-    }
-    async set(): Promise<void> {}
-    async save(): Promise<void> {}
+// Audit scenes (2026-09-12) install a window-level Tauri stub —
+// `window.__TAURI_INTERNALS__.invoke` — the way the browser gate sees them.
+// The three plugin mocks below ROUTE through it when it is installed (the REAL
+// plugin-store / plugin-fs code then runs over the stub, exactly the path the
+// gate exercises) and keep their old inert answers (null / '' / false / [])
+// when it is not, so the marketing scenes render as they always did.
+const { tauriStub } = vi.hoisted(() => ({
+  tauriStub: (): { invoke: (cmd: string, args?: unknown) => Promise<unknown> } | undefined => {
+    const w = window as Window & {
+      __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> };
+    };
+    return w.__TAURI_INTERNALS__;
   },
 }));
-vi.mock('@tauri-apps/plugin-fs', () => ({
-  readTextFile: vi.fn(async () => ''),
-  writeTextFile: vi.fn(async () => undefined),
-  exists: vi.fn(async () => false),
-  mkdir: vi.fn(async () => undefined),
-  remove: vi.fn(async () => undefined),
-  readDir: vi.fn(async () => []),
-  BaseDirectory: { AppData: 0 },
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof TauriCore>()),
+  invoke: vi.fn(async (cmd: string, args?: unknown) => {
+    const stub = tauriStub();
+    return stub === undefined ? null : stub.invoke(cmd, args);
+  }),
 }));
+vi.mock('@tauri-apps/plugin-store', async (importOriginal) => {
+  const real = await importOriginal<typeof TauriStore>();
+  class LazyStore {
+    private readonly inner: InstanceType<typeof real.LazyStore>;
+    constructor(path: string) {
+      this.inner = new real.LazyStore(path);
+    }
+    async get<T>(key: string): Promise<T | null | undefined> {
+      return tauriStub() === undefined ? null : this.inner.get<T>(key);
+    }
+    async set(key: string, value: unknown): Promise<void> {
+      if (tauriStub() !== undefined) await this.inner.set(key, value);
+    }
+    async save(): Promise<void> {
+      if (tauriStub() !== undefined) await this.inner.save();
+    }
+  }
+  return { LazyStore };
+});
+vi.mock('@tauri-apps/plugin-fs', async (importOriginal) => {
+  const real = await importOriginal<typeof TauriFs>();
+  const routed =
+    <A extends unknown[], R>(fn: (...a: A) => Promise<R>, inert: R) =>
+    async (...a: A): Promise<R> =>
+      tauriStub() === undefined ? inert : fn(...a);
+  return {
+    readTextFile: vi.fn(routed(real.readTextFile, '')),
+    writeTextFile: vi.fn(routed(real.writeTextFile, undefined)),
+    exists: vi.fn(routed(real.exists, false)),
+    mkdir: vi.fn(routed(real.mkdir, undefined)),
+    remove: vi.fn(routed(real.remove, undefined)),
+    readDir: vi.fn(routed(real.readDir, [])),
+    BaseDirectory: real.BaseDirectory,
+  };
+});
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: vi.fn(async () => () => undefined),
 }));
@@ -68,6 +107,8 @@ vi.mock('@sentry/browser', () => ({
 }));
 
 import {
+  ALL_SCENES,
+  AUDIT_SCENES,
   FIXTURE_ACCOUNT,
   FROZEN_NOW_ISO,
   MARKETING_CARDS,
@@ -77,10 +118,18 @@ import {
   MARKETING_TABLE_ROWS,
   MarketingScene,
   freezeHarnessClock,
+  isAuditScene,
   proxyTally,
   sceneFromSearch,
   sceneSize,
 } from '../../src/visual-harness/gallery';
+import {
+  AuditScene,
+  auditFleetMembers,
+  auditLoadedMarkers,
+  auditSceneSizes,
+  isAuditTauriStubInstalled,
+} from '../../src/visual-harness/audit-scenes';
 
 afterEach(() => {
   cleanup();
@@ -137,9 +186,12 @@ function visibleStrings(root: HTMLElement): string[] {
   return out;
 }
 
-describe('sceneFromSearch — the only door into a marketing scene', () => {
+describe('sceneFromSearch — the only door into a scene, marketing or audit', () => {
   it('maps every known scene name and nothing else', () => {
     for (const name of MARKETING_SCENES) {
+      expect(sceneFromSearch(`?scene=${name}`)).toBe(name);
+    }
+    for (const name of AUDIT_SCENES) {
       expect(sceneFromSearch(`?scene=${name}`)).toBe(name);
     }
     expect(sceneFromSearch('')).toBeNull();
@@ -147,6 +199,27 @@ describe('sceneFromSearch — the only door into a marketing scene', () => {
     expect(sceneFromSearch('?scene=')).toBeNull();
     expect(sceneFromSearch('?scene=profiles')).toBeNull();
     expect(sceneFromSearch('?scene=PROFILES-GRID')).toBeNull();
+    expect(sceneFromSearch('?scene=audit-')).toBeNull();
+    expect(sceneFromSearch('?scene=audit-profiles')).toBeNull();
+    expect(sceneFromSearch('?scene=__list__')).toBeNull();
+  });
+
+  it('ALL_SCENES is the six marketing scenes, in capture order, then every audit scene', () => {
+    // What scripts/gui-text-quality.mjs reads (with sceneSize) — one source.
+    expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
+    expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
+    expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
+    expect(AUDIT_SCENES).toHaveLength(10);
+    for (const name of ALL_SCENES) {
+      expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
+      const size = sceneSize(name);
+      expect(size.width).toBeGreaterThan(0);
+      expect(size.height).toBeGreaterThan(0);
+      if (isAuditScene(name)) expect(size).toEqual(auditSceneSizes()[name]);
+    }
+    // The marketing sizes did not move (scripts/marketing-screens.mjs mirrors them).
+    expect(sceneSize('profiles-list')).toEqual({ width: 1800, height: 880 });
+    expect(sceneSize('proxies')).toEqual({ width: 1280, height: 800 });
   });
 });
 
@@ -213,6 +286,228 @@ describe('every marketing scene', () => {
       }
     });
   }
+});
+
+// The loaded-state markers per audit scene (`auditLoadedMarkers`) live in the
+// harness beside the fixtures they read — one source for this file's privacy
+// arms and profile-phone-card.test.tsx's every-scene stage arm. An audit scene
+// whose data never arrived renders its empty / skeleton state, which carries
+// no host and no IP and would otherwise pass the privacy scan as clean.
+
+/** Audit scenes that show an IPv4 the scan must have SEEN (the fleet rigs on
+ *  TEST-NET). The rest render hosts only. */
+const AUDIT_IP_SCENES: ReadonlyArray<string> = ['audit-fleet'];
+/** The audit scenes render the views' OWN copy, which names two hosts the
+ *  marketing allowlist does not: `api.driftstack.dev` — SettingsView's cloud
+ *  option label, the product's public API endpoint every customer sees. It
+ *  identifies nobody and is shipped copy, so it is allowed BY NAME (not by
+ *  pattern — a second host still fails). TeamView's invite placeholder is
+ *  `teammate@example.com` since 2026-09-12 (it was `company.com`, a real
+ *  registered domain). The vendor / localhost / other-driftstack.dev markers
+ *  stay forbidden. */
+const AUDIT_ALLOWED_HOST =
+  /(?:^|\.)example\.com$|^(?:app\.)?driftstack\.io$|^api\.driftstack\.dev$/i;
+const AUDIT_FORBIDDEN_TEXT =
+  /nodemaven|oxylabs|protonvpn|mullvad|staging\.driftstack\.dev|localhost/i;
+/** Two more pieces of shipped copy: SettingsView's support mailto and the
+ *  self-hosted URL field's placeholder (DEFAULT_SETTINGS.baseUrl). Removed
+ *  VERBATIM before the scan, so a bare `driftstack.dev` or `localhost`
+ *  anywhere else (an ops host, a staging URL, a real self-hosted value)
+ *  still fails. */
+const AUDIT_COPY_LITERALS: ReadonlyArray<string> = [
+  'support@driftstack.dev',
+  'http://localhost:3000',
+];
+/** The wizard is the one scene without the window chrome (it draws its own
+ *  TitleBar), so no base URL reaches its DOM — its positive control is the
+ *  welcome heading in auditLoadedMarkers, not a host. */
+const AUDIT_NO_HOST_SCENES: ReadonlyArray<string> = ['audit-first-run'];
+
+/** The marketing privacy scan over an audit scene's rendered strings, with the
+ *  named copy hosts allowed: nothing forbidden, every public IPv4 on TEST-NET,
+ *  every public-TLD host on the allowlist, and the positive controls (a host
+ *  reached the scan; for the IP scenes, an address did). ONE function for BOTH
+ *  audit arms below — the StrictMode arm and the non-StrictMode fallback for a
+ *  KNOWN_UNLOADED scene — so a scene whose StrictMode render is its skeleton
+ *  (no member / invite rows) is still scanned in its LOADED state. Mutation:
+ *  `member_email: 'ana@example.com'` → `'ana@oxylabs.io'` in auditTeam()
+ *  (audit-scenes.tsx) reds the non-StrictMode audit-team arm on
+ *  AUDIT_FORBIDDEN_TEXT; a `toContain`-only arm let it through. */
+function expectAuditPrivacy(name: string, strings: ReadonlyArray<string>): void {
+  let ipsSeen = 0;
+  let hostsSeen = 0;
+  for (const raw of strings) {
+    const s = AUDIT_COPY_LITERALS.reduce((acc, lit) => acc.split(lit).join(' '), raw);
+    expect(s).not.toMatch(AUDIT_FORBIDDEN_TEXT);
+    for (const ip of s.match(IPV4) ?? []) {
+      if (PRIVATE_NET.test(ip) || UNSPECIFIED.test(ip)) continue;
+      ipsSeen += 1;
+      expect(ip, `non-TEST-NET IPv4 "${ip}" rendered in scene ${name}`).toMatch(TEST_NET);
+    }
+    for (const host of s.match(HOST_SHAPED) ?? []) {
+      hostsSeen += 1;
+      expect(host, `real-looking host "${host}" rendered in scene ${name}`).toMatch(
+        AUDIT_ALLOWED_HOST,
+      );
+    }
+  }
+  if (!AUDIT_NO_HOST_SCENES.includes(name)) {
+    expect(hostsSeen, `${name}: no hostname reached the scan`).toBeGreaterThan(0);
+  }
+  if (AUDIT_IP_SCENES.includes(name)) {
+    expect(ipsSeen, `${name}: no IPv4 reached the scan`).toBeGreaterThan(0);
+  }
+}
+
+/** The harness mounts under React.StrictMode (visual-harness/main.tsx), whose
+ *  simulated unmount → remount every view's mount logic — and the scene's
+ *  Tauri stub lifecycle — must survive. Render the audit scenes the same way,
+ *  so this arm measures what the gate's browser shows and not a gentler tree. */
+function renderAudit(name: (typeof AUDIT_SCENES)[number]): ReturnType<typeof render> {
+  return render(
+    <StrictMode>
+      <AuditScene name={name} />
+    </StrictMode>,
+  );
+}
+
+/** Scenes whose view does NOT reach its loaded state under StrictMode today —
+ *  the defect, in the view, that the browser gate measures around. Each stays
+ *  here until the view is fixed; the `it.fails` arm below flips red the moment
+ *  it is, so the entry (and that arm) get removed together. */
+const KNOWN_UNLOADED_UNDER_STRICT_MODE: Readonly<Record<string, string>> = {
+  // (empty since 2026-09-12: TeamView's mountedRef is set on every mount — the
+  // StrictMode remount no longer drops its load. Add an entry only with the
+  // defect's exact cause; the it.fails arm below flips red when it is fixed.)
+};
+
+describe('every audit scene — the REAL view, loaded, under the marketing privacy scan', () => {
+  for (const name of AUDIT_SCENES) {
+    it(`${name}: is its declared stage, reaches its loaded state and shows no real host, vendor or exit IP`, async () => {
+      const restore = freezeHarnessClock();
+      try {
+        const size = sceneSize(name);
+        const { container } = renderAudit(name);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        expect(stage.getAttribute('data-ready')).toBe('1');
+        expect(stage.style.width).toBe(`${String(size.width)}px`);
+        expect(stage.style.height).toBe(`${String(size.height)}px`);
+        expect(stage.getAttribute('data-frozen-now')).toBe(FROZEN_NOW_ISO);
+        expect(stage.getAttribute('data-stage-width')).toBe(String(size.width));
+        expect(stage.getAttribute('data-stage-height')).toBe(String(size.height));
+
+        // LOADED — wait for the last fixture marker (the views load async:
+        // client promises, the store / fs stub, the log buffer), then require
+        // every marker in the rendered strings (text nodes + attributes +
+        // input values; a fixture that only reaches a `value` still counts).
+        const markers = auditLoadedMarkers(name);
+        const last = markers[markers.length - 1] ?? '';
+        if (KNOWN_UNLOADED_UNDER_STRICT_MODE[name] === undefined) {
+          await waitFor(() => expect(visibleStrings(stage).join('\n')).toContain(last), {
+            timeout: 5_000,
+          });
+        }
+        const strings = visibleStrings(stage);
+        const joined = strings.join('\n');
+        if (KNOWN_UNLOADED_UNDER_STRICT_MODE[name] === undefined) {
+          for (const marker of markers) {
+            expect(joined, `${name}: fixture "${marker}" never reached the DOM`).toContain(marker);
+          }
+        }
+        expect((stage.textContent ?? '').trim().length).toBeGreaterThan(40);
+
+        // PRIVACY — the marketing scan, with the two named copy hosts allowed.
+        // For a KNOWN_UNLOADED scene this walks the skeleton; the non-StrictMode
+        // arm below scans that scene's LOADED strings with the same function.
+        expectAuditPrivacy(name, strings);
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  for (const [name, why] of Object.entries(KNOWN_UNLOADED_UNDER_STRICT_MODE)) {
+    // Flips RED the moment the view is fixed: promote to `it`, drop the entry.
+    it.fails(`${name}: reaches its loaded state under StrictMode — ${why}`, async () => {
+      const restore = freezeHarnessClock();
+      try {
+        const { container } = renderAudit(name as (typeof AUDIT_SCENES)[number]);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        const markers = auditLoadedMarkers(name as (typeof AUDIT_SCENES)[number]);
+        await waitFor(
+          () => expect(visibleStrings(stage).join('\n')).toContain(markers[markers.length - 1]),
+          { timeout: 2_000 },
+        );
+      } finally {
+        restore();
+      }
+    });
+    // …and, without StrictMode, the same view DOES load from the same fixture
+    // client — the defect is the remount, not the scene — and its LOADED
+    // strings (the member / invite rows the StrictMode arm never sees) go
+    // through the same privacy scan: the fixture rows are where a vendor host
+    // would sit, so a marker-only check here left them unvetted.
+    it(`${name}: reaches its loaded state without StrictMode (the fixture client is complete) and that state passes the privacy scan`, async () => {
+      const restore = freezeHarnessClock();
+      try {
+        const { container } = render(<AuditScene name={name as (typeof AUDIT_SCENES)[number]} />);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        const markers = auditLoadedMarkers(name as (typeof AUDIT_SCENES)[number]);
+        await waitFor(
+          () => expect(visibleStrings(stage).join('\n')).toContain(markers[markers.length - 1]),
+          { timeout: 5_000 },
+        );
+        const strings = visibleStrings(stage);
+        const joined = strings.join('\n');
+        for (const marker of markers) expect(joined).toContain(marker);
+        expectAuditPrivacy(name, strings);
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('the Tauri stub is on the window only while a stubbed audit scene is mounted', async () => {
+    // Before: nothing. A marketing scene never installs it.
+    expect(isAuditTauriStubInstalled()).toBe(false);
+    render(<MarketingScene name="billing" />);
+    expect(isAuditTauriStubInstalled()).toBe(false);
+    cleanup();
+    // During: installed in the RENDER phase, so FleetView's mount effect (a
+    // LazyStore.get through the real plugin-store over the stub) finds it —
+    // and StrictMode's unmount → remount (renderAudit) keeps it installed
+    // across the re-run of those effects.
+    const { findByText } = renderAudit('audit-fleet');
+    expect(isAuditTauriStubInstalled()).toBe(true);
+    await findByText(auditFleetMembers()[0]?.label ?? '');
+    // After: removed one microtask after unmount (StrictMode's synchronous
+    // unmount → remount re-installs before that tick lands).
+    cleanup();
+    expect(isAuditTauriStubInstalled()).toBe(true);
+    await Promise.resolve();
+    expect(isAuditTauriStubInstalled()).toBe(false);
+  });
+
+  it('an audit scene is the view inside the real window chrome, with its sidebar entry current', async () => {
+    // Settings has a sidebar entry (Sessions / Fleet / Connectivity are
+    // palette-only views: `current` names them, nothing highlights).
+    const settings = renderAudit('audit-settings');
+    expect(settings.container.querySelector('aside nav[aria-label="Primary"]')).not.toBeNull();
+    expect(settings.container.querySelector('button[aria-current="page"]')?.textContent).toContain(
+      'Settings',
+    );
+    cleanup();
+    // The view, not a replica: the fixture session the client returned.
+    const sessions = renderAudit('audit-sessions');
+    expect(sessions.container.querySelector('aside nav[aria-label="Primary"]')).not.toBeNull();
+    await sessions.findByText('Amsterdam checkout');
+  });
 });
 
 describe('the harness freezes its own clock at load when a scene is requested', () => {

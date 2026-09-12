@@ -67,6 +67,8 @@ export default {
           ready: 'rgb(var(--status-ready-rgb) / <alpha-value>)',
           busy: 'rgb(var(--status-busy-rgb) / <alpha-value>)',
           error: 'rgb(var(--status-error-rgb) / <alpha-value>)',
+          // the error hue as TEXT on its own wash — see --status-error-text-rgb
+          'error-text': 'rgb(var(--status-error-text-rgb) / <alpha-value>)',
           idle: 'rgb(var(--status-idle-rgb) / <alpha-value>)',
           // aliases — components already use these names; they were
           // silently UNDEFINED pre-rework (no-op classes). Mapped to the

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// GUI TEXT-QUALITY GATE (2026-09-12) — every leaf text element of the six
-// harness scenes (the REAL Proxies / Simulator / Billing / Command Center
-// views and both Profiles views, rendered by apps/gui-client/visual-harness.html
-// → src/visual-harness/gallery.tsx inside the app's own window chrome), in
-// BOTH themes, measured for:
+// GUI TEXT-QUALITY GATE (2026-09-12) — every leaf text element of EVERY
+// harness scene (the six marketing scenes — the REAL Proxies / Simulator /
+// Billing / Command Center views and both Profiles views — plus one audit scene
+// per remaining view, all rendered by apps/gui-client/visual-harness.html →
+// src/visual-harness/gallery.tsx inside the app's own window chrome), in BOTH
+// themes, measured for:
 //   • contrast   — WCAG 2.1 ratio of the text colour (its own alpha × the
 //                  effective `opacity` up the tree, composited) against the
 //                  element's effective background (alpha-composited up the
@@ -33,6 +34,21 @@
 // An instrument that cannot see its own control is not measuring, and a clean
 // run from such an instrument would be the best-looking failure there is.
 //
+// SCENE LIST — not hand-typed here. The gate imports the harness module through
+// the dev server it is already talking to (`import('/src/visual-harness/
+// gallery.tsx')` inside the page — vite serves the transformed module, the
+// browser dedupes it against the one the page mounted) and reads `ALL_SCENES`
+// + `sceneSize(name)` from it: ONE source, and a scene added to the harness is
+// measured by the next run without anyone editing this file. ⛔ The first
+// version carried its own six-name list, so the ten views the 2026-09-12 token
+// sweep touched (Sessions, Fleet, Recordings, Logs, Connectivity, Settings,
+// FirstRun, Recipes, AgentChat, Team) were never rendered and their light-theme
+// ink went unmeasured while the run reported clean. The list is REFUSED when it
+// is empty, is not an array of names, or lacks any of the six marketing scenes
+// (KNOWN_SCENES — the positive control: a harness that stopped exporting its
+// list, or exported a truncated one, must not produce a clean run), and every
+// rendered stage's `data-stage-width/height` must equal the list's size.
+//
 // Output: `<out>/report.json` (per theme → per scene: leaf count, the size
 // histogram, every finding with its measured ratio / fg / bg), the findings on
 // stdout, exit 1 on any finding (or, under --control, on any scene that misses
@@ -55,7 +71,14 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.HARNESS_PORT ?? 5199);
 const URL = process.env.HARNESS_URL ?? `http://127.0.0.1:${PORT}/visual-harness.html`;
-const ALL_SCENES = [
+/** The vite-served path of the harness module (apps/gui-client is the dev
+ *  server's root; visual-harness.html mounts `/src/visual-harness/main.tsx`,
+ *  which imports this). */
+const HARNESS_MODULE = '/src/visual-harness/gallery.tsx';
+/** POSITIVE CONTROL for the scene list, not the list: the six marketing scenes
+ *  that have been in the harness since 2026-09-11. A loaded list missing any of
+ *  them is refused — see loadSceneList. */
+const KNOWN_SCENES = [
   'profiles-grid',
   'profiles-list',
   'proxies',
@@ -84,7 +107,6 @@ const listArg = (name, all) => {
   return picked;
 };
 const THEMES = listArg('themes', ALL_THEMES);
-const SCENES = listArg('scenes', ALL_SCENES);
 const OUT = resolve(
   REPO_ROOT,
   args.find((a) => !a.startsWith('--')) ?? 'apps/gui-client/visual-out/text-quality',
@@ -127,6 +149,74 @@ async function ensureHarness() {
   }
   child.kill();
   throw new Error(`vite did not answer at ${URL} within 60s:\n${log}`);
+}
+
+/** Runs INSIDE the page: import the harness module through vite and hand back
+ *  its scene list with each scene's stage size. Plain data out — a module
+ *  namespace does not serialise. `sceneSize` throwing (a name it does not
+ *  size) or returning non-numbers is reported per name, not swallowed. */
+async function readSceneList(modulePath) {
+  const m = await import(/* @vite-ignore */ modulePath);
+  const names = m.ALL_SCENES;
+  if (!Array.isArray(names))
+    return { error: `ALL_SCENES is not exported as an array (got ${typeof names})` };
+  const scenes = [];
+  for (const name of names) {
+    if (typeof name !== 'string' || name === '')
+      return { error: `ALL_SCENES holds a non-name: ${JSON.stringify(name)}` };
+    let size;
+    try {
+      size = typeof m.sceneSize === 'function' ? m.sceneSize(name) : undefined;
+    } catch (e) {
+      return {
+        error: `sceneSize(${JSON.stringify(name)}) threw: ${e instanceof Error ? e.message : String(e)}`,
+      };
+    }
+    const width = Number(size?.width);
+    const height = Number(size?.height);
+    if (!(width > 0) || !(height > 0))
+      return {
+        error: `sceneSize(${JSON.stringify(name)}) → ${JSON.stringify(size)} — not a stage size`,
+      };
+    scenes.push({ name, width, height });
+  }
+  return { scenes };
+}
+
+/** The harness's scene list — names + stage sizes — read from the running
+ *  harness (see the SCENE LIST note in the header). Refuses an empty list,
+ *  a duplicate, or one that lacks any KNOWN_SCENES name. */
+async function loadSceneList(browser) {
+  const page = await browser.newPage();
+  const problems = [];
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+  try {
+    // Any `?scene=` value the harness does not know renders the plain state
+    // gallery; the import below is what this page is for.
+    await page.goto(`${URL}?scene=__list__`, { waitUntil: 'domcontentloaded' });
+    const res = await page.evaluate(readSceneList, HARNESS_MODULE);
+    if (res.error !== undefined) {
+      throw new Error(`scene list from ${HARNESS_MODULE}: ${res.error}`);
+    }
+    if (problems.length > 0) {
+      throw new Error(`scene list: the harness page reported errors:\n  ${problems.join('\n  ')}`);
+    }
+    const { scenes } = res;
+    if (scenes.length === 0)
+      throw new Error(`scene list from ${HARNESS_MODULE} is EMPTY — refusing to run`);
+    const names = scenes.map((s) => s.name);
+    const dup = names.find((n, i) => names.indexOf(n) !== i);
+    if (dup !== undefined) throw new Error(`scene list names ${JSON.stringify(dup)} twice`);
+    const missing = KNOWN_SCENES.filter((n) => !names.includes(n));
+    if (missing.length > 0) {
+      throw new Error(
+        `scene list from ${HARNESS_MODULE} lacks the known scene(s) ${missing.join(', ')} (got: ${names.join(', ')}) — refusing to run on a truncated list`,
+      );
+    }
+    return scenes;
+  } finally {
+    await page.close();
+  }
 }
 
 /** Runs INSIDE the page, over the scene's stage root. */
@@ -362,15 +452,28 @@ function injectControl(root, component) {
   root.appendChild(c);
 }
 
-async function measureScene(context, scene, theme) {
+async function measureScene(context, entry, theme) {
+  const scene = entry.name;
   const page = await context.newPage();
   const problems = [];
   page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
   try {
+    // The viewport is the stage's own size (from the list) plus a margin, so a
+    // taller audit scene is never clipped by a viewport sized for the default.
+    await page.setViewportSize({ width: entry.width + 40, height: entry.height + 40 });
     await page.clock.setFixedTime(new Date(FROZEN_NOW_ISO));
     await page.goto(`${URL}?scene=${scene}`, { waitUntil: 'networkidle' });
     const stage = page.locator(`[data-scene="${scene}"][data-ready="1"]`);
     await stage.waitFor({ state: 'visible', timeout: 30_000 });
+    const declared = await stage.evaluate((el) => ({
+      width: Number(el.getAttribute('data-stage-width')),
+      height: Number(el.getAttribute('data-stage-height')),
+    }));
+    if (declared.width !== entry.width || declared.height !== entry.height) {
+      throw new Error(
+        `${scene}: the stage declares ${declared.width}×${declared.height} but the scene list says ${entry.width}×${entry.height}`,
+      );
+    }
     await page.evaluate((mode) => {
       document.documentElement.dataset.mode = mode;
     }, theme);
@@ -402,11 +505,24 @@ async function main() {
     generatedBy: 'scripts/gui-text-quality.mjs',
     control: CONTROL,
     minPx: MIN_PX,
+    sceneSource: HARNESS_MODULE,
+    scenes: [],
     themes: {},
   };
   let findings = 0;
   let controlMisses = 0;
+  let SCENES = [];
   try {
+    const listed = await loadSceneList(browser);
+    const picked = listArg(
+      'scenes',
+      listed.map((s) => s.name),
+    );
+    SCENES = listed.filter((s) => picked.includes(s.name));
+    report.scenes = SCENES;
+    console.log(
+      `scene list: ${listed.length} scene(s) from ${HARNESS_MODULE} (${listed.map((s) => s.name).join(', ')}); measuring ${SCENES.length}`,
+    );
     for (const theme of THEMES) {
       const context = await browser.newContext({
         viewport: { width: 1840, height: 940 },
@@ -417,8 +533,9 @@ async function main() {
         timezoneId: 'UTC',
       });
       report.themes[theme] = {};
-      for (const scene of SCENES) {
-        const res = await measureScene(context, scene, theme);
+      for (const entry of SCENES) {
+        const scene = entry.name;
+        const res = await measureScene(context, entry, theme);
         report.themes[theme][scene] = res;
         const sizes = Object.entries(res.sizes)
           .sort((a, b) => +a[0] - +b[0])

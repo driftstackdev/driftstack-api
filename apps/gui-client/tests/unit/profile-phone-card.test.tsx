@@ -13,6 +13,94 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor, act, within } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type * as TauriCore from '@tauri-apps/api/core';
+import type * as TauriStore from '@tauri-apps/plugin-store';
+import type * as TauriFs from '@tauri-apps/plugin-fs';
+
+// The Tauri plugin modules, mocked exactly as marketing-scenes.test.tsx does —
+// needed ONLY by the last describe block ("every harness scene …"), which
+// mounts the scenes' real Sidebar + TitleBar chrome through the real
+// SettingsContext; its mount effects touch the store / invoke. The card arms
+// above import nothing from these packages, so the mocks change nothing for
+// them.
+//
+// ROUTED, not inert (2026-09-12 review): an audit scene installs a
+// window-level Tauri stub — `window.__TAURI_INTERNALS__.invoke` — and the
+// three plugin mocks below hand their calls to the REAL plugin-store /
+// plugin-fs code over that stub when it is installed, exactly the path the
+// browser gate exercises. With the earlier inert answers (LazyStore.get →
+// null, exists → false, readDir → []) FleetView / RecordingsView /
+// AgentChatView loaded NOTHING here, the stage arm measured their EMPTY
+// states (chrome + empty-state copy cleared both floors) and a fixture that
+// never reached the DOM was invisible to it. Without a stub (the marketing
+// scenes, the card arms) the mocks keep the inert answers.
+/* eslint-disable @typescript-eslint/require-await -- mirrors marketing-scenes.test.tsx */
+const { tauriStub } = vi.hoisted(() => ({
+  tauriStub: (): { invoke: (cmd: string, args?: unknown) => Promise<unknown> } | undefined => {
+    const w = window as Window & {
+      __TAURI_INTERNALS__?: { invoke: (cmd: string, args?: unknown) => Promise<unknown> };
+    };
+    return w.__TAURI_INTERNALS__;
+  },
+}));
+vi.mock('@tauri-apps/api/core', async (importOriginal) => ({
+  ...(await importOriginal<typeof TauriCore>()),
+  invoke: vi.fn(async (cmd: string, args?: unknown) => {
+    const stub = tauriStub();
+    return stub === undefined ? null : stub.invoke(cmd, args);
+  }),
+}));
+vi.mock('@tauri-apps/plugin-store', async (importOriginal) => {
+  const real = await importOriginal<typeof TauriStore>();
+  class LazyStore {
+    private readonly inner: InstanceType<typeof real.LazyStore>;
+    constructor(path: string) {
+      this.inner = new real.LazyStore(path);
+    }
+    async get<T>(key: string): Promise<T | null | undefined> {
+      return tauriStub() === undefined ? null : this.inner.get<T>(key);
+    }
+    async set(key: string, value: unknown): Promise<void> {
+      if (tauriStub() !== undefined) await this.inner.set(key, value);
+    }
+    async save(): Promise<void> {
+      if (tauriStub() !== undefined) await this.inner.save();
+    }
+  }
+  return { LazyStore };
+});
+vi.mock('@tauri-apps/plugin-fs', async (importOriginal) => {
+  const real = await importOriginal<typeof TauriFs>();
+  const routed =
+    <A extends unknown[], R>(fn: (...a: A) => Promise<R>, inert: R) =>
+    async (...a: A): Promise<R> =>
+      tauriStub() === undefined ? inert : fn(...a);
+  return {
+    readTextFile: vi.fn(routed(real.readTextFile, '')),
+    writeTextFile: vi.fn(routed(real.writeTextFile, undefined)),
+    exists: vi.fn(routed(real.exists, false)),
+    mkdir: vi.fn(routed(real.mkdir, undefined)),
+    remove: vi.fn(routed(real.remove, undefined)),
+    readDir: vi.fn(routed(real.readDir, [])),
+    BaseDirectory: real.BaseDirectory,
+  };
+});
+vi.mock('@tauri-apps/plugin-deep-link', () => ({
+  onOpenUrl: vi.fn(async () => () => undefined),
+}));
+vi.mock('@tauri-apps/plugin-shell', () => ({
+  open: vi.fn(async () => undefined),
+}));
+vi.mock('@tauri-apps/plugin-updater', () => ({
+  check: vi.fn(async () => null),
+}));
+vi.mock('@sentry/browser', () => ({
+  init: vi.fn(),
+  captureException: vi.fn(),
+  addBreadcrumb: vi.fn(),
+  withScope: vi.fn(),
+}));
+/* eslint-enable @typescript-eslint/require-await */
 import {
   ProfilePhoneCard,
   healthPill,
@@ -32,7 +120,15 @@ import {
   SERVER_LATENCY_TITLE,
   type ProfilePhoneCardProps,
 } from '../../src/components/ProfilePhoneCard';
-import { STATES } from '../../src/visual-harness/gallery';
+import {
+  ALL_SCENES,
+  Gallery,
+  MARKETING_SCENES,
+  STATES,
+  freezeHarnessClock,
+  isAuditScene,
+} from '../../src/visual-harness/gallery';
+import { auditLoadedMarkers } from '../../src/visual-harness/audit-scenes';
 import { RelativeTime, formatRelativeNarrow } from '../../src/components/RelativeTime';
 import {
   CHECK_VPN_ACTION,
@@ -2760,4 +2856,156 @@ describe('CONTROL — every gallery state', () => {
       unmount();
     }
   });
+});
+
+// ─── G2 (2026-09-12) — every harness scene renders a ready, populated stage ──
+// scripts/gui-text-quality.mjs reads ALL_SCENES from the harness at run time
+// and measures each stage's text leaves; this arm is the jsdom half of that
+// contract. Through the SAME door the gate uses (`?scene=<name>` →
+// `<Gallery />` → sceneFromSearch → the composition), every listed name must
+// mount a `[data-scene=<name>][data-ready="1"]` stage carrying MORE THAN 20 text
+// leaves (an element with its own non-blank text — the gate's leaf notion), and
+// at least one leaf OUTSIDE the window chrome (the Sidebar `<aside>` — the one
+// holding `nav[aria-label="Primary"]` — + the TitleBar `[data-tauri-drag-region]`),
+// so a scene whose view painted nothing cannot pass on the chrome's labels
+// alone. The six marketing names stay first and in order —
+// scripts/marketing-screens.mjs's pixel pins and the runbook name them.
+//
+// LOADED, not merely populated (2026-09-12 review): a view's EMPTY state also
+// clears both floors — FleetView's "No fleet members yet…" header alone is 7
+// own-text leaves outside the chrome, RecordingsView's "No recordings yet" 5 —
+// so for every audit scene the arm ALSO requires each of the harness's
+// `auditLoadedMarkers` (the fixture rows the view was fed: 'Rig A' + its
+// TEST-NET URL, 'Checkout flow', the saved chat titles, the member emails …)
+// among the strings of elements OUTSIDE the chrome: own text nodes plus the
+// title / aria-label / placeholder / value / alt attributes and input values
+// (a fixture that only reaches an input's `value` still counts). The chrome
+// cannot satisfy a marker — its base-URL pill is the same host as
+// AUDIT_BASE_URL, so the walk skips it.
+//
+// Mutations reasoned: drop `data-ready="1"` from the stage in gallery.tsx → the
+// query finds nothing → red; narrow `sceneFromSearch` back to MARKETING_SCENES
+// → an audit name renders the plain state gallery (no `[data-scene]`) → red;
+// reorder or drop a name in ALL_SCENES → the order arm reds; revert
+// buildTauriInvoke's `plugin:store|get` (audit-scenes.tsx) to `[null, false]`
+// → the real plugin-store over the stub hands FleetView no registry → its
+// empty state renders → 'Rig A' is absent outside the chrome → audit-fleet
+// reds (audit-agent-chat's saved chats likewise); revert `plugin:fs|exists` /
+// `read_text_file` → RecordingsView has no index → 'Checkout flow' absent →
+// audit-recordings reds; make one of this file's plugin mocks inert again
+// (LazyStore.get → null) → the same empty states → the same reds; drop a
+// method from buildAuditClient (sessions.list) → SessionsView's empty state →
+// 'Amsterdam checkout' absent → audit-sessions reds.
+describe('every harness scene (ALL_SCENES) renders a ready stage with > 20 text leaves', () => {
+  const ownTextLeaves = (root: HTMLElement): HTMLElement[] =>
+    Array.from(root.querySelectorAll<HTMLElement>('*')).filter((el) =>
+      Array.from(el.childNodes).some(
+        (n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '',
+      ),
+    );
+  /** The window chrome's roots inside a stage: the Sidebar — the `<aside>`
+   *  that holds `nav[aria-label="Primary"]`, NOT every `<aside>` (AgentChatView's
+   *  saved-chat rail and RecordingsView's recording rail are asides of the
+   *  VIEW, and the fixture rows they carry are exactly what the markers below
+   *  look for) — and the TitleBar's drag regions. */
+  const chromeRoots = (root: HTMLElement): HTMLElement[] => [
+    ...Array.from(root.querySelectorAll<HTMLElement>('aside')).filter(
+      (a) => a.querySelector('nav[aria-label="Primary"]') !== null,
+    ),
+    ...Array.from(root.querySelectorAll<HTMLElement>('[data-tauri-drag-region]')),
+  ];
+  const inChrome = (roots: ReadonlyArray<HTMLElement>, el: HTMLElement): boolean =>
+    roots.some((r) => r.contains(el));
+  /** Every string a viewer could read off the elements OUTSIDE the chrome: own
+   *  text nodes (each on its own — textContent glues siblings), the surfacing
+   *  attributes, and input values. */
+  const stringsOutsideChrome = (root: HTMLElement): string[] => {
+    const roots = chromeRoots(root);
+    const out: string[] = [];
+    for (const el of Array.from(root.querySelectorAll<HTMLElement>('*'))) {
+      if (inChrome(roots, el)) continue;
+      for (const n of Array.from(el.childNodes)) {
+        if (n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== '') {
+          out.push(n.textContent ?? '');
+        }
+      }
+      for (const attr of ['title', 'aria-label', 'placeholder', 'value', 'alt']) {
+        const v = el.getAttribute(attr);
+        if (v !== null) out.push(v);
+      }
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) out.push(el.value);
+    }
+    return out;
+  };
+
+  it('ALL_SCENES is non-empty, unique, and opens with the six marketing scenes in order', () => {
+    expect(ALL_SCENES.length).toBeGreaterThan(0);
+    expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
+    expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([
+      'profiles-grid',
+      'profiles-list',
+      'proxies',
+      'simulator',
+      'billing',
+      'command-center',
+    ]);
+  });
+
+  for (const name of ALL_SCENES) {
+    it(`${name}: [data-scene][data-ready="1"] with > 20 text leaves, some outside the chrome${isAuditScene(name) ? ', every loaded-state marker among them' : ''}`, async () => {
+      const restore = freezeHarnessClock();
+      const search = window.location.search;
+      window.history.replaceState(null, '', `?scene=${name}`);
+      try {
+        const { container } = render(<Gallery />);
+        const stage = container.querySelector<HTMLElement>(
+          `[data-scene="${name}"][data-ready="1"]`,
+        );
+        expect(stage, `${name}: no ready stage — did sceneFromSearch accept it?`).not.toBeNull();
+        if (stage === null) return;
+        // A view that loads through the fixture client / the Tauri stub reaches
+        // its data after a tick; wait for the leaves rather than a fixed time.
+        // For an audit scene, wait for the LAST marker (the views load async),
+        // then require every marker — the empty state never carries them.
+        const markers = isAuditScene(name) ? auditLoadedMarkers(name) : [];
+        if (isAuditScene(name)) {
+          expect(
+            markers.length,
+            `${name}: an audit scene with no loaded-state marker`,
+          ).toBeGreaterThan(0);
+        }
+        await waitFor(
+          () => {
+            const leaves = ownTextLeaves(stage);
+            const roots = chromeRoots(stage);
+            expect(roots.length, `${name}: chrome roots found`).toBeGreaterThan(0);
+            expect(leaves.length, `${name}: text leaves`).toBeGreaterThan(20);
+            expect(
+              leaves.filter((el) => !inChrome(roots, el)).length,
+              `${name}: text leaves outside the Sidebar / TitleBar chrome`,
+            ).toBeGreaterThan(0);
+            const last = markers[markers.length - 1];
+            if (last !== undefined) {
+              expect(
+                stringsOutsideChrome(stage).join('\n'),
+                `${name}: last fixture marker "${last}" outside the chrome`,
+              ).toContain(last);
+            }
+          },
+          { timeout: 5_000 },
+        );
+        const outside = stringsOutsideChrome(stage).join('\n');
+        for (const marker of markers) {
+          expect(
+            outside,
+            `${name}: fixture "${marker}" never reached the DOM outside the chrome — the view is on its empty / skeleton state`,
+          ).toContain(marker);
+        }
+      } finally {
+        window.history.replaceState(null, '', search === '' ? window.location.pathname : search);
+        restore();
+        cleanup();
+      }
+    });
+  }
 });
