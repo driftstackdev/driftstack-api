@@ -70,6 +70,28 @@ export interface AvailableUpdate {
   downloadOnly?: boolean;
   /** Where to send a `downloadOnly` customer. */
   downloadUrl?: string;
+  /**
+   * The rejection from an install that HAS ALREADY FAILED, when this update is
+   * being handed to the banner because of it.
+   *
+   * ⛔ SET ONLY BY {@link runUpdateCycle}, on the UNATTENDED path, and it is the
+   * whole reason that path is visible at all. Auto-update defaults ON, so on a
+   * machine with no live session the 6-hourly cycle installs by itself — and
+   * when that install failed, the cycle swallowed the rejection and called
+   * `onOffered` with the same update, so the banner mounted idle and said
+   * *"Update X available · Install & restart · Later"*: no reason, no statement
+   * that two full attempts had already failed, no download link. MEASURED off
+   * the running harness 2026-09-12. `UpdateBanner` seeds its error state from
+   * this, so the customer reads exactly what they would have read had they
+   * pressed the button themselves.
+   *
+   * `unknown`, not `UpdateInstallError`: the banner's own catch already handles
+   * every rejection shape the plugin and a caller-supplied closure can produce
+   * (the plugin's is a bare `string`), and narrowing here would silently drop
+   * the shapes that did NOT come through the installable closure — which are
+   * exactly the ones nothing else reports.
+   */
+  lastInstallFailure?: unknown;
 }
 
 /** The release page — always the newest, so it cannot go stale at the next cut. */
@@ -469,7 +491,12 @@ function memoizeImport<T>(load: () => Promise<T>): () => Promise<T> {
 }
 
 const importLogBuffer = memoizeImport(() => import('./log-buffer'));
-const importSentry = memoizeImport(() => import('@sentry/browser'));
+// ⛔ NOT `import('@sentry/browser')`. A dynamic NAMESPACE import is unshakeable
+// and dragged Session Replay + User Feedback + rrweb into the shipped bundle
+// (measured: gui-v0.1.52 grew 403,926 B over 0.1.51 for 32,030 B of real work).
+// `./sentry-capture` re-exports the one function through a NAMED static import,
+// which Rollup can shake. Its header carries the measurement.
+const importSentry = memoizeImport(() => import('./sentry-capture'));
 
 /**
  * U1 — record ONE install failure where BOTH the owner and a maintainer can
@@ -1036,6 +1063,9 @@ export async function runUpdateCycle(deps: UpdateCycleDeps): Promise<UpdateOutco
     deps.onOffered(update);
     return 'banner';
   }
+  // Wrapped rather than bare, so "no install was attempted" and "the install
+  // rejected with `undefined`" stay distinguishable.
+  let failed: { rejection: unknown } | null = null;
   if (
     shouldAutoInstall({
       autoUpdate: deps.autoUpdate(),
@@ -1055,25 +1085,45 @@ export async function runUpdateCycle(deps: UpdateCycleDeps): Promise<UpdateOutco
       // already updated, every six hours, forever. Reporting 'installed' is both
       // the truth and what makes `startUpdateChecks` stop the loop.
       //
-      // ⚠️ It also means no banner, and the customer is not told to quit and
-      // reopen. The alternative — offering a banner whose Install re-runs that
-      // window — is worse, and the honest fix (a "quit and reopen" notice for
-      // the UNATTENDED path) needs a surface this function does not own:
-      // `onOffered` takes an `AvailableUpdate`, and its caller is App.tsx.
-      if (e instanceof UpdateInstallError && e.stage === 'relaunch') return 'installed';
-      // Otherwise fall through to the banner. ⚠️ Swallowing here USED TO MAKE
-      // THE UNATTENDED FAILURE COMPLETELY INVISIBLE — no UI, no log, and the
-      // customer just saw the banner reappear with no hint that an install had
-      // been tried and failed. Every rejection the installable closure throws is
-      // now reported (dev log, plus Sentry for the attempt the customer sees)
-      // BEFORE it is thrown, so it is on record. The catch adds no reporting of
-      // its own on purpose: with the `downloadOnly` call above removed, the only
-      // rejections that reach here without one are from a caller-supplied
-      // closure, and an update check must never be able to break the app it is
-      // checking.
+      // ⛔ IT USED TO MEAN NO BANNER AT ALL, and this note used to say the honest
+      // fix — a "quit and reopen" notice for the UNATTENDED path — "needs a
+      // surface this function does not own: `onOffered` takes an
+      // `AvailableUpdate`". It takes one, and an `AvailableUpdate` now CARRIES
+      // the failure, so the notice costs nothing and re-enters nothing.
+      if (e instanceof UpdateInstallError && e.stage === 'relaunch') {
+        // …and the customer is TOLD, which is the half that was missing. The
+        // banner reads the stage off the failure and renders *"Update X
+        // installed, but the app couldn't restart itself. Quit and reopen
+        // Driftstack."* with NEITHER install action — `installActionsApply` in
+        // UpdateBanner.tsx removes both, so nothing here can re-enter the rename
+        // window. Still 'installed', because that is the truth and it is what
+        // stops `startUpdateChecks`' loop.
+        deps.onOffered({ ...update, lastInstallFailure: e });
+        return 'installed';
+      }
+      // Otherwise fall through to the banner, CARRYING the failure.
+      //
+      // ⛔ SWALLOWING IT MADE THE UNATTENDED FAILURE INVISIBLE ON SCREEN, AND
+      // FIXING THE LOG DID NOT FIX THAT. Every rejection the installable closure
+      // throws is reported (dev log, plus Sentry for the attempt the customer
+      // sees) BEFORE it is thrown — but a dev log is a maintainer's surface, and
+      // what the CUSTOMER got was `onOffered(update)` with a fresh
+      // `AvailableUpdate`, i.e. a banner mounted at `phase:'idle'` reading
+      // *"Update 0.1.52 available (current 0.1.51) · Install & restart ·
+      // Later"* after two failed ~26 MiB attempts. MEASURED off the running
+      // harness 2026-09-12. This is the shipped default configuration
+      // (auto-update ON, no session), so it is the likeliest generator of the
+      // owner's *"i see it very often"*: the install fails in the background
+      // after every release and the banner just keeps offering the update.
+      //
+      // The catch still adds no REPORTING of its own: with the `downloadOnly`
+      // call above removed, the only rejections that reach here unreported are
+      // from a caller-supplied closure, and an update check must never be able
+      // to break the app it is checking.
+      failed = { rejection: e };
     }
   }
-  deps.onOffered(update);
+  deps.onOffered(failed === null ? update : { ...update, lastInstallFailure: failed.rejection });
   return 'banner';
 }
 

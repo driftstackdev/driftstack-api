@@ -179,14 +179,34 @@ describe('the update check repeats while the app stays open (T-14)', () => {
     stop();
   });
 
-  it('a failed unattended install degrades into the banner rather than into a dead end', async () => {
+  it('a failed unattended install degrades into the banner — and the banner is HANDED the failure', async () => {
+    // ⛔ `toHaveBeenCalledWith(offered)` USED TO BE THE WHOLE ASSERTION, and a
+    // banner byte-identical to an ordinary offer IS the defect: after two failed
+    // ~26 MiB attempts the customer's screen read *"Update 0.1.19 available ·
+    // Install & restart · Later"* — no reason, no statement that anything had
+    // been tried, no download link, and a primary button inviting attempts 3
+    // and 4. What has to travel is the offer PLUS the rejection.
+    const rejection = new Error('signature mismatch');
     const offered = update(
       '0.1.19',
-      vi.fn(() => Promise.reject(new Error('signature mismatch'))),
+      vi.fn(() => Promise.reject(rejection)),
     );
     const d = deps({ check: () => Promise.resolve(offered) });
     expect(await runUpdateCycle(d)).toBe('banner');
-    expect(d.onOffered).toHaveBeenCalledWith(offered);
+    const handed = vi.mocked(d.onOffered).mock.calls[0]?.[0];
+    expect(handed?.version).toBe('0.1.19');
+    expect(handed?.install, 'the same closure, so Retry still works').toBe(offered.install);
+    expect(handed?.lastInstallFailure, 'the reason the banner renders').toBe(rejection);
+
+    // The control in the failing direction: an update NOBODY tried to install
+    // carries no failure, so the field cannot be read as decoration — and the
+    // offered object is not mutated on the way through.
+    const untried = deps({
+      check: () => Promise.resolve(update('0.1.19')),
+      sessionRunning: () => Promise.resolve(true),
+    });
+    expect(await runUpdateCycle(untried)).toBe('banner');
+    expect(vi.mocked(untried.onOffered).mock.calls[0]?.[0]?.lastInstallFailure).toBeUndefined();
   });
 
   it('the three outcomes of one pass, named, so the loop and its callers agree on what happened', async () => {

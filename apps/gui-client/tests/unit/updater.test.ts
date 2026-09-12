@@ -711,7 +711,20 @@ describe('runUpdateCycle — the two install decisions it used to get wrong', ()
         }),
     });
     expect(await runUpdateCycle(d)).toBe('installed');
-    expect(d.onOffered, 'no banner whose Install would re-run that window').not.toHaveBeenCalled();
+    // ⛔ …AND THE CUSTOMER IS TOLD, WHICH IS THE HALF THAT WAS MISSING. This
+    // used to assert `not.toHaveBeenCalled()`: an update that IS on disk, an app
+    // still running the old code, and nothing whatsoever on screen. The honest
+    // notice was blocked on "a surface this function does not own" — the surface
+    // is `onOffered`'s own `AvailableUpdate`, which now carries the failure. The
+    // STAGE is what makes it safe: UpdateBanner renders neither install action
+    // on a relaunch-stage failure, so no button here can re-enter
+    // `install_inner`'s rename window. The outcome stays 'installed', so the
+    // six-hourly loop still stops.
+    expect(d.onOffered).toHaveBeenCalledTimes(1);
+    const handed = vi.mocked(d.onOffered).mock.calls[0]?.[0];
+    const failure = handed?.lastInstallFailure;
+    expect(failure).toBeInstanceOf(UpdateInstallError);
+    expect(failure instanceof UpdateInstallError ? failure.stage : null).toBe('relaunch');
 
     // The DOWNLOAD stage is the opposite and must still degrade into the banner:
     // nothing was installed, so offering it again is the right recovery.
@@ -728,6 +741,13 @@ describe('runUpdateCycle — the two install decisions it used to get wrong', ()
     });
     expect(await runUpdateCycle(downloadStage)).toBe('banner');
     expect(downloadStage.onOffered).toHaveBeenCalled();
+    // …carrying its own failure, so the banner does not re-offer the update as
+    // though nothing had happened.
+    const downloadFailure = vi.mocked(downloadStage.onOffered).mock.calls[0]?.[0]
+      ?.lastInstallFailure;
+    expect(downloadFailure instanceof UpdateInstallError ? downloadFailure.stage : null).toBe(
+      'download',
+    );
   });
 });
 

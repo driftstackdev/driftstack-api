@@ -53,6 +53,7 @@ import {
   checkForUpdate,
   recordUpdateFailure,
   RELEASES_URL,
+  runUpdateCycle,
   type AvailableUpdate,
 } from '../../src/lib/updater';
 import { clearLogEntries, getLogEntries } from '../../src/lib/log-buffer';
@@ -490,6 +491,60 @@ describe('U4 — an os error 13 install failure, end to end through the real clo
     );
   });
 
+  it('⛔ a RETRIED failure says so ON SCREEN even when humanizeError classifies the reason', async () => {
+    // ⛔ THE RETRY SENTENCE WAS ATTACHED TO THE FALLBACK, SO IT VANISHED ON THE
+    // ONE CLASS THE RETRY WAS BUILT FOR. `humanizeError(e, fallback)` returns
+    // the fallback ONLY when no regex matched, so "Driftstack already retried
+    // once." could only ever reach the screen on an UNCLASSIFIED reason.
+    // reqwest's `error sending request` IS classified (the network arm), and the
+    // arm above calls it "the commonest failure there is" — so after two full
+    // ~26 MiB attempts the banner read *"Update to 0.1.51 failed: Check your
+    // connection and try again."*: no mention of the retry, ending in the exact
+    // "try again" that UpdateBanner.tsx's own note calls false once the app has
+    // already tried twice.
+    //
+    // MEASURED off the RUNNING harness with Playwright 2026-09-12 (the real
+    // UpdateBanner + the real install closure, both attempts rejecting `error
+    // sending request for url (…)`), visible text only:
+    //   "Update to 0.1.52 failed: Check your connection and try again."
+    //   "What went wrong" (COLLAPSED) · Retry · Download · Later
+    // The "First attempt"/"Second attempt" labels do exist — inside the closed
+    // <details>, so nothing a person reads says a retry happened. The identical
+    // two-attempt history with an `os error 13` DID say it, because that one
+    // reaches the fallback. Same history, two different stories.
+    const DROPPED = 'error sending request for url (https://example.invalid/a.tar.gz)';
+    const downloadAndInstall = vi.fn(() => rejectLikeThePlugin(DROPPED));
+    const update = await installable({ downloadAndInstall });
+    render(<UpdateBanner update={update} onDismiss={vi.fn()} />);
+    await clickInstall();
+
+    const headline = await screen.findByTestId('update-error-headline');
+    expect(downloadAndInstall, 'the network class is retried').toHaveBeenCalledTimes(2);
+    // The shared classifier stays shared: the connection sentence survives…
+    expect(headline).toHaveTextContent('Check your connection and try again.');
+    // …AND the customer is told the app already tried, which is the half of the
+    // owner's row the fallback was hoarding.
+    expect(headline).toHaveTextContent(/Driftstack already retried once\./);
+  });
+
+  it('…and a failure that was NOT retried never claims it was', async () => {
+    // The vacuity control, in the direction the real failure goes: a classified
+    // reason that `NEVER_RETRY_INSTALL` vetoes keeps its own sentence and must
+    // NOT gain the retry clause. Without this arm, appending the clause
+    // unconditionally would read green above.
+    const downloadAndInstall = vi.fn(() =>
+      rejectLikeThePlugin('Invalid encoding in minisign data'),
+    );
+    const update = await installable({ downloadAndInstall });
+    render(<UpdateBanner update={update} onDismiss={vi.fn()} />);
+    await clickInstall();
+
+    const headline = await screen.findByTestId('update-error-headline');
+    expect(downloadAndInstall, 'a signature failure fails once, forever').toHaveBeenCalledTimes(1);
+    expect(headline).toHaveTextContent("This download couldn't be verified. Try again later.");
+    expect(headline).not.toHaveTextContent(/retried/i);
+  });
+
   it('U2 the retry is VISIBLE in the banner — and it still shows PROGRESS', async () => {
     // A no-op default rather than `null`: TS narrows a `let x: T | null = null`
     // that is only reassigned inside a callback back to `null` at the call site
@@ -600,6 +655,149 @@ describe('U4 — an os error 13 install failure, end to end through the real clo
     // Not a dead end: the headline names the one action that works, and the
     // banner can still be dismissed.
     expect(screen.getByTestId('update-dismiss')).toBeInTheDocument();
+  });
+
+  it('CRITICAL the UNATTENDED failure is ON SCREEN — the banner is seeded from the install that already failed', async () => {
+    // ⛔ THE DEFAULT CONFIGURATION, AND IT SHOWED THE CUSTOMER NOTHING. Auto-update
+    // is ON by default and `App.tsx` runs this cycle at startup and every 6 h, so
+    // on a machine with no live session the install happens with no banner in
+    // sight. When it FAILED, `runUpdateCycle` swallowed the rejection and called
+    // `onOffered` with a fresh `AvailableUpdate` — the banner mounted at
+    // `phase:'idle'` and the whole of what a person could read was *"Update
+    // 0.1.51 available (current 0.1.50) · Install & restart · Later"*, after two
+    // full ~26 MiB attempts. MEASURED off the running harness 2026-09-12.
+    //
+    // The real cycle over the real install closure; only the plugin boundary is
+    // faked, with the bare-string rejection shape the IPC actually produces.
+    const downloadAndInstall = vi.fn(() => rejectLikeThePlugin(OS_ERROR_13));
+    const update = await installable({ downloadAndInstall });
+    // An array rather than a `let … = null`: TS narrows a variable only assigned
+    // inside a callback back to `null` at the call site (TS2339).
+    const offeredCalls: AvailableUpdate[] = [];
+    const outcome = await runUpdateCycle({
+      check: () => Promise.resolve<AvailableUpdate | null>(update),
+      autoUpdate: () => true,
+      sessionRunning: () => Promise.resolve(false),
+      onOffered: (u) => offeredCalls.push(u),
+    });
+    expect(outcome).toBe('banner');
+    expect(downloadAndInstall, 'two full attempts already happened').toHaveBeenCalledTimes(2);
+    const offered = offeredCalls[0];
+    if (offered === undefined) throw new Error('the cycle surfaced nothing');
+
+    // NO `waitFor`: the failure has to be in the FIRST paint, because a frame of
+    // "Update 0.1.51 available · Install & restart" is the exact claim this
+    // fixes.
+    const seeded = render(<UpdateBanner update={offered} onDismiss={vi.fn()} />);
+    expect(screen.getByTestId('update-error-headline')).toHaveTextContent(
+      "Update to 0.1.51 failed: Update couldn't be installed. Driftstack already retried once.",
+    );
+    expect(screen.getByTestId('update-error-reason')).toHaveTextContent(OS_ERROR_13);
+    expect(screen.getByTestId('update-error-first-reason')).toHaveTextContent(OS_ERROR_13);
+    expect(screen.getByTestId('update-download')).toHaveAttribute('href', RELEASES_URL);
+    expect(screen.getByTestId('update-install')).toHaveTextContent('Retry');
+
+    // The control in the failing direction: the SAME update, offered the
+    // ordinary way, still mounts idle. Without it an unconditional seed — a
+    // banner that always claims a failure — would read green above.
+    seeded.unmount();
+    render(<UpdateBanner update={update} onDismiss={vi.fn()} />);
+    expect(screen.queryByTestId('update-error-headline')).toBeNull();
+    expect(screen.getByTestId('update-install')).toHaveTextContent('Install & restart');
+  });
+
+  it("⛔ a TEXTLESS second attempt must not take attempt 1's reason down with it", async () => {
+    // The disclosure was gated on `reason !== ''`, i.e. on the LAST attempt's
+    // text. A second attempt that rejects with no text therefore deleted the
+    // whole affordance and threw away a perfectly good attempt-1 reason the app
+    // was still holding — leaving the screen saying only *"Update to 0.1.51
+    // failed: Update couldn't be installed. Driftstack already retried once."*,
+    // which is the owner's own sentence with a retry clause bolted on. MEASURED
+    // off the running harness 2026-09-12.
+    let calls = 0;
+    const downloadAndInstall = vi.fn((): Promise<void> => {
+      calls += 1;
+      if (calls === 1) return rejectLikeThePlugin(OS_ERROR_13);
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- an object with no `message` IS "the rejection carried no text"
+      return Promise.reject({});
+    });
+    const writeText = vi.fn((_text: string): Promise<void> => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const update = await installable({ downloadAndInstall });
+    render(<UpdateBanner update={update} onDismiss={vi.fn()} />);
+    await clickInstall();
+
+    const headline = await screen.findByTestId('update-error-headline');
+    expect(headline).toHaveTextContent(
+      "Update couldn't be installed. Driftstack already retried once.",
+    );
+    // The reason the app is HOLDING stays reachable…
+    expect(screen.getByTestId('update-error-details')).toBeInTheDocument();
+    expect(screen.getByTestId('update-error-first-reason')).toHaveTextContent(OS_ERROR_13);
+    // …and the empty one renders no labelled box opening onto nothing. (The
+    // control in the failing direction is the arm above — a single attempt with
+    // no text renders NO disclosure at all — so this is not "always show it".)
+    expect(screen.queryByTestId('update-error-reason')).toBeNull();
+    expect(screen.queryByText('Second attempt')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('update-copy-details'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const [copied] = writeText.mock.calls[0] as [string];
+    expect(copied).toContain(`first attempt: ${OS_ERROR_13}`);
+    expect(copied).toContain('reason: (the rejection carried no text)');
+    expect(copied).toContain('attempts: 2');
+  });
+
+  it('⛔ a RECOVERED download error is not presented as the first attempt of a relaunch failure', async () => {
+    // The combination neither half of this file covered: attempt 1 drops the
+    // connection, the retry SUCCEEDS, and `relaunch()` then rejects. `onRetry`
+    // had already set `firstReason`, and the relaunch diagnostic carries
+    // `firstReason: ''` by construction — but the catch only overwrote a
+    // NON-empty one, so the stale value survived. The customer whose update had
+    // INSTALLED was shown a network error labelled "First attempt" as the first
+    // half of the diagnosis, and Copy details said `attempts: 1` beside a `first
+    // attempt:` line. MEASURED off the running harness 2026-09-12.
+    const DROPPED = 'error sending request for url (https://example.invalid/a.tar.gz)';
+    let calls = 0;
+    const downloadAndInstall = vi.fn((): Promise<void> => {
+      calls += 1;
+      return calls === 1 ? rejectLikeThePlugin(DROPPED) : Promise.resolve();
+    });
+    const writeText = vi.fn((_text: string): Promise<void> => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+
+    const update = await installable({
+      downloadAndInstall,
+      relaunch: () => rejectLikeThePlugin('Failed to spawn the new process (os error 13)'),
+    });
+    render(<UpdateBanner update={update} onDismiss={vi.fn()} />);
+    await clickInstall();
+
+    const headline = await screen.findByTestId('update-error-headline');
+    expect(headline).toHaveTextContent(
+      "Update 0.1.51 installed, but the app couldn't restart itself.",
+    );
+    expect(downloadAndInstall, 'the transport class IS retried').toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId('update-error-reason')).toHaveTextContent(
+      'Failed to spawn the new process (os error 13)',
+    );
+    // The recovered attempt belongs to the download that WORKED. (The positive
+    // control is the two-reason arm above: a download-stage failure after a
+    // retry must still show both.)
+    expect(
+      screen.queryByTestId('update-error-first-reason'),
+      'attempt 1 was recovered — the update installed',
+    ).toBeNull();
+    expect(screen.queryByText('First attempt')).toBeNull();
+
+    await userEvent.click(screen.getByTestId('update-copy-details'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    const [copied] = writeText.mock.calls[0] as [string];
+    expect(copied).toContain('stage: relaunch');
+    expect(copied).toContain('attempts: 1');
+    expect(copied, 'self-contradictory beside `attempts: 1`').not.toContain('first attempt:');
+    expect(copied).not.toContain(DROPPED);
   });
 
   it('the DOWNLOAD stage keeps both actions — the gate is the stage, not the error phase', async () => {

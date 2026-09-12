@@ -71,34 +71,142 @@ function DownloadReleaseLink({
   );
 }
 
+/** The complete error render for ONE rejection. */
+interface UpdateFailureView {
+  stage: UpdateInstallStage;
+  /** The plugin's own text for the attempt that ended it, redacted. */
+  reason: string;
+  /** Attempt 1's text when there were two, else ''. */
+  firstReason: string;
+  /** 1, or 2 after the single automatic retry. */
+  attempts: number;
+  /** The customer-facing sentence — the headline. */
+  sentence: string;
+}
+
+/**
+ * ⛔ THE BANNER HAS TWO WAYS IN AND THEY HAVE TO SAY THE SAME THING. Until now
+ * only the Install button could produce a failure, so the entire error render
+ * lived in its catch. But the UNATTENDED cycle installs too — auto-update
+ * defaults ON and App.tsx runs `runUpdateCycle` at startup and every 6 h — and
+ * when THAT install failed, the cycle swallowed the rejection and handed
+ * `onOffered` the same update, so the banner mounted at `phase:'idle'` and the
+ * whole of what a customer could read was:
+ *
+ *     Update 0.1.52 available (current 0.1.51)  [Install & restart]  [Later]
+ *
+ * after two failed ~26 MiB attempts: no reason, no statement that anything had
+ * been tried, no download link, and a primary button inviting attempts 3 and 4.
+ * That is the SHIPPED DEFAULT path, and the likeliest generator of the owner's
+ * *"i see it very often"* — the install fails in the background after every
+ * release and the banner just keeps offering the update. MEASURED off the
+ * running harness with Playwright 2026-09-12.
+ *
+ * The failure now travels on the update itself
+ * ({@link AvailableUpdate.lastInstallFailure}) and BOTH entry points render it
+ * through here, so the seeded banner and the clicked one share one sentence,
+ * one disclosure and one set of actions by construction rather than by a second
+ * copy that can drift.
+ */
+function failureState(e: unknown, version: string): UpdateFailureView {
+  const installError = e instanceof UpdateInstallError ? e : null;
+  const stage = installError?.stage ?? 'unknown';
+  const attempts = installError?.attempts ?? 1;
+  return {
+    stage,
+    reason: rawUpdateFailureReason(e),
+    firstReason: installError?.firstReason ?? '',
+    attempts,
+    sentence:
+      stage === 'relaunch'
+        ? // ⛔ THE OLD MESSAGE WAS A LIE ON THIS PATH. `relaunch()` is awaited
+          // inside the same `try` as `downloadAndInstall()`, and macOS always
+          // relaunches — so an install that SUCCEEDED and then failed to restart
+          // rendered "Update couldn't be installed", wrong in both halves. The
+          // stage is what lets this say the true thing.
+          `Update ${version} installed, but the app couldn't restart itself. Quit and reopen Driftstack.`
+        : // ⚠️ "Try again." IS FALSE ONCE THE APP HAS ALREADY TRIED TWICE, and it
+          // invites a third full download (plus, on macOS, another admin prompt)
+          // for a failure that has now failed twice. The classifier stays shared
+          // and untouched — a reason `humanizeError` can classify still gets its
+          // own sentence.
+          //
+          // ⛔ THE RETRY CLAUSE WAS INSIDE THE FALLBACK ARGUMENT, WHICH IS THE ONE
+          // PLACE IT COULD NEVER REACH THE CLASS THE RETRY WAS BUILT FOR.
+          // `humanizeError(e, fallback)` returns `fallback` only when NO regex
+          // matched, so "Driftstack already retried once." was reachable only for
+          // an UNCLASSIFIED reason. reqwest's `error sending request` is
+          // classified (the network arm) and IS retried, so two full ~26 MiB
+          // attempts ended on *"Check your connection and try again."* — silent
+          // about the retry and ending in the very "try again" this note calls
+          // false, on the class the closure's own comment calls "the commonest
+          // failure there is".
+          //
+          // So the clause is appended to WHATEVER sentence is shown, keyed on the
+          // attempt count rather than on whether a regex happened to fire. The
+          // unclassified string is unchanged byte-for-byte ("Update couldn't be
+          // installed." + " Driftstack already retried once."), and a failure
+          // that was never retried never gains it.
+          attempts === 2
+          ? `${humanizeError(e, "Update couldn't be installed.")} Driftstack already retried once.`
+          : humanizeError(e, "Update couldn't be installed. Try again."),
+  };
+}
+
 export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Element {
   // ⛔ 'retrying' WAS A PHASE AND IS NOW A FLAG. As a phase it REPLACED
   // 'installing', so the render dropped the live fraction for the whole second
   // attempt: `onProgress` kept firing and `setFraction` kept updating state
   // nothing displayed, and the customer watched a static "Retrying…" through a
   // second ~26 MiB download. That is precisely the "it just sat there" report the
-  // visible retry exists to prevent (see UpdateInstallHooks.onRetry). Worse, the
-  // phase had no exit on success: `platformNeedsManualRelaunch()` is false on
-  // Windows, so `install()` RESOLVES rather than relaunching, and the banner sat
-  // on "Retrying…" for good. A flag keeps the progress phase intact and only
-  // changes the verb.
-  const [phase, setPhase] = useState<'idle' | 'installing' | 'error'>('idle');
+  // visible retry exists to prevent (see UpdateInstallHooks.onRetry). A flag
+  // keeps the progress phase intact and only changes the verb.
+  //
+  // ⚠️ THE SECOND HALF OF THIS NOTE USED TO CLAIM THE FLAG ALSO FIXED THE
+  // NO-EXIT-ON-SUCCESS CASE. IT DOES NOT, MEASURED 2026-09-12 off the running
+  // harness with `needsManualRelaunch: () => false` (the Windows configuration,
+  // where the NSIS installer owns the restart so `install()` RESOLVES instead of
+  // relaunching). There is no `setPhase` after the `try`, so the banner's
+  // terminal state on a SUCCESSFUL Windows install is:
+  //   • clean install  → "Update 0.1.52 available (current 0.1.51) Installing… 100%"
+  //   • after a retry  → "…  Retrying… 100%"
+  // both with NO "Later" button, i.e. still unable to be dismissed and still
+  // headlined "available". The flag changed the VERB; "sat on Retrying… for
+  // good" survives it. Left as-is deliberately here — it is the SUCCESS path and
+  // a different proposition from the owner's install-failure row — and reported
+  // rather than silently patched. The `relaunch() replaces the running process`
+  // note inside `install()` below states that stay-in-the-installing-state
+  // behaviour accurately.
+
+  // ⚠️ THE UNATTENDED INSTALL'S FAILURE, WHEN THAT IS WHY THIS BANNER EXISTS.
+  // `undefined` on an ordinary offer, and every state below then keeps its idle
+  // value. Read in the lazy initializers rather than in an effect so the failure
+  // is on screen in the FIRST paint: a frame of "Update 0.1.52 available ·
+  // Install & restart" is the exact claim this seeding exists to stop making.
+  const seeded =
+    update.lastInstallFailure === undefined
+      ? null
+      : failureState(update.lastInstallFailure, update.version);
+  const [phase, setPhase] = useState<'idle' | 'installing' | 'error'>(
+    seeded === null ? 'idle' : 'error',
+  );
   const [retried, setRetried] = useState(false);
   const [fraction, setFraction] = useState(0);
-  const [error, setError] = useState<string | null>(null);
-  // U1 — the plugin's untouched text. Empty when the rejection carried none,
-  // and the disclosure is then not rendered at all rather than opening onto
-  // nothing.
-  const [reason, setReason] = useState('');
+  const [error, setError] = useState<string | null>(seeded?.sentence ?? null);
+  // U1 — the plugin's untouched text for the attempt that ended the install.
+  // Empty when that rejection carried none; the disclosure then falls back to
+  // attempt 1's reason, and is not rendered at all when neither exists rather
+  // than opening onto nothing.
+  const [reason, setReason] = useState(seeded?.reason ?? '');
   // ⛔ THE RETRY USED TO MAKE THE CUSTOMER-VISIBLE HALF LESS DIAGNOSABLE THAN THE
   // LOG. Only the LAST attempt's reason was disclosed and copied, and attempt 2's
   // reason is frequently an artefact of attempt 1's damage rather than the cause
   // — on the macOS non-authorization path the live bundle has already been moved
   // out (updater.rs:1255), so attempt 2 reports "No such file or directory
   // (os error 2)" about nothing, and THAT is what got pasted into an issue.
-  const [firstReason, setFirstReason] = useState('');
-  const [attempts, setAttempts] = useState(1);
-  const [stage, setStage] = useState<UpdateInstallStage>('unknown');
+  const [firstReason, setFirstReason] = useState(seeded?.firstReason ?? '');
+  const [attempts, setAttempts] = useState(seeded?.attempts ?? 1);
+  const [stage, setStage] = useState<UpdateInstallStage>(seeded?.stage ?? 'unknown');
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
 
   /** What "Copy details" puts on the clipboard — the whole diagnostic, not just
@@ -109,7 +217,11 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
     `stage: ${stage}`,
     `attempts: ${attempts}`,
     ...(firstReason === '' ? [] : [`first attempt: ${firstReason}`]),
-    `reason: ${reason}`,
+    // The disclosure can now exist with an EMPTY attempt-2 reason (attempt 1's
+    // survived it), and `reason: ` with nothing after it reads as a dropped
+    // field rather than as a rejection that carried no text. Same words the dev
+    // log uses for the same fact — see `formatUpdateFailure`.
+    `reason: ${reason === '' ? '(the rejection carried no text)' : reason}`,
   ].join('\n');
 
   const copyDetails = (): void => {
@@ -147,38 +259,27 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
       // reach here. If a platform returns instead of relaunching, the
       // banner simply stays in the (completed) installing state.
     } catch (e) {
-      const raw = rawUpdateFailureReason(e);
-      const installError = e instanceof UpdateInstallError ? e : null;
-      const failedStage = installError?.stage ?? 'unknown';
+      const failure = failureState(e, update.version);
       setPhase('error');
-      setStage(failedStage);
-      setReason(raw);
-      setAttempts(installError?.attempts ?? 1);
-      // Prefer the error's copy: a caller-supplied closure may ignore `hooks`
-      // entirely, and the diagnostic carries it either way.
-      if (installError !== null && installError.firstReason !== '') {
-        setFirstReason(installError.firstReason);
-      }
-      setError(
-        failedStage === 'relaunch'
-          ? // ⛔ THE OLD MESSAGE WAS A LIE ON THIS PATH. `relaunch()` is awaited
-            // inside the same `try` as `downloadAndInstall()`, and macOS always
-            // relaunches — so an install that SUCCEEDED and then failed to
-            // restart rendered "Update couldn't be installed", wrong in both
-            // halves. The stage is what lets this say the true thing.
-            `Update ${update.version} installed, but the app couldn't restart itself. Quit and reopen Driftstack.`
-          : // ⚠️ "Try again." IS FALSE ONCE THE APP HAS ALREADY TRIED TWICE, and
-            // it invites a third full download (plus, on macOS, another admin
-            // prompt) for a failure that has now failed twice. Only the FALLBACK
-            // changes — a reason `humanizeError` can classify still gets its own
-            // sentence, and the classifier stays shared and untouched.
-            humanizeError(
-              e,
-              installError?.attempts === 2
-                ? "Update couldn't be installed. Driftstack already retried once."
-                : "Update couldn't be installed. Try again.",
-            ),
-      );
+      setStage(failure.stage);
+      setReason(failure.reason);
+      setAttempts(failure.attempts);
+      setError(failure.sentence);
+      // Prefer the error's own copy — INCLUDING AN EMPTY ONE.
+      //
+      // ⛔ THE GUARD USED TO BE `installError.firstReason !== ''`, and that kept
+      // an already-RECOVERED download error on a relaunch failure: attempt 1
+      // drops the connection, `onRetry` sets firstReason, attempt 2 SUCCEEDS,
+      // and `relaunch()` then rejects — whose diagnostic carries `firstReason:
+      // ''` by construction. The stale one survived, so the disclosure labelled
+      // a network error "First attempt" under a headline saying the update
+      // INSTALLED, and Copy details read `attempts: 1` beside a `first attempt:`
+      // line. MEASURED off the running harness 2026-09-12.
+      //
+      // A rejection that is NOT an UpdateInstallError carries no copy at all (a
+      // caller-supplied closure may ignore `hooks` entirely), so there the
+      // `onRetry` hook's value still stands.
+      if (e instanceof UpdateInstallError) setFirstReason(failure.firstReason);
       // Anything that did NOT come through the installable closure in
       // lib/updater.ts has not been recorded yet — a `downloadOnly` platform's
       // deliberate reject, or a caller-supplied closure. A reason shown to the
@@ -187,7 +288,7 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
       if (!(e instanceof UpdateInstallError)) {
         void recordUpdateFailure({
           stage: 'unknown',
-          reason: raw,
+          reason: failure.reason,
           attempt: 1,
           willRetry: false,
           fromVersion: update.currentVersion,
@@ -246,7 +347,18 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
                 </>
               )}
             </span>
-            {reason !== '' ? (
+            {/* ⛔ EITHER REASON OPENS IT. Gated on `reason !== ''` alone, a
+                TEXTLESS attempt 2 deleted the whole disclosure and took attempt
+                1's perfectly good reason with it: the app was HOLDING
+                "Permission denied (os error 13)" in `firstReason` while the only
+                thing a person could read was "Update to 0.1.52 failed: Update
+                couldn't be installed. Driftstack already retried once." — the
+                owner's own sentence, regenerated, with a retry clause bolted on.
+                A rejection carrying no text is not hypothetical:
+                `formatUpdateFailure` has a case for it, and the plugin rejects
+                with whatever the IPC decoded. MEASURED off the running harness
+                2026-09-12. */}
+            {reason !== '' || firstReason !== '' ? (
               <details className="mt-1" data-testid="update-error-details">
                 <summary className="cursor-pointer text-xs text-ink-muted hover:text-ink-secondary">
                   What went wrong
@@ -264,17 +376,23 @@ export function UpdateBanner({ update, onDismiss }: UpdateBannerProps): JSX.Elem
                         </code>
                       </div>
                     ) : null}
-                    <div className="min-w-0">
-                      {attempts === 2 ? (
-                        <span className="text-xs text-ink-muted">Second attempt</span>
-                      ) : null}
-                      <code
-                        className="mono block max-h-24 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-inset px-2 py-1 text-ink-secondary"
-                        data-testid="update-error-reason"
-                      >
-                        {reason}
-                      </code>
-                    </div>
+                    {/* …and the block that would be EMPTY is the one that is
+                        dropped, rather than a labelled box opening onto nothing.
+                        `attempts === 2` alone would render "Second attempt" over
+                        an empty `<code>`. */}
+                    {reason !== '' ? (
+                      <div className="min-w-0">
+                        {attempts === 2 ? (
+                          <span className="text-xs text-ink-muted">Second attempt</span>
+                        ) : null}
+                        <code
+                          className="mono block max-h-24 min-w-0 overflow-auto whitespace-pre-wrap break-words rounded bg-surface-inset px-2 py-1 text-ink-secondary"
+                          data-testid="update-error-reason"
+                        >
+                          {reason}
+                        </code>
+                      </div>
+                    ) : null}
                   </div>
                   <button
                     type="button"
