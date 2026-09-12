@@ -2,7 +2,18 @@
 // Three copies of that enum exist and none of them checked the others.
 //
 //   ProxyProbeReason                 services/proxy-connectivity-probe.ts — what
-//                                    the probe classifies a failure as.
+//                                    the probe classifies a failure as. ⛔ It is
+//                                    NO LONGER the only producer: since
+//                                    2026-09-12 the pre-launch gate also mints
+//                                    `config_unresolvable`, for a STORED CONFIG
+//                                    that could not be used, where nothing was
+//                                    dialled at all (routes/agent-sessions.ts).
+//                                    That reason must NOT be a probe member —
+//                                    the four probe reasons are verdicts from a
+//                                    real egress round-trip and the SDK
+//                                    documents them as such, so adding a
+//                                    never-dialled cause to that union would
+//                                    make every one of them a weaker claim.
 //   ProxyValidationFailedError       lib/errors.ts — what reaches the customer,
 //                                    with a `human` sentence per member. Its own
 //                                    comment says the enum exists "so an SDK can
@@ -65,16 +76,59 @@ describe('a reason an SDK branches on must be documented', () => {
       fromProbe.length,
       'the probe union parsed as empty — the regex, not the code',
     ).toBeGreaterThan(0);
-    expect(fromError, 'the probe and the error type disagree about the reason set').toEqual(
-      fromProbe,
-    );
+
+    // Every probe verdict must be carriable. This direction is the original one
+    // and is unchanged: a reason the probe can classify that the error type
+    // cannot carry is a value the customer receives with no branch behind it.
+    for (const reason of fromProbe) {
+      expect(
+        fromError,
+        `the probe can classify '${reason}' and the error type cannot carry it`,
+      ).toContain(reason);
+    }
+
+    // …and the other direction, which used to be equality and is now the real
+    // question: a reason the error type carries that NOTHING mints is worse
+    // than an omission, because a customer writes a branch that never runs and
+    // trusts it. The probe is no longer the only producer, so each non-probe
+    // member must be shown to be thrown somewhere in the server. Derived, never
+    // hand-listed — a roster here would be the fourth copy this file exists to
+    // prevent. Both `reason:` shapes the codebase uses are accepted: a literal,
+    // and a ternary that selects one.
+    const serverSources = [
+      'apps/server/src/routes/agent-sessions.ts',
+      'apps/server/src/routes/account-me.ts',
+      'apps/server/src/routes/account-proxies.ts',
+      'apps/server/src/services/proxy-connectivity-probe.ts',
+    ]
+      .map((rel) => {
+        try {
+          return read(rel);
+        } catch {
+          return '';
+        }
+      })
+      .join('\n');
+    expect(
+      serverSources.length,
+      'no server source was readable — the paths above, not the code',
+    ).toBeGreaterThan(0);
+    for (const reason of fromError) {
+      if (fromProbe.includes(reason)) continue;
+      expect(
+        new RegExp(`reason:[^\\n;]*'${reason}'`).test(serverSources),
+        `the error type carries '${reason}' but no route throws it — a documented value no path emits`,
+      ).toBe(true);
+    }
   });
 
   it('CRITICAL every reason is documented, and nothing is documented that cannot occur. A customer cannot branch on a value they were never told exists, and a documented value that no code path emits is worse than an omission — they would write a branch that never runs and trust it.', () => {
-    const probe = /export type ProxyProbeReason =[^;]+;/.exec(
-      read('apps/server/src/services/proxy-connectivity-probe.ts'),
-    );
-    const fromProbe = unionMembers(probe?.[0] ?? '');
+    // ⛔ The roster a customer must be taught is what the ERROR TYPE can carry,
+    // not what the probe classifies. They were the same set until 2026-09-12;
+    // pinning the docs to the probe would have silently excused the one reason
+    // a customer is most likely to hit first — a config that cannot be used.
+    const errors = /reason:\s*'unreachable'[^;]+;/.exec(read('apps/server/src/lib/errors.ts'));
+    const fromProbe = unionMembers(errors?.[0] ?? '');
     const documented = documentedReasons(read('apps/docs/src/pages/api/proxies.md'));
 
     expect(

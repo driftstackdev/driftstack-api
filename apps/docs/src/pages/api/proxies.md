@@ -370,12 +370,13 @@ The problem body carries a `reason` alongside the human `detail`:
 
 `reason` is a closed set. Branch on it — `detail` is prose and may be reworded.
 
-| Reason           | What it means                                                             | What fixes it                                              |
-| ---------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `unreachable`    | Nothing answered at `host:port`.                                          | Check the host, the port, and that the proxy is online.    |
-| `auth_failed`    | The proxy answered and rejected the username or password.                 | Re-enter the credentials.                                  |
-| `timeout`        | The proxy accepted the connection but did not finish in time.             | It is overloaded or half-down; retry, then change proxy.   |
-| `egress_blocked` | The proxy authenticated, then refused or failed to reach the destination. | Ask the provider — this is usually plan, quota, or an ACL. |
+| Reason                | What it means                                                                                                                                                                                            | What fixes it                                                                                                           |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `unreachable`         | Nothing answered at `host:port`.                                                                                                                                                                         | Check the host, the port, and that the proxy is online.                                                                 |
+| `auth_failed`         | The proxy answered and rejected the username or password.                                                                                                                                                | Re-enter the credentials.                                                                                               |
+| `timeout`             | The proxy accepted the connection but did not finish in time.                                                                                                                                            | It is overloaded or half-down; retry, then change proxy.                                                                |
+| `egress_blocked`      | The proxy authenticated, then refused or failed to reach the destination.                                                                                                                                | Ask the provider — this is usually plan, quota, or an ACL.                                                              |
+| `config_unresolvable` | The stored configuration could not be used, so **nothing was dialled**. The other four reasons are verdicts from a real round-trip through the proxy; this one is not a measurement of the proxy at all. | Open the proxy and fix or re-paste its configuration. Checking the host and port will not help — they were never tried. |
 
 `egress_blocked` is the one that surprises people. The credentials are correct
 and the proxy is up, so anything that only checks reachability calls it healthy;
