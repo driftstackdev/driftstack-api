@@ -1,0 +1,104 @@
+# GUI render gates on Linux — manual dispatch (2026-09-12).
+#
+# The two browser gates the desktop client ships behind —
+#   scripts/gui-visual-check.mjs   (profile-card geometry: nothing escapes the tile)
+#   scripts/gui-text-quality.mjs   (WCAG contrast / text size / untitled truncation,
+#                                   every harness scene, both themes, with a control)
+# — run on the maintainers' Macs today (docs/runbooks/gui-release.md). They measure
+# geometry and colour ratios, not pixels, but a different font stack changes text
+# widths, so whether they hold on a Linux runner is a MEASUREMENT, not a given.
+# This workflow takes that measurement: it renders the harness with Chromium on
+# ubuntu and uploads both reports. It is dispatch-only until the numbers say it
+# can gate a push (see the runbook for the decision).
+name: GUI render gates (Linux)
+
+on:
+  workflow_dispatch:
+    inputs:
+      text_scenes:
+        description: 'Comma-separated scene names for the text gate (empty = all)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: Geometry + text-quality gates on ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Fonts available to Chromium (recorded for the measurement)
+        run: 'fc-list : family | sort -u | head -50'
+
+      - name: Start the gui-client dev server
+        working-directory: apps/gui-client
+        run: |
+          nohup npx vite --port 5199 --strictPort --host 127.0.0.1 > "$RUNNER_TEMP/vite.log" 2>&1 &
+          for i in $(seq 1 120); do
+            if curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5199/visual-harness.html | grep -q 200; then
+              echo "harness up after $i tries"; exit 0
+            fi
+            sleep 0.5
+          done
+          echo "harness did not come up"; cat "$RUNNER_TEMP/vite.log"; exit 1
+
+      - name: Geometry gate
+        id: geometry
+        continue-on-error: true
+        env:
+          OUT_DIR: ${{ runner.temp }}/geometry
+        run: node scripts/gui-visual-check.mjs
+
+      - name: Text-quality gate (both themes)
+        id: text
+        continue-on-error: true
+        run: |
+          if [ -n "${{ inputs.text_scenes }}" ]; then
+            node scripts/gui-text-quality.mjs "$RUNNER_TEMP/text" --scenes="${{ inputs.text_scenes }}"
+          else
+            node scripts/gui-text-quality.mjs "$RUNNER_TEMP/text"
+          fi
+
+      - name: Text-quality control (the instrument must see its injected findings)
+        id: control
+        continue-on-error: true
+        run: node scripts/gui-text-quality.mjs "$RUNNER_TEMP/text-control" --control
+
+      - name: Upload reports and shots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: gui-gates-linux
+          path: |
+            ${{ runner.temp }}/geometry
+            ${{ runner.temp }}/text
+            ${{ runner.temp }}/text-control
+            ${{ runner.temp }}/vite.log
+          if-no-files-found: warn
+
+      - name: Verdict
+        if: always()
+        run: |
+          echo "geometry: ${{ steps.geometry.outcome }}"
+          echo "text:     ${{ steps.text.outcome }}"
+          echo "control:  ${{ steps.control.outcome }}"
+          if [ "${{ steps.geometry.outcome }}" != "success" ] || [ "${{ steps.text.outcome }}" != "success" ] || [ "${{ steps.control.outcome }}" != "success" ]; then
+            echo "one or more gates did not pass on Linux — read the uploaded reports"; exit 1
+          fi
