@@ -194,8 +194,13 @@ describe('W626 app styles + docs tailwind + postcss content parity', () => {
     expect(body).toMatch(/Primary action button — oxblood accent, the only saturated color/);
     expect(body).toMatch(/Multiple primary buttons on one screen is a design smell\. \*\//);
     expect(body).toMatch(/\.btn-primary \{/);
-    expect(body).toMatch(/bg-accent text-ink-inverted/);
-    expect(body).toMatch(/hover:bg-accent-hover active:bg-accent-active/);
+    // 2026-09-12 (text-contrast batch) — the face is white in BOTH modes
+    // (--on-accent-rgb, accent axis): the mode's inverted ink is slate-900 in
+    // dark mode and put dark text on the oxblood at 2.89:1. The hover fill
+    // DARKENS (oxblood-550) so white keeps 4.5 in every pointer state.
+    expect(body).toMatch(/bg-accent text-accent-on/);
+    expect(body).not.toMatch(/\.btn-primary \{[^}]*text-ink-inverted/);
+    expect(body).toMatch(/hover:bg-accent-fill-hover active:bg-accent-active/);
     expect(body).toMatch(/\.btn-secondary \{/);
     expect(body).toMatch(/bg-surface-elevated text-ink-primary/);
     expect(body).toMatch(/\.btn-danger \{/);

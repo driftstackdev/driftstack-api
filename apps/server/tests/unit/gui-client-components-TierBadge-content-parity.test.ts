@@ -76,7 +76,7 @@ describe('W477.A apps/gui-client/src/components/TierBadge.tsx content parity', (
 
   it("TONE_CLASSES 3-entry: neutral→bg-surface-inset, paid→bg-status-success/15, enterprise→bg-accent/15 (accent token, not a success-tier reuse — pinned so Enterprise isn't visually identical to paid tiers); SIZE_CLASSES sm (px-1.5 py-0.5 text-xs) + md (px-2 py-0.5 text-sm); trial tone removed 2026-05-27", () => {
     expect(body).toMatch(
-      /const TONE_CLASSES: Record<Tone, string> = \{\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*paid: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*enterprise: 'bg-accent\/15 text-accent border-accent\/30',\s*\};/,
+      /const TONE_CLASSES: Record<Tone, string> = \{\s*neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',\s*paid: 'bg-status-success\/15 text-status-success border-status-success\/30',\s*enterprise: 'bg-accent\/15 text-accent-text border-accent\/30',\s*\};/,
     );
     expect(body).toMatch(
       /const SIZE_CLASSES: Record<NonNullable<TierBadgeProps\['size'\]>, string> = \{\s*sm: 'px-1\.5 py-0\.5 text-xs',\s*md: 'px-2 py-0\.5 text-sm',\s*\};/,

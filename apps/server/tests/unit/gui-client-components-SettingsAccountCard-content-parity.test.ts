@@ -95,7 +95,7 @@ describe('W477.B apps/gui-client/src/components/SettingsAccountCard.tsx content 
       /<section\s*aria-label="Account info"\s*className="rounded-xl border border-surface-divider bg-surface-raised px-5 py-4 shadow-sm space-y-2"\s*>/,
     );
     expect(body).toMatch(
-      /<a\s*href=\{`\$\{dashboardUrl\}\/billing\/`\}\s*target="_blank"\s*rel="noreferrer"\s*className="text-sm text-accent underline"\s*>\s*Manage billing →\s*<\/a>/,
+      /<a\s*href=\{`\$\{dashboardUrl\}\/billing\/`\}\s*target="_blank"\s*rel="noreferrer"\s*className="text-sm text-accent-text underline"\s*>\s*Manage billing →\s*<\/a>/,
     );
     expect(body).toMatch(
       /\{state\.kind === 'loading' && \(\s*<p className="text-sm text-ink-secondary" role="status">\s*Loading account…\s*<\/p>\s*\)\}/,

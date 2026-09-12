@@ -62,7 +62,7 @@ describe('W475.C apps/gui-client/src/components/TitleBar.tsx content parity', ()
 
   it('TitleBar inner: nested data-tauri-drag-region on the title group + <DBadge /> + the DRIFT/STACK two-tone wordmark + subtitle fragment with mono dot separator + right slot when truthy', () => {
     expect(body).toMatch(
-      /<div className="flex items-center gap-2" data-tauri-drag-region="true">\s*<DBadge \/>\s*<span className="text-sm font-black italic tracking-tight text-ink-primary">\s*DRIFT<span className="text-accent">STACK<\/span>\s*<\/span>\s*\{subtitle \? \(\s*<>\s*<span className="mono text-ink-muted">·<\/span>\s*<span className="mono text-ink-secondary">\{subtitle\}<\/span>\s*<\/>\s*\) : null\}\s*<\/div>\s*\{right \? <div className="flex items-center gap-2 text-ink-muted">\{right\}<\/div> : null\}/,
+      /<div className="flex items-center gap-2" data-tauri-drag-region="true">\s*<DBadge \/>\s*<span className="text-sm font-black italic tracking-tight text-ink-primary">\s*DRIFT\s*<span className="text-accent" data-contrast-decorative="true">\s*STACK\s*<\/span>\s*<\/span>\s*\{subtitle \? \(\s*<>\s*<span className="mono text-ink-muted">·<\/span>\s*<span className="mono text-ink-secondary">\{subtitle\}<\/span>\s*<\/>\s*\) : null\}\s*<\/div>\s*\{right \? <div className="flex items-center gap-2 text-ink-muted">\{right\}<\/div> : null\}/,
     );
   });
 

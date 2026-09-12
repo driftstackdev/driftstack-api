@@ -164,7 +164,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
       /function toDraft\(p: ProxyConfig\): ProxyDraft \{[\s\S]*?return \{\s*label: p\.label,\s*host: p\.host,\s*port: p\.port,\s*username: p\.username,\s*password: p\.password,\s*\.\.\.\(p\.scheme !== undefined \? \{ scheme: p\.scheme \} : \{\}\),\s*\.\.\.\(p\.openvpn !== undefined \? \{ openvpn: p\.openvpn \} : \{\}\),\s*\.\.\.\(p\.wireguard !== undefined \? \{ wireguard: p\.wireguard \} : \{\}\),\s*\};\s*\}/,
     );
     expect(body).toMatch(
-      /<span className="section-label text-accent">\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*<\/span>/,
+      /<span className="section-label text-accent-text">\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}\s*<\/span>/,
     );
     expect(body).toMatch(/: mode === 'add'\s*\? 'Add proxy'\s*: 'Save changes'/);
   });

@@ -142,7 +142,7 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
   });
 
   it("EmptyConnect subcomponent: 'Not connected' section-label + 'Add an API key to connect to <mono>{baseUrl}</mono>.' + 'Open settings' button + '⌘ ,' keyboard hint — pinned so unauthenticated customer sees a clear path; 2026-06-24 GUI restyle: the section-label is now accent-tinted (section-label text-accent) and the copy moved into a hero-style raised card so the <p> is centered (mx-auto max-w-md) — copy + Open-settings/⌘, path unchanged", () => {
-    expect(body).toMatch(/<span className="section-label text-accent">Not connected<\/span>/);
+    expect(body).toMatch(/<span className="section-label text-accent-text">Not connected<\/span>/);
     expect(body).toMatch(
       /<p className="mx-auto max-w-md text-sm text-ink-secondary">\s*Add an API key to connect to <span className="mono">\{baseUrl\}<\/span>\./,
     );
