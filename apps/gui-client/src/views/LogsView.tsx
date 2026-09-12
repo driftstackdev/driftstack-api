@@ -179,7 +179,7 @@ export function LogsView(): JSX.Element {
             <IconTerminal />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Diagnostics</span>
+            <span className="section-label text-accent-text">Diagnostics</span>
             <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
               Logs
               <span className="mono text-base font-medium text-ink-muted">{entries.length}</span>
@@ -287,7 +287,7 @@ export function LogsView(): JSX.Element {
             No entries match the current filter.{' '}
             <button
               type="button"
-              className="text-accent underline-offset-2 hover:underline"
+              className="text-accent-text underline-offset-2 hover:underline"
               onClick={() => {
                 setFilter('all');
                 setQuery('');

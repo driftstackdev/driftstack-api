@@ -5,6 +5,8 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, cleanup, within, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   ProfilesTable,
   type ProfileTableRow,
@@ -14,6 +16,43 @@ import {
   EXIT_GEO_UNAVAILABLE_SHORT,
   EXIT_GEO_UNAVAILABLE_TITLE,
 } from '../../src/lib/proxy-check-copy';
+
+// Contrast (2026-09-12) — the WCAG 2.1 ratio the gate (scripts/gui-text-quality.mjs)
+// measures, from the tokens in styles/index.css, per mode.
+type Rgb = readonly [number, number, number];
+// Comments stripped first: the token layer's prose mentions `data-mode`, and a
+// comment ABOVE a block is part of that block's selector text to the parser.
+const INDEX_CSS = readFileSync(resolve(__dirname, '../../src/styles/index.css'), 'utf8').replace(
+  /\/\*[\s\S]*?\*\//g,
+  '',
+);
+/** `--name-rgb` for a mode; THROWS when absent (a missing token must red the
+ *  arm — an undefined Tailwind class renders NO colour, not a fallback). */
+function modeRgb(name: string, mode: 'light' | 'dark'): Rgb {
+  let fallback: Rgb | null = null;
+  for (const [, selector, body] of INDEX_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const m = new RegExp(`--${name}-rgb:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+)`).exec(body ?? '');
+    if (m === null) continue;
+    const rgb: Rgb = [Number(m[1]), Number(m[2]), Number(m[3])];
+    if (new RegExp(`data-mode=['"]${mode}['"]`).test(selector ?? '')) return rgb;
+    if (!/data-mode/.test(selector ?? '')) fallback = rgb;
+  }
+  if (fallback === null)
+    throw new Error(`--${name}-rgb is not defined for ${mode} in styles/index.css`);
+  return fallback;
+}
+function wcagContrast(a: Rgb, b: Rgb): number {
+  const lum = ([r, g, b2]: Rgb): number => {
+    const lin = (c: number): number => {
+      const v = c / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b2);
+  };
+  const x = lum(a);
+  const y = lum(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
 
 function row(over: Partial<ProfileTableRow> = {}): ProfileTableRow {
   return {
@@ -230,7 +269,29 @@ describe('ProfilesTable', () => {
     const { rerender } = render(
       <ProfilesTable {...props({ rows: [row({ savedTabsReopen: true, running: false })] })} />,
     );
-    expect(screen.getByText('↻ Saved tabs reopen')).toBeTruthy();
+    const line = screen.getByText('↻ Saved tabs reopen');
+    // C3 (2026-09-12) — 10px accent TEXT wears the mode-aware token: the bare
+    // accent measured 2.37 on the dark raised surface. Mutation: `text-accent`
+    // back on this line → the class pin reds; a dark --accent-text-rgb that
+    // does not clear 4.5 on base AND raised reds the token arm.
+    const cls = line.className.split(/\s+/);
+    expect(cls).toContain('text-accent-text');
+    expect(cls).not.toContain('text-accent');
+    for (const mode of ['light', 'dark'] as const) {
+      for (const surface of ['base', 'raised'] as const) {
+        expect(
+          wcagContrast(modeRgb('accent-text', mode), modeRgb(`surface-${surface}`, mode)),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+    // Positive control — the class this replaced: the accent on the dark raised surface is 2.37.
+    expect(wcagContrast(modeRgb('accent', 'dark'), modeRgb('surface-raised', 'dark'))).toBeLessThan(
+      4.5,
+    );
+    expect(wcagContrast(modeRgb('accent', 'dark'), modeRgb('surface-raised', 'dark'))).toBeCloseTo(
+      2.37,
+      1,
+    );
 
     rerender(
       <ProfilesTable {...props({ rows: [row({ savedTabsReopen: true, running: true })] })} />,
@@ -363,6 +424,41 @@ describe('ProfilesTable', () => {
       />,
     );
     expect(within(screen.getByRole('table')).queryByText(EXIT_GEO_UNAVAILABLE_SHORT)).toBeNull();
+    cleanup();
+  });
+});
+
+// 2026-09-12 review — the one profiles-list finding the gate still reported.
+describe('the "UDP via tunnel" chip reads in secondary ink on its divider wash', () => {
+  const wash = (fg: Rgb, alpha: number, bg: Rgb): Rgb => [
+    fg[0] * alpha + bg[0] * (1 - alpha),
+    fg[1] * alpha + bg[1] * (1 - alpha),
+    fg[2] * alpha + bg[2] * (1 - alpha),
+  ];
+
+  it('wears text-ink-secondary (6.71 dark / 5.51 light on divider/60 over raised) — muted was 3.88 in dark', () => {
+    // Mutation: `text-ink-muted` back on the chip → the class pin reds, and the
+    // arithmetic below shows why (the gate's own measurement: fg #94a3b8 on
+    // #374357 = 3.88 at 10px, need 4.5).
+    render(<ProfilesTable {...props({ rows: [row({ vpn: true })] })} />);
+    const chip = screen.getByText('UDP via tunnel');
+    expect(chip.getAttribute('data-udp')).toBe('tunnel');
+    const cls = chip.className.split(/\s+/);
+    expect(cls).toContain('text-ink-secondary');
+    expect(cls).not.toContain('text-ink-muted');
+    expect(cls).toContain('bg-surface-divider/60');
+    for (const mode of ['light', 'dark'] as const) {
+      const bg = wash(modeRgb('surface-divider', mode), 0.6, modeRgb('surface-raised', mode));
+      expect(wcagContrast(modeRgb('ink-secondary', mode), bg), mode).toBeGreaterThanOrEqual(4.5);
+    }
+    // Positive control — the ink this replaced, on the same wash, in dark.
+    const darkWash = wash(
+      modeRgb('surface-divider', 'dark'),
+      0.6,
+      modeRgb('surface-raised', 'dark'),
+    );
+    expect(wcagContrast(modeRgb('ink-muted', 'dark'), darkWash)).toBeLessThan(4.5);
+    expect(wcagContrast(modeRgb('ink-muted', 'dark'), darkWash)).toBeCloseTo(3.88, 1);
     cleanup();
   });
 });

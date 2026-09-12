@@ -88,6 +88,27 @@ vi.mock('../../src/lib/livekit-connection-stats', () => ({
 const { SimulatorWindow } = await import('../../src/views/SimulatorWindow');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
+/** WCAG 2.1 contrast of a `text-white/<alpha>` class composited over the simulator's
+ *  OWN chrome (#1d1e24). The drawer and toolbar are dark in BOTH themes, so this is the
+ *  one background the captions ever sit on; the ratio is computed from the class the DOM
+ *  actually carries, so the assertion is "this element clears AA", not "this literal". */
+const SIM_CHROME: readonly [number, number, number] = [0x1d, 0x1e, 0x24];
+function whiteAlphaContrast(className: string): number {
+  const m = /(?:^|\s)text-white\/(\d+)(?:\s|$)/.exec(className);
+  if (m === null) throw new Error(`no text-white/<alpha> class on: ${className}`);
+  const alpha = Number(m[1]) / 100;
+  const channel = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = ([r, g, b]: readonly [number, number, number]): number =>
+    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const over = (v: number): number => 255 * alpha + v * (1 - alpha);
+  const fg = lum([over(SIM_CHROME[0]), over(SIM_CHROME[1]), over(SIM_CHROME[2])]);
+  const bg = lum(SIM_CHROME);
+  return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+}
+
 describe('SimulatorWindow — floating iPhone', () => {
   // The drawer starts COLLAPSED (rail icons only; founder 2026-06-24 — no auto-open).
   // jsdom in this project ships a non-functional localStorage (its methods throw), so
@@ -255,6 +276,137 @@ describe('SimulatorWindow — floating iPhone', () => {
     expect(withoutZone.container.querySelector('[data-component="sim-proxy-timezone"]')).toBeNull();
     expect(bare?.textContent).not.toMatch(/Europe|Amsterdam residential ·/);
     withoutZone.unmount();
+  });
+
+  it('(S1/S2) the drawer is the simulator\'s own dark chrome in BOTH themes: captions, "· ws ✓" and "· iPhone 17" clear AA on #1d1e24, and the clipped Egress line titles its full text', () => {
+    // Measured 2026-09-12 (scene-quality over the harness simulator scene): the 9.5px
+    // captions at text-white/40 were 3.77 on #1d1e24; "· iPhone 17" at text-white/45 was
+    // 4.41; "· ws ✓" wore text-ink-secondary — a THEME token that is #525863 in light mode,
+    // 2.32 on a drawer that never changes colour. Every one of these is asserted as a
+    // RATIO from the class the DOM carries, so the guard is the proposition, not a literal.
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017&profile=Amsterdam%20Shopper&proxy=Amsterdam%20residential&tz=Europe%2FAmsterdam',
+    );
+    const { container, unmount } = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    fireEvent.click(container.querySelector('[data-component="sim-rail-diagnostics"]') as Element);
+    const panel = container.querySelector('[data-component="sim-drawer-panel"]');
+    expect(panel, 'the drawer panel renders').not.toBeNull();
+
+    // Every uppercase 9.5px caption in the pane (Profile / Device / Link / Egress / Identity
+    // and the stat-tile labels) clears 4.5 — and the set is non-empty, so a renamed class
+    // cannot make this loop vacuous.
+    const captions = Array.from(panel?.querySelectorAll('div') ?? []).filter((el) =>
+      /text-\[9\.5px\] uppercase/.test(el.className),
+    );
+    expect(captions.map((el) => el.textContent?.trim())).toEqual(
+      expect.arrayContaining(['Profile', 'Device', 'Link', 'Egress', 'Identity']),
+    );
+    for (const caption of captions) {
+      expect(
+        whiteAlphaContrast(caption.className),
+        caption.textContent ?? '',
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+
+    // "· ws ✓" must be a white tint (mode-independent), never an ink token that flips per theme.
+    const ws = Array.from(panel?.querySelectorAll('span') ?? []).find(
+      (el) => el.textContent === ' · ws ✓',
+    );
+    expect(ws, 'the Link card renders "· ws ✓" for a connected session').toBeDefined();
+    expect(ws?.className).not.toMatch(/text-ink-/);
+    expect(whiteAlphaContrast(ws?.className ?? '')).toBeGreaterThanOrEqual(4.5);
+
+    // The toolbar's muted device suffix beside the profile name.
+    const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
+    const suffix = Array.from(toolbar?.querySelectorAll('span') ?? []).find(
+      (el) => el.textContent === '· iPhone 17',
+    );
+    expect(suffix, 'the toolbar renders "· iPhone 17" beside the profile name').toBeDefined();
+    expect(whiteAlphaContrast(suffix?.className ?? '')).toBeGreaterThanOrEqual(4.5);
+
+    // S2 — the Egress card's proxy line clips at the drawer width (measured +10px); it
+    // carries title = exactly the text it renders, timezone included.
+    const zones = container.querySelectorAll('[data-component="sim-proxy-timezone"]');
+    expect(zones).toHaveLength(2);
+    const egress = zones[1]?.parentElement;
+    expect(egress?.className).toContain('truncate');
+    expect(egress?.getAttribute('title')).toBe('🌍 Amsterdam residential · Europe/Amsterdam');
+    expect(egress?.textContent).toBe(egress?.getAttribute('title'));
+    unmount();
+
+    // VACUITY — no tz: the title is exactly the bare label, no dangling separator.
+    window.history.pushState(
+      {},
+      '',
+      '/?window=simulator&ws=wss://lk&token=tok&proxy=Amsterdam%20residential',
+    );
+    const bare = render(
+      <RecordingsProvider>
+        <SimulatorWindow />
+      </RecordingsProvider>,
+    );
+    fireEvent.click(
+      bare.container.querySelector('[data-component="sim-rail-diagnostics"]') as Element,
+    );
+    const bareEgress = Array.from(
+      bare.container
+        .querySelector('[data-component="sim-drawer-panel"]')
+        ?.querySelectorAll('div') ?? [],
+    ).find((el) => el.textContent === '🌍 Amsterdam residential');
+    expect(bareEgress, 'the Egress card renders the bare proxy line').toBeDefined();
+    expect(bareEgress?.getAttribute('title')).toBe('🌍 Amsterdam residential');
+    bare.unmount();
+
+    // INSTRUMENT CONTROL — the shipped-before values must read as failures.
+    expect(whiteAlphaContrast('text-white/40')).toBeCloseTo(3.77, 2);
+    expect(whiteAlphaContrast('text-white/45')).toBeCloseTo(4.41, 2);
+  });
+
+  it('(review) the shell, the toolbar wrap and the empty state are DARK token scopes (data-mode="dark") whatever <html> says', () => {
+    // The chrome is #1d1e24 in both themes; T3/T4's light tokens fall to 2.5–2.7
+    // on it (theme-token-parity pins the arithmetic). The scope is the fix:
+    // removing data-mode="dark" from any of the three roots reds the matching
+    // assertion — `closest('[data-mode]')` then walks past the shell to <html>.
+    document.documentElement.dataset.mode = 'light';
+    try {
+      window.history.pushState({}, '', '/?window=simulator&ws=wss://lk&token=tok&name=iPhone%2017');
+      const live = render(
+        <RecordingsProvider>
+          <SimulatorWindow />
+        </RecordingsProvider>,
+      );
+      const shell = live.container.querySelector('[data-component="simulator-shell"]');
+      expect(shell?.getAttribute('data-mode')).toBe('dark');
+      const wrap = live.container.querySelector('[data-component="simulator-toolbar-wrap"]');
+      expect(wrap?.getAttribute('data-mode')).toBe('dark');
+      const drawer = live.container.querySelector('[data-component="simulator-drawer"]');
+      expect(drawer, 'the drawer renders').not.toBeNull();
+      expect(drawer?.closest('[data-mode]')).toBe(shell);
+      const toolbar = live.container.querySelector('[data-component="simulator-toolbar"]');
+      expect(toolbar?.closest('[data-mode]')).toBe(wrap);
+      live.unmount();
+
+      // The standalone empty card (no session) is the same chrome.
+      window.history.pushState({}, '', '/?window=simulator');
+      const empty = render(
+        <RecordingsProvider>
+          <SimulatorWindow />
+        </RecordingsProvider>,
+      );
+      const card = empty.container.querySelector('[data-component="simulator-empty"]');
+      expect(card, 'the empty state renders without a session').not.toBeNull();
+      expect(card?.getAttribute('data-mode')).toBe('dark');
+      expect(card?.querySelector('p')?.closest('[data-mode]')).toBe(card);
+      empty.unmount();
+    } finally {
+      delete document.documentElement.dataset.mode;
+    }
   });
 
   it('renders the iOS status bar as a dedicated strip ABOVE the content (never overlapping the page)', () => {

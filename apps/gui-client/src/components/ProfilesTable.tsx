@@ -335,7 +335,10 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               <p
                 data-component="saved-tabs-reopen"
                 title="This profile's saved tabs reopen when you launch it"
-                className="mt-0.5 text-[10px] font-medium text-accent"
+                // Contrast (2026-09-12): the accent AS 10px TEXT is the mode-aware
+                // token (dark: the accent itself measured 2.37 on the raised
+                // surface); the hue is unchanged.
+                className="mt-0.5 text-[10px] font-medium text-accent-text"
               >
                 ↻ Saved tabs reopen
               </p>
@@ -509,7 +512,11 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           // which reads as "not measured" for something that is not measurable.
           <span
             data-udp="tunnel"
-            className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-muted"
+            // 2026-09-12 (review) — secondary ink, not muted: muted on the
+            // divider/60 wash over the raised row is 3.88:1 in dark (the one
+            // profiles-list finding the gate still reported); secondary is 6.71
+            // dark / 5.51 light there.
+            className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
             title={`UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`}
           >
             UDP via tunnel
@@ -658,7 +665,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           ) : (
             <button
               type="button"
-              className="rounded bg-accent px-2 py-1 text-[11px] font-semibold text-white hover:bg-accent-hover disabled:opacity-50"
+              className="rounded bg-accent px-2 py-1 text-[11px] font-semibold text-white hover:bg-accent-fill-hover disabled:opacity-50"
               onClick={stop(() => p.onPrimary(r.id))}
               disabled={r.busy || r.launchDisabled}
               aria-busy={r.launching}

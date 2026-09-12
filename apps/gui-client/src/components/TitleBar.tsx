@@ -46,7 +46,10 @@ export function TitleBar({ subtitle, right }: Props): JSX.Element {
       <div className="flex items-center gap-2" data-tauri-drag-region="true">
         <DBadge />
         <span className="text-sm font-black italic tracking-tight text-ink-primary">
-          DRIFT<span className="text-accent">STACK</span>
+          DRIFT
+          <span className="text-accent" data-contrast-decorative="true">
+            STACK
+          </span>
         </span>
         {subtitle ? (
           <>

@@ -252,7 +252,7 @@ function Stepper({ current }: { current: WizardStep }): JSX.Element {
                   active
                     ? 'bg-accent text-white'
                     : done
-                      ? 'bg-accent-subtle text-accent'
+                      ? 'bg-accent-subtle text-accent-text'
                       : 'bg-surface-raised text-ink-muted'
                 }`}
               >
@@ -357,7 +357,7 @@ function ModeStep({
           <div className="flex-1">
             <div className="flex items-baseline gap-2">
               <div className="text-sm font-medium text-ink-primary">Cloud</div>
-              <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
+              <span className="rounded-sm bg-accent-subtle px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent-text">
                 Recommended
               </span>
             </div>

@@ -277,7 +277,7 @@ export function TeamView({ onGoToSettings }: TeamViewProps): JSX.Element {
             <button
               type="button"
               onClick={() => void refresh()}
-              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-hover"
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent-fill-hover"
             >
               Try again
             </button>

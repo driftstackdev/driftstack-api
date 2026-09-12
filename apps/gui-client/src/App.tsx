@@ -1015,7 +1015,7 @@ function Shell(): JSX.Element {
             <span>You’re not connected yet — finish setup to start launching iPhone sessions.</span>
             <button
               type="button"
-              className="rounded border border-accent/40 px-2 py-0.5 font-medium text-accent hover:bg-accent/15"
+              className="rounded border border-accent/40 px-2 py-0.5 font-medium text-accent-text hover:bg-accent/15"
               onClick={() => setWizardDismissed(false)}
             >
               Finish setup

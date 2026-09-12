@@ -238,7 +238,7 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
                     >
                       <span
                         className={`truncate text-sm font-medium ${
-                          selectedId === r.id ? 'text-accent' : 'text-ink-primary'
+                          selectedId === r.id ? 'text-accent-text' : 'text-ink-primary'
                         }`}
                       >
                         {r.label}

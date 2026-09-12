@@ -103,9 +103,15 @@ const VPN_TAG_TITLE =
 /** Polish — soft inks for coloured text on its own tint. The red-400 and
  *  oxblood-500 TOKENS measure 3.3–3.8:1 and 1.9:1 at 9–10px on their 15–25%
  *  tints; one step lighter (red-300 / oxblood-300) passes 4.5 (measured on the
- *  rendered tile). Literals, because the token file is outside this component. */
+ *  rendered tile). The error ink is a literal, because the token file is
+ *  outside this component. */
 const SOFT_ERROR_INK = 'text-[#fca5a5]';
-const SOFT_ACCENT_INK = 'text-[#e8a0ab]';
+/** Contrast (2026-09-12) — the accent AS TEXT is now a mode-aware token
+ *  (`--accent-text-rgb`: the rose tint in dark, the accent itself in light).
+ *  The dark-only literal #e8a0ab this replaced measured 1.66:1 on the light
+ *  tint (accent at 12% over the raised surface); the token's light value
+ *  measures 4.90 there and its dark value keeps the tile's rose look. */
+const SOFT_ACCENT_INK = 'text-accent-text';
 import {
   OS_FINGERPRINT_MEASURING,
   VPN_TUNNEL_OS_FINGERPRINT,
@@ -824,12 +830,109 @@ export function terseAgo(iso: string, nowMs: number = Date.now()): string {
 }
 
 /** Polish — hues 4–175 (orange → cyan) take the LIGHT thumb gradient
- *  (L58→L52) with the inverted (dark) ink; 176–359 and 0–3 (blue → magenta →
- *  red) the DARK gradient (L32→L24) with white. Searched over the hue wheel
- *  against BOTH gradient stops: every hue ≥ 4.64:1 with its ink. */
+ *  (L58→L52) with a dark ink; 176–359 and 0–3 (blue → magenta → red) the DARK
+ *  gradient (L32→L24) with white. Searched over the hue wheel against BOTH
+ *  gradient stops: every hue ≥ 4.64:1 with its ink. */
 export function thumbUsesDarkInk(hue: number): boolean {
   const h = ((hue % 360) + 360) % 360;
   return h >= 4 && h <= 175;
+}
+
+/** Contrast (2026-09-12) — the thumb's dark ink is a LITERAL (slate-900), not
+ *  `text-ink-inverted`: that token is slate-900 only in dark mode and WHITE in
+ *  light mode, so the light-gradient hues rendered white on a pastel in the
+ *  light theme (hue 60 measured 1.60:1). The thumb's background is an explicit
+ *  hsl() that does not follow the mode, so its ink must not either. Measured
+ *  over all 360 hues at both stops (the unit arm recomputes it in both modes):
+ *  slate-900 on the light gradient worst 4.66 (hue 4), white on the dark
+ *  gradient worst 4.64 (hue 180). */
+export const THUMB_DARK_INK_HEX = '#0f172a';
+export const THUMB_WHITE_INK_HEX = '#ffffff';
+/** VERBATIM class strings — Tailwind's content scanner only emits a utility
+ *  whose full name appears literally in the source; a template built from the
+ *  hex would compile, typecheck, pass jsdom and render NO colour. */
+export const THUMB_DARK_INK_CLASS = 'text-[#0f172a]';
+export const THUMB_WHITE_INK_CLASS = 'text-white';
+
+export interface ThumbRecipe {
+  /** Which ink the hue gets (mirrors `data-ink` on the rendered thumb). */
+  ink: 'dark' | 'white';
+  /** The Tailwind class the thumb wears — a literal or `text-white`, never a mode token. */
+  inkClass: string;
+  /** The ink's colour, the same in both modes. */
+  inkHex: string;
+  /** The two gradient stops (`linear-gradient(145deg, stops[0], stops[1])`). */
+  stops: readonly [string, string];
+  /** The stop with the LOWER contrast against the ink, set as the explicit
+   *  background-color so a contrast reader that cannot see gradients measures
+   *  the honest floor. Computed, not assumed: the polish picked the darker
+   *  stop by lightness, and for 48 hues (hue-shift changes luminance more than
+   *  the 6-point lightness step) that was the BETTER stop. */
+  floor: string;
+  /** The floor's WCAG 2.1 ratio against the ink — what the gate measures. */
+  floorRatio: number;
+}
+
+/** WCAG 2.1 relative luminance of an sRGB colour (the gate's formula). */
+function wcagLuminance([r, g, b]: readonly [number, number, number]): number {
+  const lin = (c: number): number => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+/** CSS `hsl(H S% L%)` → 8-bit sRGB (CSS Color 4's algorithm, as the browser resolves it). */
+function hslToRgb(h: number, s: number, l: number): readonly [number, number, number] {
+  const sat = s / 100;
+  const light = l / 100;
+  const a = sat * Math.min(light, 1 - light);
+  const f = (n: number): number => {
+    const k = (n + h / 30) % 12;
+    return Math.round((light - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255);
+  };
+  return [f(0), f(8), f(4)];
+}
+function hexToRgb(hex: string): readonly [number, number, number] {
+  return [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as unknown as readonly [
+    number,
+    number,
+    number,
+  ];
+}
+/** WCAG 2.1 contrast ratio between two colours. */
+export function wcagContrast(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+): number {
+  const x = wcagLuminance(a);
+  const y = wcagLuminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+}
+
+/** The identity thumb's colours for a hue: ONE place the JSX and the contrast
+ *  arm both read, so the arm measures what renders. */
+export function thumbRecipe(hue: number): ThumbRecipe {
+  const h = ((hue % 360) + 360) % 360;
+  const h2 = (h + 34) % 360;
+  const dark = thumbUsesDarkInk(h);
+  const [s1, l1, s2, l2] = dark ? [58, 58, 52, 52] : [58, 32, 52, 24];
+  const stops = [
+    `hsl(${h.toString()} ${s1.toString()}% ${l1.toString()}%)`,
+    `hsl(${h2.toString()} ${s2.toString()}% ${l2.toString()}%)`,
+  ] as const;
+  const inkHex = dark ? THUMB_DARK_INK_HEX : THUMB_WHITE_INK_HEX;
+  const ink = hexToRgb(inkHex);
+  const r1 = wcagContrast(ink, hslToRgb(h, s1, l1));
+  const r2 = wcagContrast(ink, hslToRgb(h2, s2, l2));
+  const floorIsSecond = r2 < r1;
+  return {
+    ink: dark ? 'dark' : 'white',
+    inkClass: dark ? THUMB_DARK_INK_CLASS : THUMB_WHITE_INK_CLASS,
+    inkHex,
+    stops,
+    floor: floorIsSecond ? stops[1] : stops[0],
+    floorRatio: Math.min(r1, r2),
+  };
 }
 
 /**
@@ -1393,7 +1496,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       : ` · ${whenTitle}`;
 
   // Polish — which thumb recipe this hue gets (see the identity row).
-  const thumbDarkInk = thumbUsesDarkInk(p.hue);
+  const thumb = thumbRecipe(p.hue);
 
   const dot = (cls: string): JSX.Element => (
     <span aria-hidden="true" className={`mr-1 inline-block h-1.5 w-1.5 rounded-full ${cls}`} />
@@ -1823,24 +1926,23 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
               magenta → red) a DARK one (L32→L24) with white — searched over
               the hue wheel at BOTH gradient stops, worst hue 4.64. The explicit
               background-color is the recipe's worst-case stop, so a contrast
-              reader that cannot see gradients measures the honest floor. */}
+              reader that cannot see gradients measures the honest floor.
+              Contrast (2026-09-12): the dark ink is a slate-900 LITERAL, not
+              `text-ink-inverted` (white in light mode → 1.60:1 at hue 60);
+              `thumbRecipe` is the one source for ink + stops. */}
           <div
             data-region="identity"
             className="mb-[5px] flex h-[38px] shrink-0 items-center gap-2 overflow-hidden pl-5"
           >
             <span
               data-component="identity-thumb"
-              data-ink={thumbDarkInk ? 'dark' : 'white'}
+              data-ink={thumb.ink}
               className={`relative grid h-[38px] w-[22px] shrink-0 place-items-center rounded-[5px] font-bold ring-1 ring-white/25 ${
-                thumbDarkInk ? 'text-ink-inverted' : 'text-white'
+                thumb.inkClass
               } ${p.icon ? 'text-[12px]' : 'text-[9px]'}`}
               style={{
-                backgroundColor: thumbDarkInk
-                  ? `hsl(${(p.hue + 34) % 360} 52% 52%)`
-                  : `hsl(${p.hue} 58% 32%)`,
-                backgroundImage: thumbDarkInk
-                  ? `linear-gradient(145deg, hsl(${p.hue} 58% 58%), hsl(${(p.hue + 34) % 360} 52% 52%))`
-                  : `linear-gradient(145deg, hsl(${p.hue} 58% 32%), hsl(${(p.hue + 34) % 360} 52% 24%))`,
+                backgroundColor: thumb.floor,
+                backgroundImage: `linear-gradient(145deg, ${thumb.stops[0]}, ${thumb.stops[1]})`,
               }}
             >
               {p.icon ? p.icon : p.monogram}
@@ -2300,7 +2402,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 ? 'bg-status-ready/[0.18] text-status-ready enabled:hover:bg-status-ready/25 disabled:opacity-50'
                 : p.launching
                   ? 'cursor-progress bg-ink-muted/15 text-ink-secondary'
-                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-hover disabled:opacity-50'
+                  : 'bg-accent text-white shadow-[0_3px_10px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.18)] enabled:hover:bg-accent-fill-hover disabled:opacity-50'
             }`}
             disabled={p.busy || (!p.running && p.launchDisabled)}
             aria-busy={!p.running && p.launching}

@@ -707,7 +707,7 @@ export function SettingsView(): JSX.Element {
             <IconCog />
           </span>
           <div className="min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-accent">
+            <span className="text-xs font-semibold uppercase tracking-wider text-accent-text">
               Settings
             </span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
@@ -778,7 +778,7 @@ export function SettingsView(): JSX.Element {
           <SectionHeader
             icon={<IconKey />}
             title="No API key yet"
-            titleClassName="text-accent dark:text-ink-primary"
+            titleClassName="text-accent-text dark:text-ink-primary"
           />
           <p className="mt-3 text-sm text-ink-secondary">
             {draftMode === 'cloud' ? (
@@ -864,7 +864,7 @@ export function SettingsView(): JSX.Element {
                 onClick={() => void update({ themeMode: m })}
                 className={
                   settings.themeMode === m
-                    ? 'bg-accent px-3 py-1.5 text-xs font-semibold text-ink-inverted'
+                    ? 'bg-accent px-3 py-1.5 text-xs font-semibold text-accent-on'
                     : 'bg-surface-inset px-3 py-1.5 text-xs text-ink-secondary transition-colors hover:text-ink-primary'
                 }
               >
@@ -1425,7 +1425,7 @@ export function SettingsView(): JSX.Element {
               href="https://status.driftstack.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-accent hover:underline"
+              className="text-accent-text hover:underline"
             >
               Status
             </a>
@@ -1436,14 +1436,14 @@ export function SettingsView(): JSX.Element {
               href="https://docs.driftstack.io"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-accent hover:underline"
+              className="text-accent-text hover:underline"
             >
               Docs
             </a>
             <span className="ml-1 text-2xs text-ink-muted">— quickstart + reference</span>
           </li>
           <li>
-            <a href="mailto:support@driftstack.dev" className="text-accent hover:underline">
+            <a href="mailto:support@driftstack.dev" className="text-accent-text hover:underline">
               support@driftstack.dev
             </a>
           </li>

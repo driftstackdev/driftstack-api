@@ -211,7 +211,7 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
             <IconActivity />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Network</span>
+            <span className="section-label text-accent-text">Network</span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
               Connectivity test
             </h2>

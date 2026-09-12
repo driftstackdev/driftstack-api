@@ -42,7 +42,7 @@ export function OsReadout({
             ? 'A VPN tunnel has no SOCKS5 stack for the control plane to fingerprint.'
             : 'Not measured yet — run Test on this profile’s proxy (Proxies screen) to fingerprint its stack.'
         }
-        className="mt-1 text-[10px] leading-snug text-white/40"
+        className="mt-1 text-[10px] leading-snug text-white/50"
       >
         {vpn ? 'OS: not available for a VPN tunnel' : 'OS: not measured'}
       </div>

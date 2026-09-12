@@ -1595,7 +1595,7 @@ function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
             🌍
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Network egress</span>
+            <span className="section-label text-accent-text">Network egress</span>
             <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
               Egress proxies
               <span className="mono ml-2 text-base font-normal text-ink-muted">
@@ -1644,7 +1644,10 @@ function SimulatorScene(): JSX.Element {
   const phoneW = 300;
   const simSize = sceneSize('simulator');
   const infoCard = 'rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2';
-  const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/40';
+  // Mirrors SimulatorWindow's drawer captions (S1: text-white/50 = 4.9 on #1d1e24;
+  // /40 was 3.77). A replica that lags the real drawer is what the text-quality
+  // gate measures, so it must move with it.
+  const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/50';
   return (
     <div
       data-scene="simulator"
@@ -1657,6 +1660,10 @@ function SimulatorScene(): JSX.Element {
     >
       <div
         data-component="scene-simulator-window"
+        // The real simulator-shell scopes its fixed-dark chrome to the dark
+        // tokens in both themes (SimulatorWindow.tsx); the scene's window does
+        // the same so the light-theme measurement is of the chrome as shipped.
+        data-mode="dark"
         className="flex flex-col overflow-hidden rounded-[16px] bg-[#1d1e24] shadow-[0_30px_80px_rgba(0,0,0,0.55)] ring-1 ring-white/[0.12]"
         style={{ width: phoneW + 252 }}
       >
@@ -1701,12 +1708,12 @@ function SimulatorScene(): JSX.Element {
               <div className={infoCard}>
                 <div className={infoLabel}>Link</div>
                 <div className="mt-0.5 truncate">
-                  eu-1.fleet.example.com<span className="text-ink-secondary"> · ws ✓</span>
+                  eu-1.fleet.example.com<span className="text-white/50"> · ws ✓</span>
                 </div>
               </div>
               <div className={infoCard}>
                 <div className={infoLabel}>Egress</div>
-                <div className="mt-0.5 truncate">
+                <div className="mt-0.5 truncate" title="🌍 Residential NL #3 · Europe/Amsterdam">
                   🌍 Residential NL #3
                   <span data-component="sim-proxy-timezone"> · Europe/Amsterdam</span>
                 </div>
@@ -1734,7 +1741,7 @@ function CommandCenterScene(): JSX.Element {
       <div className="flex flex-col gap-4 p-6">
         <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
           <div className="flex flex-col gap-1">
-            <span className="section-label text-accent">Good morning</span>
+            <span className="section-label text-accent-text">Good morning</span>
             <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
               What do you want to automate?
             </h1>

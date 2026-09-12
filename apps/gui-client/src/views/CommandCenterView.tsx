@@ -534,7 +534,7 @@ export function CommandCenterView({
           other strip. */}
       <section className="flex flex-col gap-3 rounded-xl border border-surface-divider bg-surface-raised p-5">
         <div className="flex flex-col gap-1">
-          <span className="section-label text-accent">{hello}</span>
+          <span className="section-label text-accent-text">{hello}</span>
           <h1 className="text-xl font-semibold tracking-tight text-ink-primary">
             What do you want to automate?
           </h1>
@@ -668,7 +668,7 @@ export function CommandCenterView({
           <span className="section-label">Jump back in</span>
           <button
             type="button"
-            className="py-1 text-xs font-medium text-accent hover:underline"
+            className="py-1 text-xs font-medium text-accent-text hover:underline"
             onClick={() => onNavigate('profiles')}
           >
             all profiles →
@@ -692,7 +692,7 @@ export function CommandCenterView({
           <span className="section-label">Session health</span>
           <button
             type="button"
-            className="py-1 text-xs font-medium text-accent hover:underline"
+            className="py-1 text-xs font-medium text-accent-text hover:underline"
             onClick={() => onNavigate('sessions')}
           >
             view all →
@@ -809,7 +809,7 @@ function HealthTile({
       <span className="flex items-center justify-between gap-2">
         <span className="section-label">{label}</span>
         {onClick !== undefined && (
-          <span className="section-label text-accent" aria-hidden="true">
+          <span className="section-label text-accent-text" aria-hidden="true">
             view live →
           </span>
         )}
@@ -954,7 +954,7 @@ function RecentProfilesStrip({
             className="group flex items-center gap-2.5 rounded-xl border border-surface-divider bg-surface-raised px-3 py-2.5 text-left transition-colors hover:border-accent/50 hover:bg-surface-elevated"
           >
             <span
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-sm font-semibold text-ink-secondary transition-colors group-hover:text-accent"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-inset text-sm font-semibold text-ink-secondary transition-colors group-hover:text-accent-text"
               aria-hidden="true"
             >
               {profileMonogram(p.name)}
@@ -1045,7 +1045,7 @@ export function Kpi({
         ) : (
           <span
             title={String(value)}
-            className={`mono text-3xl font-semibold leading-none tabular-nums truncate ${accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'}`}
+            className={`mono text-3xl font-semibold leading-none tabular-nums truncate ${accent ? 'text-accent-text dark:text-status-ready' : 'text-ink-primary'}`}
           >
             {value}
           </span>

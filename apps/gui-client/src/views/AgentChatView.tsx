@@ -208,7 +208,7 @@ function formatUsd(cents: number): string {
 /* Written out in full rather than composed, because Tailwind's scanner only
    sees class names that appear literally in the source. */
 const STATUS_PILL_TONE: Record<SessionStateDescriptor['tone'], string> = {
-  running: 'bg-accent/15 text-accent',
+  running: 'bg-accent/15 text-accent-text',
   starting: 'bg-status-busy/15 text-status-busy',
   stopping: 'bg-status-idle/15 text-status-idle',
   ready: 'bg-status-ready/15 text-status-ready',
@@ -1683,7 +1683,7 @@ function ChatRail({
           onClick={onNew}
           disabled={busy}
           title={busy ? 'Finish or stop the current reply first' : undefined}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-hover disabled:opacity-40"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white hover:bg-accent-fill-hover disabled:opacity-40"
         >
           + New chat
         </button>

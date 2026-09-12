@@ -87,7 +87,7 @@ function Chip({ label, on, disabled, onClick }: ChipProps): JSX.Element {
       onClick={onClick}
       className={`whitespace-nowrap rounded-full border px-2.5 py-1 text-2xs transition-colors ${
         on
-          ? 'border-accent bg-accent-subtle text-accent'
+          ? 'border-accent bg-accent-subtle text-accent-text'
           : 'border-surface-divider bg-surface-inset text-ink-secondary hover:text-ink-primary'
       } ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
     >

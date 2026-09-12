@@ -18,6 +18,25 @@ import { describe, expect, it } from 'vitest';
 import { OsReadout } from '../../src/components/OsReadout';
 import type { AgentSessionCapabilityReport } from '../../src/lib/agent-session-control';
 
+/** WCAG 2.1 contrast of a `text-white/<alpha>` class over the simulator drawer's own chrome
+ *  (#1d1e24, dark in BOTH themes) — computed from the class the DOM carries. */
+function whiteAlphaContrast(className: string): number {
+  const m = /(?:^|\s)text-white\/(\d+)(?:\s|$)/.exec(className);
+  if (m === null) throw new Error(`no text-white/<alpha> class on: ${className}`);
+  const alpha = Number(m[1]) / 100;
+  const chrome: readonly [number, number, number] = [0x1d, 0x1e, 0x24];
+  const channel = (v: number): number => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = ([r, g, b]: readonly [number, number, number]): number =>
+    0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  const over = (v: number): number => 255 * alpha + v * (1 - alpha);
+  const fg = lum([over(chrome[0]), over(chrome[1]), over(chrome[2])]);
+  const bg = lum(chrome);
+  return (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+}
+
 function report(over: Partial<AgentSessionCapabilityReport>): AgentSessionCapabilityReport {
   return {
     manual_input_available: null,
@@ -78,5 +97,21 @@ describe('OsReadout', () => {
       <OsReadout report={report({ os_fingerprint: { os: 'macos-or-ios', confidence: 'high' } })} />,
     );
     expect(screen.getByText(/OS: macos-or-ios · high/)).toBeTruthy();
+  });
+
+  it('(S1) the muted absence lines ("not measured", "not available") clear WCAG AA (4.5) on the drawer chrome', () => {
+    // Measured 2026-09-12: the shared caption tint text-white/40 is 3.77 on #1d1e24. The
+    // guard is the RATIO from the class the DOM carries, with the shipped-before value as
+    // the control so the instrument is known to fail.
+    for (const r of [null, report({}), report({ proxy_kind: 'wireguard' })]) {
+      const { container, unmount } = render(<OsReadout report={r} />);
+      const el = container.querySelector('[data-component="sim-os-readout"]');
+      expect(el, 'the readout renders').not.toBeNull();
+      expect(whiteAlphaContrast(el?.className ?? ''), el?.textContent ?? '').toBeGreaterThanOrEqual(
+        4.5,
+      );
+      unmount();
+    }
+    expect(whiteAlphaContrast('mt-1 text-white/40')).toBeCloseTo(3.77, 2);
   });
 });

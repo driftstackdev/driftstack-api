@@ -44,10 +44,19 @@
      in the UI. Reserved for the action that ends the user's current
      intent. Multiple primary buttons on one screen is a design smell. */
   .btn-primary {
+    /* 2026-09-12 (text-contrast batch, review) — the hover DARKENS. The face is
+       white (text-accent-on) at text-sm, so it needs 4.5:1 in every state a
+       pointer can put it in: rest oxblood-500 6.18, active oxblood-600 8.20 —
+       but `hover:bg-accent-hover` is oxblood-400 (#c8606e), where white reads
+       3.92. That is the same trap the bright variant's note below documents,
+       and every `bg-accent … text-white hover:bg-accent-hover` button in the
+       views had it. `--accent-fill-hover-rgb` (oxblood-550, white 7.11) is the
+       hover of an accent FILL that carries text; `--accent-hover-rgb` stays the
+       lighter rose the profile tile uses for borders and rings. */
     @apply inline-flex items-center justify-center rounded
            px-3 py-1.5 text-sm font-medium
-           bg-accent text-ink-inverted
-           hover:bg-accent-hover active:bg-accent-active
+           bg-accent text-accent-on
+           hover:bg-accent-fill-hover active:bg-accent-active
            focus-visible:ring-2 focus-visible:ring-accent-ring
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors;
@@ -73,7 +82,7 @@
   .btn-primary-bright {
     @apply inline-flex items-center justify-center rounded
            px-3 py-1.5 text-sm font-semibold
-           text-ink-inverted
+           text-accent-on
            focus-visible:ring-2 focus-visible:ring-accent-ring
            disabled:opacity-50 disabled:cursor-not-allowed
            transition-colors;
@@ -324,6 +333,21 @@
   --accent-subtle-rgb: 168 59 77;
   --accent: #a83b4d;
   --accent-ring: rgba(168, 59, 77, 0.4);
+  /* 2026-09-12 (text-contrast batch, T1) — the ink that sits ON an accent fill
+     (.btn-primary, the bright variant, any `bg-accent` chip). It lives on the
+     ACCENT axis, not the mode axis, because it is a property of the fill: white
+     on oxblood-500 is 6.18:1 in either theme. It used to be `text-ink-inverted`,
+     which is white in light mode but slate-900 in dark — so every dark-mode
+     primary button was dark text on oxblood at 2.89:1 (measured by
+     scripts/gui-text-quality.mjs on the six harness scenes). */
+  --on-accent-rgb: 255 255 255;
+  /* 2026-09-12 (review) — the HOVER of an accent fill that carries text. The
+     conventional hover on a filled button darkens; oxblood-400 (--accent-hover)
+     lightened, and white on it is 3.92:1 — under the 4.5 a text-sm face needs.
+     Oxblood-550 sits between the resting 500 and the pressed 600: white 7.11.
+     --accent-hover-rgb is untouched — it is still the rose the profile tile's
+     borders, rings and the selection dot hover to, none of which carry text. */
+  --accent-fill-hover-rgb: 154 52 70; /* oxblood-550 #9a3446 */
 }
 [data-mode='light'] {
   color-scheme: light;
@@ -341,12 +365,43 @@
   --surface-divider-rgb: 205 211 220;
   --ink-primary-rgb: 26 29 35;
   --ink-secondary-rgb: 82 88 99;
-  --ink-muted-rgb: 133 140 152;
+  /* 2026-09-12 (text-contrast batch, T3) — was 133 140 152 (#858c98), which the
+     V-1611 note above did NOT cover: "well above AA" was true of PRIMARY ink
+     only. Measured by scripts/gui-text-quality.mjs over the six harness scenes,
+     muted text was 3.21:1 on raised, 2.89 on base, 2.64 on inset and 3.33 on
+     elevated — 229 of the light theme's 276 findings. #5b6270 is the lightest
+     grey in the same neutral that clears 4.5 on the WORST surface it sits on
+     (inset #e0e3ea: 4.77; base 5.23; raised 5.82; elevated 6.03; the selected
+     row's accent wash over raised 4.87). Dark is untouched. */
+  --ink-muted-rgb: 91 98 112;
   --ink-inverted-rgb: 255 255 255;
-  --status-ready-rgb: 12 154 93;
-  --status-busy-rgb: 201 138 18;
-  --status-error-rgb: 216 69 60;
+  /* 2026-09-12 (T4) — the light status hues as TEXT: health pills, "UDP ✓",
+     "Open session", "Sign out", "Approaching limit" are 10–13px text, so they
+     need 4.5:1 — and their pills are the same hue washed over the card at
+     /10–/20, which is the surface that actually decides. Each value is the
+     LIGHTEST scale of the previous hue (hue preserved) that clears 4.5 on
+     raised, base, inset AND on its own /20 wash over raised:
+       ready  was 12 154 93 (#0c9a5d): 3.44 raised, 3.07 on its /10 pill →
+              8 106 64 (#086a40): 6.34 raised, 5.70 base, 4.67 on /20 wash
+       busy   was 201 138 18 (#c98a12): 2.80 raised, 2.43 on its /15 pill →
+              123 84 11 (#7b540b): 6.40 raised, 5.76 base, 4.76 on /20 wash
+       error  was 216 69 60 (#d8453c): 4.12 raised, 3.59 on its /10 wash →
+              166 53 46 (#a6352e): 6.29 raised, 5.66 base, 4.59 on /20 wash
+     Dark values pass as they are and are untouched. */
+  --status-ready-rgb: 8 106 64;
+  --status-busy-rgb: 123 84 11;
+  --status-error-rgb: 166 53 46;
   --status-idle-rgb: 138 141 153;
+  /* T2 — the accent AS TEXT. In light mode the accent itself clears AA on the
+     plain surfaces (#a83b4d: 5.87 raised, 5.28 base, 4.81 inset) but NOT on the
+     one accent-on-accent site: the active sidebar badge ("8/10") is accent text
+     on a `bg-accent/20` wash over the `bg-accent-subtle` row — #e0c0c7 — where
+     the accent reads 3.69:1 (measured by scripts/gui-text-quality.mjs on the
+     profiles scenes). #8f3241 is the LIGHTEST scale of the same hue that clears
+     4.5 there (4.64), and it sits between oxblood-500 and the -600 active stop,
+     so accent copy in light is a shade deeper than the fill and still oxblood:
+     7.38 on raised, 6.64 on base, 6.05 on inset, 5.90 on a /15 wash. */
+  --accent-text-rgb: 143 50 65;
   /* selected-row soft accent: light wash instead of the dark mix */
   --accent-subtle-alpha: 0.12;
 }
@@ -372,6 +427,21 @@
   --status-busy-rgb: 251 191 36;
   --status-error-rgb: 248 113 113;
   --status-idle-rgb: 107 114 128;
+  /* T2 — the accent AS TEXT in dark mode. Oxblood-500 (#a83b4d) as 10–14px text
+     on slate is 2.37:1 on raised (#1e293b) and 2.89 on base (#0f172a): every
+     `section-label text-accent` ("Network egress", "Edit proxy", "Good
+     morning"), the accent links and the active sidebar badge failed AA. This is
+     the same hue tinted toward white. The darkest tint that clears 4.5 on
+     raised alone is #c47a86 (t=0.32), but the active sidebar badge ("8/10") is
+     accent text on a `bg-accent/20` wash over the `bg-accent-subtle` row over
+     raised — a #553042 surface — which needs at least #d197a1 (t=0.47, 4.57).
+     #e8a0ab is the tint the profile tile already uses for its VPN tag in dark
+     (tile polish), clears every measured surface (7.00 on raised, 8.54 on base,
+     5.32 on the badge wash, 4.95 on elevated) and keeps ONE meaning for
+     "accent as text" across the app — so the token is unified there rather
+     than at a second, slightly darker rose. The accent itself (logo, rings,
+     fills, progress bars) is untouched. */
+  --accent-text-rgb: 232 160 171;
   --accent-subtle-alpha: 0.25;
 }
 

@@ -262,7 +262,7 @@ export function FleetView(): JSX.Element {
             <IconServer />
           </span>
           <div className="min-w-0 flex-1">
-            <span className="section-label text-accent">Cluster</span>
+            <span className="section-label text-accent-text">Cluster</span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
               Mac mini fleet
             </h2>
@@ -571,7 +571,7 @@ function Stat({
       </div>
       <span
         className={`mono text-2xl font-semibold leading-none tracking-tight tabular-nums ${
-          accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'
+          accent ? 'text-accent-text dark:text-status-ready' : 'text-ink-primary'
         }`}
       >
         {value}

@@ -179,7 +179,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
             <FilmGlyph size={18} />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Sessions</span>
+            <span className="section-label text-accent-text">Sessions</span>
             <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
               Recordings
               <span className="mono text-base font-medium text-ink-muted">{list.length}</span>
@@ -265,7 +265,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                       type="button"
                       aria-label="Copy session ID"
                       title="Copy session ID"
-                      className="text-2xs text-accent hover:underline"
+                      className="text-2xs text-accent-text hover:underline"
                       onClick={() => void handleCopySession(selected.sessionId)}
                     >
                       Copy

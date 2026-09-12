@@ -21,6 +21,10 @@ import {
   visibleMeta,
   terseAgo,
   thumbUsesDarkInk,
+  thumbRecipe,
+  wcagContrast,
+  THUMB_DARK_INK_CLASS,
+  THUMB_DARK_INK_HEX,
   vpnFailureClause,
   vpnNoticeClause,
   DEFAULT_CONTENT_WIDTH,
@@ -532,6 +536,78 @@ describe('the Clear group expands on CLICK, never on hover (V-2149)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 const SRC = resolve(__dirname, '../../src');
 const source = (rel: string): string => readFileSync(resolve(SRC, rel), 'utf8');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contrast (2026-09-12) — the colour arms below measure the WCAG 2.1 ratio the
+// gate (scripts/gui-text-quality.mjs) measures, from the tokens in
+// styles/index.css, so a mode-flipping token is measured in EACH mode.
+type Rgb = readonly [number, number, number];
+// Comments stripped first: the token layer's prose mentions `data-mode`, and a
+// comment ABOVE a block is part of that block's selector text to the parser.
+const INDEX_CSS = source('styles/index.css').replace(/\/\*[\s\S]*?\*\//g, '');
+/** A custom property's value for a mode: a block whose selector names that
+ *  data-mode wins; a block with no data-mode (the accent block) is the fallback.
+ *  THROWS when the property is absent — a missing token must red the arm, never
+ *  read as "no colour" (which is what the browser renders for an undefined
+ *  Tailwind class). */
+function modeVar(name: string, mode: 'light' | 'dark'): string {
+  let fallback: string | null = null;
+  for (const [, selector, body] of INDEX_CSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const m = new RegExp(`--${name}:\\s*([^;]+);`).exec(body ?? '');
+    if (m === null) continue;
+    const value = (m[1] ?? '').replace(/\/\*.*?\*\//g, '').trim();
+    if (new RegExp(`data-mode=['"]${mode}['"]`).test(selector ?? '')) return value;
+    if (!/data-mode/.test(selector ?? '')) fallback = value;
+  }
+  if (fallback === null)
+    throw new Error(`--${name} is not defined for ${mode} in styles/index.css`);
+  return fallback;
+}
+const modeRgb = (name: string, mode: 'light' | 'dark'): Rgb => {
+  const parts = modeVar(`${name}-rgb`, mode).split(/\s+/).map(Number);
+  if (parts.length !== 3 || parts.some((n) => !Number.isInteger(n))) {
+    throw new Error(`--${name}-rgb for ${mode} is not "R G B": ${modeVar(`${name}-rgb`, mode)}`);
+  }
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+};
+const hexRgb = (hex: string): Rgb =>
+  [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as unknown as Rgb;
+/** CSS `hsl(H S% L%)` → sRGB, CSS Color 4's algorithm (what the browser resolves). */
+function hslRgb(css: string): Rgb {
+  const m = /^hsl\((\d+) (\d+)% (\d+)%\)$/.exec(css);
+  if (m === null) throw new Error(`not an hsl() stop: ${css}`);
+  const [h, s, l] = [Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100];
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number): number => {
+    const k = (n + h / 30) % 12;
+    return Math.round((l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255);
+  };
+  return [f(0), f(8), f(4)];
+}
+/** `fg` at `alpha` composited over an opaque `bg`. */
+const over = (fg: Rgb, alpha: number, bg: Rgb): Rgb =>
+  [0, 1, 2].map((i) =>
+    Math.round((fg[i] ?? 0) * alpha + (bg[i] ?? 0) * (1 - alpha)),
+  ) as unknown as Rgb;
+/** What a Tailwind text class resolves to in a mode: a literal, white, or an
+ *  ink token from index.css. Anything else throws (the arm must not guess). */
+function inkOf(cls: string, mode: 'light' | 'dark'): Rgb {
+  if (cls === 'text-white') return [255, 255, 255];
+  const literal = /^text-\[#([0-9a-f]{6})\]$/i.exec(cls);
+  if (literal !== null) return hexRgb(`#${literal[1] ?? ''}`);
+  const token = /^text-(ink-\w+|accent-text)$/.exec(cls);
+  if (token !== null) return modeRgb(token[1] ?? '', mode);
+  throw new Error(`inkOf cannot resolve ${cls}`);
+}
+/** The accent-subtle wash the VPN tag sits on: the accent at the mode's alpha
+ *  over the raised surface (the tile's screen is `bg-surface-raised`). */
+const accentSubtleWash = (mode: 'light' | 'dark'): Rgb =>
+  over(
+    modeRgb('accent-subtle', mode),
+    Number(modeVar('accent-subtle-alpha', mode)),
+    modeRgb('surface-raised', mode),
+  );
+// ─────────────────────────────────────────────────────────────────────────────
 
 const VPN_DOWN = 'The test Mac could not bring the tunnel up: handshake timed out after 20 s.';
 const VPN_NOTICE = 'Tunnel test not run this time — a live session holds the tunnel.';
@@ -2066,7 +2142,10 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(thumbUsesDarkInk(570)).toBe(false);
     const { container, rerender } = render(<ProfilePhoneCard {...props({ hue: 150 })} />);
     const thumb = (): HTMLElement => byComponent(container, 'identity-thumb') as HTMLElement;
-    expect(classes(thumb())).toContain('text-ink-inverted');
+    // Contrast (2026-09-12): the dark ink is the slate-900 LITERAL, never the
+    // inverted token (white in light mode).
+    expect(classes(thumb())).toContain(THUMB_DARK_INK_CLASS);
+    expect(classes(thumb())).not.toContain('text-ink-inverted');
     expect(thumb().getAttribute('data-ink')).toBe('dark');
     expect(thumb().getAttribute('style')).toContain('hsl(150 58% 58%)');
     expect(thumb().getAttribute('style')).toContain('hsl(184 52% 52%)');
@@ -2084,9 +2163,10 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     expect(thumb().getAttribute('style')).toContain('hsl(244 52% 24%)');
     expect(thumb().style.backgroundColor).toBe(rgb('hsl(210 58% 32%)'));
     rerender(<ProfilePhoneCard {...props({ hue: 175 })} />);
-    expect(classes(thumb())).toContain('text-ink-inverted');
+    expect(classes(thumb())).toContain(THUMB_DARK_INK_CLASS);
     rerender(<ProfilePhoneCard {...props({ hue: 176 })} />);
     expect(classes(thumb())).toContain('text-white');
+    expect(classes(thumb())).not.toContain('text-ink-inverted');
     expect(classes(screen.getByText('iPhone 17'))).toContain('text-ink-secondary');
     expect(classes(screen.getByText('Idle'))).toContain('text-ink-secondary');
     expect(classes(pill(container))).toContain('ml-auto');
@@ -2107,6 +2187,74 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
     cleanup();
   });
 
+  it('C1 — the monogram reaches ≥ 4.5:1 on its hue background for EVERY hue 0..359 in BOTH modes: the ink is a literal, so the mode cannot flip it (text-ink-inverted measured 1.60 in light at hue 60); the explicit background-color is the stop that measures WORSE, so the gate reads the honest floor', () => {
+    // Mutations reasoned:
+    //  · THUMB_DARK_INK_CLASS = 'text-ink-inverted' (the polish's class) →
+    //    inkOf resolves it through --ink-inverted-rgb, 255 255 255 in the
+    //    light block → hue 60 measures 1.60 at both stops → red in light.
+    //  · the JSX hardcoding a class instead of thumb.inkClass → the render
+    //    pins above (THUMB_DARK_INK_CLASS present, inverted absent) red.
+    //  · `floor: stops[1]` for the light recipe (the polish's assumption) →
+    //    hue 4's floorRatio 6.63 ≠ min(4.66, 6.63) → the floor arm reds.
+    let worst = { ratio: Number.POSITIVE_INFINITY, hue: -1, mode: 'light', stop: '' };
+    let floorMismatches = 0;
+    for (const mode of ['light', 'dark'] as const) {
+      for (let hue = 0; hue < 360; hue += 1) {
+        const r = thumbRecipe(hue);
+        const ink = inkOf(r.inkClass, mode);
+        // the class and the hex the recipe declares agree in THIS mode
+        expect(ink).toEqual(hexRgb(r.inkHex));
+        const ratios = r.stops.map((stop) => wcagContrast(ink, hslRgb(stop)));
+        ratios.forEach((ratio, k) => {
+          if (ratio < worst.ratio) worst = { ratio, hue, mode, stop: r.stops[k] ?? '' };
+        });
+        const floorRatio = wcagContrast(ink, hslRgb(r.floor));
+        if (Math.abs(floorRatio - Math.min(...ratios)) > 1e-9) floorMismatches += 1;
+        expect(r.floorRatio).toBeCloseTo(Math.min(...ratios), 9);
+        expect(r.stops).toContain(r.floor);
+      }
+    }
+    expect(floorMismatches).toBe(0);
+    // worst over 360 hues × 2 modes × 2 stops: white on hsl(180 58% 32%) = 4.64
+    expect(worst.ratio).toBeGreaterThanOrEqual(4.5);
+    expect(worst).toMatchObject({ hue: 180, stop: 'hsl(180 58% 32%)' });
+    expect(worst.ratio).toBeCloseTo(4.64, 1);
+    // Positive control — the arm fails in the direction the real failure went:
+    // the inverted token IS white in light mode, and white on the light
+    // recipe's hue-60 stops measures 1.60 (< 4.5). In dark mode the same token
+    // is slate-900, which is why the finding was light-only.
+    // Tailwind's scanner needs the class VERBATIM in the source: a template
+    // literal built from the hex (`text-[${HEX}]`) passes every jsdom pin and
+    // renders no colour. The class must equal the hex it claims, and appear
+    // as that exact string in ProfilePhoneCard.tsx.
+    expect(THUMB_DARK_INK_CLASS).toBe(`text-[${THUMB_DARK_INK_HEX}]`);
+    expect(source('components/ProfilePhoneCard.tsx')).toContain(`'${THUMB_DARK_INK_CLASS}'`);
+    expect(inkOf('text-ink-inverted', 'light')).toEqual([255, 255, 255]);
+    expect(inkOf('text-ink-inverted', 'dark')).toEqual(hexRgb(THUMB_DARK_INK_HEX));
+    const white = inkOf('text-ink-inverted', 'light');
+    const worstWhite = Math.min(
+      ...thumbRecipe(60).stops.map((stop) => wcagContrast(white, hslRgb(stop))),
+    );
+    expect(worstWhite).toBeLessThan(4.5);
+    expect(worstWhite).toBeCloseTo(1.6, 1);
+    // The rendered thumb wears exactly the recipe (class, data-ink, both stops,
+    // the floor) — for a hue whose floor is NOT the polish's darker stop (4:
+    // 4.66 on the first stop vs 6.63 on the second).
+    const { container } = render(<ProfilePhoneCard {...props({ hue: 4 })} />);
+    const thumb = byComponent(container, 'identity-thumb') as HTMLElement;
+    const recipe = thumbRecipe(4);
+    expect(recipe.floor).toBe(recipe.stops[0]);
+    expect(recipe.floor).toBe('hsl(4 58% 58%)');
+    expect(classes(thumb)).toContain(recipe.inkClass);
+    expect(thumb.getAttribute('data-ink')).toBe(recipe.ink);
+    expect(thumb.getAttribute('style')).toContain(
+      `linear-gradient(145deg, ${recipe.stops[0]}, ${recipe.stops[1]})`,
+    );
+    const probe = document.createElement('div');
+    probe.style.backgroundColor = recipe.floor;
+    expect(thumb.style.backgroundColor).toBe(probe.style.backgroundColor);
+    cleanup();
+  });
   it('the dock: a white/6% hairline; Launch is a 30px 12px block titled with a sentence; live → mint tint, launching → the neutral busy button at FULL opacity (only launchDisabled dims); ⋯ is a borderless white/6% fill; both wear the solid focus ring', () => {
     const { container, rerender } = render(<ProfilePhoneCard {...props()} />);
     const dock = byComponent(container, 'card-dock') as HTMLElement;
@@ -2120,13 +2268,16 @@ describe("P2 — frame, screen, thumbnail, status, dock: the comp's chrome on th
         'text-[12px]',
         'leading-[30px]',
         'bg-accent',
-        'enabled:hover:bg-accent-hover',
+        'enabled:hover:bg-accent-fill-hover',
         'disabled:opacity-50',
         ...FOCUS_RING,
       ]),
     );
     expect(classes(launch())).not.toContain('py-1.5');
     expect(classes(launch())).not.toContain('hover:bg-accent-hover');
+    // 2026-09-12 review — white on the lighter --accent-hover rose is 3.92:1; the
+    // text-carrying fill hovers to the darker oxblood-550 (7.11) instead.
+    expect(classes(launch())).not.toContain('enabled:hover:bg-accent-hover');
     expect(launch().getAttribute('title')).toBe('Launch a session with this profile');
     const more = screen.getByRole('button', { name: 'More actions' });
     expect(classes(more)).toEqual(
@@ -2174,10 +2325,19 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
     );
     const tag = byComponent(container, 'proxy-vpn-tag') as HTMLElement;
     expect(tag.textContent).toBe('VPN');
+    // Contrast (2026-09-12): the rose ink is the mode-aware accent-text TOKEN,
+    // not the dark-only literal (#e8a0ab measured 1.66 on the light tint).
     expect(classes(tag)).toEqual(
-      expect.arrayContaining(['bg-accent-subtle', 'text-[#e8a0ab]', 'tracking-wide', 'uppercase']),
+      expect.arrayContaining([
+        'bg-accent-subtle',
+        'text-accent-text',
+        'tracking-wide',
+        'uppercase',
+      ]),
     );
     expect(classes(tag)).not.toContain('text-accent');
+    expect(classes(tag)).not.toContain('text-[#e8a0ab]');
+    expect(classes(tag).some((c) => /^text-\[#/.test(c))).toBe(false);
     expect(tag.getAttribute('title')).toBe(
       'OpenVPN / WireGuard tunnel — the whole session, UDP included, travels inside it',
     );
@@ -2209,6 +2369,37 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
     cleanup();
   });
 
+  it("C2 — the accent-text token the VPN tag wears clears 4.5:1 on the tag's tint (accent at the mode alpha over the raised surface) in BOTH modes; the literal it replaced fails light and the bare accent fails dark", () => {
+    // Mutations reasoned:
+    //  · SOFT_ACCENT_INK back to 'text-[#e8a0ab]' → the class pin above reds,
+    //    and inkOf('text-[#e8a0ab]', 'light') on the light wash = 1.66 (the
+    //    control below is that exact measurement).
+    //  · styles/index.css dark --accent-text-rgb set to the accent itself
+    //    (168 59 77) → 2.01 on the dark wash → red. A tint that clears 4.5 on
+    //    the raised surface but not on this LIGHTER wash reds here too — the
+    //    tag's real background, not the token's design surface.
+    const { container } = render(
+      <ProfilePhoneCard
+        {...props({ vpn: true, capabilities: null, latencyMs: null, exitIp: null })}
+      />,
+    );
+    const tag = byComponent(container, 'proxy-vpn-tag') as HTMLElement;
+    const inkClass = classes(tag).find((c) => c.startsWith('text-accent')) ?? '';
+    expect(inkClass).toBe('text-accent-text');
+    const measured: Record<string, number> = {};
+    for (const mode of ['light', 'dark'] as const) {
+      const ratio = wcagContrast(inkOf(inkClass, mode), accentSubtleWash(mode));
+      measured[mode] = ratio;
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+    // Positive controls — both directions of the failure the token fixes.
+    expect(wcagContrast(hexRgb('#e8a0ab'), accentSubtleWash('light'))).toBeLessThan(4.5); // 1.66
+    expect(wcagContrast(modeRgb('accent', 'dark'), accentSubtleWash('dark'))).toBeLessThan(4.5); // 2.01
+    // The tile's dark look: the token's dark value is a light rose tint, not the accent.
+    expect(inkOf(inkClass, 'dark')).not.toEqual(modeRgb('accent', 'dark'));
+    expect(measured['light']).toBeGreaterThan(0);
+    cleanup();
+  });
   it('chips are 9.5px/600 radius-6 with ONE muted family; the OS chip wears the same chrome (data-component + data-os-tone kept); the "+N" tails on the caps AND meta rows are dashed and transparent', () => {
     const { container } = render(
       <ProfilePhoneCard

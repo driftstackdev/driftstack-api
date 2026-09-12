@@ -150,7 +150,7 @@ export function SettingsAccountCard(): JSX.Element | null {
           href={`${dashboardUrl}/billing/`}
           target="_blank"
           rel="noreferrer"
-          className="text-sm text-accent underline"
+          className="text-sm text-accent-text underline"
         >
           Manage billing →
         </a>
@@ -182,7 +182,7 @@ export function SettingsAccountCard(): JSX.Element | null {
                 type="button"
                 onClick={() => void handleCopyId(state.account.id)}
                 title="Copy account id"
-                className="block w-full truncate text-right font-mono text-ink-primary underline decoration-dotted underline-offset-2 hover:text-accent"
+                className="block w-full truncate text-right font-mono text-ink-primary underline decoration-dotted underline-offset-2 hover:text-accent-text"
               >
                 {state.account.id}
               </button>

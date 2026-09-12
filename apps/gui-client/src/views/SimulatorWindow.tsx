@@ -1258,7 +1258,14 @@ export function DeviceToolbar({
     void withCurrentWindow((w) => w.startDragging());
   };
   return (
-    <div ref={wrapRef} data-component="simulator-toolbar-wrap" className="relative w-full shrink-0">
+    // data-mode="dark": the toolbar is fixed-dark chrome wherever it is mounted
+    // (the harness renders it standalone under either theme) — see simulator-shell.
+    <div
+      ref={wrapRef}
+      data-mode="dark"
+      data-component="simulator-toolbar-wrap"
+      className="relative w-full shrink-0"
+    >
       <div
         onPointerDown={startToolbarDrag}
         data-component="simulator-toolbar"
@@ -1294,7 +1301,7 @@ export function DeviceToolbar({
             {profileName !== '' ? profileName : deviceName}
           </span>
           {profileName !== '' && (
-            <span className="hidden truncate text-[11px] tracking-tight text-white/45 sm:inline">
+            <span className="hidden truncate text-[11px] tracking-tight text-white/50 sm:inline">
               · {deviceName}
             </span>
           )}
@@ -1398,7 +1405,7 @@ function LabeledControl({
       title={hint ?? label}
       onClick={onClick}
       className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[11.5px] transition-colors hover:bg-white/10 ${
-        active === true ? 'text-accent' : 'text-ink-secondary hover:text-ink-primary'
+        active === true ? 'text-accent-text' : 'text-ink-secondary hover:text-ink-primary'
       }`}
     >
       <span className="w-4 shrink-0 text-center leading-none" aria-hidden="true">
@@ -1516,7 +1523,7 @@ function DrawerRailButton({
       onClick={() => onSelect(pane)}
       className={`group relative flex h-10 w-11 flex-col items-center justify-center gap-0.5 rounded-lg transition-colors ${
         active
-          ? 'bg-accent/20 text-accent ring-1 ring-accent/40'
+          ? 'bg-accent/20 text-accent-text ring-1 ring-accent/40'
           : 'text-ink-secondary hover:bg-white/10 hover:text-ink-primary'
       }`}
     >
@@ -1706,7 +1713,7 @@ export function SessionControlSection({
           <button
             type="button"
             onClick={onRetryControl}
-            className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-accent transition-colors hover:bg-white/10"
+            className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium text-accent-text transition-colors hover:bg-white/10"
           >
             Retry
           </button>
@@ -9033,6 +9040,7 @@ export function SimulatorWindow(): JSX.Element {
         // drag-region (no title bar to grab) with its own close affordance.
         <div
           data-tauri-drag-region
+          data-mode="dark"
           data-component="simulator-empty"
           className="relative flex flex-col items-center gap-3 rounded-3xl bg-[#1d1e24] p-8 text-center ring-1 ring-white/10"
         >
@@ -9053,7 +9061,21 @@ export function SimulatorWindow(): JSX.Element {
           </p>
         </div>
       ) : (
-        <div data-component="simulator-shell" className="flex h-full w-full flex-col">
+        // data-mode="dark" (2026-09-12 review) — the shell is the simulator's OWN
+        // fixed-dark chrome (#1d1e24 toolbar and drawer, #17181d cards) in both
+        // themes, so every MODE token inside it must resolve to the dark value.
+        // The theme axis is an attribute selector, not :root, so scoping it here
+        // is enough: under a light <html> the drawer's text-ink-secondary was
+        // #525863 on #1d1e24 (2.48), the toolbar's "Live" text-status-ready 2.49,
+        // the QUIC readout 2.66 and the WebRTC-leak line 2.68 — all passing in
+        // dark. The standalone simulator window pins <html data-mode="dark">
+        // (main.tsx), so this changes nothing there; the harness and any host
+        // that mounts the shell under a light theme get the same chrome.
+        <div
+          data-mode="dark"
+          data-component="simulator-shell"
+          className="flex h-full w-full flex-col"
+        >
           <DeviceToolbar
             deviceName={deviceName}
             profileName={profileName}
@@ -9819,7 +9841,7 @@ export function SimulatorWindow(): JSX.Element {
                                   {conn.relayed ? ' relay⚠' : ''}
                                 </span>
                               ) : (
-                                <span className="text-white/40">link…</span>
+                                <span className="text-white/50">link…</span>
                               )}
                             </div>
                             <div className="truncate">
@@ -9847,7 +9869,7 @@ export function SimulatorWindow(): JSX.Element {
                                       {conn.rttMs}ms
                                     </span>
                                   ) : (
-                                    <span className="text-white/40">measuring…</span>
+                                    <span className="text-white/50">measuring…</span>
                                   )
                                 }
                               </LiveLatencySubscriber>
@@ -10020,7 +10042,7 @@ export function SimulatorWindow(): JSX.Element {
                           data-component="typing-shortcuts"
                           className="mt-1 border-t border-white/[0.08] px-3 pb-1.5 pt-1.5 text-[10.5px] leading-relaxed text-ink-secondary"
                         >
-                          <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                          <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                             Typing
                           </div>
                           <div className="mt-1 flex items-baseline gap-2">
@@ -10092,7 +10114,7 @@ export function SimulatorWindow(): JSX.Element {
                                 {/* 2-up stat tiles — Render fps + Latency (live number). */}
                                 <div className="grid grid-cols-2 gap-2">
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                       Render
                                     </div>
                                     <LiveFpsSubscriber store={fpsStore}>
@@ -10107,7 +10129,7 @@ export function SimulatorWindow(): JSX.Element {
                                     </LiveFpsSubscriber>
                                   </div>
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                       Latency
                                     </div>
                                     <LiveLatencySubscriber store={latencyStore}>
@@ -10146,7 +10168,7 @@ export function SimulatorWindow(): JSX.Element {
 
                                 {/* Transport + decode/loss/jitter/freeze line (preserved). */}
                                 <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed">
-                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                     Transport
                                   </div>
                                   <div className="mt-0.5 truncate">
@@ -10226,31 +10248,31 @@ export function SimulatorWindow(): JSX.Element {
                                 {/* Info cards — Profile / Device / Link / Egress (preserved values). */}
                                 {profileName !== '' && (
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                       Profile
                                     </div>
                                     <div className="mt-0.5 truncate">{profileName}</div>
                                   </div>
                                 )}
                                 <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                     Device
                                   </div>
                                   <div className="mt-0.5 truncate">{deviceName}</div>
                                 </div>
                                 <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                     Link
                                   </div>
                                   <div className="mt-0.5 truncate">
                                     {info ? wsHost(info.ws_url) : 'not connected'}
-                                    {info && <span className="text-ink-secondary"> · ws ✓</span>}
+                                    {info && <span className="text-white/50"> · ws ✓</span>}
                                   </div>
                                 </div>
                                 {(proxyLabel !== '' ||
                                   reportHasEgressReadout(sessionCapabilityReport)) && (
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
-                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                    <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                       Egress
                                     </div>
                                     {/* MED #2 — ONLY the cosmetic "🌍 {proxyLabel}" line is gated on
@@ -10259,7 +10281,10 @@ export function SimulatorWindow(): JSX.Element {
                                         (a reopened session whose proxy resolved to '' still shows its
                                         measured exit identity). */}
                                     {proxyLabel !== '' && (
-                                      <div className="mt-0.5 truncate">
+                                      <div
+                                        className="mt-0.5 truncate"
+                                        title={`🌍 ${proxyLabel}${displayTimezone !== '' ? ` · ${displayTimezone}` : ''}`}
+                                      >
                                         🌍 {proxyLabel}
                                         {displayTimezone !== '' && (
                                           <span data-component="sim-proxy-timezone">
@@ -10290,14 +10315,14 @@ export function SimulatorWindow(): JSX.Element {
 
                                 {/* Identity facts (preserved). */}
                                 <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2 font-mono text-[10px] leading-relaxed text-white/80">
-                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/40">
+                                  <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                     Identity
                                   </div>
                                   <div className="mt-0.5 truncate">
                                     engine-deep · bit-exact device
                                   </div>
                                   <div className="truncate">input human-cadence native</div>
-                                  <div className="truncate text-white/40">
+                                  <div className="truncate text-white/50">
                                     build{' '}
                                     {typeof __BUILD_STAMP__ !== 'undefined'
                                       ? __BUILD_STAMP__
@@ -10373,7 +10398,7 @@ export function SimulatorWindow(): JSX.Element {
                           </span>
                           <span>Files</span>
                           {files.length > 0 && (
-                            <span className="text-white/40">· {files.length}</span>
+                            <span className="text-white/50">· {files.length}</span>
                           )}
                         </div>
 
@@ -10418,8 +10443,8 @@ export function SimulatorWindow(): JSX.Element {
                           }}
                           className={`flex w-full flex-col items-center gap-1 rounded-xl border border-dashed px-4 py-5 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                             fileDragOver
-                              ? 'border-accent bg-accent/5 text-accent'
-                              : 'border-white/15 text-white/45 hover:border-accent hover:bg-accent/5 hover:text-accent'
+                              ? 'border-accent bg-accent/5 text-accent-text'
+                              : 'border-white/15 text-white/45 hover:border-accent hover:bg-accent/5 hover:text-accent-text'
                           }`}
                         >
                           <span aria-hidden="true" className="text-[15px] leading-none">
@@ -10434,7 +10459,7 @@ export function SimulatorWindow(): JSX.Element {
                                   ? 'Uploading…'
                                   : 'Drop a file or click to upload'}
                           </span>
-                          <span className="text-[10px] text-white/35">
+                          <span className="text-[10px] text-white/50">
                             → feeds the page&apos;s file picker · max 64 MiB
                           </span>
                         </button>
@@ -10446,7 +10471,7 @@ export function SimulatorWindow(): JSX.Element {
                         )}
 
                         {files.length === 0 ? (
-                          <div className="font-mono text-[10px] text-white/40">
+                          <div className="font-mono text-[10px] text-white/50">
                             {sessionId === ''
                               ? 'Start the session to upload files into the device.'
                               : 'no files uploaded'}
@@ -10471,7 +10496,7 @@ export function SimulatorWindow(): JSX.Element {
                                     <div className="truncate text-[11.5px] font-semibold text-white">
                                       {f.name}
                                     </div>
-                                    <div className="truncate text-[10px] text-white/40">
+                                    <div className="truncate text-[10px] text-white/50">
                                       {formatFileSize(f.size)} · uploaded
                                     </div>
                                   </div>
@@ -10512,7 +10537,7 @@ export function SimulatorWindow(): JSX.Element {
                               </span>
                               <span>Downloads</span>
                               {downloads !== null && downloads.length > 0 && (
-                                <span className="text-white/40">· {downloads.length}</span>
+                                <span className="text-white/50">· {downloads.length}</span>
                               )}
                               {downloads !== null && (
                                 <span
@@ -10532,7 +10557,7 @@ export function SimulatorWindow(): JSX.Element {
 
                             {/* One-line caption (audit #37) — matches the Files pane's
                             explanatory subtitle density so the pane isn't a bare list. */}
-                            <div className="text-[10px] text-white/35">
+                            <div className="text-[10px] text-white/50">
                               Files the page saved · click Save to keep one on your machine
                             </div>
 
@@ -10543,7 +10568,7 @@ export function SimulatorWindow(): JSX.Element {
                             )}
 
                             {downloads === null || downloads.length === 0 ? (
-                              <div className="font-mono text-[10px] text-white/40">
+                              <div className="font-mono text-[10px] text-white/50">
                                 {sessionId === ''
                                   ? 'Start the session to receive downloads from the device.'
                                   : 'no downloads yet'}
@@ -10568,7 +10593,7 @@ export function SimulatorWindow(): JSX.Element {
                                         <div className="truncate text-[11.5px] font-semibold text-white">
                                           {d.name}
                                         </div>
-                                        <div className="truncate text-[10px] text-white/40">
+                                        <div className="truncate text-[10px] text-white/50">
                                           {formatFileSize(d.size)}
                                         </div>
                                       </div>

@@ -404,7 +404,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
             <IconPhone />
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Sessions</span>
+            <span className="section-label text-accent-text">Sessions</span>
             <h2 className="mt-0.5 flex items-baseline gap-2 text-2xl font-semibold tracking-tight text-ink-primary">
               Active sessions
               <span className="mono text-base font-medium text-ink-muted">
@@ -692,7 +692,7 @@ function EmptyConnect({
           <IconPhone />
         </span>
         <div className="relative flex flex-col gap-1">
-          <span className="section-label text-accent">Not connected</span>
+          <span className="section-label text-accent-text">Not connected</span>
           <h2 className="text-xl font-semibold tracking-tight text-ink-primary">
             Connect to start sessions
           </h2>
@@ -965,7 +965,7 @@ function Stat({
       </div>
       <span
         className={`mono text-2xl font-semibold leading-none tracking-tight tabular-nums ${
-          accent ? 'text-accent dark:text-status-ready' : 'text-ink-primary'
+          accent ? 'text-accent-text dark:text-status-ready' : 'text-ink-primary'
         }`}
       >
         {value}

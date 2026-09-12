@@ -56,7 +56,7 @@ const TIER_TONE: Record<string, Tone> = {
 const TONE_CLASSES: Record<Tone, string> = {
   neutral: 'bg-surface-inset text-ink-secondary border-surface-divider',
   paid: 'bg-status-success/15 text-status-success border-status-success/30',
-  enterprise: 'bg-accent/15 text-accent border-accent/30',
+  enterprise: 'bg-accent/15 text-accent-text border-accent/30',
 };
 
 const SIZE_CLASSES: Record<NonNullable<TierBadgeProps['size']>, string> = {

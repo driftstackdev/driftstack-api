@@ -306,10 +306,15 @@ export function Sidebar({
             className="flex w-full items-center justify-between rounded
                        bg-status-error/10 px-2 py-1.5 text-left text-xs
                        font-medium text-status-error transition
-                       hover:bg-status-error/20"
+                       hover:bg-status-error/10"
           >
             <span>Sign out</span>
-            <span className="text-2xs opacity-70">⌘⇧L</span>
+            {/* 2026-09-12 (review) — no opacity on the hint: `opacity-70` faded the
+                10px shortcut to 3.02:1 (dark) / 3.16 (light) on the sign-out wash,
+                under the 4.5 it needs, and the text-quality gate only learned to
+                see opacity in the same change. At the button's own status-error
+                ink it reads 4.66 / 5.37. */}
+            <span className="text-2xs">⌘⇧L</span>
           </button>
         </div>
       )}
@@ -370,8 +375,8 @@ function SidebarItem({ children, icon, badge, active, onClick }: SidebarItemProp
           className={
             'shrink-0 rounded px-1.5 py-px font-mono text-2xs ' +
             (active === true
-              ? 'bg-accent/20 text-accent'
-              : 'bg-surface-elevated text-ink-muted group-hover:text-ink-secondary')
+              ? 'bg-accent/20 text-accent-text'
+              : 'bg-surface-elevated text-ink-secondary')
           }
         >
           {badge}

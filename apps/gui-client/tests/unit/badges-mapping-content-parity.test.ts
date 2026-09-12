@@ -88,7 +88,7 @@ describe('W384.B gui-client TierBadge content parity', () => {
     expect(body).toMatch(
       /paid: 'bg-status-success\/15 text-status-success border-status-success\/30',/,
     );
-    expect(body).toMatch(/enterprise: 'bg-accent\/15 text-accent border-accent\/30',/);
+    expect(body).toMatch(/enterprise: 'bg-accent\/15 text-accent-text border-accent\/30',/);
   });
 
   it('SIZE_CLASSES: sm + md variants with specific padding/text classes', () => {

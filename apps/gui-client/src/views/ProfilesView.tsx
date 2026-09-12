@@ -6772,7 +6772,7 @@ export function TagFilterRail({
           <button
             type="button"
             onClick={() => onSelect(null)}
-            className="section-label text-accent hover:underline"
+            className="section-label text-accent-text hover:underline"
           >
             clear
           </button>

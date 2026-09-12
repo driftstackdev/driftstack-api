@@ -143,7 +143,7 @@ export function ExitIpChip({
       <div
         data-component="sim-exit-ip-chip"
         data-state="measuring"
-        className="mt-1 text-[10px] leading-snug text-white/40"
+        className="mt-1 text-[10px] leading-snug text-white/50"
       >
         Exit IP: measuring…
       </div>
@@ -153,6 +153,15 @@ export function ExitIpChip({
   const candidates = report?.webrtc_candidate_ips ?? [];
   const leaks = webrtcLeakIps(report);
   const hasLeak = leaks.length > 0;
+  // Both lines truncate at the drawer's width, so each carries `title` = the
+  // full text it renders (the drawer's pattern for every clipped line). The
+  // strings are built ONCE and rendered from the same values so the tooltip can
+  // never drift from the visible text.
+  const geo = `${report?.exit_country !== undefined ? ` · ${report.exit_country}` : ''}${
+    report?.exit_timezone !== undefined ? ` · ${report.exit_timezone}` : ''
+  }`;
+  const exitLine = `Exit IP ${exitIp}${geo}`;
+  const webrtcLine = `${hasLeak ? '⚠ ' : ''}WebRTC: ${candidates.join(', ')}`;
 
   return (
     <div
@@ -160,16 +169,16 @@ export function ExitIpChip({
       data-state="observed"
       className="mt-1 text-[10px] leading-snug text-white/70"
     >
-      <div className="truncate">
-        <span className="text-white/45">Exit IP </span>
+      <div className="truncate" title={exitLine}>
+        <span className="text-white/50">Exit IP </span>
         <span className="font-mono">{exitIp}</span>
-        {report?.exit_country !== undefined ? ` · ${report.exit_country}` : ''}
-        {report?.exit_timezone !== undefined ? ` · ${report.exit_timezone}` : ''}
+        {geo}
       </div>
       {candidates.length > 0 && (
         <div
           data-component="sim-webrtc-candidates"
           data-leak={hasLeak ? 'true' : 'false'}
+          title={webrtcLine}
           className={`truncate ${hasLeak ? 'text-status-error' : 'text-white/50'}`}
         >
           {hasLeak ? '⚠ ' : ''}WebRTC: <span className="font-mono">{candidates.join(', ')}</span>

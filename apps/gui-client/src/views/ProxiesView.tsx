@@ -1427,7 +1427,7 @@ export function ProxiesView(): JSX.Element {
             🌍
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent">Network egress</span>
+            <span className="section-label text-accent-text">Network egress</span>
             <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
               Egress proxies
               <span className="mono ml-2 text-base font-normal text-ink-muted">
@@ -3319,7 +3319,7 @@ export function ProxyForm({
               🌍
             </span>
             <div className="min-w-0 flex-1">
-              <span className="section-label text-accent">
+              <span className="section-label text-accent-text">
                 {mode === 'add' ? 'Add proxy' : 'Edit proxy'}
               </span>
               <p className="mt-0.5 text-xs text-ink-muted">
@@ -3482,7 +3482,7 @@ export function ProxyForm({
                 : ''}
             </span>
           )}
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+          <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent-text hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
             <span aria-hidden>⤓</span> Upload a wg0.conf file
             <input
               type="file"
@@ -3515,7 +3515,7 @@ export function ProxyForm({
             {validation.errors.openvpn !== undefined && (
               <span className="text-2xs text-status-error">{validation.errors.openvpn}</span>
             )}
-            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
+            <label className="mt-2 inline-flex cursor-pointer items-center gap-1.5 self-start rounded border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent-text hover:bg-accent/20 focus-within:ring-2 focus-within:ring-accent-ring">
               <span aria-hidden>⤓</span> Upload a .ovpn file
               <input
                 type="file"
@@ -3533,7 +3533,7 @@ export function ProxyForm({
                   const fixed = vpnFixable;
                   if (fixed !== null) handleOvpnPaste(fixed);
                 }}
-                className="mt-1 self-start rounded border border-accent/40 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent hover:bg-accent/20"
+                className="mt-1 self-start rounded border border-accent/40 bg-accent/10 px-2 py-0.5 text-2xs font-medium text-accent-text hover:bg-accent/20"
               >
                 Remove unsupported lines (lower script-security to 1)
               </button>

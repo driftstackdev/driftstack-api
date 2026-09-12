@@ -43,9 +43,25 @@ export default {
           DEFAULT: 'rgb(var(--accent-rgb) / <alpha-value>)',
           hover: 'rgb(var(--accent-hover-rgb) / <alpha-value>)',
           active: 'rgb(var(--accent-active-rgb) / <alpha-value>)',
+          // 2026-09-12 review — the hover of an accent FILL that carries text
+          // (.btn-primary, the Launch / New chat buttons). `accent-hover` is the
+          // lighter rose (white on it 3.92:1); this one darkens (7.11:1).
+          'fill-hover': 'rgb(var(--accent-fill-hover-rgb) / <alpha-value>)',
           // soft selected-row wash: accent at a mode-tuned alpha
           subtle: 'rgb(var(--accent-subtle-rgb) / var(--accent-subtle-alpha))',
           ring: 'var(--accent-ring)', // focus ring
+          // 2026-09-12 text-contrast batch — two tokens that separate the accent
+          // as a FILL from the accent as TEXT (styles/index.css T1/T2):
+          //   text-accent-text  the accent as copy (section labels, links, the
+          //                     active sidebar badge, status pills): the accent
+          //                     itself in light, a tint of the same hue in dark
+          //                     that clears 4.5:1 on slate. `text-accent` stays
+          //                     for borders, icons, rings and glyph-only spans.
+          //   text-accent-on    the ink ON an accent fill (.btn-primary): white
+          //                     in both modes. `text-ink-inverted` is slate-900
+          //                     in dark, which put dark text on oxblood at 2.89.
+          text: 'rgb(var(--accent-text-rgb) / <alpha-value>)',
+          on: 'rgb(var(--on-accent-rgb) / <alpha-value>)',
         },
         status: {
           ready: 'rgb(var(--status-ready-rgb) / <alpha-value>)',
