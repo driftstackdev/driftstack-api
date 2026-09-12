@@ -546,7 +546,21 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
       "const infoLabel = 'text-[9.5px] uppercase tracking-[0.04em] text-white/50'",
     );
     expect(g).toContain('<span className="text-white/50"> · ws ✓</span>');
-    expect(g).toContain('title="🌍 Residential NL #3 · Europe/Amsterdam"');
+    // The Egress line is TRUNCATED, so it must carry a title — the same rule
+    // the Linux text gate enforces on every clipped element. Pinned by SHAPE,
+    // not by city: the literal `title="🌍 Residential NL #3 · Europe/Amsterdam"`
+    // used to sit here and broke the moment the scene's fixture exit moved to
+    // Tokyo, which taught the pin nothing about parity — it only made a fixture
+    // edit look like a regression.
+    const egressTitle = /title="🌍 ([^"]+) · ([^"]+)"/.exec(g);
+    expect(egressTitle, 'the drawer Egress line must carry a title — it truncates').not.toBeNull();
+    // ⛔ Whether that title names the SAME exit as the live card is NOT pinned
+    // here, and the attempt is worth recording: asserting the title's proxy
+    // name also appears as a `proxyName:` literal in this file passed a
+    // deliberate contradiction, because EVERY fixture card's proxy name is a
+    // literal in this file — the membership test was vacuous. That fact needs
+    // the rendered DOM (which card is live), so it lives in
+    // marketing-scenes.test.tsx, where the window and the card can be compared.
     expect(g).not.toMatch(/text-white\/40/);
     expect(g).not.toContain('text-ink-secondary"> · ws ✓');
     // and the real drawer still says the same

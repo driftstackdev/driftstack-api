@@ -764,6 +764,26 @@ describe('scene shapes — what scripts/marketing-screens.mjs guards at capture'
         idle,
       );
     }
+
+    // …and the EXIT agrees too. The window and the card behind it are one
+    // session in the picture, so the drawer's Egress line must name the proxy
+    // that live card runs through — a window claiming Tokyo over a card that
+    // says Amsterdam is two different sessions drawn as one. The equivalent
+    // source-text pin in theme-token-parity.test.ts could not hold this: every
+    // fixture card's proxy name is a literal in that same file, so "the name
+    // appears" passed a deliberate contradiction. Here the LIVE card is known.
+    const liveCard = cards.find((c) => nameOf(c) === liveName);
+    expect(liveCard).toBeDefined();
+    if (liveCard === undefined) return;
+    const cardProxy = /Residential [A-Z]{2} #\d+/.exec(liveCard.textContent ?? '')?.[0];
+    expect(cardProxy, 'the live card must name the proxy it runs through').toBeDefined();
+    const drawerEgress =
+      win.querySelector('[title^="🌍 "]')?.getAttribute('title') ??
+      /* the readouts carry it too */ '';
+    expect(
+      drawerEgress,
+      `the window's Egress names ${drawerEgress || '(nothing)'} but the live card runs through ${String(cardProxy)}`,
+    ).toContain(String(cardProxy));
   });
 
   it('billing + command-center: the app chrome frames the real panels', () => {
