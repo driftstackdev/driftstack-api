@@ -41,6 +41,14 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Build workspace packages
+        # The harness imports @driftstack/api-types (and the SDK) by their
+        # built entry points; on a fresh checkout nothing has built them and
+        # vite's import analysis fails on every module that imports them —
+        # the first dispatch of this workflow measured exactly that (both
+        # gates timed out on a harness that never became ready).
+        run: npm run build:packages
+
       - name: Install Chromium for Playwright
         run: npx playwright install --with-deps chromium
 
