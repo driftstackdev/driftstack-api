@@ -402,6 +402,36 @@ const CHIP_GAP = 4;
  *  → 40, CHECK_VPN_ACTION ('Check VPN') 73.98 → 74. ⛔ Re-measure with the table
  *  above — same font, same caveat about which one actually renders. */
 const FIRST_ACTION_WIDTH = { proxy: 40, vpn: 74 } as const;
+/** The VPN action's own compact form, for the same reason the OS label has one:
+ *  at content 144 'Check VPN' (74) leaves 66 for the chips, and after the
+ *  font-slack margin below that is not enough for the '— OS' chip beside the
+ *  pill that carries the tunnel hint — so the narrow VPN card was the ONE row
+ *  that still hid a fact behind a '+N', which is the thing the owner asked
+ *  about. MEASURED with the button's own class in the live harness: 'Check'
+ *  49.61 → 50, against 'Test' 39.41 → 40. It still names the action; the
+ *  button's title carries the full sentence either way. */
+const FIRST_ACTION_WIDTH_COMPACT = { proxy: 40, vpn: 50 } as const;
+const FIRST_ACTION_LABEL_COMPACT = { proxy: 'Test', vpn: 'Check' } as const;
+
+/** Which inline action fits, full label first — the same two-level rule the
+ *  chips use. Returns the label to render and the width the chips are cut
+ *  against, so the two can never disagree. `rowWidth` already carries the slack
+ *  floor, so the comparison below inherits it. */
+export function firstAction(p: CapsInput, contentWidth: number): { label: string; width: number } {
+  const kind = p.vpn === true ? 'vpn' : 'proxy';
+  const full = {
+    label: kind === 'vpn' ? CHECK_VPN_ACTION : 'Test',
+    width: FIRST_ACTION_WIDTH[kind],
+  };
+  const compact = {
+    label: FIRST_ACTION_LABEL_COMPACT[kind],
+    width: FIRST_ACTION_WIDTH_COMPACT[kind],
+  };
+  if (compact.width >= full.width) return full;
+  const { eligible, hidden } = capabilityChips(p);
+  const needed = rowWidth(eligible.map(compacted), hidden.length);
+  return needed <= contentWidth - full.width - CHIP_GAP ? full : compact;
+}
 /** The dashed '+N' tail, for the two pills that wear it: the caps row's
  *  (CHIP_BASE + OVERFLOW_PILL_CLASS, px-1) and the meta row's own rounded-full
  *  9px/400 px-1.5 one. The two DELIBERATELY differ by 4px of padding — the caps
@@ -899,10 +929,31 @@ export interface VisibleChips {
 
 /** The row's own arithmetic: every chip's width, a 4px gap between them, and the
  *  '+N' tail (plus its own gap) when anything is hidden. */
+/** ⛔ THE WIDTH TABLE HAS A HIDDEN INPUT: THE FONT STACK THAT MEASURED IT.
+ *  Every number in CHIP_WIDTH came out of one machine's fallback face, and the
+ *  cut is decided from those numbers rather than from layout — so on a host
+ *  whose fallback is wider, the reservation UNDER-counts and the row clips.
+ *  Not hypothetical: the first Linux CI run of the geometry gate after C1 (run
+ *  34699289995) failed with a caps row needing 147px inside a 144px client.
+ *  Exactly one row, the VPN one, and the thing that singled it out was that it
+ *  had ONE pixel of predicted slack — 143 of 144. Nothing else on the card was
+ *  within 4px of its limit, and nothing else failed.
+ *
+ *  So what the cut needs is not a percentage guessed from a single spread — the
+ *  first attempt here was 8%, and it pushed out the very trio C1 exists for
+ *  ('✓ Apple' makes it 140 of 144, so 8% refuses it). It needs a floor under
+ *  the slack: a row that fits only because of its last pixel does not fit
+ *  anywhere else. Three pixels makes the observed failure unreachable and
+ *  leaves the measured trio in place at 143.
+ *
+ *  ⚠️ This is a floor, not a substitute for the table. Re-measure the table when
+ *  the first family in `font-sans` starts resolving (see CHIP_WIDTH); a floor
+ *  cannot absorb a systematic error, only a marginal one. */
+const CAPS_MIN_SLACK = 3;
 const rowWidth = (chips: readonly CapChip[], hiddenCount: number): number => {
   let width = chips.reduce((sum, c) => sum + c.width, 0) + Math.max(0, chips.length - 1) * CHIP_GAP;
   if (hiddenCount > 0) width += (chips.length > 0 ? CHIP_GAP : 0) + overflowPillWidth(hiddenCount);
-  return width;
+  return width + CAPS_MIN_SLACK;
 };
 /** The same chip wearing its compact label (C1) — or itself when it has none,
  *  OR when the "compact" form is not actually narrower. Without that second
@@ -1638,20 +1689,20 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // scheme-gated (lib/proxy-probe-cache.ts). So: the same three-level cut as mode
   // 'measured', against the width the chips actually have — the row minus the
   // inline action and the gap after it.
-  // ⚠ Residual, MEASURED: 'Check VPN' is 74px, leaving 66 at content 144, and a
-  // VPN row's measured 'QUIC ✓' (45) plus its 2-hint pill (27) is 76. That ONE
-  // state keeps its chip in the pill until content 154 (a 188px card). The pill
-  // is the only thing on the row that can carry the tunnel/OS hints at all, so it
-  // is not the thing to drop for it. The non-VPN case — the measured OS defect,
+  // ⛔ That residual is CLOSED as of the Linux geometry run (see firstAction):
+  // the VPN action compacts to 'Check' (50) when the full label would push a
+  // chip into the pill, so the narrow VPN row shows its '— OS' chip and keeps
+  // the pill for the tunnel hint. The non-VPN case — the measured OS defect,
   // 40px of button — has 100px and renders the FULL '✗ Windows' at 144.
+  // The action's label and the width the chips are cut against come from ONE
+  // call, so the button that renders and the width reserved for it can never
+  // disagree — they were two separate expressions before, and a compact label
+  // added on one side only would have silently cut the chips against a button
+  // that is no longer there.
+  const action = firstAction(p, contentWidth);
   const firstChips: VisibleChips =
     mode === 'first'
-      ? visibleChips(
-          p,
-          contentWidth -
-            (p.vpn === true ? FIRST_ACTION_WIDTH.vpn : FIRST_ACTION_WIDTH.proxy) -
-            CHIP_GAP,
-        )
+      ? visibleChips(p, contentWidth - action.width - CHIP_GAP)
       : { chips: [], hiddenHints: [] };
   const vpn = p.vpn === true;
   const hasNote = p.onSaveNote !== undefined && p.note !== undefined && p.note.trim() !== '';
@@ -2453,7 +2504,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                     : 'bg-white/[0.04] enabled:hover:bg-surface-divider enabled:hover:text-ink-primary disabled:opacity-50'
                 }`}
               >
-                {vpn ? CHECK_VPN_ACTION : 'Test'}
+                {mode === 'first' ? action.label : vpn ? CHECK_VPN_ACTION : 'Test'}
               </button>
             ) : null}
             {mode === 'first' ? (
