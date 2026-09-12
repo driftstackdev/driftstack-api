@@ -12,7 +12,13 @@
 // Pure function → node environment (.test.ts, no jsdom).
 
 import { describe, expect, it } from 'vitest';
-import { cleanMeasuredProtocol, MEASURED_PROTOCOLS } from '../../src/lib/network-log-feed';
+import {
+  cleanEntry,
+  cleanMeasuredProtocol,
+  entryTimeBasis,
+  MEASURED_PROTOCOLS,
+  type NetworkRequestEntry,
+} from '../../src/lib/network-log-feed';
 
 describe('cleanMeasuredProtocol — the protocol closed-set gate', () => {
   // One property per assertion: each member of the closed set is kept verbatim.
@@ -69,5 +75,51 @@ describe('cleanMeasuredProtocol — the protocol closed-set gate', () => {
     expect(accepted).toEqual(['h1', 'h2', 'h3']);
     // And the closed set the validator advertises is exactly those three.
     expect([...MEASURED_PROTOCOLS]).toEqual(['h1', 'h2', 'h3']);
+  });
+});
+
+/* A3 is wiring the fork's resource-load emitter (2026-09-12). Their hook fires
+ * ONCE per resource load, after it completes, and carries no timestamp — so in
+ * v1 the harness stamps `started_at` at parse, which is receive time and so
+ * approximately COMPLETION. The gap between that and a real fetchStart is the
+ * whole load duration, and nothing on the wire would have said so.
+ *
+ * `entryTimeBasis` is where that cannot be forgotten: the default is the
+ * conservative reading, so a row with no basis reads as a completion time and a
+ * renderer has to be TOLD 'start' before it may use the word. */
+describe('entryTimeBasis — what started_at is a timestamp of', () => {
+  const row = (over: Partial<NetworkRequestEntry> = {}): NetworkRequestEntry => ({
+    id: 'r1',
+    url: 'https://shop.example.com/',
+    method: 'GET',
+    status: 200,
+    protocol: 'h3',
+    started_at: 1_781_000_000_000,
+    ...over,
+  });
+
+  it('reads an absent basis as a COMPLETION time, never as a start', () => {
+    expect(entryTimeBasis(row())).toBe('completion');
+    expect(entryTimeBasis(row({ time_basis: 'completion' }))).toBe('completion');
+  });
+
+  it('says start only when the producer said start', () => {
+    expect(entryTimeBasis(row({ time_basis: 'start' }))).toBe('start');
+  });
+
+  it('the wire value survives the entry parser and a junk basis does not', () => {
+    const parsed = [
+      { ...row(), time_basis: 'start' },
+      { ...row(), id: 'r2', time_basis: 'completion' },
+      { ...row(), id: 'r3', time_basis: 'whenever' },
+      { ...row(), id: 'r4' },
+    ]
+      .map(cleanEntry)
+      .filter((e): e is NetworkRequestEntry => e !== null);
+    expect(parsed).toHaveLength(4);
+    expect(parsed.map((e) => e.time_basis)).toEqual(['start', 'completion', undefined, undefined]);
+    // …and the resolver turns both unknowns into the conservative answer. A junk
+    // basis must not survive as a truthy value a renderer could switch on.
+    expect(parsed.map(entryTimeBasis)).toEqual(['start', 'completion', 'completion', 'completion']);
   });
 });

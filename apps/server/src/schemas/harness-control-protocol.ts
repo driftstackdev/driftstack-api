@@ -1708,6 +1708,21 @@ export const NetworkRequestEntrySchema = z.object({
   // Epoch-ms start; bounded below at 0 and above at year-2100 so a bogus
   // timestamp cannot land far in the future.
   started_at: z.number().min(0).max(4102444800000),
+  // ⛔ WHAT `started_at` IS A TIMESTAMP OF. The fork's resource-load hook
+  // (A3, 2026-09-12) fires once per resource load, AFTER completion, and
+  // carries no timestamp — so in v1 the HARNESS stamps `started_at` at parse,
+  // which is receive time and therefore approximately COMPLETION, not the
+  // request's fetchStart. The two differ by the whole load duration.
+  //
+  // Nothing renders it today (`network-log-feed.ts` parses it; no view reads
+  // it), so the approximation costs nothing right now. What it would cost is a
+  // "Started" column added later against a value that never meant that — the
+  // exact shape of a false claim a comment cannot prevent. So the basis rides
+  // WITH the value: 'completion' while the harness stamps it, 'start' once the
+  // fork sends a real fetchStart. Absent means unknown, which a renderer must
+  // treat as 'completion' — the conservative reading, since claiming a start we
+  // do not have is the failure that matters.
+  time_basis: z.enum(['start', 'completion']).optional(),
   // Wall-clock duration in ms, bounded to one hour.
   duration_ms: z.number().min(0).max(3600000).optional(),
   from_cache: z.boolean().optional(),

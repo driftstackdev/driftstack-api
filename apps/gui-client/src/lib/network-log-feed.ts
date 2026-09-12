@@ -61,6 +61,12 @@ export interface NetworkRequestEntry {
   type?: string;
   size_bytes?: number;
   started_at: number;
+  /** What `started_at` is a timestamp OF. Absent means unknown, and a renderer
+   *  must read that as 'completion': while the harness stamps the value at
+   *  receive time (v1 — the fork's resource-load hook carries no timestamp), it
+   *  is approximately when the load FINISHED, and the two differ by the whole
+   *  load duration. Never label the column a start unless this says 'start'. */
+  time_basis?: 'start' | 'completion';
   duration_ms?: number;
   from_cache?: boolean;
   initiator?: string;
@@ -96,7 +102,7 @@ export const NETWORK_RING_CAP = 2000;
  *  through when well-typed and omitted otherwise. `protocol` is copied verbatim
  *  (validation is a RENDER concern — dropping an unknown protocol here would hide
  *  the request entirely, when the contract says render it neutral). */
-function cleanEntry(raw: unknown): NetworkRequestEntry | null {
+export function cleanEntry(raw: unknown): NetworkRequestEntry | null {
   if (raw === null || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   if (
@@ -122,7 +128,19 @@ function cleanEntry(raw: unknown): NetworkRequestEntry | null {
   if (typeof r.duration_ms === 'number') entry.duration_ms = r.duration_ms;
   if (typeof r.from_cache === 'boolean') entry.from_cache = r.from_cache;
   if (typeof r.initiator === 'string') entry.initiator = r.initiator;
+  if (r.time_basis === 'start' || r.time_basis === 'completion') entry.time_basis = r.time_basis;
   return entry;
+}
+
+/** What `started_at` on this entry is a timestamp OF, resolved for a renderer.
+ *  ABSENT reads as 'completion', deliberately, and that asymmetry is the whole
+ *  point: while the harness stamps the value at receive time (v1 — the fork's
+ *  resource-load hook fires after completion and carries no timestamp), calling
+ *  it a start would overstate it by the entire load duration. A renderer that
+ *  defaults the other way would label every v1 row "Started" and be wrong on
+ *  all of them. Only an explicit 'start' from the producer earns that word. */
+export function entryTimeBasis(entry: NetworkRequestEntry): 'start' | 'completion' {
+  return entry.time_basis === 'start' ? 'start' : 'completion';
 }
 
 /** Coerce the wire `next_after` to a NetworkCursor; anything else → null (stop). */
