@@ -254,13 +254,18 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
                 )}
               </div>
               <Thumb recording={selected} large />
-              <p className="truncate text-sm font-semibold tracking-tight text-ink-primary">
+              <p
+                className="truncate text-sm font-semibold tracking-tight text-ink-primary"
+                title={selected.label ?? selected.sessionId}
+              >
                 {selected.label ?? selected.sessionId}
               </p>
               <dl className="flex flex-col">
                 <FactRow k="Session">
                   <span className="flex items-center gap-1.5">
-                    <span className="mono text-ink-secondary">{selected.sessionId}</span>
+                    <span className="mono text-ink-secondary" title={selected.sessionId}>
+                      {selected.sessionId}
+                    </span>
                     <button
                       type="button"
                       aria-label="Copy session ID"
@@ -442,7 +447,10 @@ function RecordingCard({
         )}
       </div>
       <div className="px-3 py-2">
-        <p className="truncate text-sm font-semibold tracking-tight text-ink-primary">
+        <p
+          className="truncate text-sm font-semibold tracking-tight text-ink-primary"
+          title={r.label ?? r.sessionId}
+        >
           {r.label ?? r.sessionId}
         </p>
         <p className="mono mt-0.5 flex items-center gap-1.5 text-2xs text-ink-muted">

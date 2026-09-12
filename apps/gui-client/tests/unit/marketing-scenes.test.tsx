@@ -678,3 +678,115 @@ describe('scene shapes — what scripts/marketing-screens.mjs guards at capture'
     );
   });
 });
+
+/* An OPAQUE IDENTIFIER: a value a reader cannot reconstruct from a prefix.
+ * `ses_audit_berlin_price_watch`, `rec_audit_price_watch`, `prof_tokyo_qa` —
+ * every one of them is a lookup key the customer pastes into a support
+ * thread. Prose truncates gracefully ("Amsterdam check…" still reads); an id
+ * truncated to `ses_audit_berl…` is simply lost. */
+const OPAQUE_ID = /^[a-z]{2,6}_[a-z0-9][a-z0-9_-]{5,}$/;
+
+/* …with ONE class carved out, in the opposite direction. An API key, a
+ * webhook signing secret and an OAuth token are rendered THROUGH
+ * `maskApiKey` precisely so the full value is NOT on the page, and a `title`
+ * carrying it would hand the secret to anyone who hovers — and to every
+ * screenshot tool that renders tooltips. They are id-shaped and they must
+ * stay unreachable, so the scan skips them by their own key prefixes (the
+ * same list `maskApiKey` knows). A short fixture body masks to itself, which
+ * is why they reach this scan looking whole. */
+const SECRET_PREFIXES = ['ds_live_', 'ds_test_', 'whsec_v1_', 'oas_', 'oat_'];
+const isSecret = (text: string): boolean => SECRET_PREFIXES.some((p) => text.startsWith(p));
+
+/** The browser gate's own reachability rule (`titled()` in
+ *  scripts/gui-text-quality.mjs): the element itself or one of six ancestors
+ *  carries a `title` / `aria-label`, so the full value is one hover away. */
+function reachable(el: Element): boolean {
+  let e: Element | null = el;
+  for (let i = 0; i < 6 && e !== null; i += 1) {
+    if (e.getAttribute('title') !== null || e.getAttribute('aria-label') !== null) return true;
+    e = e.parentElement;
+  }
+  return false;
+}
+
+/* 2026-09-12 — the FIRST Linux run of .github/workflows/gui-gates.yml
+ * (run 34677757888) found one defect neither Mac had ever shown: on the
+ * audit-recordings scene, in BOTH themes, a recording card's name paragraph
+ * clipped 17px of `ses_audit_berlin_price_watch` with no title. The card
+ * names a recording by `label ?? sessionId`, and an unlabelled recording is
+ * therefore named by its session id — under the runner's DejaVu fonts that
+ * id is wider than the 3-up card and the ellipsis ate it.
+ *
+ * The gate can only see it where the font makes it clip, which is why this
+ * arm does not measure width (jsdom has no layout): it pins the PROPERTY the
+ * gate's finding is a symptom of — an id on screen is reachable in full —
+ * across every scene, at every font, whether or not it happens to clip. */
+describe('an opaque identifier on screen is never a dead end', () => {
+  const check = (name: string, root: HTMLElement): void => {
+    const unreachable: string[] = [];
+    for (const el of Array.from(root.querySelectorAll('*'))) {
+      if (el.children.length !== 0) continue; // own text only — leaves
+      const text = (el.textContent ?? '').trim();
+      if (!OPAQUE_ID.test(text) || isSecret(text)) continue;
+      if (!reachable(el)) unreachable.push(`<${el.tagName.toLowerCase()}> "${text}"`);
+    }
+    expect(
+      unreachable,
+      `${name}: an id is rendered with no title on it or any of its six ancestors — ` +
+        `truncate it (any font, any width) and the value is unrecoverable`,
+    ).toEqual([]);
+  };
+
+  for (const name of MARKETING_SCENES) {
+    it(`${name}: every id it renders carries a title`, () => {
+      const restore = freezeHarnessClock();
+      try {
+        const { container } = render(<MarketingScene name={name} />);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+        expect(stage).not.toBeNull();
+        if (stage !== null) check(name, stage);
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  for (const name of AUDIT_SCENES) {
+    it(`${name}: every id it renders carries a title`, async () => {
+      const restore = freezeHarnessClock();
+      try {
+        const { container } = renderAudit(name);
+        const stage = container.querySelector<HTMLElement>(`[data-scene="${name}"]`);
+        expect(stage).not.toBeNull();
+        if (stage === null) return;
+        const markers = auditLoadedMarkers(name);
+        await waitFor(
+          () => expect(visibleStrings(stage).join('\n')).toContain(markers[markers.length - 1]),
+          { timeout: 5_000 },
+        );
+        check(name, stage);
+      } finally {
+        restore();
+      }
+    });
+  }
+
+  it('the rule has teeth: the recording card the Linux gate caught is the shape it scans', () => {
+    // Positive control — the id the gate reported, under the regex that
+    // selects what must be reachable, and an untitled leaf that must fail.
+    expect(OPAQUE_ID.test('ses_audit_berlin_price_watch')).toBe(true);
+    expect(OPAQUE_ID.test('Amsterdam checkout')).toBe(false);
+    expect(OPAQUE_ID.test('rec_audit_price_watch')).toBe(true);
+    // …and the carve-out points the other way: a masked key is id-shaped,
+    // and a title on it would publish the secret the mask exists to hide.
+    expect(OPAQUE_ID.test('ds_live_example')).toBe(true);
+    expect(isSecret('ds_live_example')).toBe(true);
+    expect(isSecret('ses_audit_berlin_price_watch')).toBe(false);
+    const bare = document.createElement('p');
+    bare.textContent = 'ses_audit_berlin_price_watch';
+    expect(reachable(bare)).toBe(false);
+    const titled = document.createElement('p');
+    titled.setAttribute('title', 'ses_audit_berlin_price_watch');
+    expect(reachable(titled)).toBe(true);
+  });
+});

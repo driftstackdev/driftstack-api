@@ -1,4 +1,5 @@
-# GUI render gates on Linux — manual dispatch (2026-09-12).
+# GUI render gates on Linux — on every push to main that touches the desktop
+# client or the gates, and on manual dispatch (2026-09-12).
 #
 # The two browser gates the desktop client ships behind —
 #   scripts/gui-visual-check.mjs   (profile-card geometry: nothing escapes the tile)
@@ -8,11 +9,22 @@
 # geometry and colour ratios, not pixels, but a different font stack changes text
 # widths, so whether they hold on a Linux runner is a MEASUREMENT, not a given.
 # This workflow takes that measurement: it renders the harness with Chromium on
-# ubuntu and uploads both reports. It is dispatch-only until the numbers say it
-# can gate a push (see the runbook for the decision).
+# ubuntu and uploads both reports. Its first dispatch (run 34677757888) found
+# one real Linux-only defect — a recording named by its session id truncated
+# under DejaVu Sans Mono with no title — and the geometry gate and the control
+# held, so it now runs on push as well: a text width that only clips under the
+# runner's fonts is a defect the maintainers' Macs never show.
 name: GUI render gates (Linux)
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/gui-client/**'
+      - 'packages/api-types/**'
+      - 'scripts/gui-visual-check.mjs'
+      - 'scripts/gui-text-quality.mjs'
+      - '.github/workflows/gui-gates.yml'
   workflow_dispatch:
     inputs:
       text_scenes:
@@ -22,6 +34,11 @@ on:
 
 permissions:
   contents: read
+
+# A newer push supersedes the run in flight, as ci.yml does on main.
+concurrency:
+  group: gui-gates-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   gates:
