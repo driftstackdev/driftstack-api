@@ -293,9 +293,13 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
     return line;
   }
 
-  it('ARM 11 — CRITICAL VACUITY CONTROL: with no Test in flight the card says NOT measured, never "measuring" — and renders no OS chip (the hint is in "+N")', () => {
+  it('ARM 11 — CRITICAL VACUITY CONTROL: with no Test in flight the card says NOT measured, never "measuring"', () => {
     render(<ProfilePhoneCard {...cardProps({ testing: false })} />);
-    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    // The absence is ON the row as '— OS' since 2026-09-12 (it used to ride the
+    // '+N'). WHERE it is rendered is not this arm's subject; what it SAYS is.
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')?.textContent).toBe(
+      '— OS',
+    );
     expect(osHint()).not.toMatch(/measuring/i);
     expect(osHint()).toMatch(/not measured/i);
   });
@@ -321,9 +325,12 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
   //    a Test genuinely in flight would stop saying so.
   it('ARM 13 — CRITICAL: a VPN card with its own Check in flight says why a tunnel has no fingerprint, never that one is being measured', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, testing: true })} />);
-    // Phase B: a VPN card never renders an OS chip (the cause is a placeholder,
-    // not a measurement); the cause sentence is the "+N" pill's OS line.
-    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    // A VPN card renders '— OS' and the cause is its title (2026-09-12; the
+    // cause used to sit in the "+N" pill's OS line). The subject of this arm is
+    // the SENTENCE — that it names the tunnel and never claims a measurement.
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')?.textContent).toBe(
+      '— OS',
+    );
     const title = osHint();
     expect(title).not.toMatch(/measuring/i);
     expect(title).toMatch(/VPN tunnel/i);
@@ -333,7 +340,9 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
 
   it('ARM 14 — a VPN card that has never been checked carries the same cause — the chip was blank under the dead-end hint before any reply existed', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, testing: false })} />);
-    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')?.textContent).toBe(
+      '— OS',
+    );
     expect(osHint()).toMatch(/VPN tunnel/i);
     expect(osHint()).not.toMatch(/Run Test/i);
   });

@@ -116,6 +116,7 @@ import {
   OS_FINGERPRINT_MEASURING,
   VPN_TUNNEL_OS_FINGERPRINT,
   osFingerprintVerdict,
+  type FingerprintedOs,
   type OsFingerprint,
 } from '../lib/os-fingerprint-verdict';
 import type { MeasuredQuic } from '../lib/account-proxies';
@@ -338,27 +339,97 @@ export interface ProfilePhoneCardProps {
  *  (jsdom, the first paint before the layout effect): the 240px column's 206px.
  *  A real browser overwrites it synchronously in useLayoutEffect, before paint. */
 export const DEFAULT_CONTENT_WIDTH = 206;
-/** Static widths (px) of every chip the caps row can show, MEASURED from the
- *  live render at text-[9.5px] font-semibold px-1.5 gap-0.5 (Chromium, Geist;
- *  scratchpad/polish-chips.mjs reads offsetWidth per chip and asserts no caps
- *  child's right edge passes the row's at 178/186/240/260). The cut is decided
- *  from this table, not from layout, so it is the same in jsdom and in Chromium.
- *  ⛔ The table was stale by ~10px per chip (32 for a 44px 'UDP ✓'): the sum
- *  said MAX fit the 186px column's 152px, the browser then cut the OS chip
- *  mid-glyph. Anything not listed uses the 6px/char + 14px rule (rounded up). */
+/** Static widths (px) of every chip the caps row can show, RE-MEASURED
+ *  2026-09-12 from the live render at `text-[9.5px] font-semibold px-1 gap-0.5`
+ *  (Chromium via Playwright, viewport 1200×1400 @2x, after `document.fonts.ready`):
+ *  a probe span carrying CHIP_BASE VERBATIM inside a real card body at
+ *  http://127.0.0.1:5199/visual-harness.html?w=178, its `getBoundingClientRect`
+ *  width ceil'd. To reproduce, read CHIP_BASE out of THIS file rather than copying
+ *  it — a copied literal is how the table went stale before. The cut is decided
+ *  from this table, not from layout, so it is the same in jsdom and in Chromium,
+ *  which is also why the table IS the mechanism and the row's `overflow-hidden`
+ *  is only the safety net.
+ *  ⛔ THE FONT THESE NUMBERS CAME OUT OF IS THE OS FALLBACK, NOT Geist Sans.
+ *  `font-sans` names 'Geist Sans' first (tailwind.config.ts) but nothing ships
+ *  it — no @font-face under apps/gui-client/src, no `geist` package installed, no
+ *  apps/gui-client/public — so in the harness `document.fonts.size === 0`, the
+ *  chip computes to '"Geist Sans", -apple-system, …' and -apple-system is what
+ *  rendered every number below. (`document.fonts.check('600 9.5px "Geist Sans"')`
+ *  answers TRUE there: it means "a face is available for this request", fallback
+ *  included — never use it as the provenance check. `document.fonts.size` is the
+ *  one that tells the truth.) The day Geist actually lands, the whole table is
+ *  stale, which is why it is named in the trigger below.
+ *  ⛔ RE-MEASURE the whole table whenever CHIP_BASE's padding, size or weight
+ *  moves, OR the first family in `font-sans` starts resolving. It was once stale
+ *  by ~10px per chip (32 for a 44px 'UDP ✓'): the sum said MAX fit the 186px
+ *  column's 152px, the browser then cut the OS chip mid-glyph. It moved again on
+ *  2026-09-12 (px-1.5 → px-1: exactly −4.00 per chip, measured, not assumed), and
+ *  '✗ Windows' is a measurement now instead of the 6px/char guess — which
+ *  over-stated the px-1 render by 5.86px (68 against 62.14). An earlier version of
+ *  this comment said 1.86px: that was the gap to the OLD px-1.5 render (66.14), a
+ *  number this block no longer describes.
+ *  Anything not listed falls back to 6px/char + 14px, which over-reserves every
+ *  label below by 3.8–11.5px. ⛔ That is NOT a safety property: the rule counts
+ *  CHARACTERS, not width, so it UNDER-reserves capital-heavy text — '✗ WWWWWWW'
+ *  reserves 68 and renders 85.88, measured. What makes an unmeasured label
+ *  impossible is that the reachable set is CLOSED and listed here in full: the
+ *  five UDP/QUIC literals, plus `glyph × (OS_LABEL | OS_LABEL_COMPACT)` for the
+ *  glyphs each tone can actually mint ('✓' only for macos-or-ios, '✗' only for
+ *  the three non-Darwin members, '…'/'?' only with the 'OS' label). A NEW label
+ *  must be MEASURED into this table before it can render; for OS labels the
+ *  exhaustive OS_LABEL_COMPACT record is what forces that at compile time. */
 const CHIP_WIDTH: Readonly<Record<string, number>> = {
-  'UDP ✓': 45, // 44.22 rendered
-  '⤵ UDP': 44, // 43.47
-  'QUIC ✓': 49, // 48.30
-  'QUIC ~': 47, // 46.03
-  '⤵ QUIC': 48, // 47.55
-  '✓ iOS/macOS': 78, // 77.38
-  '✗ Windows': 68, // the 6px/char rule; not in the harness — re-measure when it is
-  '… OS': 38, // 37.41
+  'UDP ✓': 41, // 40.22 rendered
+  '⤵ UDP': 40, // 39.47
+  'QUIC ✓': 45, // 44.30
+  'QUIC ~': 43, // 42.03
+  '⤵ QUIC': 44, // 43.55
+  '✓ iOS/macOS': 74, // 73.38 — the full OS label
+  '✓ Apple': 48, // 47.16 — its compact form (OS_LABEL_COMPACT)
+  '✗ Windows': 63, // 62.14
+  '✗ Win': 37, // 36.97
+  '✗ Linux': 45, // 44.53 — fits at 144 in FULL, so it never compacts
+  '✗ BSD': 39, // 38.89 — idem
+  '… OS': 34, // 33.41
+  '? OS': 30, // 29.97 — measured, undetermined: a COMPLETED classification
+  '— OS': 34, // 33.33 — no reading at all; see the eligibility rule below
 };
 const CHIP_GAP = 4;
-/** The dashed '+N' tail: 9.5px semibold + 12px padding + 2px border. */
+/** C1/C2 — the width the caps row's INLINE ACTION takes in mode 'first', so the
+ *  chips beside it are cut against the width they actually have rather than
+ *  against the whole row. MEASURED 2026-09-12 off the rendered buttons in the
+ *  live harness (`px-2 py-px text-[10px] font-semibold leading-4`): 'Test' 39.41
+ *  → 40, CHECK_VPN_ACTION ('Check VPN') 73.98 → 74. ⛔ Re-measure with the table
+ *  above — same font, same caveat about which one actually renders. */
+const FIRST_ACTION_WIDTH = { proxy: 40, vpn: 74 } as const;
+/** The dashed '+N' tail, for the two pills that wear it: the caps row's
+ *  (CHIP_BASE + OVERFLOW_PILL_CLASS, px-1) and the meta row's own rounded-full
+ *  9px/400 px-1.5 one. The two DELIBERATELY differ by 4px of padding — the caps
+ *  pill followed CHIP_BASE to px-1 for C1, the meta row has no width pressure to
+ *  spend and kept its own chrome.
+ *  MEASURED 2026-09-12 over EVERY member either row can mint, not one sample:
+ *    caps  '+1'…'+9'  21.25–22.95 (widest is '+8'), '+10'…'+13' 26.11–27.73;
+ *    meta  '+1'…'+9'  24.19–25.80 (widest is '+4'), '+10'…'+13' 28.53–30.02.
+ *  ('+3' — which an earlier version of this comment called the widest member of
+ *  each — is 22.77 / 25.66: correct numbers, but not the maxima.) One constant
+ *  therefore cannot cover both digit counts: 27 covers every single-digit member
+ *  of both rows (meta '+4' 25.80, 1.2px spare) and UNDER-reserves the double-digit
+ *  ones by up to 3.02px. The caps row can never reach 10 — its hints are at most
+ *  `eligible 3 + hidden 2` — but the meta row's N counts user TAGS (≤ 12,
+ *  packages/api-types/src/profiles.ts, plus the folder = 13 pills), and 3px over
+ *  inside `h-4 overflow-hidden` clips the trailing ⓘ. Hence the second constant
+ *  and `overflowPillWidth(n)` instead of a bare number. No gallery state can show
+ *  this (its widest meta pill is '+5'), so the geometry gate cannot cover for it.
+ *  Over-reserving on the caps side can only HIDE a chip, never overflow the row,
+ *  and after C1 that row's '+N' holds non-measurements only — its worst case is
+ *  2 chips + the pill: a VPN row's 'QUIC ✓' (45) beside a '✗ Linux' (45) is 125
+ *  of 144, and 154 at full labels before compaction. So the slack costs nothing. */
 const OVERFLOW_PILL_WIDTH = 27;
+const OVERFLOW_PILL_WIDTH_WIDE = 31;
+/** The reservation for a '+N' standing for `n` hidden things. Digit-aware: the
+ *  extra glyph is worth ~4px and the meta row's n is not bounded by 9. */
+const overflowPillWidth = (n: number): number =>
+  n < 10 ? OVERFLOW_PILL_WIDTH : OVERFLOW_PILL_WIDTH_WIDE;
 const chipWidth = (text: string): number => CHIP_WIDTH[text] ?? Math.ceil(text.length * 6 + 14);
 
 export type HealthState =
@@ -582,9 +653,23 @@ export function capsMode(p: CapsInput): CapsMode {
 
 export interface CapChip {
   key: 'udp' | 'quic' | 'os';
-  /** The visible text, also the key into the static width table. */
+  /** The FULL visible text, also the key into the static width table. */
   text: string;
   width: number;
+  /** C1 — the narrow-width form of `text`, when this chip has one that is
+   *  STRICTLY NARROWER ('✓ Apple' for '✓ iOS/macOS', '✗ Win' for '✗ Windows').
+   *  `visibleChips` spends the LABEL before it spends the chip: a shorter word
+   *  still states the measurement, a '+N' does not. Absent = this text is
+   *  already its own shortest form ('✗ Linux', '✗ BSD', '… OS', '? OS' all fit
+   *  at 144 in full). The full label stays in the '+N' hint line and in the
+   *  title. ⛔ It may only shorten the CLAIM, never narrow it to one member of a
+   *  disjunction the probe did not resolve — see OS_LABEL_COMPACT. */
+  compact?: { text: string; width: number };
+  /** C3 — the chip that keeps its place when even the compact row does not fit:
+   *  the OS MISMATCH, the single measured defect. It is dropped LAST, so what a
+   *  narrower-than-144 row pushes into the '+N' is a green chip, never the red
+   *  one. Only the mismatch sets it; everything else drops in display order. */
+  keep?: true;
   className: string;
   title: string;
   /** Data attributes; the OS chip carries `data-component="proxy-os-fingerprint"`
@@ -594,9 +679,14 @@ export interface CapChip {
 }
 
 /** Polish — 9.5px/600, radius 6 (the comp's chip; 9px bold rendered heavier and
- *  smaller than the buttons and the pill in the same rows). */
+ *  smaller than the buttons and the pill in the same rows).
+ *  C1 (2026-09-12) — px-1.5 → px-1, the owner's *"perhaps make it smaller if
+ *  needed so it all fits"*: 4px a side instead of 6 is a measured −4.00 on every
+ *  chip, −12 on the three-chip row, and it is what turns C1's 13px of headroom at
+ *  144 into headroom rather than a 1px squeeze. ⛔ Every number in CHIP_WIDTH is
+ *  measured from THIS string: change it and the table is stale. */
 const CHIP_BASE =
-  'inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1.5 py-px text-[9.5px] font-semibold leading-4';
+  'inline-flex shrink-0 cursor-help items-center gap-0.5 whitespace-nowrap rounded-md px-1 py-px text-[9.5px] font-semibold leading-4';
 /** The '+N' tail: transparent with a dashed divider — visibly "there is more",
  *  not another chip. The meta row's '+N' wears the same. */
 const OVERFLOW_PILL_CLASS =
@@ -641,6 +731,45 @@ function vpnQuicCap(quicMeasured: MeasuredQuic | null | undefined, quicProbe: bo
   return proxyCapabilities(synthetic, quicMeasured, quicProbe).find((c) => c.key === 'quic');
 }
 
+/** C1 — the caps row's narrow-width OS labels. The row is 144px wide on the
+ *  178px card and '✓ iOS/macOS' (74) cannot share it with UDP (41) and QUIC
+ *  (43+); a shorter word that still states the measurement is strictly better
+ *  than the '+1' that hid it. Exhaustive over FingerprintedOs ON PURPOSE: a new
+ *  member of that union is a compile error here, not a silently un-compacted
+ *  label that quietly reintroduces the '+1'.
+ *  ⛔ The full form is NOT lost — it is the chip's `title`, the '+N' hint line,
+ *  and what the details sheet's ProxyOsChip renders (full width, no cut). Wider
+ *  cards (content ≥ 168) still show the full label; this is the narrow form only.
+ *  ⛔ A COMPACT FORM MAY ONLY SHORTEN THE CLAIM, NEVER DECIDE IT. 'macos-or-ios'
+ *  is ONE member of FingerprintedOs precisely because the classifier cannot
+ *  separate the two: `fingerprintOs` (apps/server/src/lib/tcp-os-fingerprint.ts)
+ *  splits families by initial TTL and then by option layout, and its own honest
+ *  fallback for TTL 64 is "the option layout does not separate Darwin from
+ *  Linux" — Darwin-vs-iOS is finer than anything it measures. So the compact
+ *  label is 'Apple', the family BOTH members share, and NOT 'iOS': 'iOS' asserts
+ *  one half of a disjunction the probe never resolved, and on a residential-proxy
+ *  row it asserts the implausible half (this card is on the marketing homepage;
+ *  a Dutch rotating exit is not an iPhone). 'iOS' is also ambiguous in a second
+ *  way here — the card prints the PROFILE's 'iPhone 17' two rows up, so it reads
+ *  as a restatement of the device rather than a verdict about the PROXY, which is
+ *  the one thing the word had to identify. And it fits: '✓ Apple' measures 47.16
+ *  → 48, so the widest green trio RESERVES 41 + 45 + 48 + 8 = 142 of 144 and
+ *  RENDERS 139.68 — 4.3px of real slack, in deterministic integer arithmetic
+ *  decided by the table, not by layout. ('✓ Darwin' 52.92 and '✓ mac/iOS' 59.38
+ *  both put the trio over 144; '✓ Mac' 39.25 fits but drops iOS the way 'iOS'
+ *  drops macOS.) '✗ Windows' → 'Win' loses nothing — windows is a single member.
+ *  'Linux'/'BSD'/'OS' are already short enough to fit in full, so they compact to
+ *  themselves and never change.
+ *  Kept HERE and not in lib/os-fingerprint-verdict.ts's OS_LABEL: the compact
+ *  form is this row's geometry problem, not the verdict's meaning. */
+const OS_LABEL_COMPACT: Readonly<Record<FingerprintedOs, string>> = {
+  'macos-or-ios': 'Apple',
+  windows: 'Win',
+  linux: 'Linux',
+  bsd: 'BSD',
+  unknown: 'OS',
+};
+
 /**
  * R5 mode A — the chips a row is ELIGIBLE to show, in fixed order UDP → QUIC →
  * OS, plus the hints that never get a chip (a VPN's "UDP via tunnel", an OS
@@ -650,8 +779,10 @@ function vpnQuicCap(quicMeasured: MeasuredQuic | null | undefined, quicProbe: bo
  *   • QUIC: 'QUIC ✓' measured (green), '⤵ QUIC' measured negative (muted),
  *     'QUIC ~' inferred (muted, `data-quic-inferred="true"`);
  *   • OS: the shared ProxyOsChip for a match ('✓ iOS/macOS'), a mismatch ('✗
- *     Windows' — the ONE measured defect that stays red) or a probe in flight
- *     ('… OS'); the '—' / '?' placeholders are hints, not chips.
+ *     Windows' — the ONE measured defect that stays red), a probe in flight
+ *     ('… OS') or a determined-but-undecidable reading ('? OS' — a completed
+ *     classification, see the eligibility test below); ONLY the '—' placeholder
+ *     (never measured, or a REPORTED `unavailable` cause) is a hint, not a chip.
  */
 export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: string[] } {
   const vpn = p.vpn === true;
@@ -700,11 +831,49 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
     (vpn ? VPN_TUNNEL_OS_FINGERPRINT : p.testing ? OS_FINGERPRINT_MEASURING : undefined);
   const os = osFingerprintVerdict(fingerprint);
   const osText = `${os.glyph} ${os.label}`;
-  if (os.tone === 'match' || os.tone === 'mismatch' || os.glyph === '…') {
+  // C1 — the narrow-width label, keyed off the CLOSED FingerprintedOs union
+  // rather than off the rendered string, so a renamed OS_LABEL cannot silently
+  // fall back to the full width. Equal to `osText` ⇒ no compact form at all.
+  const osCompactText = `${os.glyph} ${OS_LABEL_COMPACT[fingerprint?.os ?? 'unknown']}`;
+  // C1/C2 — a CHIP for EVERY OS state, including the two that carry no reading.
+  //
+  // Most of them are easy: a match, the one mismatch, a probe this client has in
+  // flight ('…'), and '?' — which is not a placeholder but a COMPLETED
+  // classification carrying a real reason ('initial TTL 64 (a unix family) but
+  // the option layout does not separate Darwin from Linux', or 'TTL n matches no
+  // common initial value', tcp-os-fingerprint.ts:84, :139). It NARROWS the
+  // answer, and os-fingerprint-verdict.ts discriminates on `unavailable` rather
+  // than on `os === 'unknown'` precisely to keep "we looked and could not tell"
+  // apart from "there was nothing here to look at".
+  //
+  // ⛔ '—' — never measured, or a REPORTED `unavailable` cause — used to be the
+  // exception: a hint, riding the '+N'. It is a chip now, and the owner is the
+  // reason. Their words, 2026-09-12: "this +1 next to profile, i dont know if i
+  // like it, its unclear what its about, better to show everything" and "i dont
+  // see OS currently at profile grid either, it might hav to do with that". Both
+  // sentences were the SAME defect and only half of it was geometry. Fitting the
+  // measured chip fixed the half where a reading existed; on a proxy with no
+  // reading — which is the owner's own case, a projection gap the control plane
+  // owns — the '+1' simply stayed, still opaque, still hiding the row they asked
+  // for. '— OS' states the absence instead, and its title says which absence it
+  // is (nothing measured yet, or the cause the control plane reported).
+  //
+  // It claims nothing: '—' is not a verdict about the stack, it is the honest
+  // statement that there is no verdict. Geometry was never the obstacle either:
+  // '— OS' measures 33.33 → 34, so the trio is 41 + 43 + 34 + 8 = 126 of 144.
+  // The OS row therefore NEVER rides the '+N' any more, at any width; `hidden`
+  // keeps only what genuinely is not a measurement (a VPN's "UDP via tunnel").
+  {
     eligible.push({
       key: 'os',
       text: osText,
       width: chipWidth(osText),
+      compact:
+        osCompactText === osText
+          ? undefined
+          : { text: osCompactText, width: chipWidth(osCompactText) },
+      // C3 — the one measured defect outranks every green chip in the row.
+      keep: os.tone === 'mismatch' ? true : undefined,
       // The colour rule is osFingerprintVerdict's (match green, the ONE measured
       // defect red, measuring muted) — only the chip chrome is the card's.
       className:
@@ -716,42 +885,109 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
       title: os.hint,
       attrs: { 'data-component': 'proxy-os-fingerprint', 'data-os-tone': os.tone },
     });
-  } else {
-    hidden.push(`OS — ${os.hint}`);
   }
   return { eligible, hidden };
 }
 
 export interface VisibleChips {
   chips: CapChip[];
-  /** One line per hidden chip or placeholder: `label — hint`. The '+N' pill's title. */
+  /** One line per hidden chip or placeholder: `label — hint`. The '+N' pill's
+   *  title. ALWAYS the full label, never the compact one — the pill is where the
+   *  long form belongs, and C2 requires it to say what it holds. */
   hiddenHints: string[];
 }
 
+/** The row's own arithmetic: every chip's width, a 4px gap between them, and the
+ *  '+N' tail (plus its own gap) when anything is hidden. */
+const rowWidth = (chips: readonly CapChip[], hiddenCount: number): number => {
+  let width = chips.reduce((sum, c) => sum + c.width, 0) + Math.max(0, chips.length - 1) * CHIP_GAP;
+  if (hiddenCount > 0) width += (chips.length > 0 ? CHIP_GAP : 0) + overflowPillWidth(hiddenCount);
+  return width;
+};
+/** The same chip wearing its compact label (C1) — or itself when it has none,
+ *  OR when the "compact" form is not actually narrower. Without that second
+ *  clause a copy edit that LENGTHENS a compact label makes level 2 wider than
+ *  level 1, so both fail and level 3 silently drops a whole chip while rendering
+ *  the longer text: a C1 regression produced by something that reads as a word
+ *  change. Unreachable today (every OS_LABEL_COMPACT entry is strictly narrower,
+ *  and the test pins that invariant), so this clause is a guard, not a fix. */
+const compacted = (c: CapChip): CapChip =>
+  c.compact === undefined || c.compact.width >= c.width
+    ? c
+    : { ...c, text: c.compact.text, width: c.compact.width };
+
 /**
- * R5 mode A — the static width-table cut: fixed order, as many whole chips as
- * fit `contentWidth` (gaps 4px), then a '+N' pill (27px) when anything is
- * hidden. MAX (UDP ✓ 45 + QUIC ~ 47 + ✓ iOS/macOS 78 + gaps 8 = 178) fits
- * neither the 178px column's 144px nor the 186px column's 152px (the 1440
- * viewport), so it renders 'UDP ✓ · QUIC ~ · +1' there and all three at
- * 240/260. Deterministic in JS; the row's `overflow-hidden` is a safety net,
- * never the mechanism.
+ * R5 mode A — the static width-table cut. C1 (2026-09-12), the owner: *"this +1
+ * next to profile, i dont know if i like it, its unclear what its about, better
+ * to show everything, perhaps make it smaller if needed so it all fits. i dont
+ * see OS currently at profile grid either, it might hav to do with that"*. Both
+ * sentences were ONE defect: every eligible chip is a MEASUREMENT, and the 178px
+ * card's 144px of content could not hold three of them at the old geometry
+ * (45 + 47 + 78 + 8 = 178, i.e. 34px over), so the OS chip was ALWAYS the one
+ * that went into the '+1' — invisible from a 178px card up to a 211px one.
+ *
+ * Three levels, in this order, because a shorter word beats a hidden fact.
+ * ⛔ Every trio below is computed at the WIDEST entry of each chip — QUIC's is
+ * 'QUIC ✓' 45, NOT the inferred 'QUIC ~' 43. A spec written at the narrow one
+ * understates every threshold in it, which is how this block first read:
+ *   1. every eligible chip with its FULL label. The green trio needs
+ *      41 + 45 + 74 + 8 = 168 — content = card − 34, so a 202px card (a 200px
+ *      one still compacts); the red '✗ Windows' trio 157, a 191px card. The
+ *      'QUIC ~' variants are 2px less: 166 and 155;
+ *   2. every eligible chip with its COMPACT label (C1 → OS_LABEL_COMPACT). At
+ *      144 the green '✓ Apple' trio is 41 + 45 + 48 + 8 = 142 and the red
+ *      '✗ Win' trio 131 — 2px and 13px of headroom where the old geometry was
+ *      34px OVER. The 142 is a RESERVATION: it renders 139.68, and the sum is
+ *      integer arithmetic over ceil'd entries, so it is the same every time.
+ *      '✗ Linux' (139), '✗ BSD' (133), '… OS' (128) and '? OS' (124) already fit
+ *      at 144 in FULL, so they never compact at all;
+ *   3. only THEN whole chips, dropped by C3's priority: a `keep` chip (the OS
+ *      mismatch) goes LAST, so a row narrower than any real column pushes a
+ *      GREEN chip into the '+N' and the one measured defect stays visible.
+ *      That is 130px and below for the red trio, 141 and below for the green
+ *      one — no column is that narrow (`minmax(178px,1fr)` ⇒ 144), so in the
+ *      app level 3 never fires.
+ *
+ * C2 — a '+N' hiding a measurement is the defect; a '+N' holding things that are
+ * NOT measurements is the point of it, and its title still names what it holds.
+ * There are exactly TWO such things: a VPN row's "UDP via tunnel" hint, and the
+ * '—' OS placeholder (never measured, or a cause the server REPORTED as
+ * `unavailable`). '?' is not one of them — it is a completed classification and
+ * gets a chip of its own; see capabilityChips.
+ * Deterministic in JS; the row's `overflow-hidden` is a safety net, never the
+ * mechanism.
  */
 export function visibleChips(p: CapsInput, contentWidth: number): VisibleChips {
   const { eligible, hidden } = capabilityChips(p);
-  for (let k = Math.min(3, eligible.length); k >= 0; k -= 1) {
-    const shown = eligible.slice(0, k);
-    const hiddenCount = eligible.length - k + hidden.length;
-    let width = shown.reduce((sum, c) => sum + c.width, 0) + Math.max(0, k - 1) * CHIP_GAP;
-    if (hiddenCount > 0) width += (k > 0 ? CHIP_GAP : 0) + OVERFLOW_PILL_WIDTH;
-    if (width <= contentWidth || k === 0) {
-      return {
-        chips: shown,
-        hiddenHints: [...eligible.slice(k).map((c) => `${c.text} — ${c.title}`), ...hidden],
-      };
+  const hints = (dropped: readonly CapChip[]): string[] => [
+    ...dropped.map((c) => `${c.text} — ${c.title}`),
+    ...hidden,
+  ];
+  // Levels 1 and 2 — the whole row, full labels then compact ones.
+  for (const level of [eligible, eligible.map(compacted)]) {
+    if (rowWidth(level, hidden.length) <= contentWidth) {
+      return { chips: level, hiddenHints: hints([]) };
     }
   }
-  return { chips: [], hiddenHints: [...eligible.map((c) => `${c.text} — ${c.title}`), ...hidden] };
+  // Level 3 — drop whole chips, compact labels, lowest priority first. The
+  // order is materialised (not `slice`d off the end) so C3's `keep` can survive
+  // a chip that precedes it in display order.
+  const compact = eligible.map(compacted);
+  const dropOrder = compact
+    .map((chip, index) => ({ chip, index }))
+    .sort((a, b) => {
+      const keep = (a.chip.keep === true ? 1 : 0) - (b.chip.keep === true ? 1 : 0);
+      return keep !== 0 ? keep : b.index - a.index;
+    });
+  const gone = new Set<number>();
+  for (const { index } of dropOrder) {
+    gone.add(index);
+    const shown = compact.filter((_, j) => !gone.has(j));
+    if (rowWidth(shown, eligible.length - shown.length + hidden.length) <= contentWidth) {
+      return { chips: shown, hiddenHints: hints(eligible.filter((_, j) => gone.has(j))) };
+    }
+  }
+  return { chips: [], hiddenHints: hints(eligible) };
 }
 
 export interface MetaPill {
@@ -799,7 +1035,7 @@ export function visibleMeta(
   for (let k = all.length; k >= 0; k -= 1) {
     const shown = all.slice(0, k);
     let width = shown.reduce((sum, c) => sum + c.width, 0) + Math.max(0, k - 1) * CHIP_GAP;
-    if (k < all.length) width += (k > 0 ? CHIP_GAP : 0) + OVERFLOW_PILL_WIDTH;
+    if (k < all.length) width += (k > 0 ? CHIP_GAP : 0) + overflowPillWidth(all.length - k);
     if (width <= available || k === 0) {
       return { pills: shown, hidden: all.slice(k).map((c) => c.title) };
     }
@@ -1388,10 +1624,35 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   const pill = healthPill(p);
   const mode = capsMode(p);
   const chips = visibleChips(p, contentWidth);
-  // Mode C has no measured chips, but the row's standing facts (a tunnel
-  // carries UDP; why the OS stack cannot be read) are still true before any
-  // test — they ride in a '+N' pill beside the button rather than vanishing.
-  const firstHints = mode === 'first' ? visibleChips(p, 0).hiddenHints : [];
+  // Mode C has no SOCKS5 verdict, but the row's standing facts (a tunnel carries
+  // UDP; why the OS stack cannot be read) are still true before any test — they
+  // ride in a '+N' pill beside the button rather than vanishing.
+  // C1/C2 — and mode 'first' can carry real MEASUREMENTS too, which is why this
+  // is the row's own arithmetic and not `visibleChips(p, 0)`. Width 0 meant
+  // "hide everything": every eligible chip in this mode became a '+N' hint at
+  // EVERY card width, the '✗ Windows' C3 calls the one that matters most
+  // included. It is reachable, not hypothetical — `capabilities` is null for
+  // every VPN row and for any row whose cached verdict does not match its scheme
+  // (views/ProfilesView.tsx `matchingProbe`), while `osFingerprint`, `quicProbe`
+  // and `quicMeasured` reach the card from the raw-cache derivation, which is not
+  // scheme-gated (lib/proxy-probe-cache.ts). So: the same three-level cut as mode
+  // 'measured', against the width the chips actually have — the row minus the
+  // inline action and the gap after it.
+  // ⚠ Residual, MEASURED: 'Check VPN' is 74px, leaving 66 at content 144, and a
+  // VPN row's measured 'QUIC ✓' (45) plus its 2-hint pill (27) is 76. That ONE
+  // state keeps its chip in the pill until content 154 (a 188px card). The pill
+  // is the only thing on the row that can carry the tunnel/OS hints at all, so it
+  // is not the thing to drop for it. The non-VPN case — the measured OS defect,
+  // 40px of button — has 100px and renders the FULL '✗ Windows' at 144.
+  const firstChips: VisibleChips =
+    mode === 'first'
+      ? visibleChips(
+          p,
+          contentWidth -
+            (p.vpn === true ? FIRST_ACTION_WIDTH.vpn : FIRST_ACTION_WIDTH.proxy) -
+            CHIP_GAP,
+        )
+      : { chips: [], hiddenHints: [] };
   const vpn = p.vpn === true;
   const hasNote = p.onSaveNote !== undefined && p.note !== undefined && p.note.trim() !== '';
   // Phase C — the ⓘ glyph is always on the row (every card has a sheet); the
@@ -2195,14 +2456,28 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 {vpn ? CHECK_VPN_ACTION : 'Test'}
               </button>
             ) : null}
-            {mode === 'first' && firstHints.length > 0 ? (
-              <span
-                data-component="caps-overflow"
-                title={firstHints.join('\n')}
-                className={`${CHIP_BASE} ${OVERFLOW_PILL_CLASS}`}
-              >
-                +{firstHints.length}
-              </span>
+            {mode === 'first' ? (
+              <>
+                {firstChips.chips.map((c) => (
+                  <span
+                    key={c.key}
+                    {...c.attrs}
+                    title={c.title}
+                    className={`${CHIP_BASE} ${c.className}`}
+                  >
+                    {c.text}
+                  </span>
+                ))}
+                {firstChips.hiddenHints.length > 0 ? (
+                  <span
+                    data-component="caps-overflow"
+                    title={firstChips.hiddenHints.join('\n')}
+                    className={`${CHIP_BASE} ${OVERFLOW_PILL_CLASS}`}
+                  >
+                    +{firstChips.hiddenHints.length}
+                  </span>
+                ) : null}
+              </>
             ) : null}
             {mode === 'measured' ? (
               <>
