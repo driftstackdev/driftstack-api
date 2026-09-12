@@ -398,7 +398,6 @@ describe('T2 sweep — accent on a TEXT leaf wears text-accent-text; fills, glyp
       'views/SessionsView.tsx',
       'views/FleetView.tsx',
       'views/RecordingsView.tsx',
-      'views/LogsView.tsx',
       'views/ConnectivityView.tsx',
       'views/ProfilesView.tsx',
       'visual-harness/gallery.tsx',
@@ -625,7 +624,7 @@ describe("review follow-ups — the simulator's accent-as-text sites and the sig
 
 describe('audit-scene follow-ups — the error hue as text, and the saved-chat rail titles', () => {
   const readSource2 = (rel: string): string => readFileSync(join(SRC, rel), 'utf8');
-  it('--status-error-text-rgb clears 4.5 on the error /15 wash over raised in both modes; .btn-danger and the log error pill wear it (the error token read 4.27 in dark)', () => {
+  it('--status-error-text-rgb clears 4.5 on the error /15 wash over raised in both modes; .btn-danger wears it (the error token read 4.27 in dark on Stop / Delete)', () => {
     const mix = (
       c: [number, number, number],
       a: number,
@@ -653,9 +652,6 @@ describe('audit-scene follow-ups — the error hue as text, and the saved-chat r
     expect(contrast(dErr, mix(dErr, 0.15, token(DARK, 'surface-raised-rgb')))).toBeLessThan(4.5);
     expect(CSS).toMatch(/\.btn-danger \{[^}]*bg-status-error\/15 text-status-error-text/);
     expect(CSS).toMatch(/\.btn-danger \{[^}]*hover:bg-status-error\/20/);
-    expect(readSource2('views/LogsView.tsx')).toContain(
-      "error: 'bg-status-error/15 text-status-error-text'",
-    );
     expect(readFileSync(join(SRC, '..', 'tailwind.config.ts'), 'utf8')).toMatch(
       /'error-text':\s*'rgb\(var\(--status-error-text-rgb\) \/ <alpha-value>\)'/,
     );

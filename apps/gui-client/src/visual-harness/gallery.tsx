@@ -72,7 +72,6 @@ export const AUDIT_SCENES = [
   'audit-sessions',
   'audit-fleet',
   'audit-recordings',
-  'audit-logs',
   'audit-connectivity',
   'audit-settings',
   'audit-first-run',

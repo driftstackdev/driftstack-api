@@ -209,7 +209,7 @@ describe('sceneFromSearch — the only door into a scene, marketing or audit', (
     expect(ALL_SCENES.slice(0, MARKETING_SCENES.length)).toEqual([...MARKETING_SCENES]);
     expect(ALL_SCENES.slice(MARKETING_SCENES.length)).toEqual([...AUDIT_SCENES]);
     expect(new Set(ALL_SCENES).size).toBe(ALL_SCENES.length);
-    expect(AUDIT_SCENES).toHaveLength(10);
+    expect(AUDIT_SCENES).toHaveLength(9);
     for (const name of ALL_SCENES) {
       expect(isAuditScene(name)).toBe(name.startsWith('audit-'));
       const size = sceneSize(name);

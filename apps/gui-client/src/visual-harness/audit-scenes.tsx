@@ -46,7 +46,6 @@
 //   audit-sessions      SessionsView     loaded — 3 driver sessions (ready / busy / errored) + 1 active agent session
 //   audit-fleet         FleetView        loaded — 3 registry members, un-pinged (pings are click-driven; stub: plugin-store)
 //   audit-recordings    RecordingsView   loaded — 3 persisted recordings, first selected (stub: plugin-fs index + dir)
-//   audit-logs          LogsView         loaded — 6 buffered entries, all levels (seeded through the real log buffer)
 //   audit-connectivity  ConnectivityView idle — settings summary + Run check; /version unreachable → no server line
 //   audit-settings      SettingsView     loaded — bundled-LLM settings/status + BYOK metadata from the client;
 //                                         account card = unreachable branch; self-hosted mode (example.com URL)
@@ -83,11 +82,9 @@ import { ConfirmProvider } from '../components/ConfirmProvider';
 import type { FleetMember } from '../lib/fleet-members';
 import type { RecordingHeader } from '../lib/recordings-store';
 import type { StoredChat } from '../lib/chat-history';
-import { clearLogEntries, record } from '../lib/log-buffer';
 import { SessionsView } from '../views/SessionsView';
 import { FleetView } from '../views/FleetView';
 import { RecordingsView } from '../views/RecordingsView';
-import { LogsView } from '../views/LogsView';
 import { ConnectivityView } from '../views/ConnectivityView';
 import { SettingsView } from '../views/SettingsView';
 import { FirstRunWizard } from '../views/FirstRunWizard';
@@ -124,7 +121,6 @@ export function auditSceneSizes(): Record<AuditSceneName, { width: number; heigh
     // Three recordings + the selected one's detail measure 819 CSS px in the
     // 1280×800 window's 764 px main area; 880 shows the whole list.
     'audit-recordings': { width: SCENE_WIDTH, height: 880 },
-    'audit-logs': stage,
     'audit-connectivity': stage,
     // The whole settings form (connection, account, AI & billing, updates,
     // danger zone) measures 1684 CSS px; 1720 fits it without a scrollbar.
@@ -417,19 +413,6 @@ export function auditStoredChats(): StoredChat[] {
   ];
 }
 
-/** Lines seeded into the real log buffer for LogsView, every level once. */
-export const AUDIT_LOG_LINES: ReadonlyArray<{
-  level: 'log' | 'info' | 'warn' | 'error' | 'debug';
-  text: string;
-}> = [
-  { level: 'info', text: '[settings] loaded; base URL https://api.example.com' },
-  { level: 'log', text: '[sessions] list → 3 driver sessions, 1 agent session' },
-  { level: 'debug', text: '[proxy] socks5 udp associate ok in 41 ms' },
-  { level: 'warn', text: '[proxy] QUIC disabled by the proxy — falling back to TCP' },
-  { level: 'error', text: '[session] ses_audit_lisbon_login errored: harness exited (code 137)' },
-  { level: 'info', text: '[recordings] index hydrated: 3 recordings' },
-];
-
 /** What each audit scene must have RENDERED for it to count as loaded — the
  *  fixtures the view was fed, read back off the DOM (text nodes + attributes +
  *  input values). Both jsdom arms (tests/unit/marketing-scenes.test.tsx's
@@ -454,8 +437,6 @@ export function auditLoadedMarkers(name: AuditSceneName): ReadonlyArray<string> 
       return auditFleetMembers().flatMap((m) => [m.label, m.baseUrl]);
     case 'audit-recordings':
       return auditRecordings().map((r) => r.label ?? r.sessionId);
-    case 'audit-logs':
-      return AUDIT_LOG_LINES.map((l) => l.text);
     case 'audit-connectivity':
       return [AUDIT_BASE_URL, 'Run check'];
     case 'audit-settings':
@@ -776,32 +757,6 @@ function StubbedAuditWindow(props: {
   return <AuditWindow {...props} />;
 }
 
-/** LogsView reads the module-level ring buffer: seed it (idempotently — clear
- *  then write, so a StrictMode double render or a re-render cannot duplicate)
- *  before the view's first render subscribes. */
-function LogsScene(): JSX.Element {
-  const fixtures = useMemo(() => auditTauriFixtures(), []);
-  useTauriStub(fixtures);
-  useState(() => {
-    seedAuditLogBuffer();
-    return null;
-  });
-  return (
-    <AuditWindow scene="audit-logs" current="connectivity">
-      <LogsView />
-    </AuditWindow>
-  );
-}
-
-/** Clear the real ring buffer and write AUDIT_LOG_LINES into it (the buffer
- *  is module-global, so this is idempotent by construction). `record` also
- *  schedules the on-disk mirror write, which the stub acknowledges. Exported so
- *  the scene test can pin what the view shows against what was seeded. */
-export function seedAuditLogBuffer(): void {
-  clearLogEntries();
-  for (const line of AUDIT_LOG_LINES) record(line.level, [line.text]);
-}
-
 /** FirstRunWizard replaces the whole window (it renders its own TitleBar and
  *  no Sidebar), so its stage is the bare one — the same data-* contract the
  *  gate and the scene test read, without AppWindow's chrome. The wizard sizes
@@ -860,8 +815,6 @@ export function AuditScene({ name }: { name: AuditSceneName }): JSX.Element {
           <RecordingsView onOpen={noop} />
         </StubbedAuditWindow>
       );
-    case 'audit-logs':
-      return <LogsScene />;
     case 'audit-connectivity':
       return (
         <AuditWindow scene={name} current="connectivity">

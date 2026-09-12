@@ -79,8 +79,12 @@ describe('every view shipping the clipping hero protects its column', () => {
 
   it('finds the hero in more than the five originally claimed', () => {
     // The original fix said "five views". It was seven. A non-vacuity floor set
-    // at the claimed number would have agreed with the mistake.
-    expect(withHero.length).toBeGreaterThanOrEqual(7);
+    // at the claimed number would have agreed with the mistake. Six since
+    // 2026-09-12: LogsView (removed from navigation in June, unreachable
+    // since) was deleted with its scene; the floor follows the
+    // measured count, never the other way round.
+    expect(withHero.length).toBeGreaterThanOrEqual(6);
+    expect(withHero.length).toBeLessThanOrEqual(7);
   });
 
   it.each(withHero.map((f) => [f.slice(SRC.length + 1), f] as const))(
