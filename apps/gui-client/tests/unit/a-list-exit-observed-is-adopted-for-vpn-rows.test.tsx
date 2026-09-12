@@ -80,7 +80,7 @@ vi.mock('../../src/lib/proxies', () => ({
   resolveEndpoint: vi.fn(() => Promise.resolve({ resolved: true, ip: '1.2.3.4', message: 'ok' })),
 }));
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 const settingsStub: { settings: { apiKey: string | null; baseUrl: string } } = {
   settings: { apiKey: 'ds_key', baseUrl: 'https://api.example' },

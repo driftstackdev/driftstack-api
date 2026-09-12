@@ -88,7 +88,7 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 
 vi.mock('../../src/components/ConfirmProvider', () => ({ useConfirm: () => confirmFn }));

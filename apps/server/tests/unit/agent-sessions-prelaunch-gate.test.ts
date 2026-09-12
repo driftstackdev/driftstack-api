@@ -9,7 +9,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { runProxyPrelaunchGate } from '../../src/routes/agent-sessions.js';
 import { ProxyValidationFailedError } from '../../src/lib/errors.js';
-import type { AccountProxiesService } from '../../src/services/account-proxies.js';
+import type {
+  AccountProxiesService,
+  ProxyUnresolvableReason,
+} from '../../src/services/account-proxies.js';
 import type {
   ProbeExitIdentity,
   ProxyConnectivityProbe,
@@ -35,14 +38,29 @@ function makeOkProbe(): { probe: ProxyConnectivityProbe; probeFn: ReturnType<typ
   return { probe: { probe: probeFn } as unknown as ProxyConnectivityProbe, probeFn };
 }
 
-/** An account-proxies service whose `resolveForDispatch` is a captured mock. */
-function makeService(resolved: unknown): {
+/** An account-proxies service whose resolve is a captured mock.
+ *
+ *  (V3 2026-09-12) — the gate reads `resolveForDispatchWithReason`: the same
+ *  resolve, carrying WHY a null is null. The real service defines
+ *  `resolveForDispatch` as that method's `.config`, so the double does the same
+ *  and one mock answers both. `cause` is what the service attaches beside a null
+ *  (a reason code + the sentence the customer reads). */
+function makeService(
+  resolved: unknown,
+  cause?: { reason: ProxyUnresolvableReason; detail?: string },
+): {
   service: AccountProxiesService;
   resolveFn: ReturnType<typeof vi.fn>;
 } {
-  const resolveFn = vi.fn().mockResolvedValue(resolved);
+  const resolveFn = vi
+    .fn()
+    .mockResolvedValue({ config: resolved, ...(cause !== undefined ? cause : {}) });
   return {
-    service: { resolveForDispatch: resolveFn } as unknown as AccountProxiesService,
+    service: {
+      resolveForDispatchWithReason: resolveFn,
+      resolveForDispatch: (args: unknown) =>
+        (resolveFn(args) as Promise<{ config: unknown }>).then((r) => r.config),
+    } as unknown as AccountProxiesService,
     resolveFn,
   };
 }
@@ -66,6 +84,138 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
     // The probe is never even dialed — we block before the live test.
     expect(probeFn).not.toHaveBeenCalled();
     expect(log.warn).toHaveBeenCalled();
+  });
+
+  // (V3 2026-09-12, owner: "session not starting still") — the 422 must name the
+  // CAUSE. Nine causes reached this gate as one null and got one sentence: "its
+  // stored configuration could not be read. Re-add it and try again." For a
+  // POLICY refusal (a `script-security 2` line, an external cert/key reference)
+  // that sentence is false and its instruction is a loop — re-adding the same
+  // file is refused again — which is exactly the shape of the owner's report.
+  it('the 422 detail is the CAUSE’s sentence when the service named one (a refused directive names the line)', async () => {
+    const { probe, probeFn } = makeOkProbe();
+    const { service } = makeService(null, {
+      reason: 'config_refused_directive',
+      detail:
+        'Line 46: "script-security 2" — Driftstack does not run scripts from VPN configs. Remove this line and try again.',
+    });
+    const log = logger();
+    try {
+      await runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_directive',
+        accountId: 'acc_1',
+        logger: log,
+      });
+      throw new Error('expected a throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ProxyValidationFailedError);
+      const e = err as ProxyValidationFailedError;
+      expect(e.status).toBe(422);
+      expect(e.detail).toContain('Line 46: "script-security 2"');
+      expect(e.detail).not.toContain('could not be read');
+    }
+    expect(probeFn).not.toHaveBeenCalled();
+    // …and the LOG carries the closed-set code, so triage names the cause
+    // without a repro (it used to say only "decrypt/config").
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ reason: 'config_refused_directive' }),
+      expect.stringContaining('blocking launch'),
+    );
+  });
+
+  it('CONTROL — a null with NO cause still gets the shipped sentence (an older/partial service is unchanged)', async () => {
+    const { probe } = makeOkProbe();
+    const { service } = makeService(null);
+    try {
+      await runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_x',
+        accountId: 'acc_1',
+        logger: logger(),
+      });
+      throw new Error('expected a throw');
+    } catch (err) {
+      expect((err as ProxyValidationFailedError).detail).toContain('could not be read');
+    }
+  });
+
+  // ⛔⛔ (V4 follow-up 2026-09-12) — `unreachable` WAS A FALSE CONTRACTUAL CLAIM
+  // HERE, for a dial that provably never happened.
+  //
+  // The SDK documents that enum member as "the proxy … failed the server's LIVE
+  // pre-launch connectivity test (a real egress round-trip THROUGH the proxy)",
+  // and the desktop copy for it is "The proxy did not answer. Check the host and
+  // port, and that it is online." This branch fires BEFORE any socket, on a
+  // STORED CONFIG that could not be resolved — and for a VPN row the gate skips
+  // the probe entirely (`'type' in resolved` → return), so nothing is ever
+  // dialled at all. Every consumer branching on the enum as documented was told
+  // a measurement had been taken from a vantage that never ran, and the customer
+  // was pointed at a host and port that were never the problem.
+  //
+  // MUTATION (run): put `reason: 'unreachable'` back unconditionally → the first
+  // arm reds; the CONTROL arms below stay green, which is what separates "the
+  // gate names the right cause" from "the gate names one cause".
+  it('CRITICAL a null WITH a cause is reason=config_unresolvable — never `unreachable`, which claims a round-trip', async () => {
+    const { probe, probeFn } = makeOkProbe();
+    const { service } = makeService(null, {
+      reason: 'config_incomplete',
+      detail: 'This VPN’s stored configuration is incomplete (missing: Address).',
+    });
+    try {
+      await runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_incomplete',
+        accountId: 'acc_1',
+        logger: logger(),
+      });
+      throw new Error('expected a throw');
+    } catch (err) {
+      const e = err as ProxyValidationFailedError;
+      expect(e.status).toBe(422);
+      expect(e.extensions).toMatchObject({ reason: 'config_unresolvable', resource: 'proxy' });
+      // The cause's own sentence still rides along.
+      expect(e.detail).toContain('missing: Address');
+    }
+    // Nothing was dialled — which is the whole reason the enum member exists.
+    expect(probeFn).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — the PROBE’s own verdict keeps `unreachable`: there a round-trip really was attempted', async () => {
+    // Without this, renaming the probe's verdict too would pass the arm above.
+    const probeFn = vi.fn(() =>
+      Promise.resolve({ ok: false as const, reason: 'unreachable' as const }),
+    );
+    const probe = { probe: probeFn } as unknown as Parameters<
+      typeof runProxyPrelaunchGate
+    >[0]['probe'];
+    const { service } = makeService({ host: '203.0.113.5', port: 1080, udp_associate: true });
+    try {
+      await runProxyPrelaunchGate({
+        tier: 'api_builder',
+        probe,
+        enabled: true,
+        accountProxiesService: service,
+        proxyId: 'prx_socks',
+        accountId: 'acc_1',
+        logger: logger(),
+      });
+      throw new Error('expected a throw');
+    } catch (err) {
+      expect((err as ProxyValidationFailedError).extensions).toMatchObject({
+        reason: 'unreachable',
+      });
+    }
+    expect(probeFn).toHaveBeenCalled();
   });
 
   it('the thrown error is a 422 with reason=unreachable (the clean create-time signal the GUI surfaces)', async () => {

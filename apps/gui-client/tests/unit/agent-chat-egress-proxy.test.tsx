@@ -101,7 +101,11 @@ function lastOpts(): { profileId?: string; proxyId?: string } | undefined {
 beforeEach(() => {
   vi.clearAllMocks();
   h.useAgentChat.mockReturnValue(chatState);
-  h.setProxyServerId.mockResolvedValue(null);
+  // ⛔ (V4 follow-up 2026-09-12) — NOT `null`: that value MEANS "the local proxy
+  // row is gone" (lib/proxies' own contract), and `ensureAccountProxyRow` now
+  // acts on it by deleting the account row it just created, so the chat launch
+  // would get no proxy id at all. The happy-path return is the updated row.
+  h.setProxyServerId.mockResolvedValue({ id: 'lpx_1', serverId: 'apx_server_1' });
 });
 
 describe('AgentChatView egress — resolve the profile proxy → proxyId opt', () => {

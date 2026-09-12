@@ -15,6 +15,10 @@
 
 import {
   createProxy as createAccountProxy,
+  deleteProxy as deleteAccountProxy,
+  DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
+  isDesktopCredentialRefusalDetail,
+  isTierRefusalDetail,
   listProxies as listAccountProxies,
   testAccountProxy,
   updateProxy as updateAccountProxy,
@@ -28,7 +32,13 @@ import {
 } from './account-proxies';
 import { openvpnAutoStrip } from './openvpn-refusal';
 import type { OsFingerprint } from './os-fingerprint-verdict';
-import { MISSING_API_KEY_NEXT_STEP } from './proxy-check-copy';
+import {
+  DESKTOP_CREDENTIAL_NEXT_STEP,
+  MISSING_API_KEY_NEXT_STEP,
+  VPN_PLAN_EXCLUDED_CHECK_NOTICE,
+  VPN_PLAN_EXCLUDED_TALLY_REASON,
+  VPN_STORE_FAILED_TALLY_REASON,
+} from './proxy-check-copy';
 import {
   isProxyUsable,
   resolveEndpoint,
@@ -915,7 +925,40 @@ export async function ensureAccountProxyRow(
     }
   }
   const created = await createAccountProxy(baseUrl, apiKey, input);
-  await setProxyServerId(p.id, created.id);
+  // ⛔ (V4 follow-up 2026-09-12) — THE REMOTE ROW NOW EXISTS. Everything after
+  // this line is bookkeeping on THIS Mac, and neither of its two failure modes
+  // may be reported as "we could not store your VPN".
+  //
+  //   * `null` — `setProxyServerId` finds no local row (`idx < 0`) and returns
+  //     null SILENTLY. That happens when the proxy was DELETED while this check
+  //     was in flight, and a VPN check runs up to 90s: the create lands, the id
+  //     write is a no-op, and `ProxiesView.removeOne` already ran with
+  //     `serverId === undefined` so it never asked the server to delete
+  //     anything. An `account_proxies` row holding the customer's OpenVPN
+  //     configuration / WireGuard private key then survives a deletion the
+  //     customer watched succeed — a credential-hygiene leak, and newly
+  //     reachable for VPN rows because these checks now create. Undo our own
+  //     create and answer `undefined` (nothing to test).
+  //   * a THROW — the Tauri store write failed. The remote store SUCCEEDED, so
+  //     the caller must not print "Couldn't store this VPN on your account":
+  //     that is false, and it is the wrong half of the system. The id is
+  //     returned and this check runs. Residual, named rather than hidden: the
+  //     next check creates a SECOND row (nothing recorded the first id). That is
+  //     strictly better than today, where the same duplicate happened AND the
+  //     customer was told the opposite of what occurred.
+  //
+  // ⚠️ `null` is the CONTRACT ("No-op if the local proxy is gone. Returns the
+  // updated row"), not a void: six test doubles in this repo stubbed it as one,
+  // and two suites went red here rather than silently — which is the direction
+  // to keep. The one false positive it admits is a transient empty store read
+  // (`listProxyMetadataUnlocked` answers `[]` for a non-array value), which
+  // would delete a good row and report "not stored"; that is recoverable on the
+  // next check and strictly better than leaving a VPN key behind.
+  const recorded = await setProxyServerId(p.id, created.id).catch(() => undefined);
+  if (recorded === null) {
+    await deleteAccountProxy(baseUrl, apiKey, created.id).catch(() => undefined);
+    return undefined;
+  }
   return { id: created.id, created: true, healed };
 }
 
@@ -936,6 +979,84 @@ export function socks5FleetTestNotStoredNotice(err: unknown): string {
       ? ` Driftstack said: ${detail}`
       : ' The server did not answer; try Test again.';
   return `Tested from this Mac only. Couldn't store this proxy on your account, so the test Mac did not test it (QUIC, OS fingerprint, fleet latency).${said}`;
+}
+
+/**
+ * (V2 2026-09-12) — the VPN check's twin of the sentence above, for the row's
+ * notice AND the Test-all tally, picked TOGETHER so the two can never name
+ * different reasons for the same refusal.
+ *
+ * ⚠️ SCOPE OF THAT CLAIM, corrected 2026-09-12 (V4 follow-up). `tally` has NO
+ * consumer in `apps/gui-client/src` yet: the only caller of this function is the
+ * profile card (`ProfilesView.runFleetTestForRow`), which reads `.notice`, and
+ * the Test-all tally lives in `ProxiesView` — the proxy area's file, where the
+ * patch that would read it has not landed. So the two-surfaces guarantee is a
+ * property this function MAKES POSSIBLE, not one in effect; today `tally` is
+ * exercised only by its own unit arm. Do not cite it as shipped behaviour until
+ * `ProxiesView`'s VPN arm calls this.
+ *
+ * ⛔ MEASURED, and it is the whole of the owner's "nothing showing": a VPN row's
+ * check returned at `p.serverId === undefined` on all four surfaces (the grid's
+ * Check, Test-all, the profile card's Check VPN, the background sweep) and NO
+ * VPN path ever set `serverId` — `ensureAccountProxyRow` has exactly one
+ * `createProxy` call site in this app and its three callers are the two launches
+ * and the SOCKS5 Test arms. So a launch was the only thing that could store a
+ * VPN row, the check told the customer to launch one, and the launch was the
+ * half of the report that was failing: a closed loop in which the measurement
+ * that would explain the failure can never be taken. The checks store the row
+ * themselves now (the same `ensureAccountProxyRow` the SOCKS5 Test has called
+ * since (q) 12-memory (A)); this names the cause when that store is refused.
+ *
+ * Three causes, three sentences, discriminated by the SERVER's own contract
+ * (status + the problem `detail` the shared discriminators match) — never by
+ * prose this module reproduces:
+ *   * the TIER refusal (`vpnEgress` off) — a plan sentence of our own, because
+ *     the server's detail names an internal flag and a retry cannot help;
+ *   * the free-desktop ROUTE POLICY refusal — the credential, not the plan;
+ *   * anything else — the server's `detail` when it gave one, exactly as the
+ *     SOCKS5 sibling above does for the same request on the same route.
+ *
+ * ⛔ EXCEPT AN UNRECOGNISED 403, which echoes NOTHING (V4 follow-up
+ * 2026-09-12). The two 403s above are the only ones this module can name, and
+ * every other 403 on this route is an AUTHORISATION fact whose `detail` names
+ * internals: a key without the `account_owner` scope answers `This action
+ * requires the "account_owner" scope.` (errors-helpers), a suspended account and
+ * a denied device likewise. Echoing it put the GUI one server-side copy edit
+ * away from printing the exact class of string the plan sentence exists to keep
+ * off the screen — the tier branch is matched by a REGEX over server prose one
+ * module over, so a reworded tier sentence falls through to here and the flag
+ * name appears after all. A non-403 detail is still echoed on purpose: there it
+ * is usually about the customer's own configuration (a 400 naming the offending
+ * `.ovpn` line), which is the same reflection the launch dialog makes for the
+ * same class of cause, for the same reason.
+ */
+export function vpnStoreRefusal(err: unknown): { notice: string; tally: string } {
+  const status = (err as { status?: unknown } | null)?.status;
+  const rawDetail = (err as { detail?: unknown } | null)?.detail;
+  const detail = typeof rawDetail === 'string' && rawDetail.length > 0 ? rawDetail : undefined;
+  if (status === 403) {
+    if (isTierRefusalDetail(detail)) {
+      return { notice: VPN_PLAN_EXCLUDED_CHECK_NOTICE, tally: VPN_PLAN_EXCLUDED_TALLY_REASON };
+    }
+    if (isDesktopCredentialRefusalDetail(detail)) {
+      return {
+        notice: `Endpoint resolves. ${DESKTOP_CREDENTIAL_FLEET_TEST_REASON}`,
+        tally: DESKTOP_CREDENTIAL_NEXT_STEP,
+      };
+    }
+  }
+  const said =
+    status === 403
+      ? // See the ⛔ note above: an unrecognised 403 is an authorisation fact
+        // whose detail names internals. Say what the customer can do instead.
+        ' Your account is not allowed to store it — check your plan and API key in Settings.'
+      : detail !== undefined
+        ? ` Driftstack said: ${detail}`
+        : ' The server did not answer; try the check again.';
+  return {
+    notice: `Endpoint resolves. Couldn't store this VPN on your account, so the tunnel was not tested.${said}`,
+    tally: VPN_STORE_FAILED_TALLY_REASON,
+  };
 }
 
 /**
@@ -963,6 +1084,24 @@ export async function checkEndpointRowForSweep(
   const r = await resolveEndpoint(p.host, p.port);
   await saveEndpointResult(p.id, { resolved: r.resolved, ip: r.ip, message: r.message }, now());
   if (!r.resolved || !isVpnScheme(p.scheme)) return;
+  // (V2 2026-09-12) — ⛔ THE SWEEP DELIBERATELY DOES NOT STORE THE ROW, and this
+  // asymmetry with the two user-initiated checks (which now do) is the rule, not
+  // an oversight of the same shape as the one they just fixed.
+  //
+  // The rule being applied: a local proxy's material is "device-only, never
+  // uploaded" until the customer does something that uploads it on purpose —
+  // `account_proxies` is described, in the server's own probe service, as "the
+  // SEPARATE org-level proxy population the customer uploaded to the control
+  // plane on purpose … uploading a proxy to the CP for dispatch IS that
+  // consent". Pressing Check / Test on a row is that act (the customer asked for
+  // a measurement only the test Mac can make, and the app already told them to
+  // launch a session to get it, which uploads strictly more). A 20-minute
+  // background timer is not: it would ship a customer's VPN keys to the control
+  // plane with no act at all, which would make that sentence false.
+  //
+  // A row the customer HAS checked since this landed is already stored, so the
+  // sweep refreshes it like any other; only a row last checked on an older build
+  // stays un-measured here, and its next Check stores it.
   if (creds.apiKey === null || creds.apiKey.length === 0 || p.serverId === undefined) return;
   const outcome = await testProxyOnServer(creds.baseUrl, creds.apiKey, p.serverId);
   await persistServerProbe(p.id, outcome, { adoptExit: true });

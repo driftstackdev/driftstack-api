@@ -101,7 +101,7 @@ vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
   ) => testAccountProxy(baseUrl, apiKey, id, opts),
 }));
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('../../src/components/ConfirmProvider', () => ({
   useConfirm: () => vi.fn(() => Promise.resolve(true)),

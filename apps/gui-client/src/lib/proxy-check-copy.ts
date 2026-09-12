@@ -112,6 +112,51 @@ export const VPN_NOT_STORED_TALLY_REASON =
   'not stored on your account yet — launch a session through it once';
 export const VPN_NO_API_KEY_CHECK_NOTICE = `Endpoint resolves. ${MISSING_API_KEY_NEXT_STEP}.`;
 
+/**
+ * (V2 2026-09-12, owner: "openvpn … not showing info measurements of proxy
+ * check like a socks5 does after adding") — the two notices a VPN check leaves
+ * when it STORES the row itself and the store is refused.
+ *
+ * ⛔ The sentence above (`VPN_NOT_STORED_CHECK_NOTICE`) described the OLD
+ * behaviour and was the whole defect: a VPN row's check returned at
+ * `serverId === undefined` and told the customer to launch a session — while
+ * the launch they were told to run is the thing that was failing, so the one
+ * measurement that would have explained it could never be taken. The check
+ * stores the row now, exactly as the SOCKS5 Test has since (q) 12-memory (A),
+ * and these say why when that store cannot happen. The old sentence stays as
+ * the fallback for a store that returned no id at all.
+ *
+ * The PLAN case gets its own sentence rather than the server's: the control
+ * plane's 403 detail names an internal feature flag (`The "vpnEgress" feature
+ * is not available on the "free" tier.`), which is not a sentence to show a
+ * customer — and it is the one refusal a retry can never fix.
+ */
+export const VPN_PLAN_EXCLUDED_CHECK_NOTICE =
+  'Endpoint resolves. Your plan does not include VPN proxies, so the tunnel could not be tested and a session cannot launch through it. Upgrade to use OpenVPN or WireGuard.';
+/** The Test-all tally's clause for the same refusal. */
+export const VPN_PLAN_EXCLUDED_TALLY_REASON = 'not included in your plan';
+/** The Test-all tally's clause when the store failed for any other reason. */
+export const VPN_STORE_FAILED_TALLY_REASON = 'could not be stored on your account';
+
+/**
+ * (V4 follow-up 2026-09-12) — the row IS stored, and the PUT that re-pushes the
+ * config this Mac holds FAILED, so the tunnel the test Mac brought up is the one
+ * some EARLIER save stored.
+ *
+ * ⛔ That failure used to be swallowed whole: the check's catch only spoke when
+ * `serverId` was undefined, so for a stored row a refused re-sync said nothing
+ * and the customer was shown a measurement of a DIFFERENT configuration than the
+ * one in front of them, with no way to know. The comment above the catch
+ * justified the silence with "an unedited row already matches" — which is false
+ * for exactly the population this whole item serves: `accountProxyInputFor`
+ * heals a legacy OpenVPN blob and `persistHealedOpenvpn` writes the healed copy
+ * LOCALLY before the wire, so a healed row provably does not match the stored
+ * one. The result still stands (it is a real measurement of a real config); the
+ * sentence says which config it describes.
+ */
+export const VPN_STALE_CONFIG_CHECK_NOTICE =
+  'Endpoint resolves. This Mac’s copy of the configuration could not be sent to your account, so the result below describes the configuration stored earlier — not the one saved here. Try the check again.';
+
 /** (j) J4 / #9 — the free-desktop credential cannot reach the test route: the
  *  row is "not tested", with the same next step a row with no key gets. */
 export const DESKTOP_CREDENTIAL_NEXT_STEP = `needs an API key — ${MISSING_API_KEY_NEXT_STEP}`;

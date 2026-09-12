@@ -1677,15 +1677,41 @@ export async function runProxyPrelaunchGate(args: {
   // active here, BLOCK at create with a clean 422 instead, so the founder gets an
   // honest, specific error before any window opens. `unreachable` is the closest
   // reason (the proxy can't be used right now); the detail spells it out.
-  const resolved = await accountProxiesService.resolveForDispatch({ proxyId, accountId, tier });
+  const resolution = await accountProxiesService.resolveForDispatchWithReason({
+    proxyId,
+    accountId,
+    tier,
+  });
+  const resolved = resolution.config;
   if (resolved === null) {
+    // (V3 2026-09-12, owner: "session not starting still") — SAY WHICH CAUSE.
+    // Nine distinct causes reached this line as one `null`, and both the log
+    // ("decrypt/config") and the customer's 422 ("its stored configuration could
+    // not be read") named decryption for all of them. Two are POLICY refusals a
+    // re-add cannot fix — a `script-security 2` line the control plane will not
+    // run, a `ca ca.crt` reference no session can resolve — and one is a missing
+    // field; for those three the old sentence was false, so the owner's launch
+    // failure could be neither explained nor acted on. `reason` is the closed-set
+    // code for triage; `detail` is the sentence the owner reads, and for a refused
+    // directive it names the exact line, exactly as the create route does.
     logger?.warn(
-      { component: 'proxy-prelaunch-probe', proxyId },
-      'proxy unresolvable at pre-launch gate (decrypt/config) — blocking launch (no dispatch)',
+      { component: 'proxy-prelaunch-probe', proxyId, reason: resolution.reason },
+      'proxy unresolvable at pre-launch gate — blocking launch (no dispatch)',
     );
+    // ⛔ (V4 follow-up) — `config_unresolvable`, NOT `unreachable`. Nothing was
+    // dialled on this path: for a VPN row the gate skips the probe outright (see
+    // the `'type' in resolved` return below) and for every row it is the STORED
+    // CONFIG that failed, before any socket. `unreachable` is contractually "the
+    // proxy did not answer a real egress round-trip", and answering it here told
+    // the SDK, the dashboard and the desktop client that a measurement had been
+    // taken from a vantage that never ran — and pointed the customer at a host
+    // and port that were never the problem. The probe's own verdict below keeps
+    // `unreachable`. The fallback reason is only used when the service named no
+    // cause, which is now only a resolve that THREW.
     throw new ProxyValidationFailedError({
-      reason: 'unreachable',
+      reason: resolution.reason === undefined ? 'unreachable' : 'config_unresolvable',
       detail:
+        resolution.detail ??
         'This proxy can’t be used right now (its stored configuration could not be read). Re-add it and try again.',
     });
   }

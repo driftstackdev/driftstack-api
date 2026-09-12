@@ -114,6 +114,55 @@ describe('OVPN file-reference shared contract (cross-source pin with node 8a03a3
     // not-prefix is a real clause the parameter set does not declare.)
   });
 
+  // ⛔⛔ (V4 follow-up 2026-09-12) — THE ARM ABOVE READS THE FIXTURE, NOT THE CODE.
+  //
+  // `expect(contract.token_separators).toEqual([' ', '\t'])` compares the
+  // FIXTURE's declared parameter against a literal in this file. It says nothing
+  // about what `findUnresolvableOpenvpnFileReferences` actually splits on — and
+  // it was splitting on `/\s+/`, i.e. every Unicode space, for the whole life of
+  // this suite. `ca\u00A0ca.crt` was therefore REJECTED here and ACCEPTED by the
+  // node parser: a fourth divergence in a pair whose agreement the dispatch-time
+  // refusal's safety argument depends on, invisible to 18 green rows because no
+  // row carries an exotic separator and `\s` is a superset of the declared set.
+  //
+  // This arm drives the IMPLEMENTATION from `token_separators`, in both
+  // directions — every declared separator must split, and a whitespace character
+  // OUTSIDE the declared set must not. The negative half is the one that
+  // matters; without it a `/\s+/` implementation passes.
+  //
+  // MUTATION (run): restore `text.split(/\s+/)` in the implementation → the
+  // negative half reds on all three non-declared characters. Deleting one of the
+  // declared separators from the fixture reds the positive half.
+  it('CRITICAL the IMPLEMENTATION tokenises on exactly the declared separators — every one splits, and no other whitespace does', () => {
+    const base = 'client\ndev tun\nremote vpn.example.com 1194\n';
+    // Positive: each declared separator makes `ca <file>` a real reference.
+    expect(contract.token_separators.length).toBeGreaterThan(0); // vacuity floor
+    for (const sep of contract.token_separators) {
+      const hits = findUnresolvableOpenvpnFileReferences(`${base}ca${sep}ca.crt\n`);
+      expect(hits.length, `declared separator ${JSON.stringify(sep)} must split`).toBe(1);
+      expect(hits[0]?.directive).toBe('ca');
+    }
+    // Negative: whitespace the contract does NOT declare is not a separator,
+    // because openvpn's lexer does not split there either — such a line is an
+    // unrecognised option that fails LOUDLY, a different failure class from the
+    // SILENT file-not-found this rule exists to catch. The node accepts them, so
+    // rejecting them here would be exactly the drift this file measures.
+    const NOT_SEPARATORS = ['\u00A0', '\u000B', '\u000C'];
+    for (const ch of NOT_SEPARATORS) {
+      expect(
+        contract.token_separators.includes(ch),
+        `fixture now declares ${JSON.stringify(ch)} — move it to the positive half`,
+      ).toBe(false);
+      expect(
+        findUnresolvableOpenvpnFileReferences(`${base}ca${ch}ca.crt\n`),
+        `${JSON.stringify(ch)} must NOT be treated as a token separator`,
+      ).toEqual([]);
+    }
+    // CONTROL — the same blob with a real space IS rejected, so the negative
+    // half above cannot be satisfied by a finder that rejects nothing at all.
+    expect(findUnresolvableOpenvpnFileReferences(`${base}ca ca.crt\n`).length).toBe(1);
+  });
+
   it('DRIFT GUARD: mirror equals the driftstack canonical BYTE-FOR-BYTE when the sibling repo is present; LOUD "unverified" (never a silent skip) when absent', () => {
     if (!existsSync(CANON)) {
       // The "could not look" state, kept DISTINCT from "looked and matched" — the

@@ -98,7 +98,7 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
   clearExitResult: vi.fn(() => Promise.resolve({})),
 }));
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock('../../src/components/ConfirmProvider', () => ({
   useConfirm: () => vi.fn(() => Promise.resolve(true)),
@@ -134,7 +134,11 @@ describe('(q) Item 3 residual — the grid keeps the fleet relay verdict across 
     await waitFor(() => expect(testAccountProxy).toHaveBeenCalledTimes(1));
     // The fallback is VISIBLE — the latency now wears the server label…
     await waitFor(() => expect(screen.getByText(/90\s*ms/)).toBeInTheDocument());
-    await waitFor(() => expect(screen.getByText(/from the server/i)).toBeInTheDocument());
+    // (P2 2026-09-12) — pinned as the EXACT chip text, not /from the server/i:
+    // the health pill now names its own machine too ("healthy from the server"),
+    // so the loose regex matched two elements and getByText threw. The chip
+    // beside the number is the element this arm is about.
+    await waitFor(() => expect(screen.getByText('from the server')).toBeInTheDocument());
     // …and the relay fact the control plane could not re-measure still stands.
     expect(quicChipText()).toMatch(/✓\s*QUIC/);
   });

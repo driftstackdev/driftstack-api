@@ -44,8 +44,10 @@ import type {
 } from '../db/account-proxies-repo.js';
 import {
   UnsafeProxyHostError,
+  UNSAFE_TARGET_DETAIL,
   WIREGUARD_WRAPPED_PRESHARED_KEY_FIELD,
   type AccountProxiesService,
+  type ProxyDispatchResolution,
 } from '../services/account-proxies.js';
 import {
   encryptAccountProxySecret,
@@ -141,7 +143,13 @@ export interface AccountMeRoutesOptions {
    * returns a socks5 config OR a VPN wire OR null, and writing that union out by
    * hand here would drift from the service the gate calls.
    */
-  accountProxiesService?: Pick<AccountProxiesService, 'resolveForDispatch'>;
+  /** (V3) — `resolveForDispatchWithReason` is the same resolve carrying the CAUSE
+   *  of a null; the fleet arm reads it ONLY after a null, to say which of the nine
+   *  causes it was instead of "could not be read" for all of them. */
+  accountProxiesService?: Pick<
+    AccountProxiesService,
+    'resolveForDispatch' | 'resolveForDispatchWithReason'
+  >;
   /** Best-effort audit emitter for proxy.created / proxy.deleted (egress-config
    *  changes are security-relevant + already have dashboard labels/filters).
    *  Omitted → no audit (the customer op still succeeds). */
@@ -1303,7 +1311,21 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
        *  measurement (none free, dispatch unavailable/timed out, an error with
        *  no node to blame, any unexpected throw). A tier refusal is not a miss:
        *  it is thrown, exactly as the launch path surfaces it. */
-      type FleetMiss = { miss: 'no_fleet' | 'unresolvable' | 'no_node' };
+      type FleetMiss = {
+        miss: 'no_fleet' | 'unresolvable' | 'no_node';
+        /** (V3) — for `unresolvable` only: the sentence that names the cause. A
+         *  policy refusal (a script directive the control plane will not run, an
+         *  external cert/key reference) is NOT "could not be read", and the one
+         *  sentence this arm used to give was false for it.
+         *
+         *  ⛔ (V4 follow-up) — there was a `reason?: ProxyUnresolvableReason`
+         *  here too and NOTHING READ IT: the closed-set code reaches triage
+         *  through the `request.log.info` beside each producer, not through the
+         *  reply, and the customer-facing pick below branches on `detail`. A
+         *  written-never-read field on a reply-shaping type reads to the next
+         *  editor as though some consumer branched on it. */
+        detail?: string;
+      };
       /** The row's STORED exit as a /test reply carries it beside a `not_run`
        *  (live_session / no_node). (h) finding 1 — it rides WITH the date it was
        *  observed: the stored exit is what a session saw BEFORE whatever the
@@ -1428,7 +1450,47 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             accountId: ctx.account.id,
             tier: ctx.account.tier,
           });
-          if (resolved === null) return { miss: 'unresolvable' } satisfies FleetMiss;
+          if (resolved === null) {
+            // (V3 2026-09-12) — ask WHY, and say it. This whole request is the
+            // customer asking "why can't you measure my VPN", so a second read of
+            // the row on the FAILURE path only is the cheapest possible way to
+            // answer it honestly; the success path is untouched. `resolveForDispatch`
+            // stays the first call deliberately — it is the one the fleet arm has
+            // always made, and the one this route's suites intercept.
+            // ⛔ (V4 follow-up) — IN ITS OWN try/catch. This call sits inside the
+            // closure's outer `try`, whose handler answers with
+            // `{ miss: 'no_node' }` — "No fleet Mac was free to test this VPN
+            // tunnel. Try again in a minute." The verdict is ALREADY established
+            // by the first resolve above: the row is not dispatchable. If this
+            // purely DIAGNOSTIC second read then threw (a DB blip on the second
+            // findById, a decrypt-library fault), the customer would be handed a
+            // fabricated cause AND a retry promise for a row no retry can fix,
+            // and the true answer would be lost. A diagnostic must never be able
+            // to change the verdict it exists to explain — so a throw here
+            // degrades to the unresolvable answer with no cause, which is
+            // exactly what this arm said before the cause existed.
+            let why: ProxyDispatchResolution | null = null;
+            try {
+              why = await accountProxiesService.resolveForDispatchWithReason({
+                proxyId: row.id,
+                accountId: ctx.account.id,
+                tier: ctx.account.tier,
+              });
+            } catch (err) {
+              request.log.info(
+                { proxyId: row.id, err },
+                'proxy test: the diagnostic re-resolve threw; answering unresolvable with no cause',
+              );
+            }
+            request.log.info(
+              { proxyId: row.id, reason: why?.reason },
+              'proxy test: stored row is not dispatchable',
+            );
+            return {
+              miss: 'unresolvable',
+              ...(why?.detail !== undefined ? { detail: why.detail } : {}),
+            } satisfies FleetMiss;
+          }
           const dispatch = await fleetControlRegistry.probeEgress({
             inlineProxyConfig: resolved,
             target: FLEET_PROBE_TARGET,
@@ -1722,7 +1784,17 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               { proxyId: row.id, err },
               'proxy test: stored proxy host is unsafe; refusing the fleet dispatch',
             );
-            return { miss: 'unresolvable' } satisfies FleetMiss;
+            // ⛔ (V4 follow-up) — WITH its cause. This return carried no
+            // reason/detail, so it fell through to the shipped "could not be
+            // read. Re-add it" sentence 40 lines below — the exact class of lie
+            // V3 says it eliminated, in the same route, for the one cause where
+            // re-adding the same config is guaranteed to be refused again. The
+            // service already owns the right words (it answers the EMBEDDED
+            // endpoint with them); this is the DISPLAY host, classified by the
+            // same `classifyUnsafeHost`, so it gets the same sentence. Note this
+            // is also the only way `config_refused_target` can be reported for
+            // the display host: the service THROWS for it rather than returning.
+            return { miss: 'unresolvable', detail: UNSAFE_TARGET_DETAIL } satisfies FleetMiss;
           }
           request.log.info(
             { proxyId: row.id, err },
@@ -1759,8 +1831,31 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
           if (fleet.miss === 'unresolvable') {
             return {
               ok: false as const,
-              reason: 'This VPN’s stored configuration could not be read. Re-add it and try again.',
+              // (V3) — the CAUSE's own sentence when the service named one (for a
+              // refused directive it quotes the offending line, exactly as the
+              // create/update route does for the same blob); the shipped sentence
+              // when it did not, which is also what every unreadable cause says.
+              reason:
+                fleet.detail ??
+                'This VPN’s stored configuration could not be read. Re-add it and try again.',
               measured_from: 'control_plane' as const,
+              // ⛔ (V4 follow-up) — `not_run`, and the in-code defence that used
+              // to sit here ("a verdict about the ROW … not a `not_run`") was
+              // contradicted by its own consequence. `not_run`'s CONTRACT is
+              // "present when NOTHING RAN, so `ok:false` is not a verdict about
+              // the proxy" — and nothing ran here: no node was dispatched, no
+              // tunnel was brought up, no packet left. Its absence made the
+              // client classify the reply `failed`, which DROPS the row's
+              // exitIp/geo/latency/quic/os and stamps `exitSupersededAt`, so a
+              // WireGuard row with a missing `Address` was rendered as a red
+              // "VPN tunnel down" and the exit IP the customer had just gained
+              // was erased — by a cause that measured nothing about the tunnel.
+              // `unresolvable` covers all ten causes truthfully (see
+              // ProxyUnresolvableReason); `reason` above still carries the
+              // sentence, and the stored exit rides along exactly as it does on
+              // the live_session / no_node refusals below.
+              not_run: 'unresolvable' as const,
+              ...storedExitForReply(),
             };
           }
           return {

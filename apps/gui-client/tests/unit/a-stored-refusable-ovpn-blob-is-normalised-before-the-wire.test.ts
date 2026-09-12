@@ -34,8 +34,9 @@ import type { ProxyConfig, ProxyDraft } from '../../src/lib/proxies';
 const h = vi.hoisted(() => ({
   createProxy: vi.fn<(...a: unknown[]) => Promise<{ id: string }>>(),
   updateProxy: vi.fn<(...a: unknown[]) => Promise<{ id: string }>>(),
-  setProxyServerId: vi.fn<(id: string, serverId: string) => Promise<null>>(() =>
-    Promise.resolve(null),
+  // See the note above the mock factory below.
+  setProxyServerId: vi.fn<(id: string, serverId: string) => Promise<ProxyConfig | null>>(() =>
+    Promise.resolve({ id: 'p1', serverId: 'aprx_new' } as unknown as ProxyConfig),
   ),
   updateLocalProxy: vi.fn<(id: string, patch: ProxyDraft) => Promise<null>>(() =>
     Promise.resolve(null),
@@ -47,6 +48,15 @@ vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
   createProxy: (...a: unknown[]) => h.createProxy(...a),
   updateProxy: (...a: unknown[]) => h.updateProxy(...a),
 }));
+/** ⛔ (V4 follow-up 2026-09-12) — `setProxyServerId` MUST NOT BE STUBBED AS
+ *  `Promise.resolve(null)`. Its contract (lib/proxies) is "No-op if the local
+ *  proxy is gone. Returns the updated row" — so `null` MEANS "there is no such
+ *  local row any more", and `ensureAccountProxyRow` now acts on it: it deletes
+ *  the account row it just created rather than orphaning the customer's VPN
+ *  secret on the control plane after a delete that raced the check. A `null`
+ *  here therefore no longer stands in for "void"; it asserts a deleted row.
+ *  Return the updated row (or `undefined`, which is what the 22 other suites'
+ *  `Promise.resolve()` stubs yield and which is read as success). */
 vi.mock('../../src/lib/proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof ProxiesModule>()),
   setProxyServerId: (id: string, serverId: string) => h.setProxyServerId(id, serverId),

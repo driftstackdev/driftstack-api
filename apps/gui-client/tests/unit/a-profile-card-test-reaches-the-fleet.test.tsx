@@ -117,6 +117,12 @@ vi.mock('../../src/lib/profile-bindings', () => ({
   markLaunched: vi.fn(() => Promise.resolve()),
   clearSession: vi.fn(() => Promise.resolve()),
   deleteBinding: vi.fn(() => Promise.resolve()),
+  // (P1) — this suite renders ProxiesView, whose delete path reads this. A
+  // hand-listed factory omits every export added later, and the omission is
+  // NOT a module-load error (vitest's namespace access is lazy): the suite
+  // stays green until an arm reaches the Remove button, then throws. Listed
+  // here so that arm fails on its own subject rather than on the mock.
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 
 const UDP_OK: ProxyTestResult = {

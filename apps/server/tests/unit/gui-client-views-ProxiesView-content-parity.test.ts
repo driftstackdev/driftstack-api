@@ -44,9 +44,9 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
     expect(body).not.toMatch(/never uploaded|never go to the Driftstack control plane/i);
   });
 
-  it("ListState 4-field (proxies + loading + error nullable + notice nullable — the transient unbind confirmation, e.g. 'N profiles were unbound from the deleted proxy'); EMPTY_DRAFT 6-field with label:'' + scheme:'socks5' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
+  it("ListState 4-field (proxies + loading + error nullable + notice nullable — the transient DETACH confirmation, e.g. '2 profiles were using this proxy'; (P1) nothing is 'unbound' — the binding is KEPT naming the deleted proxy, which is the state every resolver reads as no-proxy, and the old wording described the step that CAUSED the silent re-point); EMPTY_DRAFT 6-field with label:'' + scheme:'socks5' + host:'' + port:1080 (SOCKS5 default) + username:null + password:null — pinned so the SOCKS5 default port doesn't drift, customer can submit without typing a port", () => {
     expect(body).toMatch(
-      /interface ListState \{\s*proxies: ProxyConfig\[\];\s*loading: boolean;\s*error: string \| null;\s*\/\*\* Transient confirmation, e\.g\. "N profiles were unbound from the deleted proxy"\. \*\/\s*notice: string \| null;\s*\}/,
+      /interface ListState \{\s*proxies: ProxyConfig\[\];\s*loading: boolean;\s*error: string \| null;\s*\/\*\* Transient confirmation, e\.g\. "2 profiles were using this proxy"\. \(P1\)\s*\*\s*Nothing is "unbound": the binding is KEPT naming the deleted proxy, which\s*\*\s*is the state every resolver reads as no-proxy\. \*\/\s*notice: string \| null;\s*\}/,
     );
     expect(body).toMatch(
       /const EMPTY_DRAFT: ProxyDraft = \{\s*label: '',\s*scheme: 'socks5',\s*host: '',\s*port: 1080,\s*username: null,\s*password: null,\s*\};/,

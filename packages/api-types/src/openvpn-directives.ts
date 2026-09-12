@@ -194,12 +194,43 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
  *
  * ⭐ CROSS-SOURCE PIN with the node-side reject (A3 `8a03a3929`,
  * VPNProxyConfigParser.openvpnExternalFileReference). Upload-reject (here) and
- * parse-reject (node) enforce the SAME rule so they agree by construction:
+ * parse-reject (node) enforce the same rule on the four points below, with ONE
+ * measured exception named after them — ⛔ "by construction" is what this comment
+ * used to claim, and it was false; two implementations in two languages agree
+ * until they drift, and a differential is the only thing that knows:
  *   - REJECT: first token is one of the five AND the line has a file argument
  *     (≥2 tokens), when NO `<directive>` opening tag exists anywhere in the blob.
  *   - ACCEPT: an inline `<ca>`…`</ca>` block — inline WINS even if a stray
  *     `ca ca.crt` line is also present (openvpn uses the block; the line is inert).
  *   - ACCEPT: a comment (`#`/`;`) or a bare directive with no argument.
+ *
+ * ⛔⛔ SEPARATORS: SPACE AND TAB, and ONLY those — `token_separators: [" ", "\t"]`
+ * in the shared contract (openvpn-file-reference-fixtures.json), which is what
+ * openvpn's own config lexer does and what the node parser does
+ * (`whereSeparator: { $0 == " " || $0 == "\t" }`, VPNProxyConfig.swift).
+ *
+ * This function used to split on `/\s+/`, i.e. on every Unicode space as well —
+ * a FOURTH divergence in this pair, found 2026-09-12 by reading the two sources
+ * against the contract rather than against each other. `ca\u00A0ca.crt` (a
+ * non-breaking space, which a copy-paste out of a provider's web page produces)
+ * was REFUSED here and ACCEPTED by the node, so "both ends enforce the same
+ * rule" — the sentence the dispatch-time refusal's safety argument rests on —
+ * was false, and the drift was invisible: the contract suite's rule-parameter arm
+ * compared the FIXTURE's declared separators against a literal `[' ', '\t']` and
+ * never against this code, so it read green either way. The arm now derives its
+ * cases from `token_separators` and asserts the NEGATIVE too (a whitespace char
+ * outside the declared set is NOT a separator here), which is what would have
+ * caught it.
+ *
+ * Direction of this correction: slightly MORE permissive. A line openvpn cannot
+ * tokenise is an unrecognised option that fails LOUDLY at startup — a different
+ * failure class from the SILENT file-not-found this guard exists to catch, and
+ * the one the Swift side already documents as deliberately out of scope.
+ *
+ * ⚠️ `findUnsupportedOpenvpnLines` above still splits on `/\s+/` ON PURPOSE: it is
+ * the SECURITY guard (script-executing directives), it has no cross-source
+ * contract declaring its tokenizer, and for it over-refusal is the safe
+ * direction. Do not "make them consistent".
  *   - DO NOT require `<ca>` unconditionally: the rule is "no UNRESOLVABLE file
  *     reference", not "must contain <ca>". A config with no cert material at all
  *     is a genuine error openvpn names better than a blanket requirement, and
@@ -235,7 +266,8 @@ export function findUnresolvableOpenvpnFileReferences(
   for (let i = 0; i < lines.length; i += 1) {
     const text = (lines[i] ?? '').trim();
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
-    const tokens = text.split(/\s+/);
+    // Space and tab only — see the ⛔⛔ note above. NOT `/\s+/`.
+    const tokens = text.split(/[ \t]+/);
     // CASE-SENSITIVE keyword, matching the node parser (8a03a3929) and OpenVPN's
     // own option table (streq against lowercase names — assumed from behaviour, not
     // read from options.c this session): `CA ca.crt` is an unrecognised option that

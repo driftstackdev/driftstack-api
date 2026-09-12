@@ -72,6 +72,13 @@ const agentCreate = vi.fn<(b: unknown) => Promise<unknown>>(() =>
   Promise.resolve({ id: 'agt_1', livekit: LIVEKIT }),
 );
 
+/** (V4 follow-up) — the create modal's own call, so the post-create AUTO-probe
+ *  (`#3 auto-test on create` → `probeIfUnprobed`) can be driven for real rather
+ *  than asserted about. */
+const profilesCreate = vi.fn<(b: unknown) => Promise<{ id: string }>>(() =>
+  Promise.resolve({ id: 'prof_new' }),
+);
+
 function profile() {
   return {
     id: 'prof_1',
@@ -88,6 +95,7 @@ vi.mock('../../src/lib/SettingsContext', () => {
   const stable = {
     client: {
       profiles: {
+        create: (b: unknown) => profilesCreate(b),
         list: () => Promise.resolve({ data: [profile()] }),
         // eslint-disable-next-line @typescript-eslint/require-await
         iterate: async function* () {
@@ -131,12 +139,28 @@ const { state } = vi.hoisted(() => ({
   // (n) N11/N20: it also selects WHICH VPN fixture `vpn1` is — 'openvpn' or
   // 'wireguard' — so the parametrised describes at the foot of this file drive
   // the same surfaces with a real WireGuard row.
+  // `storeRefused` — (V2 2026-09-12) the card's Check VPN now STORES an unstored
+  // row before asking the test Mac (it used to return with "launch a session
+  // once", which is why a VPN row could never be measured at all). So an
+  // unstored row only keeps a not-tested notice when the STORE is refused; this
+  // makes the account's create answer the tier 403 a Free account gets.
   state: {
     boundProxyId: 'vpn1',
     vpnStored: true,
     vpn1Scheme: 'openvpn',
+    storeRefused: false,
   },
 }));
+
+/** The control plane's answer to a VPN create on a tier without `vpnEgress`,
+ *  in the shape `lib/account-proxies` throws (status + problem detail). */
+function tierRefusal(): Error {
+  return Object.assign(new Error('proxy create failed: 403'), {
+    status: 403,
+    detail:
+      'The "vpnEgress" feature is not available on the "free" tier. Upgrade to a tier that includes this feature.',
+  });
+}
 
 vi.mock('../../src/lib/profile-bindings', () => ({
   listBindings: () =>
@@ -245,7 +269,9 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
 
 vi.mock('../../src/lib/account-proxies', async (importOriginal) => ({
   ...(await importOriginal<typeof AccountProxiesModule>()),
-  createProxy: vi.fn(() => Promise.resolve({ id: 'aprx_new' })),
+  createProxy: vi.fn(() =>
+    state.storeRefused ? Promise.reject(tierRefusal()) : Promise.resolve({ id: 'aprx_new' }),
+  ),
   updateProxy: vi.fn((_b: string, _k: string, id: string) => Promise.resolve({ id })),
   testAccountProxy: vi.fn(() => Promise.reject(new Error('not under test here'))),
 }));
@@ -271,7 +297,7 @@ vi.mock('../../src/lib/open-simulator', () => ({
   openSimulatorWindow: (args: Record<string, unknown>) => openSimulatorWindow(args),
 }));
 
-const { ProfilesView } = await import('../../src/views/ProfilesView');
+const { ProfilesView, proxyConfigRefusalMessage } = await import('../../src/views/ProfilesView');
 
 const STORE = 'proxy-probe-cache.json';
 function seedCache(probes: Record<string, unknown>): void {
@@ -290,6 +316,7 @@ async function launch(): Promise<void> {
 beforeEach(() => {
   stores.clear();
   agentCreate.mockClear();
+  profilesCreate.mockClear();
   confirmMock.mockClear();
   confirmMock.mockResolvedValue(true);
   openSimulatorWindow.mockClear();
@@ -302,6 +329,193 @@ beforeEach(() => {
   state.boundProxyId = 'vpn1';
   state.vpnStored = true;
   state.vpn1Scheme = 'openvpn';
+  state.storeRefused = false;
+});
+
+// ⛔ (V4 follow-up 2026-09-12) — WHO ASKED FOR THE TUNNEL TO COME UP.
+//
+// V2 made a VPN row's check STORE the row on the account (upload the .ovpn /
+// WireGuard private key) and then bring the tunnel up on a fleet Mac. Two of the
+// three callers of `handleTestProxy` are AUTOMATIC — the post-create auto-test
+// and `onProxyMinted` in Edit Profile — and nothing on that path gates on
+// scheme, so creating a profile on a VPN proxy did both with nobody pressing
+// anything. The rule the same change wrote down for the background sweep
+// ("pressing Check / Test on a row is that act; a 20-minute timer is not — it
+// would ship a customer's VPN keys to the control plane with no act at all")
+// applies verbatim to a profile create, which is not an act on the proxy either.
+//
+// And a `void`-ed 90s fleet probe left running while the modal closes is the
+// exact collision `handleLaunch` refuses to cause, in its own words: "most VPN
+// accounts allow one connection — the probe could break the launch."
+//
+// These arms drive the REAL create modal, so they measure the call graph rather
+// than asserting about it.
+// MUTATION: delete the `if (!userInitiated) return null;` guard in
+// runFleetTestForRow (i.e. restore the behaviour V2 shipped) → arm 1 reds on
+// createProxy AND on testAccountProxy; arm 3 (the CONTROL) stays green either
+// way, which is what makes arm 1 a guard and not a coincidence.
+describe('(V4) an AUTOMATIC probe of a VPN row neither stores it nor asks the test Mac', () => {
+  async function createAProfile(): Promise<void> {
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'New profile' }));
+    fireEvent.change(await screen.findByPlaceholderText('my-recurring-workflow'), {
+      target: { value: 'Auto Probe Profile' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Create profile$/ }));
+    await waitFor(() => expect(profilesCreate).toHaveBeenCalledTimes(1));
+  }
+
+  it('CRITICAL creating a profile on a VPN proxy does the DNS pre-flight and STOPS — no account store, no fleet tunnel', async () => {
+    state.vpnStored = false; // the unstored row: a store here would be the upload
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.createProxy).mockClear();
+    vi.mocked(AccountProxies.updateProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    await createAProfile();
+    // The pre-flight DID run — this arm is about what comes AFTER it, so a
+    // guard that simply stopped probing would not pass.
+    await waitFor(() => expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194));
+    // …and nothing left this Mac.
+    expect(vi.mocked(AccountProxies.createProxy)).not.toHaveBeenCalled();
+    expect(vi.mocked(AccountProxies.updateProxy)).not.toHaveBeenCalled();
+    expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
+    expect(testProxy).not.toHaveBeenCalled();
+    // A check nobody asked for writes no notice either (the sweep's rule).
+    expect(cardNotice()).toBeNull();
+  });
+
+  it('CRITICAL an ALREADY-STORED VPN row is not re-pushed or re-tested by an automatic probe either', async () => {
+    // The consent argument covers the upload; this covers the other half — a
+    // 90s tunnel bring-up on a fleet Mac, moments before the customer's Launch.
+    state.vpnStored = true;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.updateProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    await createAProfile();
+    await waitFor(() => expect(resolveEndpoint).toHaveBeenCalled());
+    expect(vi.mocked(AccountProxies.updateProxy)).not.toHaveBeenCalled();
+    expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
+  });
+
+  it('CONTROL — the customer pressing Check VPN on the same row DOES store it and DOES ask the test Mac', async () => {
+    // Without this the arms above are satisfied by never testing at all.
+    state.vpnStored = false;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.createProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(vi.mocked(AccountProxies.createProxy)).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it('VACUITY CONTROL — a SOCKS5 proxy is unchanged: the automatic probe still runs its native handshake', async () => {
+    // The gate is scoped to the VPN fleet step, not to auto-probing. A SOCKS5
+    // row's auto-probe is a local handshake — no upload, no fleet Mac — and it
+    // must still happen, or "auto-check after creating a profile" is broken for
+    // the whole SOCKS5 population.
+    state.vpn1Scheme = 'socks5';
+    seedCache({});
+    await createAProfile();
+    await waitFor(() => expect(testProxy).toHaveBeenCalled());
+  });
+});
+
+// ⛔ (V4 follow-up) — a REFUSED re-sync of an already-stored row was swallowed.
+//
+// `runFleetTestForRow` refreshes the account row first, so the tunnel the fleet
+// brings up is the config THIS Mac holds. When that PUT threw and the row was
+// already stored, nothing was said and the check went on to measure the
+// PREVIOUSLY STORED config — and the comment justified the silence with "an
+// unedited row already matches", which is false for exactly the population this
+// item serves: `accountProxyInputFor` heals a legacy OpenVPN blob and
+// `persistHealedOpenvpn` writes the healed copy LOCALLY before the wire.
+// MUTATION: drop the `staleStoredConfig` branch → the notice arm reds while the
+// measurement arm stays green, which is the whole point (the number is real; it
+// describes a different config).
+describe('(V4) a stored VPN row whose config could not be re-pushed says which config the result describes', () => {
+  it('CRITICAL the PUT fails, the tunnel is still measured, and the card says the result is of the config stored earlier', async () => {
+    state.vpnStored = true;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.updateProxy).mockClear();
+    vi.mocked(AccountProxies.updateProxy).mockRejectedValueOnce(
+      Object.assign(new Error('proxy update failed: 503'), { status: 503 }),
+    );
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 77,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    // The measurement still happened — against the STORED row.
+    await waitFor(() =>
+      expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'aprx_vpn',
+        { vantage: 'fleet' },
+      ),
+    );
+    expect(await screen.findByText('77ms')).toBeTruthy();
+    // …and the customer is told which configuration it describes.
+    await waitFor(() => expect(cardNotice()).toBe(VPN_STALE_CONFIG_CHECK_NOTICE));
+    // A notice, not the red banner: nothing failed.
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+  });
+
+  it('VACUITY CONTROL — a re-push that SUCCEEDS leaves no notice', async () => {
+    state.vpnStored = true;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 77,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    expect(await screen.findByText('77ms')).toBeTruthy();
+    expect(cardNotice()).toBeNull();
+  });
+
+  // (q) 13(d) had no arm on THIS surface — making the refresh conditional
+  // (`if (serverId === undefined) …`) reds nothing today. This is that arm.
+  it('CRITICAL the account row is re-pushed BEFORE the test Mac is asked (the tunnel is this Mac’s config)', async () => {
+    state.vpnStored = true;
+    seedCache({});
+    const order: string[] = [];
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.updateProxy).mockClear();
+    vi.mocked(AccountProxies.updateProxy).mockImplementation((_b, _k, id) => {
+      order.push('put');
+      return Promise.resolve({ id } as never);
+    });
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockImplementation(() => {
+      order.push('test');
+      return Promise.resolve({ ok: true, latency_ms: 5, measured_from: 'fleet' } as never);
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    await waitFor(() => expect(order).toEqual(['put', 'test']));
+  });
 });
 
 describe('a VPN profile launches through the endpoint resolve, never the SOCKS5 probe', () => {
@@ -1205,6 +1419,8 @@ import {
   VPN_NO_API_KEY_CHECK_NOTICE,
   VPN_NO_EXIT_YET_TITLE,
   VPN_NOT_STORED_CHECK_NOTICE,
+  VPN_PLAN_EXCLUDED_CHECK_NOTICE,
+  VPN_STALE_CONFIG_CHECK_NOTICE,
 } from '../../src/lib/proxy-check-copy';
 
 // Polish (2026-09-11): the notice ROW shows the next-step clause ('not stored
@@ -1218,19 +1434,70 @@ const cardNotice = (): string | null => {
 };
 
 describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tested', () => {
-  // MUTATION: restore the silent `return null` for `px.serverId === undefined`
-  // in runFleetTestForRow → no notice on the card → red.
-  it('CRITICAL not stored on the account: the card carries the grid’s notice, and the fleet is never asked', async () => {
+  // (V2 2026-09-12, owner: "openvpn … nothing of IP, quic, udp, nothing
+  // showing … and session not starting still") — THE ROW IS STORED HERE NOW.
+  //
+  // ⛔ This arm used to pin the opposite ("the fleet is never asked"), and that
+  // was the defect: NOTHING on a VPN path ever set `serverId`
+  // (`ensureAccountProxyRow` has one create call site in the app, reached only
+  // by the two launches and the SOCKS5 Test arms), so the only thing that could
+  // store a VPN row was a launch — and the launch is the half of the owner's
+  // report that fails. The card told the customer to launch a session to get a
+  // measurement, and the measurement was the only way to explain why the launch
+  // would not run. The SOCKS5 arms 40 lines away in the same file have stored
+  // the row since (q) 12-memory (A); the VPN arms were left behind.
+  //
+  // MUTATION: restore `if (px.serverId === undefined) { …notice; return null; }`
+  // in runFleetTestForRow → createProxy is never called, testAccountProxy is
+  // never called → red on both expectations below.
+  it('CRITICAL not stored on the account: the card STORES the row, then asks the test Mac — no dead-end notice', async () => {
     state.vpnStored = false;
+    seedCache({});
+    const AccountProxies = await import('../../src/lib/account-proxies');
+    vi.mocked(AccountProxies.testAccountProxy).mockClear();
+    vi.mocked(AccountProxies.createProxy).mockClear();
+    vi.mocked(AccountProxies.testAccountProxy).mockResolvedValueOnce({
+      ok: true,
+      latency_ms: 42,
+      measured_from: 'fleet',
+      node_id: 'mac-mini-07',
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    await clickCheckVpn();
+    expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194);
+    await waitFor(() => expect(vi.mocked(AccountProxies.createProxy)).toHaveBeenCalledTimes(1));
+    // …and the tunnel is tested through the row it just created.
+    await waitFor(() =>
+      expect(vi.mocked(AccountProxies.testAccountProxy)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        'aprx_new',
+        { vantage: 'fleet' },
+      ),
+    );
+    expect(testProxy).not.toHaveBeenCalled(); // never the SOCKS5 handshake (T-20)
+    expect(await screen.findByText('42ms')).toBeTruthy();
+    expect(cardNotice()).toBeNull();
+    expect(document.querySelector('[data-component="proxy-broken-banner"]')).toBeNull();
+  });
+
+  // MUTATION: return the generic `VPN_NOT_STORED_CHECK_NOTICE` on a refused
+  // store ("launch a session once") → red: that instruction is the loop, and a
+  // launch on this tier is refused by the same 403.
+  it('CRITICAL the store REFUSED (tier 403): the card names the plan, and the test Mac is never asked', async () => {
+    state.vpnStored = false;
+    state.storeRefused = true;
     seedCache({});
     const AccountProxies = await import('../../src/lib/account-proxies');
     vi.mocked(AccountProxies.testAccountProxy).mockClear();
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await clickCheckVpn();
-    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
-    expect(resolveEndpoint).toHaveBeenCalledWith('vpn.example.com', 1194);
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
     expect(vi.mocked(AccountProxies.testAccountProxy)).not.toHaveBeenCalled();
     expect(testProxy).not.toHaveBeenCalled();
+    // The server's own sentence names an internal flag (`vpnEgress`) and is
+    // never reflected; ours says what the customer can do about it.
+    expect(cardNotice()).not.toContain('vpnEgress');
     // A notice, never the red banner: nothing was tested, so nothing failed.
     expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.className).toContain(
       'text-ink-muted',
@@ -1282,10 +1549,11 @@ describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tes
 
   it('the notice belongs to THAT check: the next Check VPN drops it the moment it starts', async () => {
     state.vpnStored = false;
+    state.storeRefused = true; // (V2) — an unstored row only KEEPS a notice when the store is refused
     seedCache({});
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await clickCheckVpn();
-    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
     let release: (r: { resolved: boolean; ip: string; message: string }) => void = () => undefined;
     resolveEndpoint.mockImplementationOnce(
       () =>
@@ -1297,7 +1565,7 @@ describe('(l) #1 / #9 — the card’s Check VPN says why the tunnel was not tes
     await waitFor(() => expect(cardNotice()).toBeNull());
     release({ resolved: true, ip: '203.0.113.9', message: 'Resolved' });
     // The same reason comes back once this check lands: re-derived per check.
-    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
   });
 
   it('VACUITY CONTROL — a stored row with a key reaches the fleet and gets NO not-tested notice', async () => {
@@ -1417,11 +1685,16 @@ describe('(m) M5 — a SOCKS5 Test clears a stale VPN notice on the card', () =>
   // card once the row is a VPN again → red.
   it('CRITICAL vpn→socks5, Test proxy, →vpn again: the previous not-tested notice does not come back', async () => {
     state.vpnStored = false;
+    state.storeRefused = true; // (V2) — the notice this arm tracks now needs a refused store
     seedCache({});
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await clickCheckVpn();
-    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
     state.vpn1Scheme = 'socks5';
+    // The refusal was the VPN row's; the SOCKS5 Test that follows must be able
+    // to store its own row, or it would leave a notice of its OWN (the (q)
+    // 12-memory (A) one) and "did not come back" could not be read.
+    state.storeRefused = false;
     refresh();
     await openMenu();
     fireEvent.click(await screen.findByLabelText(/Test proxy from this Mac/));
@@ -1441,10 +1714,11 @@ describe('(m) M5 — a SOCKS5 Test clears a stale VPN notice on the card', () =>
   // above need a new observable together.
   it('INSTRUMENT CONTROL — the same flip with no Test between brings the notice back', async () => {
     state.vpnStored = false;
+    state.storeRefused = true; // (V2) — as above
     seedCache({});
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     await clickCheckVpn();
-    await waitFor(() => expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
+    await waitFor(() => expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE));
     state.vpn1Scheme = 'socks5';
     refresh();
     await openMenu();
@@ -1454,7 +1728,7 @@ describe('(m) M5 — a SOCKS5 Test clears a stale VPN notice on the card', () =>
     refresh();
     await openMenu();
     await screen.findByLabelText(/^Check VPN/);
-    expect(cardNotice()).toBe(VPN_NOT_STORED_CHECK_NOTICE);
+    expect(cardNotice()).toBe(VPN_PLAN_EXCLUDED_CHECK_NOTICE);
     expect(testProxy).not.toHaveBeenCalled();
   });
 });
@@ -1641,3 +1915,75 @@ describe.each(VPN_SCHEME_CASES)(
     });
   },
 );
+
+// ⛔ (V4 follow-up 2026-09-12, owner: "session not starting still") — THE CAUSE
+// HAS TO REACH THE SCREEN, or the whole V3 server-side change is invisible to
+// the one person it was written for.
+//
+// MEASURED before this landed: the pre-launch gate's 422 carries a `detail`
+// quoting the offending line of the customer's own .ovpn, and the client chain
+// (`friendlyError` → `humanizeError` → `fixedApiErrorMessage`) classifies on
+// `kind`/`status` and passes `reason` as `undefined`, so all ten causes arrived
+// as one sentence — "The proxy could not be verified. Check its details and try
+// again." — pointing at a host and port that were never the problem. The
+// server-side guard for V3 pins a SERVER proposition and reads green while the
+// customer-visible one is unchanged; this is the arm for the half that matters.
+//
+// MUTATIONS: (a) delete the `proxyConfigRefusalMessage` call in `friendlyError`
+// → the e2e arm reds with the generic "could not be verified" sentence; (b) make
+// the helper ignore `reason` (match on status 422 alone) → the discrimination
+// arm reds.
+describe('(V4) the launch refusal names the stored-config cause the server sent', () => {
+  const LINE_DETAIL =
+    'Line 3: "script-security 2" — Driftstack does not run scripts from VPN configurations. Remove the line and save it again.';
+
+  it('CRITICAL a 422 config_unresolvable shows OUR headline plus the server’s named line — never "check the host and port"', async () => {
+    agentCreate.mockClear();
+    agentCreate.mockRejectedValueOnce(
+      Object.assign(new Error('proxy validation failed'), {
+        kind: 'proxy_validation_failed',
+        status: 422,
+        reason: 'config_unresolvable',
+        detail: LINE_DETAIL,
+      }),
+    );
+    await launch();
+    expect(await screen.findByText(/script-security 2/)).toBeTruthy();
+    // The three sentences that were shown instead, each of which sent the owner
+    // to the wrong place.
+    expect(document.body.textContent).not.toContain('The proxy could not be verified');
+    expect(document.body.textContent).not.toContain('did not answer');
+    expect(document.body.textContent).toContain('nothing was dialled');
+  });
+
+  it('a probe verdict (reason: unreachable) is UNCHANGED — it keeps the fixed copy, because a dial really did happen', () => {
+    // The discrimination is on the contractual reason, not the status: the
+    // probe's own verdict must not be re-labelled as a config problem.
+    expect(
+      proxyConfigRefusalMessage({ status: 422, reason: 'unreachable', detail: 'x' }),
+    ).toBeNull();
+  });
+
+  it('a detail that is absent, empty or absurdly long falls back to fixed copy of ours', () => {
+    const bare = proxyConfigRefusalMessage({ status: 422, reason: 'config_unresolvable' });
+    expect(bare).toContain('re-paste the configuration');
+    expect(
+      proxyConfigRefusalMessage({ status: 422, reason: 'config_unresolvable', detail: '   ' }),
+    ).toBe(bare);
+    expect(
+      proxyConfigRefusalMessage({
+        status: 422,
+        reason: 'config_unresolvable',
+        detail: 'x'.repeat(401),
+      }),
+    ).toBe(bare);
+    // …and a 401-character body never becomes the page.
+    expect(bare).not.toContain('xxxx');
+  });
+
+  it('VACUITY CONTROL — a non-422 and a non-object are not this refusal', () => {
+    expect(proxyConfigRefusalMessage({ status: 403, reason: 'config_unresolvable' })).toBeNull();
+    expect(proxyConfigRefusalMessage(null)).toBeNull();
+    expect(proxyConfigRefusalMessage('config_unresolvable')).toBeNull();
+  });
+});

@@ -84,7 +84,7 @@ vi.mock('../../src/lib/proxy-probe-cache', async (importOriginal) => ({
 }));
 
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
 }));
 
 const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };

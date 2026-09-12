@@ -37,6 +37,7 @@ import {
   saveProbeResult,
   saveEndpointResult,
   type CachedOsFingerprint,
+  type ProbeCacheMap,
 } from '../lib/proxy-probe-cache';
 import { probeProxyExit, type ProxyExitProbeResult } from '../lib/proxies';
 import { parseProxyString } from '../lib/parse-proxy';
@@ -58,7 +59,7 @@ import {
   type AccountProxyTestNotRun,
   type MeasuredQuic,
 } from '../lib/account-proxies';
-import { clearBindingsForProxy } from '../lib/profile-bindings';
+import { profilesUsingProxy } from '../lib/profile-bindings';
 import { isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { withProxyProbe } from '../lib/proxy-probe-sweeper';
 import {
@@ -106,7 +107,9 @@ interface ListState {
   proxies: ProxyConfig[];
   loading: boolean;
   error: string | null;
-  /** Transient confirmation, e.g. "N profiles were unbound from the deleted proxy". */
+  /** Transient confirmation, e.g. "2 profiles were using this proxy". (P1)
+   *  Nothing is "unbound": the binding is KEPT naming the deleted proxy, which
+   *  is the state every resolver reads as no-proxy. */
   notice: string | null;
 }
 
@@ -356,6 +359,112 @@ const PROBE_ORIGIN_TITLE =
  */
 const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
 
+/**
+ * (P2, owner 2026-09-12) — "PRoxy tests from proxies tab still show 'slow from
+ * this mac', but it should also test from the mac worker where it will run".
+ *
+ * The row already measured BOTH: the native SOCKS5 handshake from this Mac
+ * (`result.latency_ms`) and the test Mac's number (`serverLatencyMs`, asked for
+ * as `?vantage=fleet`). They were merged with a `??` — one number under one
+ * label — so a 180ms measured on the test Mac rendered "slow from this Mac"
+ * under a "measured from your computer" hover. Two different facts, and only
+ * the second one predicts a session.
+ *
+ * So the cell shows BOTH, each labelled, and NEITHER is shown unlabelled: when
+ * one side has no number the row says which side is missing rather than
+ * quietly presenting the other as the whole truth. The health pill leads with
+ * the number that predicts the session (the test Mac's when there is one) and
+ * NAMES that machine in its own words — it is the one place a customer reads a
+ * verdict without hovering anything.
+ *
+ * ⚠️ A missing side reads as a SHORT state word plus the machine's short name,
+ * never as a sentence. Two reasons, both MEASURED against this app's real CSS
+ * in the running harness (scratchpad/measure-cell-v2.mjs, content width of the
+ * cell inside the table's own text-[12px]):
+ *
+ *   pre-P2, native only ................  66.0px x 35.5px
+ *   pre-P2, server number + chip ....... 172.2px x 35.5px   <- the old column max
+ *   a sentence in the 8px chip ......... 169.4px x   57px   (27 chars @ 8px)
+ *   SHIPPED, missing side + number ..... 150.7px x   57px
+ *   SHIPPED, both numbers .............. 172.2px x   57px   <- the new column max
+ *   SHIPPED, missing side suppressed ... 150.7px x 35.5px
+ *
+ * So the widest state is 172.2px — EXACTLY the width a server-measured row
+ * already had before P2, i.e. the column maximum does not move, and a missing
+ * side (150.7px) never drives it. The state word lands in the number's slot at
+ * the table's 12px, above the project's own 9px floor for measured text
+ * (scripts/gui-text-quality MIN_PX); only the machine-name chip is 8px, which
+ * is what that chip was before P2. A 27-character sentence at 8px was both
+ * below our own readability rule and the widest thing in the cell.
+ * The words also deliberately avoid the exact strings "from the test Mac" /
+ * "from this Mac", which mean "a number was measured there" on this grid and on
+ * the profile card, and which several suites read as that claim.
+ *
+ * ⛔ And a missing side says WHY, from state this row ALREADY holds. One
+ * sentence for every absence was false twice over: a fleet test that RAN and
+ * FAILED, and a fleet `ok` that reported no timing, have both measured this
+ * proxy — "has not measured this proxy yet" was a claim about our instrument
+ * that the code contradicted, printed beside a green pill. `vpnFailure`,
+ * `serverVantage` and `noFleetMac` separate the four states; a row whose own
+ * notice already names the absent vantage (no API key, not storable) prints no
+ * label at all rather than a second copy of a sentence already on screen.
+ */
+/** The machine names on a MISSING side — short, and deliberately not the
+ *  phrases that mean "measured there". */
+const TEST_MAC_CHIP_LABEL = 'test Mac';
+const NATIVE_CHIP_LABEL = 'this Mac';
+/** Why there is no number from the Mac that runs the profiles. FOUR states —
+ *  only the last of them is "nothing has been measured". */
+const SERVER_FAILED_WORD = 'no answer';
+const SERVER_FAILED_TITLE_PREFIX = 'The Mac that runs your profiles could not use this proxy:';
+const SERVER_NO_TIMING_WORD = 'no number';
+const SERVER_NO_TIMING_TITLE =
+  'The Mac that runs your profiles reached this proxy but reported no timing.';
+const NO_TEST_MAC_WORD = 'none free';
+const NO_TEST_MAC_LATENCY_TITLE =
+  'Not measured yet — no test Mac was free, and the number that predicts a session is measured from the Mac that runs your profiles.';
+const NO_SERVER_NUMBER_WORD = 'not tested';
+const NO_SERVER_NUMBER_TITLE =
+  'The Mac that runs your profiles has not measured this proxy yet — only its number predicts a session.';
+/** …and why there is none from this computer. An unreachable handshake did not
+ *  fail to measure: it measured that it could not connect, which is a different
+ *  fact and is not "has not measured this proxy yet". */
+const NATIVE_NO_CONNECT_WORD = 'no connect';
+const NATIVE_NO_CONNECT_TITLE = 'Your computer could not connect to this proxy.';
+const NATIVE_NO_TIMING_WORD = 'no number';
+const NATIVE_NO_TIMING_TITLE = 'Your computer connected to this proxy but recorded no timing.';
+const NO_NATIVE_NUMBER_WORD = 'not tested';
+const NO_NATIVE_NUMBER_TITLE = 'Your computer has not measured this proxy yet.';
+/** The label beside the native number, and the words the health pill borrows
+ *  for it. One constant so the pill and the cell cannot disagree. */
+const NATIVE_VANTAGE_LABEL = 'from this Mac';
+/** (P2) — the pill when the Mac that RUNS the profile could not use this proxy,
+ *  whatever the local handshake said. It outranks a green local verdict: the
+ *  session runs there, not here. The reason renders beside the pill. */
+const FLEET_FAILED_PILL = 'fails on the test Mac';
+/** At or under this many ms a latency reads "healthy"; over it, "slow". One
+ *  constant for the pill and for every per-side meter, so a bar cannot be green
+ *  beside a number the pill calls slow. */
+const LATENCY_GOOD_MS = 100;
+
+/**
+ * (P2) — every row's FLEET-measurement stamp, SOCKS5 rows included.
+ *
+ * `serverProbeStamps` (lib) deliberately keys endpoint rows only, because it
+ * feeds the "Tested" column and a SOCKS5 row's column dates its NATIVE verdict
+ * (its own doc says so). The per-side latency lines need the other date too: a
+ * fleet number outlives a native re-test (`saveServerProbeResult` keeps the
+ * prior `at` and writes only `serverProbeAt`), so without this the fleet line
+ * wore the native line's date in the one cell that prints two measurements.
+ */
+function fleetProbeStamps(cache: ProbeCacheMap): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [id, c] of Object.entries(cache)) {
+    if (typeof c.serverProbeAt === 'number') out[id] = c.serverProbeAt;
+  }
+  return out;
+}
+
 const EMPTY_DRAFT: ProxyDraft = {
   label: '',
   scheme: 'socks5',
@@ -408,6 +517,10 @@ export function ProxiesView(): JSX.Element {
   // the grid Latency column. T-6 — the QUIC verdict measured in a live session,
   // consumed by the capability chip so a measured 'h3' can go green.
   const [serverLatency, setServerLatency] = useState<Record<string, number>>({});
+  // (P2) — WHEN that server number was measured. Separate from `testedAt`,
+  // which on a SOCKS5 row dates the native verdict: the cell now prints both
+  // numbers, so each one carries its own date in its own hover.
+  const [serverProbeAt, setServerProbeAt] = useState<Record<string, number>>({});
   const [quicMeasured, setQuicMeasured] = useState<Record<string, MeasuredQuic>>({});
   // T-1 — WHERE the server latency was measured (a fleet Mac, named, or the
   // server itself when none was free) and the fleet Mac's separate QUIC-relay
@@ -492,6 +605,7 @@ export function ProxiesView(): JSX.Element {
       // (h) — a VPN row's "Tested" dates the fleet number it shows, not the
       // DNS pre-flight that ran before a refused test.
       setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
+      setServerProbeAt(fleetProbeStamps(cache));
       setVpnFailures(fleetFailureReasons(cache));
       setOsFingerprints(view.osFingerprints);
       setServerLatency(view.serverLatency);
@@ -519,6 +633,7 @@ export function ProxiesView(): JSX.Element {
         setEndpointResults(view.endpointResults);
         setExitResults(view.exitResults);
         setTestedAt({ ...view.testedAt, ...serverProbeStamps(cache) });
+        setServerProbeAt(fleetProbeStamps(cache));
         setVpnFailures(fleetFailureReasons(cache));
         setOsFingerprints(view.osFingerprints);
         setServerLatency(view.serverLatency);
@@ -653,10 +768,14 @@ export function ProxiesView(): JSX.Element {
    * obstacle course, and the reflex it trains (click through the dialog) is
    * exactly the reflex a destructive action needs intact.
    *
-   * Returns the profile names that lost their default binding, so the caller can
-   * aggregate them into a single notice.
+   * ⛔ It does NOT touch the profile→proxy bindings. See `profilesUsingProxy`:
+   * a profile bound to this proxy must be left with NO proxy, and the way to
+   * leave it that way is to leave its binding naming the deleted id — nulling
+   * it hands the profile to `proxies[0]` instead. The caller reads the affected
+   * profiles BEFORE calling this (the confirm has to count them), which is also
+   * why nothing is returned from here.
    */
-  async function removeOne(id: string): Promise<string[]> {
+  async function removeOne(id: string): Promise<void> {
     // Capture the server-side account_proxies id (set on first launch-sync)
     // BEFORE the local entry is wiped, so we can also delete the encrypted
     // server row. Without this the wrapped password / VPN secret orphans on
@@ -683,44 +802,139 @@ export function ProxiesView(): JSX.Element {
     setExitResults((r) => dropKey(r, id));
     setOsFingerprints((m) => dropKey(m, id));
     setServerLatency((m) => dropKey(m, id));
+    setServerProbeAt((m) => dropKey(m, id));
     setQuicMeasured((m) => dropKey(m, id));
     setServerVantage((m) => dropKey(m, id));
     setQuicProbe((m) => dropKey(m, id));
-    // Clear any profile default-proxy bindings that referenced this proxy, so a
-    // profile bound to it doesn't keep a DANGLING defaultProxyId. Without this,
-    // Launch would silently reroute that profile's egress to a different proxy
-    // (or, post-fix, refuse to launch) with no trace of why — a privacy hazard
-    // for an anti-detect tool. Surface which profiles were unbound so the
-    // operator knows to re-bind a proxy on purpose.
-    try {
-      return await clearBindingsForProxy(id);
-    } catch (err) {
-      console.warn('[proxies] failed to clear dangling bindings for deleted proxy', err);
-      return [];
-    }
   }
 
-  /** Notice text for N profiles left with no default proxy. */
-  function unboundNotice(n: number): string {
-    return `${String(n)} profile${n === 1 ? '' : 's'} ${
-      n === 1 ? 'was' : 'were'
-    } using this proxy as a default — they now have no default proxy. Re-bind one before launching.`;
+  /**
+   * The profiles a removal of these proxies leaves with no proxy, PER proxy id.
+   *
+   * `null` = the binding store could not be read. The confirm then HEDGES
+   * instead of claiming a count it does not have: a failed read that degrades
+   * to 0 would print "No profile is using it" over a destructive action, which
+   * is the one sentence here that must never be a guess.
+   *
+   * ⛔ Per id, NOT one pre-unioned count, because a bulk remove can PARTIALLY
+   * fail. The confirm speaks for everything the operator asked for; the notice
+   * afterwards may only speak for the ids that actually went. Unioning at the
+   * read is how the notice claimed the profiles of a proxy that is still there
+   * and still bound to them.
+   */
+  async function profilesLeftWithoutProxy(ids: string[]): Promise<Record<string, string[]> | null> {
+    const perId: Record<string, string[]> = {};
+    for (const id of ids) {
+      try {
+        perId[id] = await profilesUsingProxy(id);
+      } catch (err) {
+        console.warn('[proxies] could not read profile bindings before a remove', err);
+        return null;
+      }
+    }
+    return perId;
+  }
+
+  /** How many DISTINCT profiles these ids leave without a proxy. A profile
+   *  bound to two of the removed proxies is ONE profile left without one. */
+  function affectedCount(perId: Record<string, string[]> | null, ids: string[]): number | null {
+    if (perId === null) return null;
+    const found = new Set<string>();
+    for (const id of ids) for (const profileId of perId[id] ?? []) found.add(profileId);
+    return found.size;
+  }
+
+  /**
+   * The proxy an INHERITING profile would fall to once these ids are gone, or
+   * null when this removal changes nothing for such a profile.
+   *
+   * ⛔ P1 detaches the profiles a binding NAMES. A profile that never chose one
+   * inherits the first saved proxy (`ProfilesView.pickProxy` → `proxies[0]`,
+   * and the same in `AgentChatView` and the H3 attribution), so removing the
+   * current HEAD promotes the next survivor and silently changes the exit of
+   * every such profile — the owner's hazard exactly, for profiles no binding
+   * names. The dialog must therefore not print "Nothing is moved to a different
+   * proxy" in this case: `removeProxy` filters the list and preserves its
+   * order, so the next survivor here IS the proxy they will inherit.
+   */
+  function inheritedNextLabel(ids: string[]): string | null {
+    const head = state.proxies[0];
+    if (head === undefined || !ids.includes(head.id)) return null;
+    return state.proxies.find((p) => !ids.includes(p.id))?.label ?? null;
+  }
+
+  /**
+   * The sentence after "Remove …?": what happens to the profiles that used it.
+   *
+   * (P1) It states the count, and it states what does NOT happen — none of them
+   * is moved to another proxy — because that is precisely what the app used to
+   * do silently, and a customer who remembers the old behaviour needs to be
+   * told the profile is being left empty on purpose.
+   *
+   * ⛔ That "nothing is moved" half is CONDITIONAL, and its condition is not
+   * about the bound profiles at all: see `inheritedNextLabel`. Removing the
+   * FIRST saved proxy re-points every profile that never chose one, so when
+   * that is about to happen the sentence names the proxy they will inherit
+   * instead of printing a promise that is false in exactly the case that
+   * matters. `theirs`, not a fixed "its": the bulk dialog says "them".
+   */
+  function detachWarning(
+    affected: number | null,
+    many: boolean,
+    inheritedNext: string | null,
+  ): string {
+    const them = many ? 'them' : 'it';
+    const theirs = many ? 'their' : 'its';
+    const moved =
+      inheritedNext === null
+        ? 'Nothing is moved to a different proxy.'
+        : `Profiles that never chose a proxy will use "${inheritedNext}" instead.`;
+    if (affected === null)
+      return `Any profile using ${them} as ${theirs} default will be left with no proxy and must be given one before it launches. ${moved}`;
+    if (affected === 0)
+      return inheritedNext === null
+        ? `No profile is using ${them} as ${theirs} default.`
+        : `No profile is using ${them} as ${theirs} default, but profiles that never chose one will use "${inheritedNext}" instead.`;
+    return `${String(affected)} profile${affected === 1 ? '' : 's'} using ${them} will be left with no proxy — ${
+      affected === 1 ? 'it' : 'they'
+    } will not launch until you choose one. ${moved}`;
+  }
+
+  /** Notice text for N profiles left with no proxy by a removal. The "was
+   *  moved" clause is scoped to THOSE profiles ("none of them"), so it cannot
+   *  be read as a promise about the profiles that merely inherited this one. */
+  function detachedNotice(n: number, many: boolean): string {
+    return `${String(n)} profile${n === 1 ? '' : 's'} ${n === 1 ? 'was' : 'were'} using ${
+      many ? 'one of these proxies' : 'this proxy'
+    } — ${n === 1 ? 'it' : 'they'} now ${
+      n === 1 ? 'has' : 'have'
+    } no proxy. Choose one before launching; none of them was moved to a different proxy.`;
   }
 
   async function handleRemove(id: string): Promise<void> {
+    // Read the bindings BEFORE the dialog, because the confirm has to state the
+    // count in the question it asks — not because the count expires: P1 KEEPS
+    // the bindings, so `profilesUsingProxy(id)` answers the same afterwards.
+    // (That earlier comment claimed the opposite and was what hid the bulk
+    // notice's over-claim below.)
+    const perId = await profilesLeftWithoutProxy([id]);
+    const affected = affectedCount(perId, [id]);
     if (
       !(await confirm(
-        'Remove this proxy? Any profiles using it as a default will be unbound and must be re-bound before launching.',
-        { confirmLabel: 'Remove', tone: 'danger' },
+        `Remove this proxy? ${detachWarning(affected, false, inheritedNextLabel([id]))}`,
+        {
+          confirmLabel: 'Remove',
+          tone: 'danger',
+        },
       ))
     )
       return;
     setBusyId(id);
     try {
-      const unbound = await removeOne(id);
+      await removeOne(id);
       await refresh();
-      if (unbound.length > 0) {
-        setState((s) => ({ ...s, notice: unboundNotice(unbound.length) }));
+      if (affected !== null && affected > 0) {
+        setState((s) => ({ ...s, notice: detachedNotice(affected, false) }));
       }
     } catch (err) {
       setState((s) => ({
@@ -736,28 +950,35 @@ export function ProxiesView(): JSX.Element {
    * Remove a whole selection behind ONE confirmation that names the count.
    *
    * Removals run in sequence rather than in parallel: each one bumps
-   * testEpochRef, refreshes local state and clears bindings, and overlapping
-   * those is how a half-applied delete leaves a dangling binding behind.
+   * testEpochRef and rewrites several pieces of local state, and overlapping
+   * those is how a half-applied delete leaves one row's cached probe on
+   * another row.
    */
   async function handleRemoveMany(ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     const n = ids.length;
+    // Same read-before-the-dialog rule as handleRemove, unioned over the
+    // selection: one profile bound to two of the removed proxies is one
+    // profile left without a proxy, not two.
+    const perId = await profilesLeftWithoutProxy(ids);
+    const affected = affectedCount(perId, ids);
     if (
       !(await confirm(
-        `Remove ${String(n)} ${n === 1 ? 'proxy' : 'proxies'}? Any profiles using ${
-          n === 1 ? 'it' : 'them'
-        } as a default will be unbound and must be re-bound before launching.`,
+        `Remove ${String(n)} ${n === 1 ? 'proxy' : 'proxies'}? ${detachWarning(
+          affected,
+          n !== 1,
+          inheritedNextLabel(ids),
+        )}`,
         { confirmLabel: `Remove ${String(n)}`, tone: 'danger' },
       ))
     )
       return;
     setBusyId(ids[0] ?? null);
-    const unbound = new Set<string>();
     const failed: string[] = [];
     try {
       for (const id of ids) {
         try {
-          for (const name of await removeOne(id)) unbound.add(name);
+          await removeOne(id);
         } catch (err) {
           // One failure must not abandon the rest of the selection — the
           // operator asked for all of them, and a silent partial leaves them
@@ -776,8 +997,15 @@ export function ProxiesView(): JSX.Element {
               : 'None could be removed.',
         }));
       }
-      if (unbound.size > 0) {
-        setState((s) => ({ ...s, notice: unboundNotice(unbound.size) }));
+      // ⛔ Count ONLY the proxies that actually went. `affected` above is the
+      // union over everything the operator ASKED for — the right number for the
+      // question, the wrong one for the outcome: remove 3, one fails, and the
+      // old `failed.length < n` gate printed that union, claiming the profiles
+      // of the proxy that is still there and still bound to it.
+      const removedIds = ids.filter((id) => !failed.includes(id));
+      const detached = affectedCount(perId, removedIds);
+      if (detached !== null && detached > 0) {
+        setState((s) => ({ ...s, notice: detachedNotice(detached, removedIds.length !== 1) }));
       }
     } finally {
       setBusyId(null);
@@ -1035,6 +1263,7 @@ export function ProxiesView(): JSX.Element {
     setExitResults((r) => dropKey(r, id));
     setOsFingerprints((m) => dropKey(m, id));
     setServerLatency((m) => dropKey(m, id));
+    setServerProbeAt((m) => dropKey(m, id));
     setQuicMeasured((m) => dropKey(m, id));
     setServerVantage((m) => dropKey(m, id));
     setQuicProbe((m) => dropKey(m, id));
@@ -1078,6 +1307,12 @@ export function ProxiesView(): JSX.Element {
       // Mac just measured this", which is the opposite of what happened.
       const measured = outcome.latencyMs;
       setServerLatency((m) => (measured !== null ? { ...m, [id]: measured } : dropKey(m, id)));
+      // (P2) — the number's OWN date travels with it: `testedAt` dates the
+      // native verdict on a SOCKS5 row, and the cell prints both numbers.
+      setServerProbeAt((m) => (measured !== null ? { ...m, [id]: outcome.at } : dropKey(m, id)));
+      // (P2) — an `ok` verdict retires the last fleet failure on ANY row, not
+      // only a VPN one: the SOCKS5 pill, the sort and the hero read it now.
+      setVpnFailures((m) => dropKey(m, id));
       const quic = outcome.quicMeasured;
       if (quic !== undefined) setQuicMeasured((m) => ({ ...m, [id]: quic }));
       // T-1 — where that number was measured travels WITH it: a fleet Mac
@@ -1140,9 +1375,17 @@ export function ProxiesView(): JSX.Element {
       // `ok:false`. It cannot stay unhandled now that a proxy answering
       // nothing correctly reports one.
       setServerLatency((m) => dropKey(m, id));
+      setServerProbeAt((m) => dropKey(m, id));
       setServerVantage((m) => dropKey(m, id));
       setQuicProbe((m) => dropKey(m, id));
       setOsFingerprints((m) => dropKey(m, id));
+      // ⛔ (P2) — but the REASON is kept, on a SOCKS5 row too. This is the
+      // machine that runs the profile saying the proxy does not work, and it
+      // was the one thing the grid threw away: the row rendered a green
+      // "healthy from this Mac" beside a latency cell claiming the test Mac
+      // "has not measured this proxy yet", for the ordinary IP-allowlisted
+      // proxy this product measures from two places precisely to catch.
+      setVpnFailures((m) => ({ ...m, [id]: outcome.reason }));
     }
   }
 
@@ -1282,9 +1525,13 @@ export function ProxiesView(): JSX.Element {
         setExitResults((r) => dropKey(r, p.id));
         setOsFingerprints((m) => dropKey(m, p.id));
         setServerLatency((m) => dropKey(m, p.id));
+        setServerProbeAt((m) => dropKey(m, p.id));
         setQuicMeasured((m) => dropKey(m, p.id));
         setServerVantage((m) => dropKey(m, p.id));
         setQuicProbe((m) => dropKey(m, p.id));
+        // (P2) — the fleet leg does not run when the native probe failed, so a
+        // standing fleet failure is exactly as stale as the numbers above it.
+        setVpnFailures((m) => dropKey(m, p.id));
       }
       return result;
     } catch (err) {
@@ -1585,6 +1832,7 @@ export function ProxiesView(): JSX.Element {
           testedAt={testedAt}
           osFingerprints={osFingerprints}
           serverLatency={serverLatency}
+          serverProbeAt={serverProbeAt}
           quicMeasured={quicMeasured}
           serverVantage={serverVantage}
           quicProbe={quicProbe}
@@ -1688,10 +1936,24 @@ type SortKey = 'status' | 'label' | 'scheme' | 'latency' | 'tested';
  * Untested ranks BELOW slow and above healthy: it is a gap in knowledge rather
  * than a fault, but it is still not a proxy you should assume works.
  */
-function statusRank(result: ProxyTestResult | undefined): number {
+function statusRank(
+  result: ProxyTestResult | undefined,
+  serverLatencyMs?: number,
+  fleetFailed = false,
+): number {
+  // (P2) — the Mac that RUNS the profile said this proxy is not usable. That is
+  // a fault and it sorts with the faults: such a row used to rank 3 (healthy,
+  // from the local handshake) and sink to the BOTTOM of the page whose whole
+  // safety argument is "the broken proxy is simply the first row", and it was
+  // absent from the hero's "needs attention" for the one vantage that predicts
+  // a session.
+  if (fleetFailed) return 0;
   if (result === undefined) return 2;
   if (!result.reachable || !result.auth_ok || !result.can_route) return 0;
-  return (result.latency_ms ?? 0) > 100 ? 1 : 3;
+  // (P2) — judged by the SAME number the pill judges (the test Mac's when there
+  // is one). Ranking by the native number while the pill read "slow from the
+  // test Mac" put a row the customer was told is slow at the bottom.
+  return (serverLatencyMs ?? result.latency_ms ?? 0) > LATENCY_GOOD_MS ? 1 : 3;
 }
 
 /** (n) N19 — the state every VPN-aware tally reads, so the hero counts, the pool stats
@@ -1745,7 +2007,10 @@ function isRowHealthy(
 ): boolean {
   if (isVpnScheme(p.scheme)) return vpnRowVerdict(p.id, s) === 'up';
   const r = testResults[p.id];
-  return r !== undefined && isProxyUsable(r);
+  // (P2) — a SOCKS5 row the fleet could not use is not healthy, whatever the
+  // local handshake managed. The hero counted it as healthy while the row's own
+  // pill (and now the sort) called it a failure.
+  return r !== undefined && isProxyUsable(r) && s.vpnFailures[p.id] === undefined;
 }
 
 /** (n) N19 — `statusRank` with the VPN branch: a tunnel that is down sorts to the top
@@ -1757,11 +2022,15 @@ function rowStatusRank(
   serverLatency: Record<string, number>,
   s: VpnVerdictState,
 ): number {
-  if (!isVpnScheme(p.scheme)) return statusRank(testResults[p.id]);
+  if (!isVpnScheme(p.scheme))
+    return statusRank(testResults[p.id], serverLatency[p.id], s.vpnFailures[p.id] !== undefined);
   const verdict = vpnRowVerdict(p.id, s);
   if (verdict === 'down') return 0;
   if (verdict === 'untested') return 2;
-  return (serverLatency[p.id] ?? 0) > 100 ? 1 : 3;
+  // (P2) — LATENCY_GOOD_MS, not a fourth copy of the literal: the constant fed
+  // the pill and both meters while this branch kept its own 100, so moving it
+  // would have painted a VPN meter green beside a sort that called it slow.
+  return (serverLatency[p.id] ?? 0) > LATENCY_GOOD_MS ? 1 : 3;
 }
 
 function ProxyTable({
@@ -1774,6 +2043,7 @@ function ProxyTable({
   testedAt,
   osFingerprints,
   serverLatency,
+  serverProbeAt,
   quicMeasured,
   serverVantage,
   quicProbe,
@@ -1797,6 +2067,9 @@ function ProxyTable({
   testedAt: Record<string, number>;
   osFingerprints: Record<string, CachedOsFingerprint>;
   serverLatency: Record<string, number>;
+  /** (P2) — when each server latency was measured, so the fleet line can date
+   *  its own number rather than borrowing the native verdict's date. */
+  serverProbeAt: Record<string, number>;
   quicMeasured: Record<string, MeasuredQuic>;
   /** T-1 — where each server latency was measured, and the fleet relay verdict. */
   serverVantage: Record<string, ServerVantage>;
@@ -1852,11 +2125,13 @@ function ProxyTable({
         case 'scheme':
           return schemeLabel(p.scheme).text.toLowerCase();
         case 'latency':
-          // Sort by the SAME value the row DISPLAYS (serverLatencyMs ?? native), not
-          // the native probe alone — otherwise the visible Latency column orders wrong
-          // (a row showing the server's 180ms could sort above one showing 40ms). An
-          // unreachable native has no latency; Infinity parks it at the end ascending
-          // rather than letting a 0 masquerade as the fastest exit.
+          // Sort by the number the row's PILL judges — the test Mac's when there is
+          // one, else the native probe's. (P2) the cell no longer displays one
+          // merged value; it displays both, stacked and labelled, so "the value
+          // the row displays" is no longer a single thing and this comparator is
+          // deliberately ordered by the top line, the one that predicts a
+          // session. An unreachable native has no latency; Infinity parks it at
+          // the end ascending rather than letting a 0 masquerade as fastest.
           return (
             serverLatency[p.id] ??
             (r !== undefined && r.reachable ? (r.latency_ms ?? Infinity) : Infinity)
@@ -2053,6 +2328,7 @@ function ProxyTable({
                 testedAt={testedAt[p.id]}
                 osFingerprint={osFingerprints[p.id]}
                 serverLatencyMs={serverLatency[p.id]}
+                serverProbeAtMs={serverProbeAt[p.id]}
                 quicMeasured={quicMeasured[p.id]}
                 serverVantage={serverVantage[p.id]}
                 quicProbe={quicProbe[p.id]}
@@ -2137,6 +2413,7 @@ function ProxyRow({
   testedAt,
   osFingerprint,
   serverLatencyMs,
+  serverProbeAtMs,
   quicMeasured,
   serverVantage,
   quicProbe,
@@ -2165,6 +2442,9 @@ function ProxyRow({
   /** T-1 — the control plane's server-measured latency, preferred over the native
    *  one and labelled so it is never read as the laptop's number. */
   serverLatencyMs: number | undefined;
+  /** (P2) — when `serverLatencyMs` was measured. `testedAt` dates the NATIVE
+   *  verdict on a SOCKS5 row, and the cell prints both numbers. */
+  serverProbeAtMs: number | undefined;
   /** T-6 — the QUIC verdict measured in a live session, for the capability chip. */
   quicMeasured: MeasuredQuic | undefined;
   /** T-1 — where serverLatencyMs was measured (+ the fleet node), so the number
@@ -2173,7 +2453,10 @@ function ProxyRow({
   serverVantage: ServerVantage | undefined;
   /** T-1 — the fleet Mac's QUIC-relay verdict, its own chip; never merged. */
   quicProbe: boolean | undefined;
-  /** (b) — the fleet's failure sentence when this VPN row's tunnel did not come up. */
+  /** (b) — the fleet's failure sentence when this VPN row's tunnel did not come
+   *  up, and (P2) a SOCKS5 row's too: the Mac that runs the profile answering
+   *  "this proxy does not work" is the same fact whatever the scheme, and on a
+   *  SOCKS5 row it used to be dropped on the floor. */
   vpnFailure?: string;
   /** (d) — the server's sentence when this VPN row's test was NOT RUN: a live
    *  session holds the tunnel, or the measuring Mac was busy. A notice beside
@@ -2191,9 +2474,12 @@ function ProxyRow({
 }): JSX.Element {
   const reachable = result?.reachable ?? false;
   const healthy = result !== undefined && isProxyUsable(result);
-  // T-1 — prefer the SERVER-measured latency (measured near the fleet that runs
-  // the profile) over the native probe from this Mac; keep the native value as
-  // the fallback so a proxy with no server row still shows a number.
+  // T-1 — the number to LEAD with: the server-measured one (taken near the
+  // fleet that runs the profile) when there is one, else the native probe's, so
+  // a proxy with no server row still has a verdict. ⚠️ (P2) this is no longer
+  // "the number the cell shows" — the cell shows both sides separately below.
+  // `lat` now feeds only the health pill and the status sort, i.e. the single
+  // question "is this proxy fast enough for the session it will run".
   const fromServer = serverLatencyMs !== undefined;
   const lat = serverLatencyMs ?? result?.latency_ms;
   // T-1 — the words beside a server number name the machine that measured it.
@@ -2202,8 +2488,66 @@ function ProxyRow({
   const vantage = serverVantage !== undefined ? vantageLabel(serverVantage) : undefined;
   const vantageText = vantage?.label ?? 'server';
   const vantageTitle = vantage?.title ?? SERVER_LATENCY_TITLE;
-  const latFill = lat !== undefined && lat > 0 ? Math.max(6, Math.min(100, (lat / 250) * 100)) : 0;
-  const latGood = lat !== undefined && lat <= 100;
+  const latGood = lat !== undefined && lat <= LATENCY_GOOD_MS;
+  // (P2) — the two numbers are kept APART. `lat` above is still the one the
+  // health pill and the meter lead with (the test Mac's when it exists, because
+  // that is the machine a session runs on); these are the per-side facts the
+  // cell prints, so neither is presented as the other.
+  //
+  // The native number is shown only when the handshake actually connected —
+  // an unreachable probe's `latency_ms` is not a latency — which is the same
+  // condition the single-number cell used before.
+  const nativeNumber = reachable ? result?.latency_ms : undefined;
+  // Only a SOCKS5-probeable row HAS a "this Mac" side at all: no native
+  // handshake is ever run against a tunnel or an HTTP proxy (handleTest routes
+  // those to the endpoint check), so naming this Mac on those rows would invent
+  // a measurement nobody attempted.
+  const hasNativeSide = isSocks5Probeable(p.scheme);
+  // The pill's words follow the number the pill is judging. A server number
+  // whose machine was never reported keeps the modest "from the server" (its
+  // hover text is SERVER_LATENCY_TITLE, which says exactly that much) rather
+  // than claiming the Mac that runs the profiles.
+  const latOriginPhrase = fromServer ? (vantage?.label ?? 'from the server') : NATIVE_VANTAGE_LABEL;
+  const latOriginTitle = fromServer ? vantageTitle : PROBE_ORIGIN_TITLE;
+  // (P2) — each line's hover carries the date of ITS OWN number. `testedAt` is
+  // the native verdict's time on a SOCKS5 row (lib's `serverProbeStamps` keys
+  // endpoint rows only, by design) and a fleet number survives a native
+  // re-test, so one date beside two measurements dates at most one of them.
+  const serverLineTitle =
+    serverProbeAtMs !== undefined
+      ? `${vantageTitle} Measured ${new Date(serverProbeAtMs).toLocaleString()}.`
+      : vantageTitle;
+  const nativeLineTitle =
+    testedAt !== undefined
+      ? `${PROBE_ORIGIN_TITLE} Measured ${new Date(testedAt).toLocaleString()}.`
+      : PROBE_ORIGIN_TITLE;
+  // (P2) — WHY a side has no number, from state this row already holds. The
+  // single "has not measured this proxy yet" sentence was FALSE for two of the
+  // four states it covered (see the constants).
+  const serverMissing: { word: string; title: string } | null =
+    serverLatencyMs !== undefined
+      ? null
+      : vpnFailure !== undefined
+        ? { word: SERVER_FAILED_WORD, title: `${SERVER_FAILED_TITLE_PREFIX} ${vpnFailure}` }
+        : serverVantage !== undefined
+          ? { word: SERVER_NO_TIMING_WORD, title: SERVER_NO_TIMING_TITLE }
+          : noFleetMac
+            ? { word: NO_TEST_MAC_WORD, title: NO_TEST_MAC_LATENCY_TITLE }
+            : { word: NO_SERVER_NUMBER_WORD, title: NO_SERVER_NUMBER_TITLE };
+  // …and nothing at all when the row's own notice already names the absent
+  // vantage (no API key, not storable): SOCKS5_TEST_NO_API_KEY_NOTICE says
+  // "Tested from this Mac only… from the test Mac too — that is where … the
+  // fleet latency are measured", so the label would be a second copy of a
+  // sentence the customer has read, on every row, in the widest column.
+  const serverMissingShown = hasNativeSide && vpnNotice === undefined ? serverMissing : null;
+  const nativeMissing: { word: string; title: string } | null =
+    nativeNumber !== undefined
+      ? null
+      : result === undefined
+        ? { word: NO_NATIVE_NUMBER_WORD, title: NO_NATIVE_NUMBER_TITLE }
+        : !reachable
+          ? { word: NATIVE_NO_CONNECT_WORD, title: NATIVE_NO_CONNECT_TITLE }
+          : { word: NATIVE_NO_TIMING_WORD, title: NATIVE_NO_TIMING_TITLE };
   const exitIp = exit?.ip;
   const exitCountry = exit?.country ?? null;
   const failed = result !== undefined && !healthy;
@@ -2312,37 +2656,77 @@ function ProxyRow({
       <td className="whitespace-nowrap px-3 py-2 text-right">
         {/* (b) — a VPN row has no native `result`; its number is the fleet's, and
             it shows on the fleet's say-so (fromServer), not on a handshake that
-            never ran. */}
-        {lat !== undefined && (reachable || fromServer) ? (
-          <span
-            className="inline-flex items-center justify-end gap-1.5"
-            title={fromServer ? vantageTitle : PROBE_ORIGIN_TITLE}
-            data-latency-vantage={
-              fromServer ? (serverVantage?.measuredFrom ?? 'server') : 'this_mac'
-            }
-          >
-            <span className="mono tabular-nums text-ink-secondary">{lat}ms</span>
-            {/* T-1 — say WHERE a server-measured number came from: a fleet Mac
-                (the kind that runs the profile) or, when none was free, the
-                server itself — the fallback is visible, never silent. The
-                native fallback carries no marker. */}
-            {fromServer && (
-              <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
-                {vantageText}
-              </span>
-            )}
-            <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
+            never ran.
+
+            (P2) — BOTH sides, stacked and each labelled: the machine that runs
+            the profile on top, this computer under it. When one side has no
+            number, its own line says which side is missing, so the other is
+            never read as the whole answer. A row with no number on either side
+            is unchanged ('down' after a failed handshake, else the em dash). */}
+        {serverLatencyMs !== undefined || (hasNativeSide && nativeNumber !== undefined) ? (
+          <div className="inline-flex flex-col items-end gap-0.5">
+            {serverLatencyMs !== undefined ? (
               <span
-                className="block h-full rounded-[2px]"
-                style={{
-                  width: `${latFill.toFixed(0)}%`,
-                  background: latGood
-                    ? 'rgb(var(--status-ready-rgb))'
-                    : 'rgb(var(--status-busy-rgb))',
-                }}
-              />
-            </span>
-          </span>
+                className="inline-flex items-center justify-end gap-1.5"
+                title={serverLineTitle}
+                data-latency-vantage={serverVantage?.measuredFrom ?? 'server'}
+              >
+                <span className="mono tabular-nums text-ink-secondary">{serverLatencyMs}ms</span>
+                {/* T-1 — say WHERE a server-measured number came from: a test Mac
+                    (the kind that runs the profile) or, when none was free, the
+                    server itself — the fallback is visible, never silent. */}
+                <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                  {vantageText}
+                </span>
+                <LatencyMeter ms={serverLatencyMs} />
+              </span>
+            ) : (
+              serverMissingShown !== null && (
+                <span
+                  className="inline-flex items-center justify-end gap-1.5 opacity-60"
+                  title={serverMissingShown.title}
+                  data-latency-missing="server"
+                >
+                  {/* The state word sits where the NUMBER would, at the cell's
+                      own size — readable, and narrower than the measured line
+                      above it, so a missing side never widens the column. The
+                      8px chip is left holding a short machine name, which is
+                      what it held before this row printed two sides. */}
+                  <span className="mono text-ink-muted">{serverMissingShown.word}</span>
+                  <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                    {TEST_MAC_CHIP_LABEL}
+                  </span>
+                </span>
+              )
+            )}
+            {hasNativeSide &&
+              (nativeNumber !== undefined ? (
+                <span
+                  className="inline-flex items-center justify-end gap-1.5"
+                  title={nativeLineTitle}
+                  data-latency-vantage="this_mac"
+                >
+                  <span className="mono tabular-nums text-ink-secondary">{nativeNumber}ms</span>
+                  <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                    {NATIVE_VANTAGE_LABEL}
+                  </span>
+                  <LatencyMeter ms={nativeNumber} />
+                </span>
+              ) : (
+                nativeMissing !== null && (
+                  <span
+                    className="inline-flex items-center justify-end gap-1.5 opacity-60"
+                    title={nativeMissing.title}
+                    data-latency-missing="this_mac"
+                  >
+                    <span className="mono text-ink-muted">{nativeMissing.word}</span>
+                    <span className="rounded-sm bg-surface-inset px-1 text-[8px] font-semibold uppercase tracking-wide text-ink-muted">
+                      {NATIVE_CHIP_LABEL}
+                    </span>
+                  </span>
+                )
+              ))}
+          </div>
         ) : (
           <span className="mono text-ink-muted opacity-60">
             {result !== undefined ? 'down' : '\u2014'}
@@ -2410,7 +2794,14 @@ function ProxyRow({
       <td className="px-3 py-2">
         <div className="flex flex-col items-start gap-0.5">
           {isSocks5Probeable(p.scheme) ? (
-            <HealthPill result={result} healthy={healthy} latGood={latGood} />
+            <HealthPill
+              result={result}
+              healthy={healthy}
+              latGood={latGood}
+              originPhrase={latOriginPhrase}
+              originTitle={latOriginTitle}
+              fleetFailure={vpnFailure}
+            />
           ) : (
             <EndpointHealthPill
               endpoint={endpointResult}
@@ -2421,7 +2812,12 @@ function ProxyRow({
               vantageTitle={vantageTitle}
             />
           )}
-          {vpnFailure !== undefined && !isSocks5Probeable(p.scheme) && (
+          {/* (P2) — NOT gated on the scheme any more. A SOCKS5 row's fleet
+              failure was stored nowhere and rendered nowhere, so the only thing
+              the grid said about the session-predicting vantage was a green
+              pill and a false "has not measured this proxy yet". This is the
+              sentence the pill's own comment promised was "beside this pill". */}
+          {vpnFailure !== undefined && (
             <span
               className="max-w-[240px] whitespace-normal break-words text-[10px] leading-tight text-status-error"
               title={vpnFailure}
@@ -2533,17 +2929,68 @@ function ProxyRow({
   );
 }
 
+/**
+ * (P2) — the 30px meter beside ONE number, coloured by THAT number.
+ *
+ * Each side of the cell gets its own: a 180ms measured on the Mac that runs the
+ * profile must not be painted green by a fast local handshake, and a slow
+ * tunnel must not redden the local number. The single meter this replaces was
+ * coloured by the MERGED value, so whichever number it sat beside, it was
+ * sometimes describing the other one.
+ */
+function LatencyMeter({ ms }: { ms: number }): JSX.Element {
+  const fill = ms > 0 ? Math.max(6, Math.min(100, (ms / 250) * 100)) : 0;
+  return (
+    <span className="inline-block h-1 w-[30px] overflow-hidden rounded-[2px] bg-surface-divider">
+      <span
+        className="block h-full rounded-[2px]"
+        style={{
+          width: `${fill.toFixed(0)}%`,
+          background:
+            ms <= LATENCY_GOOD_MS ? 'rgb(var(--status-ready-rgb))' : 'rgb(var(--status-busy-rgb))',
+        }}
+      />
+    </span>
+  );
+}
+
 // Health pill — the single at-a-glance verdict for a proxy card. Quiet
 // 'untested' before the first probe; ready/error tone after.
 function HealthPill({
   result,
   healthy,
   latGood,
+  originPhrase,
+  originTitle,
+  fleetFailure,
 }: {
   result: ProxyTestResult | undefined;
   healthy: boolean;
   latGood: boolean;
+  /** (P2) — the words for the machine whose number `latGood` describes:
+   *  'from this Mac' for the native handshake, else the label of the machine
+   *  the server reported. The pill used to hard-code the native phrase while
+   *  `latGood` came from the SERVER number when there was one, so a 180ms
+   *  measured on the Mac that runs the profile read "slow from this Mac" under
+   *  a "measured from your computer" hover. */
+  originPhrase: string;
+  originTitle: string;
+  /** (P2) — the sentence the Mac that RUNS the profile returned when it could
+   *  not use this proxy. It outranks every native verdict below: the session
+   *  runs there, not here, and a proxy that admits this laptop's IP and nobody
+   *  else's is exactly the case the two vantages exist to separate. */
+  fleetFailure?: string;
 }): JSX.Element {
+  if (fleetFailure !== undefined) {
+    return (
+      <span
+        className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error"
+        title={fleetFailure}
+      >
+        {FLEET_FAILED_PILL}
+      </span>
+    );
+  }
   if (result === undefined) {
     return (
       <span className="shrink-0 rounded-[5px] bg-surface-inset px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-muted">
@@ -2552,9 +2999,19 @@ function HealthPill({
     );
   }
   if (!healthy) {
+    // (P2) — these three take no origin WORDS: each is a fact about the native
+    // handshake only (`result`), which is always this Mac's. They do take its
+    // hover, because the latency cell beside them may be showing the test Mac's
+    // number and a bare red verdict with no provenance reads as a claim about
+    // the proxy everywhere. (The earlier comment here excused the omission by
+    // pointing at a failure sentence that was gated off for this scheme and
+    // whose state was never written — a cached claim; both are fixed above.)
     const label = !result.reachable ? 'unreachable' : !result.auth_ok ? 'auth fail' : 'no route';
     return (
-      <span className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error">
+      <span
+        className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error"
+        title={PROBE_ORIGIN_TITLE}
+      >
         {label}
       </span>
     );
@@ -2564,9 +3021,9 @@ function HealthPill({
       className={`shrink-0 rounded-[5px] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
         latGood ? 'bg-status-ready/12 text-status-ready' : 'bg-status-busy/14 text-status-busy'
       }`}
-      title={PROBE_ORIGIN_TITLE}
+      title={originTitle}
     >
-      {latGood ? 'healthy' : 'slow'} from this Mac
+      {`${latGood ? 'healthy' : 'slow'} ${originPhrase}`}
     </span>
   );
 }

@@ -14,7 +14,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import type { FleetControlConnection } from '../../src/services/fleet-control-registry.js';
-import { AccountProxiesService } from '../../src/services/account-proxies.js';
+import { AccountProxiesService, UnsafeProxyHostError } from '../../src/services/account-proxies.js';
 import { ForbiddenError } from '../../src/lib/errors.js';
 
 let fx: TestAppFixture;
@@ -1067,13 +1067,55 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.reason).toMatch(NO_NODE);
   });
 
-  it('(h) a VPN row whose stored secret cannot be read is a verdict about the ROW ("re-add it"), not a not_run and not "no Mac was free"', async () => {
+  // ⛔⛔ (V4 follow-up 2026-09-12) — THIS ARM'S PROPOSITION IS DELIBERATELY
+  // REVERSED, and the reversal is the fix. It used to assert
+  // `expect('not_run' in body).toBe(false)` on the grounds that an unresolvable
+  // row is "a verdict about the ROW". The contract for `not_run` — written in
+  // `packages/api-types/src/profiles.ts` — is "present when NOTHING RAN, so
+  // `ok:false` is not a verdict about the proxy. A client branches on THIS,
+  // never on the `reason` prose." Nothing ran here: no node was dispatched
+  // (the spy below proves it), no tunnel was brought up, no packet left.
+  //
+  // Its absence was not a label problem, it was data loss. The client maps a
+  // bare `ok:false` to `kind:'failed'` → `saveFleetFailure`, which DROPS the
+  // row's exitIp/geo/latency/quic/os and stamps `exitSupersededAt`. So a
+  // WireGuard row with a missing `Address`, or a legacy blob carrying
+  // `script-security 2`, rendered as a red "VPN tunnel down — <config
+  // sentence>" and ERASED the exit IP the same change had just made visible —
+  // for a cause that measured nothing about the tunnel.
+  //
+  // ⚠️ FORWARD-COMPATIBLE BY CONSTRUCTION: an already-shipped desktop client
+  // drops a `not_run` token outside its own closed set (`cleanTestNotRun`) and
+  // degrades to exactly today's rendering, so this wire change cannot break one.
+  // The client half that USES it (`AccountProxyTestNotRun` + `notRunPhrase`)
+  // lives in the proxy area's file and is handed off, not landed here.
+  //
+  // MUTATION (run): drop `not_run: 'unresolvable'` from the route arm → this
+  // reds on the token AND on the exit; drop only `...storedExitForReply()` →
+  // reds on the exit alone.
+  it('(V4) a VPN row whose stored secret cannot be read is a NOT-RUN (nothing was dispatched) that keeps the row’s exit, with the config sentence', async () => {
     fx = await buildTestApp({
       enableFleetControlPlane: true,
       proxyConnectivityProbe: cpProbeStub(),
     });
     const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
     const id = await makeWireGuardProxy();
+    // The exit a live session saw through this tunnel — the one fact the
+    // customer had, and the one a `failed` classification erases.
+    await fx.accountProxiesRepo.update({
+      id,
+      accountId: fx.accountId,
+      updates: {
+        exitObserved: {
+          ip: '198.51.100.9',
+          country: 'DE',
+          timezone: 'Europe/Berlin',
+          observed_via: 'session',
+        },
+        exitObservedAt: new Date('2026-09-01T00:00:00Z'),
+        exitSupersededAt: null,
+      },
+    });
     // resolveForDispatch returns null for a VPN row with no wrapped secret —
     // the config the fleet would need does not exist.
     await fx.accountProxiesRepo.update({
@@ -1089,12 +1131,79 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect('not_run' in body).toBe(false);
+    // THE DISCRIMINATOR: nothing ran, so this is not a tunnel verdict.
+    expect(body.not_run).toBe('unresolvable');
+    // The sentence is unchanged, byte for byte — a customer who has read it
+    // does not get a new one because we fixed a machine field.
     expect(body.reason).toMatch(/could not be read\. Re-add it/);
     expect(body.reason).not.toMatch(/was free|unreachable/i);
     expect(body.measured_from).toBe('control_plane');
     expect(probeSpy).not.toHaveBeenCalled();
     expect('latency_ms' in body).toBe(false);
+    // …and the exit rides along, exactly as it does on the live_session and
+    // no_node refusals: it is still the last thing seen, at its own date.
+    expect(body.exit_observed).toMatchObject({ ip: '198.51.100.9', country: 'DE' });
+  });
+
+  // ⛔ (V4 follow-up) — A DIAGNOSTIC MUST NOT BE ABLE TO CHANGE THE VERDICT IT
+  // EXPLAINS. The second `resolveForDispatchWithReason` (added purely to name
+  // the cause) sat inside the closure's outer try, whose handler answers "No
+  // fleet Mac was free to test this VPN tunnel. Try again in a minute." A DB
+  // blip on its row read would therefore have replaced a correct, final answer
+  // with a fabricated one carrying a retry promise no retry can fulfil.
+  // MUTATION (run): remove the inner try/catch → this arm reds with not_run
+  // 'no_node' and the "was free" sentence.
+  it('(V4) the diagnostic re-resolve THROWING still answers unresolvable — never a fabricated "no Mac was free"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const id = await makeWireGuardProxy();
+    vi.spyOn(AccountProxiesService.prototype, 'resolveForDispatch').mockResolvedValue(null);
+    vi.spyOn(AccountProxiesService.prototype, 'resolveForDispatchWithReason').mockRejectedValue(
+      new Error('kms unreachable on the second read'),
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.not_run).toBe('unresolvable');
+    expect(body.reason).toMatch(/could not be read\. Re-add it/);
+    expect(body.reason).not.toMatch(NO_NODE);
+  });
+
+  // ⛔ (V4 follow-up) — V3 said it had eliminated "could not be read" for policy
+  // refusals, and left one behind 30 lines below its own fix: the
+  // `UnsafeProxyHostError` catch returned `{ miss:'unresolvable' }` with no
+  // cause, so an unsafe STORED HOST fell through to the re-add sentence. It is
+  // the one cause where re-adding the same configuration is guaranteed to be
+  // refused again — and the cp arm of this same route already names it honestly.
+  // MUTATION (run): drop the detail from that catch → reds on both expectations.
+  it('(V4) an unsafe stored HOST names the refused target — not "could not be read. Re-add it"', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: cpProbeStub(),
+    });
+    const probeSpy = vi.spyOn(fx.fleetControlRegistry, 'probeEgress');
+    const id = await makeWireGuardProxy();
+    vi.spyOn(AccountProxiesService.prototype, 'resolveForDispatch').mockRejectedValue(
+      new UnsafeProxyHostError('loopback'),
+    );
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body.ok).toBe(false);
+    expect(body.reason).toMatch(/private, loopback, link-local, or metadata address/);
+    expect(body.reason).not.toMatch(/could not be read/);
+    expect(body.not_run).toBe('unresolvable');
+    expect(probeSpy).not.toHaveBeenCalled();
   });
 });
 

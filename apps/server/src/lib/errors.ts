@@ -301,7 +301,21 @@ export class ProfileInUseError extends ApiError {
  */
 export class ProxyValidationFailedError extends ApiError {
   constructor(args: {
-    reason: 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked';
+    /**
+     * ⛔ (V4 follow-up 2026-09-12) — `config_unresolvable` IS NOT A PROBE
+     * OUTCOME, and that is exactly why it had to exist. The other four are
+     * verdicts from a real egress round-trip, and the SDK documents them that
+     * way ("failed the server's LIVE pre-launch connectivity test (a real egress
+     * round-trip THROUGH the proxy)"); the desktop copy for `unreachable` is
+     * "The proxy did not answer. Check the host and port, and that it is
+     * online." The pre-launch gate was throwing `unreachable` for a STORED
+     * CONFIG it could not resolve — and for a VPN row it SKIPS the probe
+     * entirely (`'type' in resolved` → return), so nothing was ever dialled.
+     * Any consumer branching on the enum as documented was told a measurement
+     * had been taken from a vantage that never ran, and pointed at a host that
+     * was never the problem. `unreachable` stays the probe's own verdict.
+     */
+    reason: 'unreachable' | 'auth_failed' | 'timeout' | 'egress_blocked' | 'config_unresolvable';
     detail?: string;
   }) {
     const human: Record<typeof args.reason, string> = {
@@ -312,6 +326,8 @@ export class ProxyValidationFailedError extends ApiError {
       timeout: 'The proxy did not respond in time — it may be slow or offline. Try again shortly.',
       egress_blocked:
         'The proxy connected but could not reach the internet — its upstream egress is blocked.',
+      config_unresolvable:
+        'This proxy’s stored configuration could not be used for a session — nothing was dialled. Open the proxy, fix or re-paste the configuration, and try again.',
     };
     super({
       type: PROBLEM_TYPES.ProxyValidationFailed,

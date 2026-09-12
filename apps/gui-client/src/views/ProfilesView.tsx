@@ -135,7 +135,11 @@ import {
 import { ProxyForm } from './ProxiesView';
 import { endpointUnresolvedCopy, isSocks5Probeable, isVpnScheme } from '../lib/proxy-scheme';
 import { withProxyProbe } from '../lib/proxy-probe-sweeper';
-import { VPN_NO_API_KEY_CHECK_NOTICE, VPN_NOT_STORED_CHECK_NOTICE } from '../lib/proxy-check-copy';
+import {
+  VPN_NO_API_KEY_CHECK_NOTICE,
+  VPN_NOT_STORED_CHECK_NOTICE,
+  VPN_STALE_CONFIG_CHECK_NOTICE,
+} from '../lib/proxy-check-copy';
 import {
   deriveProbeViewWithEndpointRows,
   ensureAccountProxyRow,
@@ -148,6 +152,7 @@ import {
   syncListExitObserved,
   testProxyOnServer,
   unansweredCheckNotice,
+  vpnStoreRefusal,
 } from '../lib/proxy-server-test';
 import { type AccountProxyScheme } from '../lib/account-proxies';
 import { teamWorkspaceLabel, teamWorkspaceTitle } from '../lib/team-label';
@@ -2509,7 +2514,40 @@ export function ProfilesView({
   // and persists both to the shared probe cache, so the card immediately shows
   // exit IP / country / latency / last-checked / UDP. Mirrors the canonical
   // ProxiesView.handleTest flow. Best-effort: a probe failure keeps prior state.
-  async function handleTestProxy(px: LocalProxyConfig): Promise<void> {
+  async function handleTestProxy(
+    px: LocalProxyConfig,
+    /**
+     * ⛔ (V4 follow-up 2026-09-12) — WHO ASKED. Default false, so a new call
+     * site gets the cautious behaviour rather than the expensive one.
+     *
+     * MEASURED, and it is why this parameter exists: V2 made a VPN row's check
+     * STORE the row, and two of this function's three callers are AUTOMATIC —
+     * `probeIfUnprobed` from the post-create auto-test (`#3 auto-test on
+     * create`) and from `onProxyMinted` in Edit Profile. `shouldAutoProbe` has
+     * no scheme gate, so creating a profile on an OpenVPN/WireGuard proxy would
+     * have uploaded that proxy's `.ovpn` / WireGuard private key to the control
+     * plane with nobody pressing anything — while the rule the same change
+     * wrote down (lib/proxy-server-test, the sweep's asymmetry) is "pressing
+     * Check / Test on a row is that act… a background timer is not: it would
+     * ship a customer's VPN keys to the control plane with no act at all".
+     * Creating a PROFILE is not an act on the proxy either, so the auto-probe
+     * is on the timer's side of that line, not the button's.
+     *
+     * And it would have brought a TUNNEL UP: `runFleetTestForRow` dispatches a
+     * fleet probe with a 90s deadline, `void`-ed, so the create modal closes and
+     * the Launch button is live while it runs. `handleLaunch` refuses to run
+     * that same probe, in its own words: "A fleet probe brings the tunnel up on
+     * a node while the launching session brings up its own, and most VPN
+     * accounts allow one connection — the probe could break the launch." A
+     * customer who created a profile on their VPN and launched immediately could
+     * have had that launch broken by OUR probe.
+     *
+     * An auto-probe therefore does the DNS pre-flight (no upload, no tunnel,
+     * ~ms) and stops. The endpoint verdict it writes is what the card needs;
+     * the tunnel is measured when the customer asks for it.
+     */
+    opts?: { userInitiated?: boolean },
+  ): Promise<void> {
     setTestingProxyId(px.id);
     // (h) finding 4 — the previous check's notice belongs to the previous
     // check: it goes the moment this one starts, whatever this one does
@@ -2556,7 +2594,12 @@ export function ProfilesView({
         // up, measures latency and observes the exit, which is the only exit
         // identity a VPN row can ever have (the native exit probe is a SOCKS5
         // request from this Mac). Best-effort, after the pre-flight's write.
-        await runFleetTestForRow(px, res.resolved, unansweredCheckNotice(prior, endpointMoved));
+        await runFleetTestForRow(
+          px,
+          res.resolved,
+          unansweredCheckNotice(prior, endpointMoved),
+          opts?.userInitiated === true,
+        );
         return;
       }
       // (l) #15 — one handshake per proxy at a time (queues behind a sweep
@@ -2657,8 +2700,22 @@ export function ProfilesView({
      *  (`unansweredCheckNotice`): whether that write moved the endpoint, and
      *  whether the card held a fleet verdict at all. */
     unansweredNotice: string,
+    /** ⛔ (V4 follow-up) — see `handleTestProxy`'s `opts.userInitiated`. This
+     *  step STORES the row on the account and brings a tunnel up on a fleet
+     *  Mac; neither may happen without the customer asking. */
+    userInitiated: boolean,
   ): Promise<ProbeCacheMap | null> {
     if (!resolved || !isVpnScheme(px.scheme)) return null;
+    // ⛔ (V4 follow-up 2026-09-12) — an AUTOMATIC probe stops at the pre-flight.
+    // The two automatic callers (post-create auto-test, onProxyMinted) reach
+    // here for a VPN row with no scheme gate anywhere on the path, and what
+    // follows uploads the row's secret material and occupies a fleet Mac for up
+    // to 90s. Same rule the background sweep applies for the same reason
+    // (lib/proxy-server-test, `checkEndpointRowForSweep`), and same silence: a
+    // check the customer did not ask for writes no notice either — it writes
+    // only what it measured, which is the endpoint verdict already persisted by
+    // the caller.
+    if (!userInitiated) return null;
     // (l) #1 / #9 — the SAME gate the grid's Check VPN has, leaving the SAME
     // notice: this card used to return here silently, so for one proxy in one
     // state the grid said why the tunnel was not tested while the card showed
@@ -2669,18 +2726,63 @@ export function ProfilesView({
       setVpnNotices((m) => ({ ...m, [px.id]: VPN_NO_API_KEY_CHECK_NOTICE }));
       return null;
     }
-    if (px.serverId === undefined) {
+    // (V2 2026-09-12, owner: "openvpn … not showing info measurements of proxy
+    // check like a socks5 does after adding, at profile grid … nothing of IP,
+    // quic, udp, nothing showing, and session not starting still") — the row is
+    // STORED here when it is not stored yet, instead of returning with "launch a
+    // session through this proxy once".
+    //
+    // ⛔ That return was the defect, and it was a closed loop: NOTHING on a VPN
+    // path ever set `serverId` (`ensureAccountProxyRow` has one create call site
+    // in this app, reached only by the two launches and the SOCKS5 Test arms), so
+    // the only thing that could store a VPN row was a launch — and the launch is
+    // the half of the owner's report that fails. The measurement that would
+    // explain the failure could never be taken. This is the SAME fix (q) Item
+    // 12-memory (A) applied to the SOCKS5 arms 40 lines above; the VPN arms kept
+    // the pre-existing early return and were left behind.
+    let serverId: string | undefined = px.serverId;
+    /** ⛔ (V4 follow-up) — the re-sync PUT for an ALREADY-STORED row failed, so
+     *  the tunnel the test Mac brings up below is the configuration some EARLIER
+     *  save stored, not the one this Mac holds. See
+     *  VPN_STALE_CONFIG_CHECK_NOTICE for why swallowing it was wrong for exactly
+     *  the healed-legacy population this item serves. */
+    let staleStoredConfig = false;
+    try {
+      // (q) 13(d) — the account row is refreshed FIRST (the grid's Check does
+      // the same at its :947), so the tunnel the fleet brings up is the config
+      // this Mac holds — not the one the last launch stored — and a stored
+      // legacy blob is normalised on the way. Best-effort for a row that is
+      // already stored: an unedited row already matches, and a transient failure
+      // must not block the check. For a row that is NOT stored the same call is
+      // the create, and its failure IS the answer — the check has nothing to ask
+      // the test Mac about — so it names the cause instead of being swallowed.
+      serverId = (await ensureServerProxy(px)) ?? serverId;
+    } catch (err) {
+      if (serverId === undefined) {
+        setVpnNotices((m) => ({ ...m, [px.id]: vpnStoreRefusal(err).notice }));
+        return null;
+      }
+      // Stored already: the check CAN still run (against the stored config), so
+      // it does — and says which config the result describes. The comment that
+      // used to justify this silence ("an unedited row already matches") is
+      // false for a healed legacy blob: `accountProxyInputFor` heals it and
+      // `persistHealedOpenvpn` writes the healed copy LOCALLY before the wire.
+      staleStoredConfig = true;
+    }
+    if (serverId === undefined) {
+      // ⛔ (V4 follow-up) — WHAT ACTUALLY REACHES HERE. `ensureServerProxy`
+      // answers `undefined` for two causes: no API key (returned above, so not
+      // this one) and — new — a local row that was DELETED while this check was
+      // in flight, which `ensureAccountProxyRow` now detects and cleans up after
+      // rather than orphaning the customer's VPN secret on the control plane. In
+      // that second case the row is already gone from the list, so this notice
+      // is written for something nothing renders; it is kept as the fail-safe
+      // for a future caller, not because a customer reads it.
       setVpnNotices((m) => ({ ...m, [px.id]: VPN_NOT_STORED_CHECK_NOTICE }));
       return null;
     }
     try {
-      // (q) 13(d) — the account row is refreshed FIRST (the grid's Check does
-      // the same at its :927), so the tunnel the fleet brings up is the config
-      // this Mac holds — not the one the last launch stored — and a stored
-      // legacy blob is normalised on the way. Best-effort: an unedited row
-      // already matches, and a transient failure must not block the check.
-      await ensureServerProxy(px).catch(() => undefined);
-      const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, px.serverId);
+      const outcome = await testProxyOnServer(settings.baseUrl, settings.apiKey, serverId);
       // ⛔ `adoptExit` — this IS the VPN row (gated above), and without it the
       // shared step writes the fleet number but never the observed exit, so the
       // card's exit cell and the launch's device-clock timezone stayed empty
@@ -2694,6 +2796,7 @@ export function ProfilesView({
       if (outcome.kind === 'not_run') {
         setVpnNotices((m) => ({ ...m, [px.id]: outcome.reason }));
       } else if (outcome.kind === 'unavailable') {
+        /* falls through to the shared unanswered notice below */
         // (i) I5 — the server did not answer: nothing was written above, so
         // the cache's failure banner (and the fields the row holds) stand;
         // this card says why THIS check measured nothing, as a notice.
@@ -2702,6 +2805,12 @@ export function ProfilesView({
         // pick, same constant, same cache). (k) K2 — nor when the card never
         // held one; the caller made the pick from the same prior entry.
         setVpnNotices((m) => ({ ...m, [px.id]: unansweredNotice }));
+      } else if (staleStoredConfig) {
+        // A real verdict came back (`ok` / `failed`) — and it is a verdict about
+        // the configuration STORED EARLIER, because the push of this Mac's copy
+        // failed above. Only said here: a `not_run` / `unavailable` produced no
+        // result to caveat, and their own sentence is the one that matters.
+        setVpnNotices((m) => ({ ...m, [px.id]: VPN_STALE_CONFIG_CHECK_NOTICE }));
       }
       return next;
     } catch {
@@ -4781,7 +4890,7 @@ export function ProfilesView({
                             } else void handleLaunch(profile);
                           }}
                           onTest={() => {
-                            if (px !== null) void handleTestProxy(px);
+                            if (px !== null) void handleTestProxy(px, { userInitiated: true });
                           }}
                           onStop={running ? () => void handleStop(profile) : undefined}
                           onAssist={onAssist ? () => onAssist(profile.id) : undefined}
@@ -4984,7 +5093,7 @@ export function ProfilesView({
                       }}
                       onTest={(id) => {
                         const px = pickProxy(id);
-                        if (px !== null) void handleTestProxy(px);
+                        if (px !== null) void handleTestProxy(px, { userInitiated: true });
                       }}
                       onEdit={(id) => {
                         const profile = resolve(id);
@@ -6939,11 +7048,67 @@ function regionName(cc: string): string {
   }
 }
 
+/**
+ * (V4 follow-up 2026-09-12, owner: "session not starting still") — the
+ * pre-launch gate's 422 for a STORED CONFIGURATION IT COULD NOT USE, in words
+ * that name the cause.
+ *
+ * ⛔ MEASURED: without this the entire V3 server-side change was invisible to
+ * the one person it was written for. The gate throws
+ * `ProxyValidationFailedError` carrying a `detail` that quotes the offending
+ * line of the customer's own `.ovpn` (or names the missing `Address`), and the
+ * chain from here — `friendlyError` → `humanizeError` → `fixedApiErrorMessage`
+ * — classifies on `kind`/`status` and passes `reason` as `undefined`, so all ten
+ * causes arrived as one sentence: "The proxy could not be verified. Check its
+ * details and try again." The customer was told to check a host and port that
+ * were never the problem, for a config that will be refused identically on every
+ * retry.
+ *
+ * ⚠️ WHICH RULE IS BEING APPLIED, and why it is not the one `api-errors.ts`
+ * states. That rule — "`detail` and `title` are diagnostic input and must never
+ * be reflected into the installed client" — exists because a remote problem body
+ * is attacker-influenced. This `detail` is not of that class: it is derived from
+ * THE CUSTOMER'S OWN stored configuration, by our own control plane, for the
+ * owner of that row, and its whole content is a line number plus a line the
+ * customer pasted. The precedent is in this same function, 130 lines above:
+ * `egressBlockCopy` reflects the server's `detail` for the proxy-SYNC refusal of
+ * the SAME class of cause, for the same reason, with the same "Driftstack said:"
+ * framing — written when the transport used to dispose that body and the dialog
+ * "could only say Check the proxy". This is that arm for the LAUNCH.
+ *
+ * Two guards on what crosses:
+ *   * the CONTRACTUAL discriminator first — status 422 plus the closed-set
+ *     `reason: 'config_unresolvable'` this gate now sends (the tier refusal,
+ *     whose detail names an internal flag, is a 403 and cannot reach here);
+ *   * the detail is BOUNDED and trimmed, so a pathological body cannot become
+ *     the page. Everything else keeps the fixed copy.
+ *
+ * Exported so an arm can pin it without rendering the view.
+ */
+export function proxyConfigRefusalMessage(err: unknown): string | null {
+  if (err === null || typeof err !== 'object') return null;
+  const record = err as { status?: unknown; reason?: unknown; detail?: unknown };
+  if (record.status !== 422 || record.reason !== 'config_unresolvable') return null;
+  const head =
+    'The session was not started: this proxy’s stored configuration could not be used, so nothing ' +
+    'was dialled and no traffic left this Mac.';
+  const detail = typeof record.detail === 'string' ? record.detail.trim() : '';
+  if (detail.length === 0 || detail.length > 400) {
+    return `${head} Open the proxy, re-paste the configuration and save it, then launch again.`;
+  }
+  return `${head} Driftstack said: ${detail}`;
+}
+
 function friendlyError(
   err: unknown,
   baseUrl?: string,
   fallback = "Couldn't complete this profile action. Try again.",
 ): string {
+  // (V4 follow-up) — the launch refusal that NAMES the line; see above for the
+  // copy rule this applies. Before the transport classifiers, because those
+  // answer it with fixed copy that discards the cause.
+  const configRefusal = proxyConfigRefusalMessage(err);
+  if (configRefusal !== null) return configRefusal;
   // 2026-05-20 — network-failure preflight (catches Tauri WebKit
   // "Load failed" before falling through to per-view formatting). Keep the
   // configured target/actionable guidance, but never include the raw native

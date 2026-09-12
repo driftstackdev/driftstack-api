@@ -116,7 +116,7 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
 // (m) M3 — the CARD arm below mounts ProfilesView over the same real cache, so
 // the binding module carries the hub's reads too (one profile bound to socks1).
 vi.mock('../../src/lib/profile-bindings', () => ({
-  clearBindingsForProxy: vi.fn(() => Promise.resolve([])),
+  profilesUsingProxy: vi.fn(() => Promise.resolve([])),
   listBindings: () =>
     Promise.resolve([
       {
