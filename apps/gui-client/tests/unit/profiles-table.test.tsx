@@ -129,6 +129,62 @@ describe('ProfilesTable', () => {
     cleanup();
   });
 
+  it('C4 — the OS row reaches the LIST, and only where this client HOLDS a reading: a fed fingerprint renders its chip, an un-fed row (VPN or not) renders nothing', () => {
+    // The owner, 2026-09-12: *"i dont see OS currently at profile grid either"* —
+    // they read the list beside the grid, and `ProfileTableRow` carried no
+    // `osFingerprint` field at all, so no fix to the card could reach this
+    // surface. The cell uses the SHARED ProxyOsChip (components/ProxyCapabilities)
+    // so the two surfaces cannot disagree about what a fingerprint means.
+    // Mutations run 2026-09-12, each restored byte-exactly:
+    //   • drop the `r.osFingerprint !== undefined` arm → the match arm goes red;
+    //   • render the chip unconditionally, or add back a VPN fallback → the LAST
+    //     TWO arms go red, which is the pair that matters: '— OS' on a row
+    //     nobody passed a reading to says "we looked and found nothing", and
+    //     that is false for every proxy that has a reading. An absent prop is
+    //     not a measurement.
+    const { rerender } = render(
+      <ProfilesTable
+        {...props({
+          rows: [
+            row({
+              osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64' },
+            }),
+          ],
+        })}
+      />,
+    );
+    const match = document.querySelector('[data-component="proxy-os-fingerprint"]');
+    expect(match).not.toBeNull();
+    expect(match?.getAttribute('data-os-tone')).toBe('match');
+    expect(match?.textContent).toBe('✓iOS/macOS'); // glyph + label, gap-0.5 between
+    // The one measured defect keeps its own tone here as well.
+    rerender(
+      <ProfilesTable
+        {...props({
+          rows: [row({ osFingerprint: { os: 'windows', confidence: 'high', reason: 'TTL 128' } })],
+        })}
+      />,
+    );
+    expect(
+      document
+        .querySelector('[data-component="proxy-os-fingerprint"]')
+        ?.getAttribute('data-os-tone'),
+    ).toBe('mismatch');
+    // ⛔ A row nobody passed a reading to renders NO chip — VPN or not. The '—'
+    // placeholder says "we looked and there is no reading", which is false for
+    // every proxy that HAS one, and a VPN row already states its tunnel in this
+    // same cell ("UDP via tunnel"). The second chip is also not free: rendering
+    // it measured +27px on the table shell and overflowed the marketing capture
+    // (scripts/marketing-screens.mjs `profiles-list`, 1526px — run 2026-09-12,
+    // which is how this arm got its shape).
+    rerender(<ProfilesTable {...props({ rows: [row({ vpn: true })] })} />);
+    expect(screen.getByText('UDP via tunnel')).toBeTruthy();
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    rerender(<ProfilesTable {...props({ rows: [row()] })} />);
+    expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    cleanup();
+  });
+
   it('clicking a sortable header fires onSort with its key', () => {
     const onSort = vi.fn();
     render(<ProfilesTable {...props({ onSort })} />);

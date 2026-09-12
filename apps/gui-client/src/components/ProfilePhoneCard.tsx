@@ -344,7 +344,9 @@ export const DEFAULT_CONTENT_WIDTH = 206;
  *  (Chromium via Playwright, viewport 1200×1400 @2x, after `document.fonts.ready`):
  *  a probe span carrying CHIP_BASE VERBATIM inside a real card body at
  *  http://127.0.0.1:5199/visual-harness.html?w=178, its `getBoundingClientRect`
- *  width ceil'd. To reproduce, read CHIP_BASE out of THIS file rather than copying
+ *  width recorded AS MEASURED (C4 — it used to be ceil'd; the table's own comment
+ *  below says why the rounding had to go). To reproduce, read CHIP_BASE out of
+ *  THIS file rather than copying
  *  it — a copied literal is how the table went stale before. The cut is decided
  *  from this table, not from layout, so it is the same in jsdom and in Chromium,
  *  which is also why the table IS the mechanism and the row's `overflow-hidden`
@@ -378,21 +380,41 @@ export const DEFAULT_CONTENT_WIDTH = 206;
  *  the three non-Darwin members, '…'/'?' only with the 'OS' label). A NEW label
  *  must be MEASURED into this table before it can render; for OS labels the
  *  exhaustive OS_LABEL_COMPACT record is what forces that at compile time. */
+/** ⛔ C4 (2026-09-12) — THESE ARE THE MEASURED WIDTHS, NOT THEIR CEILINGS.
+ *  They were ceil'd integers until the owner's own row was refused by the
+ *  rounding: `rowWidth` adds CAPS_MIN_SLACK (3) as a FLOOR under the slack, and
+ *  a ceil'd entry silently adds a second, invisible floor of its own. The widest
+ *  green trio — 'UDP ✓' + a MEASURED 'QUIC ✓' + '✓ Apple', which is what an
+ *  ordinary healthy proxy with a live h3 session and a matching fingerprint
+ *  shows — reserved 41 + 45 + 48 + 8 + 3 = 145 against the 144px content of the
+ *  178px column and lost its OS chip to a '+1', while it RENDERS 139.68: 4.32px
+ *  of real slack, refused for 1px of arithmetic that measures nothing. The two
+ *  floors were counted twice (the per-entry remainders are 0.78 + 0.70 + 0.84 =
+ *  2.32px on that trio, and as little as 0.03px on '✗ Win' — so the credit is
+ *  NOT one pixel a chip and must not be modelled as one).
+ *  With the decimals the reservation is 142.68 and the floor is exactly the 3px
+ *  it says it is: `contentWidth - rendered >= CAPS_MIN_SLACK`, on every row,
+ *  rather than 3–5.3px depending on how the labels happened to round.
+ *  ⛔ The change is monotone by construction — every reservation is now SMALLER
+ *  or equal, so no width that shows a chip today can stop showing it.
+ *  MEASURED 2026-09-12 in the live harness off CHIP_BASE at px-1 (Chromium @2x,
+ *  after document.fonts.ready); re-measure the whole table, not one cell, when
+ *  the chrome string or the font stack changes. */
 const CHIP_WIDTH: Readonly<Record<string, number>> = {
-  'UDP ✓': 41, // 40.22 rendered
-  '⤵ UDP': 40, // 39.47
-  'QUIC ✓': 45, // 44.30
-  'QUIC ~': 43, // 42.03
-  '⤵ QUIC': 44, // 43.55
-  '✓ iOS/macOS': 74, // 73.38 — the full OS label
-  '✓ Apple': 48, // 47.16 — its compact form (OS_LABEL_COMPACT)
-  '✗ Windows': 63, // 62.14
-  '✗ Win': 37, // 36.97
-  '✗ Linux': 45, // 44.53 — fits at 144 in FULL, so it never compacts
-  '✗ BSD': 39, // 38.89 — idem
-  '… OS': 34, // 33.41
-  '? OS': 30, // 29.97 — measured, undetermined: a COMPLETED classification
-  '— OS': 34, // 33.33 — no reading at all; see the eligibility rule below
+  'UDP ✓': 40.22,
+  '⤵ UDP': 39.47,
+  'QUIC ✓': 44.3,
+  'QUIC ~': 42.03,
+  '⤵ QUIC': 43.55,
+  '✓ iOS/macOS': 73.38, // the full OS label
+  '✓ Apple': 47.16, // its compact form (OS_LABEL_COMPACT)
+  '✗ Windows': 62.14,
+  '✗ Win': 36.97,
+  '✗ Linux': 44.53, // fits at 144 in FULL, so it never compacts
+  '✗ BSD': 38.89, // idem
+  '… OS': 33.41,
+  '? OS': 29.97, // measured, undetermined: a COMPLETED classification
+  '— OS': 33.33, // no reading at all; see the eligibility rule below
 };
 const CHIP_GAP = 4;
 /** C1/C2 — the width the caps row's INLINE ACTION takes in mode 'first', so the
@@ -452,8 +474,13 @@ export function firstAction(p: CapsInput, contentWidth: number): { label: string
  *  this (its widest meta pill is '+5'), so the geometry gate cannot cover for it.
  *  Over-reserving on the caps side can only HIDE a chip, never overflow the row,
  *  and after C1 that row's '+N' holds non-measurements only — its worst case is
- *  2 chips + the pill: a VPN row's 'QUIC ✓' (45) beside a '✗ Linux' (45) is 125
- *  of 144, and 154 at full labels before compaction. So the slack costs nothing. */
+ *  2 chips + the pill: a VPN row's 'QUIC ✓' (44.3) beside a '✗ Linux' (44.53) is
+ *  123.83 of 144 (153.45 at full labels, before compaction).
+ *  ⛔ C4 — "the slack costs nothing" was the sentence that ended this block, and
+ *  it was wrong in the one mode where the row is not 144 wide: in capsMode
+ *  'first' the chips get 90px, and there 31px of pill cost a MEASURED chip its
+ *  place at every real column width. Over-reserving the pill is cheap only while
+ *  something else is paying; visibleChips level 2b now makes the pill yield. */
 const OVERFLOW_PILL_WIDTH = 27;
 const OVERFLOW_PILL_WIDTH_WIDE = 31;
 /** The reservation for a '+N' standing for `n` hidden things. Digit-aware: the
@@ -782,10 +809,14 @@ function vpnQuicCap(quicMeasured: MeasuredQuic | null | undefined, quicProbe: bo
  *  a Dutch rotating exit is not an iPhone). 'iOS' is also ambiguous in a second
  *  way here — the card prints the PROFILE's 'iPhone 17' two rows up, so it reads
  *  as a restatement of the device rather than a verdict about the PROXY, which is
- *  the one thing the word had to identify. And it fits: '✓ Apple' measures 47.16
- *  → 48, so the widest green trio RESERVES 41 + 45 + 48 + 8 = 142 of 144 and
- *  RENDERS 139.68 — 4.3px of real slack, in deterministic integer arithmetic
- *  decided by the table, not by layout. ('✓ Darwin' 52.92 and '✓ mac/iOS' 59.38
+ *  the one thing the word had to identify. And it fits: '✓ Apple' measures 47.16,
+ *  so the widest green trio (with the row's worst case, a MEASURED 'QUIC ✓')
+ *  RESERVES 40.22 + 44.3 + 47.16 + 8 + the 3px floor = 142.68 of 144 and RENDERS
+ *  139.68 — the floor intact, 1.32px to spare, in deterministic arithmetic decided
+ *  by the table, not by layout. ⛔ C4: at the ceil'd entries this read '142 of 144'
+ *  and OMITTED the floor; the real reservation was 145, and that ONE pixel is what
+ *  hid this chip behind a '+1' at the 178px column — the defect, living in the
+ *  comment that described it. Quote the floor in every trio. ('✓ Darwin' 52.92 and '✓ mac/iOS' 59.38
  *  both put the trio over 144; '✓ Mac' 39.25 fits but drops iOS the way 'iOS'
  *  drops macOS.) '✗ Windows' → 'Win' loses nothing — windows is a single member.
  *  'Linux'/'BSD'/'OS' are already short enough to fit in full, so they compact to
@@ -889,10 +920,18 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   // is (nothing measured yet, or the cause the control plane reported).
   //
   // It claims nothing: '—' is not a verdict about the stack, it is the honest
-  // statement that there is no verdict. Geometry was never the obstacle either:
-  // '— OS' measures 33.33 → 34, so the trio is 41 + 43 + 34 + 8 = 126 of 144.
-  // The OS row therefore NEVER rides the '+N' any more, at any width; `hidden`
-  // keeps only what genuinely is not a measurement (a VPN's "UDP via tunnel").
+  // statement that there is no verdict. Geometry is not the obstacle either:
+  // '— OS' measures 33.33, so the measured trio is 40.22 + 42.03 + 33.33 + 8 + the
+  // 3px floor = 126.58 of 144. `hidden` keeps only what genuinely is not a
+  // measurement (a VPN's "UDP via tunnel").
+  // ⛔ C4 — this block used to end "The OS row therefore NEVER rides the '+N' any
+  // more, at any width". That was FALSE and stayed false for a day: it was a
+  // statement about capsMode 'measured' only. In capsMode 'first' the chips are
+  // cut against `contentWidth − action − gap` (90 of the 144px column, see the
+  // caps row), and the 31px reserved there for the tunnel hint's pill pushed this
+  // chip straight back off the row. Rendered, both themes, at 178 and 186:
+  // 'Check  QUIC ✓  +2'. Two mechanisms, one sentence from the owner. See
+  // visibleChips level 2b and rowWidth.
   {
     eligible.push({
       key: 'os',
@@ -943,8 +982,22 @@ export interface VisibleChips {
  *  first attempt here was 8%, and it pushed out the very trio C1 exists for
  *  ('✓ Apple' makes it 140 of 144, so 8% refuses it). It needs a floor under
  *  the slack: a row that fits only because of its last pixel does not fit
- *  anywhere else. Three pixels makes the observed failure unreachable and
- *  leaves the measured trio in place at 143.
+ *  anywhere else. Three pixels makes the observed failure unreachable.
+ *
+ *  ⛔ C4 (2026-09-12) — AND IT MUST BE THE ONLY FLOOR. Until C4 every CHIP_WIDTH
+ *  entry was ALSO ceil'd, so each row carried a second, invisible floor of 0–1px
+ *  a chip on top of this one. The two together refused the widest green trio at
+ *  the 178px column (145 reserved against 144 available, for a row that RENDERS
+ *  139.68) and put a MEASURED OS match behind a '+1' — the owner's sentence,
+ *  produced by 1px of arithmetic that measures nothing. CHIP_WIDTH now holds the
+ *  measured decimals, so this constant is literally what it claims:
+ *  `contentWidth − rendered ≥ CAPS_MIN_SLACK` on every admitted row, no more and
+ *  no less. Do NOT re-introduce rounding "for safety" — raise this number, where
+ *  it is visible and testable, or re-measure the table.
+ *  The Verdana leg (a face deliberately wider than anything in `font-sans`) puts
+ *  that trio at 144.17 in 144 — and the trio this code ALREADY admitted before C4
+ *  ('QUIC ~' in place of 'QUIC ✓') at 145.15, so C4 does not widen the worst case
+ *  the wide-font mode has to survive; it narrows it.
  *
  *  ⚠️ This is a floor, not a substitute for the table. Re-measure the table when
  *  the first family in `font-sans` starts resolving (see CHIP_WIDTH); a floor
@@ -977,34 +1030,46 @@ const compacted = (c: CapChip): CapChip =>
  * (45 + 47 + 78 + 8 = 178, i.e. 34px over), so the OS chip was ALWAYS the one
  * that went into the '+1' — invisible from a 178px card up to a 211px one.
  *
- * Three levels, in this order, because a shorter word beats a hidden fact.
+ * Four levels, in this order, because a shorter word beats a hidden fact and a
+ * hidden fact beats a hidden MEASUREMENT.
  * ⛔ Every trio below is computed at the WIDEST entry of each chip — QUIC's is
- * 'QUIC ✓' 45, NOT the inferred 'QUIC ~' 43. A spec written at the narrow one
- * understates every threshold in it, which is how this block first read:
+ * the measured 'QUIC ✓' 44.3, NOT the inferred 'QUIC ~' 42.03 — and every one
+ * of them INCLUDES rowWidth's 3px CAPS_MIN_SLACK floor. A spec written at the
+ * narrow chip understates every threshold in it, and one written without the
+ * floor understates them all by 3; this block has read both ways, and the
+ * second error is the one that shipped the owner's '+1' (see CHIP_WIDTH):
  *   1. every eligible chip with its FULL label. The green trio needs
- *      41 + 45 + 74 + 8 = 168 — content = card − 34, so a 202px card (a 200px
- *      one still compacts); the red '✗ Windows' trio 157, a 191px card. The
- *      'QUIC ~' variants are 2px less: 166 and 155;
+ *      40.22 + 44.3 + 73.38 + 8 + 3 = 168.9, so content 169 — content = card −
+ *      34, i.e. a 203px card; the red '✗ Windows' trio 157.66, a 192px card. The
+ *      'QUIC ~' variants are 2.27px less: 166.63 and 155.39;
  *   2. every eligible chip with its COMPACT label (C1 → OS_LABEL_COMPACT). At
- *      144 the green '✓ Apple' trio is 41 + 45 + 48 + 8 = 142 and the red
- *      '✗ Win' trio 131 — 2px and 13px of headroom where the old geometry was
- *      34px OVER. The 142 is a RESERVATION: it renders 139.68, and the sum is
- *      integer arithmetic over ceil'd entries, so it is the same every time.
- *      '✗ Linux' (139), '✗ BSD' (133), '… OS' (128) and '? OS' (124) already fit
- *      at 144 in FULL, so they never compact at all;
+ *      144 the green '✓ Apple' trio is 40.22 + 44.3 + 47.16 + 8 + 3 = 142.68 and
+ *      the red '✗ Win' trio 132.49 — 1.32px and 11.51px of headroom where the old
+ *      geometry was 34px OVER. The 142.68 is a RESERVATION: it RENDERS 139.68,
+ *      and the sum is over MEASURED entries, so the difference is exactly the
+ *      floor. '✗ Linux' (140.05), '✗ BSD' (134.41), '… OS' (128.93) and '? OS'
+ *      (125.49) already fit at 144 in FULL, so they never compact at all;
+ *   2b. C4 — the same row with the '+N' NOT reserved, when the pill would hold
+ *      only things that are not measurements. 31px of pill is not worth a chip;
+ *      see the block at the level itself. This is what puts the OS row on a
+ *      178px VPN tile that has measured QUIC (89.63 of the 90px that capsMode
+ *      'first' leaves beside the compact 'Check');
  *   3. only THEN whole chips, dropped by C3's priority: a `keep` chip (the OS
  *      mismatch) goes LAST, so a row narrower than any real column pushes a
  *      GREEN chip into the '+N' and the one measured defect stays visible.
- *      That is 130px and below for the red trio, 141 and below for the green
- *      one — no column is that narrow (`minmax(178px,1fr)` ⇒ 144), so in the
- *      app level 3 never fires.
+ *      That is 132px and below for the red trio, 142 and below for the green
+ *      one — no column is that narrow (`minmax(178px,1fr)` ⇒ 144), so in mode
+ *      'measured' level 3 never fires in the app. In mode 'first' it DOES: the
+ *      chips there are cut against content − action − gap, which is 90 at the
+ *      178px column, and that is the width level 2b exists for.
  *
  * C2 — a '+N' hiding a measurement is the defect; a '+N' holding things that are
  * NOT measurements is the point of it, and its title still names what it holds.
- * There are exactly TWO such things: a VPN row's "UDP via tunnel" hint, and the
- * '—' OS placeholder (never measured, or a cause the server REPORTED as
- * `unavailable`). '?' is not one of them — it is a completed classification and
- * gets a chip of its own; see capabilityChips.
+ * There is exactly ONE such thing left: a VPN row's "UDP via tunnel" hint. The
+ * '—' OS placeholder used to be the second and is a CHIP now (see
+ * capabilityChips); '?' never was one — it is a completed classification and has
+ * always had a chip of its own. C4 adds the rule that even that one hint yields
+ * its pill rather than cost a measured chip its place.
  * Deterministic in JS; the row's `overflow-hidden` is a safety net, never the
  * mechanism.
  */
@@ -1018,6 +1083,38 @@ export function visibleChips(p: CapsInput, contentWidth: number): VisibleChips {
   for (const level of [eligible, eligible.map(compacted)]) {
     if (rowWidth(level, hidden.length) <= contentWidth) {
       return { chips: level, hiddenHints: hints([]) };
+    }
+  }
+  // Level 2b — C4 (2026-09-12): THE '+N' YIELDS BEFORE A MEASUREMENT DOES.
+  //
+  // `hidden` holds only things that are NOT measurements (today: a VPN row's
+  // "UDP via tunnel" standing fact). Reserving 27 + 4 = 31px for the pill that
+  // carries them was costing whole MEASURED chips their place — the row spent a
+  // third of the 90px that capsMode 'first' leaves beside its inline action on a
+  // pill, and then dropped the OS chip to afford it. Rendered on the real card
+  // at the 178px column: a stored VPN whose endpoint resolved and whose live
+  // session reported h3 (recordLiveH3Observations → saveObservedQuic, which is
+  // not scheme-gated) painted 'Check  QUIC ✓  +2', the '+2' holding the '— OS'
+  // row the owner asked for. That is the owner's sentence exactly — *"this +1
+  // next to profile … its unclear what its about, better to show everything"*
+  // and *"i dont see OS currently at profile grid"* — and level 3 below was
+  // producing it, by design, for a hint that claims nothing.
+  //
+  // So: if every eligible chip fits once the pill is NOT reserved, show them all
+  // and drop the pill. Nothing is lost — `hidden` is rendered in full by the
+  // details sheet's capability-hints list, which reads `capabilityChips`
+  // directly and never this cut. A pill that stands over a DROPPED CHIP is a
+  // different thing and is still reserved: level 3 keeps it, because there the
+  // pill is the only statement that something is missing.
+  //
+  // ⛔ This can only ever RETURN MORE CHIPS than the levels below it — it is
+  // reached only when levels 1 and 2 failed, i.e. when the alternative was
+  // dropping a chip. It cannot hide anything.
+  if (hidden.length > 0) {
+    for (const level of [eligible, eligible.map(compacted)]) {
+      if (rowWidth(level, 0) <= contentWidth) {
+        return { chips: level, hiddenHints: [] };
+      }
     }
   }
   // Level 3 — drop whole chips, compact labels, lowest priority first. The
@@ -1686,14 +1783,21 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // every VPN row and for any row whose cached verdict does not match its scheme
   // (views/ProfilesView.tsx `matchingProbe`), while `osFingerprint`, `quicProbe`
   // and `quicMeasured` reach the card from the raw-cache derivation, which is not
-  // scheme-gated (lib/proxy-probe-cache.ts). So: the same three-level cut as mode
-  // 'measured', against the width the chips actually have — the row minus the
-  // inline action and the gap after it.
-  // ⛔ That residual is CLOSED as of the Linux geometry run (see firstAction):
-  // the VPN action compacts to 'Check' (50) when the full label would push a
-  // chip into the pill, so the narrow VPN row shows its '— OS' chip and keeps
-  // the pill for the tunnel hint. The non-VPN case — the measured OS defect,
-  // 40px of button — has 100px and renders the FULL '✗ Windows' at 144.
+  // scheme-gated (lib/proxy-probe-cache.ts). So: the same cut as mode 'measured',
+  // against the width the chips actually have — the row minus the inline action
+  // and the gap after it.
+  // ⛔ THIS IS THE NARROWEST BOX ON THE CARD: 144 − 50 − 4 = 90px at the 178px
+  // column, and it is where a '+N' costs the most. The comment here used to say
+  // the residual was "CLOSED as of the Linux geometry run" because the VPN action
+  // compacts to 'Check' (50). Compacting the BUTTON was not enough, and the claim
+  // was false for every VPN row that had actually measured something: with a
+  // stored h3 observation the row painted 'Check  QUIC ✓  +2' at 178 AND 186, in
+  // both themes, the '+2' holding the '— OS' row the owner asked for — because
+  // 31px of the 90 was reserved for a pill carrying one non-measurement. C4's
+  // level 2b makes that pill yield; the row now paints 'Check  QUIC ✓  — OS'
+  // (89.63 reserved of 90, rendering 135.24 of the 144px row).
+  // The non-VPN case — the measured OS defect, 40px of button — has 100px and
+  // renders the FULL '✗ Windows' at 144.
   // The action's label and the width the chips are cut against come from ONE
   // call, so the button that renders and the width reserved for it can never
   // disagree — they were two separate expressions before, and a compact label

@@ -82,6 +82,26 @@ describe('T-20 the OpenVPN directive set has one source', () => {
     expect(classifyUnsafeVpnTargets({ configBlob: 'script-security 1\n' })).toBeNull();
   });
 
+  it('CRITICAL a bare-CR (classic-Mac) config is refused by the server classifier, and the detail names the real line. Measured 2026-09-12 on the shipped build: `classifyUnsafeVpnTargets` returned null for exactly this blob, so account-me stored it, resolveVpnForDispatch passed it, and the node received `script-security 2` + `up /etc/…` intact — while the SAME bytes satisfied `OpenVpnProxyConfigSchema`, whose `client`/`remote` refines count a bare \\r as a line terminator. The shape half and the security half have to agree about what a line is or the guard is decorative.', () => {
+    const lines = [
+      'client',
+      'remote vpn.example.com 1194',
+      'script-security 2',
+      'up /etc/openvpn/update-resolv-conf',
+    ];
+    const cr = `${lines.join('\r')}\r`;
+    expect(classifyUnsafeVpnTargets({ configBlob: cr })).toBe('unsafe-directive');
+    expect(unsupportedOpenvpnDirectiveDetail(cr)).toBe(
+      'Line 3: "script-security 2" — Driftstack does not run scripts from VPN configs. ' +
+        'Remove this line and try again. Line 4 has the same problem.',
+    );
+    // CONTROL: the LF twin gets the identical verdict and the identical sentence, so
+    // this arm is about the line ENDING and not about this particular blob.
+    expect(unsupportedOpenvpnDirectiveDetail(`${lines.join('\n')}\n`)).toBe(
+      unsupportedOpenvpnDirectiveDetail(cr),
+    );
+  });
+
   it('CRITICAL the 400 detail names the line the shared finder names, quoted, with the remedy. This is the sentence the desktop client now shows verbatim, so its shape is a contract with the launch dialog.', () => {
     const blob =
       'client\n# hooks\n\nremote vpn.example.com 1194\nup /etc/openvpn/update-resolv-conf\n';

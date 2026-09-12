@@ -21,6 +21,8 @@
 
 import { useRef, useState, type JSX } from 'react';
 import { RelativeTime } from './RelativeTime';
+import { ProxyOsChip } from './ProxyCapabilities';
+import { type OsFingerprint } from '../lib/os-fingerprint-verdict';
 import {
   CHECK_VPN_ACTION,
   CHECK_VPN_TITLE,
@@ -54,6 +56,19 @@ export interface ProfileTableRow {
   /** Canonical QUIC verdict (same source as the card's chip) for the UDP-column
    *  tooltip, so the list never claims "QUIC ✓" while the card shows "~". */
   quic?: 'ok' | 'inferred' | 'fail' | 'unknown';
+  /** C4 (2026-09-12) — the bound proxy's passive OS fingerprint, the SAME value
+   *  the grid card takes (`probeView.osFingerprints[px.id]`, ProfilesView). The
+   *  owner, on the release that shipped the card's OS chip: *"i dont see OS
+   *  currently at profile grid either"* — and this row had no such field at all,
+   *  so the list could not show one however the grid was fixed. Absent = this
+   *  client holds no reading; the cell then shows a chip ONLY where an absence
+   *  is a FACT it can state (a VPN tunnel, whose cause the control plane reports
+   *  for every ovpn/wg row — apps/server/src/routes/account-me.ts, the
+   *  `os_fingerprint_unavailable: 'vpn_tunnel'` arm). ⛔ It must never render the
+   *  '—' placeholder for a row that simply was not passed a value: on this
+   *  surface that would read as "measured: nothing", which is a claim, and it
+   *  would be false for every proxy that HAS a reading. */
+  osFingerprint?: OsFingerprint;
   latencyMs: number | null;
   /** True when latencyMs is the fleet/server number (matches the grid card),
    *  false/absent when it is the native this-Mac probe. Drives the source hint. */
@@ -504,41 +519,71 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
           <span className="text-ink-muted">no proxy</span>
         )}
       </td>
-      {/* UDP (collapses below md) */}
+      {/* UDP + OS (collapses below md) */}
       <td className={`px-3 py-2 ${HIDE_MED}`}>
-        {r.vpn === true ? (
-          // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
-          // it. The card's chip has said so since (h); the list showed a dash,
-          // which reads as "not measured" for something that is not measurable.
-          <span
-            data-udp="tunnel"
-            // 2026-09-12 (review) — secondary ink, not muted: muted on the
-            // divider/60 wash over the raised row is 3.88:1 in dark (the one
-            // profiles-list finding the gate still reported); secondary is 6.71
-            // dark / 5.51 light there.
-            className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
-            title={`UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`}
-          >
-            UDP via tunnel
-          </span>
-        ) : r.udp === 'unknown' ? (
-          <span className="text-ink-muted">–</span>
-        ) : (
-          <span
-            className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
-              r.udp === 'ok'
-                ? 'bg-status-ready/20 text-status-ready'
-                : 'bg-surface-divider/60 text-ink-muted'
-            }`}
-            title={
-              r.udp === 'ok'
-                ? `UDP relay verified — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
-                : 'No UDP relay — WebRTC/QUIC fall back to TCP'
-            }
-          >
-            {r.udp === 'ok' ? '✓' : '⤵'}
-          </span>
-        )}
+        <div className="flex items-center gap-1">
+          {r.vpn === true ? (
+            // (n) N18 — nothing probes a UDP grant on a tunnel: UDP rides inside
+            // it. The card's chip has said so since (h); the list showed a dash,
+            // which reads as "not measured" for something that is not measurable.
+            <span
+              data-udp="tunnel"
+              // 2026-09-12 (review) — secondary ink, not muted: muted on the
+              // divider/60 wash over the raised row is 3.88:1 in dark (the one
+              // profiles-list finding the gate still reported); secondary is 6.71
+              // dark / 5.51 light there.
+              className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
+              title={`UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`}
+            >
+              UDP via tunnel
+            </span>
+          ) : r.udp === 'unknown' ? (
+            <span className="text-ink-muted">–</span>
+          ) : (
+            <span
+              className={`inline-block rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                r.udp === 'ok'
+                  ? 'bg-status-ready/20 text-status-ready'
+                  : 'bg-surface-divider/60 text-ink-muted'
+              }`}
+              title={
+                r.udp === 'ok'
+                  ? `UDP relay verified — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
+                  : 'No UDP relay — WebRTC/QUIC fall back to TCP'
+              }
+            >
+              {r.udp === 'ok' ? '✓' : '⤵'}
+            </span>
+          )}
+          {/* C4 — the OS row the owner could not find, on the surface they read
+            beside the grid. Rendered from the SHARED ProxyOsChip so the list and
+            the card cannot disagree about what a fingerprint means, and ONLY
+            where this client actually holds a reading.
+            ⛔ Two things it deliberately does NOT do:
+            • it never paints the '—' placeholder for a row that was simply not
+              passed a value. On this surface that reads as "measured: nothing",
+              which is a claim, and it is false for every proxy that HAS a
+              reading — the card can state the absence because the card is
+              rendered from a view that always knows; a table cell is not;
+            • it does not synthesise the VPN-tunnel cause the card synthesises.
+              This cell ALREADY says "UDP via tunnel", with the whole sentence in
+              its title, so a second chip repeating "this row is a VPN tunnel"
+              buys no fact — and it is not free: it measured +27px on the table
+              shell, which overflows the marketing capture's 1526px
+              (scripts/marketing-screens.mjs `profiles-list`, verified 2026-09-12
+              by running it). The card has a row of its own to spend; this column
+              does not.
+            ⚠️ WIDTH BUDGET FOR WHOEVER FEEDS THIS. Nothing passes `osFingerprint`
+            yet — ProfilesView builds these rows and already has the value the
+            card takes (`probeView.osFingerprints[px.id]`), so this cell is one
+            expression away from live, and the owner's "i dont see OS" stays TRUE
+            on the list until that lands. When it does, MEASURE the shell again:
+            the widest chip here ('✓ iOS/macOS' at ProxyOsChip `sm`) is 73.34px
+            plus the 4px gap, measured in the live harness, against 1526 − 1526
+            = 0px of slack in the capture today. Expect to spend a column, not a
+            cell. */}
+          {r.osFingerprint !== undefined ? <ProxyOsChip fingerprint={r.osFingerprint} /> : null}
+        </div>
       </td>
       {/* Created */}
       <td className={`whitespace-nowrap px-3 py-2 text-ink-muted ${HIDE_SMALL}`}>

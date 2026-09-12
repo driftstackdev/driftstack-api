@@ -104,9 +104,49 @@ vi.mock('../../src/lib/profile-bindings', () => ({
 }));
 
 // ProxiesView reads useSettings() (to delete the server-side account_proxies row
-// on remove). With apiKey:null the server delete is skipped — the local CRUD +
-// binding path under test is unaffected. Stable object → useEffect-dep safe.
-const settingsStub = { settings: { apiKey: null, baseUrl: 'http://localhost:3000' } };
+// on remove, and — V3 2026-09-12 — to learn which profiles the account still
+// HAS). With apiKey:null the server delete is skipped — the local CRUD + binding
+// path under test is unaffected. Stable object → useEffect-dep safe; the four
+// mutable knobs below are read through getters so an arm can set them after the
+// object exists.
+//
+// `roster` is the profile list `client.profiles.iterate` yields:
+//   • null            → no client at all (the default, and the offline case)
+//   • string[]        → the ids this account still holds
+//   • rosterError set → the read throws (an API failure mid-dialog)
+let roster: string[] | null = null;
+let rosterError: Error | null = null;
+/** The roster read never settles — a wedged connection, not a failed one. */
+let rosterHangs = false;
+let workspace: string | null = null;
+let teams: Array<{ owner_account_id: string }> | null = [];
+const iterateSpy = vi.fn<(q?: unknown) => void>();
+const settingsStub = {
+  settings: { apiKey: null, baseUrl: 'http://localhost:3000' },
+  get activeWorkspace() {
+    return workspace;
+  },
+  // null = /account/me has not answered yet, so whether this customer HAS a
+  // team workspace is not yet known.
+  get accountMe() {
+    return teams === null ? null : { teams };
+  },
+  get client() {
+    if (roster === null) return null;
+    return {
+      profiles: {
+        iterate: (q?: unknown) => {
+          iterateSpy(q);
+          return (async function* () {
+            if (rosterHangs) await new Promise(() => undefined);
+            if (rosterError !== null) throw rosterError;
+            for (const id of roster ?? []) yield { id };
+          })();
+        },
+      },
+    };
+  },
+};
 vi.mock('../../src/lib/SettingsContext', () => ({ useSettings: () => settingsStub }));
 
 const { ProxiesView } = await import('../../src/views/ProxiesView');
@@ -166,6 +206,14 @@ describe('ProxiesView — deleting a proxy detaches it from its profiles', () =>
     confirmAnswer = true;
     profilesUsingProxy.mockReset();
     profilesUsingProxy.mockResolvedValue([]);
+    // Default: no client. `liveProfileIds` answers null, so every arm written
+    // before the roster existed counts exactly what it counted then.
+    roster = null;
+    rosterError = null;
+    rosterHangs = false;
+    workspace = null;
+    teams = [];
+    iterateSpy.mockClear();
     // HEAD first: removing 'eu-west' is therefore NOT a removal of the
     // inherited default, which is the configuration most arms below want.
     stored = [HEAD, PROXY];
@@ -367,5 +415,170 @@ describe('ProxiesView — deleting a proxy detaches it from its profiles', () =>
     await clickRemoveSelected(['us-east', 'eu-west']);
     await waitFor(() => expect(screen.getByText(/None could be removed/i)).toBeTruthy());
     expect(screen.queryByText(/now ha(s|ve) no proxy/i)).toBeNull();
+  });
+
+  // ── V3 (2026-09-12): a BINDING is not a PROFILE ──────────────────────────
+  //
+  // `profile_bindings` is a local store nothing prunes when a profile stops
+  // existing — `deleteBinding` runs only in this install's own two delete paths,
+  // so a profile deleted from the dashboard or another Mac (or one whose
+  // `deleteBinding` threw after the server delete landed) leaves its binding
+  // behind for good. MEASURED in Chromium against the real view: two profiles on
+  // a proxy plus one stale binding printed "3 profiles using it will be left
+  // with no proxy", and with NO surviving profile on it at all the same dialog
+  // still printed 3 over a grid holding one unrelated profile.
+  //
+  // The subtraction is deliberately one-directional. Every arm below that sets
+  // `roster = null` (or a workspace, or a membership, or a throwing read) pins
+  // the count staying exactly where it was: an UNDER-count would print "No
+  // profile is using it" over a proxy three profiles depend on, which is the one
+  // sentence in this dialog that must never be a guess.
+
+  it('CRITICAL a binding whose profile the account no longer has is NOT counted', async () => {
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_ghost']);
+    roster = ['prof_a']; // prof_ghost was deleted elsewhere; its binding remains
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+
+    const asked = confirmCalls[0];
+    expect(asked?.message).toContain('1 profile using it will be left with no proxy');
+    expect(asked?.message).not.toContain('2 profiles using it');
+    // …and the grammar follows the REAL count, not the binding count.
+    expect(asked?.message).toContain('it will not launch until you choose one');
+  });
+
+  it('CRITICAL when every bound profile is gone the dialog says NO profile is using it', async () => {
+    // The measured worst case: the confirm claimed three casualties over an
+    // account that had none.
+    profilesUsingProxy.mockResolvedValue(['prof_ghost_1', 'prof_ghost_2', 'prof_ghost_3']);
+    roster = ['prof_unrelated'];
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('No profile is using it as its default');
+    expect(confirmCalls[0]?.message).not.toContain('will be left with no proxy');
+    // …and nothing is claimed afterwards either.
+    await waitFor(() => expect(removeProxy).toHaveBeenCalledWith('px_eu'));
+    expect(screen.queryByText(/were using this proxy/i)).toBeNull();
+    expect(setDefaultProxy).not.toHaveBeenCalled();
+  });
+
+  it('CRITICAL the post-delete notice counts the same way the question did', async () => {
+    // The notice is a second sentence off the same read; a fix applied only to
+    // the confirm would leave the over-claim on screen after the fact.
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_ghost']);
+    roster = ['prof_a'];
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(screen.getByText(/1 profile was using this proxy/i)).toBeTruthy());
+    expect(screen.queryByText(/2 profiles were using/i)).toBeNull();
+  });
+
+  it('CRITICAL a roster it cannot READ never shortens the count', async () => {
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_b']);
+    roster = [];
+    rosterError = new Error('profiles list offline');
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('2 profiles using it will be left with no proxy');
+    expect(confirmCalls[0]?.message).not.toContain('No profile is using it');
+  });
+
+  it("CRITICAL a TEAM workspace never subtracts — that list is the OWNER's profiles", async () => {
+    // In a team workspace `profiles.iterate` answers with the owner's set while
+    // the bindings are local and may name the member's personal profiles.
+    // Subtracting there would hide real casualties.
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_b']);
+    roster = ['prof_team_only'];
+    workspace = 'acc_owner_1';
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('2 profiles using it will be left with no proxy');
+  });
+
+  it('CRITICAL an account WITH team memberships never subtracts either', async () => {
+    // Personal workspace, but the customer also has a team: a binding can name a
+    // profile that lives in the other workspace, which the personal list cannot
+    // see and which is NOT deleted.
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_b']);
+    roster = ['prof_a'];
+    teams = [{ owner_account_id: 'acc_owner_1' }];
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('2 profiles using it will be left with no proxy');
+  });
+
+  it('does not read the profile list at all when nothing is bound to the proxy', async () => {
+    // A destructive dialog must not wait on a network round trip to say a
+    // sentence that does not depend on it.
+    profilesUsingProxy.mockResolvedValue([]);
+    roster = ['prof_a'];
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('No profile is using it as its default');
+    expect(iterateSpy).not.toHaveBeenCalled();
+  });
+
+  it('CRITICAL the bulk union subtracts the dead bindings too', async () => {
+    // prof_ghost is bound to BOTH removed proxies and exists in neither the
+    // account nor the grid; prof_a is real and bound to one.
+    profilesUsingProxy.mockImplementation((id: string) =>
+      Promise.resolve(id === 'px_us' ? ['prof_ghost'] : ['prof_a', 'prof_ghost']),
+    );
+    roster = ['prof_a'];
+    render(<ProxiesView />);
+    await clickRemoveSelected(['us-east', 'eu-west']);
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('1 profile using them will be left with no proxy');
+    expect(confirmCalls[0]?.message).not.toContain('2 profiles using them');
+  });
+
+  it('CRITICAL memberships still LOADING never subtract — the team question has no answer yet', async () => {
+    // accountMe arrives asynchronously. Trusting the personal roster before it
+    // lands reaches the team under-count by TIMING rather than by configuration:
+    // open Proxies, delete fast enough, and a team member's real casualties
+    // vanish from the dialog.
+    profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_b']);
+    roster = ['prof_a'];
+    teams = null;
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(confirmCalls[0]?.message).toContain('2 profiles using it will be left with no proxy');
+  });
+
+  it('CRITICAL a roster read that NEVER answers still opens the dialog', async () => {
+    // This read sits between a clicked Remove and the question about it. A hung
+    // profile list must not leave the button dead with nothing on screen.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      profilesUsingProxy.mockResolvedValue(['prof_a', 'prof_b']);
+      roster = ['prof_a'];
+      rosterHangs = true;
+      render(<ProxiesView />);
+      await clickRemove();
+      await vi.advanceTimersByTimeAsync(2_500);
+      await waitFor(() => expect(confirmCalls.length).toBe(1));
+      expect(confirmCalls[0]?.message).toContain('2 profiles using it will be left with no proxy');
+      expect(confirmCalls[0]?.message).not.toContain('No profile is using it');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('pages the roster rather than reading one page of it', async () => {
+    // A truncated roster subtracts profiles that are simply on page 2. The view
+    // must use the SAME paging iterator the profile grid builds itself from.
+    profilesUsingProxy.mockResolvedValue(['prof_a']);
+    roster = ['prof_a'];
+    render(<ProxiesView />);
+    await clickRemove();
+    await waitFor(() => expect(confirmCalls.length).toBe(1));
+    expect(iterateSpy).toHaveBeenCalledWith({ limit: 50 });
   });
 });

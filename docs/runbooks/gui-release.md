@@ -40,6 +40,43 @@ gh release edit gui-v0.1.1 --draft=false   # only if isDraft is still true
 
 Before step 1, run the two GUI render gates from the repo root (they need the gui-client dev server and a Chromium, so neither is in pre-push; `.github/workflows/gui-gates.yml` also runs both, plus the control, with Chromium on an ubuntu runner on every push to main that touches `apps/gui-client/**`, `packages/api-types/**` or the gate scripts — its fonts differ from a Mac's, so a text width that only clips there is caught there; a red run is a defect in a view, never a reason to exempt the element): `node scripts/gui-visual-check.mjs` (profile-card geometry — nothing outside the box) and `node scripts/gui-text-quality.mjs` (every text leaf of EVERY harness scene — the six marketing scenes plus the nine audit scenes, one per remaining view — fifteen as of 2026-09-12 (the Logs view, removed from navigation in June, is gone with its scene); the gate reads the list and each stage's size from the harness's `ALL_SCENES` at run time and refuses an empty list or one missing the six — in BOTH themes: WCAG contrast, size, untitled truncation; `--control` proves the instrument still sees its four injected findings — a 7px dim span, a clipped untitled span, and a mixed-content span faded by `opacity`, the shape of the two holes its first version had; 0 findings is the bar).
 
+## ⛔ Before you write a single line of release notes: verify each claim on the running artifact
+
+Owner directive, 2026-09-12: _"ensure all tasks really get completed on next release update, and that
+the agents responsible for tasks also finish it"_. It was earned. In the wave that became 0.1.52, four
+items were reported finished by the agent that owned them while the thing the owner had described was
+still there:
+
+| what the agent finished                        | what was still open                                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| the `+1` no longer hid a MEASURED OS chip      | on a proxy with **no** reading — the owner's own case — the pill was unchanged                  |
+| a harness literal was updated                  | `theme-token-parity.test.ts` pinned the old one; the pre-push gate rejected the push            |
+| a refusal reason was added to the error type   | two of the three copies of that enum, including the customer-facing docs table, did not have it |
+| every local gate passed on a chip-width change | the Linux geometry gate failed on the one row that fit by a single pixel                        |
+
+The pattern is one thing, and it is not carelessness: **an agent's brief and the owner's sentence are
+different propositions, and the brief is the one with the acceptance criteria attached.** A green test is
+evidence about what the test states. It is not evidence that a person looking at the screen sees what
+they asked to see.
+
+So every item a release CLAIMS gets this treatment before the notes mention it:
+
+1. **Quote the owner's words.** Not a paraphrase, not a ticket title.
+2. **Name the observable** that settles it — what a person sees on screen, or a value on the wire. Never
+   a test name and never a code path.
+3. **Produce that observable off the running artifact.** Render the real view in the harness at the real
+   width, read the DOM, screenshot it and LOOK at the screenshot. Drive the route for a server item.
+   An earlier report is not evidence; neither is a passing suite.
+4. **Attack your own verdict once.** Name the state you did not try and try it. Every miss above was an
+   adjacent state: no reading instead of a reading, the other theme, another width, a different font
+   stack, a stored value instead of a pasted one, the second failure instead of the first.
+5. **Write `UNVERIFIABLE HERE` when it is.** A real tunnel coming up, a real OAuth sign-in and an install
+   on the owner's own machine cannot be proved from a maintainer's box. Say so in the notes rather than
+   letting the claim stand — "still to come" is a section the notes are allowed to have.
+
+⛔ **A claim in the notes with no verification behind it is worse than an omission.** The customer reads
+it, believes the thing is fixed, and the next report is about trust rather than about the defect.
+
 ## ⛔ Why step 3 comes first: `gh release create` makes a LIGHTWEIGHT tag
 
 If the tag is not already on origin, `gh release create <tag>` **creates it** — via the

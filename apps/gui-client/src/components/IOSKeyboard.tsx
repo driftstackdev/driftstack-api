@@ -59,9 +59,13 @@
 //     flanks are the iOS key shapes.
 //   • NOT verified against a device, inherited unchanged from the render this
 //     replaces: the ROW PITCH (keyH 42 + gap 6 = 48), the BOARD HEIGHT (200 =
-//     23% of the 874pt screen), the absence of a home-indicator bottom inset,
-//     and the absence of the predictive row.
-// Those four are "the 402 render at that zoom", not "the device". Do not restate
+//     23% of the 874pt screen), and the absence of the predictive row.
+//   • The bottom inset is no longer simply ABSENT, and it is not the device's
+//     either: it is whatever the DISPLAY MASK the board is mounted inside would
+//     otherwise cut off (16px at a 1:1 402 board, 24px at 181, 0 with no mask).
+//     That is a clipping fix, not a home-indicator strip — a real iPhone's is
+//     ~34pt and SCALES; see the MASK note above cornerClearancePx.
+// Those are "the 402 render at that zoom", not "the device". Do not restate
 // them as iPhone fidelity without measuring a device first.
 //
 // At 1:1 the scale is exactly 1 and every metric IN REF_GEOMETRY is
@@ -358,9 +362,174 @@ export function keyboardMetrics(width: number, device = REF_DEVICE_WIDTH): Keybo
 }
 
 /** The board's total height for a given width — the same number KEYBOARD_H
- *  hard-codes for the reference width. Exported so a sizing site can ask. */
+ *  hard-codes for the reference width. Exported so a sizing site can ask.
+ *  ⛔ This is the PURE board. The rendered board is this plus the display-mask
+ *  clearance (maskBottomInsetPx), which depends on the mount and cannot be known
+ *  from a width; a sizing site that needs the rendered box must read
+ *  `data-kb-height` off the board, which publishes the box that rendered. */
 export function keyboardHeightPx(width: number, device = REF_DEVICE_WIDTH): number {
   return keyboardMetrics(width, device).height;
+}
+
+/**
+ * ⛔ THE DISPLAY MASK — a property of the MOUNT, not of the metrics, and the one
+ * thing every earlier instrument missed by measuring this board in a plain box.
+ *
+ * The only mount the app can reach is the OVERLAY (SimulatorWindow.tsx ~9657:
+ * `absolute inset-x-0 bottom-0` INSIDE `simulator-screen`, which is
+ * `overflow-hidden rounded-[2.1rem]`). The docked branch beside it is dead code
+ * — `keyboardOverlay = keyboardVisible` (~4377), so `keyboardVisible &&
+ * !keyboardOverlay` is identically false. That rounded overflow clip is the
+ * phone's display mask, and it CUT THE BOTTOM ROW at every width.
+ *
+ * Measured in Chromium 2026-09-12 on THIS component inside that exact ancestry,
+ * as a PIXEL diff of one render screenshotted with the mask radius on and then
+ * off — so the number is attributable to the mask and to nothing else:
+ *   • 1:1, board 402 — "123" lost 11.0 of its 54.3px, "return" 10.5 of 94.5.
+ *   • board 214 (browser mode OFF, a pane open, at the Tauri minimum height
+ *     560) — 17.5px of a 28.9px key, and 36 pixels of the "1" glyph itself.
+ *   • board 181 (browser mode ON — the DEFAULT, `ds-sim-browser-mode !== '0'`
+ *     — with a pane open, same 560) — 18.5 of 24.3px (76%) and 166 pixels of
+ *     the glyph. On the numbers layer that corner key is "ABC" and 263 of its
+ *     glyph pixels went: it read "BC".
+ *
+ * ⛔ THE RADIUS DOES NOT SCALE. 2.1rem is a fixed 33.6px whatever the phone is
+ * (15.7% of a 214px board, 2.3% of a 1444px one), so an inset derived from
+ * `scale` cannot close this — `round(34 × scale)` was measured leaving 18.9% of
+ * the corner key cut at 181. The clearance must come from the MASK, which is
+ * what maskBottomInsetPx reads off the live ancestors. A mount with no rounded
+ * clip — the harness scene, the dead docked branch, jsdom — measures 0 and
+ * every length in this file is byte-identical there.
+ */
+export interface MaskCornerGeometry {
+  /** The clip's corner radius in px (the larger axis of an elliptical one). */
+  radius: number;
+  /** px from the board's bottom edge DOWN to the clip's bottom edge. */
+  overhang: number;
+  /** px from the clip's side edge IN to the outermost key's side edge. */
+  keyInset: number;
+}
+
+/**
+ * The bottom inset, in px, that keeps a key of corner radius `keyRadius` clear
+ * of a rounded clip's corner arc.
+ *
+ * The key's own bottom corner is a quarter circle of radius r centred
+ * (keyInset + r) in from the clip's side and (inset + r) up from its bottom; the
+ * clip's corner is a circle of radius R centred R in and R up. The key is wholly
+ * inside iff those centres are no further apart than R − r, which solves to
+ *     inset ≥ A − √(A² − dx²),   A = R − r,   dx = A − keyInset.
+ * ⛔ `keyRadius` is not decoration: it is the slack that makes this a NO-OP
+ * wherever the corner is gentle enough that nothing is actually cut (the harness
+ * scene's 16px window radius at a 300px board asks 3.45 + bleed and the board
+ * already pads 6), i.e. the difference between measuring the bite a customer
+ * sees and padding for one they do not.
+ *
+ * ⛔ `keyBleed` is the rest of the KEY that is not in its rect, and it is not
+ * theoretical: at exact tangency the mask still took 16 device pixels of the
+ * "123" key at 1:1 (measured, mask-on vs mask-off). A key paints its bevel
+ * (`box-shadow: 0 Npx 0`) BELOW its box, and a rasteriser blends the arc into
+ * the key's own antialiased corner when the two merely kiss. Both are vertical,
+ * so both add to the inset.
+ */
+export function cornerClearancePx(
+  mask: MaskCornerGeometry,
+  keyRadius: number,
+  keyBleed: number,
+): number {
+  const r = Math.max(0, keyRadius);
+  if (!Number.isFinite(mask.radius) || mask.radius <= 0) return 0;
+  const a = mask.radius - r;
+  const dx = a - Math.max(0, mask.keyInset);
+  // The key starts past the arc, or is itself rounder than the mask: nothing to
+  // clear.
+  if (a <= 0 || dx <= 0) return 0;
+  const need = a - Math.sqrt(Math.max(0, a * a - dx * dx)) + Math.max(0, keyBleed);
+  return Math.max(0, need - Math.max(0, mask.overhang));
+}
+
+/** How far up the ancestor chain to look for the clip. The shipped mount is two
+ *  levels up (`ios-keyboard-overlay` → `simulator-screen-host` →
+ *  `simulator-screen`); the cap only stops a pathological tree from costing a
+ *  document-deep walk on every re-measure. */
+const MASK_WALK_DEPTH = 16;
+
+/**
+ * One computed `border-*-radius` in px. The computed value is `12px`, or
+ * `12px 20px` for an elliptical corner, or a percentage on some engines. An
+ * ellipse is reduced to its LARGER axis, which over-states the bite rather than
+ * under-stating it: a spare pixel of padding is cosmetic, a missing one is the
+ * defect this exists to stop.
+ */
+const clipCornerRadiusPx = (value: string, width: number, height: number): number => {
+  const parts = value.trim().split(/\s+/);
+  const axis = (raw: string | undefined, basis: number): number => {
+    if (raw === undefined) return 0;
+    const n = Number.parseFloat(raw);
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return raw.endsWith('%') ? (n / 100) * basis : n;
+  };
+  const rx = axis(parts[0], width);
+  return Math.max(rx, parts.length > 1 ? axis(parts[1], height) : rx);
+};
+
+/**
+ * The bottom inset the board needs so that no rounded clip it is mounted inside
+ * can bite its bottom-row keys — MEASURED off the live ancestors, because the
+ * mask belongs to the mount and this component is handed no prop that describes
+ * it. Bounded above by the clip's own radius; 0 when nothing clips.
+ */
+export function maskBottomInsetPx(
+  board: Element,
+  keyInset: number,
+  keyRadius: number,
+  keyBleed: number,
+): number {
+  const view = board.ownerDocument.defaultView;
+  if (view === null) return 0;
+  const b = board.getBoundingClientRect();
+  let worst = 0;
+  let node: Element | null = board.parentElement;
+  let depth = 0;
+  while (node !== null && depth < MASK_WALK_DEPTH) {
+    const cs = view.getComputedStyle(node);
+    // A rounded corner only CLIPS while overflow is not visible; a rounded box
+    // whose children may paint outside it takes nothing away.
+    const clips = [cs.overflow, cs.overflowX, cs.overflowY].some(
+      (v) => v !== '' && v !== 'visible',
+    );
+    if (clips) {
+      const a = node.getBoundingClientRect();
+      // A board hanging BELOW the clip is a different defect (its bottom row is
+      // cut straight across, which no padding can undo); clamp to 0 rather than
+      // pad for it.
+      const overhang = a.bottom - b.bottom;
+      worst = Math.max(
+        worst,
+        cornerClearancePx(
+          {
+            radius: clipCornerRadiusPx(cs.borderBottomLeftRadius, a.width, a.height),
+            overhang,
+            keyInset: Math.max(0, b.left - a.left) + keyInset,
+          },
+          keyRadius,
+          keyBleed,
+        ),
+        cornerClearancePx(
+          {
+            radius: clipCornerRadiusPx(cs.borderBottomRightRadius, a.width, a.height),
+            overhang,
+            keyInset: Math.max(0, a.right - b.right) + keyInset,
+          },
+          keyRadius,
+          keyBleed,
+        ),
+      );
+    }
+    node = node.parentElement;
+    depth += 1;
+  }
+  return Math.ceil(worst);
 }
 
 /**
@@ -861,6 +1030,29 @@ export function IOSKeyboard({
     hasDismiss,
   });
   const m = plan.metrics;
+  // ⛔ The rounded DISPLAY MASK this board is mounted inside (see the MASK note
+  // above cornerClearancePx). It cut the bottom-row corner keys at every width,
+  // its 2.1rem radius does NOT scale with the phone, and no prop describes it —
+  // so it is measured off the live ancestors and the board pads its bottom by
+  // exactly what the arc would otherwise take. 0 wherever nothing clips, which
+  // is why the mask-less mounts (harness scene, jsdom) are untouched.
+  const [maskInset, setMaskInset] = useState(0);
+  useLayoutEffect(() => {
+    const node = boardRef.current;
+    if (node === null) return;
+    // The key's paint bleed: its bevel (drawn BELOW the key's box) plus one
+    // pixel of daylight, so the arc is not rasterised into the key's own
+    // antialiased corner. Measured at 1:1: tangency alone left 16 device pixels
+    // of "123" still taken by the mask, tangency + this leaves 1.
+    const next = maskBottomInsetPx(node, m.padX, m.radius, m.bevel + 1);
+    setMaskInset((prev) => (prev === next ? prev : next));
+  }, [m.padX, m.radius, m.bevel, m.width]);
+  // The bottom padding that RENDERS, and the height that follows from it.
+  // `m.height` is the pure board; this is the box the customer sees, and
+  // data-kb-height publishes THIS so the published number and the rendered one
+  // can never disagree.
+  const padBottom = Math.max(m.padBottom, maskInset);
+  const boardHeight = m.height - m.padBottom + padBottom;
   const palette = KEYBOARD_PALETTES[colorScheme];
   // Geometry AND palette as CSS custom properties: one source for both, and the
   // press states stay real CSS `:active` rules (a React "pressed" state would
@@ -869,7 +1061,7 @@ export function IOSKeyboard({
     paddingLeft: m.padX,
     paddingRight: m.padX,
     paddingTop: m.padTop,
-    paddingBottom: m.padBottom,
+    paddingBottom: padBottom,
     rowGap: m.gap,
     background: 'var(--kb-board)',
     '--kb-board': palette.board,
@@ -906,7 +1098,11 @@ export function IOSKeyboard({
       data-kb-width={String(m.width)}
       data-kb-device={String(m.device)}
       data-kb-scale={m.scale.toFixed(4)}
-      data-kb-height={String(m.height)}
+      data-kb-height={String(boardHeight)}
+      // The display-mask clearance this render committed to (0 = no rounded clip
+      // above this board), so a browser-side gate can measure the thing that was
+      // cutting the bottom row instead of inferring it.
+      data-kb-mask-inset={String(maskInset)}
       data-kb-source={measuredWidth === null ? 'prop' : 'measured'}
       // Light iOS keyboard background. pointer-events stay on (it's the keyboard);
       // it sits BELOW the video as chrome, so it doesn't intercept video taps.

@@ -139,6 +139,13 @@ function schemeLabel(scheme: AccountProxyScheme | undefined): { icon: string; te
 // sweeper and the profile hub's inline form); the pre-launch gate had no copy at
 // all. One definition now, in lib/proxy-scheme.
 
+/** (V3) How long the remove path will wait for the profile list before giving up
+ *  on an exact count. It sits between a clicked Remove and the confirmation that
+ *  asks about it, so it is deliberately short: past it the dialog opens with the
+ *  binding count it printed before the roster existed, which over-states but
+ *  never under-states. */
+const ROSTER_READ_DEADLINE_MS = 2_000;
+
 /** VPN exit parity (b) — which proxies a sweep (Test all / Test selected) covers:
  *  a SOCKS5 row through the native probe, a VPN row through its endpoint check
  *  + the fleet test. An HTTP row has neither and is still verified at launch. */
@@ -475,7 +482,7 @@ const EMPTY_DRAFT: ProxyDraft = {
 };
 
 export function ProxiesView(): JSX.Element {
-  const { settings } = useSettings();
+  const { settings, client, activeWorkspace, accountMe } = useSettings();
   const confirm = useConfirm();
   const [state, setState] = useState<ListState>({
     proxies: [],
@@ -832,7 +839,87 @@ export function ProxiesView(): JSX.Element {
         return null;
       }
     }
+    // ⛔ (V3, 2026-09-12) A BINDING IS NOT A PROFILE. `profilesUsingProxy` reads
+    // the local `profile_bindings` store, which nothing prunes when a profile
+    // stops existing: `deleteBinding` runs only in THIS install's two delete
+    // paths, so a profile deleted from the web dashboard or another Mac — or one
+    // whose `deleteBinding` threw after the server delete succeeded — leaves its
+    // binding behind forever. MEASURED in Chromium against the real view: with
+    // two profiles on a proxy and one stale binding the dialog said "3 profiles
+    // using it will be left with no proxy"; with the account holding NO profile
+    // that uses it, it still said 3 over a grid showing one unrelated profile.
+    // A destructive confirm that invents casualties is the same defect class as
+    // one that hides them, so subtract the bindings whose profile is gone.
+    if (Object.values(perId).some((list) => list.length > 0)) {
+      const live = await liveProfileIds();
+      if (live !== null)
+        for (const id of ids) perId[id] = (perId[id] ?? []).filter((p) => live.has(p));
+    }
     return perId;
+  }
+
+  /**
+   * The ids of the profiles this install can actually show, or `null` when that
+   * cannot be established.
+   *
+   * ⛔ USED ONLY TO SUBTRACT, and only when this list is the COMPLETE set of
+   * profiles the app can put on screen for this install. Two ways it is not, and
+   * both answer `null` rather than a shorter list:
+   *   • a TEAM workspace — `profiles.iterate` then returns the OWNER's profiles,
+   *     while the bindings are local and may name the member's personal ones;
+   *   • an account that HAS team memberships — the same, for the workspace the
+   *     customer is not currently in.
+   * Filtering against a partial roster would UNDER-count, and "No profile is
+   * using it as its default" over a proxy three profiles depend on is the one
+   * sentence here that must never be a guess (see `profilesLeftWithoutProxy`).
+   * A read that fails, or a client with no profiles surface, is also `null` —
+   * every `null` leaves the count exactly as it was before this existed.
+   *
+   * `iterate` (not `list`) because it pages: a roster truncated at page 1 would
+   * subtract real profiles. It is the same call the profile grid builds itself
+   * from, so the confirm counts the profiles the customer can actually see.
+   *
+   * ⛔ `accountMe === null` is also `null` here, and that is not pedantry: the
+   * memberships arrive asynchronously from SettingsProvider, so a roster trusted
+   * while they are still loading is a roster trusted before the team question
+   * has an answer — the under-count above, reached by timing instead of by
+   * configuration.
+   *
+   * ⛔ DEADLINE. This sits between a clicked Remove and the dialog that asks
+   * about it. Before this existed the only await there was a local store read;
+   * a hung profile list would leave the button dead with nothing on screen. The
+   * race degrades to `null` (today's count) rather than holding the dialog.
+   */
+  async function liveProfileIds(): Promise<Set<string> | null> {
+    if (activeWorkspace !== null) return null;
+    if (accountMe === null || accountMe.teams.length > 0) return null;
+    if (client === null) return null;
+    const api = client;
+    // A view double can hand this component a client without the profiles
+    // surface; that is "roster unknown", not an error to log.
+    const iterate = (api as { profiles?: { iterate?: unknown } }).profiles?.iterate;
+    if (typeof iterate !== 'function') return null;
+    const collect = async (): Promise<Set<string>> => {
+      const ids = new Set<string>();
+      for await (const profile of api.profiles.iterate({ limit: 50 })) ids.add(profile.id);
+      return ids;
+    };
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        collect(),
+        new Promise<null>((resolve) => {
+          timer = globalThis.setTimeout(() => {
+            resolve(null);
+          }, ROSTER_READ_DEADLINE_MS);
+        }),
+      ]);
+    } catch (err) {
+      console.warn('[proxies] could not read the profile list before a remove', err);
+      return null;
+    } finally {
+      if (timer !== undefined) globalThis.clearTimeout(timer);
+    }
   }
 
   /** How many DISTINCT profiles these ids leave without a proxy. A profile

@@ -817,7 +817,9 @@ export function saveOsFingerprint(
  *  T-1 — the vantage (measuredFrom + nodeId) and the fleet QUIC-relay verdict
  *  (quicProbe) describe THIS measurement, not the proxy's history, so unlike
  *  quicMeasured they are REPLACED by every server result: present → stored,
- *  absent → removed. A control-plane fallback after a fleet run must not keep
+ *  absent → removed — unless the caller reports that the node never RAN the
+ *  QUIC leg (`quicSkipped`), which is not an absence of verdict but an absence
+ *  of measurement. A control-plane fallback after a fleet run must not keep
  *  wearing the fleet label or the fleet relay chip — that is the silent fallback
  *  the owner item forbids. The vantage itself is a closed set (see
  *  proxy-vantage.ts); a value outside it stores as "unlabelled". */
@@ -834,6 +836,12 @@ export function saveServerProbeResult(
     measuredFrom?: ProxyVantage;
     nodeId?: string;
     quicProbe?: boolean;
+    /** (V5 2026-09-12) — the node did NOT RUN the QUIC leg on this test
+     *  (`quic_detail: "skipped: …"`), so the absent `quicProbe` above is a
+     *  non-measurement, not "the Mac ran the leg and produced none". Same
+     *  standing as a control-plane fallback below: nothing about QUIC was
+     *  measured, so the last fleet verdict stands. */
+    quicSkipped?: boolean;
   },
   at: number,
 ): Promise<ProbeCacheMap> {
@@ -871,9 +879,25 @@ export function saveServerProbeResult(
       // customer did not cause. The fleet's last relay fact stands; the
       // vantage/node above still flip to the control plane, so the fallback
       // itself is never silent.
+      //
+      // ⛔ (V5 2026-09-12) — and the SAME is true of a fleet reply whose QUIC
+      // leg the node SKIPPED. `quic_detail: "skipped: …"` is the node's own
+      // word for "that leg never ran" (the documented VPN path: the route then
+      // omits `quic_ok` — account-me.ts — and the parse refuses one beside the
+      // detail — account-proxies.ts), so the absence here is a NON-measurement
+      // exactly like the control plane's. MEASURED in the running harness on
+      // 2026-09-12, real ProxiesView, real wire body: a SUCCESSFUL re-check of
+      // an OpenVPN row (TUNNEL UP · 61 ms from the test Mac · exit + city) turned
+      // its green `✓ QUIC` into `QUIC untested` whose hover read "Not measured
+      // yet — run Check VPN" — the button that had just run — and on the profile
+      // card the chip disappeared from the face altogether. `quicSkipped` is the
+      // caller's report of that detail; a fleet answer that RAN the leg and
+      // produced no verdict still drops the prior one (the control this rule
+      // must not swallow).
       ...(typeof server.quicProbe === 'boolean'
         ? { quicProbe: server.quicProbe }
-        : vantage?.measuredFrom === 'control_plane' && typeof prior.quicProbe === 'boolean'
+        : (vantage?.measuredFrom === 'control_plane' || server.quicSkipped === true) &&
+            typeof prior.quicProbe === 'boolean'
           ? { quicProbe: prior.quicProbe }
           : {}),
       // (h) — when THIS server test ran, so a VPN row's "Tested" can date the

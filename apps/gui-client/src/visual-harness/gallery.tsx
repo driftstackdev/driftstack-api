@@ -224,6 +224,22 @@ const LONG_PLACE = 'Amsterdam, North Holland, Netherlands';
 export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps }> = [
   { label: 'idle · UDP ok', props: base({}) },
   {
+    // ⛔ THE STATE THE GEOMETRY GATE COULD NOT SEE. The chip row's narrow-column
+    // cut was wrong for the single most ordinary healthy proxy — UDP relay
+    // verified, QUIC MEASURED (not inferred), and an OS fingerprint that
+    // matches — which at 178px rendered 'UDP ✓ QUIC ✓ +1' with the measured OS
+    // chip inside the pill. Every other fixture carries the INFERRED 'QUIC ~',
+    // which is 2px narrower and fit, so 87 browser measurements said nothing
+    // about the one combination that was broken. A gate is blind to a state no
+    // fixture produces, and the arithmetic it polices is per-state.
+    label: 'idle · fully measured: UDP ok + QUIC measured + OS match (the narrow-column trio)',
+    props: base({
+      name: 'tokyo sneakers',
+      quicMeasured: 'h3',
+      osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64, MSS 1460' },
+    }),
+  },
+  {
     label: 'MAX · full egress + folder + tags + saved-tabs + note (overflow repro)',
     props: base({
       name: FORTY_FIVE_CHAR_NAME,

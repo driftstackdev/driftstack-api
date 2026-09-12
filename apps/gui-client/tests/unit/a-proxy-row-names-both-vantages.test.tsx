@@ -283,6 +283,69 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     expect(line(container, 'this_mac')?.textContent).toContain('42ms');
   });
 
+  it('CRITICAL the test Mac’s failure survives a REMOUNT — the cache holds the reason, so the reopened row must not go green', async () => {
+    // ⛔ The arm above drives the live click. A customer reopens the app far
+    // more often than they press Test, and the grid then renders from the
+    // CACHE alone. `fleetFailureReasons` hydrates a sentence for ANY row (it is
+    // no longer gated on the scheme — P2 made a SOCKS5 row's fleet failure a
+    // real verdict), and every later fleet answer clears it
+    // (`saveServerProbeResult`, `saveExitResult`, `clearFleetFailure`), so a
+    // sentence still in the store is current by construction. MEASURED in the
+    // running harness (real ProxiesView, real CSS) before this arm existed:
+    // the reopened row rendered 'healthy from this Mac' with the missing side
+    // reading 'not tested' + "has not measured this proxy yet" — the exact
+    // false claim about our own instrument that the arm above forbids, printed
+    // beside a green pill, over a failure the cache remembered.
+    //
+    // The fixture is the entry shape `saveFleetFailure` writes: the verdict
+    // triple, the superseded stamp, the sentence, and not one server-measured
+    // field.
+    //
+    // ⚠️ PROVENANCE, so nobody reads this arm as covering the WRITE: nothing in
+    // the app puts that entry on a SOCKS5 row today. `persistServerProbe`'s
+    // `failed` arm returns null unless the caller passes `adoptExit`, and both
+    // SOCKS5 call sites (ProxiesView's Test, ProfilesView's card Test) pass
+    // none — only the VPN callers do. So this arm pins the RENDER rule alone,
+    // and the missing write is still open. MEASURED end-to-end on 2026-09-12
+    // (scratchpad/v4c-two-rows.mjs, the real Test button against a stubbed
+    // control plane): after the test Mac REFUSES a SOCKS5 proxy the row says
+    // "fails on the test Mac" from memory only — press Test on ANY OTHER row
+    // and that row's cache emit re-hydrates this one from the store, back to
+    // "180ms · from the test Mac" under a "slow from the test Mac" pill, a
+    // number the test Mac took before it refused the proxy. The write that
+    // closes it cannot simply be `saveFleetFailure` here: that writer also
+    // drops the exit THIS Mac measured (pinned in
+    // the-fleet-test-is-one-step-for-both-surfaces.test.ts, "never costs the
+    // row the exit THIS Mac measured"), which is a tunnel rule, not a SOCKS5
+    // one. It needs `saveFleetFailure` to keep a natively measured exit.
+    const reason = 'The proxy did not answer. Check the host and port, and that it is online.';
+    cacheFixture = {
+      p1: {
+        result: NATIVE_42,
+        at: Date.UTC(2026, 8, 10),
+        exitSupersededAt: Date.UTC(2026, 8, 10, 1),
+        fleetFailureReason: reason,
+      },
+    };
+    const { container } = render(<ProxiesView />);
+    await screen.findByText('london-socks');
+
+    // 1. the verdict still names the machine that failed
+    expect(await screen.findByText('fails on the test Mac')).toBeTruthy();
+    expect(screen.queryByText('healthy from this Mac')).toBeNull();
+    // 2. the reason is still on screen
+    expect(screen.getByText(reason)).toBeTruthy();
+    // 3. the missing side still says WHY, and still does not accuse our own
+    //    instrument of never having measured this proxy
+    const gap = missing(container, 'server');
+    expect(gap?.textContent).toContain('no answer');
+    expect(gap?.getAttribute('title')).toContain(reason);
+    expect(gap?.getAttribute('title')).not.toContain('has not measured this proxy yet');
+    // 4. and this Mac's own number is still shown, still labelled as its own
+    expect(line(container, 'this_mac')?.textContent).toContain('42ms');
+    expect(line(container, 'this_mac')?.textContent).toContain('from this Mac');
+  });
+
   it('CRITICAL a fleet ok with NO timing says "no number", not "has not measured" — it measured', async () => {
     // (i) I4's state on a SOCKS5 row: the Mac reached the proxy and reported no
     // latency. "Has not measured this proxy yet" is false about our own

@@ -79,6 +79,13 @@ export type ServerProbeOutcome =
       quicMeasuredAt?: number;
       vantage?: ServerVantage;
       quicProbe?: boolean;
+      /** (V5 2026-09-12) — the node did not RUN the QUIC leg on this test
+       *  (`quic_detail: "skipped: …"`). Then `quicProbe` above is absent because
+       *  NOTHING WAS MEASURED about QUIC — not because a Mac ran the leg and
+       *  reached no verdict — and the row's last relay fact stands, exactly as it
+       *  does across a control-plane fallback. Only ever `true`: a reply that ran
+       *  the leg omits the field rather than claiming `false`. */
+      quicLegSkipped?: true;
       osFingerprint?: OsFingerprint;
       /** VPN exit parity (b) — the exit the fleet Mac observed through the
        *  proxy/tunnel, when the reply carried one. Persisted as the row's exit
@@ -199,6 +206,30 @@ export function quicVerdictStamp(serverAt: string | null | undefined, now: numbe
   return now;
 }
 
+/**
+ * (V5 2026-09-12) — the node's own word for "the QUIC leg never ran", read off
+ * the reply's `quic_detail`. The fleet node emits it on the VPN path and when
+ * the endpoint never answered; the route then omits `quic_ok` beside it
+ * (account-me.ts) and the parse refuses one from an older node that still sends
+ * `quic_ok:false` (account-proxies.ts) — so by the time a reply reaches here,
+ * "skipped" shows ONLY in this string, and a consumer that reads the missing
+ * `quic_probe` as "the Mac measured and found none" is reading a hole.
+ *
+ * ⛔ The prefix is deliberately re-stated here rather than imported from
+ * `account-proxies`: that module is hand-mocked with listed factories by ten
+ * suites, where a NEW export is `undefined` at every call site (the trap
+ * `proxy-check-copy.ts`'s header was written for). The two readings are bound
+ * by measurement instead, in
+ * tests/unit/a-skipped-quic-leg-is-not-a-relay-verdict.test.ts: one wire body
+ * goes through the real parse AND this predicate, and the test fails if either
+ * half stops recognising it.
+ */
+const QUIC_LEG_SKIPPED_PREFIX = 'skipped:';
+
+function quicLegSkipped(detail: string | undefined): boolean {
+  return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
+}
+
 /** Translate the wire result into the outcome both views apply. Pure. */
 export function serverProbeOutcome(
   test: AccountProxyTestResult | null,
@@ -237,6 +268,7 @@ export function serverProbeOutcome(
       : {}),
     ...(vantage !== undefined ? { vantage } : {}),
     ...(typeof test.quic_probe === 'boolean' ? { quicProbe: test.quic_probe } : {}),
+    ...(quicLegSkipped(test.quic_detail) ? { quicLegSkipped: true as const } : {}),
     ...(test.os_fingerprint !== undefined ? { osFingerprint: test.os_fingerprint } : {}),
     ...(test.exit_observed !== undefined ? { exitObserved: test.exit_observed } : {}),
   };
@@ -322,6 +354,10 @@ export async function persistServerProbe(
       measuredFrom: outcome.vantage?.measuredFrom,
       nodeId: outcome.vantage?.nodeId,
       quicProbe: outcome.quicProbe,
+      // (V5) — WHY there is no relay verdict on this reply: the node skipped the
+      // leg (nothing measured → the last one stands) or it ran and produced none
+      // (→ the last one goes). The cache cannot tell those apart from an absence.
+      quicSkipped: outcome.quicLegSkipped,
     },
     outcome.at,
   ).catch(() => null);
@@ -788,17 +824,34 @@ export function serverProbeStamps(cache: ProbeCacheMap): Record<string, number> 
 }
 
 /**
- * (h) finding 3 — the fleet's failure sentence per VPN proxy id, read from the
+ * (h) finding 3 — the fleet's failure sentence per proxy id, read from the
  * cache so EVERY surface that subscribes to it (the Proxies grid, the profile
- * card) renders the same "tunnel down" whichever view ran the check, and a
- * remounted grid does not forget a verdict the cache still holds. Present only
- * for an endpoint entry whose last fleet answer was a failure; cleared by the
- * cache writers that record a later verdict or a later exit.
+ * card) renders the same verdict whichever view ran the check, and a remounted
+ * grid does not forget a verdict the cache still holds. Present for any entry
+ * whose last fleet answer was a failure; cleared by the cache writers that
+ * record a later verdict or a later exit (`saveServerProbeResult`,
+ * `saveExitResult`, `clearFleetFailure`), so a sentence still in the store is
+ * current by construction.
+ *
+ * ⛔ This used to require `entry.endpoint !== undefined`, i.e. VPN/HTTP rows
+ * only — written when a fleet failure could only belong to a tunnel. (P2)
+ * then made a SOCKS5 row's fleet failure a first-class verdict everywhere ELSE:
+ * `saveFleetFailure` persists the sentence for ANY row, `applyServerProbeOutcome`
+ * puts it on the row the moment the fleet answers, and the pill, the red
+ * sentence, the missing-side word, the sort rank and the hero's "needs
+ * attention" are all un-gated on the scheme. The hydrator was the one half left
+ * behind, so the verdict lived exactly as long as the mount that produced it.
+ * MEASURED in the running harness (real ProxiesView, real CSS) on 2026-09-12:
+ * a reopened SOCKS5 row whose cache entry held `fleetFailureReason` rendered a
+ * green `healthy from this Mac` with the missing side reading `not tested` +
+ * "The Mac that runs your profiles has not measured this proxy yet" — a claim
+ * about our own instrument that the entry beside it contradicted. Pinned by
+ * tests/unit/a-proxy-row-names-both-vantages.test.tsx ("survives a REMOUNT").
  */
 export function fleetFailureReasons(cache: ProbeCacheMap): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [id, c] of Object.entries(cache)) {
-    if (c.endpoint === undefined || c.fleetFailureReason === undefined) continue;
+    if (c.fleetFailureReason === undefined) continue;
     out[id] = c.fleetFailureReason;
   }
   return out;

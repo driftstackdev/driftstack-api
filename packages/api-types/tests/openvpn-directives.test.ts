@@ -66,6 +66,29 @@ describe('findUnsupportedOpenvpnLines', () => {
     expect(findUnsupportedOpenvpnLines(crlf)[0]?.text).toBe('up /etc/openvpn/update-resolv-conf');
   });
 
+  it('CRITICAL bare-CR (\\r-only) line endings are scanned like any other ending. Measured 2026-09-12 against the shipped code: the split was `/\\r?\\n/`, so a classic-Mac-ended .ovpn was ONE line whose first token is `client` — zero hits, config stored, heal a no-op, `script-security 2` and `up /etc/…` across the wire intact, every gate green. The shape schema saw the SAME blob as multi-line (JS `m` counts a bare \\r as a terminator), so the CP validated one file as multi-line for shape and single-line for security.', () => {
+    const cr = PROVIDER.replace(/\n/g, '\r');
+    expect(findUnsupportedOpenvpnLines(cr).map((h) => h.line)).toEqual([8, 9]);
+    expect(findUnsupportedOpenvpnLines(cr)[0]?.text).toBe('up /etc/openvpn/update-resolv-conf');
+    // NEGATIVE CONTROL in the same breath: a CR-ended CLEAN config still reports
+    // nothing, so the arm above is about the split and not about a finder that
+    // started flagging everything the moment it met a \r.
+    expect(findUnsupportedOpenvpnLines(CLEAN.replace(/\n/g, '\r'))).toEqual([]);
+  });
+
+  it('CRITICAL ONE stray \\r in an otherwise-LF file is enough. `remote vpn.example.com 1194\\rscript-security 2` was a SINGLE line to the shipped split, so the directive vanished AND every later number shifted — the finder reported `up` on line 4 instead of 5, which is a wrong line in a customer-facing 400. This is the reachable shape: a fully classic-Mac .ovpn is rare, a hand-edited or copy-pasted line ending is not.', () => {
+    const mixed = 'client\ndev tun\r\nremote vpn.example.com 1194\rscript-security 2\nup /x\n';
+    expect(findUnsupportedOpenvpnLines(mixed).map((h) => [h.line, h.directive])).toEqual([
+      [4, 'script-security'],
+      [5, 'up'],
+    ]);
+    // The heal keeps EACH line's own ending — LF, CRLF and bare CR all survive in
+    // place, so a mixed-ending file is not silently reformatted on the way out.
+    expect(stripUnsupportedOpenvpnLines(mixed).config).toBe(
+      'client\ndev tun\r\nremote vpn.example.com 1194\rscript-security 1\n',
+    );
+  });
+
   it('CRITICAL matches the keyword case-insensitively with any leading whitespace — a config blob is customer text, not something normalised on the way in.', () => {
     const hits = findUnsupportedOpenvpnLines('client\n  DOWN\t/tmp/x\n');
     expect(hits).toMatchObject([{ line: 2, directive: 'down', text: 'DOWN\t/tmp/x' }]);
@@ -162,6 +185,14 @@ describe('stripUnsupportedOpenvpnLines', () => {
     expect(stripUnsupportedOpenvpnLines(crlf).config).toBe(
       'client\r\nscript-security 1\r\nverb 3\r\n',
     );
+  });
+
+  it('CRITICAL heals a bare-CR paste and leaves it bare-CR: the script lines go, `script-security` is lowered in place, every \\r survives, and a re-scan is clean. The stripper numbers lines with its OWN split, so it and the finder have to move together — a stripper still splitting `/\\r?\\n/` while the finder sees five lines rewrites a line nobody reported.', () => {
+    const cr = 'client\rup /x\rscript-security 2\rverb 3\r';
+    const { config, removed } = stripUnsupportedOpenvpnLines(cr);
+    expect(config).toBe('client\rscript-security 1\rverb 3\r');
+    expect(removed.map((r) => r.directive)).toEqual(['up', 'script-security']);
+    expect(findUnsupportedOpenvpnLines(config)).toEqual([]);
   });
 
   it('CRITICAL is idempotent: the finder reports nothing on the stripped config, so a stripped paste is one the API accepts on the directive check. Without this a client could offer a fix that still gets refused.', () => {
@@ -286,5 +317,72 @@ describe('findUnresolvableOpenvpnFileReferences', () => {
       'tls-auth',
       'tls-crypt',
     ]);
+  });
+});
+
+// ⛔ THE DIFFERENTIAL. These two finders are the control plane's only readers of a
+// customer .ovpn, and they held DIFFERENT ideas of what a line is: the security
+// finder split `/\r?\n/`, the file-reference finder `/\r\n|\r|\n/`. The blind one
+// was the SECURITY half. Neither function's own arms could see that — each was
+// self-consistent, and the file-reference side even carried a bare-CR arm of its
+// own, which read as corroboration that the module handled CR. Measured
+// 2026-09-12 on the shipped build: a stored blob with `script-security 2` and
+// `up /etc/openvpn/update-resolv-conf` under classic-Mac endings passed ingress,
+// stored, healed to nothing, and reached the node with both lines intact, while
+// `OpenVpnProxyConfigSchema`'s `client`/`remote` refines saw the same bytes as
+// multi-line. This block fails in BOTH directions: make either split narrower and
+// the equality arm goes red; make either finder flag everything and the vacuity
+// control's fixture stops matching its expected line numbers.
+describe('the two finders agree on what a line is', () => {
+  const MIXED = [
+    'client',
+    'remote vpn.example.com 1194',
+    'ca ca.crt',
+    'script-security 2',
+    'up /etc/openvpn/update-resolv-conf',
+    '',
+  ].join('\n');
+
+  const ENDINGS: ReadonlyArray<readonly [string, string]> = [
+    ['LF', '\n'],
+    ['CRLF', '\r\n'],
+    ['bare CR', '\r'],
+  ];
+
+  it('CRITICAL both finders report the same directives on the same line numbers for LF, CRLF and bare CR. A split covering one ending and not another is invisible to a suite that only ever feeds it that ending.', () => {
+    for (const [name, sep] of ENDINGS) {
+      const blob = MIXED.replace(/\n/g, sep);
+      expect(
+        findUnsupportedOpenvpnLines(blob).map((h) => [h.line, h.directive]),
+        name,
+      ).toEqual([
+        [4, 'script-security'],
+        [5, 'up'],
+      ]);
+      expect(
+        findUnresolvableOpenvpnFileReferences(blob).map((h) => [h.line, h.directive]),
+        name,
+      ).toEqual([[3, 'ca']]);
+    }
+  });
+
+  it('VACUITY CONTROL the fixture really does carry both classes under every ending, so the equality arm above cannot pass by finding nothing on both sides. Reporting [] is exactly how the CR gap read green for as long as it did — two agreeing zeroes look like agreement.', () => {
+    for (const [name, sep] of ENDINGS) {
+      const blob = MIXED.replace(/\n/g, sep);
+      expect(findUnsupportedOpenvpnLines(blob).length, name).toBeGreaterThan(0);
+      expect(findUnresolvableOpenvpnFileReferences(blob).length, name).toBeGreaterThan(0);
+    }
+  });
+
+  it('CRITICAL the stripper numbers lines the way the finder does under every ending: it removes exactly what was reported, the blob keeps its own endings byte-for-byte, and a re-scan is clean.', () => {
+    for (const [name, sep] of ENDINGS) {
+      const blob = MIXED.replace(/\n/g, sep);
+      const { config, removed } = stripUnsupportedOpenvpnLines(blob);
+      expect(removed, name).toEqual(findUnsupportedOpenvpnLines(blob));
+      expect(findUnsupportedOpenvpnLines(config), name).toEqual([]);
+      expect(config, name).toBe(
+        ['client', 'remote vpn.example.com 1194', 'ca ca.crt', 'script-security 1', ''].join(sep),
+      );
+    }
   });
 });

@@ -64,7 +64,7 @@ export const DANGEROUS_OPENVPN_DIRECTIVES: ReadonlySet<string> = new Set([
 
 /** One line of an OpenVPN config the API will refuse. */
 export interface OpenvpnUnsupportedLine {
-  /** 1-based line number in the blob as pasted (CRLF and LF each count one line). */
+  /** 1-based line number in the blob as pasted (LF, CRLF and bare CR each count one line). */
   line: number;
   /** The directive keyword, lower-cased (`up`, `script-security`, …). */
   directive: string;
@@ -87,7 +87,25 @@ export interface OpenvpnUnsupportedLine {
  */
 export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsupportedLine[] {
   const hits: OpenvpnUnsupportedLine[] = [];
-  const lines = configBlob.split(/\r?\n/);
+  // ⛔ LINE ENDINGS: \r\n / \r / \n — the same three `findUnresolvableOpenvpnFileReferences`
+  // splits on below. This was `/\r?\n/` (CR-BLIND) until 2026-09-12, which made the
+  // SECURITY guard read a classic-Mac-ended .ovpn as ONE line whose first token is
+  // `client`: zero hits, every time. Measured against the running code, a stored blob of
+  // `client\rdev tun\r…\rscript-security 2\rup /etc/openvpn/update-resolv-conf\r`
+  // passed `OpenVpnProxyConfigSchema` (JavaScript's `m` flag counts a bare \r as a line
+  // terminator, so the `client`/`remote` refines DID see the lines), passed this finder
+  // with 0 hits, stored, and `stripUnsupportedOpenvpnLines` healed nothing — so
+  // `script-security 2` and the `up` line crossed the wire intact. One blob validated as
+  // MULTI-LINE for shape and SINGLE-LINE for security is exactly what the file-reference
+  // finder's own note calls "worse than no check: it reads clean".
+  //
+  // What kept that from being an RCE was openvpn itself, not this guard: 2.7.0 answers a
+  // CR-only file `Options error: Unrecognized option … :1: client` while the LF and CRLF
+  // twins both honour the `up` line (measured). That is a HOST behaviour, and this
+  // module's premise (see the header) is that the CP refuses independently of it. What
+  // the customer got instead was the owner's 2026-09-12 report: a session that never
+  // starts, with nothing on the control-plane side to read.
+  const lines = configBlob.split(/\r\n|\r|\n/);
   for (let i = 0; i < lines.length; i += 1) {
     const text = (lines[i] ?? '').trim();
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
@@ -147,9 +165,12 @@ export function stripUnsupportedOpenvpnLines(configBlob: string): {
   if (removed.length === 0) return { config: configBlob, removed };
   const byLine = new Map(removed.map((hit) => [hit.line, hit] as const));
   // Split with the separator CAPTURED so each line keeps the ending it came
-  // with; even indices are lines, odd indices the `\n` / `\r\n` after them.
-  // Numbering matches the finder's `split(/\r?\n/)` exactly.
-  const parts = configBlob.split(/(\r?\n)/);
+  // with; even indices are lines, odd indices the `\r\n` / `\r` / `\n` after
+  // them. The alternation is ORDERED so a `\r\n` is consumed whole instead of
+  // as two endings. Numbering matches the finder's split above exactly, and the
+  // two MUST move together: a stripper numbering lines differently from the
+  // finder rewrites a line the finder never reported.
+  const parts = configBlob.split(/(\r\n|\r|\n)/);
   let config = '';
   let lineNo = 0;
   for (let i = 0; i < parts.length; i += 2) {
@@ -227,10 +248,15 @@ export const OPENVPN_INLINE_REQUIRED_DIRECTIVES: ReadonlySet<string> = new Set([
  * failure class from the SILENT file-not-found this guard exists to catch, and
  * the one the Swift side already documents as deliberately out of scope.
  *
- * ⚠️ `findUnsupportedOpenvpnLines` above still splits on `/\s+/` ON PURPOSE: it is
- * the SECURITY guard (script-executing directives), it has no cross-source
+ * ⚠️ `findUnsupportedOpenvpnLines` above still splits TOKENS on `/\s+/` ON PURPOSE: it
+ * is the SECURITY guard (script-executing directives), it has no cross-source
  * contract declaring its tokenizer, and for it over-refusal is the safe
  * direction. Do not "make them consistent".
+ *
+ * ⛔ That licence is about the TOKEN separator and NOTHING else. Both functions split
+ * LINES on the same three endings (`\r\n|\r|\n`) and must keep doing so. The security
+ * finder was CR-blind until 2026-09-12 — the UNSAFE direction, and invisible, because a
+ * CR-only blob simply reported nothing. Changing either line split alone re-opens it.
  *   - DO NOT require `<ca>` unconditionally: the rule is "no UNRESOLVABLE file
  *     reference", not "must contain <ca>". A config with no cert material at all
  *     is a genuine error openvpn names better than a blanket requirement, and

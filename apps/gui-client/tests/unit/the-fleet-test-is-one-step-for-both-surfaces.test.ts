@@ -85,7 +85,12 @@ import {
   serverProbeOutcome,
   testProxyOnServer,
 } from '../../src/lib/proxy-server-test';
-import { loadProbeCache, saveProbeResult } from '../../src/lib/proxy-probe-cache';
+import {
+  loadProbeCache,
+  saveExitResult,
+  saveProbeResult,
+  saveServerProbeResult,
+} from '../../src/lib/proxy-probe-cache';
 
 const OK = {
   reachable: true,
@@ -252,6 +257,70 @@ describe('persistServerProbe — one cache write for both surfaces', () => {
     expect(await persistServerProbe('p1', { kind: 'unavailable' })).toBeNull();
     expect(await persistServerProbe('p1', { kind: 'failed', at: NOW, reason: 'no' })).toBeNull();
     expect((await loadProbeCache())['p1']).toEqual({ result: OK, at: 1 });
+  });
+
+  // ⛔ (V4 round 3, 2026-09-12) — the arm above is the vacuity control, on an
+  // entry with nothing to lose. THIS is the entry a SOCKS5 Test actually leaves
+  // behind: the native verdict, the exit this Mac measured THROUGH the proxy,
+  // and a fleet number from an earlier test.
+  //
+  // MEASURED in the running harness (real ProxiesView, real CSS, the real Test
+  // button, a stubbed control plane — scratchpad/v4c-candidates.mjs, candidate
+  // C): routing this failure through `saveFleetFailure` — the one-line "fix"
+  // for the verdict the row currently loses — rebuilds the entry as
+  // { result, at, exitSupersededAt, fleetFailureReason } and the row's Exit
+  // cell goes from "🇧🇷 203.0.113.20 · Sao Paulo, SP" to "run Test for exit IP",
+  // seconds after this Mac measured it. The fleet refusing a proxy says nothing
+  // about the exit a NATIVE probe saw through it — ProxiesView's own failure
+  // handler keeps it for exactly that reason ("the shared drop keeps a SOCKS5
+  // row's natively-measured exit; a tunnel has no other exit to keep") — and
+  // `saveFleetFailure`'s blanket drop is a TUNNEL rule: for a VPN row the fleet
+  // is the only thing that ever saw an exit.
+  //
+  // So this arm pins the shape of whatever write eventually lands here: it must
+  // not take the native exit with it. ⚠️ TODAY it passes because the SOCKS5 arm
+  // writes NOTHING at all — which is its own open defect (the fleet's refusal
+  // does not survive the next cache emit; see the V4 report of 2026-09-12) —
+  // and the write that closes THAT must keep this arm green. The CONTROL below
+  // is what stops this being vacuous: the same call from a VPN caller does
+  // supersede the exit, through the same writer.
+  it('CRITICAL a SOCKS5 row’s fleet failure never costs the row the exit THIS Mac measured', async () => {
+    const refused =
+      'The proxy refused the connection from the test Mac (reply 0x02 — not allowed by ruleset).';
+    await saveProbeResult('p1', OK, 1);
+    await saveExitResult(
+      'p1',
+      '203.0.113.20',
+      'BR',
+      { city: 'Sao Paulo', timezone: 'America/Sao_Paulo' },
+      2,
+    );
+    await saveServerProbeResult(
+      'p1',
+      { latencyMs: 180, measuredFrom: 'fleet', nodeId: 'mac-07' },
+      3,
+    );
+
+    const failure = serverProbeOutcome({ ok: false, reason: refused, measured_from: 'fleet' }, NOW);
+    await persistServerProbe('p1', failure); // the SOCKS5 call sites pass no adoptExit
+
+    const entry = (await loadProbeCache())['p1'];
+    expect(entry?.exitIp).toBe('203.0.113.20');
+    expect(entry?.exitCity).toBe('Sao Paulo');
+    expect(entry?.exitAt).toBe(2);
+    // …and the native verdict itself is untouched: the fleet answered about the
+    // fleet, and this row still connected from here.
+    expect(entry?.result).toEqual(OK);
+    expect(entry?.at).toBe(1);
+
+    // CONTROL — the SAME outcome from a VPN caller DOES supersede the exit and
+    // records the sentence, so the assertions above are about the caller, not
+    // about a writer that never drops anything.
+    await persistServerProbe('p1', failure, { adoptExit: true });
+    const tunnel = (await loadProbeCache())['p1'];
+    expect(tunnel?.exitIp).toBeUndefined();
+    expect(tunnel?.exitSupersededAt).toBe(NOW);
+    expect(tunnel?.fleetFailureReason).toBe(refused);
   });
 
   it('a proxy with no native entry gets nothing invented', async () => {

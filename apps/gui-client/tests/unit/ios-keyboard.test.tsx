@@ -24,6 +24,7 @@ import {
   SCALE_MAX,
   SCALE_MIN,
   charSpanForRow,
+  cornerClearancePx,
   keyBasisPx,
   keyWidthPx,
   keyboardHeightPx,
@@ -1517,5 +1518,312 @@ describe('IOSKeyboard — press states (direction, not just difference)', () => 
     expect(lum(KEYBOARD_PALETTES.dark.charPressed)).toBeGreaterThan(
       lum(KEYBOARD_PALETTES.dark.charBg),
     );
+  });
+});
+/**
+ * ⛔ THE DISPLAY MASK. Every arm above measures this board in a plain box, and
+ * the app has never mounted it in one: the only reachable mount is the OVERLAY
+ * (SimulatorWindow.tsx ~9657, `absolute inset-x-0 bottom-0`) INSIDE
+ * `simulator-screen`, which is `overflow-hidden rounded-[2.1rem]` (~9166). The
+ * docked branch beside it is dead code — `keyboardOverlay = keyboardVisible`
+ * (~4377) makes `keyboardVisible && !keyboardOverlay` identically false — and
+ * the harness scene mounts the DOCKED shape, so no gate has ever rendered the
+ * board the customer actually sees.
+ *
+ * That rounded clip CUT THE BOTTOM ROW at every width. Measured in Chromium
+ * 2026-09-12 on this component inside that exact ancestry, as a PIXEL diff of
+ * one render screenshotted with the mask radius on and then off:
+ *
+ *   board 402 (1:1)   "123" 257 device px gone (11.0 of its 54.3 CSS px)
+ *   board 214         "123" 495 px (17.5 of 28.9) + 36 px of the "1" glyph
+ *   board 181         "123" 575 px (18.5 of 24.3) + 166 px of the glyph;
+ *                     on the 123 layer the corner key is "ABC" and 263 px of
+ *                     its glyph went — it read "BC"
+ *   after this fix    ≤ 4 device px on any key (an antialiased graze at the
+ *                     tangent point) and ZERO on any label, at every one of
+ *                     181 / 212 / 214 / 222 / 234 / 300 / 402 / 857 / 874 / 1444
+ *
+ * ⛔ jsdom has no layout, so the pixels above are not reproducible here and this
+ * block does not pretend to: it pins the GEOMETRY (a sampled containment check
+ * that is not the closed form), the LITERAL inset each shipped width needs, and
+ * that the rendered board really applies it — plus the control that a mount with
+ * no rounded clip is left exactly as it was, which is what keeps the harness
+ * scene (and the gates that measure it) byte-identical.
+ */
+describe('IOSKeyboard — the display mask the shipped mount clips it with', () => {
+  /** `rounded-[2.1rem]` on `simulator-screen`. It is a FIXED 33.6px at every
+   *  phone width — which is why an inset derived from the scale cannot close
+   *  this, and why the clearance is measured off the mask instead. */
+  const MASK_RADIUS = 33.6;
+  /** The harness scene's own window corner (`rounded-[16px]`), for the control. */
+  const SCENE_RADIUS = 16;
+
+  /** The key's paint that is NOT in its rect: the bevel (`box-shadow: 0 Npx 0`,
+   *  drawn BELOW the key's box) plus one pixel of daylight, so the arc is not
+   *  rasterised into the key's own antialiased corner. */
+  const bleedOf = (m: KeyboardMetrics): number => m.bevel + 1;
+
+  /**
+   * How far the key's PAINTED bottom-outer corner falls outside a rounded clip,
+   * in px — positive means the mask eats that much of the key.
+   *
+   * ⛔ This is deliberately NOT cornerClearancePx's algebra: it SAMPLES the
+   * key's own corner arc and tests each point against the clip's arc, so an
+   * error in the closed form (the classic ones: using R where R − r belongs,
+   * dropping keyInset, solving for the wrong axis) shows up as a disagreement
+   * instead of cancelling. Coordinates are px from the clip's bottom-left
+   * corner, x rightwards and y UP.
+   */
+  function cornerOverflowPx(o: {
+    maskRadius: number;
+    keyInset: number;
+    keyRadius: number;
+    bleed: number;
+    inset: number;
+  }): number {
+    const cx = o.keyInset + o.keyRadius;
+    // The bevel + daylight are VERTICAL (a `0 Npx 0` shadow is the same shape
+    // translated down), so the painted corner is the key's own quarter circle
+    // sitting `bleed` px lower than its box.
+    const cy = o.inset - o.bleed + o.keyRadius;
+    let worst = -Infinity;
+    for (let i = 0; i <= 90; i += 1) {
+      const th = (Math.PI / 2) * (i / 90);
+      const x = cx - o.keyRadius * Math.cos(th);
+      const y = cy - o.keyRadius * Math.sin(th);
+      const outside =
+        x < o.maskRadius && y < o.maskRadius
+          ? Math.hypot(o.maskRadius - x, o.maskRadius - y) - o.maskRadius
+          : -Math.min(x, y);
+      worst = Math.max(worst, outside);
+    }
+    return worst;
+  }
+
+  /** The inset the component applies for a mask, exactly as the component
+   *  derives it: the clearance, rounded UP to a whole px. */
+  const insetFor = (m: KeyboardMetrics, maskRadius: number): number =>
+    Math.ceil(
+      cornerClearancePx(
+        { radius: maskRadius, overhang: 0, keyInset: m.padX },
+        m.radius,
+        bleedOf(m),
+      ),
+    );
+
+  /** The board mounted the way the app mounts it: inside a rounded, clipping
+   *  ancestor TWO levels up (overlay → screen-host → screen), with a measured
+   *  board width like `renderScaled`. `radius: 0` / `clips: false` give the
+   *  mask-less mounts (the dead docked branch, the harness scene's own stack,
+   *  a rounded box that does not clip). */
+  function renderMasked(
+    rendered: number,
+    logical: number,
+    mask: { radius: number; clips: boolean },
+  ): { container: HTMLElement; unmount: () => void } {
+    vi.stubGlobal('ResizeObserver', fakeResizeObserver(rendered));
+    try {
+      const { container, unmount } = render(
+        <div
+          data-testid="mask"
+          style={{
+            overflow: mask.clips ? 'hidden' : 'visible',
+            borderBottomLeftRadius: `${String(mask.radius)}px`,
+            borderBottomRightRadius: `${String(mask.radius)}px`,
+          }}
+        >
+          <div data-testid="screen-host">
+            <div data-testid="overlay">
+              <IOSKeyboard room={ROOM} width={logical} onDismiss={noop} />
+            </div>
+          </div>
+        </div>,
+      );
+      return { container, unmount };
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }
+
+  it('⛔ the mask ATE the bottom-row corner key at every width the app renders', () => {
+    // The pre-fix state, as geometry: at the bottom padding this board shipped
+    // with, the corner key's painted corner is OUTSIDE the display mask. These
+    // are the same widths the pixel run above measured, and the ordering is the
+    // complaint — the narrower the phone, the deeper the bite, because the
+    // 33.6px radius does not scale.
+    const bites = (
+      [
+        [402, REF_DEVICE_WIDTH],
+        [214, REF_DEVICE_WIDTH],
+        [181, REF_DEVICE_WIDTH],
+        [181, 874],
+      ] as const
+    ).map(([rendered, logical]) => {
+      const m = keyboardMetrics(rendered, logical);
+      return {
+        board: rendered,
+        outside: Number(
+          cornerOverflowPx({
+            maskRadius: MASK_RADIUS,
+            keyInset: m.padX,
+            keyRadius: m.radius,
+            bleed: bleedOf(m),
+            inset: m.padBottom,
+          }).toFixed(2),
+        ),
+      };
+    });
+    for (const b of bites) expect(b.outside, `board ${String(b.board)}`).toBeGreaterThan(1);
+    // …and it gets worse as the phone gets smaller, which is the owner's
+    // complaint: a fixed mask radius over a scaling board.
+    expect(bites[0]?.outside).toBeLessThan(bites[1]?.outside ?? 0);
+    expect(bites[1]?.outside).toBeLessThan(bites[2]?.outside ?? 0);
+  });
+
+  it('⛔ the clearance puts every bottom-row key back INSIDE the mask, at every width', () => {
+    for (const [rendered, logical] of APP_RENDERS) {
+      const m = keyboardMetrics(rendered, logical);
+      const inset = insetFor(m, MASK_RADIUS);
+      // The sampled check, on the inset the component will apply: nothing of the
+      // key's painted corner is outside the mask any more.
+      expect(
+        cornerOverflowPx({
+          maskRadius: MASK_RADIUS,
+          keyInset: m.padX,
+          keyRadius: m.radius,
+          bleed: bleedOf(m),
+          inset,
+        }),
+        `board ${String(rendered)} @ device ${String(logical)} is inside the mask`,
+      ).toBeLessThanOrEqual(0);
+      // MINIMAL, not "pad by a lot": one px less and the painted corner is out
+      // again. This is what stops the fix degenerating into a constant.
+      expect(
+        cornerOverflowPx({
+          maskRadius: MASK_RADIUS,
+          keyInset: m.padX,
+          keyRadius: m.radius,
+          bleed: bleedOf(m),
+          inset: inset - 1,
+        }),
+        `board ${String(rendered)} @ device ${String(logical)} is minimal`,
+      ).toBeGreaterThan(0);
+      // It is a CLEARANCE, never a shrink: the board can only grow downwards.
+      expect(inset).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it('⛔ the inset each shipped width needs, as LITERALS (browser-verified)', () => {
+    // Every number here was read back off the rendered board in Chromium in the
+    // shipped ancestry (data-kb-mask-inset), not derived twice.
+    const literals = (
+      [
+        [402, REF_DEVICE_WIDTH, 18],
+        [300, 300, 18],
+        [234, 268, 19],
+        [222, REF_DEVICE_WIDTH, 22],
+        [214, REF_DEVICE_WIDTH, 22],
+        [212, REF_DEVICE_WIDTH, 22],
+        [181, REF_DEVICE_WIDTH, 26],
+        [181, 874, 26],
+      ] as const
+    ).map(([rendered, logical]) => insetFor(keyboardMetrics(rendered, logical), MASK_RADIUS));
+    expect(literals).toEqual([18, 18, 19, 22, 22, 22, 26, 26]);
+    // ⛔ A SCALED inset cannot produce these — the fix that looks obvious. The
+    // mask is a fixed 33.6px, so what it demands GROWS as the board shrinks
+    // (18 → 26) while anything × scale shrinks with it (34 × 0.45 = 15).
+    const wide = keyboardMetrics(402, REF_DEVICE_WIDTH);
+    const narrow = keyboardMetrics(181, REF_DEVICE_WIDTH);
+    expect(insetFor(narrow, MASK_RADIUS)).toBeGreaterThan(insetFor(wide, MASK_RADIUS));
+    expect(Math.round(34 * narrow.scale)).toBeLessThan(insetFor(narrow, MASK_RADIUS));
+  });
+
+  it('a mask with no radius, or one that does not clip, asks for nothing', () => {
+    const m = keyboardMetrics(402, REF_DEVICE_WIDTH);
+    expect(cornerClearancePx({ radius: 0, overhang: 0, keyInset: m.padX }, m.radius, 2)).toBe(0);
+    expect(cornerClearancePx({ radius: -5, overhang: 0, keyInset: m.padX }, m.radius, 2)).toBe(0);
+    expect(
+      cornerClearancePx({ radius: Number.NaN, overhang: 0, keyInset: m.padX }, m.radius, 2),
+    ).toBe(0);
+    // A key that already starts past the arc (a wide side padding) needs none.
+    expect(cornerClearancePx({ radius: MASK_RADIUS, overhang: 0, keyInset: 40 }, m.radius, 2)).toBe(
+      0,
+    );
+    // A board held ABOVE the clip's bottom edge by more than the arc takes
+    // needs none either — the overhang is subtracted, never added.
+    expect(
+      cornerClearancePx({ radius: MASK_RADIUS, overhang: 40, keyInset: m.padX }, m.radius, 2),
+    ).toBe(0);
+    expect(
+      cornerClearancePx({ radius: MASK_RADIUS, overhang: 6, keyInset: m.padX }, m.radius, 2),
+    ).toBeCloseTo(
+      cornerClearancePx({ radius: MASK_RADIUS, overhang: 0, keyInset: m.padX }, m.radius, 2) - 6,
+      6,
+    );
+  });
+
+  it('⛔ the RENDERED board pads by the mask — and by NOTHING where nothing clips', () => {
+    for (const [rendered, logical, expected] of [
+      [402, REF_DEVICE_WIDTH, 18],
+      [214, REF_DEVICE_WIDTH, 22],
+      [181, REF_DEVICE_WIDTH, 26],
+    ] as const) {
+      const m = keyboardMetrics(rendered, logical);
+      // (a) inside the shipped rounded clip, two levels up.
+      const masked = renderMasked(rendered, logical, { radius: MASK_RADIUS, clips: true });
+      try {
+        const board = el(masked.container, '[data-component="ios-keyboard"]') as HTMLElement;
+        expect(board).toHaveAttribute('data-kb-source', 'measured');
+        expect(board).toHaveAttribute('data-kb-mask-inset', String(expected));
+        expect(board.style.paddingBottom).toBe(`${String(expected)}px`);
+        // The published height is the box that RENDERED, not the pure one — a
+        // sizing site reading data-kb-height must never get a number the board
+        // does not have.
+        expect(board).toHaveAttribute('data-kb-height', String(m.height - m.padBottom + expected));
+        // Nothing else moved: this is a bottom inset, not a re-scale.
+        expect(board.style.paddingLeft).toBe(`${String(m.padX)}px`);
+        expect(board.style.paddingTop).toBe(`${String(m.padTop)}px`);
+        expect(board.style.rowGap).toBe(`${String(m.gap)}px`);
+      } finally {
+        masked.unmount();
+      }
+
+      // (b) the CONTROL — the same board with no rounded clip above it (the
+      // dead docked branch, the harness scene's stack, every unit render). One
+      // px of drift here is a changed marketing capture and a changed
+      // gui-visual-check measurement, so it is pinned as hard as the fix.
+      for (const control of [
+        { radius: 0, clips: true },
+        { radius: MASK_RADIUS, clips: false },
+      ]) {
+        const plain = renderMasked(rendered, logical, control);
+        try {
+          const board = el(plain.container, '[data-component="ios-keyboard"]') as HTMLElement;
+          expect(board, `control ${JSON.stringify(control)}`).toHaveAttribute(
+            'data-kb-mask-inset',
+            '0',
+          );
+          expect(board.style.paddingBottom).toBe(`${String(m.padBottom)}px`);
+          expect(board).toHaveAttribute('data-kb-height', String(m.height));
+        } finally {
+          plain.unmount();
+        }
+      }
+    }
+  });
+
+  it("the harness scene's own 16px window corner is BELOW the board's existing padding", () => {
+    // Measured on the live harness 2026-09-12: the scene mounts the keyboard
+    // flush with the bottom of `scene-simulator-window` (`rounded-[16px]
+    // overflow-hidden`), and its 300px board at a 300pt device already pads 6.
+    // The clearance that corner asks for is exactly 6, so the scene renders
+    // BYTE-IDENTICALLY — data-kb-height 200, paddingBottom 6px, both re-read off
+    // the running harness after this change. That is the whole reason the
+    // marketing captures and the visual gates did not move.
+    const m = keyboardMetrics(300, 300);
+    expect(insetFor(m, SCENE_RADIUS)).toBe(6);
+    expect(Math.max(m.padBottom, insetFor(m, SCENE_RADIUS))).toBe(m.padBottom);
+    // …and the scene's gentler corner really does ask for less than the phone's.
+    expect(insetFor(m, SCENE_RADIUS)).toBeLessThan(insetFor(m, MASK_RADIUS));
   });
 });
