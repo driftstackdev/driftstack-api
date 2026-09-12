@@ -37,6 +37,7 @@ import {
   reportPreviousRun,
   startFlightRecorder,
   startStallWatch,
+  stallHeartbeatMs,
   FLIGHT_STORE_FILE,
   SIMULATOR_FLIGHT_STORE_FILE,
 } from './lib/main-thread-stall-detector';
@@ -535,10 +536,16 @@ function Shell(): JSX.Element {
     );
 
     const recorder = startFlightRecorder(store, deps);
-    const stopWatch = startStallWatch((line, census) => {
-      console.warn(line, census);
-      recorder.recordStall(census);
-    }, deps);
+    const stopWatch = startStallWatch(
+      (line, census) => {
+        console.warn(line, census);
+        recorder.recordStall(census);
+      },
+      deps,
+      // Read through the seam so a test can slow the 1 s heartbeat without
+      // stubbing the detector; production gets STALL_HEARTBEAT_MS unchanged.
+      stallHeartbeatMs(),
+    );
 
     return () => {
       stopWatch();

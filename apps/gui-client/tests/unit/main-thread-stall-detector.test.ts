@@ -1,9 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   classifyStall,
   formatFlightRecord,
   formatStall,
+  setStallHeartbeatForTests,
   shouldSurfaceRecord,
+  stallHeartbeatMs,
+  stallThresholdForHeartbeat,
+  startStallWatch,
   takeStallCensus,
   type FlightRecord,
   STALL_THRESHOLD_MS,
@@ -95,6 +99,152 @@ describe('main-thread stall detector', () => {
       takeStallCensus(3_500, { videoElements: () => 1, documentChildren: () => 42 }),
     );
     expect(line).toBe('[stall] main thread blocked 3500ms video=1 dom=42');
+  });
+
+  describe('the heartbeat test seam (setStallHeartbeatForTests / stallHeartbeatMs)', () => {
+    // Why it exists: advancing 6 h of fake time through the mounted App ran
+    // 23,066 timer callbacks, 21,600 of them this 1 s heartbeat (measured
+    // 2026-09-12, the app-shell six-hour test). The shell tests slow it through
+    // the seam rather than stubbing the module; these arms pin that the seam
+    // is what the detector actually starts from.
+    //
+    // This file runs in the node project, where there is no window and
+    // `startStallWatch` returns a no-op. A minimal window/document stub —
+    // `setInterval` delegating to the (fake) global at call time and counting
+    // every tick per registered delay — is what makes the interval the detector
+    // registers, and how often it runs, observable here.
+    //
+    // Mutations run: `stallHeartbeatMs()` returning STALL_HEARTBEAT_MS
+    // regardless of the override (`return STALL_HEARTBEAT_MS`) reds the
+    // override arm at its first read ("expected 1000 to be 60000"), before the
+    // tick count is reached. App.tsx dropping the third argument of
+    // `startStallWatch` is pinned in the-app-shell-keeps-checking-for-updates.
+    const ticksByDelay = new Map<number, number>();
+    const stops: Array<() => void> = [];
+    const deps = { videoElements: () => 0, documentChildren: () => 0 };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      ticksByDelay.clear();
+      vi.stubGlobal('window', {
+        setInterval: (fn: () => void, ms: number): unknown =>
+          globalThis.setInterval(() => {
+            ticksByDelay.set(ms, (ticksByDelay.get(ms) ?? 0) + 1);
+            fn();
+          }, ms),
+        clearInterval: (handle: unknown): void => {
+          globalThis.clearInterval(handle as NodeJS.Timeout);
+        },
+      });
+      vi.stubGlobal('document', {
+        visibilityState: 'visible',
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      });
+    });
+
+    afterEach(() => {
+      for (const stop of stops.splice(0)) stop();
+      setStallHeartbeatForTests(null);
+      vi.unstubAllGlobals();
+      vi.useRealTimers();
+    });
+
+    it('(a) with no override the seam reads the production constant, and a watch started through it ticks every second — the positive control for the counter the next arm relies on', () => {
+      expect(stallHeartbeatMs()).toBe(1_000);
+      expect(stallHeartbeatMs()).toBe(STALL_HEARTBEAT_MS);
+      stops.push(startStallWatch(() => undefined, deps, stallHeartbeatMs()));
+      vi.advanceTimersByTime(120_000);
+      expect(ticksByDelay.get(1_000), '120 s at a 1 s heartbeat').toBe(120);
+      expect(ticksByDelay.size, 'the heartbeat is the only interval this watch registers').toBe(1);
+    });
+
+    it('CRITICAL (b) after setStallHeartbeatForTests(60_000) the seam reads 60000 and the watch fires its first tick at 60 s, not 1 s — 2 ticks over 120 s, not 120', () => {
+      setStallHeartbeatForTests(60_000);
+      expect(stallHeartbeatMs()).toBe(60_000);
+      stops.push(startStallWatch(() => undefined, deps, stallHeartbeatMs()));
+      vi.advanceTimersByTime(59_999);
+      expect(ticksByDelay.get(60_000), 'nothing before 60 s').toBeUndefined();
+      expect(ticksByDelay.get(1_000), 'and no 1 s interval was registered at all').toBeUndefined();
+      vi.advanceTimersByTime(1);
+      expect(ticksByDelay.get(60_000), 'the first tick lands at exactly 60 s').toBe(1);
+      vi.advanceTimersByTime(60_000);
+      expect(ticksByDelay.get(60_000), '2 ticks over 120 s, not 120').toBe(2);
+      expect(ticksByDelay.get(1_000)).toBeUndefined();
+    });
+
+    it('(c) setStallHeartbeatForTests(null) restores the default, for the seam AND for the next watch started through it', () => {
+      setStallHeartbeatForTests(60_000);
+      expect(stallHeartbeatMs()).toBe(60_000);
+      setStallHeartbeatForTests(null);
+      expect(stallHeartbeatMs()).toBe(1_000);
+      stops.push(startStallWatch(() => undefined, deps, stallHeartbeatMs()));
+      vi.advanceTimersByTime(2_000);
+      expect(ticksByDelay.get(1_000), 'back on the 1 s heartbeat').toBe(2);
+      expect(ticksByDelay.get(60_000)).toBeUndefined();
+    });
+
+    it('CRITICAL (d) at the 60 s heartbeat an ON-TIME tick is NOT a stall, and a 63 s gap is one stall of 3000 ms — the arm that stops a slowed watch reporting a 0 ms stall every tick', () => {
+      // Measured 2026-09-12 before this arm existed: with the bare
+      // STALL_THRESHOLD_MS (3 000) as the elapsed-time boundary, every on-time
+      // 60 000 ms tick classified as stalled with blockedMs 0, and one run of
+      // the app-shell test file emitted 2,523 "[stall] main thread blocked
+      // 0ms" warnings plus as many onStall flight-store writes. The threshold
+      // the watch passes to classifyStall must move with the heartbeat.
+      //
+      // Mutation reasoned: `stallThresholdForHeartbeat(heartbeatMs)` at the
+      // classifyStall call in startStallWatch → the bare `STALL_THRESHOLD_MS`
+      // reds the first assertion (onStall called on the on-time tick, blockedMs
+      // 0). `stallThresholdForHeartbeat` returning `heartbeatMs` alone (no
+      // margin) reds the same assertion — an on-time 60 000 ms tick is not
+      // below a 60 000 ms boundary either — and the pure arm below at the
+      // production boundary (1000, not 3000). Both run 2026-09-12.
+      setStallHeartbeatForTests(60_000);
+      const onStall = vi.fn<(line: string, census: { blockedMs: number }) => void>();
+      stops.push(startStallWatch(onStall, deps, stallHeartbeatMs()));
+      vi.advanceTimersByTime(60_000);
+      expect(ticksByDelay.get(60_000), 'the tick ran').toBe(1);
+      expect(onStall, 'an on-time tick is not a stall at ANY heartbeat').not.toHaveBeenCalled();
+
+      // The thread goes away for 3 s: the wall clock moves 3 000 ms further
+      // than the timer did, so the next tick sees a 63 000 ms gap.
+      vi.setSystemTime(Date.now() + 3_000);
+      vi.advanceTimersByTime(60_000);
+      expect(ticksByDelay.get(60_000)).toBe(2);
+      expect(onStall, 'the late tick is exactly one stall').toHaveBeenCalledTimes(1);
+      expect(onStall.mock.calls[0]?.[0]).toBe('[stall] main thread blocked 3000ms video=0 dom=0');
+      expect(onStall.mock.calls[0]?.[1].blockedMs).toBe(3_000);
+
+      // Back on time: silence again, so the stall was the gap and not a latch.
+      vi.advanceTimersByTime(60_000);
+      expect(onStall).toHaveBeenCalledTimes(1);
+    });
+
+    it('the threshold moves with the heartbeat: the production boundary at 1 s is exactly STALL_THRESHOLD_MS, and a slower heartbeat keeps the same 2 s margin above it', () => {
+      expect(stallThresholdForHeartbeat(STALL_HEARTBEAT_MS)).toBe(STALL_THRESHOLD_MS);
+      expect(stallThresholdForHeartbeat(60_000), '60 s heartbeat → 62 s boundary').toBe(62_000);
+      expect(stallThresholdForHeartbeat(60_000) - 60_000, 'the margin is the production one').toBe(
+        STALL_THRESHOLD_MS - STALL_HEARTBEAT_MS,
+      );
+      // A FASTER heartbeat never lowers the boundary below the production
+      // threshold: a 3 s freeze is the defect, whatever the sampling rate.
+      expect(stallThresholdForHeartbeat(100)).toBe(STALL_THRESHOLD_MS);
+      // The watch's own boundary, both sides, at the slowed heartbeat.
+      expect(
+        classifyStall(
+          { elapsedMs: 61_999, visibleThroughout: true },
+          stallThresholdForHeartbeat(60_000),
+          60_000,
+        ).stalled,
+      ).toBe(false);
+      expect(
+        classifyStall(
+          { elapsedMs: 62_000, visibleThroughout: true },
+          stallThresholdForHeartbeat(60_000),
+          60_000,
+        ).stalled,
+      ).toBe(true);
+    });
   });
 
   describe('flight recorder', () => {

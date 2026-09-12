@@ -32,6 +32,48 @@ export const STALL_THRESHOLD_MS = 3_000;
 /** How often the heartbeat checks in. */
 export const STALL_HEARTBEAT_MS = 1_000;
 
+// ─── Test seam for the heartbeat interval ───────────────────────────────────
+//
+// Measured 2026-09-12 (the app-shell six-hour test): advancing 6 h of fake time
+// through the mounted App executes 23,066 timer callbacks — 21,600 of them this
+// 1 s heartbeat. Every test that mounts the App and advances fake hours pays
+// that, which is why the shell test needed a 30 s budget. The 1 s heartbeat is
+// right for production (it is what makes a 3 s freeze measurable), and stubbing
+// the module away would make "through the mounted shell" a smaller shell — so a
+// test can slow the heartbeat HERE instead, by name, and nowhere else.
+//
+// Production never calls the setter: `stallHeartbeatMs()` returns
+// `STALL_HEARTBEAT_MS` unchanged until a test sets an override, and `App.tsx`
+// reads the interval through it. `classifyStall` and the census are untouched.
+let heartbeatOverrideMs: number | null = null;
+
+/** Override the heartbeat interval for a test; `null` restores the default. */
+export function setStallHeartbeatForTests(ms: number | null): void {
+  heartbeatOverrideMs = ms;
+}
+
+/** The heartbeat interval the app should start: the test override, else the constant. */
+export function stallHeartbeatMs(): number {
+  return heartbeatOverrideMs ?? STALL_HEARTBEAT_MS;
+}
+
+/**
+ * The stall threshold for a given heartbeat interval.
+ *
+ * ⛔ The threshold is an ELAPSED-time boundary, so it must move with the
+ * heartbeat: `STALL_THRESHOLD_MS` alone means "blocked ≥ 2 s" only at the
+ * production 1 s heartbeat. Passed bare to a watch running at the 60 s test
+ * heartbeat, every ON-TIME tick (elapsed 60 000 ≥ 3 000) was a stall of 0 ms —
+ * measured 2026-09-12: one run of the app-shell test file emitted 2,523
+ * "[stall] main thread blocked 0ms" warnings and as many onStall flight-store
+ * writes, where the pre-seam file emitted none. This keeps the production
+ * margin (threshold − heartbeat = 2 s) at any heartbeat, and at the production
+ * heartbeat is exactly `STALL_THRESHOLD_MS`. PURE, so the boundary is testable.
+ */
+export function stallThresholdForHeartbeat(heartbeatMs: number): number {
+  return Math.max(STALL_THRESHOLD_MS, heartbeatMs + (STALL_THRESHOLD_MS - STALL_HEARTBEAT_MS));
+}
+
 export interface StallSample {
   /** Wall-clock gap between consecutive heartbeats. */
   elapsedMs: number;
@@ -165,7 +207,7 @@ export function startStallWatch(
         elapsedMs: now - last,
         visibleThroughout: visibleSinceLastTick && document.visibilityState === 'visible',
       },
-      STALL_THRESHOLD_MS,
+      stallThresholdForHeartbeat(heartbeatMs),
       heartbeatMs,
     );
     last = now;

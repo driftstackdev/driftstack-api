@@ -47,6 +47,7 @@ import { startSimulatorCrashMarker } from '../lib/simulator-crash-marker';
 import {
   browserStallCensusDeps,
   startFlightRecorder,
+  stallHeartbeatMs,
   startStallWatch,
   SIMULATOR_FLIGHT_STORE_FILE,
 } from '../lib/main-thread-stall-detector';
@@ -3376,10 +3377,14 @@ export function SimulatorWindow(): JSX.Element {
       },
     });
     const recorder = startFlightRecorder(store, deps, undefined, 'simulator');
-    const stopWatch = startStallWatch((line, census) => {
-      console.warn(line, census);
-      recorder.recordStall(census);
-    }, deps);
+    const stopWatch = startStallWatch(
+      (line, census) => {
+        console.warn(line, census);
+        recorder.recordStall(census);
+      },
+      deps,
+      stallHeartbeatMs(),
+    );
     return () => {
       stopWatch();
       void recorder.stop();
