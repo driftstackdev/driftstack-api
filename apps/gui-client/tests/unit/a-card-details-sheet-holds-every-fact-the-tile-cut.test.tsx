@@ -210,7 +210,9 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     expect(
       byComponent(sheet, 'proxy-os-fingerprint')?.getAttribute('title')?.length,
     ).toBeGreaterThan(10);
-    expect(byComponent(sheet, 'capability-hints')?.textContent).toMatch(/UDP via tunnel/);
+    expect(byComponent(sheet, 'capability-hints')?.textContent).toMatch(
+      /UDP travels inside the VPN tunnel/,
+    );
     cleanup();
   });
 

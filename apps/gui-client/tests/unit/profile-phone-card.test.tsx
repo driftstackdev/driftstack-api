@@ -1374,7 +1374,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       m[1]!,
       Number(m[2]),
     ]);
-    expect(entries).toHaveLength(14);
+    expect(entries).toHaveLength(15);
     expect(entries.filter(([, n]) => Number.isInteger(n)).map(([t]) => t)).toEqual([]);
     // …and the floor it is the only companion of is still named and still 3.
     expect(source('components/ProfilePhoneCard.tsx')).toContain('const CAPS_MIN_SLACK = 3;');
@@ -1461,10 +1461,13 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       props({ vpn: true, capabilities: null, latencyMs: 61, quicProbe: true }),
       144,
     );
-    expect(vpn.chips.map((c) => c.text)).toEqual(['QUIC ✓', '— OS']);
-    expect(vpn.chips[1]?.title).toMatch(/^Stack OS not measured: this row is a VPN tunnel/);
-    expect(vpn.hiddenHints).toHaveLength(1);
-    expect(vpn.hiddenHints[0]).toMatch(/^UDP via tunnel — /);
+    // ⛔ The VPN row's THIRD chip. "UDP travels inside the tunnel" was the last
+    // hint riding a '+N' here — the owner's "+1 on an OpenVPN" (2026-09-14) —
+    // and it is a chip now with its own glyph. Nothing is hidden on this row.
+    expect(vpn.chips.map((c) => c.text)).toEqual(['⇢ UDP', 'QUIC ✓', '— OS']);
+    expect(vpn.chips[0]?.title).toMatch(/UDP travels inside the VPN tunnel/);
+    expect(vpn.chips[2]?.title).toMatch(/^Stack OS not measured: this row is a VPN tunnel/);
+    expect(vpn.hiddenHints).toEqual([]);
     // A MEASUREMENT is never in the pill at any real column width — including
     // the '?' verdict, which is a COMPLETED classification and not a placeholder.
     for (const over of [
@@ -1708,8 +1711,8 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // The arithmetic, all four numbers measured: 'QUIC ✓' 44.3 + gap 4 + '— OS'
     // 33.33 + the 3px floor = 84.63 of the 90 the compact 'Check' (50) leaves at
     // content 144. With the pill reserved it is 115.63, which is why the row
-    // needs content 170 before the '+1' comes back — and it may, because by then
-    // nothing measured is paying for it.
+    // needs content 193 before the tunnel chip itself fits beside both. It never
+    // comes back as a '+1': a dropped `dropFirst` chip does not mint a pill.
     for (const [contentWidth, label, texts, hints] of [
       // 144 = the 178px column, 152 = the 186px one: the grid's floor, both
       // themes, and the two widths this row was broken at.
@@ -1718,11 +1721,15 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       [169, 'Check', ['QUIC ✓', '— OS'], 0],
       // From 170 the whole row fits WITH the pill, so the tunnel hint is back on
       // the row beside both chips — never instead of one.
-      [170, 'Check', ['QUIC ✓', '— OS'], 1],
-      [193, 'Check', ['QUIC ✓', '— OS'], 1],
+      [170, 'Check', ['QUIC ✓', '— OS'], 0],
+      // From 193 the tunnel chip fits beside both, so all three are on the row.
+      [193, 'Check', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
       // The full button label returns once the row fits beside it: 115.63 needs
       // content 194 next to a 74px button (a 228px card).
-      [194, 'Check VPN', ['QUIC ✓', '— OS'], 1],
+      [194, 'Check', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
+      // The full button label returns at 210: the three-chip row (128.41) needs
+      // content 210 beside a 74px button (a 244px card).
+      [210, 'Check VPN', ['⇢ UDP', 'QUIC ✓', '— OS'], 0],
     ] as const) {
       const act = firstAction(FIRST_VPN_QUIC, contentWidth);
       expect(act.label, `content ${String(contentWidth)}`).toBe(label);
@@ -1756,8 +1763,8 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       }
     }
     // ⛔ VACUITY CONTROL — the pill still exists and still holds the tunnel hint
-    // when nothing measured is paying for it. Without this, "hiddenHints is
-    // empty" would also pass if `hidden` had simply stopped being populated.
+    // Vacuity guard: this row's chips are asserted by NAME, so "hiddenHints is
+    // empty" cannot pass by the chips having silently stopped being produced.
     const FIRST_VPN_BARE = props({
       vpn: true,
       capabilities: null,
@@ -1765,9 +1772,11 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       exitIp: null,
     });
     const bare = visibleChips(FIRST_VPN_BARE, 144 - firstAction(FIRST_VPN_BARE, 144).width - 4);
-    expect(bare.chips.map((c) => c.text)).toEqual(['— OS']);
-    expect(bare.hiddenHints).toHaveLength(1);
-    expect(bare.hiddenHints[0]).toMatch(/^UDP via tunnel — /);
+    // Both facts a never-checked tunnel has, on the row, with no pill: the
+    // tunnel-UDP chip and the OS row (2026-09-14).
+    expect(bare.chips.map((c) => c.text)).toEqual(['⇢ UDP', '— OS']);
+    expect(bare.chips[0]?.title).toMatch(/UDP travels inside the VPN tunnel/);
+    expect(bare.hiddenHints).toEqual([]);
   });
 
   it("C4 rendered — a VPN row that MEASURED QUIC shows its OS row at the 178px column, not a '+2'", () => {
@@ -1861,21 +1870,24 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     cleanup();
   });
 
-  it('a VPN row renders no [data-udp] chip; "UDP via tunnel" + its sentence ride in the "+N" title; a measured relay verdict is its QUIC chip', () => {
+  it('a VPN row renders its tunnel-UDP chip with the sentence as its title, never the SOCKS5 verdict glyphs; a measured relay verdict is its QUIC chip', () => {
     const { container } = render(
       <ProfilePhoneCard
         {...props({ vpn: true, capabilities: null, latencyMs: 61, quicProbe: true })}
       />,
     );
-    expect(container.querySelector('[data-udp]')).toBeNull();
+    const tunnelUdp = container.querySelector('[data-udp="tunnel"]');
+    expect(tunnelUdp, 'the tunnel-UDP fact is a chip, not a pill').not.toBeNull();
+    expect(tunnelUdp?.textContent).toBe('⇢ UDP');
+    // …and never the two SOCKS5 verdicts, which would claim a probe that never ran.
+    expect(container.querySelector('[data-udp="true"], [data-udp="false"]')).toBeNull();
     const caps = byRegion(container, 'caps') as HTMLElement;
     const quic = caps.querySelector('[data-quic-inferred]') as HTMLElement;
     expect(quic.textContent).toBe('QUIC ✓');
     expect(quic.getAttribute('data-quic-inferred')).toBe('false');
-    const overflow = byComponent(caps, 'caps-overflow') as HTMLElement;
-    expect(overflow.getAttribute('title')).toMatch(
-      /UDP via tunnel — UDP travels inside the VPN tunnel/,
-    );
+    // Nothing is behind a pill on this row any more.
+    expect(byComponent(caps, 'caps-overflow')).toBeNull();
+    expect(tunnelUdp?.getAttribute('title')).toMatch(/UDP travels inside the VPN tunnel/);
     cleanup();
     // No relay measurement → no QUIC chip either (eligibility = a measurement).
     const { container: none } = render(
@@ -2255,9 +2267,13 @@ describe('B7 — mode C, the first measurement is one click on the card (list pa
     // then the '— OS' chip, then the '+1' that still holds the ONE fact that is
     // not a measurement at all (a tunnel cannot be UDP-probed).
     const caps = byRegion(container, 'caps') as HTMLElement;
-    expect(caps.textContent).toMatch(/^Check VPN— OS\+1$/);
+    // Three facts on the row and nothing behind a pill (2026-09-14).
+    expect(caps.textContent).toMatch(/^Check VPN⇢ UDP— OS$/);
     expect(byComponent(caps, 'proxy-os-fingerprint')?.getAttribute('title')).toMatch(/VPN tunnel/);
-    expect(byComponent(caps, 'caps-overflow')?.getAttribute('title')).toMatch(/UDP via tunnel/);
+    expect(byComponent(caps, 'caps-overflow')).toBeNull();
+    expect(caps.querySelector('[data-udp="tunnel"]')?.getAttribute('title')).toMatch(
+      /UDP travels inside the VPN tunnel/,
+    );
     cleanup();
   });
 
@@ -3118,24 +3134,31 @@ describe('P3 — via, caps, meta rows: pills and chips in one family', () => {
     expect(byComponent(unsaved, 'card-details-sheet')).not.toBeNull();
     expect(byComponent(unsaved, 'profile-size')).toBeNull();
     cleanup();
-    // A row whose ONLY hidden fact is not a measurement — a VPN's "UDP via
-    // tunnel" — is what still mints the caps '+N'. An unmeasured OS stopped
-    // minting one on 2026-09-12, so this control uses the VPN row instead.
-    const { container: first } = render(
-      <ProfilePhoneCard
-        {...props({
-          vpn: true,
-          probed: false,
-          capabilities: null,
-          latencyMs: null,
-          exitIp: null,
-        })}
-      />,
-    );
-    expect(classes(byComponent(first, 'caps-overflow') as HTMLElement)).toEqual(
-      expect.arrayContaining(['border-dashed', 'bg-transparent', 'text-[9.5px]']),
-    );
     cleanup();
+    // The same clientWidth stub the B3 block uses, inlined — that helper is
+    // scoped to its own describe.
+    const proto = Element.prototype;
+    const original = Object.getOwnPropertyDescriptor(proto, 'clientWidth');
+    Object.defineProperty(proto, 'clientWidth', {
+      configurable: true,
+      get(this: Element) {
+        return this.getAttribute('data-region') === 'status' ? 118 : 0;
+      },
+    });
+    try {
+      const { container: narrow } = render(
+        <ProfilePhoneCard {...props({ osFingerprint: REAL_OS })} />,
+      );
+      const pillEl = byComponent(narrow, 'caps-overflow');
+      expect(pillEl, 'a per-proxy chip cut for width still mints the pill').not.toBeNull();
+      expect(classes(pillEl as HTMLElement)).toEqual(
+        expect.arrayContaining(['border-dashed', 'bg-transparent', 'text-[9.5px]']),
+      );
+    } finally {
+      if (original !== undefined) Object.defineProperty(proto, 'clientWidth', original);
+      else Reflect.deleteProperty(proto, 'clientWidth');
+      cleanup();
+    }
   });
 
   it("the repair row: Re-test (the Proxies tab's word) is OUTLINED red-300, Change / Test are outlined divider buttons, all 10px/600 with transition-colors, enabled-guarded hovers and an inset focus ring; in flight the button is the neutral busy button at full opacity with aria-busy", () => {

@@ -403,6 +403,7 @@ export const DEFAULT_CONTENT_WIDTH = 206;
 const CHIP_WIDTH: Readonly<Record<string, number>> = {
   'UDP ✓': 40.22,
   '⤵ UDP': 39.47,
+  '⇢ UDP': 39.78, // a VPN row's UDP: carried inside the tunnel, never probed
   'QUIC ✓': 44.3,
   'QUIC ~': 42.03,
   '⤵ QUIC': 43.55,
@@ -727,6 +728,10 @@ export interface CapChip {
    *  narrower-than-144 row pushes into the '+N' is a green chip, never the red
    *  one. Only the mismatch sets it; everything else drops in display order. */
   keep?: true;
+  /** The inverse of `keep`: drop this one FIRST when the row is short. For a
+   *  chip whose text is the SAME on every row it can appear on, so it carries
+   *  no per-proxy information and costs a chip that does. */
+  dropFirst?: true;
   className: string;
   title: string;
   /** Data attributes; the OS chip carries `data-component="proxy-os-fingerprint"`
@@ -856,7 +861,27 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
   const hidden: string[] = [];
 
   if (vpn) {
-    hidden.push(`UDP via tunnel — ${udpTitle(true, null)}`);
+    // ⛔ A CHIP, not a hint. This was the last thing riding a VPN row's '+N',
+    // and it is why the owner reported a '+1' on an OpenVPN row on 2026-09-14
+    // after the OS row had already been promoted to a chip for the same reason:
+    // an unexplained pill is the complaint, and "we could not probe UDP here"
+    // is a statable fact, not a measurement worth hiding behind one.
+    //
+    // It gets its OWN glyph. `UDP ✓` means a relay was verified and `⤵ UDP`
+    // means one was measured and fell back; neither is true here. `⇢ UDP` is
+    // muted and says routed-through, with the full sentence as its title —
+    // reusing either existing label would claim a probe that never ran.
+    eligible.push({
+      key: 'udp',
+      text: '⇢ UDP',
+      width: chipWidth('⇢ UDP'),
+      className: CHIP_MUTED_CLASS,
+      title: udpTitle(true, null),
+      // Identical on every VPN row, so it yields the column to a chip that
+      // differs per proxy (the OS row, a measured QUIC verdict).
+      dropFirst: true,
+      attrs: { 'data-udp': 'tunnel' },
+    });
   } else if (caps !== null) {
     const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
     const text = udpOk ? 'UDP ✓' : '⤵ UDP';
@@ -1124,18 +1149,37 @@ export function visibleChips(p: CapsInput, contentWidth: number): VisibleChips {
   const dropOrder = compact
     .map((chip, index) => ({ chip, index }))
     .sort((a, b) => {
+      // `dropFirst` outranks everything: it goes before any ordinary chip, and
+      // before `keep` decides among the rest. ⛔ Added because the tunnel-UDP
+      // chip (pushed first, so last in the old reverse-index order) evicted the
+      // OS row on a narrow VPN card in `first` mode — trading a row that varies
+      // per proxy for one that reads identically on every VPN row there is.
+      const first = (b.chip.dropFirst === true ? 1 : 0) - (a.chip.dropFirst === true ? 1 : 0);
+      if (first !== 0) return first;
       const keep = (a.chip.keep === true ? 1 : 0) - (b.chip.keep === true ? 1 : 0);
       return keep !== 0 ? keep : b.index - a.index;
     });
+  // ⛔ A dropped `dropFirst` chip does NOT mint a '+N'. Its sentence is the same
+  // on every row it can appear on, and the card's details sheet lists it either
+  // way (capabilityChips feeds the sheet from `eligible`, dropped or not). The
+  // pill costs 31px — enough, on a narrow VPN card in `first` mode, to evict the
+  // OS row as well. Paying a per-proxy fact for a constant one is the wrong
+  // trade, and minting a pill for something nothing was hiding is what the
+  // owner's "+1 on an OpenVPN" was.
+  const pillCount = (goneSet: ReadonlySet<number>): number =>
+    eligible.filter((c, j) => goneSet.has(j) && c.dropFirst !== true).length + hidden.length;
+  const pillHints = (goneSet: ReadonlySet<number>): string[] =>
+    hints(eligible.filter((c, j) => goneSet.has(j) && c.dropFirst !== true));
   const gone = new Set<number>();
   for (const { index } of dropOrder) {
     gone.add(index);
     const shown = compact.filter((_, j) => !gone.has(j));
-    if (rowWidth(shown, eligible.length - shown.length + hidden.length) <= contentWidth) {
-      return { chips: shown, hiddenHints: hints(eligible.filter((_, j) => gone.has(j))) };
+    if (rowWidth(shown, pillCount(gone)) <= contentWidth) {
+      return { chips: shown, hiddenHints: pillHints(gone) };
     }
   }
-  return { chips: [], hiddenHints: hints(eligible) };
+  const all = new Set(eligible.map((_, j) => j));
+  return { chips: [], hiddenHints: pillHints(all) };
 }
 
 export interface MetaPill {

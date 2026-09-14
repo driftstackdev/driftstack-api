@@ -872,18 +872,26 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
 
   it('a VPN card renders NO UDP chip — "UDP via tunnel" and its sentence ride in the caps "+N" title (Phase B); an unprobed SOCKS5 card offers Test and no UDP chip at all', async () => {
     // Phase B (2026-09-11): the caps row is a fixed 20px line of MEASUREMENTS.
-    // UDP on a tunnel is not a measurement, so it is a hint behind '+N', never
-    // a chip; and 'UDP ?' (an unprobed SOCKS5 grant) no longer exists — that
-    // row's caps region is the first-measurement 'Test' button.
+    // ⛔ UDP on a tunnel used to be a hint behind the '+N' — never a chip —
+    // because it is not a measurement. The owner reported that '+1' on an
+    // OpenVPN row (2026-09-14), the last thing riding that pill after the OS
+    // row had already been promoted for the same reason. "We could not probe
+    // UDP here" is a statable fact; an unexplained pill is not. It is a chip
+    // now, with its OWN glyph — reusing `UDP ✓` (a verified relay) or `⤵ UDP`
+    // (a measured fall-back) would claim a probe that never ran — and the full
+    // sentence is its title. 'UDP ?' (an unprobed SOCKS5 grant) still does not
+    // exist: that row's caps region is the first-measurement 'Test' button.
     const first = render(<ProfilesView onGoToSettings={vi.fn()} />);
-    const overflow = await waitFor(() => {
-      const el = document.querySelector('[data-component="caps-overflow"]');
-      expect(el).not.toBeNull();
+    const udp = await waitFor(() => {
+      const el = document.querySelector('[data-udp="tunnel"]');
+      expect(el, 'a VPN row shows its tunnel-UDP chip, not a pill').not.toBeNull();
       return el as HTMLElement;
     });
-    expect(overflow.getAttribute('title')).toMatch(/UDP via tunnel/);
-    expect(overflow.getAttribute('title')).toMatch(/not a probed grant/);
-    expect(document.querySelector('[data-udp]')).toBeNull();
+    expect(udp.textContent).toBe('⇢ UDP');
+    expect(udp.getAttribute('title')).toMatch(/not a probed grant/);
+    // …and nothing is left hiding behind a '+N' on that row.
+    expect(document.querySelector('[data-component="caps-overflow"]')).toBeNull();
+    expect(document.querySelector('[data-udp="true"]')).toBeNull();
     expect(screen.queryByText('UDP ?')).toBeNull();
     first.unmount();
     state.boundProxyId = 'p1';
@@ -1897,20 +1905,21 @@ describe.each(VPN_SCHEME_CASES)(
       expect(screen.getByText('42ms')).toBeTruthy();
     });
 
-    // MUTATION: gate the chip on `scheme === 'openvpn'` → a WireGuard card shows
-    // "UDP ?" (an unprobed SOCKS5 grant) for a tunnel that carries UDP → red.
-    it('the caps row carries "UDP via tunnel" in its "+N" title and never the SOCKS5 "UDP ?"', async () => {
-      // Phase B: no UDP chip on a tunnel (not a measurement); the sentence is
-      // the '+N' pill's title. Gating the hint on `scheme === 'openvpn'` would
-      // leave a WireGuard card with no tunnel sentence at all → red.
+    // MUTATION: gate the chip on `scheme === 'openvpn'` → a WireGuard card
+    // loses its tunnel-UDP chip entirely → red here.
+    it('the caps row shows the tunnel-UDP chip with its sentence, and never the SOCKS5 "UDP ?"', async () => {
+      // Both tunnel schemes say the same thing about UDP, so both get the chip
+      // (2026-09-14 — it used to ride the '+N' title; the owner reported that
+      // pill). The glyph is its own: not `UDP ✓`, which would claim a probe.
       render(<ProfilesView onGoToSettings={vi.fn()} />);
-      const overflow = await waitFor(() => {
-        const el = document.querySelector('[data-component="caps-overflow"]');
+      const udp = await waitFor(() => {
+        const el = document.querySelector('[data-udp="tunnel"]');
         expect(el).not.toBeNull();
         return el as HTMLElement;
       });
-      expect(overflow.getAttribute('title')).toMatch(/UDP via tunnel/);
-      expect(document.querySelector('[data-udp]')).toBeNull();
+      expect(udp.textContent).toBe('⇢ UDP');
+      expect(udp.getAttribute('title')).toMatch(/UDP travels inside the VPN tunnel/);
+      expect(document.querySelector('[data-udp="true"]')).toBeNull();
       expect(screen.queryByText('UDP ?')).toBeNull();
     });
   },
