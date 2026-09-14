@@ -1688,8 +1688,10 @@ export async function runProxyPrelaunchGate(args: {
     // Nine distinct causes reached this line as one `null`, and both the log
     // ("decrypt/config") and the customer's 422 ("its stored configuration could
     // not be read") named decryption for all of them. Two are POLICY refusals a
-    // re-add cannot fix — a `script-security 2` line the control plane will not
-    // run, a `ca ca.crt` reference no session can resolve — and one is a missing
+    // re-add cannot fix — an `up …` line the control plane will not run (V-217: the
+    // original example here was `script-security 2`, which is now lowered and
+    // accepted, not refused), a `ca ca.crt` reference no session can resolve — and
+    // one is a missing
     // field; for those three the old sentence was false, so the owner's launch
     // failure could be neither explained nor acted on. `reason` is the closed-set
     // code for triage; `detail` is the sentence the owner reads, and for a refused

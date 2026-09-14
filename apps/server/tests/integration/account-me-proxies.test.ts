@@ -653,7 +653,21 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
     expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
   });
 
-  it('CRITICAL `script-security 2` alone is refused, with no dangerous directive present. The guard has two independent halves — a keyword list and a level threshold — and the arm above trips BOTH at once, so it cannot tell them apart. Measured: raising the threshold from >=2 to >=3 left that arm green while the classifier’s own unit test caught it. This arm isolates the level, so a slipped threshold reds the ROUTE too.', async () => {
+  // ⛔ V-217 (2026-09-14) — THIS ARM WAS INVERTED, deliberately. It used to assert
+  // that `script-security 2` alone is REFUSED 400. That refusal was the owner's
+  // "OpenVPN profiles won't save": every profile their provider issues carries the
+  // line, so every upload 400'd and the only way in was hand-editing each download.
+  // The directive only PERMITS scripts; the arm above still covers a directive that
+  // RUNS one, and the six code-loading directives it never covered are now in the
+  // set. So the level is lowered to 1 and the config accepted.
+  //
+  // It keeps the ORIGINAL arm's job — isolating the level threshold from the
+  // keyword list — because the lowering is what now depends on that threshold. If
+  // `>= 2` slips to `>= 3`, the finder stops reporting level 2, nothing lowers it,
+  // and the config is stored with the raised level standing. That is why this arm
+  // asserts on the STORED BYTES and not merely on the 201: a status code alone
+  // would go green under exactly that regression.
+  it('CRITICAL `script-security 2` alone is ACCEPTED and STORED LOWERED to 1. A slipped >=2 threshold reds this arm, because the stored blob would still read 2.', async () => {
     fx = await buildTestApp({ tier: 'api_builder' });
     const res = await fx.app.inject({
       method: 'POST',
@@ -663,17 +677,80 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
         label: 'ovpn-level-only',
         scheme: 'openvpn',
         ...SAFE_DISPLAY,
-        // No up/down/route-up/tls-verify — the level is the only problem.
+        // No up/down/route-up/tls-verify — the level is the only thing present.
         openvpn: { config_blob: 'client\nremote vpn.example.com 1194 udp\nscript-security 2\n' },
       },
     });
-    expect(res.statusCode, 'level 2 is refused on its own').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
-    // T-20 — and the level refusal names its own line, quoting the level.
-    expect(res.json<{ detail: string }>().detail).toBe(
-      'Line 3: "script-security 2" — Driftstack does not run scripts from VPN configs. ' +
-        'Remove this line and try again.',
+    expect(res.statusCode, res.body).toBe(201);
+    const meta = res.json<ProxyMeta>();
+    const stored = await fx.accountProxiesRepo.findById({ id: meta.id, accountId: fx.accountId });
+    expect(stored?.wrappedSecret, 'the config is stored').toBeTruthy();
+    const secret = readAccountProxySecret(
+      Buffer.alloc(32, 7),
+      { accountId: fx.accountId, proxyId: meta.id, slot: 'openvpn-config' },
+      stored?.wrappedSecret as string,
     );
+    const blob = (JSON.parse(secret) as { config_blob: string }).config_blob;
+    // The artefact we validated must be the artefact we keep.
+    expect(blob).toBe('client\nremote vpn.example.com 1194 udp\nscript-security 1\n');
+    expect(blob).not.toContain('script-security 2');
+  });
+
+  it('CRITICAL lowering does not launder a config that also RUNS a script: `script-security 2` beside an `up` line is still refused 400, and the message names the `up` line — the one the customer must actually remove', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-level-plus-hook',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: {
+          config_blob:
+            'client\nremote vpn.example.com 1194 udp\nscript-security 2\nup /etc/openvpn/up.sh\n',
+        },
+      },
+    });
+    expect(res.statusCode, 'the hook is still refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toContain('Line 4: "up /etc/openvpn/up.sh"');
+  });
+
+  it('CRITICAL a QUOTED script hook is refused. OpenVPN’s config lexer strips surrounding quotes, so `"up" /bin/sh` IS `--up /bin/sh` — measured against the shipped 2.7.0, both produce the identical `Options error: --up script fails with …`. The screen matched the raw token, so the quoted form read as clean and this route accepted remote code execution from customer input.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-quoted-hook',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: {
+          config_blob: 'client\nremote vpn.example.com 1194 udp\n"up" /bin/sh\n',
+        },
+      },
+    });
+    expect(res.statusCode, 'the quoted hook is refused').toBe(400);
+    expect(res.json<{ detail: string }>().detail).toMatch(/script/i);
+  });
+
+  it('CRITICAL a directive that LOADS NATIVE CODE is refused. `providers` dlopens a shared object whose constructor runs on load — measured executing at script-security 0 and at the default 1, so the node forcing `--script-security 1` does not cover this class at all. It was absent from the refusal set until V-217.', async () => {
+    fx = await buildTestApp({ tier: 'api_builder' });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/account/me/proxies',
+      headers: auth(fx),
+      payload: {
+        label: 'ovpn-provider-load',
+        scheme: 'openvpn',
+        ...SAFE_DISPLAY,
+        openvpn: {
+          config_blob: 'client\nremote vpn.example.com 1194 udp\nproviders /tmp/evil.dylib\n',
+        },
+      },
+    });
+    expect(res.statusCode, 'the native-module load is refused').toBe(400);
   });
 
   it('CRITICAL the UPDATE path re-validates the VPN config — a clean proxy cannot be EDITED into a weaponized one, and the `--`-prefixed directive bypass is caught here too (T-29 gap / T-32 fix; create-time is not the only door, and the dispatch guard must not be the only backstop)', async () => {

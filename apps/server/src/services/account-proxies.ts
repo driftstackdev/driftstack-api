@@ -8,6 +8,7 @@ import type { AccountTier, InlineVpnProxyWire, SocksProxyConfig } from '@driftst
 import {
   findUnresolvableOpenvpnFileReferences,
   InlineVpnProxyWireSchema,
+  lowerOpenvpnScriptSecurity,
 } from '@driftstack/api-types';
 import type { AccountProxiesRepo, AccountProxyRow } from '../db/account-proxies-repo.js';
 import { readAccountProxySecret } from '../lib/account-proxy-secret-encryption.js';
@@ -83,10 +84,15 @@ function freshUdpCapable(config: Record<string, unknown>): boolean | undefined {
  * call sites answered it with ONE sentence: "its stored configuration could not
  * be read. Re-add it and try again." For four of the nine causes that sentence
  * is false, and for the two POLICY causes it is actively misleading — a config
- * carrying `script-security 2`, or a `ca ca.crt` line pointing at a file no
- * session can hold, is a config the control plane REFUSES, not one it could not
- * decrypt. The customer was told to re-add a config that would be refused again,
- * and the server log said nothing but "decrypt/config".
+ * carrying `up /etc/openvpn/update-resolv-conf`, or a `ca ca.crt` line pointing at
+ * a file no session can hold, is a config the control plane REFUSES, not one it
+ * could not decrypt. The customer was told to re-add a config that would be refused
+ * again, and the server log said nothing but "decrypt/config".
+ *
+ * ⚠️ (V-217) The example here USED to be `script-security 2`. That is no longer a
+ * refusal at all — it is lowered to 1 and accepted — so it would have been a stale
+ * illustration of a live policy. The script directives it used to sit beside are
+ * still refused, and are the honest example.
  *
  * The code is for the LOG (triage picks the cause without a repro); the sentence
  * it carries is for the customer. Reason codes are a closed set, never prose.
@@ -369,18 +375,27 @@ export class AccountProxiesService {
       if (typeof parsed.config_blob !== 'string') {
         return { config: null, reason: 'config_unreadable', detail: unreadableDetail(true) };
       }
-      const blob = parsed.config_blob;
+      // (V-217) Lower `script-security 2` → 1 on the way out, for the same reason the
+      // create route does: rows stored by an older build — and every profile the
+      // owner's provider issues — carry it, and refusing them HERE is what turned a
+      // saved proxy into a session that would never launch. Refusing it protected
+      // nothing: the directive only permits scripts, every script-RUNNING directive is
+      // still refused below, and the node forces `--script-security 1` regardless.
+      const blob = lowerOpenvpnScriptSecurity(parsed.config_blob).config;
       // SSRF re-guard at dispatch (defense-in-depth): the real egress is the embedded
       // `remote <host>`, never the display host already checked above. Fail-closed.
       //
       // ⛔ (V3) — THIS IS A POLICY REFUSAL, NOT A READ FAILURE, and saying "could
-      // not be read" here is what sent the owner round the loop: a row stored by a
-      // build older than `stripUnsupportedOpenvpnLines` still carries its
-      // `script-security 2` line, the launch refused it HERE, and the sentence the
-      // customer got named decryption. The classifier already knows which of the
-      // two it is, so each says its own thing — the directive case in the same
-      // words, naming the same line, that the create/update route answers the same
-      // blob with (`unsupportedOpenvpnDirectiveDetail`).
+      // not be read" here is what sent the owner round the loop: a row stored by an
+      // older build carried a directive this branch refused, the launch failed HERE,
+      // and the sentence the customer got named decryption. The classifier already
+      // knows which of the two it is, so each says its own thing — the directive
+      // case in the same words, naming the same line, that the create/update route
+      // answers the same blob with (`unsupportedOpenvpnDirectiveDetail`).
+      //
+      // ⚠️ (V-217) The original example was `script-security 2`. That case is gone:
+      // the lowering above handles it, and what reaches this refusal now is only a
+      // directive that really would run a program.
       const unsafeTargets = classifyUnsafeVpnTargets({ configBlob: blob });
       if (unsafeTargets !== null) {
         return unsafeTargets === 'unsafe-directive'
@@ -407,7 +422,9 @@ export class AccountProxiesService {
       }
       candidate = {
         type: 'openvpn',
-        config_blob: parsed.config_blob,
+        // ⛔ `blob`, NOT `parsed.config_blob`: every guard above reads `blob`, so
+        // dispatching the raw row would ship an artefact nothing validated.
+        config_blob: blob,
         ...(str('username') !== undefined ? { username: str('username') } : {}),
         ...(typeof parsed.password === 'string' ? { password: parsed.password } : {}),
       };

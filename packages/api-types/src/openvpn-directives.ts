@@ -60,6 +60,35 @@ export const DANGEROUS_OPENVPN_DIRECTIVES: ReadonlySet<string> = new Set([
   // box mitigation as unconfirmed for this entry specifically, which is the
   // reason to reject it at ingress rather than rely on the host.
   'plugin',
+  // ⛔⛔ V-217 (2026-09-14) — SIX directives that load or run external code and
+  // were NOT in this set. Found by an adversarial sweep of `openvpn --help` and
+  // `man 8 openvpn` for the SHIPPED 2.7.0 binary, not recalled. The first three
+  // are the serious ones: they `dlopen` a shared object, whose constructor runs
+  // on load, and that happens at ANY `--script-security` level — MEASURED at
+  // level 0 and at the default 1, so the box forcing `--script-security 1` does
+  // NOT neuter this class the way it neuters the script hooks above.
+  //
+  // `--providers l` — "A list l of OpenSSL providers to load."
+  'providers',
+  // `--pkcs11-providers provider ...` — "PKCS#11 provider to load."
+  'pkcs11-providers',
+  // `--engine [name]` — loads an OpenSSL engine, i.e. a shared object.
+  'engine',
+  // `--tls-crypt-v2-verify cmd` — "Run command cmd to verify the metadata of
+  // the client-supplied tls-crypt-v2 client key". A script hook like the eleven
+  // at the top; it was simply missed.
+  'tls-crypt-v2-verify',
+  // `--iproute cmd` — "Set alternate command to execute instead of default
+  // iproute2 command". Linux-only, so it is absent from a macOS `--help` and
+  // present on the egress node, which is the one that matters. Verified in the
+  // shipped man page.
+  'iproute',
+  // `--config file` — "Read configuration options from file." A clean-looking
+  // blob that references a second file is a screen bypass by construction: we
+  // would validate the file we were given and openvpn would run the union. The
+  // session renders only client.ovpn + auth.txt anyway, so no legitimate
+  // customer config can resolve one.
+  'config',
 ]);
 
 /** One line of an OpenVPN config the API will refuse. */
@@ -130,6 +159,57 @@ export interface OpenvpnUnsupportedLine {
  * Nothing else about the line is interpreted — `up-north.example.com` after a
  * `remote` keyword is a hostname, not a directive.
  */
+/**
+ * OpenVPN's config lexer strips surrounding quotes from a token, so `"up"`,
+ * `'up'` and `up` are one directive. Match that, or the refusal is a
+ * one-character bypass. Applied repeatedly because `"--up"` nests the two forms.
+ */
+function stripEnclosingQuotes(token: string): string {
+  let out = token;
+  while (
+    out.length >= 2 &&
+    ((out.startsWith('"') && out.endsWith('"')) || (out.startsWith("'") && out.endsWith("'")))
+  ) {
+    out = out.slice(1, -1);
+  }
+  return out;
+}
+
+/**
+ * The inline blocks an OpenVPN config may carry. Everything between `<ca>` and
+ * `</ca>` is PEM/key DATA, not directives — openvpn never reads a directive
+ * there, and neither may we.
+ *
+ * ⛔ V-217: without this the finder flagged a `script-security`-looking line
+ * sitting inside a `<ca>` block, and the rewriters then OVERWROTE those bytes,
+ * corrupting the customer's certificate. A mangled `<ca>` is a tunnel that can
+ * never come up, produced by the very code meant to make the config work.
+ */
+const OPENVPN_INLINE_BLOCK_TAGS: ReadonlySet<string> = new Set([
+  'ca',
+  'cert',
+  'key',
+  'dh',
+  'extra-certs',
+  'pkcs12',
+  'crl-verify',
+  'secret',
+  'tls-auth',
+  'tls-crypt',
+  'tls-crypt-v2',
+  'peer-fingerprint',
+  // Credential blocks: openvpn reads exactly a username line and a password line
+  // from these and never interprets either as a directive, so skipping them
+  // hides nothing — and scanning them would refuse a customer whose PASSWORD
+  // happens to begin with a directive word, with no way for them to fix it.
+  'auth-user-pass',
+  'http-proxy-user-pass',
+  // ⛔ `<connection>` is deliberately ABSENT. Unlike the blocks above it holds
+  // real directives (remote/proto/port/http-proxy), openvpn parses them, and so
+  // must we — skipping it would turn it into a hiding place for exactly what
+  // this finder exists to catch.
+]);
+
 export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsupportedLine[] {
   const hits: OpenvpnUnsupportedLine[] = [];
   // ⛔ LINE ENDINGS: \r\n / \r / \n — the same three `findUnresolvableOpenvpnFileReferences`
@@ -151,9 +231,27 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
   // the customer got instead was the owner's 2026-09-12 report: a session that never
   // starts, with nothing on the control-plane side to read.
   const lines = configBlob.split(/\r\n|\r|\n/);
+  // V-217 — the inline-block cursor. Non-null while we are inside a PEM/credential
+  // block, holding the tag we are waiting to close. See OPENVPN_INLINE_BLOCK_TAGS.
+  let openBlock: string | null = null;
+  let openBlockLine = 0;
+  let openBlockText = '';
   for (let i = 0; i < lines.length; i += 1) {
     const text = (lines[i] ?? '').trim();
+    if (openBlock !== null) {
+      if (text.toLowerCase() === `</${openBlock}>`) openBlock = null;
+      // Everything else inside the block is certificate/key/credential DATA.
+      // Never matched, never reported, so never rewritten.
+      continue;
+    }
     if (text === '' || text.startsWith('#') || text.startsWith(';')) continue;
+    const blockOpen = /^<([a-z0-9-]+)>$/i.exec(text);
+    if (blockOpen !== null && OPENVPN_INLINE_BLOCK_TAGS.has(blockOpen[1]?.toLowerCase() ?? '')) {
+      openBlock = blockOpen[1]?.toLowerCase() ?? null;
+      openBlockLine = i + 1;
+      openBlockText = text;
+      continue;
+    }
     const tokens = text.split(/\s+/);
     // OpenVPN's own config parser strips a leading `--` from every directive
     // (bypass_doubledash in options.c, applied to config-file lines when the token
@@ -162,7 +260,23 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
     // one-character bypass (a `--plugin` line loads a native module as root on the
     // shared egress host — the P0 root-RCE class this guard exists to stop).
     let keyword = (tokens[0] ?? '').toLowerCase();
+    // ⛔⛔ V-217 (2026-09-14) — QUOTES, the exact same one-character bypass as the
+    // `--` case below, and it was open. OpenVPN's config lexer strips surrounding
+    // single or double quotes from every token, so `"up" /x.sh` IS `--up /x.sh`.
+    // This finder matched the raw token, so the keyword read as `"up"`, missed the
+    // set, and the line passed with ZERO hits. MEASURED against the shipped 2.7.0:
+    // `"up" /missing.sh` and `up /missing.sh` produce byte-identical
+    // `Options error: --up script fails with '/missing.sh'`, which is openvpn
+    // telling us it resolved the quoted token to the directive.
+    //
+    // It also defeated the script-security lowering in the same stroke: a quoted
+    // `"script-security" 2` was not reported, so nothing lowered it, and the
+    // raised level survived next to a live hook.
+    //
+    // Strip BEFORE the `--` test, because `"--up"` is legal too.
+    keyword = stripEnclosingQuotes(keyword);
     if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
+    keyword = stripEnclosingQuotes(keyword);
     if (DANGEROUS_OPENVPN_DIRECTIVES.has(keyword)) {
       hits.push({
         line: i + 1,
@@ -204,6 +318,20 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
       }
     }
   }
+  // V-217 — an inline block that never closes. OpenVPN refuses the whole config
+  // for this ("ERROR: Endtag </ca> missing", measured against 2.7.0), so it is
+  // not a way to smuggle a live directive past the skip above — nothing in such
+  // a file ever runs. It is reported for the other reason this module reports
+  // unparseable directives: without it the customer's only signal is a session
+  // that will not start, with nothing on the control-plane side to read.
+  if (openBlock !== null) {
+    hits.push({
+      line: openBlockLine,
+      directive: openBlock,
+      text: openBlockText,
+      reason: `\`<${openBlock}>\` is never closed with \`</${openBlock}>\`, so OpenVPN refuses the whole config when the session starts`,
+    });
+  }
   return hits;
 }
 
@@ -219,6 +347,74 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
  * it means that line was lowered rather than deleted. Running the finder on
  * `config` afterwards yields nothing — the strip is idempotent.
  */
+/**
+ * Lower `script-security 2|3` to 1, and touch NOTHING else.
+ *
+ * ⛔ This exists because the control plane REFUSED a config for a directive that
+ * cannot, by itself, run anything — and that refusal was the owner's "can't open
+ * OpenVPN profiles". Measured 2026-09-14 (A3): every profile their provider
+ * issues carries `script-security 2` at line 46, so every upload was a 400 and
+ * the workaround was hand-editing each download. Removing the line by hand and
+ * re-posting through the real API produced a working session in about a second
+ * through their own endpoint.
+ *
+ * Why accepting it is safe, and why this is NOT the wholesale strip:
+ *   • `script-security` PERMITS scripts; it executes nothing on its own.
+ *   • Every directive that DOES execute something — up, down, route-up,
+ *     tls-verify, plugin and the rest of DANGEROUS_OPENVPN_DIRECTIVES — stays
+ *     refused, loudly, naming its line. So there is nothing left for a raised
+ *     level to permit.
+ *   • The harness strips the directive again before writing the config, and
+ *     forces `--script-security 1` on the openvpn process itself.
+ * Three independent reasons a script cannot run; the refusal was the only thing
+ * the customer could see, and it protected nothing.
+ *
+ * ⛔⛔ READ THIS BEFORE TRUSTING THE SECOND BULLET. When this function was first
+ * written that bullet was FALSE, and an adversarial review measured it false the
+ * same day: the refusal set was missing six code-loading directives, and a
+ * one-character quoting trick (`"up" /x.sh`) walked past the whole finder. Both
+ * are fixed above, and BOTH WERE ALREADY REACHABLE WITHOUT THIS FUNCTION — the
+ * wholesale `script-security 2` refusal had been masking them by rejecting
+ * provider configs outright. The lesson is not about this function: it is that
+ * the second bullet is a claim about a DENYLIST over a program with hundreds of
+ * options, and a denylist is the weak half of this design. Anything that widens
+ * what we accept must re-measure that bullet against the shipped binary rather
+ * than cite this comment. The structural fix — an allowlist of known-safe
+ * directives — is written up as a follow-up, not done here.
+ *
+ * ⚠️ Do NOT widen this to the script directives. Silently deleting a line that
+ * would have run the customer's program changes what their config DOES without
+ * telling them; refusing it and naming the line is the honest answer there.
+ */
+export function lowerOpenvpnScriptSecurity(configBlob: string): {
+  config: string;
+  lowered: boolean;
+} {
+  const hits = findUnsupportedOpenvpnLines(configBlob).filter(
+    (h) => h.directive === 'script-security',
+  );
+  if (hits.length === 0) return { config: configBlob, lowered: false };
+  const byLine = new Map(hits.map((h) => [h.line, h] as const));
+  // Same capture-the-separator walk the stripper uses, for the same reason: the
+  // finder's line numbers and this rewrite must agree exactly, or it edits a
+  // line the finder never reported.
+  const parts = configBlob.split(/(\r\n|\r|\n)/);
+  let config = '';
+  let lineNo = 0;
+  for (let i = 0; i < parts.length; i += 2) {
+    lineNo += 1;
+    const text = parts[i] ?? '';
+    const ending = parts[i + 1] ?? '';
+    if (!byLine.has(lineNo)) {
+      config += `${text}${ending}`;
+      continue;
+    }
+    const indent = /^\s*/.exec(text)?.[0] ?? '';
+    config += `${indent}script-security 1${ending}`;
+  }
+  return { config, lowered: true };
+}
+
 export function stripUnsupportedOpenvpnLines(configBlob: string): {
   config: string;
   removed: OpenvpnUnsupportedLine[];
@@ -245,6 +441,14 @@ export function stripUnsupportedOpenvpnLines(configBlob: string): {
     } else if (hit.directive === 'script-security') {
       const indent = text.slice(0, text.length - text.trimStart().length);
       config += `${indent}script-security 1${ending}`;
+    } else if (OPENVPN_INLINE_BLOCK_TAGS.has(hit.directive)) {
+      // ⛔ V-217 — the UNTERMINATED-BLOCK hit is a refusal this stripper must NOT
+      // "fix". Deleting the `<ca>` line that opened the block would leave the PEM
+      // body as bare config lines and hand the customer a config missing its CA:
+      // a worse file than the one they pasted, produced by the repair path. The
+      // finder reports it so the refusal message can name it; nothing auto-fixes
+      // it, because the only real fix is the closing tag the customer must add.
+      config += text + ending;
     }
     // Any other hit: the line and its ending are dropped.
   }
@@ -364,7 +568,15 @@ export function findUnresolvableOpenvpnFileReferences(
     // `--` is still stripped (>=3 chars) so `--ca ca.crt` cannot bypass; a bare `--`
     // (len 2, not stripped) normalises to nothing and is inert.
     let keyword = tokens[0] ?? '';
+    // V-217 — quotes, same as the security finder above. OpenVPN's lexer strips
+    // them, so `"ca" ca.crt` is `--ca ca.crt`. This finder is not a security
+    // boundary (it catches a config that CANNOT launch, not one that would run
+    // something), but the two must read a line the same way or the pair disagrees
+    // about what a directive is — and that disagreement is how the quoted-`up`
+    // bypass survived in the first place.
+    keyword = stripEnclosingQuotes(keyword);
     if (keyword.length >= 3 && keyword.startsWith('--')) keyword = keyword.slice(2);
+    keyword = stripEnclosingQuotes(keyword);
     if (!OPENVPN_INLINE_REQUIRED_DIRECTIVES.has(keyword)) continue;
     if (tokens.length < 2) continue; // bare directive, no file argument — not a reference
     if (inlineBlocks.has(keyword)) continue; // inline block present → openvpn uses it

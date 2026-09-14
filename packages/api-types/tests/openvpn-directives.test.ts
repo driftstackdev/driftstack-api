@@ -15,6 +15,7 @@ import {
   OPENVPN_UNRECOGNISED_DIRECTIVES,
   findUnresolvableOpenvpnFileReferences,
   findUnsupportedOpenvpnLines,
+  lowerOpenvpnScriptSecurity,
   stripUnsupportedOpenvpnLines,
 } from '../src/openvpn-directives.js';
 
@@ -204,6 +205,176 @@ describe('stripUnsupportedOpenvpnLines', () => {
 
   it('removes an offending LAST line that has no trailing newline without leaving a dangling ending', () => {
     expect(stripUnsupportedOpenvpnLines('client\nup /x').config).toBe('client\n');
+  });
+});
+
+// V-217 — the NARROW sibling of the stripper, and the difference between them is a
+// security boundary, not a convenience. `script-security` only PERMITS scripts; the
+// directives that RUN one must still be refused, loudly, naming the line. The
+// stripper deletes both classes; this one lowers the permission and deletes nothing.
+// It exists because every OpenVPN profile one provider issues carries
+// `script-security 2` at line 46, so every upload was a 400 and the only way in was
+// hand-editing each download.
+const OWNER_PROFILE = [
+  'client',
+  'dev tun',
+  'proto udp',
+  'remote vpn.example.com 1194 udp',
+  'resolv-retry infinite',
+  'nobind',
+  'persist-key',
+  'persist-tun',
+  'script-security 2',
+  'remote-cert-tls server',
+  'verb 3',
+  '',
+].join('\n');
+
+// ⛔⛔ V-217 (2026-09-14). Two adversarial reviews of the screen, both measured
+// against the shipped openvpn 2.7.0, found the refusal set bypassable and
+// incomplete. Neither hole needed the script-security change to be reachable —
+// that change only removed the coarse backstop that had been masking them.
+// These arms are the regression pins. Each names what an attacker's config
+// would have done.
+describe('the directive screen cannot be walked past', () => {
+  const QUOTED_HOOK = 'client\n"script-security" 2\n"up" /tmp/hook.sh\nverb 3\n';
+
+  it('CRITICAL a QUOTED directive is refused exactly like the bare form. OpenVPN’s config lexer strips surrounding quotes, so `"up" /x.sh` IS `--up /x.sh` — measured: both produce the byte-identical `Options error: --up script fails with …`. The finder matched the raw token, so `"up"` missed the set entirely and the hook was accepted with the level left at 2.', () => {
+    const hits = findUnsupportedOpenvpnLines(QUOTED_HOOK);
+    expect(hits.map((h) => h.directive)).toEqual(['script-security', 'up']);
+  });
+
+  it('CRITICAL single quotes too, and a quoted double-dash form — `--` and quotes nest, so stripping only one of them leaves the other as the bypass', () => {
+    expect(
+      findUnsupportedOpenvpnLines("client\n'plugin' /tmp/e.so\n").map((h) => h.directive),
+    ).toEqual(['plugin']);
+    expect(
+      findUnsupportedOpenvpnLines('client\n"--up" /tmp/e.sh\n').map((h) => h.directive),
+    ).toEqual(['up']);
+  });
+
+  it('POSITIVE CONTROL quote-stripping does not invent hits: a quoted token that is NOT a directive stays clean, so the rule cannot start refusing ordinary configs', () => {
+    expect(findUnsupportedOpenvpnLines('client\n"remote" vpn.example.com 1194\n')).toEqual([]);
+  });
+
+  it('CRITICAL the six code-loading directives that were missing are refused. `providers`, `pkcs11-providers` and `engine` dlopen a shared object whose constructor runs at ANY script-security level — measured executing native code at level 0 and at the default 1 — so the node forcing `--script-security 1` does not cover this class at all.', () => {
+    for (const line of [
+      'providers /tmp/evil.dylib',
+      'pkcs11-providers /tmp/evil.so',
+      'engine dynamic',
+      'tls-crypt-v2-verify /tmp/verify.sh',
+      'iproute /tmp/wrapper.sh',
+      'config /tmp/stage-two.ovpn',
+    ]) {
+      const hits = findUnsupportedOpenvpnLines(`client\n${line}\n`);
+      expect(hits, `expected "${line}" to be refused`).toHaveLength(1);
+    }
+  });
+
+  it('CRITICAL a directive-looking line inside an inline `<ca>` block is NOT reported — it is certificate data, openvpn never reads a directive there, and reporting it made the rewriters overwrite the customer’s certificate bytes', () => {
+    const withCert = [
+      'client',
+      '<ca>',
+      '-----BEGIN CERTIFICATE-----',
+      'up /etc/openvpn/up.sh',
+      '-----END CERTIFICATE-----',
+      '</ca>',
+      'verb 3',
+      '',
+    ].join('\n');
+    expect(findUnsupportedOpenvpnLines(withCert)).toEqual([]);
+    expect(stripUnsupportedOpenvpnLines(withCert)).toEqual({ config: withCert, removed: [] });
+  });
+
+  it('CRITICAL but a `<connection>` block IS scanned — unlike a PEM block it holds real directives that openvpn parses, so skipping it would turn it into a hiding place for the very thing this finder catches', () => {
+    const inConnection =
+      'client\n<connection>\nremote vpn.example.com 1194\nup /tmp/e.sh\n</connection>\n';
+    expect(findUnsupportedOpenvpnLines(inConnection).map((h) => h.directive)).toEqual(['up']);
+  });
+
+  it('a block that is never closed is refused by line, because OpenVPN refuses the whole config for it ("ERROR: Endtag </ca> missing", measured) — so it cannot hide a live directive, but it CAN leave the customer with a session that silently never starts', () => {
+    const unterminated = 'client\n<ca>\n-----BEGIN CERTIFICATE-----\nAAAA\n';
+    const hits = findUnsupportedOpenvpnLines(unterminated);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]?.line).toBe(2);
+    expect(hits[0]?.reason).toContain('never closed');
+  });
+
+  it('CRITICAL and the auto-fix must NOT "repair" an unterminated block by deleting the tag that opened it — that would strip `<ca>` and hand back a config missing its certificate, worse than the paste', () => {
+    const unterminated = 'client\n<ca>\n-----BEGIN CERTIFICATE-----\nAAAA\n';
+    expect(stripUnsupportedOpenvpnLines(unterminated).config).toBe(unterminated);
+  });
+});
+
+describe('lowerOpenvpnScriptSecurity', () => {
+  it('CRITICAL the owner’s case: a profile whose ONLY fault is `script-security 2` comes back with that line reading 1, every other byte untouched, and the finder clean — so the API accepts it unedited.', () => {
+    const { config, lowered } = lowerOpenvpnScriptSecurity(OWNER_PROFILE);
+    expect(lowered).toBe(true);
+    expect(config).toBe(OWNER_PROFILE.replace('script-security 2', 'script-security 1'));
+    expect(findUnsupportedOpenvpnLines(config)).toEqual([]);
+  });
+
+  it('SECURITY BOUNDARY it does NOT remove script directives: a blob carrying both `script-security 2` and `up` keeps the `up` line verbatim, and the finder STILL reports it, so the config is still refused. This is the whole difference from stripUnsupportedOpenvpnLines — a version that called the stripper would pass every other arm here.', () => {
+    const blob = 'client\nscript-security 2\nup /etc/openvpn/update-resolv-conf\nverb 3\n';
+    const { config } = lowerOpenvpnScriptSecurity(blob);
+    expect(config).toContain('up /etc/openvpn/update-resolv-conf');
+    expect(config).toBe('client\nscript-security 1\nup /etc/openvpn/update-resolv-conf\nverb 3\n');
+    expect(findUnsupportedOpenvpnLines(config).map((h) => h.directive)).toEqual(['up']);
+  });
+
+  it('POSITIVE CONTROL a config with no `script-security` line comes back byte-identical and NOT lowered. A rewriter that reformatted every paste would satisfy the arms above.', () => {
+    expect(lowerOpenvpnScriptSecurity(PROVIDER)).toEqual({ config: PROVIDER, lowered: false });
+  });
+
+  it('a config already at `script-security 1` is not reported by the finder, so it is untouched and not lowered', () => {
+    expect(lowerOpenvpnScriptSecurity(CLEAN)).toEqual({ config: CLEAN, lowered: false });
+  });
+
+  it('CRITICAL preserves indentation and the customer’s line endings: an indented directive in a CRLF paste keeps both, so the file still opens cleanly in the editor it came from.', () => {
+    const crlf = 'client\r\n  script-security 3\r\nverb 3\r\n';
+    expect(lowerOpenvpnScriptSecurity(crlf).config).toBe(
+      'client\r\n  script-security 1\r\nverb 3\r\n',
+    );
+  });
+
+  it('CRITICAL heals a bare-CR paste and leaves it bare-CR — this helper numbers lines with its OWN split, so it and the finder must move together; one splitting `/\\r?\\n/` while the finder sees four lines rewrites a line nobody reported.', () => {
+    const cr = 'client\rscript-security 2\rverb 3\r';
+    expect(lowerOpenvpnScriptSecurity(cr).config).toBe('client\rscript-security 1\rverb 3\r');
+  });
+
+  it('CRITICAL is idempotent: lowering twice changes nothing the second time, and the finder is clean — so the value we store is the value we would store again.', () => {
+    const once = lowerOpenvpnScriptSecurity(OWNER_PROFILE).config;
+    expect(lowerOpenvpnScriptSecurity(once)).toEqual({ config: once, lowered: false });
+    expect(findUnsupportedOpenvpnLines(once)).toEqual([]);
+  });
+
+  it('SECURITY a QUOTED `"script-security" 2` is lowered like the bare form. Before V-217 the finder read the keyword as `"script-security"`, reported nothing, and this helper left the raised level standing — next to a quoted `"up"` hook the finder also missed.', () => {
+    const { config, lowered } = lowerOpenvpnScriptSecurity('client\n"script-security" 2\nverb 3\n');
+    expect(lowered).toBe(true);
+    expect(config).toBe('client\nscript-security 1\nverb 3\n');
+  });
+
+  it('SECURITY does NOT touch bytes inside an inline `<ca>` block: a directive-looking line in certificate material is data, and rewriting it would corrupt the customer’s certificate — a tunnel that can never come up, produced by the repair path itself.', () => {
+    const withCert = [
+      'client',
+      'remote vpn.example.com 1194',
+      '<ca>',
+      '-----BEGIN CERTIFICATE-----',
+      'script-security 2',
+      'up /etc/openvpn/up.sh',
+      '-----END CERTIFICATE-----',
+      '</ca>',
+      '',
+    ].join('\n');
+    expect(lowerOpenvpnScriptSecurity(withCert)).toEqual({ config: withCert, lowered: false });
+  });
+
+  it('rewrites EVERY offending line, not just the first — a config that sets the level twice must not come back still carrying one of them.', () => {
+    const twice = 'client\nscript-security 2\nverb 3\nscript-security 3\n';
+    expect(lowerOpenvpnScriptSecurity(twice).config).toBe(
+      'client\nscript-security 1\nverb 3\nscript-security 1\n',
+    );
+    expect(findUnsupportedOpenvpnLines(lowerOpenvpnScriptSecurity(twice).config)).toEqual([]);
   });
 });
 

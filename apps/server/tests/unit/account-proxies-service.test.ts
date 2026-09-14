@@ -428,10 +428,15 @@ describe('AccountProxiesService.resolveForDispatchWithReason — the cause of a 
   it('a script-executing directive is a POLICY refusal that names the line, never "could not be read"', async () => {
     const repo = new InMemoryAccountProxiesRepo();
     const svc = new AccountProxiesService(repo, MASTER);
+    // ⚠️ (V-217) This fixture used to be `script-security 2`. That line is no
+    // longer refused anywhere — it is lowered to 1 and dispatched — so it would
+    // have pinned a policy that no longer exists, and the arm would have gone
+    // green for the wrong reason the day someone re-added the refusal. `up` is a
+    // directive that really does run a program, which is what this arm is about.
     const row = await seedOpenvpn(
       repo,
       ACCT_A,
-      'client\nremote vpn.example.com 1194\nscript-security 2\n<ca>\nPEM\n</ca>\n',
+      'client\nremote vpn.example.com 1194\nup /etc/openvpn/up.sh\n<ca>\nPEM\n</ca>\n',
     );
     const r = await svc.resolveForDispatchWithReason({
       proxyId: row.id,
@@ -443,8 +448,76 @@ describe('AccountProxiesService.resolveForDispatchWithReason — the cause of a 
     // The SAME sentence the create/update route answers the same blob with,
     // naming the same line — so a customer who reads one and then the other is
     // not told two different stories.
-    expect(r.detail).toContain('Line 3: "script-security 2"');
+    expect(r.detail).toContain('Line 3: "up /etc/openvpn/up.sh"');
     expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
+  });
+
+  // V-217 — the owner's actual blocker. Every OpenVPN profile their provider
+  // issues carries `script-security 2`, so every such row was refused right here
+  // and the session never launched. The directive only PERMITS scripts; the
+  // directives that RUN one are still refused by the arm above.
+  it('CRITICAL a stored row whose only fault is `script-security 2` now RESOLVES instead of being refused — this is the legacy-row case, and every row saved by an older build carries it', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(
+      repo,
+      ACCT_A,
+      'client\nremote vpn.example.com 1194\nscript-security 2\n<ca>\nPEM\n</ca>\n',
+    );
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.reason).toBeUndefined();
+    expect(r.config).not.toBeNull();
+  });
+
+  it('CRITICAL and the config it DISPATCHES is the lowered one, not the raw stored blob. Every guard in the resolver reads the lowered value, so dispatching the raw row would ship an artefact nothing validated — which is exactly what the code did before.', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(
+      repo,
+      ACCT_A,
+      'client\nremote vpn.example.com 1194\nscript-security 2\n<ca>\nPEM\n</ca>\n',
+    );
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    const config = r.config;
+    expect(config).not.toBeNull();
+    // Narrow to the VPN wire shape: a socks5 config has no `config_blob` at all,
+    // so reading the field off the union without this would silently read
+    // `undefined` and `not.toContain` would pass on nothing.
+    if (config === null || !('type' in config) || config.type !== 'openvpn') {
+      throw new Error('expected an openvpn dispatch config');
+    }
+    expect(config.config_blob).toContain('script-security 1');
+    expect(config.config_blob).not.toContain('script-security 2');
+    // And nothing else moved: the lowering is not a strip.
+    expect(config.config_blob).toBe(
+      'client\nremote vpn.example.com 1194\nscript-security 1\n<ca>\nPEM\n</ca>\n',
+    );
+  });
+
+  it('lowering does not launder a config that ALSO runs a script: `script-security 2` plus an `up` line is still refused, naming the `up` line', async () => {
+    const repo = new InMemoryAccountProxiesRepo();
+    const svc = new AccountProxiesService(repo, MASTER);
+    const row = await seedOpenvpn(
+      repo,
+      ACCT_A,
+      'client\nremote vpn.example.com 1194\nscript-security 2\nup /etc/openvpn/up.sh\n<ca>\nPEM\n</ca>\n',
+    );
+    const r = await svc.resolveForDispatchWithReason({
+      proxyId: row.id,
+      accountId: ACCT_A,
+      tier: 'api_builder',
+    });
+    expect(r.config).toBeNull();
+    expect(r.reason).toBe('config_refused_directive');
+    expect(r.detail).toContain('Line 4: "up /etc/openvpn/up.sh"');
   });
 
   it('an external cert/key reference is refused HERE (cross-pinned with the node parse-reject), naming the line', async () => {

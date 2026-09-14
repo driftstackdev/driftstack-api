@@ -19,6 +19,7 @@ import {
   AccountProxyUpdateSchema,
   AVATAR_MAX_BYTES,
   findUnresolvableOpenvpnFileReferences,
+  lowerOpenvpnScriptSecurity,
   PROFILES_PER_TIER,
   PROXIES_PER_TIER,
   TIER_CONCURRENT_SESSION_LIMITS,
@@ -809,7 +810,23 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (!input.openvpn) {
         throw new BadRequestError('An `openvpn` config is required for scheme "openvpn".');
       }
-      const { config_blob, username, password } = input.openvpn;
+      const { config_blob: submittedBlob, username, password } = input.openvpn;
+      // ⛔ (V-217) `script-security 2` is LOWERED to 1 here, not refused. Measured
+      // 2026-09-14 (A3): every OpenVPN profile the owner's provider issues carries it
+      // at line 46, so EVERY upload was a 400 and the only way in was hand-editing
+      // each download — this was the "OpenVPN profiles won't save".
+      //
+      // Lowering is safe for three independent reasons: the directive only PERMITS
+      // scripts and runs nothing itself; every directive that DOES run something is
+      // still refused right below, so there is nothing left for a raised level to
+      // permit; and the node strips it again and forces `--script-security 1` on the
+      // openvpn process. ⚠️ Do NOT widen this to the script directives — silently
+      // deleting a line that would have run the customer's program changes what their
+      // config does without telling them.
+      //
+      // The lowered blob is what gets validated AND what gets stored: the artefact we
+      // checked must be the artefact we keep.
+      const { config: config_blob } = lowerOpenvpnScriptSecurity(submittedBlob);
       // SSRF: the real egress is the embedded `remote <host>`, NOT the display host — guard it.
       const unsafeVpn = classifyUnsafeVpnTargets({ configBlob: config_blob });
       if (unsafeVpn !== null) {

@@ -232,6 +232,15 @@ export function openvpnProxyHosts(configBlob: string): string[] {
  * exploited. The directive set and the line tokenizer live in
  * @driftstack/api-types (T-20) so the desktop client can name the same lines
  * before submitting; this side keeps ENFORCING — a hit here is still a refusal.
+ *
+ * ⚠️ (V-217) This function is UNCHANGED and still reports `script-security >= 2`.
+ * What changed is upstream: both proxy routes now call `lowerOpenvpnScriptSecurity`
+ * BEFORE asking this question, so a config whose only fault was the permission
+ * level no longer reaches here as a hit. Callers that skip that step still get the
+ * old refusal, which is the fail-closed direction. Do not "simplify" by dropping
+ * script-security from the finder — the GUI and the node both read the same finder
+ * to decide what to normalise, and an empty answer there means they normalise
+ * nothing.
  */
 function hasUnsafeOpenvpnDirective(configBlob: string): boolean {
   return findUnsupportedOpenvpnLines(configBlob).length > 0;
@@ -255,9 +264,13 @@ export function unsupportedOpenvpnDirectiveDetail(configBlob: string): string {
   if (first === undefined) {
     // Reached only if a caller asks for a detail on a config the finder passes;
     // a sentence rather than a throw, so a refusal can never become a 500.
+    // ⛔ (V-217) Does NOT name `script-security` any more. The proxy routes lower
+    // that line to 1 and accept the config, so listing it here would send the
+    // customer to delete a line we no longer object to — and leave the line that
+    // actually caused the refusal unmentioned.
     return (
       'OpenVPN config must not use a script-executing directive ' +
-      '(up/down/route-up/tls-verify/… or script-security 2+).'
+      '(up/down/route-up/tls-verify/plugin/…).'
     );
   }
   const text =
