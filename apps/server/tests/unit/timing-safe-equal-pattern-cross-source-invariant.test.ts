@@ -149,9 +149,18 @@ describe('timing-safe-equal pattern cross-source invariant', () => {
     expect(src).toMatch(/Constant-time comparison via \{@link timingSafeEqual\}/);
   });
 
-  it('routes/auth-oauth-client cookie-verifier compare also uses timingSafeEqual — pinned so the cookie-tamper check is constant-time too', () => {
+  it('routes/auth-oauth-client binding-hash compare uses timingSafeEqual after a length check — pinned so the redeem tamper check is constant-time too', () => {
+    // v1's cookie-verifier compare (`received, expected`) left with the cookie
+    // path on 2026-09-14. The constant-time compare that REMAINS is v2's: the
+    // redeem route compares the presented binding hash to the stored one. The
+    // length check comes first because timingSafeEqual throws on unequal
+    // lengths — a thrown error is not a constant-time refusal.
     const src = read(resolve(REPO_ROOT, 'apps/server/src/routes/auth-oauth-client.ts'));
     expect(src).toMatch(/import \{[^}]*timingSafeEqual[^}]*\} from 'node:crypto';/);
-    expect(src).toMatch(/if \(!timingSafeEqual\(received, expected\)\) return null;/);
+    expect(src).toMatch(
+      /expected\.length !== presented\.length \|\| !timingSafeEqual\(expected, presented\)/,
+    );
+    // …and the retired compare must not come back under the old name.
+    expect(src).not.toMatch(/timingSafeEqual\(received, expected\)/);
   });
 });

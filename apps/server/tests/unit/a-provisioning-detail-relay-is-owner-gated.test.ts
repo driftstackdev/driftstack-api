@@ -151,7 +151,16 @@ describe('provisioning-detail relay — tokens, ownership, clears', () => {
     const relay = makeSessionProvisioningDetailRelay(agentSessions, null);
     relay(frame('provisioning', T), OWNER);
     relay(frame('active'), OWNER);
-    await new Promise((r) => setTimeout(r, 60));
+    // ⛔ Wait UNTIL both serialised writes have landed, not for a fixed 60ms.
+    // Each handler's read resolves after 5ms and they run one after another, so
+    // on an idle machine 60ms is plenty — and under the full suite it was not:
+    // the pre-push gate failed here 2026-09-14 with `[T]` instead of `[T, null]`,
+    // the second write simply not yet made. The same file passed 3/3 alone. A
+    // fixed wait turns machine load into a verdict; the bound below throws
+    // rather than timing out quietly, so a real ordering bug still fails loudly.
+    for (let i = 0; i < 400 && writes.length < 2; i += 1) {
+      await new Promise((r) => setTimeout(r, 5));
+    }
     expect(writes).toEqual([T, null]);
     expect(state.provisioningDetail).toBeNull();
   });
