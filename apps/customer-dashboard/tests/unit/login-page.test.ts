@@ -156,6 +156,31 @@ async function flush(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
+/**
+ * Wait UNTIL something is true, rather than for a fixed number of turns.
+ *
+ * ⛔ `flush()` yields exactly four macrotask turns, which is a bet that the page
+ * reaches the state in four. On an idle machine it does. Under the full suite it
+ * does not: the pre-push gate failed 2026-09-14 on "OAuth start blocks a
+ * competing password submit" with `expected [] to have a length of 1` — zero
+ * fetches, i.e. the click handler had not run yet, not a wrong result. The same
+ * file passed four times out of four in isolation immediately after.
+ *
+ * A fixed wait turns machine load into a test verdict, and it fails in the
+ * direction that costs most: it blocks every push, including the ones that had
+ * nothing to do with it. Use this wherever an assertion depends on WORK HAVING
+ * STARTED; `flush()` is still right where the point is that nothing further
+ * happens. The throw is deliberate — a silent timeout would just move the same
+ * confusing failure one line down.
+ */
+async function until(predicate: () => boolean, what: string, turns = 500): Promise<void> {
+  for (let i = 0; i < turns; i += 1) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  throw new Error(`timed out after ${String(turns)} turns waiting for ${what}`);
+}
+
 function submitLogin(window: JSDOM['window'], email: string, password: string): void {
   const form = window.document.querySelector('[data-form="login"]') as HTMLFormElement;
   (form.querySelector('input[name="email"]') as HTMLInputElement).value = email;
@@ -655,6 +680,7 @@ describe('login page — local integration', () => {
     const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
     oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     submitLogin(window, 'alice@example.com', 'secret-password');
+    await until(() => fetchCalls.length >= 1, 'the OAuth start request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
@@ -681,6 +707,7 @@ describe('login page — local integration', () => {
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
     oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    await until(() => fetchCalls.length >= 2, 'the MFA challenge request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(2);
