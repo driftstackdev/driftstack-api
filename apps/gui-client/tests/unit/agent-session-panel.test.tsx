@@ -4,7 +4,7 @@
 // connection state machine deterministically.
 
 import { describe, expect, it, vi } from 'vitest';
-import { render, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import {
   AgentSessionPanel,
   friendlyConnectError,
@@ -1035,6 +1035,16 @@ describe('AgentSessionPanel overlay UX', () => {
     ['session_config_invalid', 'Session configuration unavailable', 'current configuration'],
     ['node-restarted', 'Live worker unavailable', 'live worker stopped'],
     ['session-ended', 'Session completed', 'ended normally'],
+    // A3's typed VPN bring-up reasons. The POINT of each is where it sends the
+    // customer, so the assertion is on the destination words, not the label.
+    ['remote_unresolved', 'Proxy address did not resolve', 'supplies the proxy'],
+    ['remote_refused', 'Proxy refused the connection', 'whoever supplies it'],
+    ['remote_unreachable', 'Proxy did not respond', 'unreachable'],
+    ['remote_closed_during_setup', 'Proxy hung up during setup', 'whoever supplies it'],
+    ['tls_handshake_failed', 'Proxy security handshake failed', 'certificate or tls-auth key'],
+    ['config_rejected', 'Proxy config was rejected', 're-paste its config'],
+    ['auth_failed', 'Proxy rejected the credentials', 'username or password'],
+    ['no_output', 'Tunnel could not be started', 'ours, not yours'],
   ])('renders truthful bounded recap copy for %s', async (reason, outcome, explanation) => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
@@ -1047,6 +1057,64 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(container.querySelector('[data-overlay="session-ended"]')).toHaveTextContent(
       explanation,
     );
+  });
+
+  /* ⛔ THE COARSE CODES COLLAPSE, AND THIS IS THE ARM THAT SAYS SO. The typed
+   * bring-up work arrived with the claim that provider-versus-config comes free
+   * from the coarse ErrorEvent code. It does not, at the only place a customer
+   * reads it: `proxy_connection_failed` hits the `/^proxy_/` branch and
+   * `egress_bind_failed` hits `/^egress_/`, and both return the SAME sentence.
+   * If that ever stops being true this arm should be rewritten, not deleted —
+   * but while it holds, the fine reason is the only thing carrying the errand. */
+  it('CONTROL — the coarse codes really are indistinguishable, which is why the fine ones exist', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const read = async (reason: string): Promise<string> => {
+      const { container } = render(<AgentSessionPanel info={INFO} sessionEnded={{ reason }} />);
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const text = `${container.querySelector('[data-summary="session-outcome"]')?.textContent ?? ''}|${
+        container.querySelector('[data-overlay="session-ended"]')?.textContent ?? ''
+      }`;
+      cleanup();
+      return text;
+    };
+    const provider = await read('proxy_connection_failed');
+    const config = await read('egress_bind_failed');
+    expect(
+      provider,
+      'a provider fault and a config fault read identically at the coarse level',
+    ).toBe(config);
+    // …and the fine reasons for those same two situations do NOT.
+    const fineProvider = await read('remote_unresolved');
+    const fineConfig = await read('config_rejected');
+    expect(fineProvider).not.toBe(fineConfig);
+    expect(fineProvider).toContain('supplies the proxy');
+    expect(fineConfig).toContain('re-paste its config');
+  });
+
+  it('an unknown VPN reason is never routed — it falls back to the generic copy', async () => {
+    // A3 owns the enum and will add to it. A value this build does not know must
+    // NOT borrow the nearest destination: sending someone to their provider for
+    // our bug is worse than saying nothing. Matched as whole tokens for the same
+    // reason — `remote_unresolved_v2` must not inherit `remote_unresolved`.
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    for (const unknown of ['remote_unresolved_v2', 'tunnel_wedged', 'remote_']) {
+      const { container } = render(
+        <AgentSessionPanel info={INFO} sessionEnded={{ reason: unknown }} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const overlay = container.querySelector('[data-overlay="session-ended"]');
+      expect(overlay, unknown).toHaveTextContent('This session has stopped.');
+      expect(overlay?.textContent, unknown).not.toMatch(/supplies the proxy|re-paste its config/);
+      cleanup();
+    }
   });
 
   it('does not reflect an unknown internal close reason into the rendered overlay', async () => {
