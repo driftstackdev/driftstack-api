@@ -595,7 +595,8 @@ export interface VpnTunnelUp {
   timezone: string | null;
   /** 'detail' = the harness's provisioning_detail said so; 'report' = the (b) heuristic. */
   source: 'report' | 'detail';
-  /** The step token when source is 'detail' (vpn_egress_bringing_up | vpn_egress_active | egress_geo_resolving). */
+  /** The step token when source is 'detail' — one of `VPN_STEPS` (the (c)/(h)
+   *  tokens and, W1, A3's eight bare bring-up phases). */
   step?: VpnProvisioningStep;
   /** Whether the SESSION is a VPN one — from a `vpn_`-prefixed step (only the VPN
    *  tail emits those) or the report's kind. The shared tokens
@@ -604,18 +605,77 @@ export interface VpnTunnelUp {
   vpn: boolean;
 }
 
-/** The harness's provisioning step tokens the simulator knows how to phrase. */
+/**
+ * W1 — A3's VPN bring-up PHASES (contract 2026-09-14): a closed set, emitted as
+ * a provisioning frame each time the phase CHANGES, so each lands in
+ * `provisioning_detail` exactly like the `vpn_egress_*` tokens. A3 gives them
+ * BARE — `resolving`, not `vpn_resolving` — and they are accepted here exactly
+ * as spelled: whole-string membership, no prefix matching, no aliasing. A bare
+ * token is NOT proof of a VPN session; the capability report's `proxy_kind`
+ * (`reportVpn`) carries that, and it does for every VPN session. These seven
+ * are a tunnel that is NOT up yet; `up` (success, not a timeout phase) renders
+ * as today's tunnel-up state. WireGuard emits the coarser subset connecting /
+ * handshaking / up. ⛔ Do not widen this with variants.
+ */
+export type VpnBringupPhase =
+  | 'resolving'
+  | 'connecting'
+  | 'handshaking'
+  | 'assigning_address'
+  | 'configuring_routes'
+  | 'starting_proxy'
+  | 'verifying';
+/** How each pre-`up` phase is phrased: the full caption (the address bar's
+ *  title and the notice under it) and the short chip suffix. `resolving` /
+ *  `connecting` are the provider's side and say what the tunnel is doing at the
+ *  far end; `handshaking` is the config's side and names the handshake; the
+ *  four "ours" phases say what we are setting up. In the voice of the existing
+ *  four ("Starting the VPN tunnel…", "Resolving the exit…"). */
+const VPN_BRINGUP_PHASES: Readonly<Record<VpnBringupPhase, { caption: string; chip: string }>> = {
+  resolving: { caption: 'Finding the proxy endpoint…', chip: 'finding the endpoint…' },
+  connecting: {
+    caption: 'Connecting to the proxy endpoint…',
+    chip: 'connecting to the endpoint…',
+  },
+  handshaking: { caption: 'Completing the VPN handshake…', chip: 'handshaking…' },
+  assigning_address: { caption: 'Assigning the tunnel address…', chip: 'assigning the address…' },
+  configuring_routes: { caption: 'Setting up the tunnel routes…', chip: 'setting up routes…' },
+  starting_proxy: { caption: 'Starting the tunnel proxy…', chip: 'starting the proxy…' },
+  verifying: { caption: 'Verifying the tunnel…', chip: 'verifying the tunnel…' },
+};
+/** The pre-`up` phase a step is, or null (every other step, `up` included). */
+function vpnBringupPhaseOf(step: VpnProvisioningStep | undefined): VpnBringupPhase | null {
+  return step !== undefined && Object.hasOwn(VPN_BRINGUP_PHASES, step)
+    ? (step as VpnBringupPhase)
+    : null;
+}
+
+/** The harness's provisioning step tokens the simulator knows how to phrase:
+ *  the four (c)/(h) tokens plus A3's eight bare bring-up phases (W1). */
 export type VpnProvisioningStep =
   | 'vpn_egress_bringing_up'
   | 'vpn_egress_active'
   | 'egress_geo_resolving'
-  | 'browser_spawning';
+  | 'browser_spawning'
+  | VpnBringupPhase
+  | 'up';
 const VPN_STEPS: ReadonlyArray<VpnProvisioningStep> = [
   'vpn_egress_bringing_up',
   'vpn_egress_active',
   'egress_geo_resolving',
   'browser_spawning',
+  'resolving',
+  'connecting',
+  'handshaking',
+  'assigning_address',
+  'configuring_routes',
+  'starting_proxy',
+  'verifying',
 ];
+/** Whole-string membership ONLY. ⛔ Never `startsWith` / `includes`: A3's bare
+ *  phases share prefixes with tokens that mean something else (`up` /
+ *  `upstream`, `connecting` / `connecting_x`), and a token outside the set must
+ *  read as unknown — the generic caption — never as its nearest neighbour. */
 function vpnStepOf(detail: string | null | undefined): VpnProvisioningStep | null {
   if (typeof detail !== 'string') return null;
   return (VPN_STEPS as ReadonlyArray<string>).includes(detail)
@@ -704,6 +764,10 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // before its launch timeout, so that caption states what is true — tunnel
     // up, browser not attached — instead of promising progress that is not coming.
     if (t.step === 'vpn_egress_bringing_up') return 'Starting the VPN tunnel…';
+    // W1 — A3's pre-`up` phases: the tunnel is not up, and the caption says what
+    // it is doing right now. No exit is named here: none is observed before `up`.
+    const phase = vpnBringupPhaseOf(t.step);
+    if (phase !== null) return VPN_BRINGUP_PHASES[phase].caption;
     if (t.step === 'egress_geo_resolving') {
       return where !== null
         ? `Resolving the exit location (${where})…`
@@ -723,6 +787,8 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // availability claim made from the one place that cannot know it. Say
     // only what the step token says — the tunnel is up and no browser has
     // attached — with no claim either way about what comes next.
+    // W1 — A3's `up` (success) phase reads the same line: it IS today's
+    // tunnel-up state, and what follows it is the harness's to announce.
     return where !== null
       ? `VPN tunnel connected (${where}) — browser not attached`
       : 'VPN tunnel connected — browser not attached';
@@ -732,13 +798,14 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
 
 /**
  * (h) — is the tunnel actually UP in this state? Only `vpn_egress_bringing_up`
- * says it is not: every other step, and the (b) report heuristic (which needs
- * an observed exit), describes a tunnel that came up. Every "tunnel up" word
- * in the address bars is gated on this, so the bringing-up notice never sits
- * under a chip claiming the opposite.
+ * and (W1) A3's seven pre-`up` phases say it is not: every other step (`up`
+ * included), and the (b) report heuristic (which needs an observed exit),
+ * describes a tunnel that came up. Every "tunnel up" word in the address bars
+ * is gated on this, so a bringing-up notice never sits under a chip claiming
+ * the opposite.
  */
 export function vpnTunnelIsUp(t: VpnTunnelUp): boolean {
-  return t.vpn && t.step !== 'vpn_egress_bringing_up';
+  return t.vpn && t.step !== 'vpn_egress_bringing_up' && vpnBringupPhaseOf(t.step) === null;
 }
 
 /** (h) — the short chip beside "Address" and in the browser bar, from the STEP
@@ -750,7 +817,13 @@ export function vpnTunnelChipText(t: VpnTunnelUp): string {
     if (t.step === 'browser_spawning') return 'Starting the browser…';
     return 'connecting…';
   }
-  if (!vpnTunnelIsUp(t)) return 'Starting the VPN tunnel…';
+  if (!vpnTunnelIsUp(t)) {
+    // W1 — a named phase says which part of the bring-up this is.
+    const phase = vpnBringupPhaseOf(t.step);
+    return phase === null
+      ? 'Starting the VPN tunnel…'
+      : `Starting the VPN tunnel · ${VPN_BRINGUP_PHASES[phase].chip}`;
+  }
   if (t.ip !== null) return `VPN tunnel up · exit ${t.ip}`;
   if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser not attached';
   if (t.step === 'egress_geo_resolving') return 'VPN tunnel up · resolving the exit…';
@@ -782,11 +855,83 @@ export function nextEverLiveLatch(
   return streamLiveNow && !base.everLive ? { sessionId, everLive: true } : base;
 }
 
+/**
+ * W2 — what the terminal "Session ended" overlay is handed. `reason` is the end
+ * reason the customer reads (`preferTypedEndReason`: A3's fine code when it is
+ * one we know, else the coarse one). `summary` is A3's host-free sentence from
+ * the error event, VERBATIM — it never carries the customer's proxy host
+ * (doctrine W2679, not a gap), and this window cannot fill the host in: it
+ * holds a per-session control key, not the account's proxy list, and the
+ * report's `exit_ip` is the EXIT, a different address, never the endpoint.
+ * `lastPhase` is DERIVED — see `derivedLastPhase`.
+ */
+export interface SessionEndedState {
+  reason: string | null;
+  /** `error_event.summary`, as sent. null when the session carries no error event. */
+  summary: string | null;
+  /** ⚠️ DERIVED, not a field A3 sends: the last `provisioning_detail` this window
+   *  observed before the terminal frame. null when it observed none. */
+  lastPhase: string | null;
+}
+
+/**
+ * W2 — the DERIVED `last_phase`. A3 carries the last bring-up phase reached
+ * alongside `tunnel_setup_timeout`, but where it lands on the session body is
+ * not pinned yet — checked 2026-09-14: `ApiSession` (lib/agent-session-control.ts)
+ * and the server's `PublicAgentSession` (routes/agent-sessions.ts) carry no
+ * such field. So it is derived here as the last `provisioning_detail` the
+ * client observed before the terminal frame. The server's relay CLEARS
+ * provisioning_detail on a terminal status frame
+ * (session-provisioning-detail-relay.ts, CLEARING_STATUSES), so the terminal
+ * read itself normally says null and the value is the one the previous poll
+ * held; when the terminal read still carries one, that is the later observation
+ * and wins. A window whose FIRST read is already terminal observed nothing →
+ * null → the panel's routeless timeout sentence, never a guessed route. The raw
+ * token is handed over unfiltered: the panel matches it whole and treats
+ * anything it does not know as unknown. Pure.
+ */
+/** The last bring-up phase THIS window observed for THIS session — a latch.
+ *
+ *  ⛔ Why a latch and not "the last read": our own relay
+ *  (apps/server/src/services/session-provisioning-detail-relay.ts) CLEARS
+ *  provisioning_detail on a terminal status, so the terminal read carries null
+ *  and the control-state snapshot is overwritten with it. A3's guarantee is
+ *  that THEY emit no provisioning frame on the way out; it does not cover our
+ *  relay. So the value the timeout routes on has to be remembered here, from the
+ *  last non-empty detail a poll or refresh observed, and never erased by a
+ *  blank — only replaced by a newer non-empty detail, or reset by a different
+ *  session (an in-place relaunch must not inherit the old session's phase).
+ *  Pure so the arms can drive it without a window. */
+export interface ObservedPhase {
+  sessionId: string;
+  detail: string | null;
+}
+export function nextObservedPhase(
+  prev: ObservedPhase,
+  sessionId: string,
+  detail: string | null | undefined,
+): ObservedPhase {
+  const nonEmpty = typeof detail === 'string' && detail.length > 0 ? detail : null;
+  if (sessionId !== prev.sessionId) return { sessionId, detail: nonEmpty };
+  if (nonEmpty === null) return prev;
+  return { sessionId, detail: nonEmpty };
+}
+
+export function derivedLastPhase(
+  terminalDetail: string | null | undefined,
+  observedDetail: string | null | undefined,
+): string | null {
+  if (typeof terminalDetail === 'string' && terminalDetail.length > 0) return terminalDetail;
+  if (typeof observedDetail === 'string' && observedDetail.length > 0) return observedDetail;
+  return null;
+}
+
 /** (b) — the small notice under the address bar for that state. (h) Green
  *  only for a tunnel that IS up and a browser that is coming; bringing-up and
  *  the browserless `vpn_egress_active` state are neutral — a session that will
  *  stop after its timeout is not a success box. */
 function VpnTunnelUpNotice({ tunnel }: { tunnel: VpnTunnelUp }): JSX.Element {
+  // W1 — `up` is today's tunnel-up state, so it takes the same neutral tone.
   const neutral = !vpnTunnelIsUp(tunnel) || tunnel.step === 'vpn_egress_active';
   return (
     <div
@@ -3734,6 +3879,9 @@ export function SimulatorWindow(): JSX.Element {
     mutationPending: false,
   }));
   const manualInputControlRef = useRef(manualInputControl);
+  // W2 — see nextObservedPhase: the phase the timeout routes on, latched per
+  // session from every observed detail, immune to the terminal read's null.
+  const observedPhaseRef = useRef<ObservedPhase>({ sessionId: '', detail: null });
   const clearManualAuthorityDeferredWorkRef = useRef<() => void>(() => undefined);
   const manualInputAuthorityCheckRef = useRef<
     (expectedSessionId: string, expectedRoom: Room | null, expectedEpoch: number) => boolean
@@ -3784,7 +3932,10 @@ export function SimulatorWindow(): JSX.Element {
   // copy ('idle_timeout', 'orphaned-lifetime', a worker-close, …). Reset on every
   // session swap (a fresh session starts non-terminal). Declared up here (before the
   // freeze-recovery effect that reads it) to avoid a TDZ on the effect's dep array.
-  const [sessionEnded, setSessionEnded] = useState<{ reason: string | null } | null>(null);
+  // W2 — also carries A3's host-free `summary` (verbatim) and the DERIVED
+  // `lastPhase` (see SessionEndedState / derivedLastPhase); both call sites below
+  // populate all three.
+  const [sessionEnded, setSessionEnded] = useState<SessionEndedState | null>(null);
   // Live mirror of sessionEnded for the data-channel onData callback (its effect closes
   // over a stale value and doesn't re-subscribe per session-end). Finding #3 — a late
   // page_state frame the box pushes as it tears down (or one still buffered in LiveKit)
@@ -6643,6 +6794,25 @@ export function SimulatorWindow(): JSX.Element {
           // ending session's mode is not worth clobbering an in-flight mutation for,
           // and the lifecycle fields are what the terminal state is made of.
           if (!cancelled && reqSessionId === sessionIdRef.current && s.terminal) {
+            // W2 — the last step THIS window observed, read BEFORE the update below
+            // overwrites it with the terminal read's (normally server-cleared)
+            // detail. Only this session's own snapshot counts: a swap resets it.
+            observedPhaseRef.current = nextObservedPhase(
+              observedPhaseRef.current,
+              reqSessionId,
+              s.provisioningDetail,
+            );
+            const observedPhase =
+              observedPhaseRef.current.sessionId === reqSessionId
+                ? observedPhaseRef.current.detail
+                : null;
+            // W2 — latch this session's observed bring-up phase from every read that
+            // carries one (see nextObservedPhase); a blank never erases it.
+            observedPhaseRef.current = nextObservedPhase(
+              observedPhaseRef.current,
+              reqSessionId,
+              s.provisioningDetail,
+            );
             updateManualInputControl({
               sessionId: reqSessionId,
               lifecycleStatus: s.status,
@@ -6651,7 +6821,13 @@ export function SimulatorWindow(): JSX.Element {
               provisioningDetail: s.provisioningDetail,
               capabilityReport: s.capabilityReport ?? null,
             });
-            setSessionEnded({ reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason) });
+            setSessionEnded({
+              reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason),
+              // A3's host-free sentence, verbatim; null when there is no error event.
+              summary: s.errorEvent?.summary ?? null,
+              // DERIVED (derivedLastPhase) — not a field A3 sends yet.
+              lastPhase: derivedLastPhase(s.provisioningDetail, observedPhase),
+            });
             return;
           }
           // Drop a result that resolved after an in-place session swap.
@@ -6672,6 +6848,13 @@ export function SimulatorWindow(): JSX.Element {
             controlActionRef.current === null &&
             reqControlEpoch === controlReadGenerationRef.current
           ) {
+            // W2 — latch this session's observed bring-up phase from every read that
+            // carries one (see nextObservedPhase); a blank never erases it.
+            observedPhaseRef.current = nextObservedPhase(
+              observedPhaseRef.current,
+              reqSessionId,
+              s.provisioningDetail,
+            );
             updateManualInputControl({
               sessionId: reqSessionId,
               mode: s.mode,
@@ -6685,6 +6868,13 @@ export function SimulatorWindow(): JSX.Element {
             });
             setPairKind(s.pairKind);
           } else {
+            // W2 — latch this session's observed bring-up phase from every read that
+            // carries one (see nextObservedPhase); a blank never erases it.
+            observedPhaseRef.current = nextObservedPhase(
+              observedPhaseRef.current,
+              reqSessionId,
+              s.provisioningDetail,
+            );
             updateManualInputControl({
               sessionId: reqSessionId,
               lifecycleStatus: s.status,
@@ -7735,6 +7925,24 @@ export function SimulatorWindow(): JSX.Element {
           reqControlEpoch !== controlReadGenerationRef.current
         )
           return;
+        // W2 — the last step THIS window observed, read BEFORE the update below
+        // overwrites it with the terminal read's (normally server-cleared) detail.
+        observedPhaseRef.current = nextObservedPhase(
+          observedPhaseRef.current,
+          reqSessionId,
+          s.provisioningDetail,
+        );
+        const observedPhase =
+          observedPhaseRef.current.sessionId === reqSessionId
+            ? observedPhaseRef.current.detail
+            : null;
+        // W2 — latch this session's observed bring-up phase from every read that
+        // carries one (see nextObservedPhase); a blank never erases it.
+        observedPhaseRef.current = nextObservedPhase(
+          observedPhaseRef.current,
+          reqSessionId,
+          s.provisioningDetail,
+        );
         updateManualInputControl({
           sessionId: reqSessionId,
           mode: s.mode,
@@ -7752,8 +7960,15 @@ export function SimulatorWindow(): JSX.Element {
         // latches the "Session ended" state so the reconnect/freeze machinery
         // short-circuits. A non-terminal result is the normal case (don't touch
         // sessionEnded so a transient blip never clears a real terminal end).
-        if (s.terminal)
-          setSessionEnded({ reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason) });
+        if (s.terminal) {
+          setSessionEnded({
+            reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason),
+            // A3's host-free sentence, verbatim; null when there is no error event.
+            summary: s.errorEvent?.summary ?? null,
+            // DERIVED (derivedLastPhase) — not a field A3 sends yet.
+            lastPhase: derivedLastPhase(s.provisioningDetail, observedPhase),
+          });
+        }
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
         setControlLinkUnreachable(false);
@@ -7905,6 +8120,13 @@ export function SimulatorWindow(): JSX.Element {
     void setSessionMode(request.sessionId, target, controlAuth)
       .then((s) => {
         if (!ownsControlAction(request)) return;
+        // W2 — latch this session's observed bring-up phase from every read that
+        // carries one (see nextObservedPhase); a blank never erases it.
+        observedPhaseRef.current = nextObservedPhase(
+          observedPhaseRef.current,
+          request.sessionId,
+          s.provisioningDetail,
+        );
         updateManualInputControl({
           sessionId: request.sessionId,
           mode: s.mode,

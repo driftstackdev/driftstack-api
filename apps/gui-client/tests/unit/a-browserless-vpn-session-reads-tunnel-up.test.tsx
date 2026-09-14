@@ -15,23 +15,42 @@
 //   • rendered: the Controls-pane address bar and the browser-mode bar each show
 //     the tunnel-up caption + notice instead of "connecting…", and drop them the
 //     moment the stream is live.
+//   • (W1, contract 2026-09-14) A3's seven BARE bring-up phases are accepted
+//     exactly as spelled — whole-string, no prefix matching — each with its own
+//     caption; a token outside the set stays the generic caption. `up` is
+//     CONCEPTUAL (settled with A3 later that day), never emitted:
+//     `vpn_egress_active` stays the tunnel-up token and a bare `up` is unknown.
+//   • (W2) the two terminal reads hand the panel {reason, summary, lastPhase}:
+//     A3's host-free summary verbatim, and a DERIVED last phase (the last
+//     provisioning_detail this window observed before the terminal frame), kept
+//     in a PER-SESSION record that only a non-empty detail can write — so no
+//     relay-cleared terminal read, terminal mutation body, or failed read blanks
+//     it between the observation and the derivation.
 
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
 import type { AgentSessionCapabilityReport } from '../../src/lib/agent-session-control';
+import type { VpnProvisioningStep } from '../../src/views/SimulatorWindow';
 import type * as ControlModule from '../../src/lib/agent-session-control';
 import type * as SettingsModule from '../../src/lib/settings';
 
 const sendNavigate = vi.fn(() => Promise.resolve());
-const getAgentSession = vi.fn((): Promise<unknown> => new Promise(() => {}));
+const getAgentSession = vi.fn((..._args: unknown[]): Promise<unknown> => new Promise(() => {}));
 type ControlState = {
   mode: 'manual';
   pairKind: null;
-  terminal: false;
-  status: 'active';
-  closedReason: null;
+  terminal: boolean;
+  status: string;
+  closedReason: string | null;
   provisioningDetail?: string | null;
   capabilityReport: Partial<AgentSessionCapabilityReport>;
+  errorEvent?: {
+    code: string;
+    severity: 'error';
+    summary: string;
+    customer_actionable: boolean;
+    retryable: boolean;
+  };
 };
 let manualControlState: ControlState = {
   mode: 'manual',
@@ -56,6 +75,7 @@ function immediateControl<T>(value: T): Promise<T> {
 const localStore = new Map<string, string>();
 beforeEach(() => {
   sendNavigate.mockClear();
+  panelCbs.sessionEnded = undefined;
   getAgentSession.mockReset();
   getAgentSession.mockImplementation(() => immediateControl(manualControlState));
   localStore.clear();
@@ -104,16 +124,20 @@ const panelCbs: {
   onRoom?: (room: unknown, ownerRoom: unknown) => void;
   onStateChange?: (s: { kind: string }, room: unknown) => void;
   onPublisher?: (p: string, room: unknown) => void;
+  /** (W2) the last `sessionEnded` prop the window handed the panel. */
+  sessionEnded?: unknown;
 } = {};
 vi.mock('../../src/components/AgentSessionPanel', () => ({
   AgentSessionPanel: (props: {
     onRoom?: (room: unknown, ownerRoom: unknown) => void;
     onStateChange?: (s: { kind: string }, room: unknown) => void;
     onPublisher?: (p: string, room: unknown) => void;
+    sessionEnded?: unknown;
   }) => {
     panelCbs.onRoom = props.onRoom;
     panelCbs.onStateChange = props.onStateChange;
     panelCbs.onPublisher = props.onPublisher;
+    panelCbs.sessionEnded = props.sessionEnded;
     return <div data-component="agent-session-panel-mock" />;
   },
 }));
@@ -166,8 +190,11 @@ const {
   vpnTunnelChipText,
   vpnAddressPlaceholder,
   nextEverLiveLatch,
+  derivedLastPhase,
+  nextObservedPhase,
 } = await import('../../src/views/SimulatorWindow');
-const { AgentSessionControlError } = await import('../../src/lib/agent-session-control');
+const { AgentSessionControlError, setSessionMode } =
+  await import('../../src/lib/agent-session-control');
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 const TUNNEL_UP_SENTENCE =
@@ -503,14 +530,13 @@ const STEP = (step: string, extra: Partial<AgentSessionCapabilityReport> = {}): 
   provisioningDetail: step,
   capabilityReport: { manual_input_available: true, proxy_kind: 'openvpn', ...extra },
 });
-const detail = (
-  step:
-    | 'vpn_egress_bringing_up'
-    | 'vpn_egress_active'
-    | 'egress_geo_resolving'
-    | 'browser_spawning',
-  ip: string | null = null,
-) => ({ ip, timezone: null, source: 'detail' as const, step, vpn: true });
+const detail = (step: VpnProvisioningStep, ip: string | null = null) => ({
+  ip,
+  timezone: null,
+  source: 'detail' as const,
+  step,
+  vpn: true,
+});
 const q = (container: HTMLElement, sel: string): Element | null => container.querySelector(sel);
 const addressText = (container: HTMLElement): string =>
   q(container, '[data-component="simulator-address"]')?.textContent ?? '';
@@ -568,9 +594,13 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     ).not.toMatch(/time out|timeout/);
   });
 
-  it('vpnTunnelIsUp is false ONLY for vpn_egress_bringing_up', () => {
+  it('vpnTunnelIsUp is false ONLY for vpn_egress_bringing_up and (W1) A3’s seven pre-up phases', () => {
     expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up'))).toBe(false);
     expect(vpnTunnelIsUp(detail('vpn_egress_bringing_up', '203.0.113.7'))).toBe(false);
+    for (const phase of BRINGUP_PHASES) {
+      expect(vpnTunnelIsUp(detail(phase)), phase).toBe(false);
+      expect(vpnTunnelIsUp(detail(phase, '203.0.113.7')), phase).toBe(false);
+    }
     for (const step of ['vpn_egress_active', 'egress_geo_resolving', 'browser_spawning'] as const)
       expect(vpnTunnelIsUp(detail(step)), step).toBe(true);
     expect(vpnTunnelIsUp({ ip: '203.0.113.7', timezone: null, source: 'report', vpn: true })).toBe(
@@ -712,6 +742,478 @@ describe('(h) SimulatorWindow — the address bars during bring-up and the brows
   });
 });
 
+// W1 — A3's bare bring-up phases (contract 2026-09-14), exactly as given: the
+// seven phases are a tunnel that is NOT up. `up` is CONCEPTUAL (settled with A3
+// later the same day) — never an emitted token; `vpn_egress_active` remains the
+// tunnel-up signal, and a bare `up` is OUTSIDE the set. Accepted whole-string
+// only, no prefix matching.
+const BRINGUP_PHASES = [
+  'resolving',
+  'connecting',
+  'handshaking',
+  'assigning_address',
+  'configuring_routes',
+  'starting_proxy',
+  'verifying',
+] as const;
+const NOTICE = '[data-component="simulator-vpn-tunnel-up-notice"]';
+const CHIP = '[data-component="simulator-address-vpn-tunnel-up"]';
+const CONNECTING = '[data-component="simulator-address-connecting"]';
+
+describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spelled, each with its own caption', () => {
+  const quiet = { streamLive: false, everLive: false, ended: false };
+  const vpnRep = report({ proxy_kind: 'openvpn' });
+
+  it('CRITICAL every phase is a known step on a VPN report and every one is "not up"; a bare `up` is NOT a step — conceptual, never emitted — so it claims no tunnel on any surface (MUTATION: put `up` back into VPN_STEPS → red)', () => {
+    for (const phase of BRINGUP_PHASES) {
+      const t = vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: phase });
+      expect(t?.step, phase).toBe(phase);
+      expect(t?.vpn, phase).toBe(true);
+      expect(t?.source, phase).toBe('detail');
+      expect(vpnTunnelIsUp(t!), phase).toBe(false);
+    }
+    // `up` is outside the set: unknown → null → the generic caption, on a VPN
+    // report and before any report alike. The tunnel-up token is, and stays,
+    // vpn_egress_active — the POSITIVE CONTROL in the same breath.
+    expect(vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: 'up' })).toBeNull();
+    expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: 'up' })).toBeNull();
+    const active = vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: 'vpn_egress_active' });
+    expect(active?.step).toBe('vpn_egress_active');
+    expect(vpnTunnelIsUp(active!)).toBe(true);
+    expect(vpnTunnelUpCaption(active!)).toBe('VPN tunnel connected — browser not attached');
+  });
+
+  it('CRITICAL each of the seven phases renders its own caption and no two share one, and none of them claims the tunnel is up', () => {
+    const captions = BRINGUP_PHASES.map((p) => vpnTunnelUpCaption(detail(p)));
+    expect(new Set(captions).size).toBe(BRINGUP_PHASES.length);
+    const existing = (
+      ['vpn_egress_bringing_up', 'egress_geo_resolving', 'browser_spawning'] as const
+    ).map((s) => vpnTunnelUpCaption(detail(s)));
+    for (const phase of BRINGUP_PHASES) {
+      const caption = vpnTunnelUpCaption(detail(phase));
+      expect(caption, phase).not.toBe('connecting…');
+      expect(caption, phase).toMatch(/…$/);
+      expect(caption, phase).not.toMatch(/tunnel (is )?up|connected|not attached/i);
+      expect(existing, phase).not.toContain(caption);
+      // An exit is never named before `up`: none is observed yet.
+      expect(vpnTunnelUpCaption(detail(phase, '203.0.113.7')), phase).toBe(caption);
+      // The chip names the phase under the bring-up prefix and never dangles.
+      const chip = vpnTunnelChipText(detail(phase));
+      expect(chip, phase).toMatch(/^Starting the VPN tunnel · .+…$/);
+      expect(chip, phase).not.toMatch(/tunnel up|exit\s*$/i);
+      expect(vpnAddressPlaceholder(detail(phase)), phase).toBe(
+        'Starting the VPN tunnel… — the address bar unlocks once the device is live',
+      );
+    }
+    expect(new Set(BRINGUP_PHASES.map((p) => vpnTunnelChipText(detail(p)))).size).toBe(
+      BRINGUP_PHASES.length,
+    );
+    // The words, pinned: the provider phases say what the far end is doing, the
+    // config phase names the handshake, the four "ours" phases say what we set up.
+    expect(vpnTunnelUpCaption(detail('resolving'))).toBe('Finding the proxy endpoint…');
+    expect(vpnTunnelUpCaption(detail('connecting'))).toBe('Connecting to the proxy endpoint…');
+    expect(vpnTunnelUpCaption(detail('handshaking'))).toBe('Completing the VPN handshake…');
+    expect(vpnTunnelUpCaption(detail('assigning_address'))).toBe('Assigning the tunnel address…');
+    expect(vpnTunnelUpCaption(detail('configuring_routes'))).toBe('Setting up the tunnel routes…');
+    expect(vpnTunnelUpCaption(detail('starting_proxy'))).toBe('Starting the tunnel proxy…');
+    expect(vpnTunnelUpCaption(detail('verifying'))).toBe('Verifying the tunnel…');
+  });
+
+  it('CRITICAL a bare token NOT in the set is unknown — null, hence the generic caption — even when it starts with, ends with, contains, or re-cases a phase, and `up` itself (conceptual, never emitted) is outside the set (MUTATION: `startsWith` / `includes` / lowercasing in vpnStepOf → red)', () => {
+    for (const tok of [
+      'up',
+      'upstream',
+      'up_',
+      'vpn_up',
+      'xupx',
+      'connecting_x',
+      'resolvingx',
+      'handshake',
+      'verify',
+      'assigning_address_v2',
+      'UP',
+      'Resolving',
+      ' up',
+      'up ',
+    ]) {
+      expect(vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: tok }), tok).toBeNull();
+      expect(vpnTunnelUpNotice(null, { ...quiet, provisioningDetail: tok }), tok).toBeNull();
+    }
+    // POSITIVE CONTROL in the same breath: the exact spellings ARE known.
+    expect(vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: 'verifying' })?.step).toBe(
+      'verifying',
+    );
+    expect(vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: 'connecting' })?.step).toBe(
+      'connecting',
+    );
+  });
+
+  it('⛔ REGRESSION PIN — a bare phase is not proof of a VPN session: on a SOCKS5 report, or before any report, it claims no tunnel on any surface', () => {
+    const socks = report({ proxy_kind: 'socks5', exit_ip: '203.0.113.7' });
+    for (const phase of BRINGUP_PHASES) {
+      for (const rep of [socks, null]) {
+        const t = vpnTunnelUpNotice(rep, { ...quiet, provisioningDetail: phase });
+        expect(t?.step, phase).toBe(phase);
+        expect(t?.vpn, phase).toBe(false);
+        expect(vpnTunnelIsUp(t!), phase).toBe(false);
+        for (const s of [vpnTunnelUpCaption(t!), vpnTunnelChipText(t!), vpnAddressPlaceholder(t!)])
+          expect(s, phase).not.toMatch(/VPN|tunnel/);
+      }
+    }
+  });
+});
+
+describe('(W1) SimulatorWindow — the address bars during A3’s bring-up phases', () => {
+  it('CRITICAL at `handshaking` the chip, placeholder and notice say the tunnel is coming up and name the phase; nothing says "tunnel up"', () => {
+    manualControlState = STEP('handshaking');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    const chip = q(container, CHIP);
+    expect(chip?.textContent).toContain('Starting the VPN tunnel · handshaking…');
+    expect(chip?.getAttribute('title')).toBe('Completing the VPN handshake…');
+    expect(addressText(container)).not.toMatch(/tunnel up|tunnel is up/i);
+    const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
+    expect(input.getAttribute('placeholder')).toMatch(/^Starting the VPN tunnel…/);
+    const notice = q(container, NOTICE);
+    expect(notice?.textContent).toBe('Completing the VPN handshake…');
+    expect(notice?.getAttribute('data-tone')).toBe('neutral');
+    expect(q(container, CONNECTING)).toBeNull();
+  });
+
+  it('every pre-up phase renders its own notice text in the window, none of them shared', () => {
+    const seen = new Set<string>();
+    for (const phase of BRINGUP_PHASES) {
+      manualControlState = STEP(phase);
+      const { container, unmount } = renderSim();
+      fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+      const text = q(container, NOTICE)?.textContent ?? '';
+      expect(text, phase).toBe(vpnTunnelUpCaption(detail(phase)));
+      expect(q(container, NOTICE)?.getAttribute('data-tone'), phase).toBe('neutral');
+      seen.add(text);
+      unmount();
+    }
+    expect(seen.size).toBe(BRINGUP_PHASES.length);
+  });
+
+  it('CONTROL — a bare `up` (conceptual, never emitted) renders the generic "connecting…" in the window and claims no tunnel; the tunnel-up state is still vpn_egress_active’s (MUTATION: accept `up` as a step → red)', () => {
+    manualControlState = STEP('up');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(q(container, CONNECTING)).not.toBeNull();
+    expect(q(container, NOTICE)).toBeNull();
+    expect(q(container, CHIP)).toBeNull();
+    expect(addressText(container)).not.toMatch(/tunnel/i);
+    expect(q(container, '[aria-label="Address bar"]')?.getAttribute('placeholder')).not.toMatch(
+      /tunnel/i,
+    );
+  });
+
+  it('CONTROL — an unknown bare token that merely starts with a phase renders the generic "connecting…" in the window (MUTATION: startsWith matching → red)', () => {
+    manualControlState = STEP('upstream');
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(q(container, CONNECTING)).not.toBeNull();
+    expect(q(container, NOTICE)).toBeNull();
+    expect(q(container, CHIP)).toBeNull();
+  });
+});
+
+// W2 — the two terminal reads. The 5s poll passes `{ heartbeatClientId }` as its
+// third argument; refreshControl (the mount / pane-open read) passes none — the
+// one thing that tells the two call sites apart from inside the mock.
+const SUMMARY = 'The tunnel never finished coming up within 60s.';
+const ENDED = (summary: string | null, over: Partial<ControlState> = {}): ControlState => ({
+  mode: 'manual',
+  pairKind: null,
+  terminal: true,
+  status: 'closed',
+  closedReason: 'tunnel_setup_timeout',
+  // The server's relay clears provisioning_detail on a terminal frame.
+  provisioningDetail: null,
+  // An observed EXIT on the report is a different address from the endpoint and
+  // must never be spliced into the summary as if it were the host.
+  capabilityReport: { manual_input_available: true, proxy_kind: 'openvpn', exit_ip: '203.0.113.7' },
+  ...(summary === null
+    ? {}
+    : {
+        errorEvent: {
+          code: 'proxy_connection_failed',
+          severity: 'error' as const,
+          summary,
+          customer_actionable: true,
+          retryable: true,
+        },
+      }),
+  ...over,
+});
+const isPollRead = (args: unknown[]): boolean => {
+  const opts = args[2];
+  return typeof opts === 'object' && opts !== null && 'heartbeatClientId' in opts;
+};
+
+describe('(W2) SimulatorWindow — both terminal reads hand the panel {reason, summary, lastPhase}', () => {
+  it('derivedLastPhase — the terminal read’s own detail wins, else the last observed one, else null (never a guess)', () => {
+    expect(derivedLastPhase(null, 'handshaking')).toBe('handshaking');
+    expect(derivedLastPhase(undefined, 'handshaking')).toBe('handshaking');
+    expect(derivedLastPhase('verifying', 'handshaking')).toBe('verifying');
+    expect(derivedLastPhase('verifying', null)).toBe('verifying');
+    expect(derivedLastPhase(null, null)).toBeNull();
+    expect(derivedLastPhase(undefined, undefined)).toBeNull();
+    expect(derivedLastPhase('', '')).toBeNull();
+    // The settled NEW ROUTING CASE token (tunnel up, browser never came) is
+    // handed through unfiltered — the panel routes it, this window never drops it.
+    expect(derivedLastPhase(null, 'vpn_egress_active')).toBe('vpn_egress_active');
+  });
+
+  it('nextObservedPhase — per session: a non-empty detail writes the record, a blank never erases it, another session starts fresh', () => {
+    const a0 = { sessionId: 'agt_a', detail: null };
+    const a1 = nextObservedPhase(a0, 'agt_a', 'handshaking');
+    expect(a1).toEqual({ sessionId: 'agt_a', detail: 'handshaking' });
+    // A relay-cleared terminal read, a terminal mutation body, a failed read,
+    // the swap reset's clean slate: all null — none may blank the observation.
+    expect(nextObservedPhase(a1, 'agt_a', null)).toBe(a1);
+    expect(nextObservedPhase(a1, 'agt_a', '')).toBe(a1);
+    // A later phase replaces it (phases only advance).
+    expect(nextObservedPhase(a1, 'agt_a', 'verifying')).toEqual({
+      sessionId: 'agt_a',
+      detail: 'verifying',
+    });
+    // A different session never inherits it — MUTATION: return `prev` regardless
+    // of sessionId → the swap arm below reds.
+    expect(nextObservedPhase(a1, 'agt_b', null)).toEqual({ sessionId: 'agt_b', detail: null });
+    expect(nextObservedPhase(a1, 'agt_b', 'resolving')).toEqual({
+      sessionId: 'agt_b',
+      detail: 'resolving',
+    });
+  });
+
+  it('CRITICAL site 1 — the 5s terminal poll: after observing `verifying`, a server-cleared terminal read hands the panel the summary verbatim and lastPhase "verifying" (MUTATION: drop `summary:` or `lastPhase:` at the poll site → red)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let ended = false;
+      getAgentSession.mockImplementation((...args: unknown[]) =>
+        immediateControl(ended && isPollRead(args) ? ENDED(SUMMARY) : STEP('verifying')),
+      );
+      const { container } = renderSim();
+      fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+      expect(q(container, NOTICE)?.textContent).toBe('Verifying the tunnel…');
+      expect(panelCbs.sessionEnded).toBeNull();
+      ended = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      expect(panelCbs.sessionEnded).toStrictEqual({
+        reason: 'tunnel_setup_timeout',
+        summary: SUMMARY,
+        lastPhase: 'verifying',
+      });
+      // It was the poll that ended it: only a heartbeat read returned terminal.
+      expect(getAgentSession.mock.calls.filter(isPollRead).length).toBeGreaterThan(1);
+      // Ended: the bring-up notice is gone (nothing is attaching any more).
+      expect(q(container, NOTICE)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // The mount runs the poll, then the session-switch reset, then refreshControl.
+  // The observed-phase record is PER SESSION (nextObservedPhase): the reset's
+  // clean slate starts a fresh record only for a DIFFERENT session, so this
+  // session's first-poll observation survives it (the mount-order arm below); a
+  // window whose every read is terminal observed nothing (the CONTROL below).
+  // This arm drives refreshControl's pane-open re-read.
+  it('CRITICAL site 2 — refreshControl (the pane-open read, no heartbeat option): a terminal read after the poll observed `connecting` hands the panel the summary and lastPhase "connecting" (MUTATION: drop `summary:` at the refreshControl site → red)', () => {
+    let ended = false;
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(ended && !isPollRead(args) ? ENDED(SUMMARY) : STEP('connecting')),
+    );
+    const { container } = renderSim();
+    expect(panelCbs.sessionEnded).toBeNull();
+    const before = getAgentSession.mock.calls.length;
+    ended = true;
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: SUMMARY,
+      lastPhase: 'connecting',
+    });
+    // It was refreshControl: the pane open issued a non-poll read, and no poll
+    // read ever answered terminal.
+    const after = getAgentSession.mock.calls.slice(before);
+    expect(after.some((c) => !isPollRead(c))).toBe(true);
+    expect(after.some(isPollRead)).toBe(false);
+  });
+
+  it('CONTROL — when the terminal read still carries a detail, that later observation wins over the phase the poll observed (MUTATION: prefer the observed one → red)', () => {
+    let ended = false;
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(
+        ended && !isPollRead(args)
+          ? ENDED(SUMMARY, { provisioningDetail: 'starting_proxy' })
+          : STEP('connecting'),
+      ),
+    );
+    const { container } = renderSim();
+    expect(panelCbs.sessionEnded).toBeNull();
+    ended = true;
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: SUMMARY,
+      lastPhase: 'starting_proxy',
+    });
+  });
+
+  it('CRITICAL the settled NEW ROUTING CASE token is handed through: after the poll observed `vpn_egress_active` (tunnel up, browser never came), the pane-open terminal read hands lastPhase "vpn_egress_active" unfiltered, for the panel to route → ours (MUTATION: filter to bare phases → red)', () => {
+    let ended = false;
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(ended && !isPollRead(args) ? ENDED(SUMMARY) : STEP('vpn_egress_active')),
+    );
+    const { container } = renderSim();
+    expect(panelCbs.sessionEnded).toBeNull();
+    ended = true;
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: SUMMARY,
+      lastPhase: 'vpn_egress_active',
+    });
+  });
+
+  // GATES finding 1 (2026-09-14), proven by execution before the fix: a mode
+  // mutation whose response body is already terminal carries the relay-cleared
+  // `provisioningDetail: null`; that write blanked the snapshot's detail BEFORE
+  // the `.finally` refreshControl derived lastPhase, so the panel got null for a
+  // phase this window had observed. The phase now lives in a per-session record
+  // only a non-empty detail can write (MUTATION: derive from
+  // manualInputControlRef.current.provisioningDetail again → red).
+  async function observeThenMutate(mutationBody: ControlState): Promise<void> {
+    let ended = false;
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(ended && !isPollRead(args) ? ENDED(SUMMARY) : STEP('handshaking')),
+    );
+    vi.mocked(setSessionMode).mockImplementation(
+      () => immediateControl(mutationBody) as unknown as ReturnType<typeof setSessionMode>,
+    );
+    const { container } = renderSim();
+    // ⛔ The mode radios live in the SESSION pane (`activePane === 'session'`),
+    // not the Controls pane. The first draft clicked the Controls rail entry and
+    // then asserted a radio that was never rendered — both arms failed on
+    // `expect(other).not.toBeNull()` before any mutation happened, and the
+    // failure read as a latch bug. It was the wrong rail button. (The rail's
+    // data-component is templated, `sim-rail-${pane}`: the runtime attribute is
+    // what matters, not a literal a source grep would find.)
+    // The step notice is asserted with the Controls pane open, exactly as the
+    // first draft did (it is not rendered under the Session pane); the Session
+    // pane is then opened for the mode radios the mutation needs.
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+    expect(panelCbs.sessionEnded).toBeNull();
+    fireEvent.click(q(container, '[data-component="sim-rail-session"]') as Element);
+    ended = true;
+    const other = q(container, '[role="radio"][aria-label$=" mode"]:not([aria-checked="true"])');
+    expect(other).not.toBeNull();
+    expect((other as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(other as Element);
+      await Promise.resolve();
+    });
+    expect(vi.mocked(setSessionMode)).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(panelCbs.sessionEnded).not.toBeNull());
+  }
+
+  it('CRITICAL a mode mutation whose body is already terminal (detail null) does not erase the phase the poll observed: the .finally refreshControl still hands the panel lastPhase "handshaking"', async () => {
+    try {
+      await observeThenMutate(ENDED(SUMMARY));
+      expect(panelCbs.sessionEnded).toStrictEqual({
+        reason: 'tunnel_setup_timeout',
+        summary: SUMMARY,
+        lastPhase: 'handshaking',
+      });
+    } finally {
+      vi.mocked(setSessionMode).mockReset();
+    }
+  });
+
+  it('CONTROL — the same click with a NON-terminal mutation body also hands lastPhase "handshaking": the mechanism was the terminal body’s null write, not the click', async () => {
+    try {
+      await observeThenMutate(STEP('handshaking'));
+      expect(panelCbs.sessionEnded).toStrictEqual({
+        reason: 'tunnel_setup_timeout',
+        summary: SUMMARY,
+        lastPhase: 'handshaking',
+      });
+    } finally {
+      vi.mocked(setSessionMode).mockReset();
+    }
+  });
+
+  it('CRITICAL a SECOND terminal read (the pane toggle’s refreshControl, after the poll already latched) keeps lastPhase "handshaking" — the latch is never overwritten with null', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let ended = false;
+      getAgentSession.mockImplementation(() =>
+        immediateControl(ended ? ENDED(SUMMARY) : STEP('handshaking')),
+      );
+      const { container } = renderSim();
+      fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+      expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+      ended = true;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5100);
+      });
+      const latched = {
+        reason: 'tunnel_setup_timeout',
+        summary: SUMMARY,
+        lastPhase: 'handshaking',
+      };
+      expect(panelCbs.sessionEnded).toStrictEqual(latched);
+      const before = getAgentSession.mock.calls.length;
+      // Toggle the pane: a fresh non-poll read answers terminal a second time.
+      fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+      const after = getAgentSession.mock.calls.slice(before);
+      expect(after.some((c) => !isPollRead(c))).toBe(true);
+      expect(panelCbs.sessionEnded).toStrictEqual(latched);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('CRITICAL mount order — the first poll observes `handshaking` and the seed refreshControl read is terminal: the same session’s observation survives the mount reset → lastPhase "handshaking"', () => {
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(isPollRead(args) ? STEP('handshaking') : ENDED(SUMMARY)),
+    );
+    renderSim();
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: SUMMARY,
+      lastPhase: 'handshaking',
+    });
+  });
+
+  it('CONTROL — a window whose FIRST read is already terminal observed no phase: lastPhase null (no guessed route); no error event → summary null', () => {
+    getAgentSession.mockImplementation(() => immediateControl(ENDED(null)));
+    renderSim();
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: null,
+      lastPhase: null,
+    });
+  });
+
+  it('HONESTY — the summary reaches the panel byte-for-byte; the report’s exit IP is never spliced in as the endpoint', () => {
+    const hostFree = 'Nothing answered at the proxy endpoint.';
+    getAgentSession.mockImplementation(() =>
+      immediateControl(ENDED(hostFree, { closedReason: 'remote_unreachable' })),
+    );
+    renderSim();
+    const ended = panelCbs.sessionEnded as { reason: string; summary: string; lastPhase: null };
+    expect(ended.summary).toBe(hostFree);
+    expect(ended.summary).not.toContain('203.0.113.7');
+    expect(ended.reason).toBe('remote_unreachable');
+  });
+});
+
 describe('(h) SimulatorWindow — the control poll’s transient errors keep the harness step', () => {
   // Finding 18: the error path nulled provisioningDetail on ANY error, so one
   // 5xx flipped the notice from "Starting the VPN tunnel…" to the generic
@@ -812,6 +1314,31 @@ describe('(h) SimulatorWindow — Tauri-only: the in-place session swap and the 
         q(container, '[data-component="simulator-vpn-tunnel-up-notice"]')?.textContent,
       ).toContain('VPN tunnel connected'),
     );
+  });
+
+  it('CRITICAL (W2) the observed phase is PER SESSION: after an in-place relaunch, the new session’s terminal read hands lastPhase null — the old session’s `handshaking` never leaks (MUTATION: nextObservedPhase ignores the session id → red)', async () => {
+    getAgentSession.mockImplementation((...args: unknown[]) =>
+      immediateControl(args[0] === 'agt_y' ? ENDED(SUMMARY) : STEP('handshaking')),
+    );
+    const { container } = renderSim();
+    fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
+    expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+    expect(panelCbs.sessionEnded).toBeNull();
+    const onSession = await vi.waitFor(() => {
+      const cb = tauriListeners.get('ds-session');
+      expect(cb).toBeDefined();
+      return cb as (event: { payload: string }) => void;
+    });
+    await act(async () => {
+      onSession({ payload: btoa('?window=simulator&ws=wss://lk&token=tok2&session=agt_y') });
+      await Promise.resolve();
+    });
+    await vi.waitFor(() => expect(panelCbs.sessionEnded).not.toBeNull());
+    expect(panelCbs.sessionEnded).toStrictEqual({
+      reason: 'tunnel_setup_timeout',
+      summary: SUMMARY,
+      lastPhase: null,
+    });
   });
 
   // Finding 16 (Dock half): the flag keyed only on the launch's cached `cc`.

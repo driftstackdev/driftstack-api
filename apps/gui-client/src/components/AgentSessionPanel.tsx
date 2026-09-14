@@ -25,7 +25,7 @@ import {
   type LivekitConnectionState,
   type Room,
 } from '../lib/livekit';
-import { VPN_BRINGUP_END_COPY } from '../lib/session-end-reason';
+import { vpnBringupEndCopy } from '../lib/session-end-reason';
 import { useInputCapture } from '../lib/livekit-input-capture';
 import { parseConnectionStats } from '../lib/livekit-connection-stats';
 import {
@@ -119,10 +119,25 @@ export interface AgentSessionPanelProps {
    *  set, the panel STOPS all reconnect/resubscribe/rebuild/publisher-grace
    *  machinery (those would loop "reconnecting" against a session that's gone) and
    *  shows a clear "Session ended" terminal overlay with a Close action instead.
-   *  `reason` is the server close-reason for honest copy (null when unknown). A
-   *  transient transport drop leaves this undefined so the bounded auto-reconnect
-   *  still runs. */
-  sessionEnded?: { reason: string | null } | null;
+   *  `reason` is the server close-reason for honest copy (null when unknown).
+   *  `summary` is A3's host-free `ErrorEvent.summary`, rendered VERBATIM as a
+   *  quieter second line under the explanation — it never carries the customer's
+   *  proxy host (W2679 doctrine), and this window cannot fill one in (it holds a
+   *  per-session control key, not the account's proxy list). `lastPhase` is
+   *  DERIVED by the caller, not a wire field — A3 sends no `last_phase`; the
+   *  simulator hands over the last `provisioning_detail` its status polls
+   *  observed before the terminal frame (`derivedLastPhase`, SimulatorWindow),
+   *  which can lag the daemon by a poll. It refines the `tunnel_setup_timeout`
+   *  sentence ONLY (see `vpnBringupEndCopy`).
+   *  Both are optional because the chat view still latches `{ reason }` alone;
+   *  absent ≡ null ≡ unknown, and unknown routes nowhere. A transient transport
+   *  drop leaves the whole prop undefined so the bounded auto-reconnect still
+   *  runs. */
+  sessionEnded?: {
+    reason: string | null;
+    summary?: string | null;
+    lastPhase?: string | null;
+  } | null;
   /** True while a tab switch is in flight (the box hasn't published the new tab's page
    *  yet). Shows an about:blank-style placeholder over the video so the OLD tab doesn't
    *  linger during the switch latency (founder #5 2026-06-30 "keeps showing old tab"). */
@@ -226,14 +241,20 @@ function formatSessionDuration(totalSeconds: number): string {
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
 }
 
-function friendlySessionEndCopy(reason: string | null): {
+function friendlySessionEndCopy(
+  reason: string | null,
+  lastPhase: string | null,
+): {
   outcome: string;
   explanation: string;
 } {
   const normalized = reason?.trim().toLowerCase().replaceAll('-', '_') ?? '';
   // Before every prefix branch below: these are exact tokens, and two of them
   // would otherwise be swallowed by a prefix rule that says something vaguer.
-  const vpn = VPN_BRINGUP_END_COPY[normalized];
+  // `lastPhase` refines `tunnel_setup_timeout` alone (the lib owns that rule);
+  // the lookup is own-key, so a reason spelled like a prototype member is
+  // unknown rather than Object.prototype's function.
+  const vpn = vpnBringupEndCopy(normalized, lastPhase);
   if (vpn !== undefined) return vpn;
   if (normalized === 'idle_timeout') {
     return {
@@ -407,7 +428,16 @@ export function AgentSessionPanel({
       ),
     ),
   );
-  const sessionEndCopy = friendlySessionEndCopy(sessionEnded?.reason ?? null);
+  const sessionEndCopy = friendlySessionEndCopy(
+    sessionEnded?.reason ?? null,
+    sessionEnded?.lastPhase ?? null,
+  );
+  // A3's host-free detail, verbatim. Whitespace-only counts as absent so the
+  // quieter line never renders empty.
+  const sessionEndDetail =
+    typeof sessionEnded?.summary === 'string' && sessionEnded.summary.trim() !== ''
+      ? sessionEnded.summary
+      : null;
   // The video element as STATE (not just the ref) so useInputCapture re-runs
   // when it mounts — a ref's `.current` is mutated without re-rendering, so an
   // effect keyed on the ref would attach to the stale (null) element.
@@ -1119,7 +1149,19 @@ export function AgentSessionPanel({
             </div>
           </div>
           <span className="max-w-xs text-xs text-ink-secondary">
-            {sessionEndCopy.explanation}{' '}
+            {sessionEndCopy.explanation}
+            {/* A3's host-free detail, as sent: it is better than anything generated
+                from a code, so it is never paraphrased; it never names the customer's
+                proxy host (W2679), and the exit IP is not a stand-in for one. Absent
+                → nothing rendered, so the no-detail DOM is byte-identical to before. */}
+            {sessionEndDetail !== null && (
+              <span
+                data-summary="session-end-detail"
+                className="my-1 block text-[11px] leading-snug text-ink-secondary/80"
+              >
+                {sessionEndDetail}
+              </span>
+            )}{' '}
             {/* #8 — concrete next step instead of a dead-end. The standalone Simulator
                 window can't relaunch in place (it holds only the per-session control key,
                 not the account API key/SDK client a fresh session+token needs — that lives

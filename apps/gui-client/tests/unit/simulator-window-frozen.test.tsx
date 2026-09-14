@@ -563,7 +563,11 @@ describe('SimulatorWindow — client video-freeze detector', () => {
       await Promise.resolve();
     });
     // The terminal-end signal reached the panel (it shows "Session ended", not reconnecting).
-    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+    expect(panelCbs.sessionEnded).toEqual({
+      reason: 'idle_timeout',
+      summary: null,
+      lastPhase: null,
+    });
     // Now the frame stream freezes (the ended session's last frame is pinned). Even
     // across the full sustained-freeze + escalation window, NO recovery is driven.
     advance(20);
@@ -595,7 +599,11 @@ describe('SimulatorWindow — client video-freeze detector', () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+    expect(panelCbs.sessionEnded).toEqual({
+      reason: 'idle_timeout',
+      summary: null,
+      lastPhase: null,
+    });
     // The Live cue is gone — it no longer contradicts the "Session ended" overlay.
     expect(liveCue()).toBeNull();
   });
@@ -750,7 +758,11 @@ describe('SimulatorWindow — polls stop after the session terminally ends', () 
       await Promise.resolve();
       await Promise.resolve();
     });
-    expect(panelCbs.sessionEnded).toEqual({ reason: 'idle_timeout' });
+    expect(panelCbs.sessionEnded).toEqual({
+      reason: 'idle_timeout',
+      summary: null,
+      lastPhase: null,
+    });
 
     // Both polls must now be quiescent: snapshot the call counts, advance well past
     // several of BOTH intervals (2s page-state, 5s session-end), and assert no growth.

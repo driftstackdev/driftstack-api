@@ -13,7 +13,14 @@ import {
   PUBLISHER_LOST_GRACE_MS,
   AUTO_RECONNECT_BACKOFF_MS,
 } from '../../src/components/AgentSessionPanel';
-import { isTypedBringupReason, preferTypedEndReason } from '../../src/lib/session-end-reason';
+import {
+  TUNNEL_SETUP_TIMEOUT_ROUTED_COPY,
+  VPN_BRINGUP_END_COPY,
+  isTypedBringupReason,
+  preferTypedEndReason,
+  vpnBringupEndCopy,
+  vpnBringupPhaseRoute,
+} from '../../src/lib/session-end-reason';
 import type { LiveKitInfo } from '@driftstack/sdk';
 
 const connectMock = vi.fn();
@@ -1104,7 +1111,9 @@ describe('AgentSessionPanel overlay UX', () => {
     connectMock.mockReset();
     connectMock.mockResolvedValue(undefined);
     createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
-    for (const unknown of ['remote_unresolved_v2', 'tunnel_wedged', 'remote_']) {
+    // `constructor` is the prototype-chain trap: a bare index into the copy table
+    // returned Object.prototype.constructor as the copy, and the recap went blank.
+    for (const unknown of ['remote_unresolved_v2', 'tunnel_wedged', 'remote_', 'constructor']) {
       const { container } = render(
         <AgentSessionPanel info={INFO} sessionEnded={{ reason: unknown }} />,
       );
@@ -1142,6 +1151,292 @@ describe('AgentSessionPanel overlay UX', () => {
     expect(isTypedBringupReason('remote_unresolved')).toBe(true);
     expect(isTypedBringupReason('remote_unresolved_v2')).toBe(false);
     expect(isTypedBringupReason(null)).toBe(false);
+  });
+
+  const ROUTE_WORDS = ['supplies the proxy', 'check its config', 'ours, not yours'] as const;
+  const ROUTELESS_HEDGE =
+    'There is not enough to say yet whether that is the endpoint or the configuration.';
+
+  /* A `tunnel_setup_timeout` is the one code with no errand of its own, and the
+   * one thing that can honestly give it one is the phase the bring-up stalled
+   * in. Each route is asserted on its DESTINATION words and on the absence of
+   * the other two — the label is the same for all three because what changed is
+   * whose errand it is, not what happened. */
+  it.each([
+    ['resolving', 'supplies the proxy'],
+    ['connecting', 'supplies the proxy'],
+    ['handshaking', 'check its config'],
+    ['assigning_address', 'ours, not yours'],
+    ['configuring_routes', 'ours, not yours'],
+    ['starting_proxy', 'ours, not yours'],
+    ['verifying', 'ours, not yours'],
+    // Settled with A3 2026-09-14: the tunnel was up (today's tunnel-up frame is
+    // the last detail) and the browser never came — ours, beside the four.
+    ['vpn_egress_active', 'ours, not yours'],
+  ])('tunnel_setup_timeout stalled in %s routes to "%s"', async (lastPhase, destination) => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const { container } = render(
+      <AgentSessionPanel
+        info={INFO}
+        sessionEnded={{ reason: 'tunnel_setup_timeout', summary: null, lastPhase }}
+      />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const overlay = container.querySelector('[data-overlay="session-ended"]');
+    expect(container.querySelector('[data-summary="session-outcome"]')).toHaveTextContent(
+      'Tunnel did not finish connecting',
+    );
+    expect(overlay).toHaveTextContent(destination);
+    for (const other of ROUTE_WORDS.filter((w) => w !== destination)) {
+      expect(overlay?.textContent, `${lastPhase} leaked "${other}"`).not.toContain(other);
+    }
+    // …and never the routeless hedge, which would contradict the route it just gave.
+    expect(overlay?.textContent).not.toContain(ROUTELESS_HEDGE);
+  });
+
+  it('tunnel_setup_timeout with an absent or unknown last phase keeps the routeless sentence', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    // `up` is CONCEPTUAL — never an emitted token (the emitted tunnel-up detail
+    // is `vpn_egress_active`, which IS routed) — so a caller handing it over is
+    // aliasing and must not route. The rest are spellings A3 does not emit: a
+    // `vpn_` prefix on a bare phase, a prefix of a real token, a case variant, a
+    // suffixed variant, trailing whitespace, and a prototype member. Every one
+    // of them must fall to the routeless sentence.
+    const unknownPhases: Array<string | null | undefined> = [
+      null,
+      undefined,
+      '',
+      'up',
+      'vpn_connecting',
+      'connect',
+      'Connecting',
+      'resolving_v2',
+      'handshaking ',
+      'constructor',
+    ];
+    for (const lastPhase of unknownPhases) {
+      const { container } = render(
+        <AgentSessionPanel
+          info={INFO}
+          sessionEnded={{ reason: 'tunnel_setup_timeout', summary: null, lastPhase }}
+        />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const overlay = container.querySelector('[data-overlay="session-ended"]');
+      expect(overlay, String(lastPhase)).toHaveTextContent(ROUTELESS_HEDGE);
+      for (const word of ROUTE_WORDS) {
+        expect(overlay?.textContent, `${String(lastPhase)} routed to "${word}"`).not.toContain(
+          word,
+        );
+      }
+      cleanup();
+    }
+    // A `{ reason }`-only caller (the chat view latches exactly that) reads the same.
+    const { container } = render(
+      <AgentSessionPanel info={INFO} sessionEnded={{ reason: 'tunnel_setup_timeout' }} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-overlay="session-ended"]')).toHaveTextContent(
+      ROUTELESS_HEDGE,
+    );
+  });
+
+  it('a last phase never re-routes a code that already has a destination', async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    const read = async (reason: string, lastPhase: string | null): Promise<string> => {
+      const { container } = render(
+        <AgentSessionPanel info={INFO} sessionEnded={{ reason, summary: null, lastPhase }} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const text = `${container.querySelector('[data-summary="session-outcome"]')?.textContent ?? ''}|${
+        container.querySelector('[data-overlay="session-ended"]')?.textContent ?? ''
+      }`;
+      cleanup();
+      return text;
+    };
+    // Each pairs a code with a phase whose route DISAGREES with the code's own
+    // destination; the overlay must read byte-for-byte as it does with no phase.
+    for (const [reason, lastPhase, own] of [
+      ['remote_unresolved', 'verifying', 'supplies the proxy'],
+      ['remote_unresolved', 'handshaking', 'supplies the proxy'],
+      ['remote_refused', 'assigning_address', 'whoever supplies it'],
+      ['tls_handshake_failed', 'resolving', 'certificate or tls-auth key'],
+      ['config_rejected', 'connecting', 're-paste its config'],
+      ['auth_failed', 'starting_proxy', 'username or password'],
+      ['no_output', 'handshaking', 'ours, not yours'],
+      ['idle_timeout', 'verifying', 'period of inactivity'],
+      ['proxy_connection_failed', 'resolving', 'could not be established'],
+    ] as const) {
+      const withPhase = await read(reason, lastPhase);
+      const withoutPhase = await read(reason, null);
+      expect(withPhase, `${reason} + ${lastPhase}`).toBe(withoutPhase);
+      expect(withPhase, `${reason} + ${lastPhase}`).toContain(own);
+    }
+  });
+
+  it("renders A3's host-free summary verbatim under the explanation, and nothing when it is absent", async () => {
+    connectMock.mockReset();
+    connectMock.mockResolvedValue(undefined);
+    createRoomMock.mockReturnValue({ on: vi.fn(), disconnect: vi.fn() });
+    // Realistic host-free detail, plus characters that would betray a paraphrase,
+    // a trim, or an HTML-escaping slip: leading/trailing punctuation, `<>&`.
+    for (const [reason, lastPhase, summary] of [
+      [
+        'tunnel_setup_timeout',
+        'handshaking',
+        'TLS key negotiation did not complete within 60s — the server never answered the handshake.',
+      ],
+      ['browser_crashed', null, '(worker exited: <signal 9> & no core written) '],
+    ] as const) {
+      const { container } = render(
+        <AgentSessionPanel info={INFO} sessionEnded={{ reason, summary, lastPhase }} />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const overlay = container.querySelector('[data-overlay="session-ended"]');
+      const detail = overlay?.querySelector('[data-summary="session-end-detail"]');
+      expect(detail, reason).not.toBeNull();
+      // Verbatim: equality, not containment — no trim, no rewording, no escaping.
+      expect(detail?.textContent, reason).toBe(summary);
+      expect(detail?.children.length, `${reason}: the detail is a single text line`).toBe(0);
+      // UNDER the explanation: the explanation comes first in document order,
+      // and the detail sits inside the ended overlay, not somewhere else.
+      const text = overlay?.textContent ?? '';
+      const explanationAt = text.indexOf(
+        reason === 'browser_crashed'
+          ? 'The browser running this session'
+          : 'handshake with the proxy endpoint never completed',
+      );
+      expect(explanationAt, `${reason}: explanation present`).toBeGreaterThanOrEqual(0);
+      expect(text.indexOf(summary), `${reason}: detail after explanation`).toBeGreaterThan(
+        explanationAt,
+      );
+      // …and BEFORE the relaunch instruction: a quieter second line under the
+      // explanation, not a footnote after the call to action.
+      const relaunchAt = text.indexOf('Close this window, then relaunch');
+      expect(relaunchAt, `${reason}: relaunch instruction present`).toBeGreaterThanOrEqual(0);
+      expect(relaunchAt, `${reason}: detail before the relaunch instruction`).toBeGreaterThan(
+        text.indexOf(summary),
+      );
+      cleanup();
+    }
+    // Absent → not in the DOM at all (no empty element), for null, undefined,
+    // an empty string, whitespace, and a `{ reason }`-only caller.
+    for (const summary of [null, undefined, '', '   ']) {
+      const { container } = render(
+        <AgentSessionPanel
+          info={INFO}
+          sessionEnded={{ reason: 'tunnel_setup_timeout', summary, lastPhase: 'handshaking' }}
+        />,
+      );
+      await act(async () => {
+        await Promise.resolve();
+      });
+      expect(
+        container.querySelector('[data-summary="session-end-detail"]'),
+        JSON.stringify(summary),
+      ).toBeNull();
+      expect(container.querySelector('[data-overlay="session-ended"]')).toHaveTextContent(
+        'check its config',
+      );
+      cleanup();
+    }
+    const { container } = render(
+      <AgentSessionPanel info={INFO} sessionEnded={{ reason: 'browser_crashed' }} />,
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(container.querySelector('[data-summary="session-end-detail"]')).toBeNull();
+  });
+
+  it('vpnBringupPhaseRoute is an own-key, exact-spelling lookup over the eight routable phases, and the copy refinement is scoped to the timeout code alone', () => {
+    expect(vpnBringupPhaseRoute('resolving')).toBe('provider');
+    expect(vpnBringupPhaseRoute('connecting')).toBe('provider');
+    expect(vpnBringupPhaseRoute('handshaking')).toBe('config');
+    expect(vpnBringupPhaseRoute('assigning_address')).toBe('ours');
+    expect(vpnBringupPhaseRoute('configuring_routes')).toBe('ours');
+    expect(vpnBringupPhaseRoute('starting_proxy')).toBe('ours');
+    expect(vpnBringupPhaseRoute('verifying')).toBe('ours');
+    // Settled 2026-09-14: the tunnel-up frame as last detail = tunnel up, browser never came.
+    expect(vpnBringupPhaseRoute('vpn_egress_active')).toBe('ours');
+    // `up` is conceptual, never emitted; the rest are not A3's spellings.
+    for (const bad of [
+      'up',
+      null,
+      undefined,
+      '',
+      'vpn_connecting',
+      'Connecting',
+      'connecting ',
+      'resolv',
+      'resolving_v2',
+      'constructor',
+      'toString',
+    ]) {
+      expect(vpnBringupPhaseRoute(bad), String(bad)).toBeNull();
+    }
+    // Refinement: the timeout code follows the phase; every other code ignores it.
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', 'handshaking')).toBe(
+      TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.config,
+    );
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', 'resolving')).toBe(
+      TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.provider,
+    );
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', 'verifying')).toBe(
+      TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.ours,
+    );
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', 'up')).toBe(
+      VPN_BRINGUP_END_COPY.tunnel_setup_timeout,
+    );
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', null)).toBe(
+      VPN_BRINGUP_END_COPY.tunnel_setup_timeout,
+    );
+    expect(vpnBringupEndCopy('remote_unresolved', 'handshaking')).toBe(
+      VPN_BRINGUP_END_COPY.remote_unresolved,
+    );
+    expect(vpnBringupEndCopy('no_output', 'resolving')).toBe(VPN_BRINGUP_END_COPY.no_output);
+    // The REASON keeps its existing normalisation (case, hyphens); the PHASE does not.
+    expect(vpnBringupEndCopy('TUNNEL-SETUP-TIMEOUT', 'verifying')).toBe(
+      TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.ours,
+    );
+    expect(vpnBringupEndCopy('tunnel_setup_timeout', 'VERIFYING')).toBe(
+      VPN_BRINGUP_END_COPY.tunnel_setup_timeout,
+    );
+    // Not a typed code → undefined, including prototype members.
+    expect(vpnBringupEndCopy('constructor', 'verifying')).toBeUndefined();
+    expect(vpnBringupEndCopy('browser_crashed', 'verifying')).toBeUndefined();
+    expect(vpnBringupEndCopy(null, 'verifying')).toBeUndefined();
+    // The three routed sentences are pairwise distinct and each carries only its own errand.
+    const routed = Object.values(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY).map((c) => c.explanation);
+    expect(new Set(routed).size).toBe(3);
+    expect(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.provider.explanation).toContain('supplies the proxy');
+    expect(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.config.explanation).toContain('check its config');
+    expect(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.ours.explanation).toContain('ours, not yours');
+    // Honesty pins — each sentence claims only what its phase supports:
+    // "ours" covers `vpn_egress_active`, where the tunnel DID come up, so it
+    // must not say the tunnel was what did not finish…
+    expect(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.ours.explanation).not.toContain(
+      'setting up the tunnel',
+    );
+    // …and at `handshaking` nothing is known about a reply (UDP: a dead endpoint
+    // and a dropped key are the same silence), so config must not claim one.
+    expect(TUNNEL_SETUP_TIMEOUT_ROUTED_COPY.config.explanation).not.toContain('endpoint answered');
   });
 
   it('does not reflect an unknown internal close reason into the rendered overlay', async () => {

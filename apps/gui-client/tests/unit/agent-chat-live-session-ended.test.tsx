@@ -109,7 +109,7 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
     expect(lastSessionEnded()).toBeNull();
   });
 
-  it('latches the terminal end (status=closed) and hands {reason} to the panel', async () => {
+  it('latches the terminal end (status=closed) and hands {reason, summary, lastPhase} to the panel', async () => {
     h.getSession.mockResolvedValue({
       ...SESSION,
       status: 'closed',
@@ -117,7 +117,13 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
       closed_at: '2026-06-14T01:00:00Z',
     });
     render(<AgentChatView />);
-    await waitFor(() => expect(lastSessionEnded()).toEqual({ reason: 'idle_timeout' }));
+    await waitFor(() =>
+      expect(lastSessionEnded()).toEqual({
+        reason: 'idle_timeout',
+        summary: null,
+        lastPhase: null,
+      }),
+    );
   });
 
   it('treats a closed_reason-only session as ended (status may lag at active)', async () => {
@@ -127,7 +133,13 @@ describe('AgentChatView live view — session-ended plumbing (finding #3)', () =
       closed_reason: 'browser-closed',
     });
     render(<AgentChatView />);
-    await waitFor(() => expect(lastSessionEnded()).toEqual({ reason: 'browser-closed' }));
+    await waitFor(() =>
+      expect(lastSessionEnded()).toEqual({
+        reason: 'browser-closed',
+        summary: null,
+        lastPhase: null,
+      }),
+    );
   });
 
   it('a transient GET failure is NOT a terminal end (panel keeps reconnecting)', async () => {

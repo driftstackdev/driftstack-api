@@ -22,6 +22,7 @@ import {
   type AgentUsage,
   type LiveKitInfo,
 } from '@driftstack/sdk';
+import { preferTypedEndReason } from '../lib/session-end-reason';
 import { describeAgentSessionState } from '../lib/session-liveness';
 import type { SessionStateDescriptor } from '../lib/session-liveness';
 import { useSettings } from '../lib/SettingsContext';
@@ -1408,7 +1409,11 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
   // SAME ~5s GET the simulator runs) and latch the terminal end so AgentSessionPanel
   // shows its honest "Session ended" overlay instead. Only polls while a live
   // stream is up and stops once ended (a closed session never un-closes).
-  const [sessionEnded, setSessionEnded] = useState<{ reason: string | null } | null>(null);
+  const [sessionEnded, setSessionEnded] = useState<{
+    reason: string | null;
+    summary: string | null;
+    lastPhase: string | null;
+  } | null>(null);
   // A fresh session id (or no session) clears any prior terminal-end latch.
   useEffect(() => {
     setSessionEnded(null);
@@ -1430,7 +1435,17 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
             s.status === 'closed' ||
             (typeof s.closed_at === 'string' && s.closed_at.length > 0) ||
             (typeof s.closed_reason === 'string' && s.closed_reason.length > 0);
-          if (ended) setSessionEnded({ reason: s.error_event?.code ?? s.closed_reason });
+          // The fine typed reason beats the coarse code (it is emitted alongside
+          // it and would otherwise be shadowed — see preferTypedEndReason), and
+          // A3's host-free sentence rides through verbatim. No phase polling
+          // here, so lastPhase is honestly null: the chat's embedded panel
+          // renders the routeless timeout sentence rather than a guessed route.
+          if (ended)
+            setSessionEnded({
+              reason: preferTypedEndReason(s.error_event?.code, s.closed_reason),
+              summary: s.error_event?.summary ?? null,
+              lastPhase: null,
+            });
         })
         .catch(() => undefined); // a transient GET failure is not a terminal end
     };
