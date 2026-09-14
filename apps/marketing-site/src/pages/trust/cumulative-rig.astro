@@ -65,10 +65,15 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
     </p>
     <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
       The table below shows the rig run against
-      <strong>{archetypeDisplay}</strong> as a worked example. The
-      same methodology runs against every archetype in the catalog —
-      {DEVICE_SUPPORT.archetypeCount} profiles, {DEVICE_SUPPORT.deviceFamilies},
-      on iOS {DEVICE_SUPPORT.iosVersions}, Safari {DEVICE_SUPPORT.safariVersions}.
+      <strong>{archetypeDisplay}</strong> as a worked example — one of
+      {DEVICE_SUPPORT.forkCaptureCount} profiles we hold a comprehensive fork
+      capture for. The five dimensions it checks — canvas, fonts, screen
+      geometry, inner height and configuration — are verified across
+      {DEVICE_SUPPORT.verifiedCount} profiles, either by direct fork
+      verification or by membership of a canvas cluster whose representative was
+      verified directly. {DEVICE_SUPPORT.selectableCount} profiles are
+      selectable in the product, across {DEVICE_SUPPORT.deviceFamilies}, on iOS
+      {DEVICE_SUPPORT.iosVersions}, Safari {DEVICE_SUPPORT.safariVersions}.
       (An archetype is one specific iPhone model + iOS version +
       Safari version combination — see
       <a href="/glossary/#archetype" class="text-tk-accent-text underline">the glossary</a>.)

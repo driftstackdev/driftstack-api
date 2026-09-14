@@ -76,7 +76,7 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
     expect(body).toMatch(
       /\/\/ ARCHETYPE_REGISTRY — the customer-selectable catalog \(entries with\s*\/\/ status 'launch' \| 'available'/,
     );
-    expect(body).toMatch(/Values re-derived from the registry on 2026-07-04\./);
+    expect(body).toMatch(/Values re-derived from the registry on 2026-09-14\./);
     expect(body).toMatch(
       /Update them ONLY\s*\/\/ by re-reading ARCHETYPE_REGISTRY — never by editing prose first/,
     );
@@ -90,19 +90,51 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
     expect(body).toMatch(/Full-catalog claims \(e\.g\. \/roadmap\) bind here\./);
   });
 
-  it("S18 DEVICE_SUPPORT export: `as const` literal with 5 fields pinned (archetypeCount 81 + deviceFamilies 'iPhone 13 → 17 Pro Max' + iosVersions '18.6 / 18.7' + safariVersions '18.6–26.5' + derivedOn '2026-07-04')", () => {
+  it('S18 DEVICE_SUPPORT export: the THREE counts are present, each with its own doc line naming which claim it supports', () => {
     expect(body).toMatch(
-      /export const DEVICE_SUPPORT = \{\s*\/\*\* Customer-selectable archetypes \(registry status 'launch' \| 'available'\)\. \*\/\s*archetypeCount: 81,\s*\/\*\* Device-model span of the catalog \(19 iPhone models between the endpoints\)\. \*\/\s*deviceFamilies: 'iPhone 13 → 17 Pro Max',\s*\/\*\* iOS versions present in the catalog\. \*\/\s*iosVersions: '18\.6 \/ 18\.7',\s*\/\*\* Safari version span present in the catalog \(18\.6, 26\.0, 26\.3, 26\.4, 26\.5\)\. \*\/\s*safariVersions: '18\.6–26\.5',\s*\/\*\* ISO-8601 date the values above were last re-derived from the registry\. \*\/\s*derivedOn: '2026-07-04',\s*\} as const;/,
+      /\/\*\* Archetypes with a comprehensive fork capture \(catalog `rigRun`\)\. \*\/\s*forkCaptureCount: \d+,/,
     );
+    expect(body).toMatch(
+      /\/\*\* Archetypes whose five named dimensions are verified \(catalog lifecycle `bit_identical`\)\. \*\/\s*verifiedCount: \d+,/,
+    );
+    expect(body).toMatch(
+      /\/\*\* Customer-selectable archetypes \(registry status 'launch' \| 'available'\)\. \*\/\s*selectableCount: \d+,/,
+    );
+    expect(body).toMatch(/deviceFamilies: 'iPhone 13 → 17 Pro Max',/);
+    expect(body).toMatch(/iosVersions: '18\.4\.1 \/ 18\.6 \/ 18\.7',/);
+    expect(body).toMatch(/safariVersions: '18\.4–26\.6\.1',/);
   });
 
-  it('S18 cross-source invariant: the pinned archetypeCount matches the api-types ARCHETYPE_REGISTRY customer-selectable catalog (status launch | available)', () => {
+  // ⛔ THE COUNTS ARE ORDERED AND DISTINCT, and that ordering is the guard.
+  // Before 2026-09-14 one `archetypeCount` served every claim on the page, and
+  // the cross-source pin below compared it to a registry length — true of ANY
+  // number, so it was green while the trust page asserted the cumulative rig had
+  // been run against 81 profiles. It has been run against 5. A pin that binds a
+  // number to a bucket is still measuring the wrong proposition if nobody checks
+  // the verb the number sits next to.
+  it('CRITICAL the three counts are strictly ordered fork-capture < verified < selectable, so none can be swapped for another', () => {
+    const n = (k: string): number => Number(body.match(new RegExp(`${k}: (\\d+),`))?.[1]);
+    expect(n('forkCaptureCount')).toBeGreaterThan(0);
+    expect(n('forkCaptureCount')).toBeLessThan(n('verifiedCount'));
+    expect(n('verifiedCount')).toBeLessThan(n('selectableCount'));
+  });
+
+  it('S18 cross-source invariant: selectableCount matches the registry catalog (status launch | available)', () => {
     const catalogCount = ARCHETYPE_REGISTRY.filter(
       (a) => a.status === 'launch' || a.status === 'available',
     ).length;
-    const pinned = body.match(/archetypeCount: (\d+),/)?.[1];
+    const pinned = body.match(/selectableCount: (\d+),/)?.[1];
     expect(pinned).toBeTruthy();
     expect(Number(pinned)).toBe(catalogCount);
+  });
+
+  it('CRITICAL cross-source invariant: verifiedCount matches the registry rows whose lifecycle is `bit_identical` — the EVIDENCE axis, not the selectable one. This is the number the trust page attaches the word "verified" to, and it must never drift up to the selectable count.', () => {
+    const verified = ARCHETYPE_REGISTRY.filter((a) => a.lifecycle === 'bit_identical').length;
+    const pinned = body.match(/verifiedCount: (\d+),/)?.[1];
+    expect(Number(pinned)).toBe(verified);
+    expect(verified).toBeLessThan(
+      ARCHETYPE_REGISTRY.filter((a) => a.status === 'launch' || a.status === 'available').length,
+    );
   });
 
   it('file exists at canonical path', () => {

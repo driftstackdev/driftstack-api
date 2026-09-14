@@ -36,16 +36,47 @@ describe('marketing-site trust/cumulative-rig content parity', () => {
     expect(body).toMatch(/we treat\s+it as a launch-blocking bug/);
   });
 
-  it("full-catalog framing BOUND to DEVICE_SUPPORT (S18b 2026-07-04 accuracy fix: the prior 'every launch archetype — iPhone 15 Pro, 16 Pro, 17 lineup' read as exhaustive but named the curated flagship subset; the catalog floor is iPhone 13. On the trust surface the claim now interpolates the registry-derived facts — 81 profiles, iPhone 13 → 17 Pro Max — so it is exhaustive AND drift-proof). Drift back to single-archetype or hand-typed enumerations would re-introduce the scope mismatch", () => {
-    expect(body).toMatch(/every archetype in the catalog —/);
+  // ⛔⛔ 2026-09-14 — THIS PIN GUARDED A FALSE CLAIM AND WAS GREEN.
+  //
+  // The sentence read "the same methodology runs against every archetype in the
+  // catalog — {archetypeCount} profiles", and `archetypeCount` rendered 81. That
+  // asserts the cumulative rig WAS RUN against 81 archetypes. Measured against
+  // artefacts on disk, a comprehensive fork capture exists for 5. The 81 counted
+  // archetypes whose five named dimensions are verified — by direct fork
+  // verification on some cells and by canvas-cluster membership for the rest,
+  // which is a legitimate basis for THAT claim and not for this one.
+  //
+  // The pin could not see it. It asserted the number was interpolated from
+  // DEVICE_SUPPORT rather than typed by hand, and a cross-source test asserted
+  // the constant matched a registry length — both true of ANY number, whatever
+  // verb sat next to it. Regenerating the registry would have moved it to 99 and
+  // made the claim larger, still green.
+  //
+  // The sentence now gives each number the verb its evidence supports, and this
+  // pins that separation rather than the interpolation alone.
+  it('full-catalog framing BOUND to DEVICE_SUPPORT, with each count attached to the claim its evidence supports — fork-capture count for "we ran the rig", verified count for the five dimensions (naming the cluster method in the open), selectable count for breadth', () => {
+    // The rig-was-run claim is bound to the fork-capture count and to nothing else.
     expect(body).toMatch(
-      /\{DEVICE_SUPPORT\.archetypeCount\} profiles, \{DEVICE_SUPPORT\.deviceFamilies\}/,
+      /one of\s+\{DEVICE_SUPPORT\.forkCaptureCount\} profiles we hold a comprehensive fork\s+capture for/,
     );
+    // The verification claim is bound to the verified count, and the cluster
+    // basis is stated where a customer can weigh it rather than buried.
+    expect(body).toMatch(/verified across\s+\{DEVICE_SUPPORT\.verifiedCount\} profiles/);
     expect(body).toMatch(
-      /iOS \{DEVICE_SUPPORT\.iosVersions\}, Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+      /by membership of a canvas cluster whose representative was\s+verified directly/,
     );
-    // the subset-as-exhaustive phrasing must not return
+    // Breadth is bound to the selectable count.
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.selectableCount\} profiles are\s+selectable/);
+    expect(body).toMatch(
+      /across \{DEVICE_SUPPORT\.deviceFamilies\}, on iOS\s+\{DEVICE_SUPPORT\.iosVersions\}, Safari \{DEVICE_SUPPORT\.safariVersions\}/,
+    );
+    // ⛔ The retired claim must not return, in either of its two wrong forms:
+    // the curated-subset-as-exhaustive phrasing, and the rig-ran-against-the-
+    // whole-catalog phrasing that replaced it.
     expect(body).not.toMatch(/every launch archetype — iPhone/);
+    expect(body).not.toMatch(/same methodology runs against every archetype/);
+    // And no count may be hand-typed back in beside a verification verb.
+    expect(body).not.toMatch(/DEVICE_SUPPORT\.archetypeCount/);
   });
 
   it('signal-table 10-row sampling (drift to dropping any signal would weaken the cumulative-rig claim that EVERY signal must match the iPhone): userAgent / platform / Canvas 2D / WebGL renderer / AudioContext / Font metrics / JS engine timing / TLS ClientHello / Touch-event / Screen dimensions', () => {
