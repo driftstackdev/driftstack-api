@@ -178,8 +178,38 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(nameInput![0]).not.toMatch(/\brequired\b/);
   });
 
-  it('credentials: "include" on signup fetch (cookie-session post-issuance)', () => {
-    expect(body).toMatch(/credentials: 'include'/);
+  it("credentials: 'include' on the /v1/auth/signup fetch is kept unchanged (outside the OAuth retirement; the server sets no cookie on any auth route, so the flag is inert) — and never on the OAuth start", () => {
+    const signupBlock = body.match(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/signup'[\s\S]*?\}\)\s*\.then/,
+    );
+    expect(signupBlock).not.toBeNull();
+    expect(signupBlock![0]).toMatch(/credentials: 'include'/);
+    expect(body.match(/credentials: 'include'/g)).toHaveLength(1);
+  });
+
+  it('OAuth start is cookie-free v2 end to end (v1 cookie path retired 2026-09-14): /start carries NO credentials, binding_hash is always sent, and a missing binding or flow_id is refused BEFORE the IDP', () => {
+    const startBlock = body.match(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/start'[\s\S]*?\}\);/,
+    );
+    expect(startBlock).not.toBeNull();
+    expect(startBlock![0]).toMatch(/method: 'POST'/);
+    expect(startBlock![0]).toMatch(/body: JSON\.stringify\(startBody\)/);
+    expect(startBlock![0]).toContain(
+      '// No credentials: v2 has no cookie to carry in either direction.',
+    );
+    // The retired v1 round-trip was `credentials: 'include'` on this exact fetch.
+    expect(startBlock![0]).not.toMatch(/credentials: '/);
+    // No binding → no request (v1 fell back to its cookie flow here; v2 has none).
+    expect(body).toMatch(/if \(!binding\) \{\s*throw Object\.assign\(/);
+    expect(body).toContain(
+      'Provider sign-up needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet;',
+    );
+    // No flow_id → no navigation (v1 read that as "old server" and left anyway).
+    expect(body).toMatch(
+      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\('OAuth start returned no flow id\.'\);\s*return;\s*\}/,
+    );
+    // The retired vocabulary is gone from the page.
+    expect(body).not.toMatch(/legacy|old server|old bundle/);
   });
 
   it('email-already-registered (409) renders inline Sign in + Reset password links carrying the entered email (not a dead text banner)', () => {

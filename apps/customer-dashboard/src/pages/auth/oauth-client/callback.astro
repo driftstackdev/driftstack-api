@@ -1,30 +1,29 @@
 ---
 import DashboardLayout from '../../../layouts/DashboardLayout.astro';
 
-// V-667.C — OAuth-client callback landing page. The IDP redirects
-// the user here with ?code=...&state=... after they approve consent.
-// This page POSTs the same query params back to /v1/auth/oauth-client
-// /callback (server-side; the GET endpoint surfaces outcome via JSON)
-// and routes based on the outcome:
-//   signed-in-existing-link / created-new-account → session or mfa_required
-//   mfa_required → verify TOTP/recovery, then continue to redirect_to
-//   collision-pending-verification → /auth/oauth-client/check-email
-//   existing-link-revoked → /login with "re-link or password" prompt
+// V-667.C — OAuth-client callback landing page.
 //
-// PKCE verifier cookie round-trip is automatic via credentials:'include'.
-//
-// 2026-09-11 cookie-free v2 — the paragraph above is now the LEGACY branch
-// (an old server, or a flow an old bundle started). The API's top-level
+// Cookie-free v2 (2026-09-11; the v1 cookie path was retired 2026-09-14
+// after its 24-hour compatibility window). The API's top-level
 // /v1/auth/oauth/:provider/callback finishes the IDP exchange itself and
 // 302s here with `#flow=<id>&code=<hand-off>` in the URL FRAGMENT: never
 // sent to a server, never in Referer, stripped from history below before
 // anything else runs. The code is single-use, 60 s, and worthless without
-// the flow secret login.astro stored in this origin's localStorage; this
-// page POSTs {code, flow_secret} to /v1/auth/oauth-client/redeem with NO
-// credentials and receives the same outcome JSON the legacy fetch does.
+// the flow secret login.astro / signup.astro stored in this origin's
+// localStorage; this page POSTs {code, flow_secret} to
+// /v1/auth/oauth-client/redeem with NO credentials and routes on the
+// outcome JSON:
+//   signed-in-existing-link / created-new-account → session or mfa_required
+//   mfa_required → verify TOTP/recovery, then continue to redirect_to
+//   collision-pending-verification → in-page "Check your inbox" card
+//   existing-link-revoked → in-page banner (password or re-link via /login)
 // No cookie exists anywhere in v2, so Safari ITP / Chrome Incognito /
 // Firefox Total Cookie Protection have nothing to block. Expected server
 // failures arrive as `#oauth_error=<enum>` and are mapped to copy here.
+// A ?code=&state= QUERY arrival (the retired v1 shape) is scrubbed from
+// history and refused without any request: no server path produces one
+// any more (the top-level callback 302s only to fragment URLs), so it is
+// a hand-built or bookmarked URL that no sign-in page started.
 
 import { resolveApiBaseUrl } from '../../../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
@@ -283,7 +282,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           fetch(apiBaseUrl + '/v1/auth/mfa/challenge', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
-            credentials: 'include',
+            // No credentials: the challenge token is the whole credential,
+            // exactly as login.astro submits it; no cookie exists in v2.
             body: JSON.stringify(payload),
             signal: controller.signal,
           })
@@ -341,15 +341,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         });
       }
 
-      const qs = window.location.search;
-
       const OAUTH_FLOW_KEY_PREFIX = 'ds_oauth_flow.';
       const OAUTH_FLOW_MAX_AGE_MS = 10 * 60 * 1000;
-      // Read-and-remove the flow record login.astro wrote before leaving for
-      // the IDP. Missing → this browser/window did not start the flow (or
-      // the record was pruned); older than 10 min → stale. Either way the
-      // hand-off cannot be redeemed here, which is the login-CSRF defence
-      // working, not an error to route around.
+      // Read-and-remove the flow record login.astro / signup.astro wrote
+      // before leaving for the IDP. Missing → this browser/window did not
+      // start the flow (or the record was pruned); older than 10 min →
+      // stale. Either way the hand-off cannot be redeemed here, which is
+      // the login-CSRF defence working, not an error to route around.
       function takeOauthFlowRecord(id) {
         const key = OAUTH_FLOW_KEY_PREFIX + id;
         let raw = null;
@@ -402,8 +400,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
       }
 
-      // One outcome handler for both the legacy exchange and the v2 redeem:
-      // the server answers the same 4-outcome JSON on both routes.
+      // Outcome handler for the v2 redeem: the server answers a 4-outcome JSON.
       function handleOutcome(body) {
         if (body.outcome === 'signed-in-existing-link' || body.outcome === 'created-new-account') {
           // 2026-05-19 — server now mints the web session inline in
@@ -411,7 +408,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // before navigating so the dashboard finds it on landing
           // (otherwise the dashboard surfaces "Sign in to see live
           // account data" because localStorage is empty). Mirrors
-          // the password-login flow at login.astro:217.
+          // completeSession() in login.astro's password-login flow.
           if (body.mfa_required === true) {
             startMfaChallenge(body);
             return;
@@ -430,17 +427,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (body.outcome === 'collision-pending-verification') {
           if (intro) intro.textContent = '';
-          // v2 answers carry `provider` (the fragment has no query string to
-          // read it from); the query-string heuristic stays as the legacy
-          // fallback.
-          if (mergeProvider && body.provider === 'github') {
-            mergeProvider.textContent = 'GitHub';
-          } else if (mergeProvider && body.provider === 'google') {
-            mergeProvider.textContent = 'Google';
-          } else if (mergeProvider && qs.indexOf('provider=github') >= 0) {
-            mergeProvider.textContent = 'GitHub';
-          } else if (mergeProvider) {
-            mergeProvider.textContent = 'Google';
+          // The redeem answer names the provider (the fragment carries no
+          // query string to read it from); anything else renders as Google.
+          if (mergeProvider) {
+            mergeProvider.textContent = body.provider === 'github' ? 'GitHub' : 'Google';
           }
           if (body.expires_at) {
             const minutes = Math.max(
@@ -461,9 +451,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
       }
 
-      // Shared failure path. On a timeout the one-time code (IDP code on the
-      // legacy route, hand-off code on v2) may already be consumed server-side,
-      // so the copy tells the user not to retry THIS URL.
+      // Failure path. On a timeout the one-time hand-off code may already be
+      // consumed server-side, so the copy tells the user not to retry THIS URL.
       function handleCallbackFailure(err) {
         if (err && err.name === 'AbortError') {
           if (unknownRecovery) unknownRecovery.classList.remove('hidden');
@@ -522,38 +511,21 @@ const apiBaseUrl = resolveApiBaseUrl();
         return;
       }
 
-      // ── legacy: ?code&state exchange via the credentialed XHR ─────
-      // Reached when an OLD server bounced the IDP query string here (it set
-      // its PKCE cookie on /start and reads it on this fetch), or when an old
-      // bundle's flow was forwarded by the new server. Byte-for-byte the
-      // pre-v2 behaviour, Safari failure included — never worse.
-      if (!qs || qs.length === 0) {
-        showBanner('Missing callback parameters.');
+      // ── retired v1: a ?code=&state= QUERY arrival ──────────────────
+      // No server path lands a query string here any more: the v1 XHR
+      // exchange is gone and the top-level callback 302s only to fragment
+      // URLs. A query arrival is therefore a hand-built or bookmarked URL
+      // that no sign-in page started, so it is refused without any request
+      // and without a diagnosis this page cannot make. The query is
+      // scrubbed from history first because it may carry an IDP one-time
+      // code.
+      const qs = window.location.search;
+      if (qs && qs.length > 0) {
+        window.history.replaceState(window.history.state, '', window.location.pathname);
+        showBanner('This link cannot complete a sign-in. Return to sign-in and try again.');
         return;
       }
-      window.history.replaceState(
-        window.history.state,
-        '',
-        window.location.pathname + window.location.hash,
-      );
-      if (!canPersistWebSession()) {
-        showBanner(
-          'Enable browser site storage before completing this one-time provider sign-in. The callback code has not been exchanged, so you can retry after storage is available.',
-        );
-        return;
-      }
-
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), CALLBACK_TIMEOUT_MS);
-      fetch(apiBaseUrl + '/v1/auth/oauth-client/callback' + qs, {
-        method: 'GET',
-        credentials: 'include', // PKCE cookie round-trip
-        signal: controller.signal,
-      })
-        .then(parseJsonOrReject)
-        .then(handleOutcome)
-        .catch(handleCallbackFailure)
-        .finally(() => window.clearTimeout(timeout));
+      showBanner('Missing callback parameters.');
     })();
   </script>
 </DashboardLayout>

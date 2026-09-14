@@ -34,6 +34,11 @@ interface SetUpOpts {
   requestTimeoutImmediately?: boolean;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
   storageFault?: 'deny-all' | 'drop-oauth-flow-write';
+  // false → the window has NO crypto.subtle (a non-secure context). The v1
+  // page fell back to the cookie start here; v2 has nothing to fall back to
+  // and /start refuses a body without binding_hash, so the click must be
+  // refused locally, before any request.
+  webCrypto?: boolean;
 }
 
 // localStorage faults for the OAuth v2 arms. 'deny-all' is a browser with site
@@ -102,12 +107,16 @@ function setUpDom(html: string, opts: SetUpOpts): DomHandle {
   const { window } = dom;
   // jsdom ships no WebCrypto, so without this the built page's OAuth v2 branch (which
   // hashes a browser-held flow secret with crypto.subtle) is never exercised and the
-  // click silently falls to the legacy cookie start. Node's webcrypto is the real thing.
-  if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
+  // click is refused locally as a non-secure context. Node's webcrypto is the real
+  // thing. `webCrypto: false` forces the absence explicitly (never relying on what a
+  // given jsdom happens to ship) for the arm that pins that refusal.
+  if (opts.webCrypto === false) {
+    Object.defineProperty(window.crypto, 'subtle', { value: undefined, configurable: true });
+  } else if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
     Object.defineProperty(window.crypto, 'subtle', { value: webcrypto.subtle });
   }
   // The page encodes the secret with TextEncoder before hashing; jsdom's realm has
-  // none, and the page's own guard turns that into a silent legacy start.
+  // none, and the page's own guard would turn that into the same local refusal.
   if (typeof (window as unknown as { TextEncoder?: unknown }).TextEncoder === 'undefined') {
     Object.defineProperty(window, 'TextEncoder', { value: TextEncoder });
   }
@@ -182,6 +191,24 @@ function bannerText(window: JSDOM['window']): string {
 
 async function flush(times = 4): Promise<void> {
   for (let i = 0; i < times; i++) await new Promise((r) => setTimeout(r, 0));
+}
+
+/** Wait UNTIL something is true; a fixed turn count turns machine load into a verdict. */
+async function until(predicate: () => boolean, what: string, turns = 500): Promise<void> {
+  for (let i = 0; i < turns; i += 1) {
+    if (predicate()) return;
+    await new Promise((r) => setTimeout(r, 0));
+  }
+  throw new Error(`timed out after ${String(turns)} turns waiting for ${what}`);
+}
+
+function flowKeys(window: JSDOM['window']): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const k = window.localStorage.key(i);
+    if (k && k.startsWith('ds_oauth_flow.')) keys.push(k);
+  }
+  return keys;
 }
 
 function submitSignup(window: JSDOM['window'], email: string, password: string): void {
@@ -411,30 +438,71 @@ describe('signup page — local integration', () => {
     ).toBe('/verify-email/?next=' + encodeURIComponent('/cli/authorize'));
   });
 
-  it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start and, without a flow_id (old server), stores no flow record and still navigates', async () => {
+  it('V-667.C OAuth start refuses a 200 without a flow_id: nothing stored, no navigation, the banner names the cause (the retired v1 branch navigated anyway and left the callback to fail)', async () => {
     const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
       fetchPlan: [() => json({ authorize_url: 'https://github.com/login/oauth/authorize?x=1' })],
     });
     win = window;
-    oauthButton(window).click();
-    await flush();
-    await flush();
+    const btn = oauthButton(window);
+    btn.click();
+    await until(() => !bannerHidden(window), 'the refusal banner');
     const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
     expect(post?.init?.method).toBe('POST');
     const body = JSON.parse(String(post?.init?.body));
-    expect(typeof body.provider).toBe('string');
-    expect(body.provider.length).toBeGreaterThan(0);
+    expect(body.provider).toBe('google');
     expect(body.redirect_to).toBe('https://app.driftstack.io/');
-    // Legacy-server control: no flow_id → nothing under ds_oauth_flow.* (the
-    // cookie the old server set is the whole state), and the page still leaves.
-    const flowKeys: string[] = [];
-    for (let i = 0; i < window.localStorage.length; i++) {
-      const k = window.localStorage.key(i);
-      if (k && k.startsWith('ds_oauth_flow.')) flowKeys.push(k);
-    }
-    expect(flowKeys).toEqual([]);
+    expect(flowKeys(window)).toEqual([]);
+    expect(navigations()).toBe(0);
+    expect(bannerText(window)).toBe('OAuth start returned no flow id.');
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('OAuth start sends NO credentials on /start — v2 has no cookie to carry in either direction (the retired v1 round-trip was credentials: include)', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://github.com/login/oauth/authorize?x=1',
+            flow_id: 'FLOW_ID_PLAIN',
+          }),
+      ],
+    });
+    win = window;
+    oauthButton(window).click();
+    await until(() => navigations() >= 1, 'the page to leave for the IDP');
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    // A mutation that restores `credentials: 'include'` reads here as a defined value.
+    expect(post?.init?.credentials).toBeUndefined();
     expect(bannerHidden(window)).toBe(true);
-    expect(navigations()).toBe(1);
+  });
+
+  it('OAuth start refuses locally when crypto.subtle is absent (non-secure context): no /start request, no navigation, the banner names the cause — v1 fell back to its cookie flow here; v2 has none', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      webCrypto: false,
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://github.com/login/oauth/authorize?x=1',
+            flow_id: 'MUST_NOT_BE_MINTED',
+          }),
+      ],
+    });
+    win = window;
+    const btn = oauthButton(window);
+    btn.click();
+    await until(() => !bannerHidden(window), 'the refusal banner');
+    // Direction of the real failure: a request here would be a guaranteed 400
+    // ("Reload the sign-in page…") that misdescribes a browser problem.
+    expect(fetchCalls).toHaveLength(0);
+    expect(navigations()).toBe(0);
+    expect(flowKeys(window)).toEqual([]);
+    expect(bannerText(window)).toMatch(
+      /provider sign-up needs a secure \(https\) page with web crypto.*nothing has been sent to the provider yet.*email and password/i,
+    );
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
   });
 
   it('OAuth v2 start (Item 1 closure): sends binding_hash = base64url(sha256(flow_secret)) and, given a flow_id, stores the secret under ds_oauth_flow.<flow_id> before navigating — the record the callback page will redeem, so no cross-site PKCE cookie is needed', async () => {
@@ -461,8 +529,8 @@ describe('signup page — local integration', () => {
     expect(body.provider).toBe('google');
     expect(body.redirect_to).toBe('https://app.driftstack.io/');
     // The v2 discriminator: 43 base64url chars of a SHA-256, never the secret itself.
-    // This is the field whose absence sent /signup down the cookie path (the 400
-    // "PKCE verifier cookie missing or invalid." in Safari / Incognito / Firefox TCP).
+    // /start REQUIRES it since the cookie path was retired 2026-09-14: a body without
+    // it is a 400 (stale_sign_in_page), never a cookie flow.
     expect(typeof body.binding_hash).toBe('string');
     expect(body.binding_hash).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const raw = window.localStorage.getItem('ds_oauth_flow.FLOW_ID_TEST');

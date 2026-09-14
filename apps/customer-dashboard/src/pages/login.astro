@@ -716,26 +716,21 @@ const apiBaseUrl = resolveApiBaseUrl();
       }
 
       // V-667.C — bind OAuth provider buttons. On click, POST
-      // /v1/auth/oauth-client/start { provider, redirect_to } → take
-      // the authorize_url and let the browser navigate there. The
-      // server sets the HTTP-only PKCE cookie via Set-Cookie on this
-      // same response. Errors surface in the banner.
+      // /v1/auth/oauth-client/start { provider, redirect_to, binding_hash }
+      // → take the authorize_url and let the browser navigate there.
+      // Errors surface in the banner.
       //
-      // 2026-09-11 cookie-free v2 (owner blocker "Google/GitHub login
-      // broken"): this page is on app.driftstack.io and the API on
-      // api.driftstack.dev, so the Set-Cookie above arrives on a CROSS-SITE
-      // XHR response and Safari ITP (the owner's default) drops it before
-      // it is stored — the callback then fails with "PKCE verifier cookie
-      // missing". v2 keeps no browser state on the API host: before
-      // navigating, this page mints a random flow_secret, stores it in ITS
-      // OWN first-party localStorage under the server-issued flow_id, and
-      // sends only binding_hash = sha256(flow_secret) to /start. A new
-      // server signs that digest into the state and sets NO cookie; the
-      // callback page later proves the preimage to /redeem. An OLD server
-      // ignores binding_hash (non-strict schema), answers without flow_id
-      // and sets its cookie as before — `credentials:'include'` is kept so
-      // that legacy response still stores its cookie where browsers allow
-      // it, which is exactly today's behaviour.
+      // Cookie-free v2 (2026-09-11; the v1 cookie path was retired
+      // 2026-09-14 after its 24-hour compatibility window). v2 keeps no
+      // browser state on the API host (a cross-site cookie is dropped by
+      // Safari ITP before it is stored): before navigating, this page
+      // mints a random flow_secret, stores it in ITS OWN first-party
+      // localStorage under the server-issued flow_id, and sends only
+      // binding_hash = sha256(flow_secret) to /start. The server signs
+      // that digest into the state and sets NO cookie; the callback page
+      // later proves the preimage to /redeem. binding_hash is REQUIRED —
+      // /start refuses a body without it — so the XHR carries no
+      // credentials: there is no cookie to send or to store on either side.
       const oauthButtons = root.querySelectorAll('[data-oauth]');
       const OAUTH_REQUEST_TIMEOUT_MS = 15_000;
       const OAUTH_FLOW_KEY_PREFIX = 'ds_oauth_flow.';
@@ -783,8 +778,10 @@ const apiBaseUrl = resolveApiBaseUrl();
       // chars), and binding_hash = base64url(SHA-256(utf8(flow_secret))) —
       // the SAME bytes the server hashes at /redeem. Resolves null when
       // WebCrypto is unavailable (a non-secure context; every HTTPS page and
-      // localhost has it), in which case the server's legacy cookie flow
-      // runs — that path fails on Safari exactly as before v2, never worse.
+      // localhost has it). There is no flow without the binding — /start
+      // refuses a body that lacks binding_hash — so the click handler
+      // refuses locally, before anything is sent, with copy that names the
+      // cause.
       function mintOauthBinding() {
         const c = window.crypto;
         if (
@@ -833,21 +830,27 @@ const apiBaseUrl = resolveApiBaseUrl();
           let flowSecret = null;
           mintOauthBinding()
             .then((binding) => {
+              if (!binding) {
+                throw Object.assign(
+                  new Error(
+                    'Provider sign-in needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet; open the dashboard over HTTPS or sign in with your password.',
+                  ),
+                  { customerSafe: true },
+                );
+              }
+              flowSecret = binding.secret;
               const startBody = {
                 provider: provider,
                 redirect_to: window.location.origin + (next ? next : '/'),
               };
-              if (binding) {
-                flowSecret = binding.secret;
-                startBody.binding_hash = binding.bindingHash;
-              }
+              startBody.binding_hash = binding.bindingHash;
               // The deadline bounds the REQUEST, so it starts here, right
               // before the fetch, not around the local digest above.
               timeoutId = setTimeout(() => controller.abort(), OAUTH_REQUEST_TIMEOUT_MS);
               return fetch(apiBaseUrl + '/v1/auth/oauth-client/start', {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                credentials: 'include', // legacy PKCE cookie round-trip (old server only; v2 sets none)
+                // No credentials: v2 has no cookie to carry in either direction.
                 body: JSON.stringify(startBody),
                 signal: controller.signal,
               });
@@ -869,26 +872,28 @@ const apiBaseUrl = resolveApiBaseUrl();
                 showBanner('OAuth start failed: invalid authorize URL');
                 return;
               }
-              // v2 server: persist the secret under the flow_id BEFORE leaving,
-              // and read it back — a write that did not land would strand the
-              // sign-in at the callback with nothing to redeem. A response with
-              // no flow_id is an old server: it set a cookie, there is nothing
-              // to store, and the callback page's legacy branch finishes it.
-              if (flowSecret && typeof body.flow_id === 'string' && body.flow_id.length > 0) {
-                const key = OAUTH_FLOW_KEY_PREFIX + body.flow_id;
-                const record = JSON.stringify({ secret: flowSecret, iat: Date.now() });
-                try {
-                  pruneOauthFlows(Date.now());
-                  localStorage.setItem(key, record);
-                  if (localStorage.getItem(key) !== record) {
-                    throw new Error('flow record read-back failed');
-                  }
-                } catch (_) {
-                  showBanner(
-                    'This browser could not persist the sign-in flow. Enable site storage, then start a fresh sign-in.',
-                  );
-                  return;
+              // Persist the secret under the flow_id BEFORE leaving, and read
+              // it back — a write that did not land would strand the sign-in
+              // at the callback with nothing to redeem. A 200 without a
+              // flow_id cannot be finished either (the callback page has no
+              // record to look up), so it is refused here, before the IDP.
+              if (typeof body.flow_id !== 'string' || body.flow_id.length === 0) {
+                showBanner('OAuth start failed: no flow id in the response.');
+                return;
+              }
+              const key = OAUTH_FLOW_KEY_PREFIX + body.flow_id;
+              const record = JSON.stringify({ secret: flowSecret, iat: Date.now() });
+              try {
+                pruneOauthFlows(Date.now());
+                localStorage.setItem(key, record);
+                if (localStorage.getItem(key) !== record) {
+                  throw new Error('flow record read-back failed');
                 }
+              } catch (_) {
+                showBanner(
+                  'This browser could not persist the sign-in flow. Enable site storage, then start a fresh sign-in.',
+                );
+                return;
               }
               window.location.href = authorizeUrl;
             })

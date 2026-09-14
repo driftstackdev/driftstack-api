@@ -47,21 +47,45 @@ describe('authentication query credential history scrubbing', () => {
     },
   );
 
-  it('the OAuth callback captures the provider query before removing it from the visible URL', () => {
+  it('the OAuth callback captures the fragment hand-off, strips it from the visible URL before any await, and only then looks up the flow record and redeems', () => {
     const source = readPage('auth/oauth-client/callback.astro');
-    const capture = source.indexOf('const qs = window.location.search;');
-    const missingGuard = source.indexOf('if (!qs || qs.length === 0)', capture);
-    const replace = source.indexOf('window.history.replaceState(', missingGuard);
+    const capture = source.indexOf('const rawHash = window.location.hash;');
+    const guard = source.indexOf('if (flowId && handoffCode) {', capture);
+    const replace = source.indexOf(
+      "window.history.replaceState(window.history.state, '', window.location.pathname);",
+      guard,
+    );
     const storageGuard = source.indexOf('if (!canPersistWebSession())', replace);
-    const request = source.indexOf("'/v1/auth/oauth-client/callback' + qs", storageGuard);
+    const record = source.indexOf('takeOauthFlowRecord(flowId)', storageGuard);
+    const request = source.indexOf("'/v1/auth/oauth-client/redeem'", record);
 
     expect(capture).toBeGreaterThanOrEqual(0);
-    expect(capture).toBeLessThan(missingGuard);
-    expect(missingGuard).toBeLessThan(replace);
+    expect(capture).toBeLessThan(guard);
+    expect(guard).toBeLessThan(replace);
     expect(replace).toBeLessThan(storageGuard);
-    expect(storageGuard).toBeLessThan(request);
+    expect(storageGuard).toBeLessThan(record);
+    expect(record).toBeLessThan(request);
     expect(source).not.toContain('window.history.pushState(');
     expect(source).not.toContain('window.location.reload(');
+  });
+
+  it('a retired-v1 ?code=&state= query arrival at the OAuth callback is scrubbed from the visible URL and never requested', () => {
+    const source = readPage('auth/oauth-client/callback.astro');
+    const capture = source.indexOf('const qs = window.location.search;');
+    const guard = source.indexOf('if (qs && qs.length > 0) {', capture);
+    const replace = source.indexOf(
+      "window.history.replaceState(window.history.state, '', window.location.pathname);",
+      guard,
+    );
+
+    expect(capture).toBeGreaterThanOrEqual(0);
+    expect(capture).toBeLessThan(guard);
+    expect(guard).toBeLessThan(replace);
+    // The v1 exchange (GET /v1/auth/oauth-client/callback + PKCE cookie) was
+    // retired 2026-09-14; the query carries the IDP's one-time code and must
+    // leave history without ever being sent anywhere.
+    expect(source).not.toContain("'/v1/auth/oauth-client/callback'");
+    expect(source).not.toContain("credentials: 'include'");
   });
 
   it('fails its structural contract if token deletion is removed', () => {

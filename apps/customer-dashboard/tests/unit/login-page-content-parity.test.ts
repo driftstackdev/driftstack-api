@@ -197,4 +197,30 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(fetchBlock).not.toBeNull();
     expect(fetchBlock![0]).not.toMatch(/credentials: 'include'/);
   });
+
+  it('OAuth start is cookie-free v2 end to end (v1 cookie path retired 2026-09-14): /start carries NO credentials, binding_hash is always sent, and a missing binding or flow_id is refused BEFORE the IDP', () => {
+    const startBlock = body.match(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/start'[\s\S]*?\}\);/,
+    );
+    expect(startBlock).not.toBeNull();
+    expect(startBlock![0]).toMatch(/method: 'POST'/);
+    expect(startBlock![0]).toMatch(/body: JSON\.stringify\(startBody\)/);
+    expect(startBlock![0]).toContain(
+      '// No credentials: v2 has no cookie to carry in either direction.',
+    );
+    // The retired v1 round-trip was `credentials: 'include'` on this exact fetch.
+    expect(startBlock![0]).not.toMatch(/credentials: '/);
+    expect(body).toMatch(/startBody\.binding_hash = binding\.bindingHash;/);
+    // No binding → no request (v1 fell back to its cookie flow here; v2 has none).
+    expect(body).toMatch(/if \(!binding\) \{\s*throw Object\.assign\(/);
+    expect(body).toContain(
+      'Provider sign-in needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet;',
+    );
+    // No flow_id → no navigation (v1 read that as "old server" and left anyway).
+    expect(body).toMatch(
+      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\('OAuth start failed: no flow id in the response\.'\);\s*return;\s*\}/,
+    );
+    // The retired vocabulary is gone from the page.
+    expect(body).not.toMatch(/legacy|old server|old bundle|credentials: 'include'/);
+  });
 });

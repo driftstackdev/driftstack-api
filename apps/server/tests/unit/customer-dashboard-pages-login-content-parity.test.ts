@@ -124,6 +124,14 @@ describe('W493.A apps/customer-dashboard/src/pages/login.astro content parity', 
     );
   });
 
+  it("POST /v1/auth/oauth-client/start contract (cookie-free v2; the v1 cookie path was retired 2026-09-14): body {provider, redirect_to, binding_hash} + content-type:application/json + NO credentials — pinned so the XHR never again carries the retired PKCE cookie (Safari ITP dropped it cross-site: the owner's 'Google/GitHub login broken')", () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/start', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*\/\/ No credentials: v2 has no cookie to carry in either direction\.\s*body: JSON\.stringify\(startBody\),\s*signal: controller\.signal,\s*\}\)/,
+    );
+    expect(body).toMatch(/startBody\.binding_hash = binding\.bindingHash;/);
+    expect(body).not.toMatch(/credentials: 'include'/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });

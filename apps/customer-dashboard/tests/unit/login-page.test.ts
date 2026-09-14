@@ -37,6 +37,11 @@ interface SetUpOpts {
   requestTimeoutOnCall?: number;
   fetchPlan?: Array<(call: MockFetchCall) => Response | Promise<Response>>;
   storageFault?: 'deny-all' | 'drop-session-write';
+  // false → the window has NO crypto.subtle (a non-secure context). The v1
+  // page fell back to the cookie start here; v2 has nothing to fall back to
+  // and /start refuses a body without binding_hash, so the click must be
+  // refused locally, before any request.
+  webCrypto?: boolean;
 }
 
 function faultLocalStorage(window: JSDOM['window'], mode: 'deny-all' | 'drop-session-write'): void {
@@ -60,21 +65,31 @@ function faultLocalStorage(window: JSDOM['window'], mode: 'deny-all' | 'drop-ses
   };
 }
 
-function setUpDom(
-  html: string,
-  opts: SetUpOpts,
-): { window: JSDOM['window']; fetchCalls: MockFetchCall[] } {
+interface DomHandle {
+  window: JSDOM['window'];
+  fetchCalls: MockFetchCall[];
+  // jsdom cannot navigate: every `window.location.href = …` the page performs
+  // surfaces as a "Not implemented: navigation" jsdomError. Counting them turns
+  // "did the page leave for the IDP?" into an assertable number, so a refusal
+  // arm can prove the page did NOT navigate — not merely that a banner showed.
+  navigations: () => number;
+}
+
+function setUpDom(html: string, opts: SetUpOpts): DomHandle {
   const scriptBodies: string[] = [];
   const htmlNoScripts = html.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body: string) => {
     scriptBodies.push(body);
     return '';
   });
   const virtualConsole = new VirtualConsole();
+  let navigationCount = 0;
   virtualConsole.on('jsdomError', (err: Error) => {
-    if (!/Not implemented: navigation/.test(String(err && err.message))) {
-      // eslint-disable-next-line no-console
-      console.error(err);
+    if (/Not implemented: navigation/.test(String(err && err.message))) {
+      navigationCount += 1;
+      return;
     }
+    // eslint-disable-next-line no-console
+    console.error(err);
   });
   const dom = new JSDOM(htmlNoScripts, {
     url: opts.url ?? DEFAULT_URL,
@@ -85,12 +100,16 @@ function setUpDom(
   const { window } = dom;
   // jsdom ships no WebCrypto, so without this the built page's OAuth v2 branch (which
   // hashes a browser-held flow secret with crypto.subtle) is never exercised and the
-  // click silently falls to the legacy cookie start. Node's webcrypto is the real thing.
-  if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
+  // click is refused locally as a non-secure context. Node's webcrypto is the real
+  // thing. `webCrypto: false` forces the absence explicitly (never relying on what a
+  // given jsdom happens to ship) for the arm that pins that refusal.
+  if (opts.webCrypto === false) {
+    Object.defineProperty(window.crypto, 'subtle', { value: undefined, configurable: true });
+  } else if (typeof (window.crypto as Crypto | undefined)?.subtle === 'undefined') {
     Object.defineProperty(window.crypto, 'subtle', { value: webcrypto.subtle });
   }
   // The page encodes the secret with TextEncoder before hashing; jsdom's realm has
-  // none, and the page's own guard turns that into a silent legacy start.
+  // none, and the page's own guard would turn that into the same local refusal.
   if (typeof (window as unknown as { TextEncoder?: unknown }).TextEncoder === 'undefined') {
     Object.defineProperty(window, 'TextEncoder', { value: TextEncoder });
   }
@@ -134,7 +153,7 @@ function setUpDom(
   if (!pageScript) throw new Error('login inline script not found');
   // @ts-expect-error — jsdom global has eval
   window.eval(pageScript);
-  return { window: window as JSDOM['window'], fetchCalls };
+  return { window: window as JSDOM['window'], fetchCalls, navigations: () => navigationCount };
 }
 
 function json(obj: unknown, status = 200): Response {
@@ -186,6 +205,23 @@ function submitLogin(window: JSDOM['window'], email: string, password: string): 
   (form.querySelector('input[name="email"]') as HTMLInputElement).value = email;
   (form.querySelector('input[name="password"]') as HTMLInputElement).value = password;
   form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+}
+
+function oauthButton(window: JSDOM['window']): HTMLButtonElement {
+  const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
+  // No skip-on-absence branch: a build that dropped the provider buttons must
+  // red here, not pass vacuously.
+  expect(btn, 'the built /login page must render a [data-oauth] button').not.toBeNull();
+  return btn as HTMLButtonElement;
+}
+
+function flowKeys(window: JSDOM['window']): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const k = window.localStorage.key(i);
+    if (k && k.startsWith('ds_oauth_flow.')) keys.push(k);
+  }
+  return keys;
 }
 
 describe('login page — local integration', () => {
@@ -560,27 +596,77 @@ describe('login page — local integration', () => {
     expect(bannerText(window)).toMatch(/sign-in took too long.*check your connection/i);
   });
 
-  it('V-667.C OAuth start: POSTs {provider, redirect_to} to /v1/auth/oauth-client/start', async () => {
-    const { window, fetchCalls } = setUpDom(loadBuiltPage(), {
+  it('V-667.C OAuth start: POSTs exactly {provider, redirect_to, binding_hash} to /v1/auth/oauth-client/start with NO credentials — v2 has no cookie to carry in either direction', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'FLOW_ID_PLAIN',
+          }),
+      ],
+    });
+    win = window;
+    oauthButton(window).click();
+    await until(() => navigations() >= 1, 'the page to leave for the IDP');
+    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    expect(post?.init?.method).toBe('POST');
+    const body = JSON.parse(String(post?.init?.body)) as Record<string, unknown>;
+    expect(body.provider).toBe('google');
+    expect(body.redirect_to).toBe('https://app.driftstack.io/');
+    expect(Object.keys(body).sort()).toEqual(['binding_hash', 'provider', 'redirect_to']);
+    // The retired v1 round-trip was `credentials: 'include'` (the PKCE cookie);
+    // a mutation that restores it reads here as a defined value.
+    expect(post?.init?.credentials).toBeUndefined();
+    expect(bannerHidden(window)).toBe(true);
+    expect(navigations()).toBe(1);
+  });
+
+  it('OAuth start refuses a 200 without a flow_id: nothing stored, no navigation, the banner names the cause (the retired v1 branch navigated anyway and left the callback to fail)', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
       fetchPlan: [
         () => json({ authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' }),
       ],
     });
     win = window;
-    const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
-    if (!btn) {
-      // No OAuth buttons rendered in this build — skip without failing.
-      expect(true).toBe(true);
-      return;
-    }
+    const btn = oauthButton(window);
     btn.click();
-    await flush();
-    const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
-    expect(post?.init?.method).toBe('POST');
-    const body = JSON.parse(String(post?.init?.body));
-    expect(typeof body.provider).toBe('string');
-    expect(body.provider.length).toBeGreaterThan(0);
-    expect(typeof body.redirect_to).toBe('string');
+    await until(() => !bannerHidden(window), 'the refusal banner');
+    expect(fetchCalls.filter((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url))).toHaveLength(
+      1,
+    );
+    expect(flowKeys(window)).toEqual([]);
+    expect(navigations()).toBe(0);
+    expect(bannerText(window)).toBe('OAuth start failed: no flow id in the response.');
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('OAuth start refuses locally when crypto.subtle is absent (non-secure context): no /start request, no navigation, the banner names the cause — v1 fell back to its cookie flow here; v2 has none', async () => {
+    const { window, fetchCalls, navigations } = setUpDom(loadBuiltPage(), {
+      webCrypto: false,
+      fetchPlan: [
+        () =>
+          json({
+            authorize_url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1',
+            flow_id: 'MUST_NOT_BE_MINTED',
+          }),
+      ],
+    });
+    win = window;
+    const btn = oauthButton(window);
+    btn.click();
+    await until(() => !bannerHidden(window), 'the refusal banner');
+    // Direction of the real failure: a request here would be a guaranteed 400
+    // ("Reload the sign-in page…") that misdescribes a browser problem.
+    expect(fetchCalls).toHaveLength(0);
+    expect(navigations()).toBe(0);
+    expect(flowKeys(window)).toEqual([]);
+    expect(bannerText(window)).toMatch(
+      /provider sign-in needs a secure \(https\) page with web crypto.*nothing has been sent to the provider yet.*sign in with your password/i,
+    );
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-busy')).toBe('false');
   });
 
   it('OAuth v2 start: sends binding_hash = base64url(sha256(flow_secret)) and, given a flow_id, stores the secret under it before navigating — the record the callback page will redeem', async () => {
@@ -594,12 +680,7 @@ describe('login page — local integration', () => {
       ],
     });
     win = window;
-    const btn = window.document.querySelector('[data-oauth]') as HTMLButtonElement | null;
-    if (!btn) {
-      expect(true).toBe(true);
-      return;
-    }
-    btn.click();
+    oauthButton(window).click();
     await flush();
     await flush();
     const post = fetchCalls.find((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));

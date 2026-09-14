@@ -1,9 +1,10 @@
 // Drift guard for apps/customer-dashboard/src/pages/auth/oauth-client/
 // callback.astro. Pins the V-667.C OAuth-client callback landing page
-// + outcome routing (signed-in/created → session or MFA; collision-pending → show
-// check-email card; existing-link-revoked → /login with "re-link or
-// password" prompt). Drift to dropping credentials:'include' would
-// break the PKCE verifier cookie round-trip.
+// + outcome routing (signed-in/created → session or MFA; collision-pending →
+// in-page "Check your inbox" card; existing-link-revoked → in-page banner,
+// no navigation) + the cookie-free v2 redeem. The v1 PKCE-cookie
+// exchange was retired 2026-09-14; drift back to a credentialed request
+// would re-expose cross-site sign-ins to the Safari ITP cookie drop.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -28,13 +29,15 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('V-667.C module-level OAuth callback framing and PKCE-cookie contract stay documented', () => {
+  it('V-667.C module-level OAuth callback framing and cookie-free v2 contract stay documented; the outcome list names what the code does (in-page card / banner), never a page that does not exist', () => {
     expect(body).toMatch(/\/\/ V-667\.C — OAuth-client callback landing page\./);
     expect(body).toMatch(
-      /\/\/\s+signed-in-existing-link \/ created-new-account → session or mfa_required\s*\/\/\s+mfa_required → verify TOTP\/recovery, then continue to redirect_to\s*\/\/\s+collision-pending-verification → \/auth\/oauth-client\/check-email\s*\/\/\s+existing-link-revoked → \/login with "re-link or password" prompt/,
+      /\/\/\s+signed-in-existing-link \/ created-new-account → session or mfa_required\s*\/\/\s+mfa_required → verify TOTP\/recovery, then continue to redirect_to\s*\/\/\s+collision-pending-verification → in-page "Check your inbox" card\s*\/\/\s+existing-link-revoked → in-page banner \(password or re-link via \/login\)/,
     );
+    // src/pages/auth/oauth-client/ holds callback.astro and confirm-merge.astro only.
+    expect(body).not.toMatch(/check-email/);
     expect(body).toMatch(
-      /\/\/ PKCE verifier cookie round-trip is automatic via credentials:'include'\./,
+      /\/\/ Cookie-free v2 \(2026-09-11; the v1 cookie path was retired 2026-09-14\s*\/\/ after its 24-hour compatibility window\)\./,
     );
   });
 
@@ -57,10 +60,19 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     );
   });
 
-  it("fetch GET /v1/auth/oauth-client/callback + credentials:'include' + 'PKCE cookie round-trip' comment pinned. Drift to credentials:'omit' would break the PKCE cookie carrying the verifier back to the server — token exchange would fail with 'PKCE verifier cookie missing or invalid'", () => {
+  it("fetch POST /v1/auth/oauth-client/redeem + {code, flow_secret} body + NO credentials + 'No credentials' comment pinned; the retired v1 GET /v1/auth/oauth-client/callback + credentials:'include' + 'PKCE cookie round-trip' are gone, and a retired-v1 query arrival is scrubbed then refused without a request. Drift to a credentialed redeem would put the XHR back inside every third-party-cookie policy", () => {
     expect(body).toMatch(
-      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback' \+ qs, \{\s*method: 'GET',\s*credentials: 'include', \/\/ PKCE cookie round-trip\s*signal: controller\.signal,\s*\}\)/,
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/redeem', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*\/\/ No credentials: v2 has no cookie to carry, and omitting them keeps\s*\/\/ this XHR outside every third-party-cookie policy by construction\.\s*body: JSON\.stringify\(\{ code: handoffCode, flow_secret: flowRecord\.secret \}\),\s*signal: redeemController\.signal,\s*\}\)/,
     );
+    expect(body).not.toMatch(/credentials: 'include'/);
+    expect(body).not.toMatch(/'\/v1\/auth\/oauth-client\/callback'/);
+    expect(body).not.toMatch(/PKCE cookie round-trip/);
+    expect(body).toMatch(
+      /const qs = window\.location\.search;\s*if \(qs && qs\.length > 0\) \{\s*window\.history\.replaceState\(window\.history\.state, '', window\.location\.pathname\);\s*showBanner\('This link cannot complete a sign-in\. Return to sign-in and try again\.'\);\s*return;\s*\}/,
+    );
+    // No server path produces a query arrival, so the page cannot attribute it
+    // to "an outdated sign-in page" and must not claim to.
+    expect(body).not.toMatch(/outdated sign-in page/);
   });
 
   it('signed-in outcomes require either a session token or the first-class MFA handoff', () => {
@@ -94,10 +106,11 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(body).toContain('Do not submit this code again. Start a fresh sign-in.');
   });
 
-  it("Provider-from-query-string heuristic pinned: qs.indexOf('provider=github') >= 0 → 'GitHub' / else 'Google' for the data-merge-provider text. Drift to a different heuristic would mismatch the provider-name in the check-inbox card on edge-case query strings", () => {
+  it("Provider-from-redeem-answer pinned: body.provider === 'github' → 'GitHub', anything else → 'Google' for the data-merge-provider text; the retired query-string heuristic (qs.indexOf('provider=github')) is gone — the fragment hand-off carries no query string to read it from", () => {
     expect(body).toMatch(
-      /if \(mergeProvider && qs\.indexOf\('provider=github'\) >= 0\) \{\s*mergeProvider\.textContent = 'GitHub';\s*\} else if \(mergeProvider\) \{\s*mergeProvider\.textContent = 'Google';\s*\}/,
+      /if \(mergeProvider\) \{\s*mergeProvider\.textContent = body\.provider === 'github' \? 'GitHub' : 'Google';\s*\}/,
     );
+    expect(body).not.toMatch(/qs\.indexOf\('provider=github'\)/);
   });
 
   it('Dynamic-minutes-from-expires_at framing pinned: Math.max(1, Math.round((new Date(body.expires_at).getTime() - Date.now()) / 60000)) + mergeWindow.textContent = minutes + " minutes". Drift to dropping the Math.max(1, …) floor would let "0 minutes" surface for sub-30s windows', () => {

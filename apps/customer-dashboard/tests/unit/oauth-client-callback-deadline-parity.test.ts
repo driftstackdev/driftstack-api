@@ -14,19 +14,35 @@ const CONFIRM = readFileSync(
   'utf8',
 );
 
-function expectBoundedRequest(body: string, timeoutName: string): void {
+function expectBoundedRequest(
+  body: string,
+  timeoutName: string,
+  names: { controller: string; timer: string } = { controller: 'controller', timer: 'timeout' },
+): void {
   expect(body).toContain(`const ${timeoutName} = 15_000;`);
-  expect(body).toContain('const controller = new AbortController();');
-  expect(body).toContain(`window.setTimeout(() => controller.abort(), ${timeoutName})`);
-  expect(body).toContain('signal: controller.signal');
-  expect(body).toContain('.finally(() => window.clearTimeout(timeout))');
+  expect(body).toContain(`const ${names.controller} = new AbortController();`);
+  expect(body).toContain(`window.setTimeout(() => ${names.controller}.abort(), ${timeoutName})`);
+  expect(body).toContain(`signal: ${names.controller}.signal`);
+  expect(body).toContain(`.finally(() => window.clearTimeout(${names.timer}))`);
   expect(body).toContain("err && err.name === 'AbortError'");
 }
 
 describe('OAuth callback completion deadlines', () => {
-  it('bounds the PKCE callback without changing credential or redirect guards', () => {
-    expectBoundedRequest(CALLBACK, 'CALLBACK_TIMEOUT_MS');
-    expect(CALLBACK).toContain("credentials: 'include'");
+  it('bounds the v2 redeem without changing its no-credentials posture or redirect guards', () => {
+    expectBoundedRequest(CALLBACK, 'CALLBACK_TIMEOUT_MS', {
+      controller: 'redeemController',
+      timer: 'redeemTimeout',
+    });
+    expect(CALLBACK).toContain("fetch(apiBaseUrl + '/v1/auth/oauth-client/redeem'");
+    expect(CALLBACK).toContain(
+      'body: JSON.stringify({ code: handoffCode, flow_secret: flowRecord.secret })',
+    );
+    // Retired 2026-09-14: the v1 GET exchange and its PKCE cookie. No fetch on
+    // this page carries credentials any more — the MFA challenge token is the
+    // whole credential, exactly as login.astro submits it.
+    expect(CALLBACK).not.toContain("credentials: 'include'");
+    expect(CALLBACK).not.toContain("'/v1/auth/oauth-client/callback'");
+    expect(CALLBACK).not.toContain('PKCE cookie round-trip');
     expect(CALLBACK).toContain("localStorage.setItem('ds_web_session_token', token)");
     expect(CALLBACK).toContain("localStorage.getItem('ds_web_session_token') !== token");
     expect(CALLBACK).toContain('safeNextPath(body.redirect_to, window.location.origin)');
@@ -42,10 +58,10 @@ describe('OAuth callback completion deadlines', () => {
     expect(CALLBACK).toContain('Do not submit this code again.');
   });
 
-  it('preflights persistent session storage before the one-time callback exchange', () => {
+  it('preflights persistent session storage before the one-time hand-off redeem', () => {
     expect(CALLBACK).toContain('function canPersistWebSession()');
     expect(CALLBACK).toMatch(
-      /if \(!canPersistWebSession\(\)\) \{[\s\S]*callback code has not been exchanged[\s\S]*return;[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/callback'/,
+      /if \(!canPersistWebSession\(\)\) \{[\s\S]*hand-off code was not redeemed[\s\S]*return;[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/redeem'/,
     );
   });
 

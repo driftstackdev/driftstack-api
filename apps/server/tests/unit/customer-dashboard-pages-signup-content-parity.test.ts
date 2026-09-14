@@ -117,6 +117,18 @@ describe('W492.B apps/customer-dashboard/src/pages/signup.astro content parity',
     );
   });
 
+  it("POST /v1/auth/oauth-client/start contract (cookie-free v2; the v1 cookie path was retired 2026-09-14): body {provider, redirect_to, binding_hash} + content-type:application/json + NO credentials — pinned so the XHR never again carries the retired PKCE cookie (the signup fetch above keeps its own credentials:'include'; the start fetch must not)", () => {
+    expect(body).toMatch(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/start', \{\s*method: 'POST',\s*headers: \{ 'content-type': 'application\/json' \},\s*\/\/ No credentials: v2 has no cookie to carry in either direction\.\s*body: JSON\.stringify\(startBody\),\s*signal: controller\.signal,\s*\}\)/,
+    );
+    expect(body).toMatch(/startBody\.binding_hash = binding\.bindingHash;/);
+    const startBlock = body.match(
+      /fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/start'[\s\S]*?\}\);/,
+    );
+    expect(startBlock).not.toBeNull();
+    expect(startBlock![0]).not.toMatch(/credentials: '/);
+  });
+
   it('file exists at canonical path', () => {
     expect(existsSync(LIB)).toBe(true);
   });
