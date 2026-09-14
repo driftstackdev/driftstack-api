@@ -606,6 +606,15 @@ export const LOCKED_ARCHETYPE_DISPLAY_LABEL = 'iPhone 17 / iOS 18.7 / Safari 26.
 export type ArchetypeCanvasFamily = 'A' | 'B';
 export type ArchetypeStatus = 'launch' | 'available' | 'reference' | 'planned';
 
+/**
+ * The EVIDENCE axis, mirrored from Agent-1's catalog `lifecycle` field.
+ * `bit_identical` — fork output demonstrated byte-identical to a real capture on
+ * the gated surfaces. `available` — config validated and UA measured at that
+ * cell, byte-identity not demonstrated there. `held` — withheld on policy.
+ * `reference` — our own internal baseline, not a catalog row.
+ */
+export type ArchetypeLifecycle = 'bit_identical' | 'available' | 'held' | 'reference';
+
 export interface ArchetypeConfig {
   /** Canonical slug, e.g. `iphone17_ios18_7_safari26_4`. */
   readonly id: string;
@@ -621,6 +630,27 @@ export interface ArchetypeConfig {
   readonly canvasFamily: ArchetypeCanvasFamily;
   /** Fingerprint-atlas readiness — see the enum above. */
   readonly status: ArchetypeStatus;
+  /**
+   * How strong the evidence is for this archetype, as distinct from whether a
+   * customer may select it (`status`).
+   *
+   * ⛔ These two axes were merged until 2026-09-14 and that merge produced a
+   * false claim on a public trust page. `available` means the config is
+   * validated and its user-agent measured at that exact (model, iOS, Safari)
+   * cell — real and usable. `bit_identical` means the fork's output has also
+   * been shown byte-for-byte identical to a real capture on the gated surfaces.
+   * Public copy that asserts verification must count `bit_identical`; copy that
+   * describes breadth counts what is selectable. They are different numbers and
+   * they are not interchangeable.
+   */
+  readonly lifecycle: ArchetypeLifecycle;
+  /**
+   * Why a held archetype is not offered — the SHORT, customer-facing form.
+   * Absent unless `status` is `'planned'` and the catalog withheld it on policy.
+   * The catalog's long-form reason names the vendor policy and the internal gate
+   * and is deliberately not carried here.
+   */
+  readonly heldReason?: string;
 }
 
 /**
@@ -725,14 +755,17 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  * STALE (June 2026 numbers, per A1) and must not be treated as a readiness feed.
  */
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
+  // <generated:archetype-registry> — regenerate, do not hand-edit
+  // 105 entries from operations/archetype-catalog.json (bit_identical 81, available 18, held 6).
   {
-    id: LOCKED_ARCHETYPE_ID,
-    displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,
-    device: 'iPhone 17',
-    iosVersion: '18.7',
-    safariVersion: '26.4',
-    canvasFamily: 'B',
-    status: 'launch',
+    id: 'iphone13_ios18_4_1_safari18_4',
+    displayLabel: 'iPhone 13 / iOS 18.4.1 / Safari 18.4',
+    device: 'iPhone 13',
+    iosVersion: '18.4.1',
+    safariVersion: '18.4',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone13_ios18_6_safari18_6',
@@ -742,6 +775,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13_ios18_6_safari26_0',
@@ -751,6 +785,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13_ios18_7_safari26_3',
@@ -760,6 +795,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13_ios18_7_safari26_4',
@@ -769,6 +805,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13_ios18_7_safari26_5',
@@ -778,6 +815,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13mini_ios18_6_safari18_6',
@@ -787,6 +825,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13mini_ios18_7_safari26_4',
@@ -796,6 +835,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13mini_ios18_7_safari26_5',
@@ -805,6 +845,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13pro_ios18_6_safari18_6',
@@ -814,6 +855,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13pro_ios18_6_safari26_0',
@@ -823,6 +865,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13pro_ios18_7_safari26_3',
@@ -832,6 +875,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13pro_ios18_7_safari26_4',
@@ -841,6 +885,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13pro_ios18_7_safari26_5',
@@ -850,6 +895,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13promax_ios18_6_safari18_6',
@@ -859,6 +905,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13promax_ios18_6_safari26_0',
@@ -868,6 +915,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13promax_ios18_7_safari26_3',
@@ -877,6 +925,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13promax_ios18_7_safari26_4',
@@ -886,6 +935,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone13promax_ios18_7_safari26_5',
@@ -895,6 +945,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14_ios18_6_safari18_6',
@@ -904,6 +955,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14_ios18_6_safari26_0',
@@ -913,6 +965,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone14_ios18_7_safari26_2',
+    displayLabel: 'iPhone 14 / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 14',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone14_ios18_7_safari26_3',
@@ -922,6 +985,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14_ios18_7_safari26_4',
@@ -931,6 +995,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14_ios18_7_safari26_5',
@@ -940,6 +1005,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone14_ios18_7_safari26_6_1',
+    displayLabel: 'iPhone 14 / iOS 18.7 / Safari 26.6.1',
+    device: 'iPhone 14',
+    iosVersion: '18.7',
+    safariVersion: '26.6.1',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone14plus_ios18_6_safari18_6',
@@ -949,6 +1025,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14plus_ios18_7_safari26_4',
@@ -958,6 +1035,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14plus_ios18_7_safari26_5',
@@ -967,6 +1045,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14pro_ios18_6_safari18_6',
@@ -976,6 +1055,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14pro_ios18_6_safari26_0',
@@ -985,6 +1065,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone14pro_ios18_7_safari26_2',
+    displayLabel: 'iPhone 14 Pro / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 14 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone14pro_ios18_7_safari26_3',
@@ -994,6 +1085,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14pro_ios18_7_safari26_4',
@@ -1003,6 +1095,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14pro_ios18_7_safari26_5',
@@ -1012,6 +1105,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14promax_ios18_6_safari18_6',
@@ -1021,6 +1115,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14promax_ios18_6_safari26_0',
@@ -1030,6 +1125,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14promax_ios18_7_safari26_3',
@@ -1039,6 +1135,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14promax_ios18_7_safari26_4',
@@ -1048,6 +1145,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone14promax_ios18_7_safari26_5',
@@ -1057,6 +1155,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15_ios18_6_safari18_6',
@@ -1066,6 +1165,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15_ios18_6_safari26_0',
@@ -1075,6 +1175,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone15_ios18_7_safari26_2',
+    displayLabel: 'iPhone 15 / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 15',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone15_ios18_7_safari26_3',
@@ -1084,6 +1195,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15_ios18_7_safari26_4',
@@ -1093,6 +1205,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15_ios18_7_safari26_5',
@@ -1102,6 +1215,27 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone15_ios18_7_safari26_6',
+    displayLabel: 'iPhone 15 / iOS 18.7 / Safari 26.6',
+    device: 'iPhone 15',
+    iosVersion: '18.7',
+    safariVersion: '26.6',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone15_ios18_7_safari26_6_1',
+    displayLabel: 'iPhone 15 / iOS 18.7 / Safari 26.6.1',
+    device: 'iPhone 15',
+    iosVersion: '18.7',
+    safariVersion: '26.6.1',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone15plus_ios18_6_safari18_6',
@@ -1111,6 +1245,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15plus_ios18_7_safari26_4',
@@ -1120,6 +1255,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15plus_ios18_7_safari26_5',
@@ -1129,6 +1265,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15pro_ios18_6_safari18_6',
@@ -1138,6 +1275,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15pro_ios18_6_safari26_0',
@@ -1147,6 +1285,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15pro_ios18_7_safari26_3',
@@ -1156,6 +1295,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15pro_ios18_7_safari26_4',
@@ -1165,6 +1305,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15pro_ios18_7_safari26_5',
@@ -1174,6 +1315,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15promax_ios18_6_safari18_6',
@@ -1183,6 +1325,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15promax_ios18_6_safari26_0',
@@ -1192,6 +1335,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone15promax_ios18_7_safari26_2',
+    displayLabel: 'iPhone 15 Pro Max / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 15 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone15promax_ios18_7_safari26_3',
@@ -1201,6 +1355,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15promax_ios18_7_safari26_4',
@@ -1210,6 +1365,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone15promax_ios18_7_safari26_5',
@@ -1219,6 +1375,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16_ios18_6_safari18_6',
@@ -1228,6 +1385,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16_ios18_6_safari26_0',
@@ -1237,6 +1395,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16_ios18_7_safari26_3',
@@ -1246,6 +1405,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16_ios18_7_safari26_4',
@@ -1255,6 +1415,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16_ios18_7_safari26_5',
@@ -1264,6 +1425,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16plus_ios18_6_safari18_6',
@@ -1273,6 +1435,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16plus_ios18_7_safari26_4',
@@ -1282,6 +1445,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16plus_ios18_7_safari26_5',
@@ -1291,6 +1455,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone16pro_ios18_4_1_safari18_4',
+    displayLabel: 'iPhone 16 Pro / iOS 18.4.1 / Safari 18.4',
+    device: 'iPhone 16 Pro',
+    iosVersion: '18.4.1',
+    safariVersion: '18.4',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone16pro_ios18_6_safari18_6',
@@ -1300,6 +1475,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16pro_ios18_6_safari26_0',
@@ -1309,6 +1485,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16pro_ios18_6_safari26_3',
@@ -1318,6 +1495,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16pro_ios18_7_safari26_3',
@@ -1327,6 +1505,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16pro_ios18_7_safari26_4',
@@ -1336,6 +1515,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16pro_ios18_7_safari26_5',
@@ -1345,6 +1525,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16promax_ios18_6_safari18_6',
@@ -1354,6 +1535,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '18.6',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16promax_ios18_6_safari26_0',
@@ -1363,6 +1545,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16promax_ios18_7_safari26_3',
@@ -1372,6 +1555,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16promax_ios18_7_safari26_4',
@@ -1381,6 +1565,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone16promax_ios18_7_safari26_5',
@@ -1390,6 +1575,83 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: LOCKED_ARCHETYPE_ID,
+    displayLabel: LOCKED_ARCHETYPE_DISPLAY_LABEL,
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'launch',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome150',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 150',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome149',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 149',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome148',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 148',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome151',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 151',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome152',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 152',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
+  },
+  {
+    id: 'iphone17_ios18_7_chrome153',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Chrome 153',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.4',
+    canvasFamily: 'B',
+    status: 'planned',
+    lifecycle: 'held',
+    heldReason: 'Awaiting distribution-policy decision',
   },
   {
     id: 'iphone17_ios18_7_safari26_5',
@@ -1399,6 +1661,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone17_ios18_7_safari26_6',
+    displayLabel: 'iPhone 17 / iOS 18.7 / Safari 26.6',
+    device: 'iPhone 17',
+    iosVersion: '18.7',
+    safariVersion: '26.6',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone17pro_ios18_6_safari26_0',
@@ -1408,6 +1681,17 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.0',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone17pro_ios18_7_safari26_2',
+    displayLabel: 'iPhone 17 Pro / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 17 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone17pro_ios18_7_safari26_3',
@@ -1417,6 +1701,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.3',
     canvasFamily: 'A',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone17pro_ios18_7_safari26_4',
@@ -1426,6 +1711,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone17pro_ios18_7_safari26_5',
@@ -1435,6 +1721,67 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
+  },
+  {
+    id: 'iphone17pro_ios18_7_safari26_6',
+    displayLabel: 'iPhone 17 Pro / iOS 18.7 / Safari 26.6',
+    device: 'iPhone 17 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.6',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone17pro_ios18_7_safari26_6_1',
+    displayLabel: 'iPhone 17 Pro / iOS 18.7 / Safari 26.6.1',
+    device: 'iPhone 17 Pro',
+    iosVersion: '18.7',
+    safariVersion: '26.6.1',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone17promax_ios18_6_safari26_0',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.6 / Safari 26.0',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.6',
+    safariVersion: '26.0',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone17promax_ios18_7_safari26_0_1',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.7 / Safari 26.0.1',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.0.1',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone17promax_ios18_7_safari26_2',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.7 / Safari 26.2',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.2',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  {
+    id: 'iphone17promax_ios18_7_safari26_3',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.7 / Safari 26.3',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.3',
+    canvasFamily: 'A',
+    status: 'available',
+    lifecycle: 'available',
   },
   {
     id: 'iphone17promax_ios18_7_safari26_4',
@@ -1444,6 +1791,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.4',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
   {
     id: 'iphone17promax_ios18_7_safari26_5',
@@ -1453,7 +1801,19 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '26.5',
     canvasFamily: 'B',
     status: 'available',
+    lifecycle: 'bit_identical',
   },
+  {
+    id: 'iphone17promax_ios18_7_safari26_6',
+    displayLabel: 'iPhone 17 Pro Max / iOS 18.7 / Safari 26.6',
+    device: 'iPhone 17 Pro Max',
+    iosVersion: '18.7',
+    safariVersion: '26.6',
+    canvasFamily: 'B',
+    status: 'available',
+    lifecycle: 'available',
+  },
+  // </generated:archetype-registry>
   // ── Legacy reference baseline (NOT in Agent-1's catalog) ──────────────────
   // iPhone 15 Pro / iOS 17.5 (Family A baseline). Not a catalog archetype;
   // retained as a non-selectable `reference` entry so already-created profiles
@@ -1469,6 +1829,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     safariVersion: '17.5',
     canvasFamily: 'A',
     status: 'reference',
+    lifecycle: 'reference',
   },
 ];
 

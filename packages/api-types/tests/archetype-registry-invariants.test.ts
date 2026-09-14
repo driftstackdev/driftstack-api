@@ -80,17 +80,29 @@ describe('the archetype registry keeps its shape', () => {
   });
 
   it('the registry population is pinned, so an add or a removal is deliberate', () => {
-    // Deliberately a bare count. The registry is expected to change — three
-    // chrome-iOS slugs may arrive from A1's catalog, and 27 slugs on the
-    // 26.0/26.3 bands may move to `planned` — and each of those should be a
-    // decision someone made, not a diff nobody noticed. Update the numbers with
-    // the change.
+    // Deliberately a bare count, and it stays bare now that the registry is
+    // GENERATED (scripts/gen-archetype-registry.mjs) from Agent-1's catalog.
+    // The generator has its own `--check` proving the registry matches the
+    // catalog; this pins the number a HUMAN last agreed to, so a catalog change
+    // that regenerates cleanly still has to be acknowledged here rather than
+    // arriving in a diff nobody read. Update the numbers with the change.
+    //
+    // 2026-09-14: 82 -> 106 when the registry became generated. The registry had
+    // sat at 81 catalog slugs while the catalog reached 105, and nothing on
+    // either side could see the gap: A1's gate proved the catalog matched the
+    // archetype configs, ours proved the registry compiled, and neither watched
+    // the join. The 6 `planned` rows are the held CriOS family.
     const byStatus = ARCHETYPE_REGISTRY.reduce<Record<string, number>>((acc, a) => {
       acc[a.status] = (acc[a.status] ?? 0) + 1;
       return acc;
     }, {});
-    expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(82);
-    expect(byStatus, 'the status mix changed').toEqual({ launch: 1, available: 80, reference: 1 });
+    expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(106);
+    expect(byStatus, 'the status mix changed').toEqual({
+      launch: 1,
+      available: 98,
+      planned: 6,
+      reference: 1,
+    });
   });
 
   it('CRITICAL the legacy reference baseline stays non-selectable', () => {

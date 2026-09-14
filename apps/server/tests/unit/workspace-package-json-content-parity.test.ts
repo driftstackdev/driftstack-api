@@ -69,7 +69,7 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts['dev:status']).toBe('npm run dev --workspace @driftstack/status-site');
   });
 
-  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build' (ordered fresh-build hook, build:packages then build:apps, before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint . && node scripts/check-subprocessor-mirror.mjs' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
+  it("test + pretest + lint + typecheck framing pinned: 'pretest: npm run build' (ordered fresh-build hook, build:packages then build:apps, before vitest) + 'test: vitest run' + 'test:watch: vitest' + 'bench: vitest bench --run' + 'bench:check-regression: node scripts/check-bench-regression.mjs' + 'typecheck: npm run typecheck --workspaces --if-present' + 'lint: eslint + check-subprocessor-mirror + gen-archetype-registry --check' + format/format:check running prettier through node with an explicit heap — pinned so the pretest-build-hook + test/bench/typecheck/lint workspace propagation + check-subprocessor-mirror lint-companion commitment survives", () => {
     // 2026-05-20 — pretest wraps the workspace build in a
     // PUBLIC_API_BASE_URL default so astro builds don't crash when
     // the env var is unset (pre-push gate guarantee per task #45);
@@ -90,7 +90,16 @@ describe('W529.A /package.json (workspace root) content parity', () => {
     expect(pkg.scripts.bench).toBe('vitest bench --run');
     expect(pkg.scripts['bench:check-regression']).toBe('node scripts/check-bench-regression.mjs');
     expect(pkg.scripts.typecheck).toBe('npm run typecheck --workspaces --if-present');
-    expect(pkg.scripts.lint).toBe('eslint . && node scripts/check-subprocessor-mirror.mjs');
+    // 2026-09-14 — `gen-archetype-registry.mjs --check` joined the lint chain. It
+    // is the half of the archetype freshness gate that lives on THIS side: A1's
+    // gate reds when their catalog drifts from their archetype configs, this one
+    // reds when our registry drifts from their catalog. Neither existed for the
+    // join, and the registry sat 24 entries behind while both sides looked green.
+    // It SKIPS (exit 0, loudly) when the sibling repo is not checked out, which
+    // is the CI case; the pre-push gate runs locally where it can actually see.
+    expect(pkg.scripts.lint).toBe(
+      'eslint . && node scripts/check-subprocessor-mirror.mjs && node scripts/gen-archetype-registry.mjs --check',
+    );
     // Both format scripts invoke prettier's CJS entry through node with an
     // explicit --max-old-space-size. Bare `prettier --check .` ABORTS with a
     // heap OOM on this repo at Node's default limit (measured: 4288 MB here,

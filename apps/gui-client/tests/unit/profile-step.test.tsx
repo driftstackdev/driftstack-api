@@ -1,14 +1,17 @@
 // V-669 — view tests for FirstRunWizard.tsx::ProfileStep.
 //
-// Focused on the archetype picker introduced in V-669. Post the 2026-06-25
-// catalog sync the picker derives from ARCHETYPE_REGISTRY filtered to the
-// customer-selectable statuses (launch|available) — the full 81-slug Agent-1
-// catalog (1 launch iphone17 26.4 + 80 available). The iPhone 17 26.4 launch
-// default is still pre-selected. Skip path doesn't fire any API call.
+// Focused on the archetype picker introduced in V-669. The picker derives from
+// ARCHETYPE_REGISTRY filtered to the customer-selectable statuses
+// (launch|available). Since 2026-09-14 that registry is GENERATED from Agent-1 catalog,
+// so its size moves whenever they publish — the arms below count from the
+// registry rather than pinning a number, and the held CriOS family is checked to
+// stay OUT of the picker. The iPhone 17 26.4 launch default is still
+// pre-selected. Skip path doesn't fire any API call.
 
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { ARCHETYPE_REGISTRY } from '@driftstack/api-types';
 
 const profilesCreate = vi.fn(() => Promise.resolve({}));
 
@@ -37,16 +40,39 @@ describe('V-669 ProfileStep — archetype picker', () => {
     });
   });
 
-  it('offers the full Agent-1 catalog (launch iphone17 26.4 + the 80 available slugs); the iPhone 17 26.4/26.5 bands render and 26.4 is the default', async () => {
+  it('offers the full Agent-1 catalog (launch iphone17 26.4 + every available slug); the iPhone 17 26.4/26.5 bands render and 26.4 is the default', async () => {
     profilesCreate.mockClear();
     render(<ProfileStep onSkip={vi.fn()} onCreated={vi.fn()} />);
 
-    // Post the 2026-06-25 catalog sync the picker derives from
-    // ARCHETYPE_REGISTRY filtered to launch|available — the full 81-slug
-    // Agent-1 catalog (1 launch + 80 available). The legacy iphone15pro/iOS17.5
-    // reference baseline is NOT in the catalog and stays non-selectable.
+    // The picker derives from ARCHETYPE_REGISTRY filtered to launch|available.
+    //
+    // ⛔ Counted from the registry, NOT hard-coded. This read `toHaveLength(81)`
+    // and 81 was simply the number of slugs someone had last transcribed by hand
+    // — so when the registry became generated and the catalog had moved on to 99
+    // selectable, this arm failed for the RIGHT reason and told the wrong story
+    // ("expected 99 to have length 81" reads like the picker broke). The property
+    // worth pinning is that the picker offers exactly the selectable registry and
+    // nothing else; the count is a consequence, and it changes every time A1
+    // publishes.
+    const selectable = ARCHETYPE_REGISTRY.filter(
+      (a) => a.status === 'launch' || a.status === 'available',
+    );
     const radios = screen.getAllByRole('radio');
-    expect(radios).toHaveLength(81);
+    expect(
+      selectable.length,
+      'the registry is empty — every check here would be vacuous',
+    ).toBeGreaterThan(80);
+    expect(radios).toHaveLength(selectable.length);
+    // The held CriOS family sits in the registry as `planned` and must NOT be
+    // offered. This is the arm that would catch a generator change that folded
+    // held entries in as selectable — the one direction where a bigger picker is
+    // a bug rather than new devices arriving.
+    const held = ARCHETYPE_REGISTRY.filter((a) => a.status === 'planned');
+    expect(held.length, 'no held entries — this check would be vacuous').toBeGreaterThan(0);
+    const offered = new Set(radios.map((r) => r.getAttribute('value')));
+    for (const entry of held) {
+      expect(offered.has(entry.id), `${entry.id} is held and must not be selectable`).toBe(false);
+    }
     expect(
       screen.getByRole('radio', { name: /iPhone 17 · iOS 18\.7 · Safari 26\.4/ }),
     ).toBeInTheDocument();
