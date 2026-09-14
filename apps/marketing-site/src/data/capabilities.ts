@@ -99,8 +99,11 @@ export const DEVICE_SUPPORT = {
   deviceFamilies: 'iPhone 13 → 17 Pro Max',
   /** iOS versions present in the catalog. */
   iosVersions: '18.4.1 / 18.6 / 18.7',
-  /** Safari version span present in the catalog (18.4 through 26.6.1). */
-  safariVersions: '18.4–26.6.1',
+  /** Safari version span across the SELECTABLE catalog (18.4 through 26.6).
+   *  ⚠️ Not the catalog's widest version: three 26.6.1 archetypes exist and are
+   *  withheld pending a fork canvas fix, so they are not part of what a customer
+   *  can pick and must not widen a breadth claim. */
+  safariVersions: '18.4–26.6',
   /** ISO-8601 date the values above were last re-derived from the registry. */
   derivedOn: '2026-09-14',
 } as const;

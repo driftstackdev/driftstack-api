@@ -102,7 +102,7 @@ describe('W462.C apps/marketing-site/src/data/capabilities.ts content parity', (
     );
     expect(body).toMatch(/deviceFamilies: 'iPhone 13 → 17 Pro Max',/);
     expect(body).toMatch(/iosVersions: '18\.4\.1 \/ 18\.6 \/ 18\.7',/);
-    expect(body).toMatch(/safariVersions: '18\.4–26\.6\.1',/);
+    expect(body).toMatch(/safariVersions: '18\.4–26\.6',/);
   });
 
   // ⛔ THE COUNTS ARE ORDERED AND DISTINCT, and that ordering is the guard.
