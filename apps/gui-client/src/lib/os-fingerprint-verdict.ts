@@ -253,6 +253,30 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
   // product able to falsely reassure and unable to falsely alarm, with no
   // instrument left that could contradict a wrong green.
   //
+  // ⚠️ A KNOWN LIMIT ON THE ARM THIS GATE STILL TRUSTS, measured the same night
+  // and written down rather than left as an unexamined premise.
+  //
+  // The single-host argument is about the PROXY side: one kernel, so nothing
+  // there can route a website's port differently from our observer's. That
+  // reasoning holds. What it silently assumed is that OUR two ports are
+  // comparable — and they are not. `api.driftstack.dev` is behind Cloudflare, so
+  // 443 to that name terminates at a CDN edge and is re-originated, while 7791
+  // is not in Cloudflare's proxied port set and reaches the origin directly. The
+  // two ports differ in topology before the customer's proxy is involved at all.
+  //
+  // So even a genuine single-host proxy is being read over a path a website does
+  // not use. That is a second, independent cause of the same defect the owner
+  // found from the outside, and it is ours rather than their provider's. It does
+  // NOT make this arm wrong — it withholds in every case that needed withholding,
+  // and a single-host proxy cannot itself be the source of a split — but the
+  // trusted arm rests on an assumption this measurement weakened. Settling it
+  // needs a vantage reachable on 443 with no CDN in front, which is an
+  // infrastructure decision with a real cost, not a code change.
+  //
+  // ⛔ Do not strengthen this arm, or add a new asserting arm, until that vantage
+  // exists. Getting it wrong does not fail visibly: it produces a confident,
+  // stable reading of a CDN edge labelled as the customer's proxy.
+  //
   // `singleHostVantage` is the one case where the reading IS about the path a
   // website gets: dialled host, SYN emitter and destination-visible address are
   // one machine, so there is no fabric in between to route 443 differently.
