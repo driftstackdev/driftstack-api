@@ -41,11 +41,15 @@ import { render, screen } from '@testing-library/react';
 import type { ProxyDraft } from '../../src/lib/proxies';
 import { ProxyForm } from '../../src/views/ProxiesView';
 
-/** A config a build predating the client-side gate happily stored: a bare
- *  `script-security 2` with no script directives at all. The control plane refuses it
- *  (webhook-target-guard), and the fleet forces `--script-security 1` anyway — which is
- *  why lowering it changes nothing about how the tunnel connects. */
-const LEGACY_BLOB = ['client', 'dev tun', 'remote vpn.example.com 1194 udp', 'script-security 2']
+/** A config a build predating the client-side gate happily stored.
+ *
+ *  ⛔ V-217 — this WAS a bare `script-security 2`. That line is no longer refused
+ *  anywhere: both proxy routes lower it to 1 and accept the config, so healing it
+ *  on mount would rewrite the customer's stored bytes for a refusal that no longer
+ *  exists. `keysize` is the honest replacement — OpenVPN 2.7 does not know it and
+ *  refuses the WHOLE config over it, so the heal really is what lets the session
+ *  start. The arm pinning the new script-security behaviour is ARM 1b. */
+const LEGACY_BLOB = ['client', 'dev tun', 'remote vpn.example.com 1194 udp', 'keysize 256']
   .join('\n')
   .concat('\n');
 
@@ -89,21 +93,34 @@ describe('(o) O6 — opening a stored refusable OpenVPN row heals it, and says w
     expect(save()).not.toHaveAttribute('title');
   });
 
+  it('ARM 1b — V-217: opening a row whose ONLY refusable line is `script-security 2` shows NO adjustment notice and leaves the textarea exactly as stored. The server accepts that line now, so a notice here would tell the customer we changed their file to fix a problem that does not exist — on every profile their provider issues.', () => {
+    const scriptSecurityOnly = [
+      'client',
+      'dev tun',
+      'remote vpn.example.com 1194 udp',
+      'script-security 2',
+    ]
+      .join('\n')
+      .concat('\n');
+    mount(scriptSecurityOnly);
+    expect(document.querySelector('[data-component="vpn-paste-hint"]')).toBeNull();
+    expect(blobBox().value).toBe(scriptSecurityOnly);
+  });
+
   it('ARM 2 — the adjustment is VISIBLE, not silent: the same transparent note the paste path shows', () => {
     mount(LEGACY_BLOB);
     const hint = document.querySelector('[data-component="vpn-paste-hint"]');
     expect(hint).not.toBeNull();
     const text = hint?.textContent ?? '';
-    expect(text).toMatch(/lowered script-security to 1/i);
-    expect(text).toMatch(/never runs VPN scripts/i);
+    expect(text).toMatch(/keysize/i);
+    expect(text).toMatch(/OpenVPN no longer accepts/i);
     // It is a confirmation, not an alert — the row is now saveable.
     expect(hint?.getAttribute('role')).toBe('status');
   });
 
   it('ARM 3 — the seeded blob itself is normalized in the box the customer is looking at', () => {
     mount(LEGACY_BLOB);
-    expect(blobBox().value).not.toMatch(/script-security\s+2/);
-    expect(blobBox().value).toMatch(/script-security\s+1/);
+    expect(blobBox().value).not.toMatch(/keysize/);
     // Everything else survives: this strips what the control plane refuses, nothing more.
     expect(blobBox().value).toMatch(/remote vpn\.example\.com 1194 udp/);
     expect(blobBox().value).toMatch(/^client$/m);
@@ -114,7 +131,7 @@ describe('(o) O6 — opening a stored refusable OpenVPN row heals it, and says w
     save().click();
     expect(onSave).toHaveBeenCalledTimes(1);
     const draft = onSave.mock.calls[0]?.[0];
-    expect(draft?.openvpn?.config_blob).not.toMatch(/script-security\s+2/);
+    expect(draft?.openvpn?.config_blob).not.toMatch(/keysize/);
     expect(draft?.scheme).toBe('openvpn');
     expect(draft?.host).toBe('vpn.example.com');
     expect(draft?.port).toBe(1194);

@@ -7,6 +7,7 @@ import {
   OPENVPN_UNRECOGNISED_DIRECTIVES,
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
+  lowerOpenvpnScriptSecurity,
   stripUnsupportedOpenvpnLines,
 } from '@driftstack/api-types';
 
@@ -29,7 +30,15 @@ export function openvpnRefusal(
 ): OpenvpnRefusal | null {
   if (scheme !== 'openvpn') return null;
   if (configBlob.trim() === '') return null;
-  const hit = findUnsupportedOpenvpnLines(configBlob)[0];
+  // ⛔ V-217 — ask the question the SERVER asks, which is no longer "does the
+  // finder report anything" but "does it report anything once `script-security`
+  // has been lowered". Both proxy routes lower that line and accept the config,
+  // so a form that still blocked on it would refuse a paste the API would take —
+  // the owner's original complaint, moved from the server into the client.
+  // Lowering preserves the line count, so a hit's `line` still points at the
+  // same line of the customer's paste.
+  const lowered = lowerOpenvpnScriptSecurity(configBlob).config;
+  const hit = findUnsupportedOpenvpnLines(lowered)[0];
   if (hit !== undefined) {
     const fixed = stripUnsupportedOpenvpnLines(configBlob);
     return {
@@ -98,8 +107,19 @@ export function openvpnAutoStrip(
   configBlob: string,
 ): { config: string; note: string } | null {
   if (scheme !== 'openvpn') return null;
-  const dangerous = findUnsupportedOpenvpnLines(configBlob);
+  // ⛔ V-217 — a config whose ONLY fault is `script-security 2` is now left
+  // ALONE. The server accepts it and lowers it on the way into storage, so
+  // rewriting it here would show the customer a notice saying we changed their
+  // file to fix a problem that no longer exists. Their provider puts that line
+  // in every profile it issues; "we edited your config" on every single paste,
+  // for nothing, is the wrong first impression of the product.
+  //
+  // Measure what is left AFTER lowering — the same question the server asks.
+  const lowered = lowerOpenvpnScriptSecurity(configBlob).config;
+  const dangerous = findUnsupportedOpenvpnLines(lowered);
   if (dangerous.length === 0) return null;
+  // Something really is refusable, so strip from the ORIGINAL: the customer
+  // sees one adjustment covering everything that had to move.
   const fixed = stripUnsupportedOpenvpnLines(configBlob);
   if (fixed.config === configBlob) return null;
   return { config: fixed.config, note: openvpnAdjustmentNote(fixed.removed) };

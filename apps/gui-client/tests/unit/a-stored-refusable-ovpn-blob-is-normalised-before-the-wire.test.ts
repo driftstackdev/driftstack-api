@@ -66,13 +66,22 @@ vi.mock('../../src/lib/proxies', async (importOriginal) => ({
 const { accountProxyInputFor, ensureAccountProxyRow } =
   await import('../../src/lib/proxy-server-test');
 
-/** A config a build predating the client-side strip happily stored — the owner's
- *  shape: a bare `script-security 2` with no script directive. */
+/** A config a build predating the client-side strip happily stored.
+ *
+ *  ⛔ V-217 — this fixture WAS a bare `script-security 2`, the owner's shape.
+ *  That line is no longer refused anywhere: both proxy routes lower it to 1 and
+ *  accept the config, so a self-heal for it would rewrite a blob the server is
+ *  perfectly happy with, and these arms would have been pinning a rewrite that
+ *  should no longer happen. `keysize` is the honest replacement — OpenVPN 2.7
+ *  does not know it and refuses the WHOLE config over it, so removing it really
+ *  is the difference between a session that starts and one that does not, which
+ *  is what a self-heal is for. The arm pinning the new script-security
+ *  behaviour is at the bottom of this file. */
 const LEGACY_BLOB = [
   'client',
   'dev tun',
   'remote 72.65.206.209 1194 udp',
-  'script-security 2',
+  'keysize 256',
   '<ca>',
   'MIIB',
   '</ca>',
@@ -110,10 +119,10 @@ beforeEach(() => {
 });
 
 describe('accountProxyInputFor — the ONE wire body, with the stored blob normalised', () => {
-  it('ARM 1 — CRITICAL: a stored `script-security 2` reaches the wire as `script-security 1`, everything else intact', () => {
+  it('ARM 1 — CRITICAL: a stored unparseable directive is stripped before it reaches the wire, everything else intact', () => {
     const { input, healedOpenvpn } = accountProxyInputFor(ovpnRow(LEGACY_BLOB));
-    expect(input.openvpn?.config_blob).toMatch(/^script-security 1$/m);
-    expect(input.openvpn?.config_blob).not.toMatch(/script-security\s+2/);
+    expect(input.openvpn?.config_blob).not.toMatch(/keysize/);
+    expect(input.openvpn?.config_blob).toMatch(/remote 72\.65\.206\.209/);
     // Nothing else moves: the remote line, the inline CA and the VPN credentials.
     expect(input.openvpn?.config_blob).toMatch(/^remote 72\.65\.206\.209 1194 udp$/m);
     expect(input.openvpn?.config_blob).toContain('<ca>\nMIIB\n</ca>');
@@ -121,6 +130,39 @@ describe('accountProxyInputFor — the ONE wire body, with the stored blob norma
     expect(input).toMatchObject({ scheme: 'openvpn', host: '72.65.206.209', port: 1194 });
     // The caller persists exactly what went on the wire.
     expect(healedOpenvpn).toBe(input.openvpn?.config_blob);
+  });
+
+  it('ARM 1b — V-217: a stored row whose ONLY refusable line is `script-security 2` is now forwarded BYTE FOR BYTE and reports no heal. The server accepts that line and lowers it into storage, so healing it here would rewrite the customer’s stored bytes to fix a refusal that no longer exists — and their provider puts it in every profile it issues, so it would be every row they own.', () => {
+    const legacyScriptSecurity = [
+      'client',
+      'dev tun',
+      'remote 72.65.206.209 1194 udp',
+      'script-security 2',
+      '<ca>',
+      'MIIB',
+      '</ca>',
+    ]
+      .join('\n')
+      .concat('\n');
+    const row = ovpnRow(legacyScriptSecurity);
+    const { input, healedOpenvpn } = accountProxyInputFor(row);
+    expect(input.openvpn).toBe(row.openvpn);
+    expect(input.openvpn?.config_blob).toBe(legacyScriptSecurity);
+    expect(healedOpenvpn).toBeNull();
+  });
+
+  it('ARM 1c — but a row carrying `script-security 2` AND a live hook is STILL healed, and the hook is what goes. The relaxation is about a permission flag; it must not become a way for a script directive to reach the wire.', () => {
+    const withHook = [
+      'client',
+      'remote 72.65.206.209 1194 udp',
+      'script-security 2',
+      'up /etc/openvpn/up.sh',
+    ]
+      .join('\n')
+      .concat('\n');
+    const { input, healedOpenvpn } = accountProxyInputFor(ovpnRow(withHook));
+    expect(healedOpenvpn).not.toBeNull();
+    expect(input.openvpn?.config_blob).not.toMatch(/up \/etc/);
   });
 
   it('ARM 2 — CRITICAL VACUITY CONTROL: a clean stored blob is forwarded byte for byte, and reports no heal', () => {
@@ -191,8 +233,8 @@ describe('ensureAccountProxyRow — the one sync step launch, chat and Test shar
     expect(h.updateProxy).toHaveBeenCalledTimes(1);
     const [baseUrl, key, id, body] = h.updateProxy.mock.calls[0] as [string, string, string, Body];
     expect([baseUrl, key, id]).toEqual(['http://x', 'ds_key', 'aprx_1']);
-    expect(body.openvpn?.config_blob).toMatch(/^script-security 1$/m);
-    expect(body.openvpn?.config_blob).not.toMatch(/script-security\s+2/);
+    expect(body.openvpn?.config_blob).not.toMatch(/keysize/);
+    expect(body.openvpn?.config_blob).toMatch(/remote 72\.65\.206\.209/);
     // The heal lands on the LOCAL row too, so the next launch sends the same bytes
     // without healing again — same label/endpoint/scheme, only the blob changes.
     expect(h.updateLocalProxy).toHaveBeenCalledTimes(1);
@@ -238,8 +280,8 @@ describe('ensureAccountProxyRow — the one sync step launch, chat and Test shar
     expect(r).toEqual({ id: 'aprx_new', created: true, healed: true });
     expect(h.updateProxy).not.toHaveBeenCalled();
     const body = h.createProxy.mock.calls[0]?.[2] as Body;
-    expect(body.openvpn?.config_blob).toMatch(/^script-security 1$/m);
-    expect(body.openvpn?.config_blob).not.toMatch(/script-security\s+2/);
+    expect(body.openvpn?.config_blob).not.toMatch(/keysize/);
+    expect(body.openvpn?.config_blob).toMatch(/remote 72\.65\.206\.209/);
     expect(h.setProxyServerId).toHaveBeenCalledWith('p1', 'aprx_new');
   });
 
@@ -272,6 +314,6 @@ describe('ensureAccountProxyRow — the one sync step launch, chat and Test shar
     );
     expect(r).toEqual({ id: 'aprx_1', created: false, healed: true });
     const body = h.updateProxy.mock.calls[0]?.[3] as Body;
-    expect(body.openvpn?.config_blob).not.toMatch(/script-security\s+2/);
+    expect(body.openvpn?.config_blob).toMatch(/remote 72\.65\.206\.209/);
   });
 });
