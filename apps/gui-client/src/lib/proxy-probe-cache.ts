@@ -449,11 +449,18 @@ function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
   // ⛔ `measuring` is deliberately NOT admitted — it is an in-flight UI sentinel, and
   // a persisted one would claim a probe was running across a restart.
   const unavailable = isOsFingerprintUnavailable(f.unavailable) ? f.unavailable : undefined;
+  // WHICH MACHINE was read. On the wire as `observed_via` since the field was
+  // introduced; the client dropped it here, which is how a reading of the
+  // provider's front door reached the chip as a verdict about the exit. Both
+  // spellings are admitted because the cache round-trips the camelCase form.
+  const viaRaw = f.observedVia ?? f.observed_via;
+  const observedVia = viaRaw === 'proxy_host' || viaRaw === 'exit_ip' ? viaRaw : undefined;
   return {
     os: f.os,
     confidence: f.confidence,
     reason: f.reason,
     at: f.at,
+    ...(observedVia !== undefined ? { observedVia } : {}),
     ...(unavailable !== undefined ? { unavailable } : {}),
   };
 }

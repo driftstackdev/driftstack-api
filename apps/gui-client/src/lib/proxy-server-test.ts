@@ -226,6 +226,16 @@ export function quicVerdictStamp(serverAt: string | null | undefined, now: numbe
  */
 const QUIC_LEG_SKIPPED_PREFIX = 'skipped:';
 
+/** The wire's `observed_via` under the client's name, dropping anything outside
+ *  the closed set rather than coercing it. Absent stays absent: a reading with
+ *  no stated vantage must not be treated as an exit reading. */
+function withObservedVia(fp: OsFingerprint): OsFingerprint {
+  const raw = (fp as unknown as Record<string, unknown>).observed_via;
+  if (fp.observedVia !== undefined) return fp;
+  if (raw !== 'proxy_host' && raw !== 'exit_ip') return fp;
+  return { ...fp, observedVia: raw };
+}
+
 function quicLegSkipped(detail: string | undefined): boolean {
   return detail !== undefined && detail.startsWith(QUIC_LEG_SKIPPED_PREFIX);
 }
@@ -269,7 +279,15 @@ export function serverProbeOutcome(
     ...(vantage !== undefined ? { vantage } : {}),
     ...(typeof test.quic_probe === 'boolean' ? { quicProbe: test.quic_probe } : {}),
     ...(quicLegSkipped(test.quic_detail) ? { quicLegSkipped: true as const } : {}),
-    ...(test.os_fingerprint !== undefined ? { osFingerprint: test.os_fingerprint } : {}),
+    // ⛔ NORMALISE THE VANTAGE AT THE WIRE BOUNDARY. The control plane sends
+    // `observed_via`; the client type calls it `observedVia`, and passing the
+    // wire object through unchanged left the field invisible to every consumer
+    // until a cache round-trip renamed it. That gap is exactly one Test wide —
+    // the chip would claim a verdict about the exit right after a test and stop
+    // claiming it after a restart. One spelling downstream, from here on.
+    ...(test.os_fingerprint !== undefined
+      ? { osFingerprint: withObservedVia(test.os_fingerprint) }
+      : {}),
     ...(test.exit_observed !== undefined ? { exitObserved: test.exit_observed } : {}),
   };
 }

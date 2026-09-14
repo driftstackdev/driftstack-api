@@ -353,3 +353,61 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
     expect(chip().getAttribute('title') ?? '').not.toMatch(/VPN tunnel/i);
   });
 });
+
+/* MEASURED ON PROD 2026-09-14, after the owner reported the OS chip "always
+ * reports Windows but its a MAC/IOS one". Every stored fingerprint on the
+ * account was the same three values: `windows`, `observed_via: proxy_host`,
+ * confidence medium. Not a classifier fault — the SYN had been recorded under
+ * the address we DIAL, the provider's front door, never under the exit.
+ *
+ * So the chip was describing a shared gateway and painting a red "does not
+ * match the iOS device it fronts" about a machine that is not necessarily what
+ * any website sees. A provider that forwards the connection out of the exit
+ * device makes that badge simply wrong; an application-layer proxy makes it
+ * right; a SYN cannot tell the two apart. The honest reading states what was
+ * measured and claims nothing about the exit — and is never the red tone,
+ * because the one measured defect has to stay something a customer can act on.
+ */
+describe('a front-door reading is not a verdict about the exit', () => {
+  const front = (over: Partial<OsFingerprint> = {}): OsFingerprint => ({
+    os: 'windows',
+    confidence: 'medium',
+    reason: 'initial TTL 128 (Windows default); timestamps present',
+    observedVia: 'proxy_host',
+    ...over,
+  });
+
+  it('the exact prod record is neutral, names the front door, and does not accuse the exit', () => {
+    const v = osFingerprintVerdict(front());
+    expect(v.tone, 'a provider gateway running Windows is not a defect the customer can fix').toBe(
+      'unknown',
+    );
+    expect(v.tone).not.toBe('mismatch');
+    expect(v.hint).toMatch(/front door/i);
+    expect(v.hint).toMatch(/not a verdict about the exit/i);
+    expect(v.hint).toContain('Windows');
+  });
+
+  it('an EXIT reading is untouched — the verdict it was built for still fires', () => {
+    expect(osFingerprintVerdict(front({ observedVia: 'exit_ip' })).tone).toBe('mismatch');
+    expect(osFingerprintVerdict(front({ observedVia: 'exit_ip', os: 'macos-or-ios' })).tone).toBe(
+      'match',
+    );
+  });
+
+  it('CONTROL — a reading with NO stated vantage keeps the old behaviour, never the new excuse', () => {
+    // A legacy cached record predates the field. It must not silently become
+    // "we only saw the front door", which would retire a real red badge on
+    // every stale row.
+    const legacy = front();
+    delete (legacy as { observedVia?: unknown }).observedVia;
+    expect(osFingerprintVerdict(legacy).tone).toBe('mismatch');
+  });
+
+  it('a front-door reading the classifier could not identify says so without inventing a stack', () => {
+    const v = osFingerprintVerdict(front({ os: 'unknown', confidence: 'none' }));
+    expect(v.tone).toBe('unknown');
+    expect(v.hint).toMatch(/could not be identified/i);
+    expect(v.hint).not.toMatch(/looks like undefined/);
+  });
+});

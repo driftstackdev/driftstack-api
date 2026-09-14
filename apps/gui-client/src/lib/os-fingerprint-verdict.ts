@@ -56,6 +56,12 @@ export interface OsFingerprint {
    *  and could not tell". Never set on a record the control plane actually measured,
    *  which is why it is the discriminator rather than `os === 'unknown'`. */
   unavailable?: OsFingerprintUnavailable;
+  /** WHICH MACHINE'S stack this describes — `exit_ip` is the address the website
+   *  will see, `proxy_host` is only the front door we dialled. The control plane
+   *  has always sent it (`observed_via` on the wire); the client dropped it, and
+   *  that omission is what let a reading of a provider's gateway be painted as a
+   *  verdict about the exit. Absent on a placeholder or a legacy cached record. */
+  observedVia?: 'proxy_host' | 'exit_ip';
   /** (o) O4 — set ONLY on `OS_FINGERPRINT_MEASURING`, the sentinel a view passes while
    *  a test THIS client started is in flight. "Measuring" is a claim about work in
    *  progress: it may be rendered from a running probe and from nothing else, never
@@ -176,6 +182,31 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       glyph: '—',
       label: 'OS',
       hint: 'Stack OS not measured. Run Test on a proxy that is stored on your account; the control plane fingerprints the proxy’s own TCP stack.',
+    };
+  }
+  // ⛔ MEASURED ON PROD 2026-09-14, and it is the owner's whole complaint: every
+  // stored fingerprint was `windows` / `proxy_host` / medium — the same three
+  // values on every row. Not a classifier bug. The SYN was recorded under the
+  // address we DIALLED (the provider's front door), never under the exit, so the
+  // chip was describing a shared gateway and painting a red "does not match the
+  // iOS device it fronts" about a machine that is not necessarily what any
+  // website sees. A provider that FORWARDS the connection out of the exit device
+  // makes that badge simply wrong; an application-layer proxy makes it right,
+  // and a SYN cannot tell the two apart.
+  //
+  // So a front-door reading states what was measured and claims nothing about
+  // the exit. It is never the red tone: the one measured defect has to stay a
+  // defect somebody can act on, and "your provider's gateway runs Windows" is
+  // not one. `exit_ip` readings are untouched — there the claim is about the
+  // address the site will see, which is what the verdict was always for.
+  if (fp.observedVia === 'proxy_host') {
+    const looksLike =
+      fp.os === 'unknown' ? 'could not be identified' : `looks like ${OS_LABEL[fp.os]}`;
+    return {
+      tone: 'unknown',
+      glyph: '?',
+      label: 'OS',
+      hint: `Only the proxy's front door could be read, not the exit itself — that host ${looksLike}. It is the machine we connect TO; whether a website sees its stack or the exit device's depends on how the provider forwards, so this is not a verdict about the exit.`,
     };
   }
   if (fp.os === 'unknown') {
