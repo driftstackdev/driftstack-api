@@ -8,6 +8,10 @@
 //     deps.flowStore.consume(verifierKey(payload.nonce)); if (verifier === null)
 //     return fail('state_replayed');` — a peek, or a fallback to a cookie/state-
 //     embedded verifier, answers the replay with a second exchange.
+//   • the top-level route's `exposeHeadRoute: false` — Fastify's automatic
+//     HEAD twin runs the full handler, so a HEAD would be the one use of the
+//     verifier (measured without the option: 302, verifier consumed, two IDP
+//     calls, a parked hand-off); the HEAD arm reds without it.
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -54,5 +58,26 @@ describe('an OAuth v2 verifier record is single-use', () => {
     const again = await topLevel(h, 'google', { code: IDP_CODE, state: start.state });
     expect(fragmentOf(again).get('oauth_error')).toBe('state_replayed');
     expect(h.idpCalls).toHaveLength(1);
+  });
+
+  it('a HEAD to the live route is not a use of the verifier: 404 with no Location, no consume, no IDP call, no hand-off — and the GET that follows still completes (the automatic HEAD twin used to run the whole handler)', async () => {
+    const h = await mountOauthHarness();
+    const start = await startV2(h, 'google', 'https://app.driftstack.dev/');
+    const head = await h.app.inject({
+      method: 'HEAD',
+      url: `/v1/auth/oauth/google/callback?code=${IDP_CODE}&state=${encodeURIComponent(start.state)}`,
+    });
+    expect(head.statusCode).toBe(404);
+    expect(head.headers.location).toBeUndefined();
+    expect(head.headers['set-cookie']).toBeUndefined();
+    expect(h.idpCalls, 'HEAD must not reach the IDP').toHaveLength(0);
+    expect(h.storeConsumes, 'HEAD must not consume the verifier').toHaveLength(0);
+    expect(h.storeSets, 'only the /start verifier write so far').toHaveLength(1);
+    // The verifier survived: the real GET is the first and only use.
+    const get = await topLevel(h, 'google', { code: IDP_CODE, state: start.state });
+    expect(get.statusCode).toBe(302);
+    expect(fragmentOf(get).get('code')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(h.idpCalls).toHaveLength(2);
+    expect(h.storeConsumes).toHaveLength(1);
   });
 });
