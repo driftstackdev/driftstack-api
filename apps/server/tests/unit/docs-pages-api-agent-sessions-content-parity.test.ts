@@ -94,7 +94,7 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       // itself: this shape and the ID-format note both said bare, while the
       // create-response example two blocks down said `ses_<uuid>`. account_id
       // IS bare, which is what the note is for.
-      /"id": "agt_<uuid>",\s*"account_id": "<uuid>",\s*"driftstack_session_id": "ses_<uuid> \| null",\s*"status": "active \| paused \| closed",/,
+      /"id": "agt_<uuid>",\s*"account_id": "<uuid>",\s*"driftstack_session_id": "ses_<uuid> \| null",\s*"status": "provisioning \| active \| paused \| closed",/,
     );
     expect(body).toMatch(
       /"livekit": \{\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*"room": "agt_<uuid>",\s*"token": "<HS256 JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<ISO-8601>"\s*\}/,
@@ -122,9 +122,22 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toContain(`defaults to \`${DEFAULT_AGENT_MODEL}\``);
   });
 
-  it("3-status-enum 'status': 'active | paused | closed' field shape pinned in resource + 'Closed sessions return 409' state-machine guard. Drift to dropping the paused state would simplify the lifecycle but break the pair-mode-takeover-suspend pattern", () => {
-    expect(body).toMatch(/"status": "active \| paused \| closed"/);
+  // V-218 — FOUR statuses now. `provisioning` is a READ-SHAPE value: storage only
+  // ever holds active/paused/closed (AgentSessionStatus), and the concurrency cap
+  // counts the stored one — so a provisioning session is occupying a slot. The API
+  // could already return it while this page still listed three, which is the
+  // direction that costs a customer most: their code branches on a value the docs
+  // say cannot occur, and for a VPN session it is the normal path.
+  it("4-status-enum 'status': 'provisioning | active | paused | closed' pinned in the resource shape, with the field note saying what a customer should DO with provisioning + 'Closed sessions return 409' state-machine guard. Dropping `paused` would break pair-mode takeover-suspend; dropping `provisioning` would put the docs behind the wire again", () => {
+    expect(body).toMatch(/"status": "provisioning \| active \| paused \| closed"/);
     expect(body).toMatch(/Closed sessions return 409\./);
+    // The enum alone is not documentation — a customer needs to know it means
+    // running-but-not-ready, and that it still consumes a concurrency slot.
+    expect(body).toMatch(/running but not ready/);
+    expect(body).toMatch(/counts against\s*your cap exactly as an `active` one does/);
+    // And that `provisioning_detail` may simply be absent on an older server,
+    // rather than being read as "no step".
+    expect(body).toMatch(/absent entirely on servers older than/);
   });
 
   it('documents the current HTTP 503 boundary and supported live-control channels without internal ownership or roadmap prose', () => {

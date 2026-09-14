@@ -41,7 +41,7 @@ Three operational modes:
   "id": "agt_<uuid>",
   "account_id": "<uuid>",
   "driftstack_session_id": "ses_<uuid> | null",
-  "status": "active | paused | closed",
+  "status": "provisioning | active | paused | closed",
   "closed_reason": "<string> | null",
   "provisioning_detail": null,
   "closed_at": "<ISO-8601> | null",
@@ -72,6 +72,18 @@ Three operational modes:
   }
 }
 ```
+
+The `status` field reports `provisioning` while the session exists and its node
+has begun bringing it up — a VPN tunnel connecting, an egress resolving — but no
+browser is serving yet. Treat it as **running but not ready**: do not start work
+against the session, and do not treat it as finished. It is already consuming
+one of your concurrent-session slots, so a `provisioning` session counts against
+your cap exactly as an `active` one does.
+
+`provisioning_detail` names the step it is on (a snake_case token such as
+`vpn_egress_bringing_up` or `vpn_egress_active`), and is `null` once the session
+is active or closed. It is absent entirely on servers older than 2026-09-10, so
+read it defensively rather than assuming the key exists.
 
 The `error_event` field is **optional and nullable** — it carries the most
 recent harness launch or runtime failure recorded for the session, and is
