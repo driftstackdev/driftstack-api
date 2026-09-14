@@ -63,6 +63,51 @@ export const DANGEROUS_OPENVPN_DIRECTIVES: ReadonlySet<string> = new Set([
 ]);
 
 /** One line of an OpenVPN config the API will refuse. */
+/**
+ * Directives the egress host's OpenVPN does NOT recognise, so a config carrying
+ * one is rejected at BRING-UP with `Options error: Unrecognized option or
+ * missing or extra parameter(s)` — after it passed every check here, was stored,
+ * and the customer pressed Launch. What they see is "the session didn't start".
+ *
+ * ⛔ MEASURED, NOT RECALLED, against the same OpenVPN the egress runs
+ * (2.7.0, 2026-09-14): each candidate was written as a one-line config and fed
+ * to `openvpn --config`, and only the ones that answered "Unrecognized option"
+ * are here. That mattered — three directives handed to me as members of this
+ * class (`ns-cert-type`, `max-routes`, `comp-noadapt`) are ACCEPTED by 2.7.0,
+ * and refusing them would have broken configs that work. `comp-lzo` and
+ * `cipher` only warn, so they are not here either.
+ *
+ * Two reasons a directive lands in this set, and the customer is told which:
+ *   • REMOVED from OpenVPN itself — version-dependent, platform-independent.
+ *   • WINDOWS-ONLY — the egress host is Linux and never builds them. Sourced
+ *     from the shipped man page ("uses Windows Filtering Platform", "Ask
+ *     Windows to release the TAP adapter lease", …), not from the platform this
+ *     was measured on, so the claim does not rest on the measuring machine.
+ *
+ * ⚠️ This set is version-bound. Re-measure it when the egress OpenVPN moves: a
+ * directive restored upstream would be refused here for a reason that stopped
+ * being true, which is the failure mode with no symptom.
+ */
+export const OPENVPN_UNRECOGNISED_DIRECTIVES: ReadonlyMap<string, string> = new Map([
+  // Removed from OpenVPN. Each measured as a hard `Options error` on 2.7.0.
+  ['keysize', 'removed from OpenVPN — the cipher now fixes its own key size'],
+  ['tls-remote', 'removed from OpenVPN — use verify-x509-name instead'],
+  ['no-iv', 'removed from OpenVPN — the cipher modes it applied to are gone'],
+  ['key-method', 'removed from OpenVPN — only the current key method remains'],
+  ['ifconfig-pool-linear', 'removed from OpenVPN — use topology subnet instead'],
+  ['ncp-disable', 'removed from OpenVPN — cipher negotiation can no longer be turned off'],
+  ['inetd', 'removed from OpenVPN'],
+  ['remote-ip-hint', 'removed from OpenVPN'],
+  ['management-client-pf', 'removed from OpenVPN'],
+  // Windows-only, per the shipped man page. The egress host is Linux.
+  ['block-outside-dns', 'Windows-only — it uses the Windows Filtering Platform'],
+  ['register-dns', 'Windows-only — it runs ipconfig'],
+  ['ip-win32', 'Windows-only'],
+  ['win-sys', 'Windows-only — it names the Windows system directory'],
+  ['win-sys_path', 'Windows-only — it names the Windows system directory'],
+  ['dhcp-release', 'Windows-only — it releases a Windows TAP adapter lease'],
+]);
+
 export interface OpenvpnUnsupportedLine {
   /** 1-based line number in the blob as pasted (LF, CRLF and bare CR each count one line). */
   line: number;
@@ -127,6 +172,23 @@ export function findUnsupportedOpenvpnLines(configBlob: string): OpenvpnUnsuppor
           keyword === 'plugin'
             ? '`plugin` loads a native module into OpenVPN'
             : `\`${keyword}\` runs an external program`,
+      });
+      continue;
+    }
+    // ⛔ NOT A SECURITY REFUSAL — a directive the egress OpenVPN cannot parse.
+    // Everything above this line refuses a config for what it would DO; this
+    // refuses one for what it cannot do at all. Before it existed, such a config
+    // passed every check, was stored, and failed at Launch with `Options error`
+    // that reached the customer as "the session didn't start" — the owner's own
+    // report, root-caused on the egress node 2026-09-14. Refusing it at entry is
+    // the difference between a fixable message and a mystery.
+    const unrecognised = OPENVPN_UNRECOGNISED_DIRECTIVES.get(keyword);
+    if (unrecognised !== undefined) {
+      hits.push({
+        line: i + 1,
+        directive: keyword,
+        text,
+        reason: `\`${keyword}\` is ${unrecognised}, so OpenVPN refuses the whole config when the session starts`,
       });
       continue;
     }

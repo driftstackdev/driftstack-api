@@ -4,6 +4,7 @@
 // a script directive / `script-security >= 2`, or an unresolvable inline cert/key file
 // reference. Lives in a lib (not the view) so it is unit-testable with zero mocks.
 import {
+  OPENVPN_UNRECOGNISED_DIRECTIVES,
   findUnsupportedOpenvpnLines,
   findUnresolvableOpenvpnFileReferences,
   stripUnsupportedOpenvpnLines,
@@ -43,14 +44,42 @@ export function openvpnRefusal(
 }
 
 /** A human summary of what the strip changed, for the transparent auto-apply notice. */
+/** ⛔ TWO CLASSES, AND THE SENTENCE MUST NOT MERGE THEM. This used to count
+ *  everything that was not `script-security` as a "script directive" and close
+ *  with "this changes nothing about how the VPN connects". That was true while
+ *  the strip only touched script directives, which ARE inert here (the fleet
+ *  forces `--script-security 1` and never invokes user scripts).
+ *
+ *  It stopped being true when the strip learned about directives OpenVPN cannot
+ *  parse (`keysize`, `block-outside-dns`, …). Removing one of those is the
+ *  difference between a session that starts and one that does not, and calling
+ *  it a script directive that changes nothing would be false twice in one
+ *  sentence — to a customer who is watching their VPN fail to launch. */
 function openvpnAdjustmentNote(removed: ReadonlyArray<{ directive: string }>): string {
   const loweredSecurity = removed.some((r) => r.directive === 'script-security');
-  const scripts = removed.filter((r) => r.directive !== 'script-security').length;
+  const unparseable = removed.filter((r) => OPENVPN_UNRECOGNISED_DIRECTIVES.has(r.directive));
+  const scripts = removed.filter(
+    (r) => r.directive !== 'script-security' && !OPENVPN_UNRECOGNISED_DIRECTIVES.has(r.directive),
+  ).length;
   const parts: string[] = [];
   if (loweredSecurity) parts.push('lowered script-security to 1');
   if (scripts > 0)
     parts.push(`removed ${scripts.toString()} script directive${scripts === 1 ? '' : 's'}`);
-  return `${parts.join(' and ')} (Driftstack never runs VPN scripts, so this changes nothing about how the VPN connects)`;
+  if (unparseable.length > 0)
+    parts.push(
+      `removed ${unparseable.length.toString()} line${unparseable.length === 1 ? '' : 's'} OpenVPN no longer accepts (${unparseable
+        .map((r) => r.directive)
+        .join(', ')})`,
+    );
+  // The tail explains the consequence, and each class has a different one. Only
+  // claim the inert-scripts reassurance when scripts are all that moved.
+  const tail =
+    unparseable.length > 0
+      ? scripts > 0 || loweredSecurity
+        ? ' — the script lines are inert here anyway, and the rest would have stopped the session from starting at all'
+        : ' — OpenVPN refuses the whole config over these, so the session could not have started with them in'
+      : ' (Driftstack never runs VPN scripts, so this changes nothing about how the VPN connects)';
+  return `${parts.join(' and ')}${tail}`;
 }
 
 /** N1 (owner) — auto-normalize an OpenVPN config to the form the control plane accepts,

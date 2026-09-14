@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DANGEROUS_OPENVPN_DIRECTIVES,
   OPENVPN_INLINE_REQUIRED_DIRECTIVES,
+  OPENVPN_UNRECOGNISED_DIRECTIVES,
   findUnresolvableOpenvpnFileReferences,
   findUnsupportedOpenvpnLines,
   stripUnsupportedOpenvpnLines,
@@ -384,5 +385,81 @@ describe('the two finders agree on what a line is', () => {
         ['client', 'remote vpn.example.com 1194', 'ca ca.crt', 'script-security 1', ''].join(sep),
       );
     }
+  });
+});
+
+/* The owner, twice: "session not starting still". Root-caused on the egress
+ * node 2026-09-14 — openvpn 2.7.0 spawns, parses the stored config, and
+ * rejects it on its own merits with `Options error: Unrecognized option or
+ * missing or extra parameter(s)`. The config had passed every check here,
+ * because every check here was about what a directive would DO (run a program,
+ * read a file) and this one is about whether OpenVPN knows the word at all.
+ *
+ * ⛔ THE SET IS MEASURED AND THE MEASUREMENT IS THE GUARD. Each member below
+ * was fed to the same OpenVPN the egress runs (2.7.0) as a one-line config;
+ * only the ones that answered "Unrecognized option" are in the set. Three
+ * directives offered as members — ns-cert-type, max-routes, comp-noadapt — are
+ * ACCEPTED by 2.7.0, and the negative arm keeps them out: refusing a config
+ * that works is the worse failure, because the customer cannot even see why.
+ */
+describe('a directive OpenVPN cannot parse is refused at entry, not at launch', () => {
+  it('every measured-unrecognised directive is found, with a reason that says which kind', () => {
+    for (const [directive, why] of OPENVPN_UNRECOGNISED_DIRECTIVES) {
+      const hits = findUnsupportedOpenvpnLines(
+        `client\n${directive} 256\nremote a.example.com 1194\n`,
+      );
+      const hit = hits.find((h) => h.directive === directive);
+      expect(hit, `${directive} is in the set and the finder walked past it`).toBeDefined();
+      expect(hit?.line).toBe(2);
+      // The sentence names the directive, why it fails, and WHEN it would fail.
+      expect(hit?.reason).toContain(directive);
+      expect(hit?.reason).toContain(why);
+      expect(hit?.reason).toMatch(/when the session starts/);
+      // Removed and Windows-only are told apart, because the fix differs.
+      expect(why).toMatch(/^(removed from OpenVPN|Windows-only)/);
+    }
+  });
+
+  it('CONTROL — directives 2.7.0 ACCEPTS are not refused, including three that were offered as members', () => {
+    // Measured accepted on 2.7.0: openvpn answered something other than
+    // "Unrecognized option" for each. A guard that refused these would break
+    // working configs, and the customer would have no way to tell it was us.
+    for (const directive of [
+      'ns-cert-type',
+      'max-routes',
+      'comp-noadapt',
+      'comp-lzo',
+      'cipher',
+      'client-cert-not-required',
+      'compat-names',
+      'prng',
+      'tun-ipv6',
+      'verb',
+    ]) {
+      expect(
+        OPENVPN_UNRECOGNISED_DIRECTIVES.has(directive),
+        `${directive} is ACCEPTED by openvpn 2.7.0 — refusing it breaks a working config`,
+      ).toBe(false);
+      const hits = findUnsupportedOpenvpnLines(`client\n${directive} 2\n`);
+      expect(hits.map((h) => h.directive)).not.toContain(directive);
+    }
+  });
+
+  it('the one-click fix removes them too, and leaves the rest of the config alone', () => {
+    const blob = 'client\nkeysize 256\nremote a.example.com 1194\nblock-outside-dns\nverb 3\n';
+    const { config, removed } = stripUnsupportedOpenvpnLines(blob);
+    expect(removed.map((r) => r.directive)).toEqual(['keysize', 'block-outside-dns']);
+    expect(config).toContain('remote a.example.com 1194');
+    expect(config).toContain('verb 3');
+    expect(config).not.toContain('keysize');
+    expect(config).not.toContain('block-outside-dns');
+  });
+
+  it('the `--` form is caught, exactly as the security directives are', () => {
+    // OpenVPN strips a leading `--` from config-file directives, so `--keysize`
+    // fails at bring-up identically. A set matched on the bare form only would
+    // be a one-character bypass of the entry check.
+    const hits = findUnsupportedOpenvpnLines('client\n--keysize 256\n');
+    expect(hits.map((h) => h.directive)).toContain('keysize');
   });
 });

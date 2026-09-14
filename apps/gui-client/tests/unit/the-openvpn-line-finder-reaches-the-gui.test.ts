@@ -15,6 +15,7 @@ import {
   findUnsupportedOpenvpnLines,
   stripUnsupportedOpenvpnLines,
 } from '@driftstack/sdk';
+import { openvpnAutoStrip } from '../../src/lib/openvpn-refusal';
 
 const PROVIDER = [
   'client',
@@ -47,5 +48,59 @@ describe('T-20 the OpenVPN line finder reaches the desktop client through @drift
     expect(DANGEROUS_OPENVPN_DIRECTIVES.size).toBeGreaterThanOrEqual(14);
     expect(DANGEROUS_OPENVPN_DIRECTIVES.has('up')).toBe(true);
     expect(DANGEROUS_OPENVPN_DIRECTIVES.has('down')).toBe(true);
+  });
+});
+
+/* A3 root-caused the owner's "session not starting still" on the egress node
+ * 2026-09-14: openvpn 2.7.0 parses the stored config and rejects it outright
+ * over a directive it no longer knows (`keysize`). The shared finder now
+ * refuses that class at entry, which means the AUTO-STRIP note has to describe
+ * it — and the note it inherited said the opposite of the truth twice.
+ *
+ * It counted anything that was not `script-security` as a "script directive"
+ * and closed with "this changes nothing about how the VPN connects". For an
+ * unparseable directive both halves are false: it is not a script, and removing
+ * it is exactly the difference between a session that starts and one that does
+ * not. A customer reads that sentence while watching their VPN fail. */
+describe('the auto-strip note tells the truth about WHICH class it removed', () => {
+  it('an unparseable directive is never called a script directive, and the tail does not claim it changes nothing', () => {
+    const note = openvpnAutoStrip(
+      'openvpn',
+      'client\nkeysize 256\nremote a.example.com 1194\n',
+    )?.note;
+    expect(note).toBeDefined();
+    expect(note).toContain('keysize');
+    expect(note).toMatch(/OpenVPN no longer accepts/);
+    expect(note, 'keysize is not a script directive').not.toMatch(/script directive/);
+    expect(note, 'removing it is precisely what lets the session start').not.toMatch(
+      /changes nothing about how the VPN connects/,
+    );
+    expect(note).toMatch(/could not have started/);
+  });
+
+  it('a script-only config keeps the reassurance it earned — the two tails are not merged', () => {
+    const note = openvpnAutoStrip(
+      'openvpn',
+      'client\nscript-security 2\nup /etc/openvpn/up.sh\nremote a.example.com 1194\n',
+    )?.note;
+    expect(note).toBeDefined();
+    expect(note).toMatch(/lowered script-security to 1/);
+    expect(note).toMatch(/script directive/);
+    expect(note).toMatch(/changes nothing about how the VPN connects/);
+    expect(note).not.toMatch(/OpenVPN no longer accepts/);
+  });
+
+  it('a config with BOTH says both, and claims the inert reassurance only for the scripts', () => {
+    const note = openvpnAutoStrip(
+      'openvpn',
+      'client\nscript-security 2\nup /etc/openvpn/up.sh\nkeysize 256\nremote a.example.com 1194\n',
+    )?.note;
+    expect(note).toBeDefined();
+    expect(note).toMatch(/script directive/);
+    expect(note).toMatch(/OpenVPN no longer accepts/);
+    expect(note).toMatch(/inert here anyway/);
+    expect(note).toMatch(/stopped the session from starting/);
+    // The blanket claim must not appear when something non-inert was removed.
+    expect(note).not.toMatch(/changes nothing about how the VPN connects/);
   });
 });
