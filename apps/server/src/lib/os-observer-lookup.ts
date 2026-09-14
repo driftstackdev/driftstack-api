@@ -28,7 +28,24 @@ export const OS_OBSERVER_LOOKUP_TIMEOUT_MS = 2_000;
 export const OS_OBSERVER_MAX_BODY_BYTES = 4 * 1024;
 
 export type OsObserverLookupResult =
-  | { kind: 'observed'; signature: TcpSynSignature }
+  | {
+      kind: 'observed';
+      signature: TcpSynSignature;
+      /**
+       * When the observer saw this SYN (epoch ms, from its `seen_at` second).
+       *
+       * ⛔ This is the IDENTITY BINDING and it was being thrown away. The
+       * observer keeps the LAST SYN per source address for 15 minutes, so a
+       * lookup by address alone answers "what did this address most recently
+       * do", not "what did the connection we just made look like". On
+       * residential proxies that is not a rare race — exit IPs rotate between
+       * customers, so a record filed minutes ago can belong to a different
+       * person's machine entirely, and we would report it as this customer's
+       * with full confidence. The caller compares it against the moment it
+       * dialled.
+       */
+      seenAtMs: number;
+    }
   | { kind: 'absent' }
   | { kind: 'error'; detail: string };
 
@@ -40,6 +57,24 @@ export type OsObserverLookup = (ip: string) => Promise<OsObserverLookupResult>;
  * stack omits the options — but `ttl`, `window`, `df` and `options` are in
  * every SYN, so their absence is a broken record, not a sparse one.
  */
+/**
+ * The observer's `seen_at` (whole seconds, `int(time.time())` at capture) as
+ * epoch ms, or null when the field is missing or not a plausible timestamp.
+ *
+ * Null is deliberately distinguishable from a value: a record with no usable
+ * timestamp cannot be bound to a connection, and the caller must treat that as
+ * "cannot confirm this is ours" rather than silently accepting it.
+ */
+export function parseObserverSeenAtMs(raw: unknown): number | null {
+  if (typeof raw !== 'object' || raw === null) return null;
+  const v = (raw as Record<string, unknown>).seen_at;
+  // A sane epoch-second. Rejects 0, negatives, ms-valued fields and junk.
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 1_000_000_000 || v > 4_000_000_000) {
+    return null;
+  }
+  return Math.floor(v) * 1000;
+}
+
 export function parseObserverSignature(raw: unknown): TcpSynSignature | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
@@ -82,12 +117,21 @@ export function makeOsObserverLookup(
       const res = await fetchImpl(`${base}/sig/${ip}`, { signal: ctl.signal });
       if (res.status === 404) return { kind: 'absent' };
       if (res.status !== 200) return { kind: 'error', detail: `observer answered ${res.status}` };
-      const sig = parseObserverSignature(
-        JSON.parse(await readBoundedResponseBody(res, OS_OBSERVER_MAX_BODY_BYTES)) as unknown,
-      );
-      return sig === null
-        ? { kind: 'error', detail: 'observer record was malformed' }
-        : { kind: 'observed', signature: sig };
+      const raw = JSON.parse(
+        await readBoundedResponseBody(res, OS_OBSERVER_MAX_BODY_BYTES),
+      ) as unknown;
+      const sig = parseObserverSignature(raw);
+      if (sig === null) return { kind: 'error', detail: 'observer record was malformed' };
+      const seenAtMs = parseObserverSeenAtMs(raw);
+      // A record we cannot date cannot be bound to a connection. Treat it as a
+      // malformed record rather than accepting an undatable signature — an
+      // observer too old to send `seen_at` is a deployment mismatch we want to
+      // see, not one we want to paper over with a fingerprint that may belong to
+      // somebody else.
+      if (seenAtMs === null) {
+        return { kind: 'error', detail: 'observer record carried no usable seen_at' };
+      }
+      return { kind: 'observed', signature: sig, seenAtMs };
     } catch (err) {
       return { kind: 'error', detail: err instanceof Error ? err.message : String(err) };
     } finally {

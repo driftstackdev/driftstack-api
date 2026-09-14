@@ -114,31 +114,77 @@ const observerFor = (lookup: OsObserverLookup) => ({
 });
 
 describe('a fingerprint is reported only when a SYN was observed', () => {
-  it('tunnels to the OBSERVER (not the egress target) and reports the signature found under the dialled address', async () => {
+  it('tunnels to the OBSERVER (not the egress target) and reports the signature found under the EXIT address, which it consults first', async () => {
     const { dial, connects } = await fakeSocks5(0x00);
-    const { lookup, asked } = tableLookup({ '127.0.0.1': { kind: 'observed', signature: DARWIN } });
+    const { lookup, asked } = tableLookup({
+      '203.0.113.9': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() },
+    });
     const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
     const r = await probe.observeOs(PROXY, '203.0.113.9');
     expect(connects).toEqual(['observer.example:7791']);
     if (!r.observed) throw new Error(`expected observed, got: ${r.reason}`);
-    expect(r.via).toBe('proxy_host');
-    expect(r.observedIp).toBe('127.0.0.1');
+    expect(r.via).toBe('exit_ip');
+    expect(r.observedIp).toBe('203.0.113.9');
     expect(r.os).toBe('macos-or-ios');
-    // The dialled address is consulted FIRST; the exit IP is never needed here.
-    expect(asked).toEqual(['127.0.0.1']);
+    // ⛔ THE EXIT IS ASKED FIRST, and the front door is never needed here. A
+    // proxy egresses from its exit, so that is the source the observer sees.
+    // Asking the dialled address first meant a hit on shared provider
+    // infrastructure outranked the address that describes THIS proxy.
+    expect(asked).toEqual(['203.0.113.9']);
   });
 
-  it('falls back to the echo exit IP when the dialled address has no record', async () => {
+  it('falls back to the dialled address when the exit has no record, and labels it proxy_host', async () => {
     const { dial } = await fakeSocks5(0x00);
     const { lookup, asked } = tableLookup({
-      '203.0.113.9': { kind: 'observed', signature: WINDOWS },
+      '127.0.0.1': { kind: 'observed', signature: WINDOWS, seenAtMs: Date.now() },
     });
     const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
     const r = await probe.observeOs(PROXY, '203.0.113.9');
     if (!r.observed) throw new Error(`expected observed, got: ${r.reason}`);
-    expect(r.via).toBe('exit_ip');
+    expect(r.via).toBe('proxy_host');
     expect(r.os).toBe('windows');
-    expect(asked).toEqual(['127.0.0.1', '203.0.113.9']);
+    expect(asked).toEqual(['203.0.113.9', '127.0.0.1']);
+  });
+
+  it('CRITICAL a record that PREDATES the connection is refused, and says so. The observer keeps the last SYN per address for 15 minutes, so a lookup by address alone answers "what did this address recently do" — and residential exit IPs rotate between customers, so that can be a different person\'s machine reported as this one with full confidence.', async () => {
+    const { dial } = await fakeSocks5(0x00);
+    const { lookup } = tableLookup({
+      // Four minutes old: inside the observer's 15-minute window, so it is
+      // served — and still not ours.
+      '203.0.113.9': { kind: 'observed', signature: WINDOWS, seenAtMs: Date.now() - 240_000 },
+    });
+    const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
+    const r = await probe.observeOs(PROXY, '203.0.113.9');
+    expect(r.observed).toBe(false);
+    if (r.observed) throw new Error('unreachable');
+    expect(r.reason).toContain('predates this connection');
+    expect(r).not.toHaveProperty('os');
+  });
+
+  it('CRITICAL VACUITY CONTROL: a record stamped a moment BEFORE the dial is still accepted. `seen_at` is whole seconds against a millisecond dial, so a SYN at t=100.9 records 100 for a dial at 100.5 — a strict comparison would reject almost every real observation.', async () => {
+    const { dial } = await fakeSocks5(0x00);
+    const { lookup } = tableLookup({
+      '203.0.113.9': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() - 900 },
+    });
+    const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
+    const r = await probe.observeOs(PROXY, '203.0.113.9');
+    if (!r.observed) throw new Error(`the second-quantisation tolerance is too tight: ${r.reason}`);
+    expect(r.os).toBe('macos-or-ios');
+  });
+
+  it('CRITICAL when the front door IS the exit — an ordinary datacentre SOCKS5 — the reading is labelled exit_ip, not proxy_host. Labelling it proxy_host made the client render it as an unreadable front door and suppressed a perfectly good verdict on every such proxy.', async () => {
+    const { dial } = await fakeSocks5(0x00);
+    const { lookup, asked } = tableLookup({
+      '127.0.0.1': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() },
+    });
+    const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
+    // Exit == the address we dialled.
+    const r = await probe.observeOs(PROXY, '127.0.0.1');
+    if (!r.observed) throw new Error(`expected observed, got: ${r.reason}`);
+    expect(r.via).toBe('exit_ip');
+    expect(r.os).toBe('macos-or-ios');
+    // One address, asked once — the two collapse rather than being asked twice.
+    expect(asked).toEqual(['127.0.0.1']);
   });
 
   it('reports NOT observed — naming both misses — when neither address has a record', async () => {
@@ -149,19 +195,22 @@ describe('a fingerprint is reported only when a SYN was observed', () => {
     expect(r.observed).toBe(false);
     if (r.observed) throw new Error('unreachable');
     // THE property: a miss is a miss with a reason, never a default OS.
-    expect(r.reason).toContain('127.0.0.1: no SYN recorded');
     expect(r.reason).toContain('203.0.113.9: no SYN recorded');
+    expect(r.reason).toContain('127.0.0.1: no SYN recorded');
     expect(r).not.toHaveProperty('os');
   });
 
   it('does not consult the observer at all when the tunnel is refused (no SYN was sent)', async () => {
     const { dial } = await fakeSocks5(0x05); // connection refused by host
-    const { lookup, asked } = tableLookup({ '127.0.0.1': { kind: 'observed', signature: DARWIN } });
+    const { lookup, asked } = tableLookup({
+      '127.0.0.1': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() },
+    });
     const probe = new ProxyConnectivityProbe({ dial, osObserver: observerFor(lookup) });
     const r = await probe.observeOs(PROXY, '203.0.113.9');
     expect(r.observed).toBe(false);
     // A stale record under the proxy's address would otherwise be reported as
-    // if this tunnel had produced it.
+    // if this tunnel had produced it. Note the record here is FRESH — the point
+    // is that no lookup happens at all, so freshness cannot be what saves us.
     expect(asked).toEqual([]);
   });
 
@@ -247,6 +296,10 @@ describe('the loopback lookup', () => {
   };
 
   it('404 is "absent", 200 is the parsed signature, anything else is an error', async () => {
+    // `seen_at` is part of the observer's wire shape (observer.py writes
+    // int(time.time()) on every record) and is REQUIRED here: without it a
+    // signature cannot be bound to the connection that caused it.
+    const SEEN_AT = 1_757_000_000;
     const WIRE = {
       ttl: 54,
       df: true,
@@ -254,6 +307,7 @@ describe('the loopback lookup', () => {
       mss: 1460,
       wscale: 6,
       options: [2, 1, 3, 1, 1, 8, 4, 0],
+      seen_at: SEEN_AT,
     };
     const a = fetchFor(404, { error: 'no' });
     expect(await makeOsObserverLookup('http://127.0.0.1:7792/', a.fetchImpl)('10.0.0.1')).toEqual({
@@ -264,6 +318,7 @@ describe('the loopback lookup', () => {
     expect(await makeOsObserverLookup('http://127.0.0.1:7792', b.fetchImpl)('10.0.0.1')).toEqual({
       kind: 'observed',
       signature: DARWIN,
+      seenAtMs: SEEN_AT * 1000,
     });
     const c = fetchFor(503, {});
     expect(
@@ -272,6 +327,20 @@ describe('the loopback lookup', () => {
     const d = fetchFor(200, { ttl: 'x' });
     expect(
       (await makeOsObserverLookup('http://127.0.0.1:7792', d.fetchImpl)('10.0.0.1')).kind,
+    ).toBe('error');
+    // ⛔ A record we cannot DATE is an error, not an observation. An observer too
+    // old to send `seen_at` is a deployment mismatch we want to see — accepting
+    // an undatable signature would hand back a fingerprint that may belong to
+    // another connection entirely, which is the whole defect this closes.
+    const e = fetchFor(200, { ...WIRE, seen_at: undefined });
+    expect(
+      (await makeOsObserverLookup('http://127.0.0.1:7792', e.fetchImpl)('10.0.0.1')).kind,
+    ).toBe('error');
+    // A nonsense timestamp is refused the same way, rather than being floored
+    // into some epoch that would then pass the freshness check.
+    const f = fetchFor(200, { ...WIRE, seen_at: 0 });
+    expect(
+      (await makeOsObserverLookup('http://127.0.0.1:7792', f.fetchImpl)('10.0.0.1')).kind,
     ).toBe('error');
   });
 

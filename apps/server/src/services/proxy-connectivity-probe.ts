@@ -554,6 +554,10 @@ export class ProxyConnectivityProbe {
     }
     const { host, port, lookup } = this.osObserver;
     const msg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+    // Stamped BEFORE the dial: every SYN our CONNECT causes is at or after this
+    // instant, so a record older than it belongs to someone else. See the
+    // freshness check below.
+    const dialStartedAtMs = Date.now();
     let socket: Socket;
     try {
       socket = await this.dial(proxy.host, proxy.port, OS_OBSERVE_TIMEOUT_MS);
@@ -590,18 +594,53 @@ export class ProxyConnectivityProbe {
     }
     // The CONNECT succeeded, so the proxy completed a handshake with the
     // observer and its SYN is on record — under whichever address it used.
+    // ⛔ EXIT FIRST. A proxy egresses from its exit address, so that is the
+    // source the observer actually sees. The front door is where WE dialled, and
+    // for a residential provider it is shared infrastructure that many customers
+    // sit behind — asking about it first means a hit there wins over the address
+    // that describes this customer's proxy.
     const keys: string[] = [];
-    for (const ip of [peerIp, exitIp]) {
+    for (const ip of [exitIp, peerIp]) {
       if (typeof ip === 'string' && isIP(ip) !== 0 && !keys.includes(ip)) keys.push(ip);
     }
     const misses: string[] = [];
     for (const ip of keys) {
       const r = await lookup(ip);
       if (r.kind === 'observed') {
+        // ⛔⛔ IS THIS RECORD OURS? The observer keeps the LAST SYN per address
+        // for 15 minutes, so a lookup by address answers "what did this address
+        // most recently do", not "what did the connection we just made look
+        // like". On residential proxies exit IPs ROTATE BETWEEN CUSTOMERS, so a
+        // record from minutes ago can be a different person's machine — and we
+        // would report their OS as this customer's, with full confidence and no
+        // way to tell. That is the likeliest explanation for a Mac/iOS proxy
+        // reporting Linux, and for three different proxies returning one
+        // identical verdict.
+        //
+        // Our CONNECT caused a SYN, so a record that is OURS cannot predate the
+        // dial. `seen_at` is whole seconds while `dialStartedAtMs` is ms, so a
+        // SYN at t=100.9 records 100 against a dial at 100.5 — floor the dial to
+        // the second and allow one more for the observer's integer clock. Both
+        // processes run on the same host, so there is no skew to budget beyond
+        // that quantisation.
+        const notBeforeMs = Math.floor(dialStartedAtMs / 1000) * 1000 - 1000;
+        if (r.seenAtMs < notBeforeMs) {
+          misses.push(
+            `${ip}: a SYN is on record but it predates this connection ` +
+              `(${Math.round((dialStartedAtMs - r.seenAtMs) / 1000)}s older), so it is another ` +
+              `connection's and cannot describe this proxy`,
+          );
+          continue;
+        }
         return {
           observed: true,
           observedIp: ip,
-          via: ip === peerIp ? 'proxy_host' : 'exit_ip',
+          // `exit_ip` whenever the address we matched IS the exit — including
+          // when the front door and the exit are the same host, which is the
+          // ordinary datacentre SOCKS5 case. Labelling that `proxy_host` made
+          // the client render it as an unreadable front door and suppressed a
+          // perfectly good reading on every such proxy.
+          via: ip === exitIp || ip !== peerIp ? 'exit_ip' : 'proxy_host',
           signature: r.signature,
           ...fingerprintOs(r.signature),
         };
