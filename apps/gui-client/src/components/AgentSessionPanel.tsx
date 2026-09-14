@@ -25,6 +25,7 @@ import {
   type LivekitConnectionState,
   type Room,
 } from '../lib/livekit';
+import { VPN_BRINGUP_END_COPY } from '../lib/session-end-reason';
 import { useInputCapture } from '../lib/livekit-input-capture';
 import { parseConnectionStats } from '../lib/livekit-connection-stats';
 import {
@@ -224,75 +225,6 @@ function formatSessionDuration(totalSeconds: number): string {
   if (hours === 0) return `${minutes} min`;
   return minutes === 0 ? `${hours} hr` : `${hours} hr ${minutes} min`;
 }
-
-/**
- * A3's typed VPN bring-up reasons (closed_reason), and the ONE thing each is
- * for: telling the customer WHERE to go. A tunnel that never came up sends them
- * to their provider, to their own config, or nowhere — and those are different
- * errands. Before this, every one of them reached the same sentence.
- *
- * ⛔ THE COARSE CODES DO NOT DO THIS FOR US, which is worth writing down because
- * it was offered as free. `proxy_connection_failed` matches the `/^proxy_/`
- * branch below and `egress_bind_failed` matches `/^egress_/`, and BOTH of those
- * branches return the identical "Connection route unavailable / The secure
- * connection route for this session could not be established." So the coarse
- * pair collapses to one sentence at the only place a customer reads it. The
- * fine reason is where the distinction survives.
- *
- * ⚠️ MATCHED AS WHOLE TOKENS, never by prefix or substring. A3 owns this enum
- * and will not reuse a value for a different meaning; matching loosely would
- * re-route on a value they add later that merely starts the same way.
- *
- * ⛔ `tunnel_setup_timeout` deliberately has NO destination. "We cannot tell
- * whether this is you or them" is a real state, and a product that guesses
- * there sends people to their provider for our own bug.
- */
-const VPN_BRINGUP_END_COPY: Readonly<Record<string, { outcome: string; explanation: string }>> = {
-  remote_unresolved: {
-    outcome: 'Proxy address did not resolve',
-    explanation:
-      'The address this proxy points at does not exist any more, so nothing could be dialled. This is on the side that supplies the proxy — the endpoint is offline or its address has changed.',
-  },
-  remote_refused: {
-    outcome: 'Proxy refused the connection',
-    explanation:
-      'The proxy endpoint answered and refused. It is down, or the port has changed — one for whoever supplies it.',
-  },
-  remote_unreachable: {
-    outcome: 'Proxy did not respond',
-    explanation:
-      'Nothing answered at the proxy endpoint. It is unreachable or something on the way is filtering it.',
-  },
-  remote_closed_during_setup: {
-    outcome: 'Proxy hung up during setup',
-    explanation:
-      'The proxy endpoint accepted the connection and then closed it before the tunnel was up. One for whoever supplies it.',
-  },
-  tls_handshake_failed: {
-    outcome: 'Proxy security handshake failed',
-    explanation:
-      'The endpoint answered but the encrypted handshake did not complete. Usually a certificate or tls-auth key in the config that no longer matches the server.',
-  },
-  config_rejected: {
-    outcome: 'Proxy config was rejected',
-    explanation:
-      'The VPN software refused the configuration itself. Open the proxy and re-paste its config — Driftstack will offer to remove anything it no longer accepts.',
-  },
-  auth_failed: {
-    outcome: 'Proxy rejected the credentials',
-    explanation: 'The endpoint refused the username or password stored with this proxy.',
-  },
-  tunnel_setup_timeout: {
-    outcome: 'Tunnel did not finish connecting',
-    explanation:
-      'The proxy endpoint answered but the tunnel never finished coming up in time. There is not enough to say yet whether that is the endpoint or the configuration.',
-  },
-  no_output: {
-    outcome: 'Tunnel could not be started',
-    explanation:
-      'The VPN software did not start on our side, so nothing was attempted. This one is ours, not yours.',
-  },
-};
 
 function friendlySessionEndCopy(reason: string | null): {
   outcome: string;

@@ -13,6 +13,7 @@ import {
   PUBLISHER_LOST_GRACE_MS,
   AUTO_RECONNECT_BACKOFF_MS,
 } from '../../src/components/AgentSessionPanel';
+import { isTypedBringupReason, preferTypedEndReason } from '../../src/lib/session-end-reason';
 import type { LiveKitInfo } from '@driftstack/sdk';
 
 const connectMock = vi.fn();
@@ -1115,6 +1116,32 @@ describe('AgentSessionPanel overlay UX', () => {
       expect(overlay?.textContent, unknown).not.toMatch(/supplies the proxy|re-paste its config/);
       cleanup();
     }
+  });
+
+  /* ⛔ THE SELECTOR, AND WHY THE TABLE WOULD HAVE BEEN DEAD WITHOUT IT. A failed
+   * VPN bring-up emits BOTH reasons: the coarse code on the error event, and the
+   * fine typed reason on the status frame. The shipped call sites read
+   * `errorEvent?.code ?? closedReason`, which prefers the coarse one — so the
+   * coarse value would have shadowed the fine one every single time, the ten
+   * sentences above would never have rendered once, and every test in this file
+   * would still have passed because they hand the reason in directly.
+   * Caught only by reading how the caller picks. */
+  it('CRITICAL the fine bring-up reason beats the coarse code, which is emitted alongside it', () => {
+    expect(preferTypedEndReason('proxy_connection_failed', 'remote_unresolved')).toBe(
+      'remote_unresolved',
+    );
+    expect(preferTypedEndReason('egress_bind_failed', 'config_rejected')).toBe('config_rejected');
+    // …and nothing else changes: a coarse code with no typed reason still wins
+    // over a vaguer close reason, exactly as before.
+    expect(preferTypedEndReason('browser_crashed', 'session_errored')).toBe('browser_crashed');
+    expect(preferTypedEndReason(null, 'idle_timeout')).toBe('idle_timeout');
+    expect(preferTypedEndReason(undefined, undefined)).toBeNull();
+    // An unknown reason must not be treated as typed — it would steal priority
+    // from a coarse code that at least maps to something.
+    expect(preferTypedEndReason('browser_crashed', 'remote_unresolved_v2')).toBe('browser_crashed');
+    expect(isTypedBringupReason('remote_unresolved')).toBe(true);
+    expect(isTypedBringupReason('remote_unresolved_v2')).toBe(false);
+    expect(isTypedBringupReason(null)).toBe(false);
   });
 
   it('does not reflect an unknown internal close reason into the rendered overlay', async () => {

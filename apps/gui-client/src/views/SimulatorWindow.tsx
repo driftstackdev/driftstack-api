@@ -58,6 +58,7 @@ import {
   type DiscardedActivation,
 } from '../lib/activation-tombstones';
 import { AgentSessionPanel } from '../components/AgentSessionPanel';
+import { preferTypedEndReason } from '../lib/session-end-reason';
 import { ExitIpChip } from '../components/ExitIpChip';
 import { QuicReadout } from '../components/QuicReadout';
 import { OsReadout } from '../components/OsReadout';
@@ -6650,7 +6651,7 @@ export function SimulatorWindow(): JSX.Element {
               provisioningDetail: s.provisioningDetail,
               capabilityReport: s.capabilityReport ?? null,
             });
-            setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
+            setSessionEnded({ reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason) });
             return;
           }
           // Drop a result that resolved after an in-place session swap.
@@ -7751,7 +7752,8 @@ export function SimulatorWindow(): JSX.Element {
         // latches the "Session ended" state so the reconnect/freeze machinery
         // short-circuits. A non-terminal result is the normal case (don't touch
         // sessionEnded so a transient blip never clears a real terminal end).
-        if (s.terminal) setSessionEnded({ reason: s.errorEvent?.code ?? s.closedReason });
+        if (s.terminal)
+          setSessionEnded({ reason: preferTypedEndReason(s.errorEvent?.code, s.closedReason) });
         // A successful control round-trip proves the session is reachable —
         // clear any stale "control may not be reaching the device" badge.
         setControlLinkUnreachable(false);
