@@ -22,6 +22,7 @@
 // provider fails so CI can gate on it.
 
 import process from 'node:process';
+import { createHash, randomBytes } from 'node:crypto';
 
 const args = parseArgs(process.argv.slice(2));
 const baseUrl = (args['base-url'] ?? '').replace(/\/+$/, '');
@@ -93,7 +94,16 @@ async function smoke(p) {
     res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: p, redirect_to: REDIRECT_TO }),
+      // v2 (2026-09-14): `binding_hash` is REQUIRED — a 43-char base64url sha256
+      // digest the browser derives from its flow secret. The v1 cookie path that
+      // accepted a body without it is gone, so a smoke that omits it now measures
+      // the stale-tab 400, not the route. A fresh random digest is the honest
+      // stand-in here: the smoke proves /start answers, not the whole exchange.
+      body: JSON.stringify({
+        provider: p,
+        redirect_to: REDIRECT_TO,
+        binding_hash: createHash('sha256').update(randomBytes(32)).digest('base64url'),
+      }),
     });
   } catch (err) {
     console.error(`FAIL ${p}: transport error: ${err.message}`);

@@ -68,6 +68,10 @@ const SENSITIVE_ERR_KEYS = new Set([
   'refreshtoken',
   'idtoken',
   'codeverifier',
+  // OAuth v2 (2026-09-14): the browser-held flow secret whose sha256 is the
+  // binding_hash. Never appears on the wire to us, so this is defence in depth
+  // against a future log line that reflects a request body.
+  'flowsecret',
   'authorizeurl',
   'credential',
   'credentials',

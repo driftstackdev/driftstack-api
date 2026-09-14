@@ -143,10 +143,14 @@ From a workstation:
    (matches Google Cloud Console registration).
 3. Complete consent. Browser briefly hits
    `https://api.driftstack.dev/v1/auth/oauth/google/callback?...`
-   (302 from IDP), which 302s to
-   `https://app.driftstack.io/auth/oauth-client/callback?...`
-   (final landing).
-4. The callback page POSTs to the server. Three possible outcomes:
+   (302 from IDP). The server completes the token exchange THERE, on its
+   own origin, and 302s to
+   `https://app.driftstack.io/auth/oauth-client/callback#flow=...&code=...`
+   (final landing — note the FRAGMENT, not a query string: v2 since
+   2026-09-11; the v1 cookie round-trip that landed on `?code=&state=`
+   was retired 2026-09-14 after 48h of zero legacy hits).
+4. The callback page reads the fragment and POSTs `/v1/auth/oauth-client/redeem`
+   with its flow secret. Three possible outcomes:
    - **New account** (your email isn't in our DB): page redirects to
      `/`. Confirm the dashboard recognises you as signed in.
    - **Existing-link** (same Google account, same email): page
