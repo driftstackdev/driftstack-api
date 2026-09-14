@@ -227,13 +227,82 @@ const NOT_REACHABLE = {
   latency_ms: 0,
   message: 'The proxy did not answer.',
 } as const;
-const REAL_OS = { os: 'macos-or-ios', confidence: 'high', reason: 'TTL 64, MSS 1460' } as const;
+/** ⛔ (V-219, 2026-09-14) THE VANTAGE IS PART OF EVERY ASSERTING FIXTURE NOW.
+ *  os-fingerprint-verdict.ts mints a match or a mismatch only where
+ *  `singleHostVantage === true`: the host we dialled, the host that emitted the
+ *  SYN and the address the destination sees are ONE machine, so nothing in
+ *  between can route a website's 443 differently from our observer's port. That
+ *  is the ordinary datacentre SOCKS5 row, and it is the row the arms below were
+ *  written against — these four fixtures exist to produce a chip that ASSERTS
+ *  ('✓ Apple', '✗ Win'), because what they measure is the width table, the
+ *  compact label, the drop order and the chrome, never the verdict's meaning.
+ *  Left un-vantaged they would every one render '? …' and those arms would be
+ *  measuring a state they were never about. The withheld direction is not
+ *  dropped: it is pinned on purpose, in its own arms, from the fixtures below.
+ *  ⛔ `observedVia` is 'exit_ip' and never 'proxy_host': single-host means the
+ *  address we dialled IS the exit, so the control plane labels it 'exit_ip'.
+ *  The pair ('proxy_host', true) is a state the producer cannot emit, and a
+ *  fixture carrying it would pin a row that does not exist. */
+const REAL_OS = {
+  os: 'macos-or-ios',
+  confidence: 'high',
+  reason: 'TTL 64, MSS 1460',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+} as const;
 /** C1/C3 — the MISMATCH fixtures. '✗ Windows' (63) is the single measured
  *  defect and the hardest chip to fit; 'Linux' (45) and 'BSD' (39) already fit
  *  144 in full, which is what makes them the control for the compact label. */
-const WINDOWS_OS = { os: 'windows', confidence: 'high', reason: 'TTL 128, MSS 1460' } as const;
-const LINUX_OS = { os: 'linux', confidence: 'medium', reason: 'TTL 64, window 29200' } as const;
-const BSD_OS = { os: 'bsd', confidence: 'low', reason: 'TTL 64, window 65535' } as const;
+const WINDOWS_OS = {
+  os: 'windows',
+  confidence: 'high',
+  reason: 'TTL 128, MSS 1460',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+} as const;
+const LINUX_OS = {
+  os: 'linux',
+  confidence: 'medium',
+  reason: 'TTL 64, window 29200',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+} as const;
+const BSD_OS = {
+  os: 'bsd',
+  confidence: 'low',
+  reason: 'TTL 64, window 65535',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+} as const;
+/** ⛔ (V-219) THE WITHHELD VANTAGE — the SAME two readings, taken where the
+ *  reading describes the proxy's own infrastructure rather than the path a
+ *  website gets. MEASURED by the owner 2026-09-14: browserleaks.com/ip loaded
+ *  THROUGH their residential proxy reads the arriving stack on 443 — a
+ *  website's port — and reports Mac/iOS, while our observer reads the same
+ *  proxy on 7791 and reports Linux at high confidence. The provider routes web
+ *  traffic through the residential device and odd ports through its own
+ *  infrastructure, so a reading taken at our vantage can describe a path no
+ *  website ever touches.
+ *
+ *  Two shapes, because ABSENT MEANS FALSE and both must withhold identically:
+ *  `*_MULTI_HOP` is the server SAYING false, and `*_LEGACY` is the same reading
+ *  off a cached record written before the field existed — which is the shape
+ *  most stored rows in the wild still have, and the one that would default into
+ *  a confident claim if the gate tested anything looser than `!== true`.
+ *  Derived from the fixtures above field by field, so a changed reading cannot
+ *  leave the withheld copies describing a different proxy. */
+const REAL_OS_MULTI_HOP = { ...REAL_OS, singleHostVantage: false } as const;
+const WINDOWS_OS_MULTI_HOP = { ...WINDOWS_OS, singleHostVantage: false } as const;
+const REAL_OS_LEGACY = {
+  os: REAL_OS.os,
+  confidence: REAL_OS.confidence,
+  reason: REAL_OS.reason,
+} as const;
+const WINDOWS_OS_LEGACY = {
+  os: WINDOWS_OS.os,
+  confidence: WINDOWS_OS.confidence,
+  reason: WINDOWS_OS.reason,
+} as const;
 /** C1/C2 — the '?' verdict: the classifier RAN and could not decide, with a real
  *  reason. Copied from apps/server/src/lib/tcp-os-fingerprint.ts's own TTL-64
  *  fallback. ⛔ No `unavailable` field — that is what makes it a completed
@@ -1276,7 +1345,18 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // thresholds here are 3px above the MEASURED sum, not 3px above a ceil'd one.
     expect(visibleChips(MAX, 143).chips).toHaveLength(3);
     expect(visibleChips(MAX, 141).chips).toHaveLength(3);
-    expect(visibleChips(MAX, 140).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~']);
+    // ⛔ (V-219, 2026-09-14) BELOW THE COMPACT TRIO THE EVICTION ORDER FLIPPED,
+    // DELIBERATELY. This read ['UDP ✓', 'QUIC ~'] until today — the GREEN OS chip
+    // was the one that went. `keep` was `os.tone === 'mismatch'` and is now
+    // `fingerprint !== undefined && !unavailable && measuring !== true`, so EVERY
+    // measured reading is pinned to the row whatever its tone and the QUIC chip
+    // rides the '+1' instead. The trade is the owner's own ruling, twice over:
+    // the OS reading is the fact they said they could not see in the profile grid
+    // at all, and a measured fact behind an opaque '+N' is the thing they
+    // objected to. A future reader can tell this from a regression by the
+    // mutation: reverting `keep` to the tone test restores the old pair here.
+    expect(visibleChips(MAX, 140).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
+    expect(visibleChips(MAX, 140).hiddenHints[0]).toMatch(/^QUIC ~ — /);
     // 166.63 = 40.22 + 42.03 + 73.38 + 8 + 3, MAX's full-label threshold: the
     // sweep flips from '✓ Apple' to '✓ iOS/macOS' at content 167 / a 201px card.
     expect(visibleChips(MAX, 166).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '✓ Apple']);
@@ -1305,8 +1385,12 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     ]);
     expect(visibleChips(GREEN_WORST, 144).hiddenHints).toEqual([]);
     // …and the floor is still a floor: 142.68 needs 143, so 142 still drops one.
+    // ⛔ (V-219) WHICH one it drops changed, and only that: the measured
+    // '✓ Apple' now outranks the measured 'QUIC ✓' for the same reason as the
+    // 140 arm above. What this pair measures is the FLOOR — that 142.68 needs
+    // 143 — and the floor has not moved a pixel.
     expect(visibleChips(GREEN_WORST, 143).chips).toHaveLength(3);
-    expect(visibleChips(GREEN_WORST, 142).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓']);
+    expect(visibleChips(GREEN_WORST, 142).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
     expect(visibleChips(GREEN_WORST, 168).chips.map((c) => c.text)).toEqual([
       'UDP ✓',
       'QUIC ✓',
@@ -1325,14 +1409,33 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // Below the compact trio (140.41 here, 142.68 at 'QUIC ✓', slack floor
     // included) a whole chip goes — and the '+N' hint then carries the FULL
     // label, never the compact one.
+    // ⛔ (V-219) …and the chip that goes is the QUIC one now, not the OS one —
+    // see the 140 arm. The FULL-label property of the hint is UNCHANGED and is
+    // still pinned below, at the only widths where a MEASURED OS chip can be
+    // hidden at all.
     const at128 = visibleChips(MAX, 128);
-    expect(at128.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~']);
+    expect(at128.chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
     expect(at128.hiddenHints).toHaveLength(1);
-    expect(at128.hiddenHints[0]).toMatch(/^✓ iOS\/macOS — Proxy stack looks like iOS\/macOS/);
-    // The '+1' tail reserves 27px (dashed border + 9.5px): 40.22 + 42.03 + 4 + 4
-    // + 27 = 117.25, +3 slack floor = 120.25.
-    expect(visibleChips(MAX, 121).chips).toHaveLength(2);
-    expect(visibleChips(MAX, 120).chips).toHaveLength(1);
+    expect(at128.hiddenHints[0]).toMatch(/^QUIC ~ — /);
+    // The '+1' tail reserves 27px (dashed border + 9.5px). The surviving pair is
+    // 'UDP ✓' + the pinned '✓ Apple' now: 40.22 + 47.16 + 4 + 4 + 27 = 122.38,
+    // +3 slack floor = 125.38 — so 126 keeps two and 125 keeps one. (It was
+    // 40.22 + 42.03 + … = 120.25 while the pair was 'UDP ✓' + 'QUIC ~'; the
+    // arithmetic is the same, the operands moved.)
+    expect(visibleChips(MAX, 126).chips).toHaveLength(2);
+    expect(visibleChips(MAX, 125).chips).toHaveLength(1);
+    // The LAST chip standing is the measured reading — 47.16 + 4 + 27 + 3 =
+    // 81.16 — which is the privilege the red mismatch has always had (C3), now
+    // extended to every measured tone rather than to the one that alarms.
+    expect(visibleChips(MAX, 82).chips.map((c) => c.text)).toEqual(['✓ Apple']);
+    const tiny = visibleChips(MAX, 81);
+    expect(tiny.chips).toEqual([]);
+    // Below that even the pinned chip goes, and THERE the hint still carries the
+    // FULL label, never the compact one: the '+N' pill is where the long form
+    // belongs (C2). Asserted both ways so a compact label cannot leak in.
+    expect(tiny.hiddenHints).toHaveLength(3);
+    expect(tiny.hiddenHints[2]).toMatch(/^✓ iOS\/macOS — Proxy stack looks like iOS\/macOS/);
+    expect(tiny.hiddenHints.some((h) => h.startsWith('✓ Apple'))).toBe(false);
     // Every other measured chip, pinned to its px-1 render as well.
     const widths = (over: Partial<ProfilePhoneCardProps>) =>
       Object.fromEntries(visibleChips(props(over), 400).chips.map((c) => [c.text, c.width]));
@@ -1374,21 +1477,43 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       m[1]!,
       Number(m[2]),
     ]);
-    expect(entries).toHaveLength(15);
+    // 15 -> 21 on 2026-09-14 (V-219): the '?' glyph now pairs with a NAMED OS,
+    // not only the bare 'OS' label, so all six `? × (OS_LABEL |
+    // OS_LABEL_COMPACT)` pairs became reachable at once. They were measured into
+    // the table the same day, by the same method, with '? OS' and '✓ Apple' as
+    // controls reproducing their existing entries — see CHIP_WIDTH's note.
+    //
+    // ⛔ This count is the POINT of the arm, not incidental to it: a new label
+    // that renders without being measured falls to the `ceil(len * 6 + 14)`
+    // estimate, and that estimate over-reserves. '? Apple' estimated 56 against
+    // a real 43.80 and put a measured OS chip behind a '+1' at the 178px column.
+    // Update it only alongside a real measurement.
+    expect(entries).toHaveLength(21);
     expect(entries.filter(([, n]) => Number.isInteger(n)).map(([t]) => t)).toEqual([]);
     // …and the floor it is the only companion of is still named and still 3.
     expect(source('components/ProfilePhoneCard.tsx')).toContain('const CAPS_MIN_SLACK = 3;');
   });
 
   it('visibleChips C3 — a MISMATCH fits 144 as "✗ Win", and where even the compact row does not fit the RED chip keeps its place and a GREEN one goes into the "+N"', () => {
-    // ProfilePhoneCard.tsx: the `keep: os.tone === 'mismatch'` flag and the
-    // materialised drop order in `visibleChips` level 3. Dropping `keep` makes
+    // ProfilePhoneCard.tsx: the `keep` flag and the materialised drop order in
+    // `visibleChips` level 3. ⛔ (V-219, 2026-09-14) That flag is no longer
+    // `os.tone === 'mismatch'` — it is `fingerprint !== undefined &&
+    // !unavailable && measuring !== true`, so the red row below is now ONE
+    // INSTANCE of a general rule ("a measured reading keeps its place") rather
+    // than the exception it used to be. The red geometry is unchanged, which is
+    // why this arm still reads as it did. Dropping `keep` makes
     // the 128 arm below render ['UDP ✓', 'QUIC ✓'] with the red chip hidden →
     // red (mutation run 2026-09-12). MEASURED at px-1: ✗ Windows 62.14, ✗ Win
     // 36.97, so the full red trio is 40.22 + 44.3 + 62.14 + 8 = 154.66 and the
     // compact one 129.49, each +3 for the CAPS_MIN_SLACK floor (rowWidth) →
     // 157.66 and 132.49 against 144. (C4: the entries are the MEASUREMENTS now,
     // not their ceilings — see CHIP_WIDTH.)
+    // ⛔ (V-219) WINDOWS_OS carries `singleHostVantage: true` since 2026-09-14,
+    // and it has to: the verdict withholds the red tone as hard as the green one
+    // unless the reading is about a website's path, and what THIS arm measures is
+    // the drop order a red chip gets — not whether the tone is minted. The
+    // withheld direction is pinned in its own arm below ('V-219 — the vantage
+    // gate is SYMMETRIC'), where the lost `keep` is asserted too.
     const RED = props({ osFingerprint: WINDOWS_OS, quicMeasured: 'h3' });
     const at144 = visibleChips(RED, 144);
     expect(at144.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', '✗ Win']);
@@ -1415,8 +1540,14 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // (36.97 + 4 + 27 + 3 slack = 70.97).
     expect(visibleChips(RED, 71).chips.map((c) => c.text)).toEqual(['✗ Win']);
     expect(visibleChips(RED, 70).chips).toHaveLength(0);
-    // A green OS chip has no such privilege: it goes first, as it always did.
-    expect(visibleChips(MAX, 128).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~']);
+    // ⛔ (V-219, 2026-09-14) A GREEN OS CHIP HAS THE SAME PRIVILEGE NOW.
+    // This line read "A green OS chip has no such privilege: it goes first, as
+    // it always did" and asserted ['UDP ✓', 'QUIC ~']. Retention is keyed on
+    // HAVING MEASURED, not on the tone, so the green reading is pinned here
+    // exactly as the red one is and the QUIC chip is what moves into the '+1'.
+    // Nothing in the drop order is mismatch-specific any more.
+    expect(visibleChips(MAX, 128).chips.map((c) => c.text)).toEqual(['UDP ✓', '✓ Apple']);
+    expect(visibleChips(MAX, 128).hiddenHints[0]).toMatch(/^QUIC ~ — /);
     // 'Linux' (45) and 'BSD' (39) are already short enough to fit 144 in FULL,
     // so they compact to themselves and the label never changes.
     // ⛔ The WIDTH is asserted, not just the presence. Asserting only "the chip is
@@ -1443,7 +1574,143 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // be caught by the 128px behaviour arm, not by this restatement of it.
     expect(os?.keep).toBe(true);
     expect(MAX.osFingerprint?.os).toBe('macos-or-ios');
-    expect(visibleChips(MAX, 144).chips.find((c) => c.key === 'os')?.keep).toBeUndefined();
+    // ⛔ (V-219) …and the GREEN reading carries the flag too. This asserted
+    // `toBeUndefined()` until 2026-09-14, correctly, while `keep` was the
+    // mismatch tone. The half of the rule that still DROPS a chip is the one
+    // holding no measurement at all, and it has its own arm below ("a chip
+    // carrying NO measurement is still droppable") — without which this pair
+    // would no longer bound the flag in both directions.
+    expect(visibleChips(MAX, 144).chips.find((c) => c.key === 'os')?.keep).toBe(true);
+  });
+
+  it('V-219 — the vantage gate is SYMMETRIC: with no singleHostVantage neither the green match nor the red mismatch is minted — and the withheld reading KEEPS its place in the row, because withholding a verdict is not failing to measure', () => {
+    // ⛔ ADDED 2026-09-14. This is a DELIBERATE INVERSION of the two C1/C3 arms
+    // above, not a regression: os-fingerprint-verdict.ts now gates BOTH arms on
+    // whether the reading is about the path a WEBSITE gets. MEASURED by the
+    // owner with a third-party instrument — browserleaks.com/ip loaded THROUGH
+    // their residential proxy reads the arriving stack on 443 and reports
+    // Mac/iOS; our observer reads the same proxy on 7791 and reports Linux at
+    // high confidence. The provider routes web traffic through the residential
+    // device and odd ports through its own infrastructure, so the chip was
+    // painting a verdict about a path no website ever touches.
+    //
+    // ⛔⛔ BOTH DIRECTIONS ARE ASSERTED HERE AND THE SYMMETRY IS THE POINT.
+    // Withholding only the red arm — the one that produced the complaint —
+    // would have been a complaint-to-evidence fix: the green is minted from the
+    // identical SYN over the identical path, and a vantage that cannot support
+    // "detectable mismatch" cannot support "matches the iOS device it fronts"
+    // either. Of the two errors the false green is far worse. A red chip is an
+    // irritant somebody eventually reports; a green chip on a proxy that is
+    // actually detectable costs a customer their account, and nobody ever files
+    // a bug about a reassuring badge. An arm that pinned only the red half
+    // would leave the product able to falsely reassure and unable to falsely
+    // alarm, with no instrument left that could contradict a wrong green.
+    //
+    // ABSENT MEANS FALSE, so the legacy shape is pinned beside the explicit one:
+    // a cached record written before the field existed, an older server and a
+    // tampered response all read `undefined`, and every one of them has to fail
+    // to assert rather than default into a confident claim.
+    for (const [label, fp, os] of [
+      ['green, server said false', REAL_OS_MULTI_HOP, 'iOS/macOS'],
+      ['green, legacy record with no vantage field at all', REAL_OS_LEGACY, 'iOS/macOS'],
+      ['red, server said false', WINDOWS_OS_MULTI_HOP, 'Windows'],
+      ['red, legacy record with no vantage field at all', WINDOWS_OS_LEGACY, 'Windows'],
+    ] as const) {
+      // Width 400 on purpose: every chip fits, so this arm measures the VERDICT
+      // and the geometry cannot decide it. See the note below.
+      const chip = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 400).chips.find(
+        (c) => c.key === 'os',
+      );
+      expect(chip?.text, label).toBe(`? ${os}`);
+      expect(chip?.attrs['data-os-tone'], label).toBe('unknown');
+      // ⛔ RETENTION SURVIVES THE WITHHELD VERDICT — AND IT BRIEFLY DID NOT.
+      // For a few hours on 2026-09-14 this line asserted `toBeUndefined()`, and
+      // was a true description of the code: C3's flag was keyed on the MISMATCH
+      // tone (`keep: os.tone === 'mismatch'`), so withholding the tone ALSO
+      // un-pinned the chip and dropped it behind a '+1' at the grid's narrowest
+      // column. That is the owner's original complaint reintroduced by the fix
+      // for a different one — "this +1 next to profile … its unclear what its
+      // about, better to show everything", plus "i dont see OS currently at
+      // profile grid". So the production rule was changed rather than this
+      // consequence documented: `keep` now asks "did we MEASURE something" (a
+      // fingerprint that is present, not `unavailable`, not `measuring`) instead
+      // of "did we DECIDE something". A withheld reading IS a reading — we
+      // declined to draw a conclusion from it, we did not fail to take it — so
+      // it keeps its place whatever its tone. The geometry consequence is
+      // re-measured at the foot of this arm.
+      expect(chip?.keep, label).toBe(true);
+      expect(chip?.title, label).toMatch(
+        /^Proxy stack looks like .+ \((high|medium|low) confidence\), but this proxy forwards through more than one machine/,
+      );
+      expect(chip?.title, label).toMatch(
+        /not necessarily what a site sees\. Not a verdict either way\./,
+      );
+      // …and it is never worded as either verdict, at any width.
+      expect(chip?.title, label).not.toMatch(
+        /detectable mismatch|matches the iOS device it fronts/,
+      );
+    }
+    // ⛔ VACUITY CONTROL — the IDENTICAL readings WITH the vantage still assert,
+    // in both tones. Without this the loop above would pass just as happily if
+    // the fixtures had stopped being readings at all, or if the chip had stopped
+    // being produced: "no verdict" is the easiest thing in the world to get for
+    // the wrong reason.
+    // ⛔ `keep` is TRUE on all four rows now (the two here and the two above),
+    // so it is NOT what this control discriminates on any more — the TEXT and
+    // the TONE are, and they are the two columns that still differ. Read the
+    // keep column as a pin on the new rule's uniformity, not as evidence that
+    // the fixtures still assert.
+    for (const [label, fp, text, tone, keep] of [
+      ['green', REAL_OS, '✓ iOS/macOS', 'match', true],
+      ['red', WINDOWS_OS, '✗ Windows', 'mismatch', true],
+    ] as const) {
+      const chip = visibleChips(props({ osFingerprint: fp, quicMeasured: 'h3' }), 400).chips.find(
+        (c) => c.key === 'os',
+      );
+      expect(chip?.text, label).toBe(text);
+      expect(chip?.attrs['data-os-tone'], label).toBe(tone);
+      expect(chip?.keep, label).toBe(keep);
+    }
+    // ⛔ ONE CONSEQUENCE THIS ARM DELIBERATELY DOES NOT PIN, because it is the
+    // owner's call and not this file's — recorded here so the next reader does
+    // not have to re-derive it.
+    //
+    // The withheld tone mints labels that are NEW reachable strings: '?' is no
+    // longer paired only with 'OS'. '? iOS/macOS', '? Apple', '? Windows',
+    // '? Win', '? Linux' and '? BSD' are all reachable now, and CHIP_WIDTH holds
+    // none of them — its own comment still says the '?' glyph appears "only with
+    // the 'OS' label", a sentence V-219 made false. They fall back to
+    // `ceil(len * 6 + 14)`, which OVER-reserves: '? Apple' reserves 56 where a
+    // '✓ Apple' of the same shape renders 47.16.
+    //
+    // ⛔ RE-MEASURED 2026-09-14 AFTER THE RETENTION RULE CHANGED. The note here
+    // used to record TWO compounding causes; ONE OF THEM IS FIXED and the entry
+    // is rewritten rather than appended to, because a stale measurement beside a
+    // current one is indistinguishable from a current one.
+    //
+    // `visibleChips` at the four real column widths, withheld green (default
+    // inferred QUIC) and withheld red (measured QUIC):
+    //   content 144 (the 178px column, the grid's floor)
+    //     green → ['UDP ✓','? Apple'] and a '+1' holding the QUIC chip
+    //     red   → ['UDP ✓','QUIC ✓','? Win'] — the whole row fits
+    //   content 152 → ['UDP ✓','QUIC ~','? Apple']   (nothing hidden)
+    //   content 172 → ['UDP ✓','QUIC ~','? Apple']
+    //   content 206 → ['UDP ✓','QUIC ~','? iOS/macOS']
+    // So the withheld READING is on the row at every real column now — that was
+    // the cause worth fixing, and `keep` fixed it. What remains is a '+1' at the
+    // narrowest column ONLY, holding the QUIC chip, and it has a single cause
+    // left: the un-measured label over-reserves. '?' is no longer paired only
+    // with 'OS', none of the six new strings is in CHIP_WIDTH, and the fallback
+    // gives '? Apple' 56 where the same-shaped '✓ Apple' renders 47.16 — nine
+    // pixels of arithmetic that measures nothing, the same defect C4 removed
+    // from the rest of the table.
+    //
+    // Whether the answer is to measure the six labels into CHIP_WIDTH or to
+    // accept the pill there is still a PRODUCT decision, so this arm continues to
+    // assert the verdict at a width the width table cannot reach and leaves the
+    // geometry to the owner. Widening a fixture until the eviction disappears
+    // would paper over it.
+    expect(visibleChips(props({ osFingerprint: REAL_OS_LEGACY }), 400).chips).toHaveLength(3);
   });
 
   it('visibleChips C2 — the OS row is ALWAYS a chip, measured or not; the "+N" holds only what is not a measurement at all', () => {
@@ -1470,6 +1737,12 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(vpn.hiddenHints).toEqual([]);
     // A MEASUREMENT is never in the pill at any real column width — including
     // the '?' verdict, which is a COMPLETED classification and not a placeholder.
+    // ⛔ (V-219) The four OS fixtures carry the single-host vantage, so the OS
+    // chip here is the asserting one this arm was written for. A reading whose
+    // vantage is withheld is STILL a measurement and still eligible — but its
+    // label is one CHIP_WIDTH has never been measured for, and at content 144 it
+    // is evicted. That is recorded, and deliberately not pinned, in the symmetry
+    // arm above.
     for (const over of [
       { osFingerprint: REAL_OS },
       { osFingerprint: WINDOWS_OS },
@@ -1531,6 +1804,10 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
   it('C3 rendered — a MISMATCH at a measured 144px renders the red chip itself ("✗ Win", soft red ink), never a "+1"', () => {
     // ProfilePhoneCard.tsx OS_LABEL_COMPACT['windows']: reverting it to 'Windows'
     // puts the trio at 157 > 144 and the red chip back into the '+1' → red arm.
+    // ⛔ (V-219) The fixture's `singleHostVantage: true` is what still makes this
+    // a mismatch at all; this arm is about the compact label and the red chrome.
+    // Its inversion — the same reading with the vantage withheld — is the arm
+    // 'V-219 rendered' below, which asserts the red chrome is gone.
     atContentWidth(144, () => {
       const { container } = render(
         <ProfilePhoneCard {...props({ osFingerprint: WINDOWS_OS, quicMeasured: 'h3' })} />,
@@ -1553,6 +1830,59 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     });
   });
 
+  it('V-219 rendered — the SAME mismatch from a multi-hop vantage wears the neutral chrome, never the red; and the green half is withheld just as hard', () => {
+    // ⛔ ADDED 2026-09-14 — the DOM counterpart of the symmetry arm above, and a
+    // deliberate inversion of 'C3 rendered' directly before it. The fixture is
+    // WINDOWS_OS minus the vantage and nothing else, so what this arm isolates
+    // is the gate: the ink and the fill go with the claim they carried.
+    //
+    // Rendered at the card's own DEFAULT_CONTENT_WIDTH (206 — what jsdom's 0px
+    // measurement falls back to) rather than under the 144px stub the C1/C3 arms
+    // use, so the chip is on the row for reasons that have nothing to do with the
+    // width table. See the eviction note in the symmetry arm: at content 144 the
+    // withheld GREEN row does lose its chip, and that is the owner's decision to
+    // make, not a thing to encode here.
+    const { container } = render(
+      <ProfilePhoneCard {...props({ osFingerprint: WINDOWS_OS_MULTI_HOP, quicMeasured: 'h3' })} />,
+    );
+    const caps = byRegion(container, 'caps') as HTMLElement;
+    const os = byComponent(caps, 'proxy-os-fingerprint') as HTMLElement;
+    expect(os).not.toBeNull();
+    expect(os.textContent).toBe('? Windows');
+    expect(os.getAttribute('data-os-tone')).toBe('unknown');
+    // The exact two classes 'C3 rendered' asserts, now absent — a red chip is a
+    // claim of a detectable defect, and this vantage cannot support one.
+    expect(classes(os)).not.toContain('bg-status-error/15');
+    expect(classes(os)).not.toContain('text-[#fca5a5]');
+    // …and it did not fall the OTHER way either: withholding a mismatch must not
+    // mint the reassurance. This is the false green the gate exists to prevent.
+    expect(classes(os)).not.toContain('text-status-ready');
+    expect(classes(os)).toEqual(expect.arrayContaining(['bg-ink-muted/15', 'text-ink-secondary']));
+    expect(os.getAttribute('title')).toMatch(
+      /^Proxy stack looks like Windows \(high confidence\), but/,
+    );
+    expect(os.getAttribute('title')).toMatch(/not necessarily what a site sees/);
+    expect(os.getAttribute('title')).not.toMatch(/detectable mismatch/);
+    expect(byComponent(caps, 'caps-overflow')).toBeNull();
+    cleanup();
+    // The green half, from the shape MOST stored rows are actually in: a cached
+    // record written before the field existed. ABSENT MEANS FALSE — it renders
+    // '? iOS/macOS', never the '✓ iOS/macOS' this same reading rendered until
+    // today, and never the green ink.
+    const { container: green } = render(
+      <ProfilePhoneCard {...props({ osFingerprint: REAL_OS_LEGACY })} />,
+    );
+    const g = byComponent(
+      byRegion(green, 'caps') as HTMLElement,
+      'proxy-os-fingerprint',
+    ) as HTMLElement;
+    expect(g.textContent).toBe('? iOS/macOS');
+    expect(g.getAttribute('data-os-tone')).toBe('unknown');
+    expect(classes(g)).not.toContain('text-status-ready');
+    expect(g.getAttribute('title')).not.toMatch(/matches the iOS device it fronts/);
+    cleanup();
+  });
+
   it('C1 — a compact label may only SHORTEN the claim, never decide it: "✓ Apple", never a bare "✓ iOS"', () => {
     // ProfilePhoneCard.tsx OS_LABEL_COMPACT['macos-or-ios']. 'macos-or-ios' is ONE
     // member of FingerprintedOs because `fingerprintOs` cannot separate Darwin
@@ -1572,7 +1902,16 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(os?.width).toBe(47.16);
     // The full disjunction is never lost: it is the chip's title and the hint line.
     expect(os?.title).toMatch(/^Proxy stack looks like iOS\/macOS \(high confidence\)/);
-    expect(visibleChips(MAX, 128).hiddenHints[0]).toMatch(/^✓ iOS\/macOS — /);
+    // ⛔ (V-219, 2026-09-14) THE HINT IS READ AT CONTENT 81, NOT 128. A measured
+    // reading carries `keep` now, so at 128 the OS chip is ON the row and the
+    // QUIC chip is the one in the '+1'; the OS hint is only reachable below
+    // 81.16 — the width at which even the pinned chip plus its '+2' stops
+    // fitting. The property this line pins is untouched: wherever the OS row
+    // does end up in the pill, the HINT says 'iOS/macOS' and never the compact
+    // 'Apple'. Pinned both ways so a compact label cannot leak into a hint.
+    const hintsAt81 = visibleChips(MAX, 81).hiddenHints;
+    expect(hintsAt81[2]).toMatch(/^✓ iOS\/macOS — /);
+    expect(hintsAt81.some((h) => h.startsWith('✓ Apple'))).toBe(false);
     // …and the SOURCE, so a compact form can never be re-pointed at one member
     // without this arm being read first.
     expect(source('components/ProfilePhoneCard.tsx')).toContain("'macos-or-ios': 'Apple',");
@@ -1609,7 +1948,14 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     const chip = undet.chips.find((c) => c.key === 'os');
     expect(chip?.attrs['data-os-tone']).toBe('unknown');
     expect(chip?.compact).toBeUndefined();
-    expect(chip?.keep).toBeUndefined();
+    // ⛔ (V-219, 2026-09-14) `keep` is TRUE here, and that is this arm's own
+    // thesis rather than a surprise: '?' is a COMPLETED classification, so it
+    // passes the new retention test — `fingerprint !== undefined &&
+    // !unavailable && measuring !== true` — exactly as a '✓' or a '✗' does. It
+    // asserted `toBeUndefined()` while retention was the mismatch TONE, i.e.
+    // while a measurement that decided nothing was as droppable as no
+    // measurement at all — the very distinction this arm exists to deny.
+    expect(chip?.keep).toBe(true);
     expect(chip?.title).toMatch(
       /^Stack OS could not be determined — initial TTL 64 \(a unix family\)/,
     );
@@ -1635,7 +1981,77 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       expect(v.chips[2]?.width, label).toBe(33.33);
       expect(v.chips[2]?.title, label).toMatch(hint);
       expect(v.chips[2]?.attrs['data-os-tone'], label).toBe('unknown');
+      // ⛔ (V-219) …and NEITHER carries `keep`: being a chip at every real width
+      // is not the same privilege as being pinned when the row runs out. That is
+      // the whole difference between '?' above and '—' here — one narrowed the
+      // answer, the other has no answer to narrow — and the arm below turns it
+      // into a behavioural contrast at a single width.
+      expect(v.chips[2]?.keep, label).toBeUndefined();
       expect(v.hiddenHints, label).toEqual([]);
+    }
+  });
+
+  it('C3/V-219 — the OTHER half of the retention rule: a chip carrying NO measurement is still droppable, and at ONE width the two halves separate', () => {
+    // ProfilePhoneCard.tsx `capabilityChips`:
+    //   keep: fingerprint !== undefined && fingerprint.unavailable === undefined
+    //         && fingerprint.measuring !== true ? true : undefined
+    //
+    // ⛔ ADDED 2026-09-14 WITH THE RULE ITSELF. The clause that pins a measured
+    // reading to the row is asserted all over this block; the three clauses that
+    // let a NON-reading go had no arm of their own, and without one the rule
+    // could be widened to a bare `true` — pinning '— OS' and '… OS', chips that
+    // say only that there is nothing to say about this proxy's stack — with
+    // every other arm in the file still green. That is the load-bearing half:
+    // "the OS row always gets a chip" (C2) is a statement about WIDTH, and
+    // "a measured reading keeps its place" is a statement about EVIDENCE; only
+    // this arm stops the second from swallowing the first.
+    // Mutation: `keep: true` unconditionally → the three non-reading rows below
+    // render ['UDP ✓', <the OS chip>] and red here. ⚠️ DERIVED, NOT RUN — src/ was
+    // out of scope for the session that added this arm, so the claim rests on the
+    // 123px arithmetic below (a kept '— OS' reserves 40.22 + 33.33 + 4 + 4 + 27 +
+    // 3 = 111.55, inside 123) plus its MEASURED neighbour: '? OS', a keep-flagged
+    // OS chip 3.36px narrower, does render exactly that two-chip row at this
+    // width. Run it before trusting the sentence.
+    //
+    // ONE WIDTH separates the halves, which is what makes this a contrast rather
+    // than two unrelated pins. Content 123, measured at the runner 2026-09-14:
+    //   • '? OS' (29.97) — a COMPLETED classification, so a reading — wants
+    //     40.22 + 42.03 + 29.97 + 8 + 3 = 123.22 for the full trio, 0.22px more
+    //     than it has. Level 3 fires and `keep` decides: the QUIC chip goes and
+    //     the OS chip stays;
+    //   • '— OS' (33.33 — never measured, or a cause the control plane REPORTED)
+    //     and '… OS' (33.41 — the in-flight sentinel) want 126.58 / 126.66, miss
+    //     by more, and carry no `keep` — so the OS chip is the one that goes,
+    //     exactly as it did before V-219.
+    // Same width, same shortfall, opposite outcome, decided by nothing but
+    // whether a measurement exists.
+    const measured = visibleChips(props({ osFingerprint: UNDETERMINED_OS }), 123);
+    expect(measured.chips.map((c) => c.text)).toEqual(['UDP ✓', '? OS']);
+    expect(measured.chips.find((c) => c.key === 'os')?.keep).toBe(true);
+    expect(measured.hiddenHints).toHaveLength(1);
+    expect(measured.hiddenHints[0]).toMatch(/^QUIC ~ — /);
+    for (const [label, over, text] of [
+      ['never measured — no fingerprint at all', {}, '— OS'],
+      [
+        'an `unavailable` cause the control plane reported',
+        { osFingerprint: VPN_UNAVAILABLE_OS },
+        '— OS',
+      ],
+      ['the in-flight `measuring` sentinel', { testing: true }, '… OS'],
+    ] as const) {
+      // It IS a chip at a real column width — C2, and the owner's "i dont see OS
+      // currently at profile grid" is still answered for these rows…
+      const wide = visibleChips(props({ ...over }), 206).chips.find((c) => c.key === 'os');
+      expect(wide?.text, label).toBe(text);
+      // …it simply is not PINNED, so it is the first thing a short row loses.
+      expect(wide?.keep, label).toBeUndefined();
+      const narrow = visibleChips(props({ ...over }), 123);
+      expect(
+        narrow.chips.map((c) => c.text),
+        label,
+      ).toEqual(['UDP ✓', 'QUIC ~']);
+      expect(narrow.hiddenHints, label).toHaveLength(1);
+      expect(narrow.hiddenHints[0], label).toMatch(new RegExp(`^${text} — `));
     }
   });
 

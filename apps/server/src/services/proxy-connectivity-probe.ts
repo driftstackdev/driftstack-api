@@ -246,6 +246,19 @@ export type OsObservation =
        *  exit address did (the provider forwards the raw connection out of the
        *  exit device). */
       via: 'proxy_host' | 'exit_ip';
+      /**
+       * (V-219) True only when the address we dialled, the address that emitted
+       * the SYN, and the address the destination will see are ONE host — so
+       * there is no intermediary that could route a website's port differently
+       * from the observer's, and this reading describes the path a website gets.
+       *
+       * ⛔ NECESSARY, NOT SUFFICIENT. A directly-dialled residential node, or a
+       * pool answering on one front door, also satisfies it. It is false
+       * whenever the exit address is unknown, so "cannot tell" collapses into
+       * "do not assert" rather than into "representative". A consumer may use it
+       * to WITHHOLD a claim; it must never use it to strengthen one.
+       */
+      singleHostVantage: boolean;
       signature: TcpSynSignature;
     } & OsFingerprintResult)
   | { observed: false; reason: string };
@@ -641,6 +654,34 @@ export class ProxyConnectivityProbe {
           // the client render it as an unreadable front door and suppressed a
           // perfectly good reading on every such proxy.
           via: ip === exitIp || ip !== peerIp ? 'exit_ip' : 'proxy_host',
+          // ⛔⛔ (V-219) IS THIS READING EVEN ABOUT THE PATH A WEBSITE USES?
+          //
+          // Measured by the owner 2026-09-14 with a third-party instrument:
+          // browserleaks.com/ip, loaded THROUGH their residential proxy, reads
+          // the arriving stack on 443 and reports Mac/iOS. Our observer reads
+          // the same proxy on 7791 and reports Linux at high confidence. Same
+          // proxy, two ports, two operating systems — the provider routes web
+          // traffic through the residential device and odd ports through its own
+          // infrastructure. So a fingerprint taken here can describe a path no
+          // website ever touches, and the OS chip was calling that a "detectable
+          // mismatch".
+          //
+          // Splitting paths by port REQUIRES more than one machine: you dial a
+          // gateway and egress from a device. When the host we dialled, the host
+          // that emitted the SYN, and the address the destination will see are
+          // all ONE address, there is no fabric in between to route 443
+          // differently from 7791 — one kernel crafts both SYNs. Destination-port
+          // policy on that host can change the egress address or the MSS, but not
+          // the initial TTL, window, or TCP option ORDER, which is what the
+          // classifier keys on. That is the ordinary datacentre SOCKS5 case, and
+          // for it the reading IS representative.
+          //
+          // ⚠️ NECESSARY, NOT SUFFICIENT, and the client must treat it that way:
+          // a directly-dialled residential node, or a pool answering on a single
+          // front door, can also satisfy it. `exitIp` is optional, so when it is
+          // absent the honest answer is `false` — "cannot tell" collapses into
+          // "do not assert", never into "representative".
+          singleHostVantage: exitIp !== undefined && ip === peerIp && peerIp === exitIp,
           signature: r.signature,
           ...fingerprintOs(r.signature),
         };

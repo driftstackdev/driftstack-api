@@ -209,6 +209,10 @@ type OsFingerprintFields =
         reason: string;
         observed_ip: string;
         observed_via: 'proxy_host' | 'exit_ip';
+        /** (V-219) Whether the reading describes the path a website gets — see
+         *  `OsObservation.singleHostVantage`. The client withholds a match or
+         *  mismatch CLAIM unless this is explicitly true. */
+        single_host_vantage: boolean;
       };
     }
   | { os_fingerprint_unavailable: 'vpn_tunnel' | 'not_observed' | 'observer_off' };
@@ -1171,6 +1175,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               reason: os.reason,
               observed_ip: os.observedIp,
               observed_via: os.via,
+              // (V-219) Whether this reading describes the path a website gets.
+              // The client withholds a match/mismatch CLAIM when it is false —
+              // see the owner's browserleaks measurement in the probe's comment.
+              single_host_vantage: os.singleHostVantage,
             },
           };
         } catch (err) {

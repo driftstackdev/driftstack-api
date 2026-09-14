@@ -62,6 +62,19 @@ export interface OsFingerprint {
    *  that omission is what let a reading of a provider's gateway be painted as a
    *  verdict about the exit. Absent on a placeholder or a legacy cached record. */
   observedVia?: 'proxy_host' | 'exit_ip';
+  /**
+   * (V-219) Whether this reading describes the path a WEBSITE gets: the host we
+   * dialled, the host that emitted the SYN and the address the destination sees
+   * are one machine, so nothing in between can route a site's port differently
+   * from our observer's.
+   *
+   * ⛔ Absent means FALSE, and that is load-bearing. A legacy cached record, a
+   * placeholder, an older server, or a tampered response all read `undefined` —
+   * and every one of them must fail to assert rather than default into a
+   * confident claim. Only an explicit `true` from a server that computed it
+   * unlocks the match/mismatch arms.
+   */
+  singleHostVantage?: boolean;
   /** (o) O4 — set ONLY on `OS_FINGERPRINT_MEASURING`, the sentinel a view passes while
    *  a test THIS client started is in flight. "Measuring" is a claim about work in
    *  progress: it may be rendered from a running probe and from nothing else, never
@@ -218,18 +231,52 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
     };
   }
   const label = OS_LABEL[fp.os];
+  // ⛔⛔ (V-219) NEITHER ARM MAY ASSERT UNLESS THE VANTAGE SUPPORTS IT, and the
+  // symmetry is the whole point.
+  //
+  // MEASURED by the owner 2026-09-14: browserleaks.com/ip loaded THROUGH their
+  // residential proxy reads the arriving stack on 443 — a website's port — and
+  // reports Mac/iOS. Our observer reads the same proxy on 7791 and reports Linux
+  // at high confidence. The provider routes web traffic through the residential
+  // device and odd ports through its own infrastructure, so a reading taken here
+  // can describe a path no website ever touches.
+  //
+  // The tempting fix was to stop painting the red arm, because that is the one
+  // that produced a complaint. That would have been a complaint-to-evidence fix,
+  // not a claim-to-evidence one: the GREEN arm is minted from the identical SYN,
+  // over the identical path, and asserts "matches the iOS device it fronts". If
+  // this vantage cannot support "detectable mismatch" it cannot support "matches"
+  // either — and of the two errors, the false green is far worse. A red chip is
+  // an irritant somebody eventually reports; a green chip on a proxy that is
+  // actually detectable costs a customer their account, and nobody ever files a
+  // bug about a reassuring badge. Silencing only the red one would have left the
+  // product able to falsely reassure and unable to falsely alarm, with no
+  // instrument left that could contradict a wrong green.
+  //
+  // `singleHostVantage` is the one case where the reading IS about the path a
+  // website gets: dialled host, SYN emitter and destination-visible address are
+  // one machine, so there is no fabric in between to route 443 differently.
+  // Everything else states what was measured and claims nothing.
+  if (fp.singleHostVantage !== true) {
+    return {
+      tone: 'unknown',
+      glyph: '?',
+      label,
+      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence), but this proxy forwards through more than one machine, and we can only read the stack on our own port. A website connects on a different port and may reach a different machine — so this is what the proxy's own infrastructure looks like, not necessarily what a site sees. Not a verdict either way. ${fp.reason}`,
+    };
+  }
   if (fp.os === 'macos-or-ios') {
     return {
       tone: 'match',
       glyph: '✓',
       label,
-      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — matches the iOS device it fronts. ${fp.reason}`,
+      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — matches the iOS device it fronts, and this proxy answers from a single host, so a website sees the same stack. ${fp.reason}`,
     };
   }
   return {
     tone: 'mismatch',
     glyph: '✗',
     label,
-    hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — an iOS device behind a ${label} stack is a detectable mismatch. ${fp.reason}`,
+    hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — an iOS device behind a ${label} stack is a detectable mismatch. This proxy answers from a single host, so a website sees the same stack. ${fp.reason}`,
   };
 }

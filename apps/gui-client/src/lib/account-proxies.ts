@@ -547,7 +547,26 @@ function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
   const f = raw as Record<string, unknown>;
   if (!isFingerprintedOs(f.os) || !isFingerprintConfidence(f.confidence)) return undefined;
   if (typeof f.reason !== 'string') return undefined;
-  return { os: f.os, confidence: f.confidence, reason: f.reason };
+  // ⛔⛔ (V-219) THE VANTAGE FIELDS WERE DROPPED HERE, and that is why the
+  // front-door guard in os-fingerprint-verdict.ts has never once fired on a real
+  // row. The server has sent `observed_via` since the field existed and
+  // `single_host_vantage` since today; this allowlist rebuilt the object from
+  // three fields and silently discarded both. The guard downstream branches on
+  // `observedVia`, so it was reading a field nothing ever populated — a dead
+  // branch that looked like a working safeguard.
+  //
+  // ⚠️ Both default to the CAUTIOUS value when absent or malformed. A server too
+  // old to send them, or a proxy tampering with the response, must not be able to
+  // promote a reading into a confident claim by omission.
+  const viaRaw = f.observed_via;
+  const observedVia = viaRaw === 'proxy_host' || viaRaw === 'exit_ip' ? viaRaw : undefined;
+  return {
+    os: f.os,
+    confidence: f.confidence,
+    reason: f.reason,
+    ...(observedVia !== undefined ? { observedVia } : {}),
+    singleHostVantage: f.single_host_vantage === true,
+  };
 }
 
 /** The server budgets ~12s for connectivity plus ~6s for the observer tunnel;

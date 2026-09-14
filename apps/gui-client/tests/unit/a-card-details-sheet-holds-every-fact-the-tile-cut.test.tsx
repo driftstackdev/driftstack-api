@@ -42,7 +42,40 @@ const FAILURE =
 const NOTICE =
   'Tunnel test not run this time — a live session holds the tunnel. Showing the last result.';
 const TAGS = ['banking', 'ch', 'aged', 'warm', 'checkout'] as const;
-const REAL_OS = { os: 'macos-or-ios', confidence: 'high', reason: 'TTL 64, MSS 1460' } as const;
+/**
+ * A real reading the verdict renders as a full MATCH — and (V-219) it renders
+ * that way only because of the two vantage fields.
+ *
+ * ⚠️ The arms using it are about the SHEET — every pre-Phase-B fact reachable at
+ * full length, the whole capability set beside it — not about the colour rule;
+ * they merely happened to use a reading that asserted. So the fixture states the
+ * vantage a producer would have sent rather than the assertion being relaxed:
+ * the host we dialled, the host that emitted the SYN and the address the
+ * destination sees are ONE machine, so nothing in between can route a website's
+ * port differently and the reading is about the path a site actually gets.
+ *
+ * ⛔ `observedVia` must be 'exit_ip' alongside it. Single-host means the dialled
+ * address IS the exit, so the server labels it 'exit_ip'; the pair proxy_host +
+ * singleHostVantage is a state the control plane never emits, and a fixture
+ * pinning it would be pinning fiction.
+ */
+const REAL_OS = {
+  os: 'macos-or-ios',
+  confidence: 'high',
+  reason: 'TTL 64, MSS 1460',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+} as const;
+
+/** The SAME reading with the vantage dropped — the one shape a legacy cached
+ *  record, an older server and a tampered response all arrive in, since ABSENT
+ *  MEANS FALSE. The verdict withholds BOTH arms on it; the sheet still has to
+ *  carry the fact, which is what the withheld-case arm below pins. */
+const REAL_OS_NO_VANTAGE = {
+  os: REAL_OS.os,
+  confidence: REAL_OS.confidence,
+  reason: REAL_OS.reason,
+} as const;
 
 function props(over: Partial<ProfilePhoneCardProps> = {}): ProfilePhoneCardProps {
   return {
@@ -205,7 +238,11 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     // Every tag, at full length, in one row (no '+N' tail inside the sheet).
     expect(inSheet.queryByText(/^\+\d+$/)).toBeNull();
     expect(byComponent(sheet, 'tags-row')?.querySelectorAll('span')).toHaveLength(1 + TAGS.length);
-    // The OS fact carries its hint (the sheet's "OS fact AND hints").
+    // The OS fact carries its hint (the sheet's "OS fact AND hints"). The green
+    // tone is REAL_OS's VANTAGE talking (V-219, os-fingerprint-verdict.ts's
+    // `singleHostVantage !== true` gate): the identical bytes without it read
+    // 'unknown', which the arm below pins — this one is about the fact being in
+    // the sheet, so its fixture carries the vantage.
     expect(byComponent(sheet, 'proxy-os-fingerprint')?.getAttribute('data-os-tone')).toBe('match');
     expect(
       byComponent(sheet, 'proxy-os-fingerprint')?.getAttribute('title')?.length,
@@ -213,6 +250,32 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     expect(byComponent(sheet, 'capability-hints')?.textContent).toMatch(
       /UDP travels inside the VPN tunnel/,
     );
+    cleanup();
+  });
+
+  // (V-219) The companion to the arm above, and the reason that one's fixture
+  // gained a vantage instead of a weaker assertion: the gate withholds the
+  // VERDICT, and this file is about the FACT. A reading our vantage cannot turn
+  // into a claim still has to reach the sheet at full length, or the new rule
+  // would have quietly cut one of the ten rows Phase C promised — exactly the
+  // regression this file exists to catch.
+  it("a reading whose vantage supports no verdict is STILL a fact in the sheet: the OS row is there and named, the tone is the neutral one and the hint says it describes the proxy's own infrastructure — withheld, never deleted (a deliberate inversion: without singleHostVantage this row may NOT read 'match')", () => {
+    const { container } = render(
+      <ProfilePhoneCard {...everything({ osFingerprint: REAL_OS_NO_VANTAGE })} />,
+    );
+    fireEvent.click(glyph());
+    const chip = byComponent(sheetOf(container) as HTMLElement, 'proxy-os-fingerprint');
+    expect(chip, 'the OS row survives a withheld verdict').not.toBeNull();
+    // The measurement is still REPORTED — label is the OS name, glyph the
+    // neutral '?' — it is the CLAIM about the phone it fronts that is withheld.
+    expect(chip?.textContent).toContain('iOS/macOS');
+    expect(chip?.querySelector('[aria-hidden="true"]')?.textContent).toBe('?');
+    // ⛔ ABSENT MEANS FALSE, and symmetrically: the same bytes minus the vantage
+    // may not mint the green any more than the red. Of the two errors the false
+    // green is the expensive one — nobody ever files a bug about a reassuring
+    // badge, and it costs a customer the account.
+    expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
+    expect(chip?.getAttribute('title')).toMatch(/not necessarily what a site sees/);
     cleanup();
   });
 

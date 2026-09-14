@@ -86,7 +86,41 @@ import {
   saveProbeResult,
 } from '../../src/lib/proxy-probe-cache';
 
-const REAL: OsFingerprint = { os: 'macos-or-ios', confidence: 'high', reason: 'TTL 64, MSS 1460' };
+/**
+ * The SAME reading in WIRE shape (snake_case), for arms that post it through
+ * `testAccountProxy` and let `cleanWireFingerprint` parse it.
+ *
+ * ⛔ Not interchangeable with REAL. The wire spells the vantage
+ * `single_host_vantage`; the client type spells it `singleHostVantage`. Handing
+ * the camelCase object to a wire fixture silently loses the field — the cleaner
+ * reads the snake_case key, finds nothing, and defaults to the cautious value,
+ * so the arm would be asserting on a reading the server never sent.
+ */
+const REAL_WIRE = {
+  os: 'macos-or-ios',
+  confidence: 'high',
+  reason: 'TTL 64, MSS 1460',
+  observed_via: 'exit_ip',
+  single_host_vantage: true,
+};
+
+/**
+ * A real, asserting reading — one the verdict renders as a full match.
+ *
+ * ⚠️ (V-219) `singleHostVantage` is part of what makes it assertable and must
+ * stay. Without it the verdict withholds the claim, because a reading taken
+ * through a multi-machine proxy describes our own observer's path rather than a
+ * website's. The arms using this fixture are about a real reading outranking a
+ * placeholder or a cause sentence — they need it to actually assert, so the
+ * vantage is set rather than the rule relaxed.
+ */
+const REAL: OsFingerprint = {
+  os: 'macos-or-ios',
+  confidence: 'high',
+  reason: 'TTL 64, MSS 1460',
+  observedVia: 'exit_ip',
+  singleHostVantage: true,
+};
 
 const OK_PROBE = {
   reachable: true,
@@ -183,7 +217,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
   it('CRITICAL VACUITY CONTROL — a REAL reading is untouched: it keeps the green match and carries no cause sentence', async () => {
     // The failure this item could introduce is the mirror image of the one it fixes:
     // every row wearing an "unavailable" sentence. This arm fails in that direction.
-    replyOk({ os_fingerprint: REAL });
+    replyOk({ os_fingerprint: REAL_WIRE });
     const res = await testAccountProxy('http://x', 'k', 'p_socks');
     if (!res.ok) throw new Error('fixture is an ok reply');
     expect(res.os_fingerprint_unavailable).toBeUndefined();
@@ -197,7 +231,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
   });
 
   it('CONTROL — a server that sends BOTH a reading and a cause is believed about the READING: a cause explains an absence, and there is none', async () => {
-    replyOk({ os_fingerprint: REAL, os_fingerprint_unavailable: 'not_observed' });
+    replyOk({ os_fingerprint: REAL_WIRE, os_fingerprint_unavailable: 'not_observed' });
     const res = await testAccountProxy('http://x', 'k', 'p_both');
     if (!res.ok) throw new Error('fixture is an ok reply');
     expect(res.os_fingerprint?.unavailable).toBeUndefined();
@@ -388,20 +422,67 @@ describe('a front-door reading is not a verdict about the exit', () => {
     expect(v.hint).toContain('Windows');
   });
 
-  it('an EXIT reading is untouched — the verdict it was built for still fires', () => {
-    expect(osFingerprintVerdict(front({ observedVia: 'exit_ip' })).tone).toBe('mismatch');
-    expect(osFingerprintVerdict(front({ observedVia: 'exit_ip', os: 'macos-or-ios' })).tone).toBe(
-      'match',
-    );
+  // ⛔⛔ (V-219) THE TWO ARMS BELOW WERE INVERTED, and the reason is the sharpest
+  // thing learned on this feature.
+  //
+  // They pinned that an `exit_ip` reading still fires the full verdict, and that
+  // a reading with no stated vantage keeps it too. Both rested on the premise
+  // that reading the exit address means reading what a website sees. The owner
+  // disproved that with a third-party instrument: browserleaks.com/ip, loaded
+  // THROUGH their residential proxy, reads the arriving stack on 443 and says
+  // Mac/iOS; our observer reads the same proxy on 7791 and says Linux at high
+  // confidence. The provider routes web traffic through the residential device
+  // and odd ports through its own infrastructure, so `exit_ip` says WHICH
+  // ADDRESS emitted the SYN and says nothing about WHICH PORT it was read on.
+  //
+  // What replaces it is `singleHostVantage`: the dialled host, the SYN emitter
+  // and the destination-visible address are one machine, so there is no fabric
+  // in between to route a website's port differently. And it gates BOTH arms —
+  // the green as hard as the red. Silencing only the red would have been a
+  // complaint-to-evidence fix: the green is minted from the identical SYN over
+  // the identical path, and of the two errors it is far the worse, because a
+  // false red is an irritant somebody reports and a false green costs an account
+  // while nobody ever files a bug about a reassuring badge.
+  it('CRITICAL an exit-address reading alone no longer fires the verdict — the address is not the vantage', () => {
+    const v = osFingerprintVerdict(front({ observedVia: 'exit_ip' }));
+    expect(v.tone, 'exit_ip names the address, not the port the reading came from').toBe('unknown');
+    expect(v.hint).toMatch(/forwards through more than one machine/i);
+    // The measurement is still shown — the data is real, only the claim is withheld.
+    expect(v.hint).toContain('Windows');
   });
 
-  it('CONTROL — a reading with NO stated vantage keeps the old behaviour, never the new excuse', () => {
-    // A legacy cached record predates the field. It must not silently become
-    // "we only saw the front door", which would retire a real red badge on
-    // every stale row.
+  it('CRITICAL the GREEN arm is withheld on exactly the same evidence as the red — the symmetry is the fix', () => {
+    const darwin = osFingerprintVerdict(front({ observedVia: 'exit_ip', os: 'macos-or-ios' }));
+    expect(
+      darwin.tone,
+      'a vantage that cannot support "detectable mismatch" cannot support "matches" either',
+    ).toBe('unknown');
+    expect(darwin.tone).not.toBe('match');
+  });
+
+  it('CRITICAL a single-host proxy DOES fire the full verdict, both ways — the feature is withheld, not deleted', () => {
+    // One machine: dialled host, SYN emitter and destination-visible address are
+    // the same, so nothing can route 443 differently from the observer's port.
+    // This is the ordinary datacentre SOCKS5 case and the reading is about the
+    // path a website gets, so the warning is true and actionable.
+    // ⚠️ `observedVia` must be 'exit_ip' here: single-host means the dialled
+    // address IS the exit, so the server labels the match accordingly. The pair
+    // proxy_host + singleHostVantage cannot occur, and a fixture asserting it
+    // would be pinning a state the producer never emits.
+    const single = { observedVia: 'exit_ip' as const, singleHostVantage: true };
+    expect(osFingerprintVerdict(front(single)).tone).toBe('mismatch');
+    expect(osFingerprintVerdict(front({ ...single, os: 'macos-or-ios' })).tone).toBe('match');
+  });
+
+  it('CRITICAL a reading with NO stated vantage asserts NOTHING. Absence must fail closed: a legacy cached record, an older server and a tampered response all look identical here, and none of them may promote itself into a confident claim by omission.', () => {
     const legacy = front();
     delete (legacy as { observedVia?: unknown }).observedVia;
-    expect(osFingerprintVerdict(legacy).tone).toBe('mismatch');
+    expect(osFingerprintVerdict(legacy).tone).toBe('unknown');
+    expect(osFingerprintVerdict(legacy).tone).not.toBe('mismatch');
+    // And the same for the flattering direction.
+    const legacyDarwin = front({ os: 'macos-or-ios' });
+    delete (legacyDarwin as { observedVia?: unknown }).observedVia;
+    expect(osFingerprintVerdict(legacyDarwin).tone).not.toBe('match');
   });
 
   it('a front-door reading the classifier could not identify says so without inventing a stack', () => {

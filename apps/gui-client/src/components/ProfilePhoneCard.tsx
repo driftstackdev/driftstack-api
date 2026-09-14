@@ -416,6 +416,30 @@ const CHIP_WIDTH: Readonly<Record<string, number>> = {
   '… OS': 33.41,
   '? OS': 29.97, // measured, undetermined: a COMPLETED classification
   '— OS': 33.33, // no reading at all; see the eligibility rule below
+  // ⛔ V-219 (2026-09-14) — the '?' glyph now pairs with a NAMED OS, not only
+  // with the bare 'OS' label. A reading taken through a multi-machine proxy is
+  // withheld as neutral while still showing the stack it read, so every
+  // `? × (OS_LABEL | OS_LABEL_COMPACT)` pair became reachable in one change.
+  //
+  // Unmeasured, they fell to the `ceil(len * 6 + 14)` estimate, which
+  // OVER-reserves: '? Apple' reserved 56 against a real 43.80. At the 178px
+  // column's 144px content that pushed the trio over and minted a '+1' — the
+  // exact pill the owner objected to, reintroduced by arithmetic rather than by
+  // a decision. With the measured value the same row reserves 137.05 and fits.
+  //
+  // MEASURED the same way as the rest of the table and on the same day the gate
+  // landed: a probe span carrying CHIP_BASE read OUT OF THIS FILE, inside a real
+  // card body at http://127.0.0.1:5199/visual-harness.html?w=178, Chromium
+  // 1200×1400 @2x, after document.fonts.ready, `document.fonts.size === 0` (the
+  // OS fallback, as the provenance note above requires). CONTROLS in the same
+  // run reproduced '? OS' at 29.96875 and '✓ Apple' at 47.15625 — the table's
+  // 29.97 and 47.16 — so the method is the one these numbers came out of.
+  '? iOS/macOS': 70.02,
+  '? Apple': 43.8,
+  '? Windows': 59.45,
+  '? Win': 34.28,
+  '? Linux': 41.84,
+  '? BSD': 36.2,
 };
 const CHIP_GAP = 4;
 /** C1/C2 — the width the caps row's INLINE ACTION takes in mode 'first', so the
@@ -966,8 +990,30 @@ export function capabilityChips(p: CapsInput): { eligible: CapChip[]; hidden: st
         osCompactText === osText
           ? undefined
           : { text: osCompactText, width: chipWidth(osCompactText) },
-      // C3 — the one measured defect outranks every green chip in the row.
-      keep: os.tone === 'mismatch' ? true : undefined,
+      // C3 — a MEASURED reading outranks every green chip in the row.
+      //
+      // ⛔ (V-219) This was `os.tone === 'mismatch'`, and keying retention on the
+      // TONE was safe only while a measured reading always produced one. It does
+      // not any more: a reading taken through a multi-machine proxy is withheld
+      // as neutral, which under the old rule silently dropped the chip out of the
+      // visible row and behind the "+N" pill.
+      //
+      // That is the owner's original complaint reintroduced by the fix for a
+      // different one — they told us a "+1" hiding a fact was worse than a
+      // smaller row showing it. The reading is the same fact either way; whether
+      // we are willing to draw a CONCLUSION from it is a separate question and a
+      // poor reason to hide it. So retention now follows "did we measure
+      // something", not "did we decide something".
+      //
+      // The three non-readings keep the old behaviour and can still be dropped:
+      // an `unavailable` cause, the in-flight `measuring` sentinel, and no
+      // fingerprint at all are not facts about this proxy's stack.
+      keep:
+        fingerprint !== undefined &&
+        fingerprint.unavailable === undefined &&
+        fingerprint.measuring !== true
+          ? true
+          : undefined,
       // The colour rule is osFingerprintVerdict's (match green, the ONE measured
       // defect red, measuring muted) — only the chip chrome is the card's.
       className:

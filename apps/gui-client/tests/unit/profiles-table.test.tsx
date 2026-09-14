@@ -147,7 +147,25 @@ describe('ProfilesTable', () => {
         {...props({
           rows: [
             row({
-              osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64' },
+              // (V-219) The vantage is fixture FURNITURE here, not this arm's
+              // subject: the arm is about the cell reaching the list at all, and
+              // it needs a reading that actually asserts to tell a rendered chip
+              // from a swallowed one. `exit_ip` + single-host is the ordinary
+              // datacentre SOCKS5 case — dialled host, SYN emitter and
+              // destination-visible address are ONE machine, so nothing in
+              // between can route a website's port differently — and it is the
+              // only shape the match/mismatch arms fire on at all now.
+              // ⚠️ Never 'proxy_host' beside `singleHostVantage: true`: single
+              // host means the dialled address IS the exit, so the server labels
+              // it 'exit_ip', and that pair would pin a state the producer never
+              // emits.
+              osFingerprint: {
+                os: 'macos-or-ios',
+                confidence: 'high',
+                reason: 'SYN/TTL 64',
+                observedVia: 'exit_ip',
+                singleHostVantage: true,
+              },
             }),
           ],
         })}
@@ -157,11 +175,25 @@ describe('ProfilesTable', () => {
     expect(match).not.toBeNull();
     expect(match?.getAttribute('data-os-tone')).toBe('match');
     expect(match?.textContent).toBe('✓iOS/macOS'); // glyph + label, gap-0.5 between
-    // The one measured defect keeps its own tone here as well.
+    // The one measured defect keeps its own tone here as well — carrying the
+    // same single-host vantage, because (V-219) the gate withholds the RED
+    // exactly as hard as the green, and this arm is not the place that pins
+    // that. It is here to prove the tone reaches the list, not to prove which
+    // tone a vantage earns.
     rerender(
       <ProfilesTable
         {...props({
-          rows: [row({ osFingerprint: { os: 'windows', confidence: 'high', reason: 'TTL 128' } })],
+          rows: [
+            row({
+              osFingerprint: {
+                os: 'windows',
+                confidence: 'high',
+                reason: 'TTL 128',
+                observedVia: 'exit_ip',
+                singleHostVantage: true,
+              },
+            }),
+          ],
         })}
       />,
     );
@@ -182,6 +214,56 @@ describe('ProfilesTable', () => {
     expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
     rerender(<ProfilesTable {...props({ rows: [row()] })} />);
     expect(document.querySelector('[data-component="proxy-os-fingerprint"]')).toBeNull();
+    cleanup();
+  });
+
+  it("C4/V-219 — a reading with NO single-host vantage still RENDERS on the list, as the withheld '?' tone: this cell decides PRESENCE, the shared verdict decides ASSERTION", () => {
+    // ⚠️ A DELIBERATE INVERSION, not a regression. Before V-219 this exact
+    // fixture — a real macOS/iOS reading carrying no vantage — rendered the
+    // green '✓' chip on this surface; it no longer may. The owner measured why
+    // with a third-party instrument 2026-09-14: browserleaks.com/ip loaded
+    // THROUGH their residential proxy reads the arriving stack on 443, a
+    // website's port, and reports Mac/iOS, while our observer reads the SAME
+    // proxy on 7791 and reports Linux at high confidence. The provider routes
+    // web traffic through the residential device and odd ports through its own
+    // infrastructure, so a reading taken at our vantage can describe a path no
+    // website ever touches. ⛔ ABSENT MEANS FALSE: a legacy cached row, an older
+    // server and a tampered response all read `undefined` here, and every one of
+    // them must fail to assert rather than default into a confident claim.
+    //
+    // ⛔ WHY IT LIVES BESIDE C4 AND NOT ONLY IN THE VERDICT'S OWN SPEC. What is
+    // pinned here is not the rule — it is that this CELL hands the chip the
+    // whole record and adds nothing to it. The match arm above already catches a
+    // refactor that DROPS the vantage on the way through (its green would go
+    // red). Only this arm catches the opposite and far worse one: a cell that
+    // spreads a vantage of its own (`{...r.osFingerprint, singleHostVantage:
+    // true}`) to get its green chips back leaves every other arm in this file
+    // green. A false red is an irritant somebody eventually reports; a false
+    // green on a detectable proxy costs a customer their account, and nobody
+    // ever files a bug about a reassuring badge.
+    render(
+      <ProfilesTable
+        {...props({
+          rows: [
+            row({
+              osFingerprint: { os: 'macos-or-ios', confidence: 'high', reason: 'SYN/TTL 64' },
+            }),
+          ],
+        })}
+      />,
+    );
+    const chip = document.querySelector('[data-component="proxy-os-fingerprint"]');
+    // PRESENCE is unchanged, and that is the half this file owns: this client
+    // HOLDS a reading, so the cell still renders one. The withheld case is a
+    // quieter chip, never a missing one — which is what keeps it distinct from
+    // the un-fed rows C4 asserts render nothing at all.
+    expect(chip).not.toBeNull();
+    expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
+    // Still one glyph plus the same label — the OS that was measured is named,
+    // only the claim about it is withheld — so the cell's width budget (see the
+    // ProfilesTable comment beside this column) is the same shape as the green.
+    expect(chip?.textContent).toBe('?iOS/macOS');
+    expect(chip?.getAttribute('title')).toContain('not necessarily what a site sees');
     cleanup();
   });
 

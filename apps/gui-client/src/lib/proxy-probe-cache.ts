@@ -460,6 +460,11 @@ function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
     confidence: f.confidence,
     reason: f.reason,
     at: f.at,
+    // (V-219) `true` only when the stored record says so. A legacy entry written
+    // before the field existed reads `undefined` and therefore FALSE — which is
+    // the cautious direction: an old reading cannot promote itself into a
+    // confident claim just by predating the check.
+    ...(f.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
     ...(observedVia !== undefined ? { observedVia } : {}),
     ...(unavailable !== undefined ? { unavailable } : {}),
   };
@@ -797,11 +802,23 @@ export function saveOsFingerprint(
       ...prior,
       // (o) O3 — the reported cause is written beside the reading it stands in for;
       // without it the next load reproduces a bare `unknown` and the dead-end hint.
+      // ⛔⛔ (V-219) THE SECOND PLACE THE VANTAGE DIED. This rebuilds the record
+      // field by field, and it copied five of them — losing `observedVia`
+      // IMMEDIATELY, not merely across a restart. The load-path allowlist
+      // (`cleanOsFingerprint`) faithfully admits the field, so it looked covered;
+      // there was simply never anything in the store for it to admit, because
+      // this is the only mint path. The grid reads the cache-derived map, so the
+      // chip has never seen a vantage on a real row.
+      //
+      // A field-by-field rebuild is the shape that caused this. Anything added
+      // to the reading must be added HERE as well, or it is silently discarded.
       osFingerprint: {
         os: fp.os,
         confidence: fp.confidence,
         reason: fp.reason,
         at,
+        ...(fp.observedVia !== undefined ? { observedVia: fp.observedVia } : {}),
+        ...(fp.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
         ...(fp.unavailable !== undefined ? { unavailable: fp.unavailable } : {}),
       },
     };
