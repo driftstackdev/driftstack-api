@@ -53,7 +53,13 @@ describe('sdk-typescript resources/agent-sessions content parity', () => {
     expect(body).toMatch(/id: string;/);
     expect(body).toMatch(/account_id: string;/);
     expect(body).toMatch(/driftstack_session_id: string \| null;/);
-    expect(body).toMatch(/status: 'active' \| 'paused' \| 'closed';/);
+    // V-218 — `provisioning` joined the union. The API could already return it
+    // while the SDK's type said it could not, so `status === 'active'` was
+    // silently false during bring-up and an exhaustive switch fell through. A
+    // published type that contradicts the wire is worse than a loose one: it
+    // tells a customer a branch is unreachable when it is the normal path for a
+    // VPN session.
+    expect(body).toMatch(/status: 'provisioning' \| 'active' \| 'paused' \| 'closed';/);
     expect(body).toMatch(/closed_reason: string \| null;/);
     expect(body).toMatch(/token_budget_total: number;/);
     expect(body).toMatch(/token_budget_remaining: number;/);

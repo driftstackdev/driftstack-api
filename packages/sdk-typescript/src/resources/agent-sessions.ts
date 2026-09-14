@@ -93,7 +93,22 @@ export interface AgentSession {
   id: string;
   account_id: string;
   driftstack_session_id: string | null;
-  status: 'active' | 'paused' | 'closed';
+  /**
+   * Lifecycle state as the API reports it.
+   *
+   * `'provisioning'` means the session exists and its node has begun bringing it
+   * up — a VPN tunnel connecting, an egress resolving — but no browser is
+   * serving yet. It is a READ-SHAPE value: storage only ever holds active,
+   * paused or closed, and the concurrency cap counts the stored value, so a
+   * provisioning session IS occupying one of your slots. Treat it as "running,
+   * not ready": do not start work against it, and do not treat it as finished.
+   * `provisioning_detail` below says which step it is on.
+   *
+   * ⚠️ It was absent from this union until 2026-09-14 while the API could
+   * already return it, so `status === 'active'` was silently false during
+   * bring-up and an exhaustive switch fell through its default.
+   */
+  status: 'provisioning' | 'active' | 'paused' | 'closed';
   closed_reason: string | null;
   /** Why the session is still provisioning (e.g. 'vpn_egress_active'); null once active; absent on older servers. */
   provisioning_detail?: string | null;
@@ -158,7 +173,8 @@ export interface AgentSession {
   /**
    * W2679 — worker-reported per-session liveness, re-based onto the fleet
    * heartbeat. Distinct from `status`, which stays `'active'` until the session
-   * is closed even if the worker crashed/never-started. `state` is the latest
+   * is closed even if the worker crashed — it reports `'provisioning'` only
+   * before a browser first serves, never again afterwards. `state` is the latest
    * worker state (or `null` = "seen but no live state"); `fresh` is whether the
    * owning node's beat is recent enough to trust. Absent (field omitted) when
    * the deployment has no fleet control plane OR no beat has reported the
