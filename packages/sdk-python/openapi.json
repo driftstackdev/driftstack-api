@@ -20210,25 +20210,17 @@
                   "binding_hash": {
                     "type": "string",
                     "pattern": "^[A-Za-z0-9_-]{43}$",
-                    "description": "base64url SHA-256 of a browser-held flow secret; presence selects the cookie-free v2 flow"
+                    "description": "base64url SHA-256 of a browser-held flow secret; its preimage is proven at /redeem"
                   }
                 },
-                "required": ["provider", "redirect_to"]
+                "required": ["provider", "redirect_to", "binding_hash"]
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow. A v2 start (binding_hash present) also returns `flow_id`.",
-            "headers": {
-              "Set-Cookie": {
-                "description": "HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Set ONLY for legacy starts without `binding_hash`; a v2 start sets no cookie. Must be returned on the callback for the legacy flow to complete.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
+            "description": "Authorize URL — the client redirects the user's browser here to start the IDP consent flow — plus `flow_id`, the public id of this flow. No cookie is set: the PKCE verifier is held server-side and the browser proves the flow secret at /redeem.",
             "content": {
               "application/json": {
                 "schema": {
@@ -20240,16 +20232,16 @@
                     },
                     "flow_id": {
                       "type": "string",
-                      "description": "present only for v2 starts"
+                      "description": "public id of this flow, for the page to find its own record"
                     }
                   },
-                  "required": ["authorize_url"]
+                  "required": ["authorize_url", "flow_id"]
                 }
               }
             }
           },
           "400": {
-            "description": "Unknown provider OR provider not configured.",
+            "description": "Unknown provider, provider not configured, redirect_to off the dashboard origin, OR binding_hash absent — a sign-in page from before the cookie-free flow: the detail reads \"This sign-in page is out of date. Reload the sign-in page and try again.\" and the body carries `reason: \"stale_sign_in_page\"`.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -20361,7 +20353,7 @@
         },
         "responses": {
           "200": {
-            "description": "The same outcome union the legacy callback answers, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.",
+            "description": "The sign-in outcome union, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.",
             "content": {
               "application/json": {
                 "schema": {
@@ -20555,14 +20547,6 @@
         "responses": {
           "200": {
             "description": "Merge confirmed; IDP identity now linked to the existing account.",
-            "headers": {
-              "Set-Cookie": {
-                "description": "Clears the PKCE cookie for this nonce (`Max-Age=0`) now that the verifier has been consumed.",
-                "schema": {
-                  "type": "string"
-                }
-              }
-            },
             "content": {
               "application/json": {
                 "schema": {

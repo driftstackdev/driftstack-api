@@ -63,7 +63,6 @@ const EXEMPT: ReadonlyMap<string, string> = new Map([
   ['POST /v1/webhooks/stripe', 'inbound provider webhook receiver'],
   ['POST /v1/webhooks/nowpayments', 'inbound provider webhook receiver'],
   // Browser legs of interactive flows — reached by redirect, never by an SDK.
-  ['GET /v1/auth/oauth-client/callback', 'browser leg of an interactive flow'],
   ['GET /v1/auth/oauth/{}/callback', 'browser leg of an interactive flow (per provider)'],
   ['POST /v1/oauth/authorize/complete', 'browser leg of an interactive flow'],
   // GUI-client-only — the desktop client's private endpoints.

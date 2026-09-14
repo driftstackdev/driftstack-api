@@ -1,17 +1,31 @@
-// V-667.C — integration tests for the OAuth-client routes.
+// V-667.C — integration tests for the OAuth-client routes, on the real app
+// wiring (buildTestApp: the routes + the problem+json error handler + the
+// in-memory flow store + the injected IDP fetch seam + a real
+// OAuthClientService over in-memory repos).
 //
-//   POST /v1/auth/oauth-client/start          — issue authorize URL
-//   GET  /v1/auth/oauth-client/callback       — state/cookie boundary
-//                                                exercised with a stubbed
-//                                                token exchange; provider
-//                                                protocol behavior is covered
-//                                                by the exchange unit tests
-//   POST /v1/auth/oauth-client/confirm-merge  — Verdict-1 completion
+//   POST /v1/auth/oauth-client/start           — authorize URL; binding_hash
+//                                                REQUIRED
+//   GET  /v1/auth/oauth/:provider/callback     — the IDP's top-level return:
+//                                                state verification, the
+//                                                single-use verifier, token
+//                                                exchange + userinfo (injected)
+//                                                and the fragment hand-off
+//   POST /v1/auth/oauth-client/redeem          — flow-secret proof → session
+//   POST /v1/auth/oauth-client/confirm-merge   — Verdict-1 completion
+//
+// The v1 cookie path — GET /v1/auth/oauth-client/callback and the PKCE
+// cookie /start used to set — was retired 2026-09-14, after its 24-hour
+// old-bundle window closed with zero legacy-cookie callbacks on prod. Its
+// arms here became the stale-page 400, the 404 and the no-Set-Cookie arms;
+// the state-verification arms moved to the top-level route, where the check
+// now runs.
 //
 // The fixture registers the routes only when `opts.oauthClient` is
 // passed; this test exercises the registered-route surface. Tests that
 // pass nothing should continue to see 404 (route absent), matching
 // prod-pre-env-wire posture.
+import { createHash, randomBytes } from 'node:crypto';
+import type { LightMyRequestResponse } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildTestApp, type TestAppFixture } from './_helpers/build-test-app.js';
 import { signOauthClientState } from '../../src/lib/oauth-client-state.js';
@@ -33,44 +47,168 @@ const OAUTH = {
   github: { clientId: 'github-test-id', clientSecret: 'github-test-secret' },
 };
 
-// Per-provider URL derivation — must equal what auth-oauth-client.ts
-// computes for the IDP redirect_uri parameter.
-/**
- * A fetch that refuses the token exchange, INJECTED rather than stubbed.
- *
- * This was `vi.stubGlobal('fetch', …)` and it never took effect:
- * `lib/oauth-client-exchange.ts` captures `globalThis.fetch` at module load,
- * so a later stub is a different reference. The arms below passed because the
- * exchange failed anyway — by making a REAL request to the provider (a POST
- * to GitHub's token endpoint answers 404 in ~250ms, which is why the failure
- * arrived as `idp-error` and not `network-error`).
- *
- * Passed through `buildTestApp({ oauthClient: { …, fetch } })`, these arms now
- * control the IDP interaction they always claimed to, and the suite stops
- * talking to github.com.
- */
-const REJECTING_FETCH: typeof fetch = () =>
-  Promise.resolve(
-    new Response(JSON.stringify({ error: 'invalid_grant' }), {
-      status: 400,
+const STALE_DETAIL = 'This sign-in page is out of date. Reload the sign-in page and try again.';
+
+// ─── IDP seams ────────────────────────────────────────────────────────────
+//
+// INJECTED rather than stubbed. `vi.stubGlobal('fetch', …)` never took
+// effect here: `lib/oauth-client-exchange.ts` captures `globalThis.fetch` at
+// module load, so a later stub is a different reference, and the arms that
+// "refused the exchange" were passing because a REAL request to the provider
+// failed (a POST to GitHub's token endpoint answers 404 in ~250ms). Passed
+// through `buildTestApp({ oauthClient: { …, fetch } })`, these arms control
+// the IDP interaction they claim to, and the suite never talks to github.com.
+
+function jsonResponse(status: number, body: unknown): Promise<Response> {
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status,
       headers: { 'content-type': 'application/json' },
     }),
   );
+}
+
+/** Refuses the token exchange. */
+const REJECTING_FETCH: typeof fetch = () => jsonResponse(400, { error: 'invalid_grant' });
+
+/** Answers the token exchange and userinfo for both providers; records every URL. */
+function okFetch(seen: string[]): typeof fetch {
+  return (input) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    seen.push(url);
+    if (/\/token$|\/access_token$/.test(url)) {
+      return jsonResponse(200, {
+        access_token: 'at_live',
+        token_type: 'bearer',
+        scope: 'read:user',
+      });
+    }
+    if (url.includes('api.github.com/user')) {
+      return jsonResponse(200, {
+        id: 4242,
+        login: 'octo',
+        name: 'Octo Cat',
+        avatar_url: 'https://avatars.test/octo',
+        email: 'octo@example.test',
+      });
+    }
+    return jsonResponse(200, {
+      sub: 'google-sub-1',
+      email: 'person@example.test',
+      email_verified: true,
+      name: 'Person Example',
+      picture: 'https://avatars.test/person',
+    });
+  };
+}
+
+/** Answers the token exchange, fails ONLY userinfo; records every URL. */
+function userinfoFailsFetch(seen: string[]): typeof fetch {
+  return (input) => {
+    const url = String(input instanceof Request ? input.url : input);
+    seen.push(url);
+    const isUserinfo = url.includes('api.github.com/user') || url.includes('openidconnect');
+    return isUserinfo
+      ? jsonResponse(401, { message: 'Bad credentials' })
+      : jsonResponse(200, { access_token: 'at_live', scope: 'read:user' });
+  };
+}
 
 const callbackFor = (p: 'google' | 'github') => `${OAUTH.callbackUrlBase}/${p}/callback`;
 
+// ─── flow helpers ─────────────────────────────────────────────────────────
+
+/** What login.astro does before /start: a random secret, and its digest. */
+function mintBinding(): { secret: string; bindingHash: string } {
+  const secret = randomBytes(32).toString('base64url');
+  return { secret, bindingHash: createHash('sha256').update(secret).digest('base64url') };
+}
+
+interface Flow {
+  res: LightMyRequestResponse;
+  state: string;
+  flowId: string;
+  secret: string;
+  bindingHash: string;
+}
+
+/** A real /start, as the dashboard performs it. */
+async function startFlow(
+  f: TestAppFixture,
+  provider: 'google' | 'github',
+  redirectTo = 'https://app.driftstack.test/dashboard',
+): Promise<Flow> {
+  const binding = mintBinding();
+  const res = await f.app.inject({
+    method: 'POST',
+    url: '/v1/auth/oauth-client/start',
+    headers,
+    payload: { provider, redirect_to: redirectTo, binding_hash: binding.bindingHash },
+  });
+  const body = res.json<{ authorize_url?: string; flow_id?: string }>();
+  const state = body.authorize_url
+    ? (new URL(body.authorize_url).searchParams.get('state') ?? '')
+    : '';
+  return { res, state, flowId: body.flow_id ?? '', ...binding };
+}
+
+function topLevel(
+  f: TestAppFixture,
+  provider: 'google' | 'github',
+  query: Record<string, string>,
+): Promise<LightMyRequestResponse> {
+  const qs = new URLSearchParams(query).toString();
+  return f.app.inject({
+    method: 'GET',
+    url: `/v1/auth/oauth/${provider}/callback${qs.length > 0 ? `?${qs}` : ''}`,
+  });
+}
+
+function redeem(f: TestAppFixture, code: string, flowSecret: string) {
+  return f.app.inject({
+    method: 'POST',
+    url: '/v1/auth/oauth-client/redeem',
+    headers,
+    payload: { code, flow_secret: flowSecret },
+  });
+}
+
+function locationOf(res: LightMyRequestResponse): URL {
+  const loc = res.headers.location;
+  if (typeof loc !== 'string') throw new Error(`no Location (status ${String(res.statusCode)})`);
+  return new URL(loc);
+}
+
+function fragmentOf(res: LightMyRequestResponse): URLSearchParams {
+  const hash = locationOf(res).hash;
+  return new URLSearchParams(hash.startsWith('#') ? hash.slice(1) : hash);
+}
+
+/** The one refusal an unverifiable, bind-less or off-list state gets; only
+ *  the bounded code varies (state_replayed for a state that is ours but
+ *  expired, state_invalid for everything else). */
+function expectRefusalOnConfiguredOrigin(
+  res: LightMyRequestResponse,
+  code: 'state_invalid' | 'state_replayed' = 'state_invalid',
+): void {
+  expect(res.statusCode).toBe(302);
+  expect(res.headers['cache-control']).toBe('no-store');
+  const loc = locationOf(res);
+  expect(loc.origin).toBe(OAUTH.dashboardOrigin);
+  expect(loc.pathname).toBe('/auth/oauth-client/callback/');
+  expect(loc.search, 'nothing from the query is forwarded').toBe('');
+  expect(fragmentOf(res).get('oauth_error')).toBe(code);
+  expect(res.headers['set-cookie']).toBeUndefined();
+}
+
 describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
-  it('returns 200 + authorize_url with all PKCE + state params when google is configured', async () => {
+  it('returns 200 + authorize_url with all PKCE + state params + flow_id, and NO Set-Cookie, when google is configured', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider: 'google', redirect_to: 'https://app.driftstack.test/' },
-    });
-    expect(res.statusCode).toBe(200);
-    const body = res.json<{ authorize_url: string }>();
-    const url = new URL(body.authorize_url);
+    const flow = await startFlow(fx, 'google', 'https://app.driftstack.test/');
+    expect(flow.res.statusCode).toBe(200);
+    expect(flow.res.headers['cache-control']).toBe('no-store');
+    expect(flow.res.headers['set-cookie'], 'the cookie path is gone').toBeUndefined();
+    const url = new URL(flow.res.json<{ authorize_url: string }>().authorize_url);
     expect(url.hostname).toBe('accounts.google.com');
     expect(url.searchParams.get('client_id')).toBe('google-test-id');
     expect(url.searchParams.get('redirect_uri')).toBe(callbackFor('google'));
@@ -84,9 +222,10 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
     // contract).
     expect(url.searchParams.get('prompt')).toBe('consent');
     expect(url.searchParams.get('access_type')).toBe('offline');
+    expect(flow.flowId).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it('sets the HMAC-signed HTTP-only PKCE cookie on the start response', async () => {
+  it("CRITICAL a /start without binding_hash — what a sign-in page from before the cookie-free flow sends — is a 400 naming the fix in the customer's words, with a stable reason, no cookie and no authorize_url", async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
     const res = await fx.app.inject({
       method: 'POST',
@@ -94,20 +233,44 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
       headers,
       payload: { provider: 'github', redirect_to: 'https://app.driftstack.test/dashboard' },
     });
-    expect(res.statusCode).toBe(200);
-    const setCookie = res.headers['set-cookie'];
-    const cookies = Array.isArray(setCookie) ? setCookie : [setCookie ?? ''];
-    const pkce = cookies.find((c) => typeof c === 'string' && c.startsWith('ds_oauth_pkce_'));
-    expect(pkce).toBeDefined();
-    expect(String(pkce).split('=')[0]).toMatch(/^ds_oauth_pkce_[A-Za-z0-9_-]{43}$/);
-    expect(pkce).toMatch(/HttpOnly/i);
-    expect(pkce).toMatch(/Path=\/v1\/auth\/oauth-client/);
-    // D2 — cookie body is "<verifier>.<nonce>.<base64url(hmac)>"; all three non-empty.
-    const body = String(pkce).split(';')[0]?.split('=')[1] ?? '';
-    const [verifier, nonce, sig] = body.split('.');
-    expect(verifier?.length ?? 0).toBeGreaterThan(40);
-    expect(nonce?.length ?? 0).toBeGreaterThan(20);
-    expect(sig?.length ?? 0).toBeGreaterThan(20);
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ detail?: string; reason?: string; authorize_url?: string }>();
+    expect(body.detail).toBe(STALE_DETAIL);
+    expect(body.reason).toBe('stale_sign_in_page');
+    expect(body.authorize_url).toBeUndefined();
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('a PRESENT but malformed binding_hash is the generic validation 400, not the stale-page message', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: {
+        provider: 'github',
+        redirect_to: 'https://app.driftstack.test/',
+        binding_hash: 'x',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json<{ detail?: string }>().detail).not.toContain('Reload the sign-in page');
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it('an ARRAY body is the generic validation 400 too: `typeof [] === "object"` and it has no binding_hash, but it is a caller bug, not a stale page', async () => {
+    fx = await buildTestApp({ oauthClient: OAUTH });
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: '/v1/auth/oauth-client/start',
+      headers,
+      payload: '[]',
+    });
+    expect(res.statusCode).toBe(400);
+    const body = res.json<{ detail?: string; reason?: string }>();
+    expect(body.detail).not.toContain('Reload the sign-in page');
+    expect(body.reason).toBeUndefined();
+    expect(res.headers['set-cookie']).toBeUndefined();
   });
 
   it('returns 400 when the request body fails schema validation (bad provider)', async () => {
@@ -116,40 +279,35 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
       method: 'POST',
       url: '/v1/auth/oauth-client/start',
       headers,
-      payload: { provider: 'facebook', redirect_to: 'https://app.driftstack.test/' },
+      payload: {
+        provider: 'facebook',
+        redirect_to: 'https://app.driftstack.test/',
+        binding_hash: mintBinding().bindingHash,
+      },
     });
     expect(res.statusCode).toBe(400);
   });
 
   it('returns 400 when redirect_to is off the dashboard origin (open-redirect guard)', async () => {
     // A forged /start with an off-origin redirect_to must be rejected at the
-    // source — otherwise the callback echoes it back and the SPA bounces a
+    // source — otherwise /redeem echoes it back and the SPA bounces a
     // just-signed-in user off-site. dashboardOrigin is https://app.driftstack.test.
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider: 'google', redirect_to: 'https://evil.example/phish' },
-    });
-    expect(res.statusCode).toBe(400);
+    const flow = await startFlow(fx, 'google', 'https://evil.example/phish');
+    expect(flow.res.statusCode).toBe(400);
     // No authorize_url is minted for an off-origin target.
-    expect(res.json<{ authorize_url?: string }>().authorize_url).toBeUndefined();
+    expect(flow.res.json<{ authorize_url?: string }>().authorize_url).toBeUndefined();
   });
 
   it('accepts a same-origin redirect_to with a deep path (legit deep-link round-trip)', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: {
-        provider: 'google',
-        redirect_to: 'https://app.driftstack.test/cli/authorize?session=abc',
-      },
-    });
-    expect(res.statusCode).toBe(200);
-    expect((res.json<{ authorize_url: string }>().authorize_url ?? '').length).toBeGreaterThan(20);
+    const flow = await startFlow(
+      fx,
+      'google',
+      'https://app.driftstack.test/cli/authorize?session=abc',
+    );
+    expect(flow.res.statusCode).toBe(200);
+    expect(flow.state.length).toBeGreaterThan(20);
   });
 
   it('returns 400 when the configured server lacks creds for the requested provider', async () => {
@@ -162,26 +320,15 @@ describe('POST /v1/auth/oauth-client/start (V-667.C)', () => {
         github: OAUTH.github,
       },
     });
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider: 'google', redirect_to: 'https://app.driftstack.test/' },
-    });
-    expect(res.statusCode).toBe(400);
-    const body = res.json<{ detail?: string }>();
-    expect(String(body.detail ?? '')).toMatch(/not configured/);
+    const flow = await startFlow(fx, 'google', 'https://app.driftstack.test/');
+    expect(flow.res.statusCode).toBe(400);
+    expect(String(flow.res.json<{ detail?: string }>().detail ?? '')).toMatch(/not configured/);
   });
 
   it('returns 404 when oauthClient was never wired (matches prod-pre-env-wire posture)', async () => {
     fx = await buildTestApp(); // no oauthClient
-    const res = await fx.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider: 'google', redirect_to: 'https://app.driftstack.test/' },
-    });
-    expect(res.statusCode).toBe(404);
+    const flow = await startFlow(fx, 'google', 'https://app.driftstack.test/');
+    expect(flow.res.statusCode).toBe(404);
   });
 });
 
@@ -209,54 +356,40 @@ describe('POST /v1/auth/oauth-client/confirm-merge (V-667.C)', () => {
     expect(res.statusCode).toBe(400);
     const body = res.json<{ detail?: string }>();
     expect(String(body.detail ?? '')).toMatch(/invalid, expired, or already used/);
+    expect(res.headers['set-cookie']).toBeUndefined();
   });
 });
 
-describe('GET /v1/auth/oauth/:provider/callback — Path A IDP-direct redirect', () => {
-  // Path A (2026-05-16): IDP redirects browser to the API per-provider
-  // path; API 302s to the SPA exchange page preserving the query
-  // string. This proves the bounce works for both providers and
-  // forwards arbitrary query keys (code, state, error, scope, etc.).
+describe("GET /v1/auth/oauth/:provider/callback — the IDP's top-level return, unverifiable states", () => {
+  // Path A (2026-05-16): the IDP redirects the browser to the API per-provider
+  // path. Nothing in an unverifiable state can be trusted, so every such
+  // return is the same bounded refusal on the CONFIGURED origin — never the
+  // verbatim query forward the retired XHR route used to consume.
 
-  it('google: 302 to dashboard SPA callback preserving code + state', async () => {
+  it('google: garbage code+state → #oauth_error=state_invalid on the configured origin; neither value is echoed', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/auth/oauth/google/callback?code=abc123&state=xyz789',
-    });
-    expect(res.statusCode).toBe(302);
-    const loc = res.headers.location;
-    expect(typeof loc).toBe('string');
-    const url = new URL(String(loc));
-    expect(url.origin).toBe(OAUTH.dashboardOrigin);
-    expect(url.pathname).toBe('/auth/oauth-client/callback');
-    expect(url.searchParams.get('code')).toBe('abc123');
-    expect(url.searchParams.get('state')).toBe('xyz789');
+    const res = await topLevel(fx, 'google', { code: 'abc123', state: 'xyz789' });
+    expectRefusalOnConfiguredOrigin(res);
+    const raw = String(res.headers.location);
+    expect(raw).not.toContain('abc123');
+    expect(raw).not.toContain('xyz789');
   });
 
-  it('github: 302 to dashboard SPA callback preserving forwarded query string', async () => {
+  it('github: extra IDP keys (scope) are not forwarded either', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/auth/oauth/github/callback?code=g0d&state=s7t&scope=read%3Auser',
-    });
-    expect(res.statusCode).toBe(302);
-    const url = new URL(String(res.headers.location));
-    expect(url.searchParams.get('code')).toBe('g0d');
-    expect(url.searchParams.get('state')).toBe('s7t');
-    expect(url.searchParams.get('scope')).toBe('read:user');
+    const res = await topLevel(fx, 'github', { code: 'g0d', state: 's7t', scope: 'read:user' });
+    expectRefusalOnConfiguredOrigin(res);
+    expect(String(res.headers.location)).not.toContain('read');
   });
 
-  it('forwards an error-denial query param verbatim (?error=access_denied)', async () => {
+  it('?error=access_denied with no state: state_invalid, and the raw IDP strings never reach the Location', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/auth/oauth/google/callback?error=access_denied&error_description=User+denied',
+    const res = await topLevel(fx, 'google', {
+      error: 'access_denied',
+      error_description: 'User denied',
     });
-    expect(res.statusCode).toBe(302);
-    const url = new URL(String(res.headers.location));
-    expect(url.searchParams.get('error')).toBe('access_denied');
-    expect(url.searchParams.get('error_description')).toBe('User denied');
+    expectRefusalOnConfiguredOrigin(res);
+    expect(String(res.headers.location)).not.toContain('denied');
   });
 
   it('returns 404 for an unsupported provider segment (only google + github registered)', async () => {
@@ -267,441 +400,267 @@ describe('GET /v1/auth/oauth/:provider/callback — Path A IDP-direct redirect',
     });
     expect(res.statusCode).toBe(404);
   });
-});
 
-describe('GET /v1/auth/oauth-client/callback — Path B SPA exchange', () => {
-  it('IDP error param: short OAuth-spec code lands in 400 detail verbatim', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/auth/oauth-client/callback?error=access_denied',
+  it('HEAD is not a route here: 404 with no Location, the live state is NOT consumed by it, and the GET that follows completes — the automatic HEAD twin used to run the whole handler', async () => {
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
+    const flow = await startFlow(fx, 'google');
+    const head = await fx.app.inject({
+      method: 'HEAD',
+      url: `/v1/auth/oauth/google/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
     });
-    expect(res.statusCode).toBe(400);
-    const body = res.json<{ detail?: string }>();
-    expect(body.detail).toContain('IDP returned error: access_denied');
-  });
-
-  it('IDP error param: huge crafted error string is capped at 128 chars before interpolation (prevents problem+json body bloat)', async () => {
-    // OAuth spec error codes are short tokens like 'access_denied'
-    // / 'invalid_scope' — a 10kb error string is either a misconfigured
-    // IDP or an attacker probing for response-bloat. Slice 115 caps
-    // the interpolated portion at 128 chars.
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const huge = 'A'.repeat(10_000);
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `/v1/auth/oauth-client/callback?error=${huge}`,
-    });
-    expect(res.statusCode).toBe(400);
-    const body = res.json<{ detail?: string }>();
-    // The detail carries the 128-char slice, NOT the full 10k string.
-    expect(body.detail).toBe(`IDP returned error: ${'A'.repeat(128)}`);
-    // Defensive bound on the entire detail length so a future
-    // refactor that re-introduces the full-string interpolation
-    // trips the test.
-    expect((body.detail ?? '').length).toBeLessThan(200);
-  });
-
-  it('missing code+state: 400 with explicit "Missing code or state" detail', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: '/v1/auth/oauth-client/callback',
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail?: string }>().detail).toContain('Missing code or state');
+    expect(head.statusCode).toBe(404);
+    expect(head.headers.location).toBeUndefined();
+    expect(head.headers['set-cookie']).toBeUndefined();
+    expect(seen, 'HEAD must not reach the IDP').toEqual([]);
+    const get = await topLevel(fx, 'google', { code: 'dummycode', state: flow.state });
+    expect(get.statusCode).toBe(302);
+    expect(fragmentOf(get).get('code')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(seen.length, 'the GET is the first and only use').toBe(2);
   });
 });
 
-describe('D2 — state↔cookie nonce binding (login-CSRF defense)', () => {
-  async function startFlow(
-    f: TestAppFixture,
-    provider: 'google' | 'github' = 'github',
-  ): Promise<{ state: string; cookie: string; cookieName: string; cookieValue: string }> {
-    const res = await f.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider, redirect_to: 'https://app.driftstack.test/dashboard' },
-    });
-    const state = new URL(res.json<{ authorize_url: string }>().authorize_url).searchParams.get(
-      'state',
-    );
-    const setCookie = res.headers['set-cookie'];
-    const raw = (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).find((c) =>
-      String(c).startsWith('ds_oauth_pkce_'),
-    );
-    const cookie = String(raw).split(';')[0] ?? '';
-    const separator = cookie.indexOf('=');
-    return {
-      state: state ?? '',
-      cookie,
-      cookieName: cookie.slice(0, separator),
-      cookieValue: cookie.slice(separator + 1),
-    };
-  }
-
-  it("rejects a valid state when only a DIFFERENT flow's scoped cookie is present", async () => {
+describe('GET /v1/auth/oauth-client/callback — the retired v1 XHR exchange', () => {
+  it('CRITICAL answers 404 for every legacy shape (cookie + code + state, a live v2 state, ?error, bare) while the live routes on the same app answer — the route is absent, not broken', async () => {
     fx = await buildTestApp({ oauthClient: OAUTH });
-    const a = await startFlow(fx);
-    const b = await startFlow(fx);
-    // Flow B selects only B's nonce-scoped cookie; A's valid cookie is unrelated.
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(b.state)}`,
-      headers: { cookie: a.cookie },
+    const flow = await startFlow(fx, 'google');
+    expect(flow.res.statusCode, 'positive control: the route family is registered').toBe(200);
+    const legacyState = signOauthClientState({
+      provider: 'google',
+      redirectTo: 'https://app.driftstack.test/dashboard',
+      signingSecret: OAUTH.signingSecret,
     });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail?: string }>().detail).toContain(
-      'PKCE verifier cookie missing or invalid',
-    );
-  });
-
-  it("rejects another flow's valid signed value forged under the expected cookie name", async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const a = await startFlow(fx);
-    const b = await startFlow(fx);
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(b.state)}`,
-      headers: { cookie: `${b.cookieName}=${a.cookieValue}` },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail?: string }>().detail).toContain('State/cookie binding mismatch');
-  });
-
-  it('rejects a tampered value under the correct nonce-scoped cookie name', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const flow = await startFlow(fx);
-    // Tamper the FIRST signature character, never the last.
-    //
-    // The cookie is `verifier.nonce.sig`, and `sig` is a 32-byte HMAC in
-    // base64url: 43 chars x 6 bits = 258 bits carrying 256, so the FINAL char
-    // has 2 slack bits and four distinct characters decode to the same byte
-    // ('A','B','C','D' all decode alike, and so on in groups of four).
-    // Verification does Buffer.from(sig,'base64url') + timingSafeEqual, which
-    // compares the decoded BYTES — so flipping the last char left the signature
-    // valid whenever it fell in the same group, and this test failed to reject
-    // and went red. Measured over 20,000 real signatures: 6.16% of runs, which
-    // is exactly the predicted 4/64. That is the intermittent failure A2 had
-    // been carrying as an unexplained flake; it was never load-related.
-    //
-    // A leading char carries all 6 of its bits inside byte 0, so changing it
-    // always changes the decoded signature.
-    const [verifier, nonce, sig] = flow.cookieValue.split('.');
-    const tamperedSig = `${sig?.startsWith('A') === true ? 'B' : 'A'}${(sig ?? '').slice(1)}`;
-    const tampered = `${verifier}.${nonce}.${tamperedSig}`;
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
-      headers: { cookie: `${flow.cookieName}=${tampered}` },
-    });
-    expect(res.statusCode).toBe(400);
-    expect(res.json<{ detail?: string }>().detail).toContain(
-      'PKCE verifier cookie missing or invalid',
-    );
-  });
-
-  // V-1403 — the tamper arm above flips a character and so keeps the signature at its
-  // natural 43 chars. Nothing had ever sent a cookie whose signature decodes to a
-  // DIFFERENT NUMBER OF BYTES, and branch coverage agreed: the length guard one line
-  // above the compare in `readPkceCookie` had never been taken.
-  //
-  // A cookie is chosen entirely by whoever holds the browser. `Buffer.from(sig,
-  // 'base64url')` shortens rather than rejects, so the caller picks the length of
-  // `received`, and `timingSafeEqual` raises RangeError on a length mismatch instead of
-  // returning false. Without the guard this route answers a hand-written cookie with a
-  // 500 rather than the 400 every other bad-cookie shape here gets.
-  it.each([
-    ['is truncated to one character', (s: string) => s.slice(0, 1)],
-    ['is truncated to half its length', (s: string) => s.slice(0, 22)],
-    ['is padded out to twice the digest width', (s: string) => `${s}${s}`],
-  ])(
-    'CRITICAL a PKCE cookie whose signature %s is refused with a 400, like every other bad cookie. The value is attacker-chosen, base64url decoding shortens instead of rejecting, and the compare below raises on a length mismatch — so the length guard is what keeps a crafted cookie from becoming a 500.',
-    async (_label, mangle) => {
-      fx = await buildTestApp({ oauthClient: OAUTH });
-      const flow = await startFlow(fx);
-      const [verifier, nonce, sig] = flow.cookieValue.split('.');
-      const forged = `${verifier}.${nonce}.${mangle(sig ?? '')}`;
-
-      const res = await fx.app.inject({
-        method: 'GET',
-        url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
-        headers: { cookie: `${flow.cookieName}=${forged}` },
-      });
-
-      expect(
-        res.statusCode,
-        'a wrong-length signature must be refused, not raise out of the handler as a 500',
-      ).toBe(400);
-      expect(res.json<{ detail?: string }>().detail).toContain(
-        'PKCE verifier cookie missing or invalid',
-      );
-    },
-  );
-
-  it('a state+cookie from the SAME flow passes the binding check (fails later, not on the binding)', async () => {
-    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
-    const a = await startFlow(fx);
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(a.state)}`,
-      headers: { cookie: a.cookie },
-    });
-    // The nonce binding matches, so we get PAST it (the flow then fails at the
-    // IDP token exchange, which is not exercised here) — never the mismatch 400.
-    expect(res.json<{ detail?: string }>().detail ?? '').not.toContain('State/cookie binding');
-  });
-
-  it('keeps two browser-tab flows independent and clears only the callback flow', async () => {
-    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
-    const google = await startFlow(fx, 'google');
-    const github = await startFlow(fx, 'github');
-    expect(google.cookieName).not.toBe(github.cookieName);
-    const cookieJar = `${google.cookie}; ${github.cookie}`;
-
-    for (const flow of [google, github]) {
-      const res = await fx.app.inject({
-        method: 'GET',
-        url: `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`,
-        headers: { cookie: cookieJar },
-      });
-      expect(res.statusCode).toBe(400);
-      const detail = res.json<{ detail?: string }>().detail ?? '';
-      expect(detail).not.toContain('PKCE verifier cookie');
-      expect(detail).not.toContain('State/cookie binding');
-      const cleared = String(res.headers['set-cookie'] ?? '');
-      expect(cleared).toContain(`${flow.cookieName}=;`);
-      const other = flow === google ? github : google;
-      expect(cleared).not.toContain(`${other.cookieName}=;`);
+    for (const [url, extra] of [
+      [
+        `/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(legacyState)}`,
+        { cookie: 'ds_oauth_pkce_abc=verifier.nonce.sig' },
+      ],
+      [`/v1/auth/oauth-client/callback?code=dummycode&state=${encodeURIComponent(flow.state)}`, {}],
+      ['/v1/auth/oauth-client/callback?error=access_denied', {}],
+      ['/v1/auth/oauth-client/callback', {}],
+    ] as const) {
+      const res = await fx.app.inject({ method: 'GET', url, headers: extra });
+      expect(res.statusCode, url).toBe(404);
+      expect(res.headers['set-cookie'], url).toBeUndefined();
     }
   });
 });
 
-// ─── the state token's OWN verification, at the route ───────────────────────
-//
-// Added 2026-08-15. The D2 block above is a careful set on the nonce-scoped PKCE
-// cookie binding — but every one of its arms supplies a token minted by /start,
-// i.e. a VALID state, and then varies the COOKIE. `verifyOauthClientState`
-// returning anything other than `ok` is what `routes/auth-oauth-client.ts:201`
-// refuses, and that refusal had never executed: the function is covered in
-// isolation by `lib-oauth-client-state`, and the route's use of it was not.
+// ─── the state token's OWN verification, at the top-level route ────────────
 //
 // This is the CSRF defence for social login. The state token is what ties the
 // callback the browser presents back to a flow this server started; without the
 // check, a callback carrying an attacker-chosen `state` — and therefore an
 // attacker-chosen `provider` and `redirectTo` — is processed as if we had issued
 // it. The verifier is a tagged union precisely so the route can distinguish the
-// failure modes, and all three non-ok kinds are driven here.
+// failure modes, and all three non-ok kinds are driven here, plus the fourth
+// shape only this route knows: a genuine signature with no `bind`.
 //
-// The state check runs BEFORE the PKCE cookie is read, so these arms send no
-// cookie at all: reaching a cookie error would mean the state check let the
-// request through.
-//
-// MUTATION-PROVED against routes/auth-oauth-client.ts and
-// lib/oauth-client-state.ts — controls 25/25 here, 11/11 on the verifier's own
-// unit test:
-//
-//                                                    here    state-lib pin
-//   the route ignores the verifier's verdict        3 red        GREEN
-//   the route refuses only a MALFORMED state        2 red        GREEN
-//   the signature comparison always succeeds        1 red        2 red
-//   the TTL check is removed                        1 red        2 red
-//
-// The first two are route-WIRING failures and the verifier cannot see either:
-// it still classifies every token correctly, and all 11 of its arms pass, while
-// the route acts on a verdict it no longer reads. The second is the sharper of
-// the pair — refusing only `malformed` still rejects hand-written junk, so the
-// endpoint looks defended, while a FORGED token (correctly shaped, wrong
-// signature) sails through. That is the login-CSRF bypass, and it is the exact
-// shape a reviewer skims past.
-//
-// The last two are CLASSIFICATION failures and both layers catch them, which is
-// the division of labour working: the verifier owns "is this token valid", the
-// route owns "do we act on that answer".
+// The state check runs BEFORE the verifier lookup, so a refusal here shows as
+// state_invalid (state_replayed for one that is ours but expired) with NO IDP
+// call and NO store consume; a state that passes moves on to the exchange,
+// which is the positive control at the end.
 
-describe('the OAuth callback verifies the state token itself', () => {
-  const CALLBACK = '/v1/auth/oauth-client/callback';
-
-  /** A real /start flow: the state and its nonce-scoped PKCE cookie. */
-  async function startFlowFor(
-    f: TestAppFixture,
-    provider: 'google' | 'github',
-  ): Promise<{ state: string; cookie: string }> {
-    const res = await f.app.inject({
-      method: 'POST',
-      url: '/v1/auth/oauth-client/start',
-      headers,
-      payload: { provider, redirect_to: 'https://app.driftstack.test/dashboard' },
-    });
-    const state =
-      new URL(res.json<{ authorize_url: string }>().authorize_url).searchParams.get('state') ?? '';
-    const setCookie = res.headers['set-cookie'];
-    const cookie = String(
-      (Array.isArray(setCookie) ? setCookie : [setCookie ?? '']).find((c) =>
-        String(c).startsWith('ds_oauth_pkce_'),
-      ),
-    ).split(';')[0];
-    return { state, cookie: cookie ?? '' };
-  }
-
+describe('the top-level callback verifies the state token itself', () => {
   it('CRITICAL a MALFORMED state is refused. The token is `payload.signature`; anything without that shape cannot have been minted by us, and the refusal is what stops a hand-written state from reaching the exchange.', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=not-a-token`,
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: malformed/i);
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
+    const res = await topLevel(fx, 'google', { code: 'dummycode', state: 'not-a-token' });
+    expectRefusalOnConfiguredOrigin(res);
+    expect(seen, 'no IDP call').toEqual([]);
   });
 
   it('CRITICAL a FORGED state — correctly shaped, signed with a different secret — is refused. This is the login-CSRF case: the signature is the only thing distinguishing a flow this server started from one an attacker composed, and a forged state carries an attacker-chosen provider and redirect target into the rest of the handler.', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
     const forged = signOauthClientState({
       provider: 'github',
       redirectTo: 'https://app.driftstack.test/dashboard',
       signingSecret: 'z'.repeat(32), // NOT the server's secret
+      bind: mintBinding().bindingHash,
     });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(forged)}`,
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: bad-signature/i);
+    const res = await topLevel(fx, 'github', { code: 'dummycode', state: forged });
+    expectRefusalOnConfiguredOrigin(res);
+    expect(seen).toEqual([]);
   });
 
   it('CRITICAL an EXPIRED state is refused even though its signature is ours. The TTL is 5 minutes; without the expiry check a state captured from a browser history, a referrer header or a shared link stays replayable indefinitely, which is the difference between a bounded window and a permanent one.', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
     const stale = signOauthClientState({
       provider: 'github',
       redirectTo: 'https://app.driftstack.test/dashboard',
       signingSecret: OAUTH.signingSecret, // genuinely ours
+      bind: mintBinding().bindingHash,
       nowMs: Date.now() - 10 * 60 * 1000, // minted 10 minutes ago, TTL is 5
     });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(stale)}`,
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/state token invalid: expired/i);
+    const res = await topLevel(fx, 'github', { code: 'dummycode', state: stale });
+    // Ours, just too old: the code is state_replayed, whose dashboard copy
+    // says "has expired" — not state_invalid's "not valid for this dashboard".
+    expectRefusalOnConfiguredOrigin(res, 'state_replayed');
+    expect(seen).toEqual([]);
   });
 
-  it('CRITICAL a provider de-configured BETWEEN mint and callback fails closed. /start already refuses an unconfigured provider, so a state can only be minted for one that WAS wired — this branch exists for the deploy where creds are pulled while a customer is mid-flow. Modelled by replaying a real google flow against a server that now has only github, with the same signing secret so both the state and the PKCE cookie still verify: the refusal has to come from the provider lookup, and nothing earlier.', async () => {
-    // App A: both providers wired — mint a genuine google flow.
-    const wired = await buildTestApp({ oauthClient: OAUTH });
-    const { state, cookie } = await startFlowFor(wired, 'google');
-    await wired.cleanup();
-
-    // App B: google's creds are gone; same signing secret, so state + cookie
-    // both still verify and only the provider lookup can fail.
-    fx = await buildTestApp({
-      oauthClient: {
-        signingSecret: OAUTH.signingSecret,
-        callbackUrlBase: OAUTH.callbackUrlBase,
-        dashboardOrigin: OAUTH.dashboardOrigin,
-        github: OAUTH.github,
-      },
-    });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(state)}`,
-      headers: { cookie },
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/provider "google" is not configured/i);
-  });
-
-  // MUTATION-PROVED — control 28/28:
-  //   the unconfigured-provider check removed        1 red
-  //   the check narrowed to `creds === null`         1 red
-  //   the userinfo verdict is ignored                1 red
-  //   the token-exchange verdict is ignored          2 red
-  //   the two IDP refusals collapse into one message 1 red
-  //   the fetch seam is dropped from userinfo        1 red
-  //
-  // The last one only started failing once the injected client recorded its
-  // calls. Without the seam the helper falls back to the global fetch, really
-  // reaches api.github.com, really gets a 401, and produces the SAME 400 — so
-  // the refusal assertion passed while the request went to the network. That is
-  // the shape this whole seam exists to remove, and it survived a mutation until
-  // the test asserted WHICH client made the call rather than only what came back.
-  //
-  // The second matters because `providers` is a Partial record: a missing key
-  // is `undefined`, not `null`, so narrowing the test to `=== null` reads as
-  // equivalent and disables the guard entirely.
-
-  it('CRITICAL a userinfo fetch that fails AFTER a successful token exchange is refused, rather than the flow continuing with an unverified identity. By this point we hold a real access token, so the tempting failure mode is to carry on with whatever is at hand — and what follows is link-or-create, which would attach or mint an account from an identity the IDP never confirmed.', async () => {
-    // The injected fetch answers the token endpoint and fails ONLY userinfo, so
-    // the exchange genuinely succeeds and this is the branch under test. It is
-    // matched positively on the userinfo URLs: enumerating the token endpoints
-    // instead was fragile, and a miss there reports "Token exchange failed",
-    // which is a different refusal wearing a similar shape.
+  it('CRITICAL a BIND-LESS state — genuinely ours, exactly the shape the retired /start minted — is refused the same way, never forwarded: no browser holds a flow secret for it, so nothing can finish it.', async () => {
     const seen: string[] = [];
-    const userinfoFails: typeof fetch = (input) => {
-      const url = String(input instanceof Request ? input.url : input);
-      seen.push(url);
-      const isUserinfo = url.includes('api.github.com/user') || url.includes('openidconnect');
-      return Promise.resolve(
-        isUserinfo
-          ? new Response(JSON.stringify({ message: 'Bad credentials' }), {
-              status: 401,
-              headers: { 'content-type': 'application/json' },
-            })
-          : new Response(JSON.stringify({ access_token: 'at_live', scope: 'read:user' }), {
-              status: 200,
-              headers: { 'content-type': 'application/json' },
-            }),
-      );
-    };
-    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: userinfoFails } });
-    const flow = await startFlowFor(fx, 'github');
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(flow.state)}`,
-      headers: { cookie: flow.cookie },
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/userinfo fetch failed/i);
-    // The refusal alone does not prove the INJECTED client was used: with the
-    // seam removed the helper falls back to the global fetch, really calls
-    // api.github.com, really gets a 401, and produces this same 400. Measured —
-    // that mutation survived until this assertion existed. Asserting the
-    // injected client actually saw the userinfo URL is what pins both the seam
-    // and the promise that this suite makes no outbound request.
-    expect(
-      seen.some((u) => u.includes('api.github.com/user')),
-      'the userinfo call went through the injected client, not the network',
-    ).toBe(true);
-  });
-
-  it('CRITICAL the token exchange failing is reported as its OWN refusal, distinct from the userinfo one. They are adjacent branches with near-identical shape; collapsing them would send an operator reading logs to the wrong side of the IDP round-trip.', async () => {
-    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
-    const flow = await startFlowFor(fx, 'github');
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(flow.state)}`,
-      headers: { cookie: flow.cookie },
-    });
-    expect(res.statusCode, 'refused').toBe(400);
-    expect(res.json<{ detail: string }>().detail).toMatch(/token exchange failed/i);
-    expect(res.json<{ detail: string }>().detail).not.toMatch(/userinfo/i);
-  });
-
-  it('CRITICAL a state we genuinely minted gets PAST this check. Every arm above asserts a 400, and a callback that refused all states would satisfy all three while breaking social login entirely — so this asserts the failure moves ON, to the cookie binding rather than the state.', async () => {
-    fx = await buildTestApp({ oauthClient: OAUTH });
-    const fresh = signOauthClientState({
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
+    const legacy = signOauthClientState({
       provider: 'github',
       redirectTo: 'https://app.driftstack.test/dashboard',
       signingSecret: OAUTH.signingSecret,
     });
-    const res = await fx.app.inject({
-      method: 'GET',
-      url: `${CALLBACK}?code=dummycode&state=${encodeURIComponent(fresh)}`,
+    const res = await topLevel(fx, 'github', {
+      code: 'dummycode',
+      state: legacy,
+      scope: 'read:user',
     });
-    // No cookie sent, so it still fails — but on the NEXT check, not this one.
+    expectRefusalOnConfiguredOrigin(res);
+    expect(String(res.headers.location)).not.toContain('dummycode');
+    expect(seen).toEqual([]);
+  });
+
+  it('a state whose `bind` is PRESENT but not a 256-bit base64url digest — which /start never signs — is refused like a bind-less one: state_invalid, no IDP call', async () => {
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
+    for (const bind of ['', 'abc', 'A'.repeat(42)]) {
+      const state = signOauthClientState({
+        provider: 'github',
+        redirectTo: 'https://app.driftstack.test/dashboard',
+        signingSecret: OAUTH.signingSecret,
+        bind,
+      });
+      const res = await topLevel(fx, 'github', { code: 'dummycode', state });
+      expectRefusalOnConfiguredOrigin(res);
+    }
+    expect(seen).toEqual([]);
+  });
+
+  it('CRITICAL a state we genuinely minted gets PAST this check. Every arm above asserts state_invalid, and a callback that refused all states would satisfy them all while breaking social login entirely — so this asserts the failure moves ON, to the exchange (refused by the injected IDP → exchange_failed on the STATE origin), never state_invalid.', async () => {
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: REJECTING_FETCH } });
+    const flow = await startFlow(fx, 'github');
+    const res = await topLevel(fx, 'github', { code: 'dummycode', state: flow.state });
+    expect(res.statusCode).toBe(302);
+    expect(fragmentOf(res).get('oauth_error')).toBe('exchange_failed');
+    expect(fragmentOf(res).get('oauth_error')).not.toBe('state_invalid');
+  });
+
+  it('CRITICAL a userinfo fetch that fails AFTER a successful token exchange is refused, rather than the flow continuing with an unverified identity. By this point we hold a real access token, so the tempting failure mode is to carry on with whatever is at hand — and what follows is link-or-create, which would attach or mint an account from an identity the IDP never confirmed.', async () => {
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: userinfoFailsFetch(seen) } });
+    const flow = await startFlow(fx, 'github');
+    const res = await topLevel(fx, 'github', { code: 'dummycode', state: flow.state });
+    expect(res.statusCode, 'refused').toBe(302);
+    expect(fragmentOf(res).get('oauth_error')).toBe('userinfo_failed');
+    // The refusal alone does not prove the INJECTED client was used: with the
+    // seam removed the helper falls back to the global fetch, really calls
+    // api.github.com, really gets a 401, and produces this same refusal.
+    // Asserting the injected client actually saw the userinfo URL is what pins
+    // both the seam and the promise that this suite makes no outbound request.
     expect(
-      res.json<{ detail?: string }>().detail ?? '',
-      'the state itself was accepted',
-    ).not.toMatch(/state token invalid/i);
+      seen.some((u) => u.includes('api.github.com/user')),
+      'the userinfo call went through the injected client, not the network',
+    ).toBe(true);
+    // Nothing was linked or minted: a fresh /redeem attempt has no code to use.
+    const res2 = await redeem(fx, 'A'.repeat(43), flow.secret);
+    expect(res2.statusCode).toBe(400);
+  });
+
+  it('CRITICAL the token exchange failing is reported as its OWN refusal, distinct from the userinfo one, and burns the verifier: the same callback replayed is state_replayed, with no second IDP call.', async () => {
+    const seen: string[] = [];
+    const rejecting: typeof fetch = (input) => {
+      seen.push(String(input instanceof Request ? input.url : input));
+      return REJECTING_FETCH(input);
+    };
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: rejecting } });
+    const flow = await startFlow(fx, 'github');
+    const res = await topLevel(fx, 'github', { code: 'dummycode', state: flow.state });
+    expect(fragmentOf(res).get('oauth_error')).toBe('exchange_failed');
+    expect(seen).toHaveLength(1);
+    const replay = await topLevel(fx, 'github', { code: 'dummycode', state: flow.state });
+    expect(fragmentOf(replay).get('oauth_error')).toBe('state_replayed');
+    expect(seen, 'a replay must not reach the IDP').toHaveLength(1);
+  });
+});
+
+describe('cookie-free sign-in end to end', () => {
+  it('CRITICAL start → top-level (injected IDP) → fragment hand-off → /redeem mints the session for the browser that proved the flow secret; no Set-Cookie on any hop', async () => {
+    const seen: string[] = [];
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch(seen) } });
+    const flow = await startFlow(fx, 'google', 'https://app.driftstack.test/usage?tab=1');
+    expect(flow.res.statusCode).toBe(200);
+
+    const top = await topLevel(fx, 'google', { code: 'idp-code-1', state: flow.state });
+    expect(top.statusCode).toBe(302);
+    expect(top.headers['set-cookie']).toBeUndefined();
+    expect(seen).toEqual([
+      'https://oauth2.googleapis.com/token',
+      'https://openidconnect.googleapis.com/v1/userinfo',
+    ]);
+    const loc = locationOf(top);
+    expect(loc.origin).toBe(OAUTH.dashboardOrigin);
+    expect(loc.pathname).toBe('/auth/oauth-client/callback/');
+    expect(loc.search).toBe('');
+    const frag = fragmentOf(top);
+    expect(frag.get('flow')).toBe(flow.flowId);
+    const code = frag.get('code') ?? '';
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    for (const word of ['session_token', 'account_id', 'usage']) {
+      expect(String(top.headers.location)).not.toContain(word);
+    }
+
+    const res = await redeem(fx, code, flow.secret);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['set-cookie']).toBeUndefined();
+    expect(res.headers['cache-control']).toBe('no-store');
+    const body = res.json<{
+      outcome: string;
+      provider: string;
+      account_id?: string;
+      redirect_to?: string;
+      session_token?: string;
+    }>();
+    expect(body.outcome).toBe('created-new-account');
+    expect(body.provider).toBe('google');
+    expect(typeof body.account_id).toBe('string');
+    expect(body.redirect_to).toBe('https://app.driftstack.test/usage?tab=1');
+    expect(typeof body.session_token, 'a 30-day web session was minted at /redeem').toBe('string');
+  });
+
+  it('CRITICAL D2 — a wrong flow secret is refused BEFORE any account exists, and it burns the code so the right secret is refused afterwards too', async () => {
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch([]) } });
+    const flow = await startFlow(fx, 'github');
+    const top = await topLevel(fx, 'github', { code: 'idp-code-1', state: flow.state });
+    const code = fragmentOf(top).get('code') ?? '';
+    expect(code).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    const wrong = await redeem(fx, code, mintBinding().secret);
+    expect(wrong.statusCode).toBe(400);
+    expect(wrong.json<{ detail?: string }>().detail).toBe(
+      'Sign-in was not started by this browser.',
+    );
+
+    const right = await redeem(fx, code, flow.secret);
+    expect(right.statusCode).toBe(400);
+    expect(right.json<{ detail?: string }>().detail).toMatch(/invalid, expired, or already used/);
+
+    // No account was created for the identity: a fresh, correctly-redeemed
+    // flow for the same IDP identity is a CREATE, not a sign-in.
+    const again = await startFlow(fx, 'github');
+    const top2 = await topLevel(fx, 'github', { code: 'idp-code-2', state: again.state });
+    const ok = await redeem(fx, fragmentOf(top2).get('code') ?? '', again.secret);
+    expect(ok.statusCode).toBe(200);
+    expect(ok.json<{ outcome: string }>().outcome).toBe('created-new-account');
+  });
+
+  it('/redeem is single-use: the identical second request is refused and the first session stands', async () => {
+    fx = await buildTestApp({ oauthClient: { ...OAUTH, fetch: okFetch([]) } });
+    const flow = await startFlow(fx, 'google');
+    const top = await topLevel(fx, 'google', { code: 'idp-code-1', state: flow.state });
+    const code = fragmentOf(top).get('code') ?? '';
+    const first = await redeem(fx, code, flow.secret);
+    expect(first.statusCode).toBe(200);
+    const second = await redeem(fx, code, flow.secret);
+    expect(second.statusCode).toBe(400);
+    expect(second.json<{ detail?: string }>().detail).toMatch(/invalid, expired, or already used/);
   });
 });

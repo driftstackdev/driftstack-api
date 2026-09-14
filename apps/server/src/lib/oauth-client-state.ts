@@ -40,10 +40,11 @@ export interface OAuthClientStatePayload {
    *  The dashboard mints `flow_secret` in first-party localStorage before
    *  navigating to the IDP and sends only this digest to /start; the
    *  top-level callback carries it into the hand-off record and /redeem
-   *  proves the preimage. Its PRESENCE is the signed v2 marker: a state
-   *  without it was minted for an old bundle's cookie flow and takes the
-   *  legacy forward. Optional so states minted before the deploy still
-   *  verify. */
+   *  proves the preimage. Every state /start signs carries it. Optional in
+   *  the TYPE only, so a state minted before 2026-09-11 still decodes here
+   *  and the guards can mint one: the top-level route refuses a state
+   *  without it (#oauth_error=state_invalid) — there is no legacy branch;
+   *  the cookie flow its absence once selected was retired 2026-09-14. */
   bind?: string;
 }
 
@@ -55,7 +56,8 @@ export interface SignStateOpts {
   nowMs?: number;
   /** Override for tests — fixed nonce. */
   nonce?: string;
-  /** v2 flow-secret digest; omitted for the legacy cookie flow. */
+  /** v2 flow-secret digest. /start always passes one; only a guard omits
+   *  it, to mint the bind-less state the top-level route must refuse. */
   bind?: string;
 }
 
@@ -165,9 +167,10 @@ export function verifyOauthClientState(opts: VerifyStateOpts): VerifyStateResult
   ) {
     return { kind: 'malformed' };
   }
-  // v2 marker: absent (legacy) or a string. Checked apart from the block above
-  // so the pinned 4-field shape stays byte-identical; a non-string `bind`
-  // cannot be a signed digest and is refused rather than read as legacy.
+  // `bind`: absent (a pre-2026-09-11 state — the route refuses it) or a
+  // string. Checked apart from the block above so the pinned 4-field shape
+  // stays byte-identical; a non-string `bind` cannot be a signed digest and
+  // is malformed here rather than left for the route to read.
   if (payload.bind !== undefined && typeof payload.bind !== 'string') {
     return { kind: 'malformed' };
   }

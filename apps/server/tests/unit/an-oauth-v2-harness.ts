@@ -1,5 +1,6 @@
 // Shared harness for the `an-oauth-*` / `a-top-level-oauth-*` guards
-// (cookie-free OAuth v2, 2026-09-11).
+// (cookie-free OAuth v2, 2026-09-11; the v1 cookie path was retired
+// 2026-09-14, so there is no v1 /start helper here any more).
 //
 // Mounts `registerOAuthClientRoutes` on a bare Fastify with the app's
 // problem+json error handler, an InMemoryMfaChallengeStore as the v2 flow
@@ -58,6 +59,9 @@ export interface HarnessOpts {
   /** `null` = account inactive (issueOAuthWebSession returns null). */
   sessionResult?: OAuthWebSessionResult | null;
   nowMs?: () => number;
+  /** Provider credentials to wire; default both. `{ github: CREDS }` models a
+   *  server whose google creds were pulled mid-flow. */
+  providers?: Partial<Record<Provider, { clientId: string; clientSecret: string }>>;
 }
 
 export interface Harness {
@@ -155,7 +159,7 @@ export async function mountOauthHarness(opts: HarnessOpts = {}): Promise<Harness
   registerOAuthClientRoutes(app, {
     service,
     authFlows,
-    providers: { google: CREDS, github: CREDS },
+    providers: opts.providers ?? { google: CREDS, github: CREDS },
     callbackUrlBase: CALLBACK_URL_BASE,
     dashboardOrigin,
     signingSecret: SIGNING_SECRET,
@@ -207,7 +211,7 @@ export interface StartV2 {
   bindingHash: string;
 }
 
-/** The v2 /start a NEW bundle performs. */
+/** The /start the dashboard performs: binding_hash = sha256(flow_secret). */
 export async function startV2(
   h: Harness,
   provider: Provider,
@@ -227,37 +231,6 @@ export async function startV2(
     flowId: body.flow_id ?? '',
     secret: binding.secret,
     bindingHash: binding.bindingHash,
-  };
-}
-
-export interface StartV1 {
-  res: LightMyRequestResponse;
-  authorizeUrl: string;
-  state: string;
-  /** `name=value` of the PKCE cookie, ready for a Cookie header. */
-  cookie: string;
-}
-
-/** The legacy /start an OLD bundle performs (no binding_hash). */
-export async function startV1(
-  h: Harness,
-  provider: Provider,
-  redirectTo: string,
-): Promise<StartV1> {
-  const res = await h.app.inject({
-    method: 'POST',
-    url: '/v1/auth/oauth-client/start',
-    payload: { provider, redirect_to: redirectTo },
-  });
-  const body = res.json<{ authorize_url?: string }>();
-  const setCookie = res.headers['set-cookie'];
-  const cookies = Array.isArray(setCookie) ? setCookie : [setCookie ?? ''];
-  const pkce = cookies.find((c) => typeof c === 'string' && c.startsWith('ds_oauth_pkce_')) ?? '';
-  return {
-    res,
-    authorizeUrl: body.authorize_url ?? '',
-    state: body.authorize_url ? stateOf(body.authorize_url) : '',
-    cookie: pkce.split(';')[0] ?? '',
   };
 }
 

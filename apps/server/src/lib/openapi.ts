@@ -2633,15 +2633,15 @@ function buildRegistry(): OpenAPIRegistry {
   // dashboard sends the customer's browser to; /confirm-merge is
   // the verdict-1 same-email-collision resolution path.
   //
-  // 2026-09-11 — cookie-free v2 flow. A /start carrying `binding_hash`
-  // (sha256 of a browser-held flow secret) answers with a `flow_id` and NO
-  // Set-Cookie; the PKCE verifier stays server-side. The top-level IDP
-  // callback then runs the token exchange itself, parks the verified
-  // identity under a single-use hand-off code and 302s to the dashboard with
-  // that code in the URL fragment; /redeem is where the browser proves the
-  // flow secret and the account row + session are minted. A start without
-  // binding_hash is the legacy cookie flow, unchanged — what an old bundle
-  // sends.
+  // 2026-09-11 — cookie-free flow. /start takes `binding_hash` (sha256 of a
+  // browser-held flow secret) and answers with a `flow_id` and NO Set-Cookie;
+  // the PKCE verifier stays server-side. The top-level IDP callback then runs
+  // the token exchange itself, parks the verified identity under a single-use
+  // hand-off code and 302s to the dashboard with that code in the URL
+  // fragment; /redeem is where the browser proves the flow secret and the
+  // account row + session are minted. 2026-09-14 — binding_hash became
+  // REQUIRED: the cookie flow a start without it used to select was retired,
+  // and such a start is now a 400 telling the customer to reload the page.
   /** 32 random bytes, base64url, unpadded → exactly 43 chars. Mirrors the
    *  route's BASE64URL_256_BIT_RE; shared by binding_hash, flow_secret and
    *  the hand-off code. */
@@ -2649,21 +2649,20 @@ function buildRegistry(): OpenAPIRegistry {
   const OauthClientStartRequestOpenApi = z.object({
     provider: z.enum(['google', 'github']),
     redirect_to: z.string().url(),
-    binding_hash: OauthClientBase64Url256OpenApi.optional().describe(
-      'base64url SHA-256 of a browser-held flow secret; presence selects the cookie-free v2 flow',
+    binding_hash: OauthClientBase64Url256OpenApi.describe(
+      'base64url SHA-256 of a browser-held flow secret; its preimage is proven at /redeem',
     ),
   });
   const OauthClientStartResponseOpenApi = z.object({
     authorize_url: z.string().url(),
-    flow_id: z.string().optional().describe('present only for v2 starts'),
+    flow_id: z.string().describe('public id of this flow, for the page to find its own record'),
   });
   const OauthClientRedeemRequestOpenApi = z.object({
     code: OauthClientBase64Url256OpenApi,
     flow_secret: OauthClientBase64Url256OpenApi,
   });
-  // The outcome union `completeSignIn` answers — shared with the legacy XHR
-  // callback so a client handles one shape. `provider` rides on every arm: a
-  // v2 page has no provider in its query string (the fragment carries only
+  // The outcome union `completeSignIn` answers. `provider` rides on every arm:
+  // the page has no provider in its query string (the fragment carries only
   // flow + code), so the collision banner reads it from here.
   const OauthClientProviderOpenApi = z.enum(['google', 'github']);
   const OauthClientRedeemResponseOpenApi = z.union([
@@ -2718,24 +2717,14 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          "Authorize URL — the client redirects the user's browser here to start the IDP consent flow. A v2 start (binding_hash present) also returns `flow_id`.",
+          "Authorize URL — the client redirects the user's browser here to start the IDP consent flow — plus `flow_id`, the public id of this flow. No cookie is set: the PKCE verifier is held server-side and the browser proves the flow secret at /redeem.",
         content: { 'application/json': { schema: OauthClientStartResponseOpenApi } },
-        // V-944 — this endpoint SETS the PKCE cookie the confirm step reads back,
-        // so the legacy flow does not work without it. Declared because a client
-        // implementing the dance outside a browser has to know to return it; a
-        // browser does it automatically and would never notice the omission,
-        // which is why it went unpublished. 2026-09-11 — a v2 start sets NO
-        // cookie: the verifier is held server-side and the browser proves the
-        // flow secret at /redeem instead.
-        headers: {
-          'Set-Cookie': {
-            description:
-              'HttpOnly PKCE cookie scoped to `Path=/v1/auth/oauth-client`, carrying the signed verifier for this nonce. Set ONLY for legacy starts without `binding_hash`; a v2 start sets no cookie. Must be returned on the callback for the legacy flow to complete.',
-            schema: { type: 'string' },
-          },
-        },
       },
-      400: { description: 'Unknown provider OR provider not configured.', content: problemContent },
+      400: {
+        description:
+          'Unknown provider, provider not configured, redirect_to off the dashboard origin, OR binding_hash absent — a sign-in page from before the cookie-free flow: the detail reads "This sign-in page is out of date. Reload the sign-in page and try again." and the body carries `reason: "stale_sign_in_page"`.',
+        content: problemContent,
+      },
     },
   });
   registerRoute(r, {
@@ -2758,7 +2747,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       200: {
         description:
-          'The same outcome union the legacy callback answers, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.',
+          'The sign-in outcome union, plus `provider`. The hand-off code is consumed on first use; the account is linked and a session (or MFA challenge) minted only when sha256(flow_secret) matches the binding_hash the flow was started with. No cookie is read or set.',
         content: { 'application/json': { schema: OauthClientRedeemResponseOpenApi } },
       },
       400: {
@@ -2790,15 +2779,6 @@ function buildRegistry(): OpenAPIRegistry {
       200: {
         description: 'Merge confirmed; IDP identity now linked to the existing account.',
         content: { 'application/json': { schema: OauthClientConfirmMergeResponseOpenApi } },
-        // V-944 — the mirror of the header above: this step CLEARS the PKCE
-        // cookie (Max-Age=0) once the verifier has been spent.
-        headers: {
-          'Set-Cookie': {
-            description:
-              'Clears the PKCE cookie for this nonce (`Max-Age=0`) now that the verifier has been consumed.',
-            schema: { type: 'string' },
-          },
-        },
       },
       400: {
         description: 'Token is invalid, expired, or already used.',

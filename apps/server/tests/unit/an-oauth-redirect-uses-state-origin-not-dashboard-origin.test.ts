@@ -12,8 +12,10 @@
 //     … fragmentErrorUrl(configured, 'state_invalid')` refusal.
 //   • `allowedDashboardOrigins()` — widening it past the two first-party hosts,
 //     or reading the request Host, reds the allow-list arms.
-//   • the legacy branch `reply.redirect(`${origin}/auth/oauth-client/callback?…`)`
-//     (state origin) — pointing it back at deps.dashboardOrigin reds the v1 arm.
+//   • the bind-less refusal `const bind = payload.bind; if (bind === undefined
+//     || !BASE64URL_256_BIT_RE.test(bind)) return refuse();` landing on the
+//     CONFIGURED origin — letting a bind-less state choose its own origin (or
+//     forwarding it) reds that arm.
 
 import { describe, expect, it } from 'vitest';
 import { FIRST_PARTY_DASHBOARD_ORIGINS } from '../../src/lib/cors-allow.js';
@@ -25,7 +27,6 @@ import {
   mintBinding,
   mountOauthHarness,
   signState,
-  startV1,
   startV2,
   topLevel,
 } from './an-oauth-v2-harness.js';
@@ -45,16 +46,15 @@ describe('an OAuth top-level 302 targets the verified state origin, not the conf
     expect(loc.hash).not.toContain('usage');
   });
 
-  it('legacy (old bundle): the verbatim forward also lands on the origin that started the flow', async () => {
+  it('a bind-less state (signed by us, on-list .io redirectTo) cannot choose its origin: refused to the CONFIGURED .dev origin with state_invalid, nothing forwarded', async () => {
     const h = await mountOauthHarness({ dashboardOrigin: 'https://app.driftstack.dev' });
-    const start = await startV1(h, 'github', 'https://app.driftstack.io/');
-    const top = await topLevel(h, 'github', { code: 'c1', state: start.state, scope: 'read:user' });
+    const legacy = signState({ provider: 'github', redirectTo: 'https://app.driftstack.io/' });
+    const top = await topLevel(h, 'github', { code: 'c1', state: legacy, scope: 'read:user' });
     const loc = locationOf(top);
-    expect(loc.origin).toBe('https://app.driftstack.io');
-    expect(loc.searchParams.get('code')).toBe('c1');
-    expect(loc.searchParams.get('state')).toBe(start.state);
-    expect(loc.searchParams.get('scope')).toBe('read:user');
-    expect(loc.hash).toBe('');
+    expect(loc.origin).toBe('https://app.driftstack.dev');
+    expect(loc.search).toBe('');
+    expect(fragmentOf(top).get('oauth_error')).toBe('state_invalid');
+    expect(h.idpCalls).toHaveLength(0);
   });
 
   it('a validly-signed state whose redirectTo is OFF the allow-list is refused: 302 to the CONFIGURED origin with #oauth_error=state_invalid, no forward, no exchange', async () => {
@@ -71,11 +71,12 @@ describe('an OAuth top-level 302 targets the verified state origin, not the conf
     expect(fragmentOf(res).get('oauth_error')).toBe('state_invalid');
     expect(h.idpCalls).toHaveLength(0);
     expect(h.storeConsumes, 'refused before the verifier is even looked up').toHaveLength(0);
-    // Same refusal for a legacy (bind-less) state: never forwarded off-list.
+    // Same refusal for a bind-less state: never forwarded, off-list or not.
     const legacy = signState({ redirectTo: 'https://evil.example/phish' });
     const res2 = await topLevel(h, 'google', { code: IDP_CODE, state: legacy });
     expect(locationOf(res2).origin).toBe('https://app.driftstack.dev');
-    expect(locationOf(res2).searchParams.get('code')).toBeNull();
+    expect(locationOf(res2).search).toBe('');
+    expect(fragmentOf(res2).get('oauth_error')).toBe('state_invalid');
   });
 
   it('a self-hosted (non-first-party) configured origin keeps an EXACT allow-list: a first-party state origin is off-list there', async () => {

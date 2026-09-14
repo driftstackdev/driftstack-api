@@ -136,7 +136,6 @@ const PUBLIC_EXEMPTIONS: readonly RouteExemption[] = [
     'registerOAuthClientRoutes',
     [
       ['post', '/v1/auth/oauth-client/start'],
-      ['get', '/v1/auth/oauth-client/callback'],
       ['post', '/v1/auth/oauth-client/confirm-merge'],
       ['post', '/v1/auth/oauth-client/redeem'],
     ],
@@ -153,7 +152,7 @@ const PUBLIC_EXEMPTIONS: readonly RouteExemption[] = [
     ],
     'inline',
     'public',
-    "Public IDP callback: verifies the signed state, forwards bind-less (legacy) flows verbatim to the state's own allow-listed origin, and for v2 states completes the token exchange server-side and 302s with a single-use hand-off code in the URL fragment; no session is minted here.",
+    'Public IDP callback: verifies the signed state (an unverifiable or bind-less state is bounced to the configured dashboard origin with #oauth_error=state_invalid, never forwarded), completes the token exchange server-side and 302s with a single-use hand-off code in the URL fragment; no session is minted here.',
   ),
   ...exactRoutes(
     'auth.ts',
@@ -636,7 +635,10 @@ describe('all-route caller-authority invariant', () => {
     // 2026-09-11 — 315 since POST /v1/auth/oauth-client/redeem: the v2 cookie-free
     // sign-in hand-off. Public protocol route (IP-gated, no account context read),
     // so the structurally-authorized count below does not move.
-    expect(routes).toHaveLength(315);
+    // 2026-09-14 — 314 since GET /v1/auth/oauth-client/callback (the v1 PKCE-cookie
+    // XHR exchange) was retired with the cookie path; it was a public protocol route,
+    // so the structurally-authorized count below does not move either.
+    expect(routes).toHaveLength(314);
     // +1 (not +2): only the LIVE network route is structurally authorized; the
     // disabled twin is a stub in DISABLED_EXEMPTIONS. Had the live route shipped
     // ungated, this number would not have moved while the total moved by two.
@@ -663,7 +665,8 @@ describe('all-route caller-authority invariant', () => {
     // 2026-09-11 — 36 since POST /v1/auth/oauth-client/redeem joined the public
     // protocol surface (v2 cookie-free sign-in hand-off; IP-gated, no caller
     // authority by design — the session is what it mints).
-    expect(PUBLIC_EXEMPTIONS).toHaveLength(36);
+    // 35 since 2026-09-14: the retired GET /v1/auth/oauth-client/callback exemption left with its route.
+    expect(PUBLIC_EXEMPTIONS).toHaveLength(35);
     expect(MANUAL_AUTH_EXEMPTIONS).toHaveLength(1);
     // V-1491 — 35 to 37: the agent-sessions disabled registrar gained
     // `transcript` and `gui-control-key`, the two live routes it had no twin for.

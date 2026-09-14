@@ -45,7 +45,6 @@ const NOT_PUBLIC_API: Record<string, string> = {
   '/v1/webhooks/nowpayments': 'Provider ingress. NowPayments IPN; no SDK method.',
   '/v1/auth/oauth/${provider}/callback':
     'Template-literal registration; the identity provider redirects a BROWSER here.',
-  '/v1/auth/oauth-client/callback': 'Browser redirect target in the OAuth client flow, not an API.',
   '/v1/oauth/authorize/complete': 'Browser consent-form POST, not an API call.',
   '/v1/status/stream': 'Unauthenticated SSE stream; a long-lived event stream, not a JSON method.',
   '/v1/sessions/{id}/gui-input': 'Desktop-client input transport, authorized by GUI control key.',

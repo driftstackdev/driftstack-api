@@ -216,7 +216,6 @@ const INTENTIONALLY_UNPUBLISHED_OPERATIONS = new Set([
   'GET /v1/agent-sessions/:p/gui-control-key',
   // #7 — raw screenshot bytes for the GUI; not an SDK JSON contract.
   'GET /v1/agent-sessions/:p/captures/:p',
-  'GET /v1/auth/oauth-client/callback',
   'GET /v1/auth/oauth/github/callback',
   'GET /v1/auth/oauth/google/callback',
   'GET /v1/internal/atlas-priority/event/:p',
@@ -273,7 +272,11 @@ describe('published OpenAPI operation ↔ Fastify registration coverage', () => 
     // route + its disabled twin share one normalized method+path, so +1; unpublished).
     // 261 since 2026-09-11 registered `POST /v1/auth/oauth-client/redeem` — published,
     // so it is deliberately NOT in INTENTIONALLY_UNPUBLISHED_OPERATIONS.
-    expect(routeOperations.size).toBe(261);
+    // 260 since 2026-09-14 retired `GET /v1/auth/oauth-client/callback` (the v1
+    // PKCE-cookie XHR exchange) with the cookie path; it was unpublished, so its
+    // INTENTIONALLY_UNPUBLISHED_OPERATIONS entry left with it and the published
+    // count above does not move.
+    expect(routeOperations.size).toBe(260);
   });
 
   it('documents the method-specific customer-core contract', () => {

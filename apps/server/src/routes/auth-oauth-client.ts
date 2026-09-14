@@ -1,41 +1,24 @@
 // V-667.C — OAuth-client (sign-in-with-Google/GitHub) routes.
 //
 //   POST /v1/auth/oauth-client/start           — issue authorize URL
-//   GET  /v1/auth/oauth/:provider/callback     — IDP redirects here;
-//                                                 302 to SPA callback
-//   GET  /v1/auth/oauth-client/callback        — SPA-side exchange
-//                                                 (existing flow)
+//   GET  /v1/auth/oauth/:provider/callback     — IDP returns here; token
+//                                                 exchange, then 302 to
+//                                                 the SPA with a fragment
+//   POST /v1/auth/oauth-client/redeem          — hand-off code + flow
+//                                                 secret → session
 //   POST /v1/auth/oauth-client/confirm-merge   — Verdict 1 collision-
 //                                                 flow completion
-//   POST /v1/auth/oauth-client/redeem          — v2: hand-off code +
-//                                                 flow secret → session
 //
-// Path A (2026-05-16): the IDP redirect target moved from the SPA
-// origin (`${dashboardOrigin}/auth/oauth-client/callback`) to the API
-// per-provider path (`${callbackUrlBase}/${provider}/callback`) so the
-// `redirect_uri` Google + GitHub Consoles registered actually matches
-// what the IDP sees. The per-provider API route only does a 302 to
-// the SPA, preserving the IDP's query string — so the existing SPA
-// fetch flow against /v1/auth/oauth-client/callback is unchanged
-// (PKCE cookie path scope still aligns).
+// Path A (2026-05-16): the IDP redirect target is the API per-provider
+// path (`${callbackUrlBase}/${provider}/callback`), so the `redirect_uri`
+// Google + GitHub Consoles registered is exactly what the IDP sees at
+// authorize AND at token exchange (`callbackUrlFor`).
 //
-// PKCE verifier storage: HTTP-only secure cookie keyed on the state
-// nonce. The cookie is HMAC-signed via the same OAUTH_CLIENT_STATE_
-// SIGNING_SECRET used to sign the state JWT; tampering is detected.
-// Cookie path is restricted to /v1/auth/oauth-client and 5-min Max-
-// Age matches the state TTL. The IDP-direct redirect path (/v1/auth
-// /oauth/:provider/callback) doesn't need the cookie — it just 302s
-// to the SPA which then fetches /v1/auth/oauth-client/callback where
-// the cookie IS in scope.
-//
-// Cookie-free v2 (2026-09-11) — the owner's "Google/GitHub login broken"
-// blocker. The dashboard lives on app.driftstack.io and the API on
-// api.driftstack.dev: different registrable domains, so the PKCE cookie
-// above is SET on the response to a cross-site XHR and Safari ITP (the
-// owner's default) drops it before it is ever stored; the read at the
-// callback then finds nothing ("PKCE verifier cookie missing or
-// invalid"). No cookie attribute fixes a cookie that was never stored.
-// v2 keeps NO browser state on the API host at all:
+// Cookie-free flow (live 2026-09-11; the cookie path it replaced was
+// retired 2026-09-14, after its old-bundle window closed with zero cookie-path
+// callbacks measured on prod). The dashboard (app.driftstack.io) and the
+// API (api.driftstack.dev) are different registrable domains, so NO
+// browser state is kept on the API host at all:
 //   1. the dashboard mints a random flow_secret in its OWN first-party
 //      localStorage and POSTs binding_hash = sha256(flow_secret) to
 //      /start; the server signs `bind` into the state, stores the PKCE
@@ -51,17 +34,20 @@
 //   3. the page POSTs {code, flow_secret} to /redeem (no credentials);
 //      the server consumes the record, checks sha256(flow_secret) ===
 //      bind in constant time, and only THEN links the account and mints
-//      the session — the same JSON the legacy XHR callback returns.
-// D2 is not dropped: the cookie↔state-nonce binding becomes a
-// flow_secret↔state.bind binding, checked BEFORE any DB write or
-// session mint, so an attacker's state paired with a victim's browser
-// still fails (the preimage exists only in the initiating browser), and
-// it does not rely on PKCE, so it holds for GitHub OAuth Apps too.
-// Every state without `bind` (an old bundle, or one minted before the
-// deploy) takes the legacy forward + cookie route below, byte-for-byte.
+//      the session.
+// D2 (login-CSRF): the flow_secret↔state.bind binding is checked BEFORE
+// any DB write or session mint, so an attacker's state paired with a
+// victim's browser still fails (the preimage exists only in the
+// initiating browser), and it does not rely on PKCE, so it holds for
+// GitHub OAuth Apps too.
+// A /start without binding_hash, or a state without `bind`, has no
+// browser that can finish it: /start answers 400 telling the customer to
+// reload the sign-in page, and the top-level callback bounces to the
+// configured dashboard origin with #oauth_error=state_invalid. Nothing
+// here reads or sets a cookie.
 
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   buildAuthorizeUrl,
@@ -82,16 +68,13 @@ import { readClientIp } from '../lib/client-ip.js';
 import { AUTH_IP_LIMITS, ipRateLimit } from '../middleware/ip-rate-limit.js';
 import type { Logger } from '../lib/logger.js';
 
-const COOKIE_NAME_PREFIX = 'ds_oauth_pkce_';
-const COOKIE_TTL_SECONDS = 300; // 5 min — matches state TTL
-
-// v2 store keys (caller-prefixed: the store is shared with the MFA
-// challenge hand-off, which prefixes its own keys with 'mfa-challenge:').
+// Store keys (caller-prefixed: the store is shared with the MFA challenge
+// hand-off, which prefixes its own keys with 'mfa-challenge:').
 const VERIFIER_KEY_PREFIX = 'oauth-client-verifier:';
 const HANDOFF_KEY_PREFIX = 'oauth-client-handoff:';
 /** Verifier record lifetime — equals the state TTL; the state's iat check
  *  stays the authority, the record TTL only bounds Redis occupancy. */
-const VERIFIER_TTL_SECONDS = 300;
+const VERIFIER_TTL_SECONDS = 300; // 5 min — matches state TTL
 /** Hand-off record lifetime: the 302 → page load → redeem XHR takes
  *  seconds; 60 s bounds how long a leaked fragment could be redeemed
  *  (and it still needs the flow-secret preimage). */
@@ -100,17 +83,26 @@ const HANDOFF_TTL_SECONDS = 60;
  *  binding_hash (sha256 digest), flow_secret and the hand-off code. */
 const BASE64URL_256_BIT_RE = /^[A-Za-z0-9_-]{43}$/;
 
+// binding_hash is REQUIRED: base64url SHA-256 of the flow secret the page
+// minted in its own localStorage. Its preimage is what /redeem proves, so
+// a start without it could never be finished — refused with
+// STALE_SIGN_IN_PAGE_DETAIL rather than a bare validation error.
 const StartBodySchema = z.object({
   provider: z.enum(['google', 'github']),
   redirect_to: z.string().url(),
+  binding_hash: z.string().regex(BASE64URL_256_BIT_RE),
 });
 
-// v2 opt-in on /start. Read from the raw body beside StartBodySchema rather
-// than as an `.optional()` member of it: the anonymous-route exemption
-// guard pins that schema as having no optional field, and its two-field
-// shape is content-pinned. Present → v2 (must be a 43-char digest);
-// absent → the legacy cookie flow, which is what an old bundle sends.
-const BindingHashSchema = z.string().regex(BASE64URL_256_BIT_RE);
+/** The 400 a /start with NO binding_hash gets. Only a sign-in page from
+ *  before the cookie-free flow sends one (it minted no flow secret), and
+ *  the server can no longer finish that flow — so the detail names the one
+ *  fix in the customer's words. No page ever renders it: the only client
+ *  that can send this body is an old cached bundle, whose error rendering
+ *  is frozen at a generic line. `detail` and `reason` serve whoever reads
+ *  the raw problem body — the smoke script, curl, support, the spec. */
+const STALE_SIGN_IN_PAGE_DETAIL =
+  'This sign-in page is out of date. Reload the sign-in page and try again.';
+const STALE_SIGN_IN_PAGE_REASON = 'stale_sign_in_page';
 
 const RedeemBodySchema = z.object({
   code: z.string().regex(BASE64URL_256_BIT_RE),
@@ -158,9 +150,9 @@ export interface RegisterOAuthClientRoutesDeps {
    *  end with a trailing slash; schema-level transform strips it. */
   callbackUrlBase: string;
   /** Dashboard origin for the post-IDP 302 redirect from
-   *  /v1/auth/oauth/:provider/callback to the SPA exchange page. */
+   *  /v1/auth/oauth/:provider/callback to the SPA callback page. */
   dashboardOrigin: string;
-  /** HMAC-SHA256 key for state JWT + cookie signing (≥32 chars). */
+  /** HMAC-SHA256 key for state signing (≥32 chars). */
   signingSecret: string;
   logger: Logger;
   /**
@@ -172,7 +164,7 @@ export interface RegisterOAuthClientRoutesDeps {
    * LOAD (`lib/oauth-client-exchange.ts`), so a test's
    * `vi.stubGlobal('fetch', …)` can never reach them — the capture still
    * points at the original. Without this seam the IDP legs of the callback
-   * were untestable AND every arm that got past the state/cookie checks made
+   * were untestable AND every arm that got past the state checks made
    * a REAL outbound request to the provider (measured: a POST to GitHub's
    * token endpoint answers 404 in ~250ms, which is why the failure surfaced
    * as `idp-error` rather than `network-error`).
@@ -184,9 +176,9 @@ export interface RegisterOAuthClientRoutesDeps {
    *  and the dashboard would show "Sign in to see live account data"
    *  on the post-OAuth landing. */
   authFlows: AuthFlowsService;
-  /** 2026-05-20 — required for IP-gate preHandlers on /start +
-   *  /callback + /confirm-merge (per 2026-05-19 rate-limit audit
-   *  doc — these were unauthenticated routes with no abuse gate).
+  /** 2026-05-20 — required for IP-gate preHandlers on /start, the
+   *  top-level callback, /redeem + /confirm-merge (per 2026-05-19
+   *  rate-limit audit doc — unauthenticated routes with no abuse gate).
    *  Same store the AUTH_IP_LIMITS gates on auth.ts use. */
   rateLimitStore: RateLimitStore;
   /** Test seam — defaults to Date.now() / randomBytes. */
@@ -195,9 +187,9 @@ export interface RegisterOAuthClientRoutesDeps {
    * 2026-09-11 — single-use store for the v2 PKCE verifier (keyed by the
    * state nonce) and the post-exchange hand-off record (keyed by the
    * hashed hand-off code). Production passes a RedisMfaChallengeStore;
-   * tests the InMemory one. REQUIRED on purpose: a v2 /start with no
-   * store must fail to compile, not fall back to the cookie the design
-   * exists to remove. Fails closed on a Redis outage, like MFA login.
+   * tests the InMemory one. REQUIRED on purpose: a /start with no store
+   * must fail to compile, not 500 on its first use. Fails closed on a
+   * Redis outage, like MFA login.
    */
   flowStore: Pick<MfaChallengeStore, 'set' | 'consume'>;
 }
@@ -256,13 +248,13 @@ function fragmentErrorUrl(origin: string, code: OauthFragmentError): string {
   return `${origin}/auth/oauth-client/callback/#oauth_error=${code}`;
 }
 
-function readBindingHash(body: unknown): string | undefined {
-  if (body === null || typeof body !== 'object') return undefined;
-  const raw = (body as Record<string, unknown>).binding_hash;
-  if (raw === undefined) return undefined;
-  const parsed = BindingHashSchema.safeParse(raw);
-  if (!parsed.success) throw new ValidationError(parsed.error.flatten());
-  return parsed.data;
+/** A body that is a plain object but carries no binding_hash at all — the
+ *  shape a pre-2026-09-11 sign-in page sends. A PRESENT but malformed
+ *  digest, or a body that is not an object at all (null, a string, an
+ *  array), is a caller bug, not a stale page, and stays a validation 400. */
+function bindingHashIsAbsent(body: unknown): boolean {
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return false;
+  return (body as Record<string, unknown>).binding_hash === undefined;
 }
 
 function sha256Hex(value: string): string {
@@ -327,27 +319,23 @@ export function registerOAuthClientRoutes(
 
   // 2026-05-20 — IP gates (pre-launch blocker per 2026-05-19
   // rate-limit audit). Unauthenticated routes; account-creation
-  // flood is the real abuse vector on /callback's success path,
+  // flood is the real abuse vector on /redeem's success path,
   // since the linkOrCreateAccount call mints a fresh row + a
   // 30-day web session for a never-seen IDP identity.
   const startGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_start',
     ...AUTH_IP_LIMITS.oauthClientStart,
   });
-  const callbackGate = ipRateLimit(deps.rateLimitStore, {
-    bucketPrefix: 'oauth_client_callback',
-    ...AUTH_IP_LIMITS.oauthClientCallback,
-  });
   const confirmMergeGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_confirm_merge',
     ...AUTH_IP_LIMITS.oauthClientConfirmMerge,
   });
-  // 2026-09-11 — the top-level IDP-return route now makes outbound IDP
-  // calls (v2) and /redeem is where the account row + session are minted,
-  // so both are gated. Each has its OWN bucket: sharing `callbackGate`'s
-  // bucket would charge a sign-in two tokens (top-level + redeem) and
-  // could 429 the top-level NAVIGATION as a raw problem+json page on the
-  // API host after a couple of quick retries. Same 5/min/IP budget.
+  // 2026-09-11 — the top-level IDP-return route makes the outbound IDP
+  // calls and /redeem is where the account row + session are minted, so
+  // both are gated. Each has its OWN bucket: sharing one would charge a
+  // sign-in two tokens (top-level + redeem) and could 429 the top-level
+  // NAVIGATION as a raw problem+json page on the API host after a couple
+  // of quick retries. Same 5/min/IP budget (the callback bound).
   const topLevelGate = ipRateLimit(deps.rateLimitStore, {
     bucketPrefix: 'oauth_client_toplevel',
     ...AUTH_IP_LIMITS.oauthClientCallback,
@@ -358,10 +346,10 @@ export function registerOAuthClientRoutes(
   });
 
   /**
-   * Link-or-create + session mint + the 4-outcome JSON. Shared by the
-   * legacy XHR callback (runs it right after the exchange) and /redeem
-   * (runs it after the hand-off binding check) so both answer the same
-   * shape and the SPA's outcome handling is one code path.
+   * Link-or-create + session mint + the 4-outcome JSON. Runs at /redeem
+   * only, after the hand-off binding check — never on the top-level
+   * navigation — so the session is minted into the request of the browser
+   * that proved the flow secret.
    */
   async function completeSignIn(
     req: FastifyRequest,
@@ -444,7 +432,17 @@ export function registerOAuthClientRoutes(
   // ── POST /v1/auth/oauth-client/start ──────────────────────────
   app.post('/v1/auth/oauth-client/start', { preHandler: [startGate] }, async (req, reply) => {
     const parsed = StartBodySchema.safeParse(req.body);
-    if (!parsed.success) throw new ValidationError(parsed.error.flatten());
+    if (!parsed.success) {
+      // No binding_hash at all is a stale sign-in page, not a malformed
+      // request: say so in the customer's words. Anything else (a present
+      // but malformed digest included) stays a validation 400.
+      if (bindingHashIsAbsent(req.body)) {
+        throw new BadRequestError(STALE_SIGN_IN_PAGE_DETAIL, {
+          reason: STALE_SIGN_IN_PAGE_REASON,
+        });
+      }
+      throw new ValidationError(parsed.error.flatten());
+    }
     const provider = parsed.data.provider;
     // Open-redirect defense at the source: redirect_to MUST be on the dashboard
     // origin. z.string().url() above guarantees it parses; this rejects
@@ -471,15 +469,12 @@ export function registerOAuthClientRoutes(
     if (!creds) {
       throw new BadRequestError(`Provider "${provider}" is not configured on this server.`);
     }
-    // v2 marker (see module header). Validated after the pinned schema so a
-    // malformed digest is a 400, not a silent fall-through to the cookie flow.
-    const bindingHash = readBindingHash(req.body);
-
     // PKCE verifier — 43..128 base64url chars (RFC 7636 §4.1).
     const verifier = randomBytes(48).toString('base64url'); // 64 chars
     const challenge = computeS256Challenge(verifier);
-    // D2 — one nonce binds the signed state to the browser cookie set below,
-    // so the callback can prove they came from the same /start.
+    // The nonce keys the server-side verifier record; `bind` is the digest
+    // whose preimage /redeem proves (D2, see module header). Both ride
+    // inside the signed state.
     const nonce = randomBytes(16).toString('hex');
     const state = signOauthClientState({
       provider,
@@ -487,7 +482,7 @@ export function registerOAuthClientRoutes(
       signingSecret: deps.signingSecret,
       nowMs: now(),
       nonce,
-      ...(bindingHash !== undefined ? { bind: bindingHash } : {}),
+      bind: parsed.data.binding_hash,
     });
     const authorizeUrl = buildAuthorizeUrl({
       provider,
@@ -498,159 +493,52 @@ export function registerOAuthClientRoutes(
     });
     reply.header('cache-control', 'no-store');
 
-    if (bindingHash !== undefined) {
-      // v2 — the verifier never reaches the browser. Stored server-side
-      // under the state nonce, consumed exactly once by the top-level
-      // callback (GETDEL). NO Set-Cookie: on a cross-site XHR response
-      // Safari would drop it anyway, and this design keeps zero browser
-      // state on the API host.
-      await deps.flowStore.set(verifierKey(nonce), verifier, VERIFIER_TTL_SECONDS);
-      return reply.code(200).send({ authorize_url: authorizeUrl, flow_id: flowIdFor(nonce) });
-    }
-
-    // Set the HTTP-only signed cookie carrying the verifier + state nonce.
-    setPkceCookie(reply, verifier, nonce, deps.signingSecret);
-
-    return reply.code(200).send({ authorize_url: authorizeUrl });
+    // The verifier never reaches the browser. Stored server-side under the
+    // state nonce, consumed exactly once by the top-level callback (GETDEL).
+    // NO Set-Cookie on any answer from this route: the design keeps zero
+    // browser state on the API host.
+    await deps.flowStore.set(verifierKey(nonce), verifier, VERIFIER_TTL_SECONDS);
+    return reply.code(200).send({ authorize_url: authorizeUrl, flow_id: flowIdFor(nonce) });
   });
 
-  // ── GET /v1/auth/oauth-client/callback ────────────────────────
-  app.get<{ Querystring: { code?: string; state?: string; error?: string } }>(
-    '/v1/auth/oauth-client/callback',
-    { preHandler: [callbackGate] },
-    async (req, reply) => {
-      // IDP may redirect with ?error=access_denied if the user
-      // cancelled the consent — surface a clean 400 in that case.
-      // Cap the error string to a sane bound before interpolating so
-      // a crafted huge ?error= value doesn't swell the problem+json
-      // body (OAuth-spec error codes are short tokens like
-      // 'access_denied', 'invalid_scope', etc.).
-      if (typeof req.query.error === 'string' && req.query.error.length > 0) {
-        const errSlice = req.query.error.slice(0, 128);
-        throw new BadRequestError(`IDP returned error: ${errSlice}`);
-      }
-      const code = typeof req.query.code === 'string' ? req.query.code : '';
-      const stateToken = typeof req.query.state === 'string' ? req.query.state : '';
-      if (code.length === 0 || stateToken.length === 0) {
-        throw new BadRequestError('Missing code or state query parameter.');
-      }
-
-      // Verify state JWT — CSRF defense + extracts provider +
-      // redirect_to. Bad / expired states 401.
-      const stateRes = verifyOauthClientState({
-        token: stateToken,
-        signingSecret: deps.signingSecret,
-        nowMs: now(),
-      });
-      if (stateRes.kind !== 'ok') {
-        throw new BadRequestError(`State token invalid: ${stateRes.kind}`);
-      }
-      const { provider, redirectTo, nonce: stateNonce } = stateRes.payload;
-
-      // Read + verify the PKCE verifier cookie.
-      const cookie = readPkceCookie(req, deps.signingSecret, stateNonce);
-      if (cookie === null) {
-        throw new BadRequestError('PKCE verifier cookie missing or invalid.');
-      }
-      // D2 — the state and this cookie must have been minted by the SAME
-      // /start. Rejects a login-CSRF that pairs an attacker-obtained valid
-      // state with the victim's (or any other) cookie, even for an IDP that
-      // ignores PKCE (GitHub OAuth Apps).
-      if (cookie.nonce !== stateNonce) {
-        throw new BadRequestError('State/cookie binding mismatch.');
-      }
-      const verifier = cookie.verifier;
-      clearPkceCookie(reply, stateNonce);
-
-      const creds = deps.providers[provider];
-      if (!creds) {
-        throw new BadRequestError(`Provider "${provider}" is not configured.`);
-      }
-
-      // Exchange the code for tokens. callbackUrl MUST equal the
-      // per-provider URL we sent to authorize — IDPs reject mismatches.
-      const tokens = await exchangeCodeForTokens({
-        provider,
-        clientId: creds.clientId,
-        clientSecret: creds.clientSecret,
-        callbackUrl: callbackUrlFor(provider, deps.callbackUrlBase),
-        code,
-        codeVerifier: verifier,
-        ...(deps.fetch !== undefined ? { fetch: deps.fetch } : {}),
-      });
-      if (tokens.kind !== 'ok') {
-        deps.logger.warn(
-          { component: 'oauth-client', provider, kind: tokens.kind },
-          'oauth-client token exchange failed',
-        );
-        throw new BadRequestError(`Token exchange failed: ${tokens.kind}`);
-      }
-
-      // Fetch userinfo + normalize.
-      const userinfo = await fetchUserInfo({
-        provider,
-        accessToken: tokens.tokens.accessToken,
-        ...(deps.fetch !== undefined ? { fetch: deps.fetch } : {}),
-      });
-      if (userinfo.kind !== 'ok') {
-        deps.logger.warn(
-          { component: 'oauth-client', provider, kind: userinfo.kind },
-          'oauth-client userinfo fetch failed',
-        );
-        throw new BadRequestError(`Userinfo fetch failed: ${userinfo.kind}`);
-      }
-
-      return reply.code(200).send(await completeSignIn(req, provider, userinfo.user, redirectTo));
-    },
-  );
-
   // ── GET /v1/auth/oauth/:provider/callback ─────────────────────
-  // Path A (2026-05-16): the IDP redirects the browser here with
-  // ?code=...&state=... after the consent screen. This route does
-  // NOT do the token exchange — it just 302s to the SPA callback
-  // page preserving the query string. The SPA then fetches the
-  // existing /v1/auth/oauth-client/callback endpoint (where the
-  // PKCE cookie is in scope) to do the real exchange.
-  //
-  // Why the bounce: the IDP-Console-registered redirect_uri must
-  // match what the SPA + API see at exchange time. Registering the
-  // API URL keeps that contract clean (API owns its routes); the
-  // 302-then-SPA-fetch shape lets the existing PKCE cookie scope
-  // (`Path=/v1/auth/oauth-client`) stay valid without widening it.
-  //
-  // 2026-09-11 — the paragraph above now describes the LEGACY branch
-  // only. The route verifies the state FIRST and branches on the signed
-  // `bind` marker:
-  //   • no usable state (absent, malformed, bad signature, expired) or a
-  //     verified state WITHOUT `bind` → the verbatim query forward above,
-  //     for every case including ?error= — an old bundle's XHR route then
-  //     produces today's messages unchanged. A verified legacy state is
-  //     forwarded to ITS OWN allow-listed origin (Q6); an unverifiable one
-  //     can only go to the configured origin.
-  //   • a verified state WITH `bind` → the v2 exchange runs HERE, on a
+  // The IDP redirects the browser here with ?code=...&state=... after the
+  // consent screen — this route IS the Console-registered redirect_uri
+  // (Path A, module header). The state is verified FIRST, and only a
+  // verified state carrying `bind` can be finished:
+  //   • no usable state (absent, malformed, bad signature, expired), or a
+  //     verified one whose `bind` is missing or not a digest → nothing in
+  //     it may choose an origin or a branch: 302 to the CONFIGURED
+  //     dashboard origin with a bounded #oauth_error — state_invalid (the
+  //     same refusal an off-list origin gets), or state_replayed for a
+  //     state that is ours but past its TTL, since the page's copy for
+  //     that code is the one that says "expired". Nothing from the query
+  //     is forwarded.
+  //   • a verified state WITH `bind` → the exchange runs HERE, on a
   //     top-level navigation, with the verifier read from the store; the
   //     browser is then 302'd with a single-use hand-off code in the
   //     FRAGMENT. Every expected failure after verification is a bounded
   //     #oauth_error=<enum> on the same page, never a raw problem+json
   //     page on the API host; unexpected 5xx/429 still render there.
   // The query string is never zod-parsed: the values are read once with
-  // typeof checks, as the XHR route does.
+  // typeof checks.
+  // No automatic HEAD twin (Fastify adds one per GET by default): a HEAD
+  // here would run the whole handler — GETDEL the verifier, two IDP calls,
+  // a parked hand-off — for an answer whose body nobody reads. Nothing in
+  // the flow sends HEAD, so it is a 404.
   for (const provider of ['google', 'github'] as const) {
     app.get<{ Querystring: Record<string, string> }>(
       `/v1/auth/oauth/${provider}/callback`,
-      { preHandler: [topLevelGate] },
+      { preHandler: [topLevelGate], exposeHeadRoute: false },
       async (req, reply) => {
-        // Every answer here is a per-flow 302 carrying either the IDP code
-        // or a hand-off code; nothing may cache it.
+        // Every answer here is a per-flow 302 carrying a hand-off code or a
+        // bounded error; nothing may cache it.
         reply.header('cache-control', 'no-store');
 
-        // Forward the IDP's entire query string verbatim. Includes
-        // code+state on success or error+error_description on consent
-        // denial — the SPA exchange route handles both.
-        const qs = new URLSearchParams();
-        for (const [k, v] of Object.entries(req.query)) {
-          if (typeof v === 'string') qs.append(k, v);
-        }
+        // Where a refusal lands when the state cannot vouch for an origin.
+        const configuredOrigin = new URL(deps.dashboardOrigin).origin;
+        const refuse = (code: OauthFragmentError = 'state_invalid') =>
+          reply.redirect(fragmentErrorUrl(configuredOrigin, code), 302);
 
         const stateToken = typeof req.query.state === 'string' ? req.query.state : '';
         const stateRes =
@@ -662,33 +550,35 @@ export function registerOAuthClientRoutes(
               })
             : null;
         if (stateRes === null || stateRes.kind !== 'ok') {
-          // Unverifiable → cannot be v2, cannot choose an origin from it.
-          // Byte-identical to the pre-v2 bounce: the SPA's XHR route turns
-          // this into "State token invalid: …" / "IDP returned error: …".
-          const target = `${deps.dashboardOrigin}/auth/oauth-client/callback?${qs.toString()}`;
-          return reply.redirect(target, 302);
+          // Unverifiable: absent, malformed, forged or expired. It cannot
+          // choose an origin, and nothing else in the query (code, error,
+          // extra IDP keys) is trusted or forwarded. An EXPIRED state is
+          // still ours (a customer who sat on the consent screen past the
+          // 5-minute TTL), so it gets the code whose copy says "expired";
+          // everything else is state_invalid.
+          return refuse(stateRes?.kind === 'expired' ? 'state_replayed' : 'state_invalid');
         }
         const payload = stateRes.payload;
+        const bind = payload.bind;
+        if (bind === undefined || !BASE64URL_256_BIT_RE.test(bind)) {
+          // Signed by us but minted without a binding — a state from before
+          // the cookie-free flow — or with one that is not a 256-bit digest,
+          // which /start never signs. No browser holds a flow secret for it,
+          // so it can never be finished: refused the same way, never
+          // exchanged, verifier untouched.
+          return refuse();
+        }
 
         // Open-redirect guard RE-APPLIED at the redirect site: the 302
         // origin is the verified state's own origin only when it is on the
         // closed allow-list. A validly-signed state whose redirectTo is
         // off-list (config changed mid-flight, or a signing-key compromise)
         // is REFUSED — bounced to the configured origin with a fixed error,
-        // never forwarded and never exchanged.
+        // never exchanged.
         const origin = redirectOriginFor(payload.redirectTo, deps.dashboardOrigin);
-        if (origin === null) {
-          const configured = new URL(deps.dashboardOrigin).origin;
-          return reply.redirect(fragmentErrorUrl(configured, 'state_invalid'), 302);
-        }
+        if (origin === null) return refuse();
 
-        if (payload.bind === undefined) {
-          // Legacy (old bundle / pre-deploy state): verbatim forward, to the
-          // origin that started the flow.
-          return reply.redirect(`${origin}/auth/oauth-client/callback?${qs.toString()}`, 302);
-        }
-
-        // ── v2 ────────────────────────────────────────────────────
+        // ── exchange ──────────────────────────────────────────────
         const fail = (code: OauthFragmentError) =>
           reply.redirect(fragmentErrorUrl(origin, code), 302);
         if (typeof req.query.error === 'string' && req.query.error.length > 0) {
@@ -749,7 +639,7 @@ export function registerOAuthClientRoutes(
           provider,
           user: userinfo.user,
           redirectTo: payload.redirectTo,
-          bind: payload.bind,
+          bind,
           iat: now(),
         };
         await deps.flowStore.set(
@@ -835,80 +725,4 @@ export function registerOAuthClientRoutes(
       });
     },
   );
-}
-
-// ─── cookie helpers ──────────────────────────────────────────────
-
-function setPkceCookie(reply: FastifyReply, verifier: string, nonce: string, secret: string): void {
-  // D2 — sign over verifier AND the state nonce so the cookie is bound to the
-  // SAME /start that minted the state. This blocks pairing a valid state from
-  // one flow with the verifier cookie of another (login-CSRF) — a gap PKCE
-  // can't close for providers that ignore it (GitHub OAuth Apps). Signing over
-  // `${verifier}.${nonce}` also prevents swapping a valid verifier onto a
-  // different nonce.
-  const sig = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest('base64url');
-  const value = `${verifier}.${nonce}.${sig}`;
-  const cookieName = pkceCookieName(nonce);
-  // SameSite=None (was Lax) — 2026-09-09. The dashboard moved to app.driftstack.io
-  // while this cookie is issued by api.driftstack.dev; those are different
-  // registrable domains, so the SPA's credentialed callback fetch is now cross-site
-  // and a Lax cookie would NOT be sent (→ "PKCE verifier cookie missing", breaking
-  // BOTH Google and GitHub). None+Secure lets it ride the cross-site exchange. The
-  // CSRF surface None widens is already closed here by the HttpOnly+signed cookie,
-  // the state JWT, and the D2 verifier↔state-nonce binding checked at the callback.
-  // (Safari ITP still blocks 3rd-party cookies → the durable fix is to run the token
-  // exchange on the top-level /v1/auth/oauth/:provider/callback where the cookie is
-  // first-party; tracked as the OAuth follow-up.)
-  reply.header(
-    'set-cookie',
-    `${cookieName}=${value}; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=${COOKIE_TTL_SECONDS.toString()}`,
-  );
-}
-
-function clearPkceCookie(reply: FastifyReply, nonce: string): void {
-  reply.header(
-    'set-cookie',
-    `${pkceCookieName(nonce)}=; Path=/v1/auth/oauth-client; HttpOnly; Secure; SameSite=None; Max-Age=0`,
-  );
-}
-
-function readPkceCookie(
-  req: FastifyRequest,
-  secret: string,
-  expectedNonce: string,
-): { verifier: string; nonce: string } | null {
-  const cookieHeader = req.headers.cookie;
-  if (typeof cookieHeader !== 'string') return null;
-  const expectedName = pkceCookieName(expectedNonce);
-  for (const part of cookieHeader.split(';')) {
-    const [k, ...rest] = part.trim().split('=');
-    if (k === expectedName) {
-      const value = rest.join('=');
-      // base64url verifier/sig and hex nonce contain no '.', so a 3-way split
-      // is unambiguous.
-      const [verifier, nonce, sig] = value.split('.');
-      if (!verifier || !nonce || !sig) return null;
-      const expected = createHmac('sha256', secret).update(`${verifier}.${nonce}`).digest();
-      let received: Buffer;
-      try {
-        received = Buffer.from(sig, 'base64url');
-      } catch {
-        return null;
-      }
-      if (received.length !== expected.length) return null;
-      if (!timingSafeEqual(received, expected)) return null;
-      return { verifier, nonce };
-    }
-  }
-  return null;
-}
-
-/**
- * Give each in-flight browser flow an independent cookie. Hashing the signed
- * nonce keeps the cookie name fixed-length and token-safe even if another
- * server-side state producer is added later. The nonce remains inside the
- * HMAC-protected value and is compared with the verified state on callback.
- */
-function pkceCookieName(nonce: string): string {
-  return `${COOKIE_NAME_PREFIX}${createHash('sha256').update(nonce).digest('base64url')}`;
 }

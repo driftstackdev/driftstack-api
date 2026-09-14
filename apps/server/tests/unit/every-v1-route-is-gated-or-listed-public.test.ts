@@ -84,7 +84,6 @@ const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   'POST /v1/auth/cli-authorize/initiate',
   'POST /v1/auth/cli-authorize/exchange',
   'POST /v1/auth/oauth-client/start',
-  'GET /v1/auth/oauth-client/callback',
   'GET /v1/auth/oauth/${provider}/callback',
   'POST /v1/auth/oauth-client/confirm-merge',
   // v2 browser sign-in hand-off: the caller proves the flow secret it holds; no

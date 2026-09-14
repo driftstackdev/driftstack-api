@@ -1,12 +1,13 @@
 // Cookie-free OAuth v2 (2026-09-11) — the top-level IDP-return route completes
-// the exchange itself, and /start sets NO cookie for a v2 flow.
+// the exchange itself, and /start sets NO cookie (the cookie path was retired 2026-09-14).
 //
 // Reverting these production lines reds the named assertions:
-//   • routes/auth-oauth-client.ts /start: `if (bindingHash !== undefined) {
-//     await deps.flowStore.set(verifierKey(nonce), …); return … flow_id }`
-//     → "no Set-Cookie", "flow_id", "verifier stored" arms.
-//   • routes/auth-oauth-client.ts top-level route, the `// ── v2` branch
-//     (`payload.bind === undefined` deciding legacy vs v2, then
+//   • routes/auth-oauth-client.ts /start: `await deps.flowStore.set(
+//     verifierKey(nonce), …); return … flow_id` (binding_hash REQUIRED in
+//     StartBodySchema) → "no Set-Cookie", "flow_id", "verifier stored" arms.
+//   • routes/auth-oauth-client.ts top-level route, the `// ── exchange` branch
+//     (reached only past `if (bind === undefined ||
+//     !BASE64URL_256_BIT_RE.test(bind)) return refuse()`, then
 //     `exchangeCodeForTokens` / `fetchUserInfo` / `flowStore.set(handoffKey…)`)
 //     → "injected fetch called for the token exchange", "fragment" arms.
 //   • lib/oauth-client-state.ts `...(opts.bind !== undefined ? { bind } : {})`
@@ -15,6 +16,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CALLBACK_URL_BASE,
+  CREDS,
   IDP_CODE,
   SESSION_PLAINTEXT,
   mountOauthHarness,
@@ -117,6 +119,30 @@ describe('a top-level OAuth callback completes the exchange (v2)', () => {
     expect(h.storeSets, 'no hand-off record on failure').toHaveLength(1);
   });
 
+  it('a provider de-configured BETWEEN mint and callback fails closed: the same signing secret and a seeded verifier get past verification and the store, and the refusal is provider_unavailable — no IDP call', async () => {
+    // /start already refuses an unconfigured provider, so a state can only be
+    // minted for one that WAS wired; this branch exists for the deploy where
+    // creds are pulled while a customer is mid-flow. Modelled by minting the
+    // flow on a server with both providers, then replaying the callback on a
+    // server with only github — same secret, and the verifier record copied
+    // across, so nothing earlier than the provider lookup can refuse.
+    const wired = await mountOauthHarness();
+    const start = await startV2(wired, 'google', 'https://app.driftstack.dev/');
+    const verifierKey = wired.storeSets[0]!;
+    const verifier = await wired.store.peek(verifierKey);
+    expect(verifier).toMatch(/^[A-Za-z0-9_-]{64}$/);
+
+    const h = await mountOauthHarness({ providers: { github: CREDS } });
+    await h.store.set(verifierKey, verifier!, 300);
+    const top = await topLevel(h, 'google', { code: IDP_CODE, state: start.state });
+    expect(top.statusCode).toBe(302);
+    expect(fragmentOf(top).get('oauth_error')).toBe('provider_unavailable');
+    expect(h.idpCalls).toHaveLength(0);
+    expect(h.storeConsumes, 'the verifier lookup ran (it sits before the provider check)').toEqual([
+      verifierKey,
+    ]);
+  });
+
   it('userinfo refused → userinfo_failed, and the verifier was still consumed (one attempt per state)', async () => {
     const h = await mountOauthHarness({ idp: 'userinfo-fails' });
     const start = await startV2(h, 'google', 'https://app.driftstack.dev/');
@@ -125,7 +151,7 @@ describe('a top-level OAuth callback completes the exchange (v2)', () => {
     expect(await h.store.peek(h.storeSets[0]!)).toBeNull();
   });
 
-  it('a malformed binding_hash on /start is a 400, not a silent fall-through to the cookie flow', async () => {
+  it('a malformed binding_hash on /start is a 400: no Set-Cookie, no store write', async () => {
     const h = await mountOauthHarness();
     const res = await h.app.inject({
       method: 'POST',

@@ -12,8 +12,12 @@
 // The route is mounted on a bare Fastify with no providers configured, so the
 // provider check — which runs AFTER the origin check — is the observable "origin
 // accepted" signal: a redirect_to that passes the origin gate answers with the
-// provider message, one that fails answers with the origin message.
+// provider message, one that fails answers with the origin message. Every start
+// here carries a binding_hash (REQUIRED since the cookie path was retired
+// 2026-09-14); without it the route answers the stale-page 400 before either
+// check runs, and this test would be measuring the wrong refusal.
 
+import { createHash, randomBytes } from 'node:crypto';
 import Fastify from 'fastify';
 import pino from 'pino';
 import { describe, expect, it } from 'vitest';
@@ -40,19 +44,24 @@ async function mount(dashboardOrigin: string) {
     signingSecret: 's'.repeat(48),
     logger: pino({ level: 'silent' }),
     rateLimitStore: new MemoryRateLimitStore(),
-    // 2026-09-11 — the v2 flow store is a required route dep; a bare /start
-    // with no binding_hash (this test) never touches it.
+    // 2026-09-11 — the flow store is a required route dep; every start here is
+    // refused at the origin or provider check, before the store is written.
     flowStore: new InMemoryMfaChallengeStore(),
   });
   await app.ready();
   return app;
 }
 
+/** What the dashboard sends: a digest of a browser-held flow secret. */
+function bindingHash(): string {
+  return createHash('sha256').update(randomBytes(32)).digest('base64url');
+}
+
 async function start(app: Awaited<ReturnType<typeof mount>>, redirectTo: string) {
   const res = await app.inject({
     method: 'POST',
     url: '/v1/auth/oauth-client/start',
-    payload: { provider: 'google', redirect_to: redirectTo },
+    payload: { provider: 'google', redirect_to: redirectTo, binding_hash: bindingHash() },
   });
   // Compare the parsed message, not the raw body: the JSON escapes the quotes in
   // `Provider "google"`, so a substring match on the raw text reads a pass as a miss.

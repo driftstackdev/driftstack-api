@@ -135,7 +135,6 @@ const UNDOCUMENTED_ROUTES = new Map<string, string>([
     'GET /v1/agent-sessions/:p/gui-control-key',
     'CUSTOMER — mints a control+read credential for the desktop client. Requires write + read:sessions on an ordinary key',
   ],
-  ['GET /v1/auth/oauth-client/callback', 'm2m — the redirect target a browser lands on'],
   ['GET /v1/internal/atlas-priority/event/:p', 'm2m — internal capture orchestration'],
   ['GET /v1/internal/atlas-priority/queue', 'm2m — internal capture orchestration'],
   ['GET /v1/mac-nodes', 'staff — driftstack_internal_admin, like every /v1/admin surface'],
