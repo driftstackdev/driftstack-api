@@ -541,8 +541,15 @@ export function CommandCenterView({
           {statusSummary !== null && <p className="text-sm text-ink-secondary">{statusSummary}</p>}
         </div>
         <div className="flex flex-wrap gap-2">
+          {/* ⛔ NOT "Ask Driftstack AI" — the owner, 2026-09-14: the label is
+              confusing "as it opens browser automation", and they are keeping
+              that phrasing for a customer-support chat they plan to add. Two
+              different things must not share a name, and this one is not a
+              place you ask questions: it is where you describe a task and watch
+              the browser do it. The heading directly above asks "What do you
+              want to automate?" — the button is now its answer. */}
           <button type="button" className="btn-primary gap-2" onClick={() => onNavigate('ai')}>
-            <IconSparkle /> Ask Driftstack AI
+            <IconSparkle /> Describe a task
           </button>
           <button
             type="button"

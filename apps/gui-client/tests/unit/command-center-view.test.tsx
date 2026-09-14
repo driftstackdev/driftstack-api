@@ -191,8 +191,13 @@ describe('CommandCenterView', () => {
   it('leads with Automate: the hero CTAs route to ai and recipes', () => {
     const onNavigate = nav();
     render(<CommandCenterView onNavigate={onNavigate} />);
-    fireEvent.click(screen.getByRole('button', { name: /Ask Driftstack AI/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Describe a task/ }));
     expect(onNavigate).toHaveBeenCalledWith('ai');
+    // ⛔ The old label was "Ask Driftstack AI" and it is retired, not renamed
+    // around. The owner is keeping that phrasing for a customer-support chat
+    // they plan to add, and two different things must not share a name — so
+    // this asserts the old words are GONE, not merely that the new ones exist.
+    expect(screen.queryByRole('button', { name: /Ask Driftstack/i })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Saved tasks/ }));
     expect(onNavigate).toHaveBeenCalledWith('recipes');
   });

@@ -2283,7 +2283,7 @@ function CommandCenterScene(): JSX.Element {
           </div>
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-primary gap-2">
-              ✦ Ask Driftstack AI
+              ✦ Describe a task
             </button>
             <button type="button" className="btn-secondary gap-2">
               ▤ Saved tasks
