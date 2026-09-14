@@ -16,7 +16,10 @@ import { type Session } from '../lib/client';
 import { diagnosticFetchError } from '../lib/diagnostic-fetch-error';
 import { humanizeError } from '../lib/humanize-error';
 import { listProxies, type ProxyConfig as LocalProxyConfig } from '../lib/proxies';
-import { countActiveAgentSessions } from '../lib/active-agent-sessions';
+import {
+  countActiveAgentSessions,
+  LIVE_AGENT_SESSION_STATUSES,
+} from '../lib/active-agent-sessions';
 import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';
 
 // Consistency #5 — the minimal agent-session shape SessionsView renders. A
@@ -368,7 +371,12 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   // Consistency #5 — only ACTIVE agent sessions are rendered as live cards
   // (paused/closed are terminal/inactive here). Listed alongside driver
   // sessions so a launched profile is visible + stoppable on this surface.
-  const liveAgentSessions = state.agentSessions.filter((s) => s.status === 'active');
+  // (V-218) `provisioning` too: a session mid-bring-up is one the customer just
+  // launched and must be able to see and stop, not one that disappears until its
+  // tunnel is up.
+  const liveAgentSessions = state.agentSessions.filter((s) =>
+    LIVE_AGENT_SESSION_STATUSES.has(s.status),
+  );
   const hasSessions = state.sessions.length > 0 || liveAgentSessions.length > 0;
   const showSkeleton = state.loading && !hasSessions;
 

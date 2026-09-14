@@ -477,7 +477,30 @@ function publicAgentSession(
     // input + output use the same prefixed contract.
     driftstack_session_id:
       rec.driftstackSessionId !== null ? `ses_${rec.driftstackSessionId}` : null,
-    status: rec.status,
+    // ⛔ (V-218) DERIVED, not stored. A row is INSERTED `active` — that value is
+    // load-bearing for billing and integrity, not a description of the session:
+    // the per-account concurrency cap counts `status = 'active'`, and a partial
+    // unique index (profile_id) WHERE status = 'active' enforces one live session
+    // per profile. Storing anything else at insert would uncount a running
+    // session against its cap and let two open on one profile.
+    //
+    // But it made the read LIE. A3 measured a session reported `active` at +0s
+    // whose VPN bring-up then failed with `no_output`, and on production today a
+    // VPN session never reaches a browser at all (their spawn is flag-gated), so
+    // it sits until the 90s sweep reaps it — reported `active` the whole time.
+    // That is the owner's "profile starts, simulator opens, then instantly closes
+    // with an error", and it sat next to `provisioning_detail`, a field whose
+    // whole job is to say why the session is STILL PROVISIONING. One field
+    // explaining the wait, beside a status denying there was one.
+    //
+    // `provisioningDetail` is non-null exactly while the node has reported a
+    // provisioning step and not yet reported `active`: the relay clears it
+    // unconditionally on `active` and on every terminal status
+    // (CLEARING_STATUSES, session-provisioning-detail-relay.ts), serialised per
+    // session so a replayed pair cannot leave a stale token. So it is precisely
+    // the predicate for "not live yet", and reporting it costs the cap nothing.
+    status:
+      rec.status === 'active' && rec.provisioningDetail !== null ? 'provisioning' : rec.status,
     closed_reason: rec.closedReason,
     provisioning_detail: rec.provisioningDetail,
     token_budget_total: rec.tokenBudgetTotal,

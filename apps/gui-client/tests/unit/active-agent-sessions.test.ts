@@ -11,7 +11,7 @@ import {
 import type { DriftstackClient } from '../../src/lib/client';
 
 describe('countActiveAgentSessions', () => {
-  it('counts only status === active (paused/closed do not consume a slot)', () => {
+  it('counts active and provisioning (paused/closed do not consume a slot)', () => {
     expect(
       countActiveAgentSessions([
         { status: 'active' },
@@ -20,6 +20,28 @@ describe('countActiveAgentSessions', () => {
         { status: 'active' },
       ]),
     ).toBe(2);
+  });
+
+  // V-218 — the control plane now reports `provisioning` for a session whose node
+  // has begun bring-up and not yet reported a browser. Server-side that row still
+  // counts against the concurrency cap (the cap reads the STORED status, which is
+  // `active`), so a client that ignored it would show a smaller number than the
+  // server enforces — and the customer would see "cap reached" with fewer sessions
+  // listed than the cap allows, which is the confusing direction.
+  it('CRITICAL counts a `provisioning` session — it holds a slot, and a VPN session can sit there for the whole bring-up', () => {
+    expect(countActiveAgentSessions([{ status: 'provisioning' }, { status: 'active' }])).toBe(2);
+  });
+
+  it('CRITICAL VACUITY CONTROL: the widening is exactly two statuses — an unknown status still does not count, so a future value cannot silently start consuming slots', () => {
+    expect(
+      countActiveAgentSessions([{ status: 'terminating' }, { status: 'creating' }, { status: '' }]),
+    ).toBe(0);
+  });
+
+  it('a stale liveness beat still suppresses a provisioning session, exactly as it does an active one', () => {
+    expect(countActiveAgentSessions([{ status: 'provisioning', liveness: { fresh: false } }])).toBe(
+      0,
+    );
   });
 
   it('a present-but-STALE liveness beat (worker went silent) does not count; absent or fresh does', () => {

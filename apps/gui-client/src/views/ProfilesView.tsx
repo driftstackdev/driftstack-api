@@ -29,6 +29,7 @@ import {
   type ProfilesMetaMap,
 } from '../lib/profiles-meta';
 import { stopOnExitIpChangeCreateFields } from '../lib/agent-session-create-fields';
+import { LIVE_AGENT_SESSION_STATUSES } from '../lib/active-agent-sessions';
 import {
   loadFolders,
   addFolder,
@@ -696,7 +697,10 @@ export function ProfilesView({
   // Pre-check the cap so Launch is greyed with a clear reason instead. The
   // server's `concurrent_session_active` is driver-only, so add the active
   // agent sessions this view already tracks (disjoint ids → no double-count).
-  const activeAgentCount = agentSessions.filter((s) => s.status === 'active').length;
+  // (V-218) counts `provisioning` as well — it holds a slot against the cap.
+  const activeAgentCount = agentSessions.filter((s) =>
+    LIVE_AGENT_SESSION_STATUSES.has(s.status),
+  ).length;
   const concurrentCap = accountMe?.concurrent_session_cap ?? null;
   const concurrentActive =
     accountMe?.concurrent_session_active !== undefined

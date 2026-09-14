@@ -81,6 +81,46 @@ async function buildApp(opts: {
   return app;
 }
 
+// V-218 — the reported `status` is DERIVED from the stored one. A row is
+// inserted `active` because that value is load-bearing for billing and
+// integrity (the concurrency cap counts status = 'active'; a partial unique
+// index on (profile_id) WHERE status = 'active' enforces one live session per
+// profile), so it cannot be changed at insert without uncounting running
+// sessions. What it must not do is describe a session that is not live yet.
+describe('agent-sessions read shape — a provisioning session does not report itself active (V-218)', () => {
+  it('CRITICAL a stored-active row carrying a provisioning detail reports status "provisioning". Measured by the harness agent: a session reported `active` at +0s whose VPN bring-up then failed, and on production a VPN session never reaches a browser at all — so it read `active` until the 90s sweep reaped it. That is what the owner sees as "it starts, then instantly closes with an error".', async () => {
+    const app = await buildApp({
+      record: makeRecord('agt_live', { status: 'active', provisioningDetail: 'vpn_egress_active' }),
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    expect(res.statusCode).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect(body['status']).toBe('provisioning');
+    // The detail still rides alongside, so the client can say WHICH step.
+    expect(body['provisioning_detail']).toBe('vpn_egress_active');
+    await app.close();
+  });
+
+  it('CRITICAL VACUITY CONTROL: a stored-active row with NO provisioning detail still reports "active". The relay clears the detail unconditionally on an `active` frame, so this is the live case — a derivation that reported provisioning here would make every running session look like it never started.', async () => {
+    const app = await buildApp({
+      record: makeRecord('agt_live', { status: 'active', provisioningDetail: null }),
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    const body = res.json<Record<string, unknown>>();
+    expect(body['status']).toBe('active');
+    await app.close();
+  });
+
+  it('CRITICAL a terminal status is never overridden, even if a detail somehow survived — a closed session must never read as provisioning', async () => {
+    const app = await buildApp({
+      record: makeRecord('agt_live', { status: 'closed', provisioningDetail: 'vpn_egress_active' }),
+    });
+    const res = await app.inject({ method: 'GET', url: '/v1/agent-sessions/agt_live' });
+    expect(res.json<Record<string, unknown>>()['status']).toBe('closed');
+    await app.close();
+  });
+});
+
 describe('agent-sessions read shape — liveness field (W2679)', () => {
   it('OMITS liveness when the store is not wired (prod no-fleet-CP regression guard — never default to dead)', async () => {
     const app = await buildApp({});

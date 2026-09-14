@@ -19,11 +19,26 @@
 import type { DriftstackClient } from './client';
 
 /**
+ * The statuses that occupy a session slot — what a customer means by "running".
+ *
+ * ⛔ (V-218) `provisioning` belongs here. The control plane now reports it for a
+ * session whose node has started bring-up and not yet reported a browser, and
+ * such a session IS holding its slot: it counts against the account's
+ * concurrency cap server-side (the cap counts the STORED status, which is still
+ * `active`). Counting only `active` here would make a session the customer just
+ * launched vanish from every count and list while it connects — and for a VPN
+ * session that window is seconds at best, and until the 90s sweep at worst.
+ * That is the opposite of what the derived status was added to fix.
+ */
+export const LIVE_AGENT_SESSION_STATUSES: ReadonlySet<string> = new Set(['active', 'provisioning']);
+
+/**
  * Count the account's LIVE agent sessions — the number shown as "Running" and
  * folded into the concurrent-slot estimate. A session counts when its status is
- * `'active'` AND its liveness beat is not present-but-stale: a `fresh:false` beat
- * means the owning worker went silent, so the session is a zombie the per-profile
- * badge (ProfilesView.boundSessionByProfileId) and the chat header
+ * in {@link LIVE_AGENT_SESSION_STATUSES} AND its liveness beat is not
+ * present-but-stale: a `fresh:false` beat means the owning worker went silent, so
+ * the session is a zombie the per-profile badge
+ * (ProfilesView.boundSessionByProfileId) and the chat header
  * (session-liveness.ts) already treat as idle. Counting it here made the Command
  * Center claim "Running" for a crashed session the Profiles hub showed idle, and
  * could grey out Launch ("cap reached") with no running session to stop. An
@@ -36,7 +51,7 @@ export function countActiveAgentSessions(
 ): number {
   let n = 0;
   for (const s of sessions) {
-    if (s.status !== 'active') continue;
+    if (!LIVE_AGENT_SESSION_STATUSES.has(s.status)) continue;
     if (s.liveness !== undefined && !s.liveness.fresh) continue;
     n += 1;
   }
