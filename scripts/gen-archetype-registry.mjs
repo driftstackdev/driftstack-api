@@ -29,6 +29,9 @@ const END = '  // </generated:archetype-registry>';
 /** The one entry that keeps status 'launch'; every other ready slug is 'available'. */
 const LOCKED = 'iphone17_ios18_7_safari26_4';
 
+/** Mirrors ArchetypeLifecycle in packages/api-types. An unknown value is fatal. */
+const KNOWN_LIFECYCLES = new Set(['bit_identical', 'available', 'in_development', 'held']);
+
 const strip = (value, prefix) =>
   value.startsWith(prefix) ? value.slice(prefix.length).trim() : value.trim();
 
@@ -82,13 +85,52 @@ function entryFor(row) {
     row.browser === 'chrome' && chromeMajor !== undefined
       ? `Chrome ${chromeMajor}`
       : `Safari ${safariVersion}`;
-  const status = row.status === 'ready' ? (id === LOCKED ? 'launch' : 'available') : 'planned';
   // `lifecycle` is the STRENGTH axis and is deliberately separate from `status`,
   // which is the SELECTABILITY axis. 'available' means the config is validated
   // and its UA measured at that exact cell; only 'bit_identical' means the fork
   // has been diffed byte-for-byte against a real capture. Public copy that
   // claims verification must count the latter — see DEVICE_SUPPORT.
-  const lifecycle = row.lifecycle ?? (row.status === 'ready' ? 'available' : 'held');
+  // ⛔ FAIL on a lifecycle we do not know, rather than defaulting it. A silent
+  // fallback here would put an unrecognised value into the `available` bucket,
+  // and `available` is one of the two buckets public copy counts as verified —
+  // so a new catalog value would quietly inflate a verification claim on the
+  // trust page. That is exactly the class of defect this generator was written
+  // after. A new lifecycle is a deliberate decision on this side, not a default.
+  //
+  // `in_development` arrived 2026-09-14 for three archetypes the fork renders
+  // with the wrong canvas family; they are held_out, so they land as `planned`
+  // and are not selectable.
+  const lifecycle = row.lifecycle;
+  if (!KNOWN_LIFECYCLES.has(lifecycle)) {
+    console.error(
+      `archetype-registry: ${row.slug} has lifecycle ${JSON.stringify(lifecycle)}, which this ` +
+        `generator does not know. Known: ${[...KNOWN_LIFECYCLES].join(', ')}.\n` +
+        '  Add it to KNOWN_LIFECYCLES here AND to ArchetypeLifecycle in packages/api-types, and\n' +
+        '  decide what public copy should count it as, before regenerating.',
+    );
+    exit(2);
+  }
+  // ⛔⛔ SELECTABILITY COMES FROM `lifecycle`, NEVER FROM `status`. The two axes
+  // answer different questions and their numbers deliberately do not match:
+  //
+  //   status     GENERATOR-owned upstream, derived from the config validator.
+  //              `ready` means "this config is well-formed" — correct UA, correct
+  //              geometry, correct id. 99 rows are ready.
+  //   lifecycle  A1-owned. "Should a customer be able to pick this, and how
+  //              strong is the claim?" 96 rows should be offered.
+  //
+  // The gap is three archetypes whose configs are perfectly valid and which the
+  // FORK still renders wrongly — it classifies Safari 26.6.1 as canvas Family A
+  // while the config declares B, so a session would produce a wrong canvas hash.
+  // The validator has no opinion about the fork's parser, so it will keep
+  // computing `ready` for them until the fork is fixed.
+  //
+  // This mapped `status` for its first few hours and would have shipped all three
+  // as selectable. Reading `status` here is not a shortcut, it is a different
+  // question, and the answer it gives is "is the file well-formed" when what a
+  // picker needs is "will this render correctly".
+  const selectable = lifecycle === 'bit_identical' || lifecycle === 'available';
+  const status = selectable ? (id === LOCKED ? 'launch' : 'available') : 'planned';
   return {
     id,
     displayLabel: `${device} / iOS ${iosVersion} / ${browserLabel}`,
@@ -103,6 +145,10 @@ function entryFor(row) {
     // customer's device picker must say "blocked on a choice we are making"
     // without naming either.
     heldReason: row.heldReasonShort ?? null,
+    // What a held row will BE when it lands. "based on iPhone 17 / iOS 18.7 /
+    // Safari 26.4" tells a customer something about a greyed-out row; its own
+    // slug does not.
+    baseArchetype: typeof row.baseArchetype === 'string' ? row.baseArchetype : null,
   };
 }
 
@@ -150,6 +196,7 @@ function render(rows) {
     if (e.heldReason !== null) {
       lines.push(`    heldReason: '${e.heldReason.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}',`);
     }
+    if (e.baseArchetype !== null) lines.push(`    baseArchetype: '${e.baseArchetype}',`);
     lines.push('  },');
   }
   lines.push(END);

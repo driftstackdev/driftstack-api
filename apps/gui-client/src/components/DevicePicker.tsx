@@ -26,6 +26,10 @@ export interface PickerDevice {
   readonly safariVersion: string;
   /** Rendering engine — all current entries are WebKit; future-proofed. */
   readonly engine: 'webkit' | 'chrome';
+  /** Why this device cannot be picked yet — the short, customer-facing reason
+   *  from the catalog, e.g. "Awaiting distribution-policy decision". Absent for
+   *  selectable rows and for our own internal reference baseline. */
+  readonly heldReason?: string;
   /** Whether this device can be selected (bit-exact). Non-selectable entries
    *  render as muted "reference" rows. */
   readonly selectable: boolean;
@@ -430,8 +434,16 @@ export function DevicePicker({
                     </span>
                     <span
                       className={`text-2xs ${d.selectable ? 'text-status-ready' : 'text-ink-muted'}`}
+                      title={!d.selectable && d.heldReason !== undefined ? d.heldReason : undefined}
                     >
-                      {d.selectable ? '✓ bit-exact' : 'reference'}
+                      {/* A row that cannot be picked has to say WHY, or it reads
+                          as broken rather than deliberate. The reason comes from
+                          the catalog (short form, written by the team that
+                          withheld it) — never invented here, and never the long
+                          internal form, which names vendor policy. Falls back to
+                          the old "reference" label for our own internal baseline,
+                          which is withheld for a different reason and has none. */}
+                      {d.selectable ? '✓ bit-exact' : (d.heldReason ?? 'reference')}
                     </span>
                     <span
                       aria-hidden="true"

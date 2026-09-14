@@ -269,6 +269,9 @@ const PICKER_DEVICES: readonly PickerDevice[] = ARCHETYPE_REGISTRY.map((a) => ({
   safariVersion: a.safariVersion,
   engine: 'webkit',
   selectable: SELECTABLE_STATUSES.has(a.status),
+  // Carried so a greyed-out row can say why it is greyed out. Only the catalog
+  // writes this string; nothing here invents one.
+  ...(a.heldReason !== undefined ? { heldReason: a.heldReason } : {}),
 }));
 
 interface Profile {

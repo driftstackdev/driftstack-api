@@ -613,7 +613,12 @@ export type ArchetypeStatus = 'launch' | 'available' | 'reference' | 'planned';
  * cell, byte-identity not demonstrated there. `held` — withheld on policy.
  * `reference` — our own internal baseline, not a catalog row.
  */
-export type ArchetypeLifecycle = 'bit_identical' | 'available' | 'held' | 'reference';
+export type ArchetypeLifecycle =
+  | 'bit_identical'
+  | 'available'
+  | 'in_development'
+  | 'held'
+  | 'reference';
 
 export interface ArchetypeConfig {
   /** Canonical slug, e.g. `iphone17_ios18_7_safari26_4`. */
@@ -651,6 +656,12 @@ export interface ArchetypeConfig {
    * and is deliberately not carried here.
    */
   readonly heldReason?: string;
+  /**
+   * For a held archetype built on top of another, the slug it is based on — so
+   * a greyed-out row can say what it will be when it lands ("based on iPhone 17
+   * / iOS 18.7 / Safari 26.4") rather than leaving a customer to decode a slug.
+   */
+  readonly baseArchetype?: string;
 }
 
 /**
@@ -756,7 +767,7 @@ export const ARCHETYPE_DEVICES_PER_TIER: Record<AccountTier, readonly string[] |
  */
 export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
   // <generated:archetype-registry> — regenerate, do not hand-edit
-  // 105 entries from operations/archetype-catalog.json (bit_identical 81, available 18, held 6).
+  // 105 entries from operations/archetype-catalog.json (bit_identical 81, available 15, held 6).
   {
     id: 'iphone13_ios18_4_1_safari18_4',
     displayLabel: 'iPhone 13 / iOS 18.4.1 / Safari 18.4',
@@ -1014,8 +1025,9 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.6.1',
     canvasFamily: 'B',
-    status: 'available',
-    lifecycle: 'available',
+    status: 'planned',
+    lifecycle: 'in_development',
+    heldReason: 'Canvas fidelity verification in progress',
   },
   {
     id: 'iphone14plus_ios18_6_safari18_6',
@@ -1234,8 +1246,9 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.6.1',
     canvasFamily: 'B',
-    status: 'available',
-    lifecycle: 'available',
+    status: 'planned',
+    lifecycle: 'in_development',
+    heldReason: 'Canvas fidelity verification in progress',
   },
   {
     id: 'iphone15plus_ios18_6_safari18_6',
@@ -1597,6 +1610,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_chrome149',
@@ -1608,6 +1622,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_chrome148',
@@ -1619,6 +1634,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_chrome151',
@@ -1630,6 +1646,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_chrome152',
@@ -1641,6 +1658,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_chrome153',
@@ -1652,6 +1670,7 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     status: 'planned',
     lifecycle: 'held',
     heldReason: 'Awaiting distribution-policy decision',
+    baseArchetype: 'iphone17_ios18_7_safari26_4',
   },
   {
     id: 'iphone17_ios18_7_safari26_5',
@@ -1740,8 +1759,9 @@ export const ARCHETYPE_REGISTRY: readonly ArchetypeConfig[] = [
     iosVersion: '18.7',
     safariVersion: '26.6.1',
     canvasFamily: 'B',
-    status: 'available',
-    lifecycle: 'available',
+    status: 'planned',
+    lifecycle: 'in_development',
+    heldReason: 'Canvas fidelity verification in progress',
   },
   {
     id: 'iphone17promax_ios18_6_safari26_0',

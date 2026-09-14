@@ -91,7 +91,14 @@ describe('the archetype registry keeps its shape', () => {
     // sat at 81 catalog slugs while the catalog reached 105, and nothing on
     // either side could see the gap: A1's gate proved the catalog matched the
     // archetype configs, ours proved the registry compiled, and neither watched
-    // the join. The 6 `planned` rows are the held CriOS family.
+    // the join.
+    //
+    // The 9 `planned` rows are 6 held CriOS plus 3 withdrawn the same day: the
+    // fork renders Safari 26.6.1 as canvas Family A while the config declares B,
+    // so a session on one would produce a wrong canvas hash — a tell. They were
+    // selectable in a commit that had already entered the pre-push gate, and the
+    // generator's `--check` reds inside that gate's lint step is what stopped
+    // them. That is the whole argument for generating this file.
     const byStatus = ARCHETYPE_REGISTRY.reduce<Record<string, number>>((acc, a) => {
       acc[a.status] = (acc[a.status] ?? 0) + 1;
       return acc;
@@ -99,10 +106,46 @@ describe('the archetype registry keeps its shape', () => {
     expect(ARCHETYPE_REGISTRY.length, 'registry size changed').toBe(106);
     expect(byStatus, 'the status mix changed').toEqual({
       launch: 1,
-      available: 98,
-      planned: 6,
+      available: 95,
+      planned: 9,
       reference: 1,
     });
+  });
+
+  it('CRITICAL an archetype still in development is NEVER selectable, whatever its status says', () => {
+    // The sharpest version of the rule above, pinned on the EVIDENCE axis rather
+    // than the status axis, because that is the axis that carries the reason.
+    // `in_development` means the fork does not yet render this archetype
+    // correctly — for the three that arrived 2026-09-14, it picks the wrong
+    // canvas family and produces a detectable hash. A row like that reaching a
+    // customer is worse than it being absent, so selectability must fail closed
+    // even if someone later maps its status wrongly.
+    const inDevelopment = ARCHETYPE_REGISTRY.filter((a) => a.lifecycle === 'in_development');
+    expect(
+      inDevelopment.length,
+      'no in-development entries — this arm would be vacuous; drop it or keep a fixture',
+    ).toBeGreaterThan(0);
+    for (const entry of inDevelopment) {
+      expect(
+        isSelectableArchetypeId(entry.id),
+        `${entry.id} is still in development and must not be selectable`,
+      ).toBe(false);
+      expect(entry.status, `${entry.id} must not carry a selectable status`).not.toBe('available');
+      expect(entry.status).not.toBe('launch');
+    }
+  });
+
+  it('CRITICAL every held or in-development entry carries a reason a customer can read', () => {
+    // A greyed-out row with no explanation is worse than no row: it looks broken.
+    for (const entry of ARCHETYPE_REGISTRY.filter(
+      (a) => a.lifecycle === 'held' || a.lifecycle === 'in_development',
+    )) {
+      expect(entry.heldReason, `${entry.id} is withheld with no reason`).toBeTruthy();
+      expect(
+        (entry.heldReason ?? '').length,
+        `${entry.id}'s reason is too long for a row`,
+      ).toBeLessThan(80);
+    }
   });
 
   it('CRITICAL the legacy reference baseline stays non-selectable', () => {

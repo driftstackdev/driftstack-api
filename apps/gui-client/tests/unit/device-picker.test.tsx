@@ -54,6 +54,15 @@ const DEVICES: PickerDevice[] = [
     engine: 'webkit',
     selectable: false, // reference baseline — visible but not clickable
   },
+  {
+    id: 'iphone14_ios18_7_safari26_6_1',
+    device: 'iPhone 14',
+    iosVersion: '18.7',
+    safariVersion: '26.6.1',
+    engine: 'webkit',
+    selectable: false,
+    heldReason: 'Fork canvas-family parser fix pending',
+  },
 ];
 
 /** Controlled harness mirroring how CreateProfileModal owns the selection. */
@@ -90,7 +99,7 @@ describe('DevicePicker', () => {
 
   it('renders all devices grouped, newest family first, with a live count', () => {
     render(<Harness />);
-    expect(screen.getByTestId('device-count')).toHaveTextContent('5 devices');
+    expect(screen.getByTestId('device-count')).toHaveTextContent('6 devices');
     // Group headers appear newest-first: 17 then 16 then 15 then 13.
     const headers = screen.getAllByText(/family ·/).map((h) => h.textContent ?? '');
     expect(headers[0]).toMatch(/iPhone 17 family/);
@@ -266,5 +275,24 @@ describe('registry parity', () => {
     // meaningful) and not ALL are — the catalog has reference baselines.
     const selectableCount = ARCHETYPE_REGISTRY.filter((a) => SELECTABLE.has(a.status)).length;
     expect(selectableCount).toBeGreaterThan(1);
+  });
+});
+
+describe('DevicePicker — a row that cannot be picked says why', () => {
+  it('CRITICAL a withheld device renders its catalog reason instead of the generic "reference" label, and carries it as a tooltip. A greyed-out row with no explanation reads as broken rather than deliberate — and the customer cannot tell "coming soon" from "something is wrong".', () => {
+    render(<Harness />);
+    expect(screen.getByText('Fork canvas-family parser fix pending')).toBeInTheDocument();
+  });
+
+  it('CRITICAL the reason is never invented: a withheld row with no catalog reason keeps the old label rather than a made-up sentence', () => {
+    render(<Harness />);
+    // The internal reference baseline is withheld for a different reason and
+    // carries none, so it must fall back rather than borrow another row's.
+    expect(screen.getByText('reference')).toBeInTheDocument();
+  });
+
+  it('CRITICAL VACUITY CONTROL: a selectable row shows the bit-exact mark, not a reason — so the branch above is not simply relabelling everything', () => {
+    render(<Harness />);
+    expect(screen.getAllByText('✓ bit-exact').length).toBeGreaterThan(0);
   });
 });
