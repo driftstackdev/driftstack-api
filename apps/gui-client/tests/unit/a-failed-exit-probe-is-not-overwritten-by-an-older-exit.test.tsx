@@ -548,6 +548,59 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
     cleanup();
   });
 
+  /* ⛔ THE RENDERER SHIPPED WITHOUT ITS FEED. The list gained an OS cell and the
+   * shared ProxyOsChip when the grid's OS work landed, and `profiles-table.test.tsx`
+   * guards that cell — by handing it the prop BY HAND. Nothing passed the prop, so
+   * every real row rendered an empty cell, the owner's "i dont see OS" stayed true
+   * on the surface beside the one that was fixed, and no test could see it: the
+   * renderer's guard was green and the view had no arm at all. The marketing
+   * capture cannot see it either — the `profiles-list` scene builds its rows
+   * directly and carries no fingerprint, so the chip never paints there.
+   *
+   * This arm is the wire, and it is the only thing that covers it.
+   * MUTATION: drop `osFingerprint:` from ProfilesView's table-row builder → red
+   * here, green everywhere else. Run 2026-09-14.
+   */
+  it('CRITICAL the LIST row shows the OS the card shows — the view hands the table the fingerprint, not just the card', async () => {
+    seedCache({
+      socks1: {
+        ...healthyWithExit(NOW - 1000),
+        // CachedOsFingerprint = OsFingerprint + `at`. Without the stamp the
+        // cache's cleaner drops the entry and the card reads '— OS', which is
+        // how this arm first failed — on its own fixture, not on the wire.
+        osFingerprint: {
+          os: 'macos-or-ios',
+          confidence: 'high',
+          reason: 'SYN/TTL 64, MSS 1460',
+          at: NOW - 60_000,
+        },
+      },
+    });
+    render(<ProfilesView onGoToSettings={vi.fn()} />);
+    // The CARD reads it first — the value exists in the view's probe state.
+    const onCard = await waitFor(() => {
+      const el = document.querySelector('[data-component="proxy-os-fingerprint"]');
+      expect(el, 'the card should show the fingerprint the cache carries').not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(onCard.textContent).toContain('iOS');
+    fireEvent.click(await screen.findByRole('button', { name: '☰ List' }));
+    const table = await screen.findByRole('table');
+    // …and so does the ROW. Before the wire, this query returned null while the
+    // card's succeeded — the two surfaces disagreeing about one proxy.
+    const inRow = await waitFor(() => {
+      const el = table.querySelector('[data-component="proxy-os-fingerprint"]');
+      expect(
+        el,
+        'the list row shows an empty OS cell — ProfilesView is not passing it',
+      ).not.toBeNull();
+      return el as HTMLElement;
+    });
+    expect(inRow.textContent).toContain('iOS');
+    expect(inRow.getAttribute('title')).toMatch(/Proxy stack looks like/);
+    cleanup();
+  });
+
   // (n) N-M1's discriminator. Without it, "the card distinguishes the two
   // states" and "the card renames the cell for every row with no exit" look
   // identical: this entry is usable, probed, and carries NO failure stamp, so

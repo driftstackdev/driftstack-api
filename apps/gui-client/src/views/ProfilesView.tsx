@@ -4981,6 +4981,14 @@ export function ProfilesView({
                       // same expression the grid card is handed above, so the row
                       // reads "exit geo unavailable", never "no exit IP".
                       exitProbeFailed: px !== null && probeView.exitResults[px.id] === null,
+                      // ⛔ The list's OS cell had a renderer and no feed. The column
+                      // and the shared ProxyOsChip landed with the grid's fix, and
+                      // ProfilesTable's own comment said it plainly — "nothing passes
+                      // osFingerprint" — so every row showed an empty cell and the
+                      // owner's "i dont see OS" was still true on the surface beside
+                      // the one that was fixed. Same expression the card is handed at
+                      // :4842; a row and a card must not disagree about a proxy.
+                      osFingerprint: px !== null ? probeView.osFingerprints[px.id] : undefined,
                       udp,
                       quic,
                       // rowLat prefers the fleet number and falls back to the native

@@ -573,15 +573,20 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               (scripts/marketing-screens.mjs `profiles-list`, verified 2026-09-12
               by running it). The card has a row of its own to spend; this column
               does not.
-            ⚠️ WIDTH BUDGET FOR WHOEVER FEEDS THIS. Nothing passes `osFingerprint`
-            yet — ProfilesView builds these rows and already has the value the
-            card takes (`probeView.osFingerprints[px.id]`), so this cell is one
-            expression away from live, and the owner's "i dont see OS" stays TRUE
-            on the list until that lands. When it does, MEASURE the shell again:
-            the widest chip here ('✓ iOS/macOS' at ProxyOsChip `sm`) is 73.34px
-            plus the 4px gap, measured in the live harness, against 1526 − 1526
-            = 0px of slack in the capture today. Expect to spend a column, not a
-            cell. */}
+            ⚠️ WIDTH BUDGET. ProfilesView now DOES pass `osFingerprint` — the
+            same `probeView.osFingerprints[px.id]` the card is handed — so this
+            cell is live and the owner's "i dont see OS" is no longer true on the
+            list. The renderer had shipped without its feed, which is the worst
+            of the two halves to ship alone: every row rendered an empty cell and
+            nothing anywhere said why.
+            ⚠️ AND THE CAPTURE CANNOT TELL YOU IF IT OVERFLOWS. The marketing
+            `profiles-list` scene builds its rows directly and carries no
+            fingerprint, so the chip never renders there and the shell's measured
+            0px of slack at 1526px was never tested against it. The widest chip
+            here ('✓ iOS/macOS' at ProxyOsChip `sm`) is 73.34px plus a 4px gap.
+            Before widening this cell, or adding a fingerprint to
+            MARKETING_TABLE_ROWS, measure the shell in the live harness — the
+            capture will pass either way until something actually paints one. */}
           {r.osFingerprint !== undefined ? <ProxyOsChip fingerprint={r.osFingerprint} /> : null}
         </div>
       </td>
