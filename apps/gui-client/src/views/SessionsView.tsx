@@ -29,7 +29,13 @@ import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';
 // driver sessions so a launched profile is visible + stoppable on this surface.
 interface AgentSessionLite {
   id: string;
-  status: 'active' | 'paused' | 'closed';
+  /** Mirrors the SDK's `AgentSession['status']`. `provisioning` joined it in
+   *  V-218 — a session whose node has begun bring-up and not yet served a
+   *  browser. It is LIVE for this view's purposes (see
+   *  LIVE_AGENT_SESSION_STATUSES): the customer just launched it, it is holding
+   *  a concurrency slot, and it must stay visible and stoppable while it
+   *  connects rather than disappearing until the tunnel is up. */
+  status: 'provisioning' | 'active' | 'paused' | 'closed';
   created_at: string;
   mode: 'manual' | 'ai' | 'pair';
 }
