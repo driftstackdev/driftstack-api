@@ -271,6 +271,28 @@ describe('the directive screen cannot be walked past', () => {
     }
   });
 
+  it('CRITICAL `config` is refused — measured on the egress node against openvpn 2.7.0, `config /etc/passwd` makes openvpn PARSE /etc/passwd as configuration (it errors at /etc/passwd:11). So the directive reads an arbitrary file on our host and interprets it, and a config that references a second file defeats the screen by construction.', () => {
+    expect(findUnsupportedOpenvpnLines('client\nconfig /etc/passwd\n')).toHaveLength(1);
+  });
+
+  it('CRITICAL the process-control set is refused too, matching the node screen directive-for-directive so the two halves cannot disagree about what a config may do to the openvpn process', () => {
+    for (const line of [
+      'cd /tmp',
+      'chroot /tmp',
+      'daemon',
+      'management 127.0.0.1 7505',
+      'management-external-key',
+    ]) {
+      expect(findUnsupportedOpenvpnLines(`client\n${line}\n`), line).toHaveLength(1);
+    }
+  });
+
+  it('POSITIVE CONTROL the process-control additions did not swallow ordinary directives that merely share a prefix', () => {
+    expect(
+      findUnsupportedOpenvpnLines('client\ncomp-lzo no\nkey-direction 1\ncipher AES-256-GCM\n'),
+    ).toEqual([]);
+  });
+
   it('CRITICAL a directive-looking line inside an inline `<ca>` block is NOT reported — it is certificate data, openvpn never reads a directive there, and reporting it made the rewriters overwrite the customer’s certificate bytes', () => {
     const withCert = [
       'client',

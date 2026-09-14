@@ -87,8 +87,43 @@ export const DANGEROUS_OPENVPN_DIRECTIVES: ReadonlySet<string> = new Set([
   // blob that references a second file is a screen bypass by construction: we
   // would validate the file we were given and openvpn would run the union. The
   // session renders only client.ovpn + auth.txt anyway, so no legitimate
-  // customer config can resolve one.
+  // customer config can resolve one. ⭐ Measured by A3 on the egress node against
+  // the shipped 2.7.0: `config /etc/passwd` makes openvpn PARSE /etc/passwd as
+  // configuration (it errors at /etc/passwd:11), so the directive reads an
+  // arbitrary file on our host and interprets it. Not theoretical.
   'config',
+  // PROCESS CONTROL — matched to the node's own screen (A3, same day) so the two
+  // halves refuse the same set. None of these execute a customer program, which
+  // is why they are grouped apart from the six above, but none has any business
+  // in a customer's tunnel config either: they change what the openvpn PROCESS
+  // is, where it runs, and who can drive it. Refusing them at ingress costs a
+  // legitimate config nothing.
+  //
+  // `--cd dir` changes the process working directory, which silently re-points
+  // every relative path in the file; `--chroot dir` moves its filesystem root;
+  // `--daemon` detaches it from the supervision that is supposed to reap it.
+  'cd',
+  'chroot',
+  'daemon',
+  // The `management` family opens a control channel into the running openvpn —
+  // a socket that can be driven to change its behaviour, and on some builds to
+  // supply credentials or hold/release the tunnel. A customer config that stands
+  // one up is asking for a second driver of our process.
+  'management',
+  'management-client',
+  'management-query-passwords',
+  'management-query-proxy',
+  'management-query-remote',
+  'management-external-key',
+  'management-external-cert',
+  'management-client-auth',
+  'management-client-user',
+  'management-client-group',
+  'management-hold',
+  'management-signal',
+  'management-forget-disconnect',
+  'management-up-down',
+  'management-log-cache',
 ]);
 
 /** One line of an OpenVPN config the API will refuse. */
