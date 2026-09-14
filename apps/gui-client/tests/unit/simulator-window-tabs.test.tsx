@@ -326,6 +326,48 @@ describe('SimulatorWindow — page tab strip', () => {
     expect(container.querySelector('[data-component="page-error-overlay"]')).not.toBeNull();
   });
 
+  it('CRITICAL a fresh session opens the keyboard on the FIRST focus — the seed giving way to the real tab is not a transition with inherited focus (MUTATION: suppress unconditionally in setActiveTabIdSynchronized → red)', async () => {
+    // Owner, 2026-09-14: "on first keyboard focus (tapping textbox) it doesn't
+    // open, surprisingly the second one does". The second tap was the blur→focus
+    // edge that lifts a suppression armed when the box's first tabListRestore
+    // replaced the client-minted seed id with the real one. Nothing had ever
+    // been focused on that page, so there was nothing to suppress.
+    const { container } = renderSim();
+    await waitFor(() =>
+      expect(
+        container.querySelector('[data-component="simulator-keyboard-toggle"]'),
+      ).not.toBeDisabled(),
+    );
+    expect(tabEls(container)).toHaveLength(1); // the seed
+    // The box's FIRST restore: one real tab replaces the seed. Not a switch —
+    // the same freshly loaded page, now with its real id.
+    pushPageState({
+      type: 'tabListRestore',
+      tabs: [{ id: 'tab_real_1', url: 'https://shop.example.com/', scrollY: 0, title: 'Shop' }],
+      activeTabId: 'tab_real_1',
+    });
+    // The very first focus opens it. No blur first.
+    pushPageState({ tabId: 'tab_real_1', state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('true');
+    // CONTROL — a LATER restore among live tabs still suppresses the newly
+    // active tab's inherited focus (the pinned warm-tab rule in the next arm is
+    // unchanged): it must wait for the blur→focus edge as before.
+    pushPageState({ tabId: 'tab_real_1', state: 'loaded', inputFocused: false });
+    pushPageState({
+      type: 'tabListRestore',
+      tabs: [
+        { id: 'tab_real_1', url: 'https://shop.example.com/', scrollY: 0, title: 'Shop' },
+        { id: 'tab_real_2', url: 'https://news.example.com/', scrollY: 0, title: 'News' },
+      ],
+      activeTabId: 'tab_real_2',
+    });
+    pushPageState({ tabId: 'tab_real_2', state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('false');
+    pushPageState({ tabId: 'tab_real_2', state: 'loaded', inputFocused: false });
+    pushPageState({ tabId: 'tab_real_2', state: 'loaded', inputFocused: true });
+    expect(keyboardPressed(container)).toBe('true');
+  });
+
   it('keeps keyboard focus scoped to the active tab across rapid switches and stale frames', async () => {
     const { container } = renderSim();
     // Human input now fails closed until the control read positively resolves to

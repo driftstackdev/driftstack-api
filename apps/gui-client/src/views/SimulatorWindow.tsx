@@ -5301,7 +5301,21 @@ export function SimulatorWindow(): JSX.Element {
   // reply handling observes the operator's latest choice synchronously.
   const activeTabIdRef = useRef(activeTabId);
   const setActiveTabIdSynchronized = useCallback((tabId: string): void => {
-    if (activeTabIdRef.current !== tabId) keyboardFocusSuppressedTabRef.current = tabId;
+    // A tab transition suppresses the target tab's INHERITED focus: switching to
+    // a live tab whose page already has a focused field must not pop the
+    // keyboard; only a fresh blur→focus edge may (simulator-window-tabs pins it).
+    //
+    // ⛔ But only among tabs that EXIST. Before the tab space is established the
+    // only "transition" is the client-minted seed id giving way to the box's real
+    // id for the same, freshly loaded page — there is no inherited focus to
+    // protect, nothing was ever focused. Suppressing there ate the customer's
+    // FIRST tap on a fresh session: the owner reported (2026-09-14) that the
+    // keyboard "on first focus doesn't open, surprisingly the second one does" —
+    // the second being the blur→focus edge this suppression waits for. A fresh
+    // session must open on the first real focus.
+    if (activeTabIdRef.current !== tabId && tabSpaceEstablishedRef.current) {
+      keyboardFocusSuppressedTabRef.current = tabId;
+    }
     activeTabIdRef.current = tabId;
     setActiveTabId(tabId);
   }, []);
@@ -6159,9 +6173,14 @@ export function SimulatorWindow(): JSX.Element {
           // in this same task routes against the restored set rather than the retired
           // seed/previous set.
           tabsRef.current = restored;
-          tabSpaceEstablishedRef.current = true;
           setTabs(restored);
+          // Activate BEFORE marking the space established: the first restore is
+          // the seed giving way to the real tab, and the activation must see
+          // "not yet established" so it does not suppress a focus nobody has
+          // inherited (see setActiveTabIdSynchronized). Every later restore is
+          // a transition among live tabs and suppresses as before.
           setActiveTabIdSynchronized(active.id);
+          tabSpaceEstablishedRef.current = true;
           // Reflect the active tab's url in the address bar (the BrowserBar reads liveUrl).
           if (active.url !== '') setLiveUrl(active.url);
           if (active.title !== '') setLiveTitle(active.title);
