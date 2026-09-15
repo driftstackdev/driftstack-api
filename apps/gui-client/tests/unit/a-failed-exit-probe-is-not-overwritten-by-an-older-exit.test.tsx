@@ -597,7 +597,7 @@ describe('(m) M3 — the card’s Test whose exit probe fails reads the honest u
       return el as HTMLElement;
     });
     expect(inRow.textContent).toContain('iOS');
-    expect(inRow.getAttribute('title')).toMatch(/Proxy stack looks like/);
+    expect(inRow.getAttribute('title')).toMatch(/looks like|presents as/);
     cleanup();
   });
 

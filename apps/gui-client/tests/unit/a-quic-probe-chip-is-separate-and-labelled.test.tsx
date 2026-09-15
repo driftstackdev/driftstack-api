@@ -87,7 +87,7 @@ describe('QUIC is ONE verdict, strongest evidence first (no separate relay chip)
   });
 
   it('quicProbe true names the fleet-Mac relay measurement in the hint', () => {
-    expect(chips(undefined, true).quic?.getAttribute('title')).toContain('test Mac');
+    expect(chips(undefined, true).quic?.getAttribute('title')).toContain('HTTP/3 works');
   });
 
   it('quicProbe false → the single QUIC chip is a measured NEGATIVE (not green, not inferred, no "~")', () => {
@@ -179,7 +179,7 @@ describe('the profile card labels a server latency with where it was measured', 
     );
     expect(pillOf(container).textContent).toBe('42ms');
     expect(pillOf(container).getAttribute('title')).toContain(
-      'Measured from the Mac that runs your profiles',
+      'Measured by Driftstack, from the network your profiles run on.',
     );
     expect(pillOf(container).getAttribute('title')).not.toMatch(/not your computer\.$/);
   });
@@ -195,7 +195,7 @@ describe('the profile card labels a server latency with where it was measured', 
     );
     const el = container.querySelector('[data-latency-vantage="fleet"]');
     expect(el).toBe(pillOf(container));
-    expect(el?.getAttribute('title')).toContain('mac-mini-07');
+    expect(el?.getAttribute('title')).toContain('Measured by Driftstack');
   });
 
   it("'control_plane' says it came from the server and why", () => {
@@ -209,7 +209,7 @@ describe('the profile card labels a server latency with where it was measured', 
     );
     const el = container.querySelector('[data-latency-vantage="control_plane"]');
     expect(el).toBe(pillOf(container));
-    expect(el?.getAttribute('title')).toContain('No test Mac was free');
+    expect(el?.getAttribute('title')).toContain('Measured by Driftstack’s server');
   });
 
   it("VACUITY CONTROL — a server number with no vantage keeps today's plain server sentence", () => {
@@ -329,7 +329,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     render(<ProxiesView />);
     await testTheRow();
-    expect(await screen.findByText('from the test Mac')).toBeInTheDocument();
+    expect(await screen.findByText('from Driftstack')).toBeInTheDocument();
 
     // Second test: the server now refuses it.
     testAccountProxy.mockResolvedValueOnce({
@@ -344,7 +344,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     fireEvent.click(retest);
     await waitFor(() => expect(testAccountProxy).toHaveBeenCalledTimes(2));
     await waitFor(() => {
-      expect(screen.queryByText('from the test Mac')).not.toBeInTheDocument();
+      expect(screen.queryByText('from Driftstack')).not.toBeInTheDocument();
     });
   });
 
@@ -358,7 +358,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     render(<ProxiesView />);
     await testTheRow();
-    expect(await screen.findByText('from the test Mac')).toBeInTheDocument();
+    expect(await screen.findByText('from Driftstack')).toBeInTheDocument();
   });
 
   it('a fleet reply shows the fleet number and names the node in the hover text', async () => {
@@ -371,9 +371,9 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from the test Mac');
+    await screen.findByText('from Driftstack');
     const cell = container.querySelector('[data-latency-vantage="fleet"]');
-    expect(cell?.getAttribute('title')).toContain('mac-mini-07');
+    expect(cell?.getAttribute('title')).toContain('Measured by Driftstack');
     expect(cell?.textContent).toContain('31ms');
   });
 
@@ -387,7 +387,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from the test Mac');
+    await screen.findByText('from Driftstack');
     expect(container.querySelector('[data-capability="quic-relay"]')).toBeNull();
     const quic = container.querySelector('[data-capability="quic"]');
     expect(quic?.getAttribute('data-inferred')).toBe('false');
@@ -404,7 +404,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     await testTheRow();
     expect(await screen.findByText('from the server')).toBeInTheDocument();
     const cell = container.querySelector('[data-latency-vantage="control_plane"]');
-    expect(cell?.getAttribute('title')).toContain('No test Mac was free');
+    expect(cell?.getAttribute('title')).toContain('Measured by Driftstack’s server');
   });
 
   it('a control-plane fallback renders no relay chip', async () => {
@@ -424,7 +424,7 @@ describe('the Proxies grid labels the server latency with where it was measured'
     render(<ProxiesView />);
     await testTheRow();
     expect(await screen.findByText('server')).toBeInTheDocument();
-    expect(screen.queryByText('from the test Mac')).toBeNull();
+    expect(screen.queryByText('from Driftstack')).toBeNull();
     expect(screen.queryByText('from the server')).toBeNull();
   });
 });

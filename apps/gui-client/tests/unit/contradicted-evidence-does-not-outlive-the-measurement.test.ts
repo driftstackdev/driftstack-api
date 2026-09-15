@@ -142,7 +142,7 @@ describe('a live measurement retires the relay verdict it contradicts', () => {
     expect(later.inferred, 'it falls back to the INFERENCE, never to the retired verdict').toBe(
       true,
     );
-    expect(later.hint, 'and it says so — "LIKELY — not tested"').toMatch(/not tested/i);
+    expect(later.hint, 'and it says so — "LIKELY — not tested"').toMatch(/not yet tested/i);
     expect((await loadProbeCache()).p1).not.toHaveProperty('quicProbe');
   });
 

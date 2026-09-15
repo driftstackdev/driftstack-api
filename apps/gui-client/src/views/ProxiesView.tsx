@@ -241,11 +241,11 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
     case 'live_session':
       return 'in use by a live session; end it to test the tunnel';
     case 'node_busy':
-      return 'the test Mac was busy; try again in a minute';
+      return 'the checker was busy; try again in a minute';
     case 'node_error':
-      return 'the test Mac could not complete the test; try again shortly';
+      return 'the check could not complete; try again shortly';
     case 'no_node':
-      return 'no test Mac free';
+      return 'no checker free';
     case 'plan_excluded':
       return 'not included in your plan';
     case 'desktop_credential':
@@ -418,7 +418,7 @@ const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
  */
 /** The machine names on a MISSING side — short, and deliberately not the
  *  phrases that mean "measured there". */
-const TEST_MAC_CHIP_LABEL = 'test Mac';
+const TEST_MAC_CHIP_LABEL = 'Driftstack';
 const NATIVE_CHIP_LABEL = 'this Mac';
 /** Why there is no number from the Mac that runs the profiles. FOUR states —
  *  only the last of them is "nothing has been measured". */
@@ -429,7 +429,7 @@ const SERVER_NO_TIMING_TITLE =
   'The Mac that runs your profiles reached this proxy but reported no timing.';
 const NO_TEST_MAC_WORD = 'none free';
 const NO_TEST_MAC_LATENCY_TITLE =
-  'Not measured yet — no test Mac was free, and the number that predicts a session is measured from the Mac that runs your profiles.';
+  'Not measured yet — no checker was free. This number is measured from Driftstack’s network, where your profiles run.';
 const NO_SERVER_NUMBER_WORD = 'not tested';
 const NO_SERVER_NUMBER_TITLE =
   'The Mac that runs your profiles has not measured this proxy yet — only its number predicts a session.';
@@ -448,7 +448,7 @@ const NATIVE_VANTAGE_LABEL = 'from this Mac';
 /** (P2) — the pill when the Mac that RUNS the profile could not use this proxy,
  *  whatever the local handshake said. It outranks a green local verdict: the
  *  session runs there, not here. The reason renders beside the pill. */
-const FLEET_FAILED_PILL = 'fails on the test Mac';
+const FLEET_FAILED_PILL = 'fails from Driftstack';
 /** At or under this many ms a latency reads "healthy"; over it, "slow". One
  *  constant for the pill and for every per-side meter, so a bar cannot be green
  *  beside a number the pill calls slow. */
@@ -1318,7 +1318,7 @@ export function ProxiesView(): JSX.Element {
         return {
           resolved: true,
           tunnelOk: null,
-          notTested: 'measured from the server, not the test Mac',
+          notTested: 'measured from the server only',
         };
       }
       // (i) I4 — a fleet `ok` with no timing still brought the tunnel UP (the
@@ -3128,7 +3128,7 @@ function HealthPill({
  *  machine that would measure it, and it does NOT tell the customer to press a button
  *  that cannot produce a value while every Mac is busy. */
 const NO_TEST_MAC_QUIC_HINT =
-  'Not measured yet — no test Mac was free; QUIC is measured from the Mac that runs your profiles.';
+  'Not measured yet — no checker was free; QUIC is measured from Driftstack’s network.';
 
 /**
  * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
@@ -3168,12 +3168,12 @@ function VpnQuicChip({
         : quicProbe === true
           ? {
               ok: true,
-              hint: 'QUIC relays through this tunnel — measured from the test Mac, the kind that runs your profiles.',
+              hint: 'QUIC relays through this tunnel — HTTP/3 works.',
             }
           : quicProbe === false
             ? {
                 ok: false,
-                hint: 'QUIC does not relay through this tunnel — measured from the test Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+                hint: 'QUIC does not relay through this tunnel — HTTP/3 falls back to HTTP/2.',
               }
             : null;
   if (verdict === null) {
@@ -3191,7 +3191,7 @@ function VpnQuicChip({
         title={
           noFleetMac
             ? NO_TEST_MAC_QUIC_HINT
-            : `Not measured yet — run ${CHECK_VPN_ACTION}: the test Mac brings the tunnel up and probes QUIC through it.`
+            : `Not measured yet — run ${CHECK_VPN_ACTION} to bring the tunnel up and test QUIC through it.`
         }
       >
         QUIC untested

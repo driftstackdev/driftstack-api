@@ -542,7 +542,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     testAccountProxy.mockResolvedValue(NODE_BUSY);
     render(<ProxiesView />);
     expect(await screen.findByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
+    expect(screen.getByText('from Driftstack')).toBeInTheDocument();
     await clickCheck();
     expect(await screen.findByText(BUSY)).toBeInTheDocument();
     // The pre-flight has been persisted by now (the reply follows it).
@@ -550,7 +550,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
       expect(loadProbeCache().then((c) => c.vpn1?.at)).resolves.not.toBe(NOW - 2),
     );
     expect(screen.getByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
+    expect(screen.getByText('from Driftstack')).toBeInTheDocument();
     const entry = (await loadProbeCache()).vpn1;
     expect(entry?.serverLatencyMs).toBe(42);
     expect(entry?.measuredFrom).toBe('fleet');
@@ -764,7 +764,7 @@ describe('(h) the Proxies grid — a failed tunnel stays failed across cache emi
     expect(screen.getByText('tunnel down')).toBeInTheDocument();
     expect(screen.queryByText('42ms')).toBeNull();
     expect(screen.queryByText('203.0.113.9')).toBeNull();
-    expect(screen.queryByText('from the test Mac')).toBeNull();
+    expect(screen.queryByText('from Driftstack')).toBeNull();
   });
 
   // Finding 28 — after a refusal the Tested column read "just now" (the
@@ -1038,7 +1038,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     await clickCheck();
     expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
     expect(screen.getByText('42ms')).toBeInTheDocument();
-    expect(screen.getByText('from the test Mac')).toBeInTheDocument();
+    expect(screen.getByText('from Driftstack')).toBeInTheDocument();
     expect(screen.getByText('203.0.113.9')).toBeInTheDocument();
     expect(screen.getByText('tunnel up')).toBeInTheDocument();
   });
@@ -1308,9 +1308,7 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
       reason: `${real.PLAN_EXCLUDES_FLEET_TEST_REASON} ${TIER_DETAIL}`,
       not_run: 'plan_excluded',
     });
-    expect(real.PLAN_EXCLUDES_FLEET_TEST_REASON).toBe(
-      'Your plan does not include fleet tests for VPN proxies.',
-    );
+    expect(real.PLAN_EXCLUDES_FLEET_TEST_REASON).toBe('Your plan does not include VPN checks.');
   });
 
   // (i) I6 follow-up (review) — the route answers 403 for a key without the

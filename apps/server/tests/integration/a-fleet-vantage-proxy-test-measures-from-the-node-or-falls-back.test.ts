@@ -937,7 +937,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     'exit_ip',
     'os_fingerprint',
   ] as const;
-  const NO_NODE = /No fleet Mac was free to test this VPN tunnel/;
+  const NO_NODE = /No checker was free to test this VPN tunnel/;
 
   it('(h) CRITICAL with NO node connected a wireguard row is a not_run:no_node labelled control_plane — never the cp TCP probe, never a tunnel verdict', async () => {
     // Also the vacuity control for the dispatch arms above: the registry IS
@@ -1101,7 +1101,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(body.ok).toBe(false);
     expect(body.not_run).toBe('no_node');
     expect(body.measured_from).toBe('control_plane');
-    expect(body.reason).toMatch(/this deployment has none set up/);
+    expect(body.reason).toMatch(/VPN checks are not available on this deployment/);
     expect(body.reason).not.toMatch(/was free|try again/i);
     expect(body.reason).not.toMatch(/unreachable/i);
     for (const k of MEASUREMENT_KEYS) {

@@ -284,7 +284,7 @@ describe('(b) — a VPN row’s Check endpoint runs the fleet test after the pre
     expect(screen.queryByText('tunnel up')).toBeNull();
   });
 
-  it('a control-plane FALLBACK (no test Mac free) is not a tunnel verdict — "endpoint ok", never "tunnel up"', async () => {
+  it('a control-plane FALLBACK (no checker free) is not a tunnel verdict — "endpoint ok", never "tunnel up"', async () => {
     const { node_id: _dropped, ...cp } = FLEET_OK;
     testAccountProxy.mockResolvedValue({ ...cp, measured_from: 'control_plane' });
     render(<ProxiesView />);
@@ -377,7 +377,7 @@ describe('(h) — the VPN row says what its check does, and renders what the fle
     // no "fleet Mac" in the customer's sentence.
     const btn = await screen.findByRole('button', { name: /^check vpn$/i });
     expect(btn.getAttribute('title')).toBe(
-      'Check VPN — resolves the endpoint, then the test Mac brings the tunnel up and measures its latency and exit.',
+      'Check VPN — resolves the endpoint, then brings the tunnel up and measures its latency and exit.',
     );
     expect(btn.getAttribute('title')).not.toMatch(/DNS-resolve|verifies at launch/);
     expect(screen.getByText('no exit measured yet — run Check VPN')).toBeInTheDocument();
@@ -472,7 +472,7 @@ describe('(h) — the VPN row says what its check does, and renders what the fle
 });
 
 describe('(h) — a resolved row whose tunnel nothing measured is "not tested", never "up", "down" or "unresolved"', () => {
-  it('CRITICAL no_node is a muted notice on the row and a "not tested (no test Mac free)" in the sweep', async () => {
+  it('CRITICAL no_node is a muted notice on the row and a "not tested (no checker free)" in the sweep', async () => {
     testAccountProxy.mockResolvedValue(NO_NODE);
     render(<ProxiesView />);
     await clickTestAll();
@@ -481,7 +481,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     expect(screen.queryByText('tunnel down')).toBeNull();
     expect(screen.getByText('endpoint ok')).toBeInTheDocument();
     expect(
-      await screen.findByText('1 VPN tunnel not tested (no test Mac free) — nothing was tested'),
+      await screen.findByText('1 VPN tunnel not tested (no checker free) — nothing was tested'),
     ).toBeInTheDocument();
   });
 
@@ -497,9 +497,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     render(<ProxiesView />);
     await clickTestAll();
     expect(
-      await screen.findByText(
-        'Tested 3 — 1 VPN tunnel up, 1 down, 1 not tested (no test Mac free)',
-      ),
+      await screen.findByText('Tested 3 — 1 VPN tunnel up, 1 down, 1 not tested (no checker free)'),
     ).toBeInTheDocument();
   });
 
@@ -564,7 +562,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN tunnel not tested (measured from the server, not the test Mac) — nothing was tested',
+        '1 VPN tunnel not tested (measured from the server only) — nothing was tested',
       ),
     ).toBeInTheDocument();
     first.unmount();
@@ -590,7 +588,7 @@ describe('(h) — a resolved row whose tunnel nothing measured is "not tested", 
     await clickTestAll();
     expect(
       await screen.findByText(
-        '1 VPN tunnel skipped (the test Mac was busy; try again in a minute) — nothing was tested',
+        '1 VPN tunnel skipped (the checker was busy; try again in a minute) — nothing was tested',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/live session/)).toBeNull();

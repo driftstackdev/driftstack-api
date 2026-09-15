@@ -72,8 +72,7 @@ import { proxyVerdict, type ProxyTestResult } from '../lib/proxies';
 /** Hover text on the card's probe measurements. The probe runs on this Mac; the
  *  profile runs on Driftstack's servers (same sentence as ProxiesView, kept local
  *  because lib/proxies is hand-mocked by dozens of suites). */
-export const PROBE_ORIGIN_TITLE =
-  'Measured from your computer, not from the server that runs your profile.';
+export const PROBE_ORIGIN_TITLE = 'Measured from your computer.';
 /** T-1 — hover text on a latency measured by the control plane, closer to the
  *  fleet that runs the profile than this Mac. */
 export const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
@@ -1975,7 +1974,7 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
     if (at === undefined || !Number.isFinite(at)) return null;
     const iso = new Date(at).toISOString();
     if (p.checkedAtIso !== null && Date.parse(p.checkedAtIso) === at) return null;
-    return { text: `fleet latency measured ${formatRelativeNarrow(iso, nowMs)}`, iso };
+    return { text: `server latency measured ${formatRelativeNarrow(iso, nowMs)}`, iso };
   })();
   const exitSeen = ((): { text: string; title: string; age: 'dated' | 'undated' } | null => {
     if (!hasExit) return null;
@@ -2393,9 +2392,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                           data-server-measured-at={serverMeasuredLabel.iso}
                           className="text-[9.5px] text-ink-muted"
                           title={
-                            'The fleet latency shown on this card was measured then. Checking a ' +
-                            'proxy’s reachability keeps the fleet number it already had, so the ' +
-                            'date above can be newer than the number it sits beside.'
+                            'The server-measured latency on this card was measured then. Checking ' +
+                            'reachability keeps that number, so the date above can be newer than it.'
                           }
                         >
                           {serverMeasuredLabel.text}

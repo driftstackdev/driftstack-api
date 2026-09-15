@@ -263,7 +263,7 @@ describe('ProfilesTable', () => {
     // only the claim about it is withheld — so the cell's width budget (see the
     // ProfilesTable comment beside this column) is the same shape as the green.
     expect(chip?.textContent).toBe('?iOS/macOS');
-    expect(chip?.getAttribute('title')).toContain('not necessarily what a site sees');
+    expect(chip?.getAttribute('title')).toContain('a website may reach a different one');
     cleanup();
   });
 

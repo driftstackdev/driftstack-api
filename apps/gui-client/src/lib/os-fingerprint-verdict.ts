@@ -137,11 +137,10 @@ const OS_LABEL: Record<Exclude<FingerprintedOs, 'unknown'>, string> = {
  */
 const UNAVAILABLE_HINT: Record<OsFingerprintUnavailable, string> = {
   vpn_tunnel:
-    'Stack OS not measured: this row is a VPN tunnel, and a tunnel has no SOCKS5 proxy stack for the control plane to dial and fingerprint. No test can produce one here.',
+    'OS not measured: a VPN tunnel does not expose a proxy stack to read, so no test can produce one here.',
   not_observed:
-    'Stack OS not measured: this proxy refused the connection the fingerprint is read from, so it sent no SYN of its own. Run Test again — a proxy that was momentarily refusing can still be fingerprinted.',
-  observer_off:
-    'Stack OS not measured: stack fingerprinting is switched off on this deployment, so nothing here measures it. No test can produce one.',
+    'OS not measured: the proxy refused the connection used for the reading. Run Test again.',
+  observer_off: 'OS not measured: OS detection is switched off on this deployment.',
 };
 
 /** The one-line `reason` carried on the placeholder record, for any consumer that
@@ -219,7 +218,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '—',
       label: 'OS',
-      hint: 'Stack OS not measured. Run Test on a proxy that is stored on your account; the control plane fingerprints the proxy’s own TCP stack.',
+      hint: 'OS not measured yet. Run Test on this proxy.',
     };
   }
   // ⛔ MEASURED ON PROD 2026-09-14, and it is the owner's whole complaint: every
@@ -253,7 +252,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '?',
       label: 'OS',
-      hint: `Only the proxy's front door could be read, not the exit itself — that host ${looksLike}. It is the machine we connect TO; whether a website sees its stack or the exit device's depends on how the provider forwards, so this is not a verdict about the exit.`,
+      hint: `Only the proxy's entry point could be read, not the exit device — that entry point ${looksLike}. This does not say what websites see.`,
     };
   }
   if (fp.os === 'unknown') {
@@ -261,7 +260,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '?',
       label: 'OS',
-      hint: `Stack OS could not be determined — ${fp.reason}`,
+      hint: 'OS could not be determined from this proxy.',
     };
   }
   const label = OS_LABEL[fp.os];
@@ -329,7 +328,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '?',
       label,
-      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence), but this proxy forwards through more than one machine, and we can only read the stack on our own port. A website connects on a different port and may reach a different machine — so this is what the proxy's own infrastructure looks like, not necessarily what a site sees. Not a verdict either way. ${fp.reason}`,
+      hint: `This proxy looks like ${label} (${fp.confidence} confidence), but it forwards through more than one machine, so a website may reach a different one. Not a conclusion either way.`,
     };
   }
   if (fp.os === 'macos-or-ios') {
@@ -337,24 +336,24 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'match',
       glyph: '✓',
       label,
-      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — matches the iOS device it fronts. ${vantageSentence(fp)} ${fp.reason}`,
+      hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device it fronts.${vantageSentence(fp)}`,
     };
   }
   return {
     tone: 'mismatch',
     glyph: '✗',
     label,
-    hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — an iOS device behind a ${label} stack is a detectable mismatch. ${vantageSentence(fp)} ${fp.reason}`,
+    hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — an iOS device behind a ${label} proxy can be detected.${vantageSentence(fp)}`,
   };
 }
 
 /** Why a verdict may be asserted, in the customer's terms — whichever vantage
  *  unlocked it. */
 function vantageSentence(fp: OsFingerprint): string {
-  if (fp.webPortVantage !== true) {
-    return 'This proxy answers from a single host, so a website sees the same stack.';
-  }
-  return fp.observedVia === 'proxy_host'
-    ? 'Read on the web port (443), the one a website connects on — the same stack browserleaks reports. This provider forwards by destination, so a site behind a CDN could still reach a different machine.'
-    : 'Read on the web port (443), the same one a website connects on, so a site sees this stack.';
+  // Customer terms only: no ports, no vantage names, no third-party sites. The
+  // one caveat a customer can act on is that a forwarding provider may route
+  // some sites differently.
+  return fp.webPortVantage === true && fp.observedVia === 'proxy_host'
+    ? ' This provider forwards from the device, so some sites may still be routed differently.'
+    : '';
 }

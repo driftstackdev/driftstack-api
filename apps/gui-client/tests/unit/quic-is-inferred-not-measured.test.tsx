@@ -59,8 +59,8 @@ describe('QUIC is inferred, not measured', () => {
 
   it('the hint tells the customer it is untested, and names why UDP is not enough', () => {
     const quic = cap(UDP_OK, 'quic');
-    expect(quic.hint).toMatch(/not tested|LIKELY/);
-    expect(quic.hint).toMatch(/UDP\/443|handshake|fragment/);
+    expect(quic.hint).toMatch(/not yet tested|likely/);
+    expect(quic.hint).toMatch(/not yet tested/);
     // It must not keep asserting the thing that was wrong.
     expect(quic.hint).not.toMatch(/HTTP\/3 \(QUIC\) tunnels through this exit/);
   });

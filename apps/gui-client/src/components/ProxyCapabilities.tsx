@@ -106,7 +106,7 @@ export function proxyCapabilities(
               label: 'QUIC',
               ok: true,
               inferred: false,
-              hint: 'This proxy relays QUIC — measured from the test Mac, the kind that runs your profiles. HTTP/3 works through this exit.',
+              hint: 'This proxy relays QUIC — HTTP/3 works through this exit.',
             }
           : quicProbe === false
             ? {
@@ -114,7 +114,7 @@ export function proxyCapabilities(
                 label: 'QUIC',
                 ok: false,
                 inferred: false,
-                hint: 'This proxy does not relay QUIC — measured from the test Mac. HTTP/3 falls back to HTTP/2 over TCP.',
+                hint: 'This proxy does not relay QUIC — HTTP/3 falls back to HTTP/2.',
               }
             : {
                 key: 'quic',
@@ -124,7 +124,7 @@ export function proxyCapabilities(
                 ok: udp,
                 inferred: udp,
                 hint: udp
-                  ? 'UDP relay verified, so HTTP/3 is LIKELY — not tested. Some exits relay UDP yet still block UDP/443 or fragment the QUIC handshake, so run Test (or a session) to confirm.'
+                  ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
                   : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
               };
   return [

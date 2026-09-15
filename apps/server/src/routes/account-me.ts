@@ -308,7 +308,7 @@ export function classifyVpnProbeFailure(
   // owns the failure rather than sending the customer to re-check their keys.
   if (has('egress_bin_missing') || has('tunnel_up_no_socks')) {
     return {
-      reason: `The test Mac could not start its VPN tool, so your ${name} configuration was never tested. This is a fault on our side — try again shortly.`,
+      reason: `We could not start the VPN tool, so your ${name} configuration was never tested. This is a fault on our side — try again shortly.`,
       notRun: 'node_error',
     };
   }
@@ -316,7 +316,7 @@ export function classifyVpnProbeFailure(
   // Not a verdict about the tunnel (it was up), and not a config problem.
   if (has('probe_failed') || has('timeout')) {
     return {
-      reason: `The ${name} tunnel came up on the test Mac, but the exit check did not finish. Try again shortly.`,
+      reason: `The ${name} tunnel came up, but the exit check did not finish. Try again shortly.`,
       notRun: 'node_error',
     };
   }
@@ -327,7 +327,7 @@ export function classifyVpnProbeFailure(
   // customer their tunnel is fine would be the worst possible answer.
   if (has('egress_leak_detected')) {
     return {
-      reason: `The ${name} tunnel came up but traffic did not leave through it, so the test Mac stopped it. This configuration is not safe to browse through.`,
+      reason: `The ${name} tunnel came up but traffic did not leave through it, so we stopped it. This configuration is not safe to browse through.`,
     };
   }
   // ⛔ No "check your address". The node waits out the tunnel's init window and
@@ -335,12 +335,12 @@ export function classifyVpnProbeFailure(
   // would send a customer to edit a line that is correct.
   if (has('endpoint_unreachable')) {
     return {
-      reason: `The ${name} endpoint did not answer within the tunnel's wait, so the tunnel did not come up. The endpoint is down, blocked, or not accepting this peer — the test Mac cannot tell which.`,
+      reason: `The ${name} endpoint did not answer within the tunnel's wait, so the tunnel did not come up. The endpoint is down, blocked, or not accepting this peer — we cannot tell which.`,
     };
   }
   if (has('handshake_failed')) {
     return {
-      reason: `The ${name} tunnel did not come up on the test Mac. Check the keys, the endpoint, and that the server accepts this peer.`,
+      reason: `The ${name} tunnel did not come up. Check the keys, the endpoint, and that the server accepts this peer.`,
     };
   }
 
@@ -1955,8 +1955,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             ok: false as const,
             reason:
               fleet.miss === 'no_fleet'
-                ? 'VPN tunnels are tested from a fleet Mac, and this deployment has none set up.'
-                : 'No fleet Mac was free to test this VPN tunnel. Try again in a minute.',
+                ? 'VPN checks are not available on this deployment.'
+                : 'No checker was free to test this VPN tunnel. Try again in a minute.',
             measured_from: 'control_plane' as const,
             not_run: 'no_node' as const,
             ...storedExitForReply(),

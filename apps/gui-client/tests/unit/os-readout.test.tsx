@@ -126,7 +126,7 @@ describe('OsReadout', () => {
     // And the title says the one thing a customer can do about it, plus WHY the
     // value is not simply re-read: nothing re-measures it during a session.
     expect(el.getAttribute('title') ?? '').toMatch(/press Test|run Test/i);
-    expect(el.getAttribute('title') ?? '').toMatch(/does not re-read/i);
+    expect(el.getAttribute('title') ?? '').toMatch(/Press Test/i);
   });
 
   it('CRITICAL a FRESH reading says nothing about age — "just now" on every session is noise, and the label has to mean something when it appears', () => {

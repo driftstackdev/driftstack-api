@@ -39,8 +39,31 @@ const SURFACES = [
   'lib/proxy-server-test.ts',
   'lib/proxy-check-copy.ts',
   'lib/account-proxies.ts',
+  // (2026-09-15) The OS chip's sentences and the cockpit readout, after the
+  // owner found "browserleaks" and "test Mac" in them.
+  'lib/os-fingerprint-verdict.ts',
+  'components/OsReadout.tsx',
+  'components/ProfilesTable.tsx',
 ];
-const JARGON = [/fleet Mac/i, /endpoint resolver/i, /\bverdict\b/i, /\bvantage\b/i];
+// ⛔ Owner directive 2026-09-15: customer copy says WHAT they get, never HOW we
+// run it. "test Mac" was the earlier customer-facing substitute for "fleet Mac"
+// and is now banned too — the customer does not need to know a Mac is involved.
+// Third-party sites are never cited as evidence, and nothing names the observer,
+// the control plane, ports, or TCP internals.
+const JARGON = [
+  /fleet Mac/i,
+  /test Mac/i,
+  /control plane/i,
+  /browserleaks/i,
+  /\bobserver\b/i,
+  /raw[- ]socket/i,
+  /\bSYN\b/,
+  /\bTTL\b/,
+  /port 443|\(443\)|\b7791\b/,
+  /endpoint resolver/i,
+  /\bverdict\b/i,
+  /\bvantage\b/i,
+];
 
 /** Strip line comments, block comments and JSX comment blocks, so a comment
  *  that NAMES the jargon (they all do) is never a hit. Newlines are kept, so
@@ -177,9 +200,9 @@ describe('#11 — the proxy surfaces carry no internal jargon in customer-facing
 
   it('the sentences the audit named now read in the customer’s words', async () => {
     const vantage = await import('../../src/lib/proxy-vantage');
-    expect(vantage.vantageLabel({ measuredFrom: 'fleet' }).label).toBe('from the test Mac');
+    expect(vantage.vantageLabel({ measuredFrom: 'fleet' }).label).toBe('from Driftstack');
     expect(vantage.vantageLabel({ measuredFrom: 'control_plane' }).title).toContain(
-      'No test Mac was free',
+      'Measured by Driftstack’s server',
     );
     const pst = await import('../../src/lib/proxy-server-test');
     expect(pst.SERVER_DID_NOT_ANSWER_NOTICE).toBe(

@@ -506,8 +506,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                   className={`mono ${r.latencyMs <= 100 ? '' : 'text-status-busy'}`}
                   title={
                     r.latencyFromServer === true
-                      ? 'Measured from the fleet that runs the profile'
-                      : 'Measured from this Mac'
+                      ? 'Measured by Driftstack'
+                      : 'Measured from this computer'
                   }
                 >
                   {r.latencyMs}ms

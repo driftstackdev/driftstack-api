@@ -53,15 +53,12 @@ export function vantageLabel(v: ServerVantage): { label: string; title: string }
   if (v.measuredFrom === 'fleet') {
     return {
       // (l) #11 — "the test Mac", never the internal "fleet Mac".
-      label: 'from the test Mac',
-      title:
-        v.nodeId !== undefined
-          ? `Measured from the Mac that runs your profiles (${v.nodeId}).`
-          : 'Measured from the Mac that runs your profiles.',
+      label: 'from Driftstack',
+      title: 'Measured by Driftstack, from the network your profiles run on.',
     };
   }
   return {
     label: 'from the server',
-    title: "No test Mac was free — measured from Driftstack's server, not your computer.",
+    title: 'Measured by Driftstack’s server, not your computer.',
   };
 }

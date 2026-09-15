@@ -157,7 +157,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     // '—' (nothing was measured), never '?' (measured and undetermined).
     expect(v.glyph).toBe('—');
     expect(v.hint).toMatch(/VPN tunnel/i);
-    expect(v.hint).toMatch(/no SOCKS5 proxy stack/i);
+    expect(v.hint).toMatch(/does not expose a proxy stack/i);
     expect(v.hint).toMatch(/No test can produce one/i);
     // ⛔ the whole point of the item: no dead-end instruction.
     expect(v.hint).not.toMatch(/Run Test/i);
@@ -211,7 +211,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     expect(res.os_fingerprint_unavailable).toBeUndefined();
     expect(res.os_fingerprint).toBeUndefined();
     // Falls back to today's neutral wording, which is still true of it.
-    expect(osFingerprintVerdict(undefined).hint).toMatch(/Stack OS not measured/i);
+    expect(osFingerprintVerdict(undefined).hint).toMatch(/OS not measured/i);
   });
 
   it('CRITICAL VACUITY CONTROL — a REAL reading is untouched: it keeps the green match and carries no cause sentence', async () => {
@@ -417,8 +417,8 @@ describe('a front-door reading is not a verdict about the exit', () => {
       'unknown',
     );
     expect(v.tone).not.toBe('mismatch');
-    expect(v.hint).toMatch(/front door/i);
-    expect(v.hint).toMatch(/not a verdict about the exit/i);
+    expect(v.hint).toMatch(/entry point/i);
+    expect(v.hint).toMatch(/does not say what websites see/i);
     expect(v.hint).toContain('Windows');
   });
 

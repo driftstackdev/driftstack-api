@@ -26,7 +26,7 @@ export const RECHECK_ACTION = 'Re-check';
 
 /** #10 / #11 — what the VPN check does, in the customer's words (the grid
  *  button title and the card menu label share it). */
-export const CHECK_VPN_TITLE = `${CHECK_VPN_ACTION} — resolves the endpoint, then the test Mac brings the tunnel up and measures its latency and exit.`;
+export const CHECK_VPN_TITLE = `${CHECK_VPN_ACTION} — resolves the endpoint, then brings the tunnel up and measures its latency and exit.`;
 
 /** #2 — what an HTTP row's check does: the address, nothing more. */
 export const CHECK_ENDPOINT_TITLE =
@@ -46,7 +46,7 @@ export const HTTP_VERIFIED_AT_LAUNCH = 'verified at launch';
  *  never disagree about the state they name. */
 export const VPN_NO_EXIT_YET_SHORT = 'no exit measured yet';
 export const VPN_NO_EXIT_YET = `${VPN_NO_EXIT_YET_SHORT} — run ${CHECK_VPN_ACTION}`;
-export const VPN_NO_EXIT_YET_TITLE = `No exit measured yet. Run ${CHECK_VPN_ACTION} to bring the tunnel up on the test Mac, or launch a session — a live session reports its own exit.`;
+export const VPN_NO_EXIT_YET_TITLE = `No exit measured yet. Run ${CHECK_VPN_ACTION}, or launch a session — a live session reports its own exit.`;
 
 /** (n) N-M1 / Phase B — V-857's THIRD exit state ("the probe did not complete"),
  *  hoisted from the card so the Proxies grid (ProxiesView) and the profile card
@@ -68,7 +68,7 @@ export const VPN_LATENCY_NOT_MEASURED = 'not measured';
  *  measured through the tunnel. `VPN_NO_EXIT_YET_TITLE` was used here and
  *  asserted "No exit measured yet" two rows above the exit it contradicted;
  *  this sentence names only what is missing. */
-export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel yet. Run ${CHECK_VPN_ACTION} to bring the tunnel up on the test Mac and measure it.`;
+export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel yet. Run ${CHECK_VPN_ACTION} to measure it.`;
 
 /** (o) — the Proxies grid's "tunnel up · no latency" pill ((i) I4: the test Mac
  *  brought the tunnel up and observed the exit but reported no number). The
@@ -76,7 +76,7 @@ export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel
  *  with a "no exit yet" title beside the exit that reply put on the row; both
  *  surfaces now carry this one sentence. */
 export const VPN_TUNNEL_UP_NO_LATENCY_TITLE =
-  'The test Mac brought this tunnel up and measured through it, but reported no latency.';
+  'The tunnel came up and was measured, but no latency was reported.';
 
 /** (o) — the pre-flight of a VPN/HTTP row is a DNS resolve of its endpoint. When
  *  it does NOT resolve, nothing downstream ran: no tunnel, no latency, no exit.
@@ -173,4 +173,4 @@ export const RETEST_ACTION = 'Re-test';
  *  both surfaces read these two strings. */
 export const ENDPOINT_OK_PILL = 'endpoint ok';
 export const ENDPOINT_OK_TITLE =
-  'The endpoint resolved. The tunnel itself is measured by the test Mac when the proxy is stored on your account, and verified at launch.';
+  'The endpoint resolved. The tunnel itself is measured once the proxy is stored on your account, and verified at launch.';

@@ -445,7 +445,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       proxyName: 'Mullvad no-osl-wg-001',
       proxyAddress: '193.32.127.66:51820',
       vpnFailure:
-        'The test Mac could not bring the tunnel up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
+        'The tunnel could not be brought up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
       vpnNotice:
         'Tunnel test not run this time — a live session holds the tunnel. Showing the last result.',
       folder: 'Marketplaces',
@@ -628,7 +628,7 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
       proxyName: 'Mullvad no-osl-wg-001',
       proxyAddress: '193.32.127.66:51820',
       vpnFailure:
-        'The test Mac could not bring the tunnel up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
+        'The tunnel could not be brought up: handshake timed out after 20 s (no reply from 193.32.127.66:51820).',
       vpnNotice:
         'Tunnel test not run this time — a live session holds the tunnel. Showing the last result.',
       folder: 'Marketplaces',

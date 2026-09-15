@@ -518,7 +518,7 @@ export type ListExitRow = Pick<AccountProxyMeta, 'id' | 'exit_observed' | 'exit_
 /** (i) I7 — the sentence a Mac that never ran the failing test shows for a
  *  tunnel the list says a fleet check found down. Names no cause — the list
  *  carries the contradiction's date, not the node's reason. */
-export const LIST_TUNNEL_DOWN_REASON = 'The last fleet check could not bring this tunnel up.';
+export const LIST_TUNNEL_DOWN_REASON = 'The last check could not bring this tunnel up.';
 
 /** The list's `exit_superseded_at`, as a time — or undefined when the row was
  *  never contradicted, the server predates the field, or the value is not a
@@ -1061,7 +1061,7 @@ export async function ensureAccountProxyRow(
  *  the native verdict stands, and the row says which legs did NOT run and why,
  *  instead of a silent '~' QUIC chip whose hint says "run Test" — the loop the
  *  customer was already in. The next step is the one control the GUI has. */
-export const SOCKS5_TEST_NO_API_KEY_NOTICE = `Tested from this Mac only. ${MISSING_API_KEY_NEXT_STEP} from the test Mac too — that is where QUIC, the OS fingerprint and the fleet latency are measured.`;
+export const SOCKS5_TEST_NO_API_KEY_NOTICE = `Tested from this computer only. ${MISSING_API_KEY_NEXT_STEP} for the full check — QUIC, OS and server latency.`;
 
 /** (q) Item 12-memory (A) — the SOCKS5 Test's notice when the row could not be
  *  stored on the account (the create/refresh threw), so the fleet leg did not
@@ -1073,7 +1073,7 @@ export function socks5FleetTestNotStoredNotice(err: unknown): string {
     typeof detail === 'string' && detail.length > 0
       ? ` Driftstack said: ${detail}`
       : ' The server did not answer; try Test again.';
-  return `Tested from this Mac only. Couldn't store this proxy on your account, so the test Mac did not test it (QUIC, OS fingerprint, fleet latency).${said}`;
+  return `Tested from this computer only. Couldn't store this proxy on your account, so the full check (QUIC, OS, server latency) did not run.${said}`;
 }
 
 /**

@@ -609,8 +609,7 @@ const FLEET_TEST_FAILED_REASON =
  *  carries no problem `type` of its own, so its sentence is the discriminator
  *  (`requireTierFeature` in the server's errors-helpers). Every other 403
  *  still throws, as before I6. */
-export const PLAN_EXCLUDES_FLEET_TEST_REASON =
-  'Your plan does not include fleet tests for VPN proxies.';
+export const PLAN_EXCLUDES_FLEET_TEST_REASON = 'Your plan does not include VPN checks.';
 
 /** The server's tier-refusal detail: `The "<feature>" feature is not available
  *  on the "<tier>" tier. …` — matched, never reproduced. */

@@ -275,7 +275,7 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     // green is the expensive one — nobody ever files a bug about a reassuring
     // badge, and it costs a customer the account.
     expect(chip?.getAttribute('data-os-tone')).toBe('unknown');
-    expect(chip?.getAttribute('title')).toMatch(/not necessarily what a site sees/);
+    expect(chip?.getAttribute('title')).toMatch(/a website may reach a different one/);
     cleanup();
   });
 

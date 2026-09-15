@@ -962,7 +962,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
     expect(pill.getAttribute('data-health')).toBe('ok');
     expect(pill.getAttribute('data-latency-vantage')).toBe('fleet');
     expect(pill.getAttribute('title')).toBe(
-      'The test Mac brought this tunnel up and measured through it, but reported no latency.',
+      'The tunnel came up and was measured, but no latency was reported.',
     );
     expect(document.body.textContent).not.toMatch(/not measured/);
     expect(document.querySelector('[data-region="caps"]')?.getAttribute('data-caps-mode')).toBe(

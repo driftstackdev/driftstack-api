@@ -340,15 +340,15 @@ describe('the closed set helper', () => {
 
   it("labels 'fleet' as from a fleet Mac and names the node in the hover text", () => {
     const l = vantageLabel({ measuredFrom: 'fleet', nodeId: 'mac-mini-07' });
-    expect(l.label).toBe('from the test Mac');
-    expect(l.title).toContain('mac-mini-07');
-    expect(l.title).toContain('Mac that runs your profiles');
+    expect(l.label).toBe('from Driftstack');
+    expect(l.title).toContain('Measured by Driftstack');
+    expect(l.title).toContain('network your profiles run on');
   });
 
   it("labels 'control_plane' as from the server and says why in the hover text", () => {
     const l = vantageLabel({ measuredFrom: 'control_plane' });
     expect(l.label).toBe('from the server');
-    expect(l.title).toContain('No test Mac was free');
+    expect(l.title).toContain('Measured by Driftstack’s server');
   });
 });
 

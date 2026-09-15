@@ -219,7 +219,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     const { body, proxyId } = await runFleetTest('mac-wg-006', 'egress_bin_missing');
 
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/test Mac could not start its VPN tool/);
+    expect(body.reason).toMatch(/We could not start the VPN tool/);
     expect(body.reason).toMatch(/fault on our side/);
     // Never blame the customer's config for a binary missing on OUR Mac.
     expect(String(body.reason)).not.toMatch(/check the keys/i);
@@ -230,7 +230,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     const { body, proxyId } = await runFleetTest('mac-wg-007', 'tunnel_up_no_socks');
 
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/test Mac could not start its VPN tool/);
+    expect(body.reason).toMatch(/We could not start the VPN tool/);
     expect(await supersededAt(proxyId)).toBeNull();
   });
 
@@ -270,7 +270,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
       expect(body.not_run, 'the late answer must not be reported as "no Mac was free"').not.toBe(
         'no_node',
       );
-      expect(String(body.reason)).not.toMatch(/No fleet Mac was free/);
+      expect(String(body.reason)).not.toMatch(/No checker was free/);
       // …and it is the verdict, with the node named as its source.
       expect(body.ok).toBe(false);
       expect(body.measured_from).toBe('fleet');

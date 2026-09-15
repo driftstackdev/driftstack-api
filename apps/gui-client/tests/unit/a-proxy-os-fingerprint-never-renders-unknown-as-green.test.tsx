@@ -106,7 +106,7 @@ describe('a trustworthy-LOOKING reading from an untrustworthy vantage', () => {
     // operator sees the fact and only the CLAIM about it is withheld.
     expect(v.label).toBe('iOS/macOS');
     expect(v.hint).toMatch(/forwards through more than one machine/i);
-    expect(v.hint).toContain('not necessarily what a site sees');
+    expect(v.hint).toContain('a website may reach a different one');
     // ⛔ and the reassurance must not leak back in through the prose.
     expect(v.hint).not.toContain('matches the iOS device');
   });

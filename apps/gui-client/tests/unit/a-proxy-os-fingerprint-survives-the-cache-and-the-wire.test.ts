@@ -351,7 +351,7 @@ describe('the wire', () => {
     const v = await verdictThroughTheChain('mobile-web', true);
     expect(v.tone).toBe('match');
     expect(v.label).toBe('iOS/macOS');
-    expect(v.hint).toMatch(/web port \(443\)/);
+    expect(v.hint).toMatch(/presents as iOS\/macOS/);
   });
 
   it('CRITICAL CONTROL — the same reading WITHOUT the web-port vantage stays neutral, so the arm above is about the vantage and not a relaxed gate', async () => {

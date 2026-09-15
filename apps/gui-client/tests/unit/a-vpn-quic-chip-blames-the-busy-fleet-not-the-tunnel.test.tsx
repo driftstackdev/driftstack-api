@@ -167,8 +167,8 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
       expect(quicChip().getAttribute('data-unmeasured')).toBe('no_fleet_mac');
     });
     const title = quicChip().getAttribute('title') ?? '';
-    expect(title).toMatch(/no test Mac was free/i);
-    expect(title).toMatch(/measured from the Mac that runs your profiles/i);
+    expect(title).toMatch(/no checker was free/i);
+    expect(title).toMatch(/Driftstack’s network/i);
     // ⛔ it must NOT send the customer back to the button that just produced this.
     expect(title).not.toMatch(/run Check VPN/i);
     // Still "untested" — absence is not a negative verdict about the tunnel.
@@ -185,8 +185,8 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
     });
     const title = quicChip().getAttribute('title') ?? '';
     expect(title).toMatch(/does not relay through this tunnel/i);
-    expect(title).toMatch(/measured from the test Mac/i);
-    expect(title).not.toMatch(/no test Mac was free/i);
+    expect(title).toMatch(/HTTP\/3 falls back/i);
+    expect(title).not.toMatch(/no checker was free/i);
   });
 
   it('ARM 2b — a deployment with NO fleet at all takes the same branch: same discriminator, same true sentence', async () => {
@@ -197,7 +197,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
     await waitFor(() => {
       expect(quicChip().getAttribute('data-unmeasured')).toBe('no_fleet_mac');
     });
-    expect(quicChip().getAttribute('title') ?? '').toMatch(/measured from the Mac that runs/i);
+    expect(quicChip().getAttribute('title') ?? '').toMatch(/Driftstack’s network/i);
   });
 
   it('ARM 4 — CRITICAL VACUITY CONTROL: a refusal that DID reach a Mac (a live session holds the tunnel) is NOT blamed on a busy fleet', async () => {
@@ -216,7 +216,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
     // The row shows the refusal as its own notice — that is the reply having landed.
     await screen.findByText(/live session is browsing through this VPN/i);
     expect(quicChip().getAttribute('data-unmeasured')).toBe('never_tested');
-    expect(quicChip().getAttribute('title') ?? '').not.toMatch(/no test Mac was free/i);
+    expect(quicChip().getAttribute('title') ?? '').not.toMatch(/no checker was free/i);
   });
 
   it('ARM 3 — CRITICAL VACUITY CONTROL: a row no server test has ever landed on keeps the "run Check VPN" wording — the fleet was never asked, so it cannot be blamed', () => {
@@ -227,7 +227,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
       expect(quicChip().getAttribute('data-unmeasured')).toBe('never_tested');
       const title = quicChip().getAttribute('title') ?? '';
       expect(title).toMatch(/run Check VPN/i);
-      expect(title).not.toMatch(/no test Mac was free/i);
+      expect(title).not.toMatch(/no checker was free/i);
     });
   });
 });

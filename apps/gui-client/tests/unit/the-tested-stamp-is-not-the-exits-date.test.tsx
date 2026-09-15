@@ -230,8 +230,8 @@ describe('the fleet latency states its own date when it differs from the check',
   it('CRITICAL a fleet number measured before the last check says when — the two dates are hours apart and the card showed only the newer one', () => {
     const el = measuredAt(server({ serverMeasuredAtMs: NOW - 3 * HOUR }));
     expect(el, 'the sheet carries the fleet measurement date').not.toBeNull();
-    expect(el?.textContent ?? '').toMatch(/^fleet latency measured \d+ h ago$/);
-    expect(el?.getAttribute('title') ?? '').toMatch(/keeps the fleet number it already had/i);
+    expect(el?.textContent ?? '').toMatch(/^server latency measured \d+ h ago$/);
+    expect(el?.getAttribute('title') ?? '').toMatch(/keeps that number/i);
   });
 
   it('CRITICAL VACUITY CONTROL — EQUAL DATES SAY NOTHING. One check produced both, so repeating the date would be noise on every freshly-tested row, and a rule that printed it there would look identical on the arm above.', () => {

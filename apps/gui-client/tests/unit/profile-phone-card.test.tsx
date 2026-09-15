@@ -963,11 +963,11 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
         latencyVantage: { measuredFrom: 'fleet', nodeId: 'mac-mini-07' },
       }),
     );
-    expect(fleet.title).toContain('Measured from the Mac that runs your profiles (mac-mini-07)');
+    expect(fleet.title).toContain('Measured by Driftstack, from the network your profiles run on.');
     const cp = healthPill(
       props({ latencyFromServer: true, latencyVantage: { measuredFrom: 'control_plane' } }),
     );
-    expect(cp.title).toContain('No test Mac was free');
+    expect(cp.title).toContain('Measured by Driftstack’s server');
     // VACUITY CONTROL — a server number with no vantage keeps the plain server sentence.
     expect(healthPill(props({ latencyFromServer: true })).title).toBe(SERVER_LATENCY_TITLE);
     // A VPN fleet number has no SOCKS5 verdict to append.
@@ -1434,7 +1434,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // FULL label, never the compact one: the '+N' pill is where the long form
     // belongs (C2). Asserted both ways so a compact label cannot leak in.
     expect(tiny.hiddenHints).toHaveLength(3);
-    expect(tiny.hiddenHints[2]).toMatch(/^✓ iOS\/macOS — Proxy stack looks like iOS\/macOS/);
+    expect(tiny.hiddenHints[2]).toMatch(/^✓ iOS\/macOS — Your proxy presents as iOS\/macOS/);
     expect(tiny.hiddenHints.some((h) => h.startsWith('✓ Apple'))).toBe(false);
     // Every other measured chip, pinned to its px-1 render as well.
     const widths = (over: Partial<ProfilePhoneCardProps>) =>
@@ -1521,7 +1521,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(at144.hiddenHints).toEqual([]);
     const os = at144.chips.find((c) => c.key === 'os');
     expect(os?.attrs['data-os-tone']).toBe('mismatch');
-    expect(os?.title).toMatch(/^Proxy stack looks like Windows/);
+    expect(os?.title).toMatch(/^(Your proxy presents as|This proxy looks like) Windows/);
     // 157.66 is where the full label takes over: content 158, a 192px card.
     expect(visibleChips(RED, 157).chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ✓', '✗ Win']);
     expect(visibleChips(RED, 158).chips.map((c) => c.text)).toEqual([
@@ -1640,15 +1640,13 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       // re-measured at the foot of this arm.
       expect(chip?.keep, label).toBe(true);
       expect(chip?.title, label).toMatch(
-        /^Proxy stack looks like .+ \((high|medium|low) confidence\), but this proxy forwards through more than one machine/,
+        /^This proxy looks like .+ \((high|medium|low) confidence\), but it forwards through more than one machine/,
       );
       expect(chip?.title, label).toMatch(
-        /not necessarily what a site sees\. Not a verdict either way\./,
+        /a website may reach a different one\. Not a conclusion either way\./,
       );
       // …and it is never worded as either verdict, at any width.
-      expect(chip?.title, label).not.toMatch(
-        /detectable mismatch|matches the iOS device it fronts/,
-      );
+      expect(chip?.title, label).not.toMatch(/can be detected|matches the iOS device it fronts/);
     }
     // ⛔ VACUITY CONTROL — the IDENTICAL readings WITH the vantage still assert,
     // in both tones. Without this the loop above would pass just as happily if
@@ -1720,7 +1718,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // asked about. '— OS' states the absence; its title says which absence.
     const unmeasured = visibleChips(props(), 144);
     expect(unmeasured.chips.map((c) => c.text)).toEqual(['UDP ✓', 'QUIC ~', '— OS']);
-    expect(unmeasured.chips[2]?.title).toMatch(/^Stack OS not measured\. Run Test/);
+    expect(unmeasured.chips[2]?.title).toMatch(/^OS not measured yet\. Run Test/);
     expect(unmeasured.hiddenHints).toEqual([]);
     // The VPN row is the vacuity control for the '+N' itself: something CAN
     // still be hidden, so the loop below is not passing because nothing ever is.
@@ -1733,7 +1731,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // and it is a chip now with its own glyph. Nothing is hidden on this row.
     expect(vpn.chips.map((c) => c.text)).toEqual(['⇢ UDP', 'QUIC ✓', '— OS']);
     expect(vpn.chips[0]?.title).toMatch(/UDP travels inside the VPN tunnel/);
-    expect(vpn.chips[2]?.title).toMatch(/^Stack OS not measured: this row is a VPN tunnel/);
+    expect(vpn.chips[2]?.title).toMatch(/^OS not measured: a VPN tunnel/);
     expect(vpn.hiddenHints).toEqual([]);
     // A MEASUREMENT is never in the pill at any real column width — including
     // the '?' verdict, which is a COMPLETED classification and not a placeholder.
@@ -1791,7 +1789,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       // The full claim is not lost: it is the chip's own title — and 'Apple' is
       // the family BOTH members of 'macos-or-ios' share, so the compact form
       // shortens the claim without deciding it.
-      expect(os.getAttribute('title')).toMatch(/^Proxy stack looks like iOS\/macOS/);
+      expect(os.getAttribute('title')).toMatch(
+        /^(Your proxy presents as|This proxy looks like) iOS\/macOS/,
+      );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
         'UDP ✓',
         'QUIC ~',
@@ -1820,7 +1820,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       expect(classes(os)).toEqual(
         expect.arrayContaining(['bg-status-error/15', 'text-[#fca5a5]', 'px-1']),
       );
-      expect(os.getAttribute('title')).toMatch(/^Proxy stack looks like Windows/);
+      expect(os.getAttribute('title')).toMatch(
+        /^(Your proxy presents as|This proxy looks like) Windows/,
+      );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
         'UDP ✓',
         'QUIC ✓',
@@ -1859,9 +1861,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(classes(os)).not.toContain('text-status-ready');
     expect(classes(os)).toEqual(expect.arrayContaining(['bg-ink-muted/15', 'text-ink-secondary']));
     expect(os.getAttribute('title')).toMatch(
-      /^Proxy stack looks like Windows \(high confidence\), but/,
+      /^This proxy looks like Windows \(high confidence\), but/,
     );
-    expect(os.getAttribute('title')).toMatch(/not necessarily what a site sees/);
+    expect(os.getAttribute('title')).toMatch(/a website may reach a different one/);
     expect(os.getAttribute('title')).not.toMatch(/detectable mismatch/);
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
     cleanup();
@@ -1901,7 +1903,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(os?.text).toBe('✓ Apple');
     expect(os?.width).toBe(47.16);
     // The full disjunction is never lost: it is the chip's title and the hint line.
-    expect(os?.title).toMatch(/^Proxy stack looks like iOS\/macOS \(high confidence\)/);
+    expect(os?.title).toMatch(/^Your proxy presents as iOS\/macOS to websites \(high confidence\)/);
     // ⛔ (V-219, 2026-09-14) THE HINT IS READ AT CONTENT 81, NOT 128. A measured
     // reading carries `keep` now, so at 128 the OS chip is ON the row and the
     // QUIC chip is the one in the '+1'; the OS hint is only reachable below
@@ -1956,9 +1958,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // while a measurement that decided nothing was as droppable as no
     // measurement at all — the very distinction this arm exists to deny.
     expect(chip?.keep).toBe(true);
-    expect(chip?.title).toMatch(
-      /^Stack OS could not be determined — initial TTL 64 \(a unix family\)/,
-    );
+    expect(chip?.title).toMatch(/^OS could not be determined/);
     // ⛔ The two '—' states — never measured, and a cause the control plane
     // REPORTED — were hints here until 2026-09-12. They are chips now, for the
     // owner's reason recorded in capabilityChips: a '+1' that means "no OS
@@ -1966,11 +1966,11 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // own build was in. The distinction '?' vs '—' survives where it is real —
     // in the GLYPH and the title, not in whether the row is shown at all.
     for (const [label, over, hint] of [
-      ['never measured', {}, /^Stack OS not measured\. Run Test/],
+      ['never measured', {}, /^OS not measured yet\. Run Test/],
       [
         'reported unavailable',
         { osFingerprint: VPN_UNAVAILABLE_OS },
-        /^Stack OS not measured: this row is a VPN tunnel/,
+        /^OS not measured: a VPN tunnel/,
       ],
     ] as const) {
       const v = visibleChips(props({ ...over, quicMeasured: 'h3' }), 144);
@@ -2219,7 +2219,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       const os = byComponent(caps, 'proxy-os-fingerprint') as HTMLElement;
       expect(os).not.toBeNull();
       expect(os.textContent).toBe('— OS');
-      expect(os.getAttribute('title')).toMatch(/^Stack OS not measured: this row is a VPN tunnel/);
+      expect(os.getAttribute('title')).toMatch(/^OS not measured: a VPN tunnel/);
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
         'Check',
         'QUIC ✓',
@@ -2324,7 +2324,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     const absent = byComponent(caps, 'proxy-os-fingerprint');
     expect(absent).not.toBeNull();
     expect(absent?.textContent).toBe('— OS');
-    expect(absent?.getAttribute('title')).toMatch(/^Stack OS not measured/);
+    expect(absent?.getAttribute('title')).toMatch(/^OS not measured/);
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
     cleanup();
     const { container: real } = render(<ProfilePhoneCard {...props({ osFingerprint: REAL_OS })} />);
@@ -2639,7 +2639,7 @@ describe('B7 — mode C, the first measurement is one click on the card (list pa
     expect(container.querySelector('[data-udp], [data-quic-inferred]')).toBeNull();
     expect(byComponent(container, 'proxy-os-fingerprint')?.textContent).toBe('— OS');
     expect(byComponent(container, 'proxy-os-fingerprint')?.getAttribute('title')).toMatch(
-      /^Stack OS not measured/,
+      /^OS not measured/,
     );
     expect(byComponent(container, 'caps-overflow')).toBeNull();
     fireEvent.click(btn);

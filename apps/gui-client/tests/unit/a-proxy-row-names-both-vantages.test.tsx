@@ -157,12 +157,12 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from the test Mac');
+    await screen.findByText('from Driftstack');
 
     const fleet = line(container, 'fleet');
     expect(fleet?.textContent).toContain('31ms');
-    expect(fleet?.textContent).toContain('from the test Mac');
-    expect(fleet?.getAttribute('title')).toContain('mac-mini-07');
+    expect(fleet?.textContent).toContain('from Driftstack');
+    expect(fleet?.getAttribute('title')).toContain('Measured by Driftstack');
 
     const local = line(container, 'this_mac');
     expect(local?.textContent).toContain('42ms');
@@ -195,7 +195,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     testProxy.mockResolvedValue({ ...NATIVE_42, latency_ms: 180 });
     const { container } = render(<ProxiesView />);
     await testTheRow();
-    await screen.findByText('from the test Mac');
+    await screen.findByText('from Driftstack');
 
     const fleetFill = meterFill(line(container, 'fleet'));
     const nativeFill = meterFill(line(container, 'this_mac'));
@@ -215,8 +215,10 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     render(<ProxiesView />);
     await testTheRow();
 
-    const pill = await screen.findByText('slow from the test Mac');
-    expect(pill.getAttribute('title')).toContain('Measured from the Mac that runs your profiles');
+    const pill = await screen.findByText('slow from Driftstack');
+    expect(pill.getAttribute('title')).toContain(
+      'Measured by Driftstack, from the network your profiles run on.',
+    );
     // …and never the laptop's words over the test Mac's number.
     expect(screen.queryByText('slow from this Mac')).toBeNull();
     expect(screen.queryByText('healthy from this Mac')).toBeNull();
@@ -232,7 +234,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await testTheRow();
 
     const pill = await screen.findByText('slow from the server');
-    expect(pill.getAttribute('title')).toContain('No test Mac was free');
+    expect(pill.getAttribute('title')).toContain('Measured by Driftstack’s server');
     expect(screen.queryByText('slow from this Mac')).toBeNull();
   });
 
@@ -242,7 +244,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await testTheRow();
 
     expect(await screen.findByText('server')).toBeTruthy();
-    expect(screen.queryByText('from the test Mac')).toBeNull();
+    expect(screen.queryByText('from Driftstack')).toBeNull();
     // The pill is modest in the same way: it borrows the server's own sentence.
     const pill = screen.getByText('healthy from the server');
     expect(pill.getAttribute('title')).toBe('Measured from Driftstack, not your computer.');
@@ -262,7 +264,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await testTheRow();
 
     // 1. the verdict names the machine that failed, not the one that passed
-    const pill = await screen.findByText('fails on the test Mac');
+    const pill = await screen.findByText('fails from Driftstack');
     expect(pill.getAttribute('title')).toContain(reason);
     expect(screen.queryByText('healthy from this Mac')).toBeNull();
     // 2. the reason itself is on screen
@@ -270,7 +272,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     // 3. the missing side says WHY, and does not claim our instrument idle
     const gap = missing(container, 'server');
     expect(gap?.textContent).toContain('no answer');
-    expect(gap?.textContent).toContain('test Mac');
+    expect(gap?.textContent).toContain('Driftstack');
     expect(gap?.getAttribute('title')).toContain(reason);
     expect(gap?.getAttribute('title')).not.toContain('has not measured this proxy yet');
     // 4. it counts as a problem, in the hero the page's safety argument rests on
@@ -278,7 +280,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
 
     // The missing side must not wear the string that means "measured there",
     // and this Mac's own number is still shown, still labelled.
-    expect(screen.queryByText('from the test Mac')).toBeNull();
+    expect(screen.queryByText('from Driftstack')).toBeNull();
     expect(line(container, 'fleet')).toBeNull();
     expect(line(container, 'this_mac')?.textContent).toContain('42ms');
   });
@@ -331,7 +333,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await screen.findByText('london-socks');
 
     // 1. the verdict still names the machine that failed
-    expect(await screen.findByText('fails on the test Mac')).toBeTruthy();
+    expect(await screen.findByText('fails from Driftstack')).toBeTruthy();
     expect(screen.queryByText('healthy from this Mac')).toBeNull();
     // 2. the reason is still on screen
     expect(screen.getByText(reason)).toBeTruthy();
@@ -378,9 +380,9 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
 
     const gap = missing(container, 'server');
     expect(gap?.textContent).toContain('none free');
-    expect(gap?.getAttribute('title')).toContain('no test Mac was free');
+    expect(gap?.getAttribute('title')).toContain('no checker was free');
     // Not a failure: the row is not accused of anything.
-    expect(screen.queryByText('fails on the test Mac')).toBeNull();
+    expect(screen.queryByText('fails from Driftstack')).toBeNull();
   });
 
   it('and ONLY a side nothing ever measured says "not tested"', async () => {
@@ -408,7 +410,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await screen.findByText('42ms');
 
     expect(container.querySelector('[data-component="proxy-row-notice"]')?.textContent).toContain(
-      'Tested from this Mac only',
+      'Tested from this computer only',
     );
     expect(missing(container, 'server')).toBeNull();
     // …and this Mac's number is still labelled as this Mac's.

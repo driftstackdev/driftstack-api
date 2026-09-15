@@ -58,8 +58,8 @@ export function OsReadout({
         data-state={vpn ? 'not-available' : 'not-measured'}
         title={
           vpn
-            ? 'A VPN tunnel has no SOCKS5 stack for the control plane to fingerprint.'
-            : 'Not measured yet — run Test on this profile’s proxy (Proxies screen) to fingerprint its stack.'
+            ? 'A VPN tunnel does not expose a proxy stack to read.'
+            : 'Not measured yet — run Test on this profile’s proxy (Proxies screen).'
         }
         className="mt-1 text-[10px] leading-snug text-white/50"
       >
@@ -88,9 +88,8 @@ export function OsReadout({
       title={
         aged && measuredAt !== undefined
           ? `Measured ${new Date(measuredAt).toLocaleString()}, when this proxy was last tested. ` +
-            'The control plane does not re-read a proxy’s stack while a session runs — press Test ' +
-            'on the Proxies screen for a current reading.'
-          : 'The passive TCP/IP fingerprint of the proxy’s own stack, measured by the control plane when this proxy was last tested.'
+            'Press Test on the Proxies screen for a current reading.'
+          : 'The operating system this proxy presents to websites, measured when it was last tested.'
       }
       className="mt-1 text-[10px] leading-snug text-white/70"
     >
