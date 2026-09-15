@@ -17,8 +17,11 @@ infra/
 │   ├── staging.driftstack.dev.conf staging API vhost
 │   ├── fleet.driftstack.dev.conf   DIRECT (grey-cloud, NOT CF) fleet-node control WS vhost
 │   └── ws_upgrade_map.conf         $connection_upgrade map (→ /etc/nginx/conf.d/), used by fleet
+├── os-observer/
+│   └── observer.py                 passive raw-SYN OS fingerprinter (see below)
 ├── systemd/
-│   └── driftstack-api.service      systemd unit, runs as `driftstack` user
+│   ├── driftstack-api.service      systemd unit, runs as `driftstack` user
+│   └── driftstack-os-observer.service  unit for the observer (CAP_NET_RAW only)
 └── hetzner/
     └── docker-compose.yml          legacy compose model (superseded by V-278 systemd)
 ```
@@ -95,3 +98,60 @@ the matching DPA + sub-processors.json update.
 - **LIVE-mode secrets** (Stripe `sk_live_`, post-KvK) are written via
   SSH directly to `/opt/driftstack/api/.env` on the host. They never
   pass through the agent's chat history or pull-request artifacts.
+
+## os-observer
+
+The passive OS fingerprinter behind the proxy **OS chip**. A SOCKS5 proxy opens
+its own TCP connection to a destination, so the SYN arriving here was built by
+the proxy host's kernel — and TTL, window, MSS, window scale and TCP option
+ORDER exist only in that SYN. A connected socket has had them consumed, so the
+control plane cannot read them and this sniffs them instead.
+
+⛔ **It lived only on the production host until 2026-09-15.** Everything beside it
+in this directory was version-controlled; this was not, so a rebuild would have
+lost it and a change had no review trail. The copy here is the DEPLOYED artefact,
+fetched from the host rather than reconstructed.
+
+|            |                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| Host       | the API origin (`driftstack-production`, 128.140.37.74)                                  |
+| Sniffs     | `OBS_PORTS` = {7791, 443}, raw `SOCK_RAW`/`IPPROTO_TCP`, SYNs only                       |
+| Accepts    | binds 7791 itself; **443 is accepted by nginx**, which is why no new listener was needed |
+| Lookup     | `127.0.0.1:7792`, loopback only, never the public interface                              |
+| Records    | last SYN per **(address, port)**, bounded LRU, 15-minute TTL                             |
+| Capability | `CAP_NET_RAW` only; `NoNewPrivileges=true`                                               |
+
+### Why two ports
+
+`7791` is reached directly. `443` on **`api.driftstack.dev` is Cloudflare-fronted**,
+so a SYN arriving there is Cloudflare's edge and not the proxy's — a perfectly
+stable reading of the wrong machine. **`fleet.driftstack.dev` is direct**
+(documented above as grey-cloud, NOT CF), and nginx already serves 443 on it, so
+that name is a valid second vantage with no new infrastructure.
+
+This matters because a provider can route web traffic and odd ports differently:
+measured 2026-09-14, one residential proxy read Mac/iOS on 443 (via
+browserleaks.com/ip) and Linux on 7791. Records are keyed per (address, port) so
+the two can be **compared** rather than overwrite each other.
+
+### Contract
+
+| Path               | Answer                                                                                                         |
+| ------------------ | -------------------------------------------------------------------------------------------------------------- |
+| `/sig/<ip>`        | the **7791** record. UNCHANGED — the control plane calls exactly this                                          |
+| `/sig/<ip>/<port>` | that vantage's record                                                                                          |
+| unobserved port    | **400**, not 404 — "we do not watch that port" must stay distinguishable from "nothing came from that address" |
+| unseen / expired   | 404 with a reason, **never** a default signature                                                               |
+
+### Deploying a change
+
+```sh
+scp infra/os-observer/observer.py root@<host>:/opt/driftstack/os-observer/observer.py
+ssh root@<host> 'systemctl restart driftstack-os-observer'
+ssh root@<host> 'curl -s http://127.0.0.1:7792/healthz'     # {"ok":true,...,"ports":[443,7791]}
+```
+
+⚠️ Back the live file up first, and afterwards confirm the **legacy** path still
+answers — connect to 7791 from off-host and check `/sig/<ip>` returns 200 with
+`dst_port: 7791`. A healthy service that records nothing looks identical to a
+working one from `systemctl` alone.

@@ -1,0 +1,19 @@
+[Unit]
+Description=Driftstack passive OS-fingerprint observer (raw SYN on :7791, lookup on 127.0.0.1:7792)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/driftstack/os-observer/observer.py
+Restart=always
+RestartSec=2
+# Raw socket only; nothing else.
+AmbientCapabilities=CAP_NET_RAW
+CapabilityBoundingSet=CAP_NET_RAW
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
