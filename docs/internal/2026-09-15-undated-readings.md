@@ -137,9 +137,56 @@ heuristic window. Worth doing only without a timer — recomputing on window foc
 the moment a customer is actually looking. Recorded beside the memo in the code
 as well, because an unrecorded known gap is how the original one survived.
 
+## The two-port diagnostic — RAN, and it settled both reports
+
+Permissions were granted mid-session. Method as agreed with A3: the **deployed**
+`ProxyConnectivityProbe` — the control plane's own dialer, SOCKS5 handshake and
+`observeOs` — against the origin's IP literal, only the port differing, two
+rounds alternating order. No exit addresses recorded here; the addresses were
+identical across every leg of every proxy.
+
+| proxy                | :7791 (observer port)                                                    | :443 (a website's port)            | TTL                 |
+| -------------------- | ------------------------------------------------------------------------ | ---------------------------------- | ------------------- |
+| VerizonNY            | Linux `[2,4,8,1,3]` ws7                                                  | **Darwin** `[2,1,3,1,1,8,4,0]` ws6 | 53                  |
+| TMobile TX / NY / GA | Linux, same layout                                                       | **Darwin**, same layout            | **114–117 on both** |
+| NMtest (control)     | Linux                                                                    | Linux                              | 47                  |
+| AT&T test proxy      | `auth_failed` on every leg — the provider rejects the stored credentials |                                    |                     |
+
+Three findings, each fixed and shipped in `52f9e5f07`, `2b5e153f1`, `040f395b6`:
+
+1. **Mobile providers relay the device's stack on 443 and their gateway's on odd
+   ports.** 443 agrees with the owner's browserleaks reading exactly. The
+   observer port was reading the provider's infrastructure. Production now
+   dials 443 (`DS_OS_OBSERVER_PORT=443`, host an IP literal), and the lookup
+   reads the record for the port dialled — it never did before, so the setting
+   was half-wired.
+2. **"TmobileTX shows Win" was a classifier defect.** Two different kernels
+   cannot both originate TTL 128; the carrier rewrites it. The classifier read
+   TTL first. It now reads the option layout first and TTL corroborates. An
+   adversarial review caught three over-reaches in the first version (FreeBSD
+   read as Darwin → false green; timestamped Windows → unknown; TTL-255 fall
+   through to BSD → false red), all fixed and pinned.
+3. **The 0.1.54 front-door guard's premise is false on 443.** Every mobile
+   record sat under the front-door _address_ yet carried the device's _options_.
+   The chip now names the stack on a web-port reading (`? iOS/macOS`) and still
+   asserts nothing — a second review showed a front-door hit on 443 means the
+   provider routes by destination, so a CDN-named site may reach a different
+   machine. Naming is supported; judging is not yet.
+
+⚠️ **Withdrawn, and worth recording:** a guard refusing an observer record newer
+than the tunnel, meant to close the shared last-SYN slot on 443. Review showed it
+could never fire on that race (any record present at lookup is already no newer
+than now) and could reject our own SYN when the sniffer lags. The residual risk
+is written beside the lookup; the real fix is an observer contract change.
+
+Verified live after deploy through the deployed probe as the service wires it:
+VerizonNY → `macos-or-ios/high`, TMobileTX → `macos-or-ios/medium` (rewrite
+named), NMtest → `linux` via the exit itself.
+
 ## Open / handed over
 
-- ⛔ **Two-port OS diagnostic — BLOCKED on permissions, not design.** The plan
+- ✅ ~~Two-port OS diagnostic — BLOCKED~~ Ran; see above.
+- ⛔ (was) **Two-port OS diagnostic — BLOCKED on permissions, not design.** The plan
   was settled with A3: drive the 443 CONNECT server-side with the _same dialer_
   as the 7791 leg (the deployed `dist/services/proxy-connectivity-probe.js` on
   the origin IS that dialer; `observeOs` already takes an observer host/port and
@@ -147,8 +194,7 @@ as well, because an unrecorded known gap is how the original one survived.
   the same IP, no DNS and no CDN question — isolate port from dialer exactly).
   Mid-session the permission classifier began refusing SSH to production,
   including a plain `ls`. Not routed around. **Needs the owner to allow it.**
-- ⚠️ **VerizonNY cannot be the decisive case** until its 7791 leg succeeds at
-  least once (A3's correction, accepted).
+- ✅ VerizonNY's probe succeeds again; it WAS the decisive case.
 - **A3 → A2 handover, shape frozen:** the harness re-verifies a live session's
   exit every ~10 min and **discards the address**. It will be emitted on the
   capability report as `exitIp` (IP literal) and `observedAt` (ISO-8601), both
