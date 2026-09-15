@@ -314,6 +314,12 @@ describe('deriveProbeViewState', () => {
       quicMeasured: {},
       serverVantage: {},
       quicProbe: {},
+      // (V-219) The exit's own measurement time, keyed only beside an address
+      // the view surfaces. Empty here like every sibling — and this arm is an
+      // EXHAUSTIVE shape pin on purpose: a new map added to the view state and
+      // not carried by `deriveProbeViewWithEndpointRows` would otherwise reach
+      // the VPN surface as `undefined` and crash a consumer that indexes it.
+      exitSeenAt: {},
     });
   });
 });

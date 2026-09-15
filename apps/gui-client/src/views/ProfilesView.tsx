@@ -4847,6 +4847,12 @@ export function ProfilesView({
                           quicProbe={px !== null ? probeView.quicProbe[px.id] : undefined}
                           latencyVantage={px !== null ? probeView.serverVantage[px.id] : undefined}
                           osFingerprint={px !== null ? probeView.osFingerprints[px.id] : undefined}
+                          // (V-219) WHEN the exit above was measured. The card's
+                          // "Tested" stamp is the reachability check and moves
+                          // without the exit moving — a capability re-test keeps
+                          // the address, and the 15-minute sweep re-probes
+                          // capability only. Absent = an entry too old to date.
+                          exitSeenAtMs={px !== null ? probeView.exitSeenAt[px.id] : undefined}
                           vpn={px !== null && isVpnScheme(px.scheme)}
                           vpnFailure={px !== null ? vpnFailures[px.id] : undefined}
                           vpnNotice={px !== null ? vpnNotices[px.id] : undefined}

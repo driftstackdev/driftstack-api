@@ -161,6 +161,26 @@ export interface ProbeViewState {
   serverVantage: Record<string, ServerVantage>;
   /** T-1 — the fleet Mac's QUIC-relay verdict, same usable-only rule. */
   quicProbe: Record<string, boolean>;
+  /**
+   * (V-219) WHEN the exit beside it was measured — `exitAt`, keyed only for rows
+   * that surface an exit at all.
+   *
+   * ⛔ `testedAt` is NOT this date and reading it as this date is a live defect.
+   * The exit probe and the capability probe are SEPARATE calls: `saveProbeResult`
+   * preserves the exit across every capability re-test (deliberately — losing the
+   * customer's location on a reachability check would be worse), and the
+   * background sweeper re-probes CAPABILITY ONLY, every 15 minutes, five rows at
+   * a time. So `testedAt` moves without the exit moving, and a row can read
+   * "Tested just now" beside an address measured hours or days earlier — which on
+   * a rotating residential exit is a different machine in a different city.
+   *
+   * The launch path already refuses this exit past 30 minutes
+   * (`isExitIdentityFresh`, ProfilesView): we decline to ROUTE through a reading
+   * this old while still SHOWING it as current. Surfaces with room to say the age
+   * say it; the compact chip keeps the value, because an address that admits its
+   * age beats no address at all — the owner asked for location to be shown.
+   */
+  exitSeenAt: Record<string, number>;
 }
 
 /**
@@ -326,6 +346,7 @@ export function deriveProbeViewState(
   const quicMeasured: Record<string, MeasuredQuic> = {};
   const serverVantage: Record<string, ServerVantage> = {};
   const quicProbe: Record<string, boolean> = {};
+  const exitSeenAt: Record<string, number> = {};
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
@@ -367,6 +388,10 @@ export function deriveProbeViewState(
         ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
         ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
       };
+      // Keyed only beside an exit that is actually surfaced, and only when it can
+      // be dated: an entry written before `exitAt` existed has no honest answer,
+      // and an absent key reads as "we cannot say", never as "just now".
+      if (typeof c.exitAt === 'number') exitSeenAt[id] = c.exitAt;
     } else if (c.exitProbeFailedAt !== undefined && isProxyUsable(c.result)) {
       // (l) #14 — V-857's third state, reproduced from the cache: the proxy
       // is usable and the exit probe did not complete. `null`, not absent, so
@@ -383,6 +408,7 @@ export function deriveProbeViewState(
     quicMeasured,
     serverVantage,
     quicProbe,
+    exitSeenAt,
   };
 }
 

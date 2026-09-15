@@ -222,6 +222,22 @@ export interface ProfilePhoneCardProps {
    * `deriveProbeViewWithEndpointRows(...).exitResults[id] === null`.
    */
   exitProbeFailed?: boolean;
+  /**
+   * (V-219) Epoch ms when `exitIp`/`countryCode` were MEASURED, when we can say.
+   *
+   * ⛔ NOT the card's "Tested" time, and the gap between them is the defect this
+   * exists for. The exit probe and the capability probe are separate calls: a
+   * capability re-test preserves the exit and re-stamps the tested time, and the
+   * background sweeper re-probes capability ONLY every 15 minutes — so an address
+   * measured days ago can sit under "Tested just now". Absent = we cannot date it
+   * (an entry from before the stamp existed), which the sheet states as such
+   * rather than implying it is current.
+   */
+  exitSeenAtMs?: number;
+  /** Reference moment for the exit's age line. Injected by tests so the sheet's
+   *  output is deterministic without freezing the global clock; production never
+   *  passes it. */
+  nowMs?: number;
   locationLabel?: string | null; // #6 — resolved "city, region" / country name for the exit
   /** Phase B — reserved: the exit's IANA timezone, rendered as a trailing ≤40px
    *  glyph on the exit row when a caller starts passing it. No relayout. */
@@ -1643,6 +1659,7 @@ function focusMenuItem(menu: HTMLElement | null, which: 'first' | 'last' | 'next
 }
 
 export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
+  const nowMs = p.nowMs ?? Date.now();
   // Secondary actions live behind a ⋯ button in the dock so they're
   // tap-discoverable on a trackpad, not hover-only (founder 2026-06-16,
   // matching the visual-demo dock).
@@ -1928,6 +1945,40 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // 6px speck and the 🚫 emoji was the one saturated pictogram on a muted
   // row), its SHORT clause, and a title that says something the text does not.
   const hasExit = p.hasProxy && (p.exitIp !== null || p.countryCode !== null);
+  // (V-219) The exit's own age, for the details sheet. Three states, and the
+  // compact tile shows none of them: it has no room, and the address itself is
+  // what the owner asked to see there.
+  //
+  // ⚠️ NO THRESHOLD, deliberately. The chip surfaces elsewhere ask "is this still
+  // current" and drop or label past a window; the sheet is the surface that
+  // answers "tell me everything about this row", so it states the date whatever
+  // it is. A window here would need a fourth copy of a constant that already
+  // lives in two places, and its only effect would be to hide the answer on the
+  // one screen the customer opened to get it.
+  const exitSeen = ((): { text: string; title: string; age: 'dated' | 'undated' } | null => {
+    if (!hasExit) return null;
+    const at = p.exitSeenAtMs;
+    if (at === undefined || !Number.isFinite(at)) {
+      // An entry written before the stamp existed. "We cannot say when" is a
+      // weaker claim than any date, and a surface that stays SILENT here is read
+      // as saying the address is current.
+      return {
+        text: 'seen at an unknown time',
+        title:
+          'This row predates the exit timestamp, so we cannot say when the address was ' +
+          'measured. Press Test for one we can date.',
+        age: 'undated',
+      };
+    }
+    return {
+      text: `seen ${formatRelativeNarrow(new Date(at).toISOString(), nowMs)}`,
+      title:
+        `Measured ${new Date(at).toLocaleString()}. The Tested time above is the reachability ` +
+        'check, which runs again — on demand and on the background sweep — WITHOUT re-reading ' +
+        'the exit, so the two dates are not the same fact.',
+      age: 'dated',
+    };
+  })();
   const exitPlace = p.locationLabel != null && p.locationLabel !== '' ? p.locationLabel : null;
   const socksVerdict = p.capabilities !== null ? proxyVerdict(p.capabilities) : null;
   const exit: { glyph: string | null; text: string; title: string; muted: boolean } = !p.hasProxy
@@ -2192,6 +2243,26 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                         {p.exitIp !== null ? (
                           <span className="mono break-all text-[9.5px] text-ink-secondary">
                             {p.exitIp}
+                          </span>
+                        ) : null}
+                        {/* ⛔ (V-219) WHEN. The sheet is the surface with room to
+                            say it, and the tile above has none — so the tile keeps
+                            the address (the owner asked for location to be shown,
+                            and an address that can be dated here beats no address
+                            there) and this line carries the date the row's "Tested"
+                            stamp does NOT give: that one moves on every capability
+                            re-test and on every background sweep, neither of which
+                            re-reads the exit. Said only past the window, because a
+                            "just now" on every card is noise; an undatable exit
+                            says so rather than passing for current. */}
+                        {exitSeen !== null ? (
+                          <span
+                            data-component="exit-seen-at"
+                            data-exit-age={exitSeen.age}
+                            className="text-[9.5px] text-ink-muted"
+                            title={exitSeen.title}
+                          >
+                            {exitSeen.text}
                           </span>
                         ) : null}
                       </>

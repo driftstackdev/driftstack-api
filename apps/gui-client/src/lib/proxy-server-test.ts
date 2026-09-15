@@ -808,7 +808,7 @@ export function deriveProbeViewWithEndpointRows(
         ...(c.nodeId !== undefined ? { nodeId: c.nodeId } : {}),
       };
     if (c.quicProbe !== undefined) view.quicProbe[id] = c.quicProbe;
-    if (c.exitIp !== undefined)
+    if (c.exitIp !== undefined) {
       view.exitResults[id] = {
         ip: c.exitIp,
         country: c.exitCountry ?? null,
@@ -817,6 +817,13 @@ export function deriveProbeViewWithEndpointRows(
         ...(c.exitTimezone !== undefined ? { timezone: c.exitTimezone } : {}),
         ...(c.exitAsnOrg !== undefined ? { asn_org: c.exitAsnOrg } : {}),
       };
+      // ⛔ The date travels WITH the address, here as well as in the base
+      // derivation. This overlay runs AFTER that one and re-adds what it dropped
+      // for a VPN row, so an address added back without its stamp is an address a
+      // surface can only render as current — which is the whole defect, restored
+      // for exactly the rows nobody tested.
+      if (typeof c.exitAt === 'number') view.exitSeenAt[id] = c.exitAt;
+    }
   }
   return { ...view, endpointResults };
 }

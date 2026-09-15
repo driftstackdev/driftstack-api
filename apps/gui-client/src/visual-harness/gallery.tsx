@@ -151,6 +151,13 @@ function base(over: Partial<ProfilePhoneCardProps>): ProfilePhoneCardProps {
     flag: '🇳🇱',
     countryCode: 'NL',
     exitIp: '82.14.220.9',
+    // (V-219) The exit's own measurement time, and the harness's `nowMs` beside
+    // it. Both FIXED: the sheet states the age of the address, so a fixture dated
+    // against the wall clock would make every card capture change by the minute.
+    // Twelve minutes before the frozen instant — a realistic fresh reading, which
+    // is the state the undated fallback would otherwise hide from every capture.
+    exitSeenAtMs: Date.parse('2026-06-15T06:30:00.000Z'),
+    nowMs: Date.parse(FROZEN_NOW_ISO),
     locationLabel: 'Amsterdam, North Holland',
     latencyMs: 42,
     latencyFillPct: 28,
