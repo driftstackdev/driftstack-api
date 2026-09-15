@@ -467,7 +467,7 @@ function publicAgentSession(
   // owned proxy, or never measured) → rendered "measuring…", never a placeholder.
   // Every other callsite passes undefined; only the report-carrying customer reads
   // surface it.
-  osFingerprint?: { os: string; confidence: string } | null,
+  osFingerprint?: { os: string; confidence: string; at: string } | null,
 ): PublicAgentSession {
   const liveness = sessionLiveness(rec, livenessStore);
   const base: PublicAgentSession = {
@@ -2163,11 +2163,28 @@ export function registerAgentSessionsRoutes(
   // proxyId simply reads null. The internal diagnostics on the row never leave here.
   const readSessionProxyOsFingerprint = async (
     rec: AgentSessionRecord,
-  ): Promise<{ os: string; confidence: string } | null> => {
+  ): Promise<{ os: string; confidence: string; at: string } | null> => {
     if (rec.proxyId === null || accountProxiesService === undefined) return null;
     const proxyRow = await accountProxiesService.findOwned(rec.proxyId, rec.accountId);
     const fp = proxyRow?.osFingerprint ?? null;
-    return fp === null ? null : { os: fp.os, confidence: fp.confidence };
+    if (fp === null) return null;
+    // ⛔⛔ (V-219) WHEN was this measured? The row has carried the answer since
+    // migration 0119 -- `os_fingerprint_at`, written only when a SYN was actually
+    // observed -- and this projection read the fingerprint and ignored the stamp.
+    // So the cockpit rendered `OS: windows · high` about a LIVE session from a
+    // measurement that could be months old, in bare present tense, with nothing
+    // on screen able to say how old. A proxy is tested once and the reading is
+    // never re-taken unless the customer presses Test again, so "months old" is
+    // the ordinary case rather than the edge one.
+    //
+    // A reading we cannot DATE cannot be shown as current either, so an absent or
+    // unusable stamp projects NOTHING -- the same fail-closed rule the observer
+    // lookup applies to a record with no `seen_at`, and the same one the client
+    // cache applies to an undated entry. It costs nothing today: the only writer
+    // sets both columns in one update.
+    const atMs = proxyRow?.osFingerprintAt?.getTime();
+    if (atMs === undefined || !Number.isFinite(atMs)) return null;
+    return { os: fp.os, confidence: fp.confidence, at: new Date(atMs).toISOString() };
   };
 
   /** LK.4 — auto-mint a LiveKit token for the just-created (or

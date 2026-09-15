@@ -210,6 +210,39 @@ describe('agent-session-control transport', () => {
     });
   });
 
+  // ⛔ (V-219) The reading's measurement time. Everything else on this report is
+  // a live harness frame; this one field is a value the control plane stored when
+  // the customer last pressed Test, so without a stamp the cockpit could only
+  // render it in bare present tense however old it was.
+  it("getAgentSession parses the OS reading's measurement stamp, and DROPS one it cannot read as a date", async () => {
+    const withFp = (fp: unknown) =>
+      ok({ mode: 'manual', status: 'active', capability_report: { os_fingerprint: fp } });
+
+    mockFetch.mockResolvedValue(
+      withFp({ os: 'windows', confidence: 'high', at: '2026-09-07T11:00:00.000Z' }),
+    );
+    expect((await getAgentSession('agt_1')).capabilityReport?.os_fingerprint).toEqual({
+      os: 'windows',
+      confidence: 'high',
+      at: '2026-09-07T11:00:00.000Z',
+    });
+
+    // An unreadable stamp is DROPPED, not passed through: the readout would
+    // otherwise render "— ago" beside a real OS. The reading itself still shows —
+    // a stamp we cannot parse is a gap in our own plumbing, not a reason to hide
+    // what was measured.
+    for (const bad of ['', 'yesterday', 42, null, {}]) {
+      mockFetch.mockResolvedValue(withFp({ os: 'windows', confidence: 'high', at: bad }));
+      const fp = (await getAgentSession('agt_1')).capabilityReport?.os_fingerprint;
+      expect(fp, `at: ${JSON.stringify(bad)}`).toEqual({ os: 'windows', confidence: 'high' });
+    }
+
+    // VACUITY CONTROL — the arms above are about the STAMP. A reading with no
+    // os/confidence is still dropped wholesale, stamp or not.
+    mockFetch.mockResolvedValue(withFp({ confidence: 'high', at: '2026-09-07T11:00:00.000Z' }));
+    expect((await getAgentSession('agt_1')).capabilityReport?.os_fingerprint).toBeUndefined();
+  });
+
   it('getAgentSession omits the exit-identity fields when absent or wrong-typed (vacuity)', async () => {
     // Vacuity 1 — no capability_report at all → no report (so no exit fields).
     mockFetch.mockResolvedValue(ok({ mode: 'manual', status: 'active' }));
@@ -700,7 +733,7 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     h3_connection_count: 3,
     reported_at: 1_700_000_000_000,
     webrtc_candidate_ips: ['203.0.113.7', '198.51.100.4'],
-    os_fingerprint: { os: 'macos-or-ios', confidence: 'high' },
+    os_fingerprint: { os: 'macos-or-ios', confidence: 'high', at: '2026-09-07T11:00:00.000Z' },
   };
   const withField = (
     over: Partial<AgentSessionCapabilityReport>,
@@ -740,6 +773,31 @@ describe('capabilityReportsEqual (#12 — exit-identity / QUIC change-detection)
     const noOs = { ...base };
     delete noOs.os_fingerprint;
     expect(capabilityReportsEqual(base, noOs)).toBe(false);
+    // ⛔ (V-219) A RE-TEST THAT MEASURES THE SAME THING IS STILL NEW EVIDENCE. The
+    // readout renders the reading's AGE past its freshness window, so "macos-or-ios,
+    // measured an hour ago" and "macos-or-ios, measured a minute ago" are different
+    // lines on screen. Leave `at` out of the compare and the snapshot never bumps —
+    // the first reading's age sticks to the session for as long as it runs.
+    expect(
+      capabilityReportsEqual(
+        base,
+        withField({
+          os_fingerprint: {
+            os: 'macos-or-ios',
+            confidence: 'high',
+            at: '2026-09-07T11:59:00.000Z',
+          },
+        }),
+      ),
+    ).toBe(false);
+    // …and a stamp appearing or disappearing is a change too (a control plane
+    // deploy that starts or stops sending it).
+    expect(
+      capabilityReportsEqual(
+        base,
+        withField({ os_fingerprint: { os: 'macos-or-ios', confidence: 'high' } }),
+      ),
+    ).toBe(false);
     // h3 flips from observed → absent (the parser omits it when unset).
     const noH3 = { ...base };
     delete noH3.h3_connection_observed;

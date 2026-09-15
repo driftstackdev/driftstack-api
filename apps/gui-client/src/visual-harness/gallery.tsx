@@ -1342,9 +1342,19 @@ export const MARKETING_CAPABILITY_REPORT: AgentSessionCapabilityReport = {
   exit_timezone: 'Asia/Tokyo',
   webrtc_candidate_ips: [TEST_NET.jp],
   observed_at: '2026-06-15T06:41:30.000Z',
-  os_fingerprint: { os: 'Linux', confidence: 'high' },
+  // ⛔ (V-219) DATED, and dated FIXED. The readout labels a reading past its
+  // freshness window (`OS: Linux · high · 3 mo ago`), so an undated fixture would
+  // exercise only the legacy shape, and a fixture dated relative to the wall
+  // clock would make this capture change every day. Stamped just before the
+  // report's own `observed_at`, and the scene passes that same instant as `nowMs`
+  // — a fresh reading, rendered exactly as it is today, deterministically.
+  os_fingerprint: { os: 'Linux', confidence: 'high', at: '2026-06-15T06:40:00.000Z' },
   proxy_kind: 'socks5',
 };
+
+/** The instant the simulator scene is captured AT. Fixed, because a relative-age
+ *  label rendered against the wall clock would change the capture every day. */
+export const MARKETING_CAPTURED_AT_MS = Date.parse('2026-06-15T06:41:30.000Z');
 
 /** What the fleet knows about a proxy in the scene, in the terms ProxiesView
  *  tallies its header from: `isRowHealthy` counts a SOCKS5 row with a passing
@@ -2237,7 +2247,10 @@ function SimulatorScene(): JSX.Element {
                     </div>
                     <ExitIpChip report={MARKETING_CAPABILITY_REPORT} />
                     <QuicReadout report={MARKETING_CAPABILITY_REPORT} />
-                    <OsReadout report={MARKETING_CAPABILITY_REPORT} />
+                    <OsReadout
+                      report={MARKETING_CAPABILITY_REPORT}
+                      nowMs={MARKETING_CAPTURED_AT_MS}
+                    />
                   </div>
                   <div className={`${infoCard} font-mono text-[10px] leading-relaxed`}>
                     <div className={`font-sans ${infoLabel}`}>Identity</div>

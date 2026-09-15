@@ -98,8 +98,15 @@ export interface AgentSessionCapabilityReport {
    *  control plane. Present ONLY when the report carried a well-typed value; an
    *  absent field means NOT OBSERVED (never measured, or no owned proxy) and must
    *  render as "measuring…", NEVER a placeholder OS. Parsed defensively — a null,
-   *  a non-object, or a missing/empty os|confidence → omitted, never coerced. */
-  os_fingerprint?: { os: string; confidence: string };
+   *  a non-object, or a missing/empty os|confidence → omitted, never coerced.
+   *
+   *  ⛔ `at` is WHEN the control plane measured it (ISO). This is a STORED
+   *  reading, taken once when the customer last pressed Test on the proxy and
+   *  never re-taken on its own, so without the stamp the cockpit could only
+   *  render it in bare present tense however old it was. Optional because a
+   *  server that predates it omits the field — that build's readout keeps the
+   *  old undated line rather than blanking a value it cannot date. */
+  os_fingerprint?: { os: string; confidence: string; at?: string };
   /** VPN exit parity (b) — WHAT KIND of egress the harness brought up for this
    *  session, when the report said: a SOCKS5 proxy, or an OpenVPN/WireGuard
    *  tunnel. Present ONLY for one of those three values; anything else (a newer
@@ -232,12 +239,21 @@ function optionalReportString(v: unknown): string | undefined {
  *  empty field → undefined, so an unmeasured exit renders as "measuring…" rather
  *  than a coerced placeholder OS. Same defensive rule as the exit-identity fields:
  *  wrong type → omitted, never coerced, never throws. */
-function parseOsFingerprint(v: unknown): { os: string; confidence: string } | undefined {
+function parseOsFingerprint(
+  v: unknown,
+): { os: string; confidence: string; at?: string } | undefined {
   if (v === null || typeof v !== 'object' || Array.isArray(v)) return undefined;
   const rec = v as Record<string, unknown>;
   const os = optionalReportString(rec.os);
   const confidence = optionalReportString(rec.confidence);
-  return os !== undefined && confidence !== undefined ? { os, confidence } : undefined;
+  if (os === undefined || confidence === undefined) return undefined;
+  // The stamp is additive and defensive like every other field here: a string
+  // this build cannot parse as a date is DROPPED, never passed through — the
+  // readout would otherwise render "— ago" beside a real OS. Dropping it costs
+  // only the age line; the reading itself still shows.
+  const at = optionalReportString(rec.at);
+  const dated = at !== undefined && Number.isFinite(Date.parse(at));
+  return { os, confidence, ...(dated ? { at } : {}) };
 }
 
 function capabilityReportOf(body: ApiSession): AgentSessionCapabilityReport | undefined {

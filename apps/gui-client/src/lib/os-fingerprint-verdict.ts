@@ -12,6 +12,25 @@
 // green: an operator who cannot tell a blank from a pass reads every blank as
 // a pass. The chip carries a third, neutral tone for both.
 
+/**
+ * How long a measured stack reading stays current, in ms.
+ *
+ * ⛔ DEFINED HERE, in the module with no imports, because TWO surfaces age the
+ * same reading and they must age it by the same number: the proxy grid's cached
+ * reading (proxy-probe-cache drops it past this) and the cockpit's session
+ * readout (OsReadout labels it past this). A second literal in the component
+ * would drift from this one silently, and the two surfaces would then disagree
+ * about the same proxy on the same screen.
+ *
+ * Thirty minutes, matching QUIC_VERDICT_TTL_MS and EXIT_IDENTITY_TTL_MS, and for
+ * the reason those give: all three describe something measured THROUGH the proxy
+ * that the proxy can change underneath us. A stack fingerprint feels more
+ * permanent than a QUIC verdict, and that intuition is exactly the trap — a
+ * residential exit rotates to another machine entirely, and the reading is about
+ * the machine, not the row.
+ */
+export const OS_FINGERPRINT_TTL_MS = 30 * 60 * 1000;
+
 export const FINGERPRINTED_OS = ['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown'] as const;
 export type FingerprintedOs = (typeof FINGERPRINTED_OS)[number];
 export const FINGERPRINT_CONFIDENCE = ['high', 'medium', 'low', 'none'] as const;

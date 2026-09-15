@@ -16,6 +16,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { OsReadout } from '../../src/components/OsReadout';
+import { OS_FINGERPRINT_TTL_MS } from '../../src/lib/os-fingerprint-verdict';
 import type { AgentSessionCapabilityReport } from '../../src/lib/agent-session-control';
 
 /** WCAG 2.1 contrast of a `text-white/<alpha>` class over the simulator drawer's own chrome
@@ -97,6 +98,71 @@ describe('OsReadout', () => {
       <OsReadout report={report({ os_fingerprint: { os: 'macos-or-ios', confidence: 'high' } })} />,
     );
     expect(screen.getByText(/OS: macos-or-ios · high/)).toBeTruthy();
+  });
+
+  // ⛔⛔ (V-219) THIS FIELD IS NOT A LIVE MEASUREMENT and every field beside it
+  // is. The control plane fingerprints a proxy's stack exactly once, when the
+  // customer presses Test on the Proxies screen, and stores it on the proxy row;
+  // nothing re-reads it while a session runs. So this line rendered a reading of
+  // unbounded age in the same present tense as the streaming state and the exit
+  // IP next to it — `OS: windows · high`, indistinguishable from a fact measured
+  // seconds ago.
+  //
+  // Labelled rather than dropped: unlike the 178px grid chip, which has no room
+  // and drops the reading past the same window, there is room on this line to say
+  // when — and an old reading that admits its age is worth more than none.
+  const NOW = Date.parse('2026-09-15T12:00:00.000Z');
+  const observed = (at: string | undefined): AgentSessionCapabilityReport =>
+    report({
+      os_fingerprint: { os: 'windows', confidence: 'high', ...(at !== undefined ? { at } : {}) },
+    });
+
+  it('CRITICAL a reading past the freshness window says WHEN it was taken — a stored fact rendered in bare present tense is the whole defect', () => {
+    const at = new Date(NOW - OS_FINGERPRINT_TTL_MS * 100).toISOString();
+    render(<OsReadout report={observed(at)} nowMs={NOW} />);
+    const el = screen.getByText(/OS: windows · high ·/);
+    expect(el.getAttribute('data-age')).toBe('aged');
+    expect(el.textContent ?? '').toMatch(/·\s*\d+\s*d ago$/);
+    // And the title says the one thing a customer can do about it, plus WHY the
+    // value is not simply re-read: nothing re-measures it during a session.
+    expect(el.getAttribute('title') ?? '').toMatch(/press Test|run Test/i);
+    expect(el.getAttribute('title') ?? '').toMatch(/does not re-read/i);
+  });
+
+  it('CRITICAL a FRESH reading says nothing about age — "just now" on every session is noise, and the label has to mean something when it appears', () => {
+    const at = new Date(NOW - 5 * 60 * 1000).toISOString();
+    render(<OsReadout report={observed(at)} nowMs={NOW} />);
+    const el = screen.getByText(/^OS: windows · high$/);
+    expect(el.getAttribute('data-age')).toBe('fresh');
+    expect(el.textContent ?? '').not.toMatch(/ago/);
+  });
+
+  it('CRITICAL the boundary is the SHARED window, not a second literal — the grid chip drops a reading at exactly this age, and two surfaces disagreeing about the same proxy on the same screen is its own defect', () => {
+    const justInside = new Date(NOW - (OS_FINGERPRINT_TTL_MS - 1)).toISOString();
+    const justOutside = new Date(NOW - OS_FINGERPRINT_TTL_MS).toISOString();
+    const a = render(<OsReadout report={observed(justInside)} nowMs={NOW} />);
+    expect(
+      a.container.querySelector('[data-component="sim-os-readout"]')?.getAttribute('data-age'),
+    ).toBe('fresh');
+    a.unmount();
+    const b = render(<OsReadout report={observed(justOutside)} nowMs={NOW} />);
+    expect(
+      b.container.querySelector('[data-component="sim-os-readout"]')?.getAttribute('data-age'),
+    ).toBe('aged');
+  });
+
+  it('an UNDATED reading still renders — a control plane that predates the stamp is a gap in OUR plumbing, not evidence about the customer\'s proxy, and blanking it would read as "never measured"', () => {
+    render(<OsReadout report={observed(undefined)} nowMs={NOW} />);
+    const el = screen.getByText(/^OS: windows · high$/);
+    expect(el.getAttribute('data-state')).toBe('observed');
+    expect(el.getAttribute('data-age')).toBe('undated');
+  });
+
+  it('CONTROL — a stamp in the FUTURE reads as current, never as a negative age. Clock skew between the box and this Mac is real, and "-3 d ago" is worse than saying nothing.', () => {
+    const at = new Date(NOW + 60 * 60 * 1000).toISOString();
+    render(<OsReadout report={observed(at)} nowMs={NOW} />);
+    const el = screen.getByText(/^OS: windows · high$/);
+    expect(el.getAttribute('data-age')).toBe('fresh');
   });
 
   it('(S1) the muted absence lines ("not measured", "not available") clear WCAG AA (4.5) on the drawer chrome', () => {

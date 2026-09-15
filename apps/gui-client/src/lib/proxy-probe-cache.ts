@@ -19,6 +19,7 @@ import {
   isFingerprintedOs,
   isOsFingerprintUnavailable,
   type OsFingerprint,
+  OS_FINGERPRINT_TTL_MS,
 } from './os-fingerprint-verdict';
 import { cleanServerVantage, type ProxyVantage, type ServerVantage } from './proxy-vantage';
 import {
@@ -253,8 +254,13 @@ export function isExitIdentityFresh(atMs: number | undefined, nowMs: number): bo
  * fingerprint feels more permanent than a QUIC verdict, and that intuition is
  * exactly the trap — a residential exit rotates to another machine entirely, and
  * the reading is about the machine, not the row.
+ *
+ * ⚠️ Re-exported, not defined: the cockpit's session readout ages the SAME
+ * reading and must use the SAME number, and it cannot import this module (the
+ * Tauri store rides along). The single definition lives in the import-free
+ * os-fingerprint-verdict, so the two surfaces cannot drift apart.
  */
-export const OS_FINGERPRINT_TTL_MS = 30 * 60 * 1000;
+export { OS_FINGERPRINT_TTL_MS };
 
 /**
  * Is a measured OS fingerprint still current?

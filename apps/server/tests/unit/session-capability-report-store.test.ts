@@ -137,7 +137,7 @@ describe('SessionCapabilityReportStore', () => {
     expect(store.get('agt_2')?.observed_at).toBeNull();
   });
 
-  it('N-2 the customer-safe subset carries the {os, confidence} OS-fingerprint arg, and is null without it — never a placeholder OS', () => {
+  it('N-2 the customer-safe subset carries the {os, confidence, at} OS-fingerprint arg, and is null without it — never a placeholder OS', () => {
     const store = new SessionCapabilityReportStore();
     store.set(report('agt_1'));
     const stored = store.get('agt_1');
@@ -146,8 +146,22 @@ describe('SessionCapabilityReportStore', () => {
     // With the arg the control plane read from the proxy row, ONLY the {os,
     // confidence} subset crosses — the internal reason/observed_ip/observed_via
     // (which the arg deliberately does not carry) never appear.
-    const safe = customerSafeCapabilityReport(stored!, { os: 'windows', confidence: 'medium' });
-    expect(safe.os_fingerprint).toEqual({ os: 'windows', confidence: 'medium' });
+    //
+    // ⛔ (V-219) `at` rides with it, and it is the one field here that has to.
+    // Every other value in this report is a live harness frame; this one was
+    // measured once, when the customer last pressed Test on the proxy, and
+    // nothing re-reads it while the session runs. Without the stamp the cockpit
+    // can only render a stored reading of any age in bare present tense.
+    const safe = customerSafeCapabilityReport(stored!, {
+      os: 'windows',
+      confidence: 'medium',
+      at: '2026-06-01T09:30:00.000Z',
+    });
+    expect(safe.os_fingerprint).toEqual({
+      os: 'windows',
+      confidence: 'medium',
+      at: '2026-06-01T09:30:00.000Z',
+    });
 
     // ⛔ Absent-is-not-a-negative: with NO arg (never measured, or no owned proxy)
     // the field is null — NOT OBSERVED, rendered "measuring…" — never coerced to a

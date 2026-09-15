@@ -38,17 +38,22 @@ function candidateIpsEqual(
   return true;
 }
 
-/** N-2 — value equality for the {os, confidence} OS-fingerprint subset. Two
- *  `undefined`s are equal; one present and one absent is a change; otherwise both
- *  fields must match. Kept here (not spread) so a fingerprint that genuinely moved
- *  forces a snapshot bump and the cockpit's OS readout updates in steady state. */
+/** N-2 — value equality for the {os, confidence, at} OS-fingerprint subset. Two
+ *  `undefined`s are equal; one present and one absent is a change; otherwise every
+ *  field must match. Kept here (not spread) so a fingerprint that genuinely moved
+ *  forces a snapshot bump and the cockpit's OS readout updates in steady state.
+ *
+ *  ⛔ `at` is compared too. A re-test that measures the SAME os and confidence is
+ *  still new evidence — it is the difference between "windows, measured in March"
+ *  and "windows, measured a minute ago", which is exactly what the readout shows.
+ *  Leave it out and the first reading's age sticks to the row for ever. */
 function osFingerprintEqual(
-  a: { os: string; confidence: string } | undefined,
-  b: { os: string; confidence: string } | undefined,
+  a: { os: string; confidence: string; at?: string } | undefined,
+  b: { os: string; confidence: string; at?: string } | undefined,
 ): boolean {
   if (a === b) return true;
   if (a === undefined || b === undefined) return false;
-  return a.os === b.os && a.confidence === b.confidence;
+  return a.os === b.os && a.confidence === b.confidence && a.at === b.at;
 }
 
 /**

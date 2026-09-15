@@ -102,8 +102,14 @@ export type CustomerSafeCapabilityReport = Omit<
   'streaming_health' | 'interpose_image_loaded'
 > & {
   /**
-   * N-2 — the customer-safe subset {os, confidence} of the exit proxy's cached
-   * passive TCP/IP OS fingerprint. NOT a harness fact: the CONTROL PLANE measures
+   * N-2 — the customer-safe subset {os, confidence, at} of the exit proxy's cached
+   * passive TCP/IP OS fingerprint. `at` is WHEN it was measured (ISO, the proxy
+   * row's `os_fingerprint_at`) and crosses to the customer for one reason: this
+   * is a stored reading of unbounded age, not a live one, and a surface that
+   * cannot say how old it is can only render it as a present-tense fact. A
+   * reading with no usable stamp is not projected at all.
+   *
+   * NOT a harness fact: the CONTROL PLANE measures
    * it (proxy /:id/test) and persists it on the proxy row, and the serve path
    * reads it back here. `null` means NOT OBSERVED — never measured, or the session
    * has no owned proxy to read — and must render as "measuring…", never a
@@ -111,12 +117,12 @@ export type CustomerSafeCapabilityReport = Omit<
    * internal diagnostics (reason / observed_ip / observed_via) are deliberately
    * NOT here.
    */
-  os_fingerprint: { os: string; confidence: string } | null;
+  os_fingerprint: { os: string; confidence: string; at: string } | null;
 };
 
 export function customerSafeCapabilityReport(
   report: SessionCapabilityReport,
-  osFingerprint?: { os: string; confidence: string } | null,
+  osFingerprint?: { os: string; confidence: string; at: string } | null,
 ): CustomerSafeCapabilityReport {
   return {
     timestamp: report.timestamp,
