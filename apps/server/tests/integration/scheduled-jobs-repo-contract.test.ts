@@ -45,7 +45,34 @@ import type * as schema from '../../src/db/schema.js';
 const DEFAULT_DB_URL = 'postgres://driftstack:driftstack@localhost:5432/driftstack';
 const DB_URL = process.env.DATABASE_URL ?? DEFAULT_DB_URL;
 
-const NOW = new Date('2026-08-20T12:00:00.000Z');
+/**
+ * This file's clock. Every `runAt` and every `claimDue({ now })` in it is
+ * `NOW ± delta`, so the arms' semantics depend only on the offsets.
+ *
+ * ⛔ THE DATE ITSELF IS ISOLATION, not flavour. The drizzle subject shares ONE
+ * `scheduled_jobs` table with every other file in the run, and `claimDue` takes
+ * the OLDEST `batchSize` due rows — so at a present-day `NOW` this file's jobs
+ * queue up BEHIND another file's and can be crowded out of a `batchSize: 10`
+ * claim entirely. The arm then fails with "the first worker claimed nothing",
+ * about a repo that behaved perfectly.
+ *
+ * MEASURED 2026-09-15 06:24, in a full-suite run, and the same file passed in
+ * isolation seconds later — the signature of contention, not of a defect. A
+ * reproduction is scriptable: seed thirty rows due at this `NOW` and the arms
+ * fail; they pass with the clock below.
+ *
+ * ⚠️ Fixed by ORDERING rather than by raising `batchSize`, which only moves the
+ * threshold and claims more of other files' rows on the way. 1990 is older than
+ * anything another suite plausibly enqueues, so these jobs are always at the
+ * head of the queue whatever else is in it.
+ *
+ * ⚠️ Safe because the repo NEVER mixes in the wall clock: `claimDue` writes
+ * `locked_at = ${now}` from the value passed here, and the stale-lock arms
+ * compare against `NOW + SCHEDULED_JOB_STALE_LOCK_MS`. Shifting the clock moves
+ * every side of every comparison together. A repo that stamped `now()` in SQL
+ * would make this change wrong, so check that before moving it again.
+ */
+const NOW = new Date('1990-01-01T12:00:00.000Z');
 const MIN = 60 * 1000;
 
 let client: ReturnType<typeof postgres> | null = null;
