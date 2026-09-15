@@ -237,35 +237,18 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
   // defect somebody can act on, and "your provider's gateway runs Windows" is
   // not one. `exit_ip` readings are untouched — there the claim is about the
   // address the site will see, which is what the verdict was always for.
-  // ⛔⛔ (V-219) ON THE WEB PORT THE CHIP NAMES THE STACK — AND STILL CLAIMS NOTHING.
-  //
-  // MEASURED on production 2026-09-15: every mobile proxy's 443 record was filed
-  // under the front-door address, yet carried a Darwin option layout no Linux
-  // gateway emits, and for VerizonNY it matched the owner's independent
-  // browserleaks reading; the same address on the observer port carried the
-  // gateway's Linux layout. So on 443 the address named a relay while the options
-  // named the author, and "? OS" hid a reading that agrees with what a website
-  // measures. The chip now says what the stack looks like.
-  //
-  // ⚠️ It does NOT assert a match or mismatch, and this first shipped as a full
-  // exemption that did. An adversarial review showed why that is not safe: `via`
-  // is `proxy_host` exactly when the exit echo — ALSO a port-443 connection, to a
-  // CDN name — left from a different address than our raw-IP SYN. That proves
-  // this provider routes by DESTINATION, so a site on a CDN name can reach a
-  // different machine than our IP-literal vantage did. One proxy agreeing with
-  // browserleaks is evidence the label is right, not proof the path is the one
-  // every site gets. Naming the stack is honest; judging it is not yet.
-  if (fp.observedVia === 'proxy_host') {
+  // ⛔⛔ (V-219) ON THE WEB PORT A FRONT-DOOR READING IS A VERDICT. The owner's
+  // decision, 2026-09-15, after the measurement: we present as an iPhone, and a
+  // Darwin stack on 443 — the port a website connects on, confirmed against an
+  // independent browserleaks reading of the same proxy — is green. A review had
+  // argued for naming without judging (a front-door hit on 443 shows the provider
+  // routes by destination, so a CDN-named site may reach a different machine);
+  // that caveat stays in the hint, and the verdict is what the web port measured.
+  // Symmetric on purpose: the same vantage that supports green supports red.
+  // Only the OBSERVER-port front door — the provider's gateway — stays neutral.
+  if (fp.observedVia === 'proxy_host' && fp.webPortVantage !== true) {
     const looksLike =
       fp.os === 'unknown' ? 'could not be identified' : `looks like ${OS_LABEL[fp.os]}`;
-    if (fp.webPortVantage === true && fp.os !== 'unknown') {
-      return {
-        tone: 'unknown',
-        glyph: '?',
-        label: OS_LABEL[fp.os],
-        hint: `Stack looks like ${OS_LABEL[fp.os]} (${fp.confidence} confidence), read on the web port (443) — the port a website connects on. This proxy forwards through more than one machine and routes by destination, so a site may still reach a different machine than we did: this names the stack, it is not a verdict. ${fp.reason}`,
-      };
-    }
     return {
       tone: 'unknown',
       glyph: '?',
@@ -368,7 +351,10 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
 /** Why a verdict may be asserted, in the customer's terms — whichever vantage
  *  unlocked it. */
 function vantageSentence(fp: OsFingerprint): string {
-  return fp.webPortVantage === true
-    ? 'Read on the web port (443), the same one a website connects on, so a site sees this stack.'
-    : 'This proxy answers from a single host, so a website sees the same stack.';
+  if (fp.webPortVantage !== true) {
+    return 'This proxy answers from a single host, so a website sees the same stack.';
+  }
+  return fp.observedVia === 'proxy_host'
+    ? 'Read on the web port (443), the one a website connects on — the same stack browserleaks reports. This provider forwards by destination, so a site behind a CDN could still reach a different machine.'
+    : 'Read on the web port (443), the same one a website connects on, so a site sees this stack.';
 }

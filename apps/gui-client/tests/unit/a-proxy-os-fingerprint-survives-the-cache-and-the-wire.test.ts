@@ -347,17 +347,17 @@ describe('the wire', () => {
     return osFingerprintVerdict(view.osFingerprints[id]);
   };
 
-  it("CRITICAL a web-port reading from a multi-host MOBILE proxy survives every hop and NAMES the stack — the owner's VerizonNY, labelled iOS/macOS where browserleaks read it — without asserting a verdict the vantage cannot support", async () => {
+  it("CRITICAL a web-port reading from a multi-host MOBILE proxy survives every hop and is GREEN — the owner's VerizonNY, read as iOS/macOS where browserleaks read it; we present as an iPhone, so Darwin on the port websites use is a match", async () => {
     const v = await verdictThroughTheChain('mobile-web', true);
+    expect(v.tone).toBe('match');
     expect(v.label).toBe('iOS/macOS');
-    expect(v.tone, 'a front-door reading never asserts, even on 443').toBe('unknown');
     expect(v.hint).toMatch(/web port \(443\)/);
   });
 
-  it('CRITICAL CONTROL — the same reading WITHOUT the web-port vantage names nothing, so the arm above is about the vantage and not a relaxed label', async () => {
+  it('CRITICAL CONTROL — the same reading WITHOUT the web-port vantage stays neutral, so the arm above is about the vantage and not a relaxed gate', async () => {
     const v = await verdictThroughTheChain('mobile-obs', false);
     expect(v.tone).toBe('unknown');
-    expect(v.label, 'the observer-port front door is the gateway: no stack name').toBe('OS');
+    expect(v.label, 'the observer-port front door is the gateway: no verdict, no name').toBe('OS');
   });
 
   it('CRITICAL an older server that sends NO vantage field defaults to withholding, never to asserting', async () => {
