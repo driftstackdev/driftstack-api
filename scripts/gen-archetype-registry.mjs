@@ -129,6 +129,15 @@ function entryFor(row) {
   // as selectable. Reading `status` here is not a shortcut, it is a different
   // question, and the answer it gives is "is the file well-formed" when what a
   // picker needs is "will this render correctly".
+  //
+  // ⚠️ The EMITTED `status` below is derived from `lifecycle` — it is not the
+  // upstream validator status the paragraph above describes. So a consumer that
+  // filters the generated registry on `status` (`SELECTABLE_ARCHETYPE_IDS` in
+  // api-types does) is filtering on lifecycle one hop removed: change `lifecycle`
+  // in the catalog and regenerate, and selectability follows. What CANNOT move
+  // selectability is hand-editing `status` in the generated file — `--check` in
+  // lint reds that. A peer read the headline above as "the consumer reads the
+  // wrong axis"; it does not, and this sentence exists so nobody else does.
   const selectable = lifecycle === 'bit_identical' || lifecycle === 'available';
   const status = selectable ? (id === LOCKED ? 'launch' : 'available') : 'planned';
   return {
