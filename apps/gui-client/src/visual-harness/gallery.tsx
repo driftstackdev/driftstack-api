@@ -542,7 +542,16 @@ export const STATES: ReadonlyArray<{ label: string; props: ProfilePhoneCardProps
   },
   {
     label: 'socks5 · server vantage',
-    props: base({ latencyFromServer: true, latencyVantage: { measuredFrom: 'control_plane' } }),
+    props: base({
+      latencyFromServer: true,
+      latencyVantage: { measuredFrom: 'control_plane' },
+      // (V-219) Dated an hour before the card's Checked stamp, because that gap
+      // is the state this row exists to show: a native re-check carries the
+      // server number and re-stamps the date beside it, so the sheet states the
+      // measurement's own date. A fixture with the two dates equal would render
+      // nothing and the harness would never show the line at all.
+      serverMeasuredAtMs: Date.parse('2026-06-15T05:30:00.000Z'),
+    }),
   },
   {
     label: 'inherited default · 15-char IPv4 · unnamed proxy',
