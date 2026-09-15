@@ -99,6 +99,23 @@ the matching DPA + sub-processors.json update.
   SSH directly to `/opt/driftstack/api/.env` on the host. They never
   pass through the agent's chat history or pull-request artifacts.
 
+## Checking that this directory is true
+
+```sh
+node scripts/check-infra-drift.mjs                 # production
+DRIFT_HOST=root@116.203.22.197 node scripts/check-infra-drift.mjs   # staging
+```
+
+Compares every tracked artefact here against the copy actually deployed, in both
+directions — a file edited on the box is as much a defect as a repo change never
+deployed. It also fails on a file added to `infra/` and never added to the
+script's map, because an unwatched artefact is how the observer went years
+without source control.
+
+⚠️ Deliberately **not** part of `lint`: it needs production SSH, which is slow
+and unavailable to most people. An unreachable host prints SKIPPED and exits 0,
+and says in the output that this is _not_ a pass.
+
 ## os-observer
 
 The passive OS fingerprinter behind the proxy **OS chip**. A SOCKS5 proxy opens
