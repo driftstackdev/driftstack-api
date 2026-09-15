@@ -806,6 +806,22 @@ export function ProfilesView({
   // VPN exit parity (b) — the endpoint-row overlay is the same shared step the
   // Proxies grid reads, so a VPN row's fleet-measured latency and exit reach the
   // card exactly as a SOCKS5 row's do.
+  //
+  // ⚠️ (V-219) KNOWN LIMIT, recorded rather than left to be rediscovered. The
+  // derivation ages the OS reading and the QUIC verdict against `Date.now()`,
+  // captured when this memo RECOMPUTES — and it recomputes only when the cache
+  // changes. So a reading keeps rendering past its window until the next cache
+  // emit rather than at the instant it expires.
+  //
+  // Bounded, not unbounded: the background sweeper writes every fifteen minutes
+  // while the app is open, so the worst case is ~45 minutes against a 30-minute
+  // window. The pre-existing QUIC verdict TTL (W-30) has always had exactly this
+  // property.
+  //
+  // Not closed with a periodic tick in the deps: that re-renders the whole grid
+  // every minute to buy at most fifteen minutes of accuracy on a heuristic
+  // window. Worth doing only without a timer — recomputing on window focus, the
+  // moment a customer is actually looking — which is a separate change.
   const probeView = useMemo(() => deriveProbeViewWithEndpointRows(probeCache), [probeCache]);
   // (h) — when each VPN row's fleet fields were measured, for the card's
   // "checked" stamp: the entry's `at` is the DNS pre-flight, re-stamped before

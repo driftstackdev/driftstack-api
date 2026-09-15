@@ -120,6 +120,23 @@ one reads as saying it is current; a latency is a magnitude and visibly
 approximate, so a line admitting we cannot date it would cost more attention than
 it is worth.
 
+## Known limit of the fix itself
+
+The derivation ages against `Date.now()` captured when `ProfilesView`'s memo
+RECOMPUTES, and it recomputes only when the probe cache changes. A reading
+therefore keeps rendering past its window until the next cache emit rather than
+at the instant it expires.
+
+Bounded, not unbounded: the background sweeper writes every fifteen minutes while
+the app is open, so the worst case is ~45 minutes against a 30-minute window. The
+pre-existing QUIC verdict TTL (W-30) has always had the same property.
+
+⚠️ Deliberately not closed with a periodic tick in the memo deps: that re-renders
+the whole grid every minute to buy at most fifteen minutes of accuracy on a
+heuristic window. Worth doing only without a timer — recomputing on window focus,
+the moment a customer is actually looking. Recorded beside the memo in the code
+as well, because an unrecorded known gap is how the original one survived.
+
 ## Open / handed over
 
 - ⛔ **Two-port OS diagnostic — BLOCKED on permissions, not design.** The plan
