@@ -71,6 +71,7 @@ import {
   saveEndpointResult,
   saveExitResult,
   saveProbeResult,
+  saveServerProbeResult,
 } from '../../src/lib/proxy-probe-cache';
 import { deriveProbeViewWithEndpointRows } from '../../src/lib/proxy-server-test';
 
@@ -209,6 +210,47 @@ const OK = {
 const saveExit = (id: string, at: number): Promise<unknown> =>
   saveExitResult(id, '185.22.1.9', 'CH', { city: 'Zürich', region: 'Zurich' }, at);
 
+// ⛔ THE SAME BORROWED FRESHNESS, on the number the card PREFERS. A native
+// capability re-test CARRIES the fleet latency forward — deliberately, because a
+// reachability check measured no fleet latency and erasing one would be worse —
+// and re-stamps the Checked date beside it. The background sweeper runs native
+// probes every fifteen minutes. So a row shows a fleet number measured hours ago
+// under a date refreshed minutes ago, and only one of those two facts was on
+// screen.
+//
+// `serverProbeAt` has dated it all along, and `serverProbeStamps` already
+// surfaces that date — but only for ENDPOINT rows, which is exactly why the
+// SOCKS5 case went unnoticed: the code looked like it handled this.
+describe('the fleet latency states its own date when it differs from the check', () => {
+  const server = (over: Partial<ProfilePhoneCardProps> = {}): HTMLElement =>
+    openSheet({ latencyFromServer: true, ...over });
+  const measuredAt = (sheet: HTMLElement): HTMLElement | null =>
+    sheet.querySelector<HTMLElement>('[data-component="server-measured-at"]');
+
+  it('CRITICAL a fleet number measured before the last check says when — the two dates are hours apart and the card showed only the newer one', () => {
+    const el = measuredAt(server({ serverMeasuredAtMs: NOW - 3 * HOUR }));
+    expect(el, 'the sheet carries the fleet measurement date').not.toBeNull();
+    expect(el?.textContent ?? '').toMatch(/^fleet latency measured \d+ h ago$/);
+    expect(el?.getAttribute('title') ?? '').toMatch(/keeps the fleet number it already had/i);
+  });
+
+  it('CRITICAL VACUITY CONTROL — EQUAL DATES SAY NOTHING. One check produced both, so repeating the date would be noise on every freshly-tested row, and a rule that printed it there would look identical on the arm above.', () => {
+    const at = Date.parse(props().checkedAtIso as string);
+    expect(measuredAt(server({ serverMeasuredAtMs: at }))).toBeNull();
+  });
+
+  it("VACUITY CONTROL — a card whose latency is NOT the fleet's says nothing. The line explains a number that is not on this card otherwise, and printing it beside a native latency would date the wrong measurement.", () => {
+    const el = measuredAt(
+      openSheet({ latencyFromServer: false, serverMeasuredAtMs: NOW - 3 * HOUR }),
+    );
+    expect(el).toBeNull();
+  });
+
+  it('VACUITY CONTROL — an undatable fleet number says nothing rather than guessing. Unlike the exit, this one has no "unknown time" state: the number is advisory and a line admitting we cannot date it would cost more attention than it is worth.', () => {
+    expect(measuredAt(server({ serverMeasuredAtMs: undefined }))).toBeNull();
+  });
+});
+
 describe('the derivation carries the exit date to both proxy surfaces', () => {
   beforeEach(() => {
     stores.clear();
@@ -232,6 +274,22 @@ describe('the derivation carries the exit date to both proxy surfaces', () => {
     const overlaid = deriveProbeViewWithEndpointRows(cache, 3_000);
     expect(overlaid.exitResults.vpn1, 'the overlay surfaces the address').not.toBeNull();
     expect(overlaid.exitSeenAt.vpn1, 'and its date with it').toBe(2_000);
+  });
+
+  it("CRITICAL the fleet latency's date is keyed by BOTH derivations — the base one for a SOCKS5 row and the overlay for a VPN row, or the rule is true of one kind of row and silently false of the other", async () => {
+    await saveProbeResult('s1', OK, 1_000);
+    await saveServerProbeResult('s1', { latencyMs: 61, measuredFrom: 'fleet' }, 2_000);
+    expect(deriveProbeViewState(await loadProbeCache(), 3_000).serverMeasuredAt.s1).toBe(2_000);
+
+    await saveEndpointResult('vpn2', { resolved: true, ip: '203.0.113.17', message: 'ok' }, 1_000);
+    await saveServerProbeResult('vpn2', { latencyMs: 61, measuredFrom: 'fleet' }, 2_000);
+    const cache = await loadProbeCache();
+    // The base derivation surfaces nothing for a VPN row — without this control
+    // the overlay arm could pass on a row that renders no latency at all.
+    expect(deriveProbeViewState(cache, 3_000).serverMeasuredAt.vpn2).toBeUndefined();
+    const overlaid = deriveProbeViewWithEndpointRows(cache, 3_000);
+    expect(overlaid.serverLatency.vpn2, 'the overlay surfaces the number').toBe(61);
+    expect(overlaid.serverMeasuredAt.vpn2, 'and its date with it').toBe(2_000);
   });
 
   it('VACUITY CONTROL — a row with an exit but no usable verdict surfaces neither the address nor a date. A stamp keyed beside a dropped address would date a measurement the surface is not showing.', async () => {

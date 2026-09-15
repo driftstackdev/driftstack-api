@@ -181,6 +181,23 @@ export interface ProbeViewState {
    * age beats no address at all — the owner asked for location to be shown.
    */
   exitSeenAt: Record<string, number>;
+  /**
+   * (V-219) WHEN the SERVER-measured fields beside it were measured —
+   * `serverProbeAt`, keyed only for rows that surface one.
+   *
+   * ⛔ Same borrowed-freshness shape as `exitSeenAt`, on the number the card
+   * PREFERS. `saveProbeResult` carries `serverLatencyMs` across every native
+   * capability re-test (deliberately — a reachability check measured no fleet
+   * latency and must not erase one), the background sweeper runs native probes
+   * every fifteen minutes, and the card shows the server number whenever it has
+   * one. So "Tested just now" can sit over a fleet latency measured hours
+   * earlier, from a node that may no longer be the one serving this proxy.
+   *
+   * `serverProbeStamps` already surfaces this date — but only for ENDPOINT rows,
+   * which is why the SOCKS5 case needed a home. Keyed here so both derivations
+   * and both surfaces read one map.
+   */
+  serverMeasuredAt: Record<string, number>;
 }
 
 /**
@@ -347,6 +364,7 @@ export function deriveProbeViewState(
   const serverVantage: Record<string, ServerVantage> = {};
   const quicProbe: Record<string, boolean> = {};
   const exitSeenAt: Record<string, number> = {};
+  const serverMeasuredAt: Record<string, number> = {};
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
@@ -359,8 +377,13 @@ export function deriveProbeViewState(
       isOsFingerprintFresh(c.osFingerprint, nowMs)
     )
       osFingerprints[id] = c.osFingerprint;
-    if (c.serverLatencyMs !== undefined && isProxyUsable(c.result))
+    if (c.serverLatencyMs !== undefined && isProxyUsable(c.result)) {
       serverLatency[id] = c.serverLatencyMs;
+      // Keyed beside the number it dates and only when we can date it: an entry
+      // written before `serverProbeAt` existed has no honest answer, and an
+      // absent key reads as "we cannot say", never as "just now".
+      if (typeof c.serverProbeAt === 'number') serverMeasuredAt[id] = c.serverProbeAt;
+    }
     // W-30 — a verdict older than its TTL is dropped here rather than at the chip,
     // so every consumer ages identically: the Proxies grid, the profile card, and
     // anything added later. Falling out of this map is exactly "never measured",
@@ -409,6 +432,7 @@ export function deriveProbeViewState(
     serverVantage,
     quicProbe,
     exitSeenAt,
+    serverMeasuredAt,
   };
 }
 

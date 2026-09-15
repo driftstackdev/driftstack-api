@@ -4853,6 +4853,13 @@ export function ProfilesView({
                           // the address, and the 15-minute sweep re-probes
                           // capability only. Absent = an entry too old to date.
                           exitSeenAtMs={px !== null ? probeView.exitSeenAt[px.id] : undefined}
+                          // (V-219) …and when the FLEET number beside it was
+                          // measured. A native re-check carries that number and
+                          // re-stamps the date above it, so the two can be hours
+                          // apart with only one of them on screen.
+                          serverMeasuredAtMs={
+                            px !== null ? probeView.serverMeasuredAt[px.id] : undefined
+                          }
                           vpn={px !== null && isVpnScheme(px.scheme)}
                           vpnFailure={px !== null ? vpnFailures[px.id] : undefined}
                           vpnNotice={px !== null ? vpnNotices[px.id] : undefined}

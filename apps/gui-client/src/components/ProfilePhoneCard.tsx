@@ -234,6 +234,17 @@ export interface ProfilePhoneCardProps {
    * rather than implying it is current.
    */
   exitSeenAtMs?: number;
+  /**
+   * (V-219) Epoch ms when the SERVER-measured latency was measured, when we can
+   * say. Only meaningful beside `latencyFromServer`.
+   *
+   * ⛔ NOT the card's "Checked" time. A native capability re-test CARRIES the
+   * fleet number forward (a reachability check measured no fleet latency and
+   * must not erase one) and re-stamps the checked time, and the background
+   * sweeper runs native probes every fifteen minutes — so the number shown can
+   * be hours older than the date shown above it.
+   */
+  serverMeasuredAtMs?: number;
   /** Reference moment for the exit's age line. Injected by tests so the sheet's
    *  output is deterministic without freezing the global clock; production never
    *  passes it. */
@@ -1955,6 +1966,17 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
   // it is. A window here would need a fourth copy of a constant that already
   // lives in two places, and its only effect would be to hide the answer on the
   // one screen the customer opened to get it.
+  // (V-219) The fleet number's own date, for the Checked row. `null` whenever
+  // there is nothing to disambiguate: no server number on this card, no stamp we
+  // can trust, or the two dates are the same check.
+  const serverMeasuredLabel = ((): { text: string; iso: string } | null => {
+    if (p.latencyFromServer !== true) return null;
+    const at = p.serverMeasuredAtMs;
+    if (at === undefined || !Number.isFinite(at)) return null;
+    const iso = new Date(at).toISOString();
+    if (p.checkedAtIso !== null && Date.parse(p.checkedAtIso) === at) return null;
+    return { text: `fleet latency measured ${formatRelativeNarrow(iso, nowMs)}`, iso };
+  })();
   const exitSeen = ((): { text: string; title: string; age: 'dated' | 'undated' } | null => {
     if (!hasExit) return null;
     const at = p.exitSeenAtMs;
@@ -2348,15 +2370,38 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                 ) : null}
                 {p.hasProxy ? (
                   <DetailRow fact="checked" label="Checked">
-                    {p.checkedAtIso !== null ? (
-                      <span data-component="proxy-checked-at" data-checked-at={p.checkedAtIso}>
-                        <time dateTime={p.checkedAtIso}>
-                          {new Date(p.checkedAtIso).toLocaleString()}
-                        </time>
-                      </span>
-                    ) : (
-                      <span className="italic text-ink-muted">never checked</span>
-                    )}
+                    <div className="flex flex-col gap-px">
+                      {p.checkedAtIso !== null ? (
+                        <span data-component="proxy-checked-at" data-checked-at={p.checkedAtIso}>
+                          <time dateTime={p.checkedAtIso}>
+                            {new Date(p.checkedAtIso).toLocaleString()}
+                          </time>
+                        </span>
+                      ) : (
+                        <span className="italic text-ink-muted">never checked</span>
+                      )}
+                      {/* ⛔ (V-219) The number above this row is the FLEET's when
+                          `latencyFromServer` is set, and it is carried across every
+                          native re-check — which is what re-stamps the date beside
+                          it. Two true values composing into a false sentence, so
+                          the fleet measurement states its own date whenever the two
+                          differ. Equal dates say nothing: one check produced both,
+                          and repeating it would be noise. */}
+                      {serverMeasuredLabel !== null ? (
+                        <span
+                          data-component="server-measured-at"
+                          data-server-measured-at={serverMeasuredLabel.iso}
+                          className="text-[9.5px] text-ink-muted"
+                          title={
+                            'The fleet latency shown on this card was measured then. Checking a ' +
+                            'proxy’s reachability keeps the fleet number it already had, so the ' +
+                            'date above can be newer than the number it sits beside.'
+                          }
+                        >
+                          {serverMeasuredLabel.text}
+                        </span>
+                      ) : null}
+                    </div>
                   </DetailRow>
                 ) : null}
                 <DetailRow fact="last-used" label={runningSince !== null ? 'Running' : 'Last used'}>

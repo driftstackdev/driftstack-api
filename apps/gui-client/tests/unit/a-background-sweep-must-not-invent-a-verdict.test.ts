@@ -320,6 +320,7 @@ describe('deriveProbeViewState', () => {
       // not carried by `deriveProbeViewWithEndpointRows` would otherwise reach
       // the VPN surface as `undefined` and crash a consumer that indexes it.
       exitSeenAt: {},
+      serverMeasuredAt: {},
     });
   });
 });

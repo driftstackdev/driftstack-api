@@ -799,7 +799,13 @@ export function deriveProbeViewWithEndpointRows(
     // `vpn_tunnel` placeholder these rows normally carry still renders.
     if (c.osFingerprint !== undefined && isOsFingerprintFresh(c.osFingerprint, nowMs))
       view.osFingerprints[id] = c.osFingerprint;
-    if (c.serverLatencyMs !== undefined) view.serverLatency[id] = c.serverLatencyMs;
+    if (c.serverLatencyMs !== undefined) {
+      view.serverLatency[id] = c.serverLatencyMs;
+      // ⛔ The date travels WITH the number here too. This overlay runs after the
+      // base derivation dropped it for a VPN row, so a number re-added without
+      // its stamp is one the sheet can only render as current.
+      if (typeof c.serverProbeAt === 'number') view.serverMeasuredAt[id] = c.serverProbeAt;
+    }
     if (c.quicMeasured !== undefined && isQuicVerdictFresh(c.quicMeasuredAt, nowMs))
       view.quicMeasured[id] = c.quicMeasured;
     if (c.measuredFrom !== undefined)
