@@ -1036,12 +1036,12 @@ describe('AgentSessionPanel overlay UX', () => {
     ['budget-exhausted', 'Usage limit reached', 'configured usage limit'],
     ['customer-closed', 'Closed by you', 'closed from Driftstack'],
     ['browser_crashed', 'Browser stopped unexpectedly', 'stopped unexpectedly'],
-    ['proxy_connection_failed', 'Connection route unavailable', 'could not be established'],
-    ['egress_unreachable', 'Connection route unavailable', 'could not be established'],
+    ['proxy_connection_failed', 'Proxy connection failed', 'could not connect through its proxy'],
+    ['egress_unreachable', 'Proxy connection failed', 'could not connect through its proxy'],
     ['launch_timeout', 'Browser could not start', 'try starting it again'],
     ['webdriver_connect_failed', 'Browser could not start', 'try starting it again'],
     ['session_config_invalid', 'Session configuration unavailable', 'current configuration'],
-    ['node-restarted', 'Live worker unavailable', 'live worker stopped'],
+    ['node-restarted', 'Session stopped unexpectedly', 'on our side stopped this session'],
     ['session-ended', 'Session completed', 'ended normally'],
     // A3's typed VPN bring-up reasons. The POINT of each is where it sends the
     // customer, so the assertion is on the destination words, not the label.
@@ -1279,7 +1279,7 @@ describe('AgentSessionPanel overlay UX', () => {
       ['auth_failed', 'starting_proxy', 'username or password'],
       ['no_output', 'handshaking', 'ours, not yours'],
       ['idle_timeout', 'verifying', 'period of inactivity'],
-      ['proxy_connection_failed', 'resolving', 'could not be established'],
+      ['proxy_connection_failed', 'resolving', 'could not connect through its proxy'],
     ] as const) {
       const withPhase = await read(reason, lastPhase);
       const withoutPhase = await read(reason, null);
@@ -1451,7 +1451,7 @@ describe('AgentSessionPanel overlay UX', () => {
       await Promise.resolve();
     });
     const ended = container.querySelector('[data-overlay="session-ended"]');
-    expect(ended).toHaveTextContent('Live worker unavailable');
+    expect(ended).toHaveTextContent('Session stopped unexpectedly');
     expect(ended?.outerHTML).not.toContain(internalReason);
   });
 

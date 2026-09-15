@@ -33,8 +33,8 @@ import DocLayout from '../../layouts/DocLayout.astro';
     </li>
     <li>
       <a href="/api/agent-sessions/">Agent sessions</a> — AI-driven chat-style automation, manual
-      pass-through mode, and pair-mode interactive takeover/handback state machine. This
-      complements regular driver sessions.
+      pass-through mode, and pair mode, where you can ask to take over from the AI (handing
+      control back to the AI is not available yet). Works alongside regular sessions.
     </li>
     <li>
       <a href="/api/recipes/">Recipes</a> — save a finished agent-session's intent_log +
@@ -42,8 +42,8 @@ import DocLayout from '../../layouts/DocLayout.astro';
       it does not expose recipe execution.
     </li>
     <li>
-      <a href="/api/bundled-llm/">Bundled LLM</a> — opt-in consent, monthly soft cap, used /
-      remaining / refused state for the no-BYOK agent decomposer rail.
+      <a href="/api/bundled-llm/">Bundled LLM</a> — opt-in consent, monthly soft cap, and used /
+      remaining budget when you use Driftstack's bundled AI model instead of your own key.
     </li>
     <li>
       <a href="/api/byok-anthropic/">BYOK Anthropic key</a> — bring-your-own key management: set,
@@ -54,8 +54,9 @@ import DocLayout from '../../layouts/DocLayout.astro';
       clone, delete. Snapshots — capture / list / restore / delete.
     </li>
     <li>
-      <a href="/api/proxies/">Account proxies</a> — register your own SOCKS5 proxies; route a
-      session's egress through one. Passwords encrypted at rest, never echoed.
+      <a href="/api/proxies/">Account proxies</a> — register your own proxies and VPNs (SOCKS5,
+      OpenVPN, WireGuard); route a session's traffic through one. Passwords encrypted at rest,
+      never echoed.
     </li>
     <li>
       <a href="/api/usage/">Usage</a> — current-period meter for sessions / api-calls / data
@@ -79,7 +80,7 @@ import DocLayout from '../../layouts/DocLayout.astro';
     </li>
     <li>
       <a href="/api/status/">Status page API</a> — public snapshot, incident feed (REST + SSE),
-      30-day SLA report, and double-opt-in email subscription. Unauthenticated; CDN-coalesced.
+      30-day SLA report, and double-opt-in email subscription. No authentication needed.
     </li>
     <li>
       <a href="/api/oauth/">OAuth 2.0 (third-party clients)</a> — Authorization-code + PKCE
@@ -126,7 +127,7 @@ import DocLayout from '../../layouts/DocLayout.astro';
     <li>
       <strong>OpenAPI spec.</strong> Live at <code>https://api.driftstack.dev/openapi.json</code>;
       rendered via Scalar UI on the API host at <code>/docs/</code>. The spec is the contract for
-      SDK consumers; a deliberately committed copy lives in the repository for SDK regeneration.
+      SDK consumers.
     </li>
     <li>
       <strong>Authentication.</strong> Customer API keys are <code>ds_live_…</code> on every

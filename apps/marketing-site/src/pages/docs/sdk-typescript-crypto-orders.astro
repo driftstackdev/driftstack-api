@@ -118,10 +118,9 @@ console.log(receipt.paid_at, receipt.price_cents);`}</code></pre>
       HTTPS endpoint, poll
       <code>client.cryptoOrders.get(order_id)</code> until
       <code>status</code> transitions to <code>paid</code> or
-      <code>failed</code>. The SDK ships
-      <code>verifyWebhookSignature</code> for every live event type,
-      including the now-live crypto.order.* events alongside the
-      session + quota + api-key + egress-capability event domains.
+      <code>failed</code>. The SDK's
+      <code>verifyWebhookSignature</code> verifies every event type,
+      including <code>crypto.order.*</code>.
     </p>
 
     <h2>End-to-end example</h2>

@@ -13,7 +13,7 @@
 //     S30 2026-07-07 founder decision: soften — "EU-only" dropped
 //     because R2-held file objects replicate EU + US)
 //   • "Drive it by hand, or drive it from code." audience split
-//   • Two ladders + free tier
+//   • Two plan families + free tier
 //   • Self-hosted as a parallel offering
 
 import { readFileSync } from 'node:fs';
@@ -31,7 +31,7 @@ const REQUIRED_PHRASES = [
   'One metric. Concurrent sessions',
   'EU-hosted by default',
   'Drive it by hand, or drive it from code',
-  'Two ladders',
+  'Two plan families',
   'Run Driftstack on your own infrastructure',
 ];
 

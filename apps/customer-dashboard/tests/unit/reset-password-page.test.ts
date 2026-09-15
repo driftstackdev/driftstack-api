@@ -225,7 +225,7 @@ describe('reset-password page — local integration', () => {
     );
     expect(form.classList.contains('hidden')).toBe(false);
     expect(bannerText(window)).toMatch(
-      /enable browser site storage.*one-time reset link.*has not been consumed.*entries are still here/i,
+      /blocking site storage.*sign-in needs.*the link still works.*entries are still here/i,
     );
   });
 
@@ -244,7 +244,7 @@ describe('reset-password page — local integration', () => {
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
     expect(bannerText(window)).toMatch(
-      /password was changed.*could not finish sign-in.*do not submit this link again.*new password.*fresh reset link/i,
+      /password was changed.*couldn't finish signing you in.*don't use this link again.*new password.*fresh reset link/i,
     );
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
@@ -263,7 +263,7 @@ describe('reset-password page — local integration', () => {
     expect(fetchCalls).toHaveLength(1);
     expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
-    expect(bannerText(window)).toMatch(/password was changed.*do not submit this link again/i);
+    expect(bannerText(window)).toMatch(/password was changed.*don't use this link again/i);
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
     expect(fetchCalls).toHaveLength(1);
@@ -282,7 +282,7 @@ describe('reset-password page — local integration', () => {
     expect(isHidden(window, '[data-form="reset-password"]')).toBe(true);
     expect(isHidden(window, '[data-form="reset-mfa"]')).toBe(true);
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
-    expect(bannerText(window)).toMatch(/password was changed.*do not submit this link again/i);
+    expect(bannerText(window)).toMatch(/password was changed.*don't use this link again/i);
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
     await flush();
     expect(fetchCalls).toHaveLength(1);
@@ -346,7 +346,7 @@ describe('reset-password page — local integration', () => {
         ?.textContent,
     ).toMatch(/request a fresh reset link/i);
     expect(bannerText(window)).toMatch(
-      /outcome is unknown.*may already have changed your password.*consumed this one-time link.*do not submit this link again.*try signing in.*if that fails.*fresh reset link/i,
+      /took too long.*password may already have been changed.*don't use this link again.*try signing in with the new password.*if that fails.*fresh reset link/i,
     );
 
     submit(window, 'a-brand-new-password', 'a-brand-new-password');
@@ -412,7 +412,7 @@ describe('reset-password page — local integration', () => {
     expect(mfaForm.classList.contains('hidden')).toBe(false);
     expect(code.value).toBe('654321');
     expect(bannerText(window)).toMatch(
-      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+      /blocking site storage.*sign-in needs.*enter your code again/i,
     );
   });
 
@@ -441,7 +441,7 @@ describe('reset-password page — local integration', () => {
     expect(mfaForm.classList.contains('hidden')).toBe(true);
     expect(isHidden(window, '[data-unknown-recovery]')).toBe(false);
     expect(bannerText(window)).toMatch(
-      /password was changed.*two-factor verification was accepted.*do not submit this code again.*new password/i,
+      /password was changed and your code was accepted.*couldn't finish signing you in.*don't enter that code again.*new password/i,
     );
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -472,7 +472,7 @@ describe('reset-password page — local integration', () => {
 
     expect(mfaForm.classList.contains('hidden')).toBe(true);
     expect(bannerText(window)).toMatch(
-      /MFA sign-in outcome is unknown.*one-time challenge.*do not submit this code again.*new password/i,
+      /took too long.*your code may already have been used.*don't enter it again.*new password/i,
     );
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();

@@ -29,9 +29,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <strong>never</strong> stored — keys are hashed with
         <code>scrypt</code> (logN=15) at mint time. OAuth client
         secrets are similarly hashed before storage. MFA seeds are
-        AES-256 encrypted with a key from the
-        <code>MFA_ENCRYPTION_KEY</code> env, never written in
-        plaintext.
+        AES-256 encrypted at rest, never written in plaintext.
       </li>
       <li>
         <strong>In transit:</strong> TLS 1.2+ enforced on every
@@ -50,10 +48,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </li>
       <li>
         <strong>Profile state:</strong> Per-profile browser state
-        (cookies, localStorage, IndexedDB) lives in the WebKit driver
-        layer as per-profile encrypted files on disk on the driver
-        host (the MacStadium fleet, US). The Postgres profile row
-        (EU) holds metadata only — name, archetype, description.
+        (cookies, localStorage, IndexedDB) is stored as per-profile
+        encrypted files on the browser hosts (MacStadium, US). The
+        database record (EU) holds metadata only — name, device
+        profile, description.
       </li>
     </ul>
 
@@ -87,8 +85,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <h2>Network + infrastructure</h2>
     <ul>
       <li>
-        Driftstack runs <strong>primarily in the EU</strong> (Hetzner
-        Falkenstein / Nuremberg). Customer-facing API endpoints are
+        Driftstack runs <strong>primarily in the EU</strong> (Hetzner,
+        Falkenstein, Germany). Customer-facing API endpoints are
         served from the EU region. See
         <a href="https://docs.driftstack.io/reference/data-residency/">/docs/data-residency</a>
         for the current per-category location and transfer safeguards.
@@ -123,16 +121,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         eval is intentionally not exposed.
       </li>
       <li>
-        Each session is one isolated WebKit instance backed by an
-        ephemeral context; cross-session state never bleeds.
+        Each session runs in its own isolated browser that starts
+        fresh; state never leaks between sessions.
         Persistence between sessions only happens via the
         customer-managed <strong>profile</strong> mechanism
-        (encrypted browser state on the driver host — the MacStadium
-        fleet, US).
+        (encrypted browser state on the browser hosts — MacStadium,
+        US).
       </li>
       <li>
-        Concurrent-session caps per tier act as the primary
-        cost-control + abuse-mitigation primitive; exceeding the cap
+        Per-tier caps on how many sessions run at once are the primary
+        cost-control and abuse-mitigation mechanism; exceeding the cap
         returns <code>429</code> with the
         <code>concurrency-limit</code> RFC 7807 type.
       </li>
@@ -169,11 +167,14 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         events).
       </li>
       <li>
-        Session logs — per-session navigation + console output
-        retained per tier.
+        Session activity — the pages visited in your agent sessions, per
+        profile, via the <a href="/api-reference/">API</a>
+        (<code>GET /v1/profiles/:id/activity</code>).
       </li>
       <li>
-        Cost ledger — every billable event, queryable via the API.
+        <a href="/docs/cost-monitoring/">Operational cost estimate</a> — a
+        per-month estimate of what it costs to serve your account. It is not
+        an invoice.
       </li>
     </ul>
 

@@ -22,7 +22,7 @@ describe('W310.C /webhooks delivery-timeout parity', () => {
   const delivery = read(DELIVERY);
 
   it('page promises the endpoint must respond 2xx within 10s', () => {
-    expect(page).toMatch(/2xx within 10s/);
+    expect(page).toMatch(/success status \(2xx\)\s+within 10 seconds/);
   });
 
   it('webhook-delivery default timeout is 10_000ms (matches 10s claim)', () => {
@@ -30,7 +30,7 @@ describe('W310.C /webhooks delivery-timeout parity', () => {
   });
 
   it('page mentions HTTPS-required posture', () => {
-    expect(page).toMatch(/HTTPS required/i);
+    expect(page).toMatch(/Must start with https:\/\//);
   });
 
   it('page surfaces delivered / failed / dlq counts', () => {

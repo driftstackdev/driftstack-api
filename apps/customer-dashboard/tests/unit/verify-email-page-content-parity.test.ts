@@ -67,9 +67,11 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/setTimeout\(\(\) => controller\.abort\(\), VERIFY_REQUEST_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
-    expect(body).toContain('Email-verification outcome is unknown after the request timed out.');
-    expect(body).toContain('consumed this one-time token');
-    expect(body).toContain('Do not submit this token again.');
+    expect(body).toContain('The request took too long, so your email may already be verified.');
+    expect(body).toContain("Don't use this link again — try signing in.");
+    expect(body).toContain(
+      "If sign-in says you're still unverified, request a new verification email below.",
+    );
     expect(body).toContain('Continue to sign in');
     expect(body).toContain('Resend verification email');
   });
@@ -116,7 +118,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/\.finally\(\(\) => clearTimeout\(timeoutId\)\)/);
     expect(body).toMatch(/resendOutcomeUnknown = true/);
-    expect(body).toMatch(/Verification-email delivery is unknown/);
+    expect(body).toMatch(/The request took too long, so we're not sure the email went out/);
     expect(body).toMatch(/Check inbox before retrying/);
   });
 
@@ -142,7 +144,7 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
 
   it('/signup "restart signup" cross-link present', () => {
     expect(body).toMatch(/<a\s*href="\/signup\/"\s*class="[^"]+"\s*>\s*restart signup\s*<\/a\s*>/);
-    expect(body).toMatch(/Token expired or never arrived\?/);
+    expect(body).toMatch(/Code expired or never arrived\?/);
   });
 
   it('linkToken-wins-over-debugToken fallback chain pinned (URL token always wins when both present; dev paste-in kept for back-compat)', () => {
@@ -163,9 +165,9 @@ describe('W371.B customer-dashboard /verify-email page content parity', () => {
     expect(body).toContain('function canPersistWebSession()');
     expect(body).toContain("const probeKey = 'ds_web_session_storage_probe'");
     expect(body).toMatch(/if \(!canPersistWebSession\(\)\) \{/);
-    expect(body).toContain('It has not been consumed');
+    expect(body).toContain('Allow it, then open the link again — it still works.');
     expect(body).toMatch(/localStorage\.getItem\('ds_web_session_token'\) !== session\.token/);
-    expect(body).toContain('Do not submit this token again. Continue to sign in');
+    expect(body).toContain("Don't use this link again — just sign in.");
   });
 
   it('withSidebar={false} pre-auth surface', () => {

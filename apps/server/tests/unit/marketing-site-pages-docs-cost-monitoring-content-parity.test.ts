@@ -20,7 +20,8 @@ describe('W514.B marketing operational-cost docs content parity', () => {
 
   it('pins compute-only production truth and the four reserved zero fields', () => {
     expect(body).toMatch(/Today only the compute\s+estimate is populated/);
-    expect(body).toMatch(/Derived from session lifecycle time in whole minutes/);
+    expect(body).toMatch(/Derived from session time in whole minutes/);
+    expect(body).not.toMatch(/fleet-cost/);
     for (const label of [
       'Storage \\(reserved\\)',
       'Egress \\(reserved\\)',
@@ -38,9 +39,11 @@ describe('W514.B marketing operational-cost docs content parity', () => {
     expect(body).toMatch(/"totalCents": 4720/);
   });
 
-  it('keeps bundled-LLM accounting in its separate included-service budget', () => {
-    expect(body).toMatch(/10-cent-per-turn included-service budget value/);
-    expect(body).toMatch(/not rolled into\s+this estimate or separately itemized by Stripe today/);
+  it('keeps bundled-LLM accounting in its separate plan budget (2026-09-15 plain words: no "included-service budget" / Stripe internals on the customer page)', () => {
+    expect(body).toMatch(/10-cent-per-turn budget that is included in your plan/);
+    expect(body).toMatch(
+      /not\s+rolled into this estimate and is not a separate item on your invoice\s+today/,
+    );
     expect(body).toMatch(/GET \/v1\/account\/me\/bundled-llm-settings/);
     expect(body).not.toMatch(/contracted custom rate|billed on one invoice|per-token rate/i);
   });
@@ -49,7 +52,7 @@ describe('W514.B marketing operational-cost docs content parity', () => {
     for (const state of ['under-soft', 'between-soft-and-hard', 'over-hard']) {
       expect(body).toMatch(new RegExp(`>${state}<\\/span`));
     }
-    expect(body).toMatch(/operator-tuned unit-economics configuration/);
+    expect(body).toMatch(/they are Driftstack's internal configuration/);
     expect(body).toMatch(
       /does not add an\s+overage, rate-limit new sessions, or stop work already running/,
     );
@@ -57,9 +60,7 @@ describe('W514.B marketing operational-cost docs content parity', () => {
   });
 
   it('pins the current request-time computation and payment sources of truth', () => {
-    expect(body).toMatch(
-      /endpoint recomputes each request from current lifecycle-derived\s+session minutes/,
-    );
+    expect(body).toMatch(/endpoint recomputes on each request from your current session\s+minutes/);
     expect(body).toMatch(
       /Use Stripe billing state and\s+invoices, or the relevant NowPayments receipt, for payment truth/,
     );
@@ -68,7 +69,7 @@ describe('W514.B marketing operational-cost docs content parity', () => {
 
   it('keeps the live endpoint shape and fresh-account zero response', () => {
     expect(body).toMatch(/GET \/v1\/account\/cost\?billing_cycle=YYYY-MM/);
-    expect(body).toMatch(/synthesised zero-breakdown for fresh accounts/);
+    expect(body).toMatch(/all-zero breakdown for fresh accounts/);
     expect(body).toMatch(/\(no 404\)/);
     expect(body).toMatch(/All amounts are integer accounting cents/);
     expect(existsSync(LIB)).toBe(true);

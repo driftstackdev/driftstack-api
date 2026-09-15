@@ -67,10 +67,10 @@ describe('docs api/account content parity', () => {
 
   it('avatar DELETE retention framing, corrected by V-797. This pinned "a sweeper job collects orphaned keys off the hot path" as a load-bearing async-GC contract. No such sweeper exists: routes/account-me.ts itself says a FUTURE sweeper, and no service, scheduled job or chain touches avatar keys. The page now tells customers the object persists and a previously-shared URL keeps resolving.', () => {
     expect(body).toMatch(
-      /The R2\s*\n?object itself is left in place and there is no sweeper collecting\s*\n?orphaned keys today/,
+      /The\s*\n?image file itself is not deleted, so a previously shared link keeps\s*\n?working/,
     );
     expect(body, 'and the consequence is stated, not just the mechanism').toMatch(
-      /a previously-shared object URL keeps resolving/,
+      /a previously shared link keeps\s*\n?working\. Do not treat the delete as an erasure of the image\./,
     );
     expect(body, 'the phantom garbage collector must not return').not.toMatch(
       /a sweeper job collects orphaned keys/,

@@ -221,7 +221,7 @@ vi.mock('../../src/lib/open-simulator', () => ({
 const { ProfilesView } = await import('../../src/views/ProfilesView');
 
 /** The one message every egress block must carry, whatever caused it. */
-const LEAK_COPY = /was NOT launched[\s\S]*default IP/;
+const LEAK_COPY = /was not started[\s\S]*without your proxy/;
 
 describe('a launch that cannot name the proxy must not launch', () => {
   beforeEach(() => {

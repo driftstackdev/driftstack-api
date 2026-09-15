@@ -85,9 +85,7 @@ timestamp:
 ```
 
 After the override expires, subsequent reads return the
-tier-default row again. The override doesn't disappear from the
-admin's audit trail — only from the calling account's effective
-config.
+tier-default row again.
 
 Requires the broad `read` scope; `account_owner` also satisfies the
 gate. Resource-granular, write-only, and zero-scope keys cannot inspect
@@ -98,7 +96,7 @@ account-wide limits or staff-applied override metadata.
 | Bucket key                   | Consumed by                                            | Why a separate bucket?                                                                                                    |
 | ---------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
 | `global`                     | Every authenticated `/v1/*` without a dedicated bucket | Coarse anti-abuse cap — protects against runaway scripts                                                                  |
-| `sessions:create`            | `POST /v1/sessions` and `POST /v1/profiles/:id/launch` | Lower cap because session creation is the most expensive op (driver allocation); a profile launch creates a session too   |
+| `sessions:create`            | `POST /v1/sessions` and `POST /v1/profiles/:id/launch` | Lower cap because session creation starts a browser; a profile launch creates a session too                               |
 | `agent_sessions:message`     | `POST /v1/agent-sessions/:id/message`                  | Isolated from `global` so an LLM-driven message loop can't drain the global cap                                           |
 | `agent_sessions:input_event` | `POST /v1/agent-sessions/:id/input-event`              | High-frequency live input (sized for ≤120Hz mouseMove / touchMove) — isolated so input streams can't drain the global cap |
 
@@ -108,9 +106,8 @@ hitting that bucket's cap returns 429.
 
 ## Per-tier defaults
 
-The defaults the endpoint returns when no override is active are
-locked in `packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS`.
-Full table at [/reference/rate-limits](/reference/rate-limits/).
+The defaults the endpoint returns when no override is active are in
+the full table at [/reference/rate-limits](/reference/rate-limits/).
 
 ## Admin overrides
 
@@ -121,7 +118,7 @@ have:
 - `capacity` and `refill_per_second` — the new ceiling
 - `expires_at` — when the override automatically reverts to tier
   default
-- `reason` — admin-side audit string (not exposed on the customer
+- `reason` — an internal note (not exposed on the customer
   endpoint)
 
 When an override exists for a bucket and `now < expires_at`, the
@@ -131,8 +128,8 @@ back to the tier default automatically.
 Customers needing legitimate high-throughput workloads (Enterprise,
 agencies running scraping jobs across many domains) request
 overrides via `support@driftstack.dev` with workload shape +
-expected steady-state RPS. Admins evaluate, set the override via
-`/v1/admin/rate-limit-overrides`, and notify the customer.
+expected steady-state requests per second. Support reviews the
+request, applies the override, and lets you know.
 
 ## Customer-dashboard surface
 
@@ -195,10 +192,3 @@ The `Retry-After` HTTP header carries the same value as
 `retry_after_seconds`. SDK clients honour it automatically with
 exponential backoff capped at 10s; see
 [/reference/errors](/reference/errors/) for retry-loop examples.
-
-## Source of truth
-
-Routes: `apps/server/src/routes/account-rate-limits.ts`. Schema:
-`packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS`.
-Override repo: `apps/server/src/db/rate-limit-overrides-repo.ts`.
-Admin route: `apps/server/src/routes/admin-rate-limit-overrides.ts`.

@@ -17,6 +17,7 @@ import { SessionStatusBadge } from '../components/SessionStatusBadge';
 import { useSettings } from '../lib/SettingsContext';
 import { type Session } from '../lib/client';
 import { humanizeError } from '../lib/humanize-error';
+import { formatDeviceName } from './ProfilesView';
 
 interface HistoryState {
   sessions: Session[];
@@ -92,8 +93,7 @@ export function SessionsHistoryView(): JSX.Element {
             )}
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Ended sessions (destroyed or errored) with their lifetime and final status. Active
-            sessions live under "Active" in the sidebar.
+            Sessions that have ended, with how long they ran and how they finished.
           </p>
           {state.refreshedAt !== null && (
             <p className="mt-1 text-2xs text-ink-muted">
@@ -142,7 +142,7 @@ export function SessionsHistoryView(): JSX.Element {
             </svg>
           }
           title="No past sessions yet"
-          description="Sessions that have ended — destroyed or errored — show up here."
+          description="Sessions that have ended show up here."
         />
       )}
 
@@ -166,11 +166,11 @@ export function SessionsHistoryView(): JSX.Element {
                   </p>
                   <p className="mono mt-0.5 truncate text-2xs text-ink-muted">{s.id}</p>
                   <p className="mt-1 text-2xs text-ink-muted">
-                    {s.archetype} · {fmtDuration(s.created_at, endedIso)} ·{' '}
+                    {formatDeviceName(s.archetype)} · {fmtDuration(s.created_at, endedIso)} ·{' '}
                     {endedIso ? (
                       <RelativeTime
                         iso={endedIso}
-                        tooltipPrefix={s.destroyed_at ? 'Ended' : 'Last state (errored)'}
+                        tooltipPrefix={s.destroyed_at ? 'Ended' : 'Stopped'}
                       />
                     ) : (
                       '—'
@@ -193,12 +193,12 @@ export function SessionsHistoryView(): JSX.Element {
                       a clean one. */}
                   {egressWarnings(s).length > 0 && (
                     <p className="mt-0.5 text-2xs text-status-warn">
-                      Egress: {egressWarnings(s).join(' · ')}
+                      Proxy limits: {egressWarnings(s).join(' · ')}
                     </p>
                   )}
                   {s.status === 'errored' && (
                     <p className="mt-0.5 text-2xs text-ink-muted italic">
-                      Reason not reported by the harness
+                      No error details were recorded
                     </p>
                   )}
                 </div>
@@ -233,9 +233,9 @@ function egressWarnings(s: { egress_capabilities: unknown }): string[] {
     warnings?: unknown;
   };
   const out: string[] = [];
-  if (c.udp_associate === false) out.push('no UDP associate');
-  if (c.quic_route === false) out.push('no QUIC route');
-  if (c.dns_remote_resolve === false) out.push('DNS resolved locally');
+  if (c.udp_associate === false) out.push('UDP not supported');
+  if (c.quic_route === false) out.push('HTTP/3 not available');
+  if (c.dns_remote_resolve === false) out.push('DNS resolved outside the proxy');
   if (Array.isArray(c.warnings)) {
     for (const w of c.warnings) if (typeof w === 'string' && w.length > 0) out.push(w);
   }

@@ -74,14 +74,13 @@ describe('W508.B apps/marketing-site/src/pages/docs/admin-api-pagination.astro c
 
   it("Cursor lifetime framing: 'Cursors are not signed and do not expire on a timer' + 'default 1000 rows on filtered queries, 51 rows on the unfiltered first page — the limit + 1 overflow probe' + 'falls out of the window, the server returns an empty page with next_cursor: null' — pinned so the not-signed + no-timer-expire + 1000-row-filtered-window + 51-row-unfiltered-overflow-probe + benign-empty-on-window-overflow commitments survive (drift to changing the window-size would create marketing↔server divergence; drift to dropping 'empty page on overflow' would force clients to handle an unexpected error)", () => {
     expect(body).toMatch(
-      /Cursors are not signed and do not expire on a timer; the\s*server treats them as the literal\s*<code>\(created_at, order_id\)<\/code> pair to seek past\./,
+      /Cursors do not expire on a timer\. A cursor stays valid as long\s*as the row it points at is still within the most recent rows\s*the server scans\./,
     );
     expect(body).toMatch(
-      /default 1000 rows on filtered\s*queries, 51 rows on the unfiltered first page — the\s*<code>limit \+ 1<\/code> overflow probe/,
+      /If you walk slowly enough that the row falls out of that\s*range, the server returns an empty page with\s*<code>next_cursor: null<\/code>\./,
     );
-    expect(body).toMatch(
-      /If you walk slowly enough that the anchor row falls out of\s*the window, the server returns an empty page with\s*<code>next_cursor: null<\/code>\./,
-    );
+    // Scan-window sizes and the overflow probe are server internals.
+    expect(body).not.toMatch(/overflow probe|not signed|seek past/);
   });
 
   it("Validation errors 2-rule: cursor >512 chars → 400 + malformed cursor → empty page with next_cursor:null — pinned so the 2-rule cursor-validation framing + the 'server prefers benign empty over surfacing decode internals' rationale survive (drift to surfacing decode internals would leak cursor-format details that clients shouldn't depend on)", () => {
@@ -89,8 +88,9 @@ describe('W508.B apps/marketing-site/src/pages/docs/admin-api-pagination.astro c
       /A cursor longer than 512 characters returns\s*<code>400 Bad Request<\/code>\./,
     );
     expect(body).toMatch(
-      /A malformed cursor \(not valid base64url JSON of\s*<code>&#123;ts, id&#125;<\/code>\) returns an empty page with\s*<code>next_cursor: null<\/code>; the server prefers a benign\s*empty result over surfacing decode internals\./,
+      /A malformed cursor returns an empty page with\s*<code>next_cursor: null<\/code>\./,
     );
+    expect(body).not.toMatch(/base64url|decode internals/);
   });
 
   it('current route matrix, offset exception, and crypto-only detail scope are pinned', () => {

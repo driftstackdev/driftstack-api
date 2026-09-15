@@ -44,12 +44,12 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/"anthropic_input_tokens": 1200,\s*\n\s*"anthropic_output_tokens": 340,/);
   });
 
-  it('Agent sessions overview framing pinned (W554: intent list completed to all 6 kinds — navigate/interact/wait/capture + behavioural scroll/behavioral_pause): chat-style decompose→execute loop + NL messages + streaming-results contract stay documented', () => {
+  it('Agent sessions overview framing pinned (W554: intent list completed to all 6 kinds — navigate/interact/wait/capture + behavioural scroll/behavioral_pause): AI-drives-from-plain-language + typed intents + results-in-response contract stay documented', () => {
     expect(body).toMatch(
-      /An \*\*agent session\*\* layers a chat-style decompose→execute loop on\s*top of a regular driver-backed browser session\./,
+      /An \*\*agent session\*\* lets an AI drive a browser session from\s*plain-language messages\./,
     );
     expect(body).toMatch(
-      /the server's decomposer translates that into typed\s*intents \(`navigate`, `interact`, `wait`, `capture`, plus the\s*behavioural `scroll` and `behavioral_pause`\); the runtime executes\s*them; results stream back in the response\./,
+      /Driftstack turns it\s*into a list of typed \*\*intents\*\* \(`navigate`, `interact`, `wait`,\s*`capture`, plus the behavioural `scroll` and `behavioral_pause`\), runs\s*them, and returns the results in the response\./,
     );
   });
 
@@ -76,13 +76,13 @@ describe('docs/pages/api/agent-sessions content parity', () => {
 
   it('3-mode state machine framing pinned: ai (default; every message goes through decomposer + executor; closed sessions return 409) + manual (message is transcript-only pass-through; gui-client drives real actions via gui_control plane HMAC channel) + pair (interactive takeover state machine; AI drives by default; customer calls takeover to seize control then handback to return; state transitions audit-logged) — pinned so the 3-mode roster + AI-default + manual-gui_control-plane + pair-takeover-handback-state-machine + audit-logged contract all stay documented (drift on any mode would mismatch route+service+DB enum)', () => {
     expect(body).toMatch(
-      /- `ai` \(default\) — every customer message goes through the\s*decomposer \+ executor\. Closed sessions return 409\./,
+      /- `ai` \(default\) — every customer message is planned and executed by\s*the AI\. Closed sessions return 409\./,
     );
     expect(body).toMatch(
-      /- `manual` — `message` is a transcript-only pass-through\. The\s*customer's gui-client drives the real actions via the\s*gui_control plane \(a separate per-session HMAC channel\)\./,
+      /- `manual` — `message` is a transcript-only pass-through\. The desktop\s*app drives the real actions\./,
     );
     expect(body).toMatch(
-      /- `pair` — interactive takeover state machine\. AI drives by\s*default; the customer can call `takeover` to seize control,\s*then `handback` to return control to AI\. State transitions are\s*audit-logged\./,
+      /- `pair` — interactive takeover\. AI drives by default; the customer\s*can call `takeover` to take control, then `handback` to return\s*control to the AI \(handback is not available yet — see below\)\.\s*State transitions are audit-logged\./,
     );
   });
 
@@ -97,10 +97,10 @@ describe('docs/pages/api/agent-sessions content parity', () => {
       /"id": "agt_<uuid>",\s*"account_id": "<uuid>",\s*"driftstack_session_id": "ses_<uuid> \| null",\s*"status": "provisioning \| active \| paused \| closed",/,
     );
     expect(body).toMatch(
-      /"livekit": \{\s*"ws_url": "wss:\/\/mac-NNN\.driftstack\.dev:8443",\s*"room": "agt_<uuid>",\s*"token": "<HS256 JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<ISO-8601>"\s*\}/,
+      /"livekit": \{\s*"ws_url": "wss:\/\/<livekit-host>",\s*"room": "agt_<uuid>",\s*"token": "<HS256 JWT>",\s*"participant_identity": "customer-<account-uuid>",\s*"expires_at": "<ISO-8601>"\s*\}/,
     );
     expect(body).toMatch(
-      /The `livekit` field is \*\*optional\*\* — auto-populated on the\s*session-create response when the deployment has at least\s*one Mac with registered LiveKit credentials, and absent otherwise\s*\(pre-LK deployment, OR no Mac has called\s*`POST \/v1\/mac-nodes\/register` yet\)\./,
+      /The `livekit` field is \*\*optional\*\* — auto-populated on the\s*session-create response when live video is available on the\s*deployment, and absent otherwise\./,
     );
   });
 
@@ -137,18 +137,18 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/counts against\s*your cap exactly as an `active` one does/);
     // And that `provisioning_detail` may simply be absent on an older server,
     // rather than being read as "no step".
-    expect(body).toMatch(/absent entirely on servers older than/);
+    expect(body).toMatch(/may be absent entirely on older deployments/);
   });
 
   it('documents the current HTTP 503 boundary and supported live-control channels without internal ownership or roadmap prose', () => {
     expect(body).toMatch(
-      /\*\*HTTP manual-input dispatch is unavailable\.\*\* Manual-mode and\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*the HTTP route does not forward input to the harness\./,
+      /\*\*HTTP manual input is unavailable\.\*\* Manual-mode and\s*pair-mode-after-takeover input-events return `503 feature-unavailable`;\s*the HTTP route does not accept them\./,
     );
     expect(body).toMatch(
-      /use the desktop Simulator or publish input through\s*the LiveKit DataChannel documented in the/,
+      /use the desktop app or send input over the LiveKit data channel\s*documented in the/,
     );
     expect(body).not.toMatch(/Agent\s+[123]|until[^.]{0,120}lands/iu);
-    expect(body).toMatch(/live fleet state is\s*unavailable in the deployment\./);
+    expect(body).toMatch(/live session state is\s*unavailable on this deployment\./);
     expect(body).toMatch(/no BYOK or bundled-LLM provider is available in the deployment/);
     expect(body).not.toMatch(/control plane\s*is not wired|activation gate is off|key path wired/);
   });
@@ -166,16 +166,12 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).not.toContain('try a broader selector or wait for it to appear');
   });
 
-  it('documents exact control-lane admission, manual provider bypass, and honest partial 409 settlement', () => {
-    expect(body).toMatch(/admits each request into exactly one control lane/);
-    expect(body).toMatch(/A `manual` request is\s*transcript-only and never consults BYOK/);
-    expect(body).toMatch(
-      /invalidate the admitted turn even if\s*the session later returns to the same visible mode/,
-    );
+  it('documents per-message mode admission, manual provider bypass, and honest partial 409 settlement', () => {
+    expect(body).toMatch(/Each message runs in the mode the session was in when it arrived/);
+    expect(body).toMatch(/A `manual`\s*message is transcript-only and never touches BYOK/);
+    expect(body).toMatch(/cancels the turn even if the session later returns to the same mode/);
     expect(body).toMatch(/`409 conflict` with `ai_control_unavailable: true` and a `phase`/);
-    expect(body).toMatch(
-      /starts no later provider attempt, retry, browser intent, read-back, or\s*transcript suffix/,
-    );
+    expect(body).toMatch(/and no\s*further work is started/);
     expect(body).toMatch(/`tokens_consumed` and\s*`usage`/);
     expect(body).toMatch(/redacted `partial_results`/);
     expect(body).toMatch(/manual transcript turn never reads or hashes the irrelevant/);
@@ -184,12 +180,12 @@ describe('docs/pages/api/agent-sessions content parity', () => {
     expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
     expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
     expect(body).toMatch(/redacted `partial_results` evidence described\s*above/);
-    expect(body).toMatch(/posted 10-cent included-service accounting value/);
-    expect(body).toMatch(/not the upstream model's measured cost/);
-    expect(body).toMatch(/optional read-back model call is recorded separately/);
-    expect(body).toMatch(/not currently aggregated into this response field/);
+    expect(body).toMatch(/the flat 10 cents\s*charged for the turn/);
+    expect(body).toMatch(/not the model's measured cost/);
+    expect(body).toMatch(/It is the whole charge\s*for that turn/);
+    expect(body).toMatch(/a per-turn figure rather than a running total/);
     expect(body).toMatch(
-      /`ai_control_unavailable: true` when a message's admitted control epoch changes/,
+      /`ai_control_unavailable: true` when control of the session changes while a message is running/,
     );
   });
 

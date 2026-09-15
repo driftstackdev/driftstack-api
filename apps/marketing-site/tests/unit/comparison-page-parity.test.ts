@@ -44,8 +44,8 @@ describe('W263.A /comparison ↔ live archetype + competitor framing parity', ()
     expect(page).toMatch(/browserbase:\s*'Chromium/);
   });
 
-  it('comparison framing acknowledges WebKit source-level fork', () => {
-    expect(page).toMatch(/WebKit source-level fork/);
+  it("comparison framing (meta description) names Apple's WebKit as the browser iPhones actually use, vs Chromium (2026-09-15: was 'WebKit source-level fork vs Chromium')", () => {
+    expect(page).toMatch(/Apple's WebKit \(the browser iPhones actually use\) vs Chromium/);
   });
 
   it('CTA copy stays anchored to the iPhone Safari narrative', () => {

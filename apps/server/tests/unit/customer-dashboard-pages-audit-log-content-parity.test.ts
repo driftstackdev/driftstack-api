@@ -138,8 +138,12 @@ describe('W496.B apps/customer-dashboard/src/pages/audit-log.astro content parit
     );
   });
 
-  it("Export cap + privacy@driftstack.dev framing pinned: 'Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint (GET /v1/account/audit-log) with cursor pagination. Account, billing, and authentication data export on request via privacy@driftstack.dev.' — pinned so the 10k cap + the privacy-email-for-other-data-types reference stay (drift to dropping privacy@ contact would orphan customers who want non-audit data exports)", () => {
-    expect(body).toMatch(/Exports cap at 10,000 rows per file\. Older entries remain accessible/);
+  it("Export cap + privacy@driftstack.dev framing pinned: 'Each export includes up to 10,000 entries. Older entries are still available through the API — see the audit log API docs. To export your account, billing and sign-in data, email privacy@driftstack.dev.' — pinned so the 10k cap + the privacy-email-for-other-data-types reference stay (drift to dropping privacy@ contact would orphan customers who want non-audit data exports)", () => {
+    expect(body).toMatch(
+      /Each export includes up to 10,000 entries\. Older entries are still available through the API/,
+    );
+    expect(body).toContain('https://docs.driftstack.io/api/audit-log/');
+    expect(body).toMatch(/To export your account, billing and sign-in data, email/);
     expect(body).toMatch(/>privacy@driftstack\.dev<\/code\s*>/);
   });
 

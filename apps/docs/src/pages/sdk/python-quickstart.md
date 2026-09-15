@@ -6,8 +6,8 @@ description: 5-minute getting-started for the driftstack-sdk Python client. Sync
 
 # Python quickstart
 
-— laser-focused 5-minute path to a working Python Driftstack
-session. For the multi-language overview see the [combined quickstart](/quickstart/).
+A five-minute path to a working Python Driftstack session. For the
+multi-language overview see the [combined quickstart](/quickstart/).
 
 ## Prerequisites
 
@@ -28,8 +28,8 @@ pip install driftstack-sdk
 ```
 
 The package ships both sync (`Driftstack`) and async
-(`AsyncDriftstack`) clients off the same wire shape. Pick whichever
-matches your runtime.
+(`AsyncDriftstack`) clients with the same methods. Pick whichever
+fits your application.
 
 ## 2. Configure the client
 
@@ -196,32 +196,27 @@ Async mirrors are 1:1: `await aclient.agent_sessions.set_mode(...)`,
 `await aclient.agent_sessions.takeover(...)`,
 `await aclient.agent_sessions.handback(...)`.
 
-State machine kinds you'll see: `ai-driving`, `takeover-pending`,
-`takeover-queued` (mid-decompose deferral), `human-driving`,
+States you'll see: `ai-driving`, `takeover-pending`,
+`takeover-queued` (the AI is finishing its current step first), `human-driving`,
 `handback-pending`, `handback-queued`.
 
-> **⚠️ The handback half of this loop cannot complete on any deployment today.**
-> `takeover()` works and parks the session in `takeover-pending`. Advancing from there to
-> `human-driving` requires the `takeover-grant` transition, and **nothing emits it** — the
-> harness has no control-plane surface to fire it yet (tracked in
-> `docs/internal/cross-agent-control-plane-contract.md`). Consequences you will actually
-> observe:
+> **⚠️ Handback cannot complete on any deployment today.** `takeover()` works and
+> leaves the session in `takeover-pending`, but no session can currently advance from
+> there to `human-driving`. What you will see:
 >
-> - `handback()` returns **409 `pair-mode-conflict`** every time, because
->   `handback-request` is only accepted from `human-driving`.
-> - `human-driving`, `handback-pending` and `handback-queued` are **unreachable**, so a UI
->   that branches on them is dead code.
-> - After 30s without a client heartbeat the sweep silently returns the session to
->   `ai-driving`, so a parked takeover expires on its own.
+> - `handback()` returns **409 `pair-mode-conflict`** every time, because handback is
+>   only accepted from `human-driving`.
+> - `human-driving`, `handback-pending` and `handback-queued` are never reached, so a UI
+>   that branches on them will not run.
+> - A session left in `takeover-pending` returns to `ai-driving` on its own after 30
+>   seconds without a client heartbeat.
 >
-> Drive live sessions through the desktop Simulator's control channel until the emitter
-> ships.
+> Until this ships, use the desktop Simulator to control live sessions by hand.
 
 ### Modifier vocabulary
 
 `keyDown` / `keyUp` events accept a `modifiers` array. Use the
-canonical 4-name set — these map 1:1 onto Quartz `CGEventFlags`
-on the macOS harness side:
+canonical 4-name set — `cmd`, `ctrl`, `shift`, `option`:
 
 ```py
 from driftstack.resources.agent_sessions import CANONICAL_MODIFIER_NAMES
@@ -233,25 +228,23 @@ result = client.agent_sessions.send_input_event(
 )
 ```
 
-DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
-through the schema unchanged but the harness decoder drops them.
+DOM-standard names (`Shift / Control / Alt / Meta`) are accepted but
+ignored.
 
 ## Next steps
 
 - [Session lifecycle reference](/guides/session-lifecycle/) —
   states, the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
-  identity slots that survive across sessions.
-- [Agent sessions](/api/agent-sessions/) — natural-language
-  decompose-and-execute on top of the regular driver surface;
-  AI / manual / pair modes, live SSE transcript stream, and the
-  LiveKit-based live video subscription (auto-populated `livekit`
-  field on session-create, or re-mint via
-  `client.agent_sessions.livekit_token(id)` after the 24h token TTL —
-  also available on the async client).
+  profiles that survive across sessions.
+- [Agent sessions](/api/agent-sessions/) — let an AI agent drive a
+  session from plain-language instructions; AI / manual / pair modes,
+  a live transcript stream, and live video (the `livekit` field on the
+  create response, or `client.agent_sessions.livekit_token(id)` for a
+  fresh token after 24 hours — also on the async client).
 - [Bundled LLM](/api/bundled-llm/) and
-  [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
-  agent sessions can use.
+  [BYOK Anthropic](/api/byok-anthropic/) — the two ways to supply an
+  AI model to agent sessions.
 - [Idempotency keys](/reference/idempotency/) — `Idempotency-Key` is
   honoured on agent sessions and the billing checkouts, and NOT on
   `POST /v1/sessions`; retrying that one mints a second session.

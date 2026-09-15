@@ -61,14 +61,14 @@ const DIMENSIONS = [
     ],
   },
   {
-    heading: 'Quotas',
+    heading: 'Limits',
     rows: [
       {
         label: 'Saved profiles',
         get: (t: (typeof API_TIERS)[number]): string => fmtNumberOrString(t.profiles),
       },
       {
-        label: 'Concurrent sessions',
+        label: 'Concurrent sessions (running at once)',
         get: (t: (typeof API_TIERS)[number]): string => fmtNumberOrString(t.concurrent),
       },
       {
@@ -76,7 +76,7 @@ const DIMENSIONS = [
         get: (t: (typeof API_TIERS)[number]): string => t.hoursLabel,
       },
       {
-        label: 'Device types (archetypes)',
+        label: 'Device types',
         get: (t: (typeof API_TIERS)[number]): string => t.archetypeAccess,
       },
     ],
@@ -103,7 +103,7 @@ const DIMENSIONS = [
 
 <BaseLayout
   title="Pricing comparison"
-  description="Side-by-side comparison of every Driftstack tier: pricing, quotas, features, support. Pulled from the same data the live billing system uses, so you can quote it in evaluations."
+  description="Side-by-side comparison of every Driftstack tier: pricing, limits, features, support. These are the exact prices you'll be billed, so you can quote them with confidence."
 >
   <section class="relative overflow-hidden bg-gradient-to-b from-tk-bg to-tk-surface">
     {/* 2026-05-23 — hero-glow + gradient h1 matches family. */}
@@ -115,8 +115,7 @@ const DIMENSIONS = [
       <h1 class="mt-3 text-4xl font-semibold tracking-tight md:text-5xl text-tk-ink">Compare every tier, side-by-side.</h1>
       <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         Everything that matters when you're comparing plans, in one
-        table. Numbers come from the same data file the live billing
-        system uses — what you see here is what your invoice will say.
+        table. These are the exact prices you'll be billed.
       </p>
       <p class="mt-4 max-w-prose text-sm text-tk-ink-3">
         Looking for the glanceable view?
@@ -132,9 +131,8 @@ const DIMENSIONS = [
         <h2 class="text-xl font-semibold tracking-tight text-tk-ink">Free ({fmtUsd(freeTier.monthlyUsd)}, forever)</h2>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
           {freeTier.hoursLabel} — a try-before-you-buy tier, no card
-          required. Includes every device type
-          (<a href="/glossary/#archetype" class="text-tk-accent-text underline">archetype</a>)
-          we currently offer.
+          required. Includes every iPhone model, iOS version and Safari
+          version we currently offer.
         </p>
         <p class="mt-2 text-sm">
           <a
@@ -203,14 +201,14 @@ const DIMENSIONS = [
         </table>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
-        ★ = team's most popular tier in active evaluations. Not a sales
-        push — just what prospective customers are picking right now.
+        ★ = our most popular tier right now.
       </p>
       <p class="mt-2 max-w-prose text-xs text-tk-ink-3">
         BYOK = bring your own key: you connect your own Anthropic account
         for the AI agent and pay Anthropic directly. Bundled = Driftstack
-        carries the AI calls and bills them on your Driftstack invoice. An
-        <a href="/glossary/#archetype" class="text-tk-accent-text underline">archetype</a>
+        provides the AI access for you, counted against a monthly budget
+        included in your plan. A
+        <a href="/glossary/#archetype" class="text-tk-accent-text underline">device type</a>
         is a specific iPhone model + iOS + Safari combination. SLA = the
         reply time we commit to for support.
       </p>
@@ -227,8 +225,8 @@ const DIMENSIONS = [
           </h3>
           <p class="mt-2 text-sm text-tk-ink-2">
             Switching to a higher tier is immediate. You pay only the
-            difference for the rest of the billing period (prorated); the
-            next invoice reflects the upgrade. No interruption to running
+            difference for the rest of the billing period; the next
+            invoice reflects the upgrade. No interruption to running
             sessions.
           </p>
         </div>
@@ -263,8 +261,8 @@ const DIMENSIONS = [
           <p class="mt-2 text-sm text-tk-ink-2">
             Annual billing is ~20% off the monthly rate, paid up-front.
             You can switch monthly → annual at any time (the annual term
-            starts right away, prorated); annual → monthly takes effect
-            at the annual term's end.
+            starts right away and you pay only the difference); annual →
+            monthly takes effect at the annual term's end.
           </p>
         </div>
       </div>

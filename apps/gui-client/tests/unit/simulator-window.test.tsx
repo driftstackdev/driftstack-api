@@ -278,7 +278,7 @@ describe('SimulatorWindow — floating iPhone', () => {
     withoutZone.unmount();
   });
 
-  it('(S1/S2) the drawer is the simulator\'s own dark chrome in BOTH themes: captions, "· ws ✓" and "· iPhone 17" clear AA on #1d1e24, and the clipped Egress line titles its full text', () => {
+  it('(S1/S2) the drawer is the simulator\'s own dark chrome in BOTH themes: captions, the Link card\'s "Connected ✓" and "· iPhone 17" clear AA on #1d1e24, and the clipped Proxy line titles its full text', () => {
     // Measured 2026-09-12 (scene-quality over the harness simulator scene): the 9.5px
     // captions at text-white/40 were 3.77 on #1d1e24; "· iPhone 17" at text-white/45 was
     // 4.41; "· ws ✓" wore text-ink-secondary — a THEME token that is #525863 in light mode,
@@ -305,7 +305,7 @@ describe('SimulatorWindow — floating iPhone', () => {
       /text-\[9\.5px\] uppercase/.test(el.className),
     );
     expect(captions.map((el) => el.textContent?.trim())).toEqual(
-      expect.arrayContaining(['Profile', 'Device', 'Link', 'Egress', 'Identity']),
+      expect.arrayContaining(['Profile', 'Device', 'Link', 'Proxy', 'Identity']),
     );
     for (const caption of captions) {
       expect(
@@ -314,13 +314,20 @@ describe('SimulatorWindow — floating iPhone', () => {
       ).toBeGreaterThanOrEqual(4.5);
     }
 
-    // "· ws ✓" must be a white tint (mode-independent), never an ink token that flips per theme.
-    const ws = Array.from(panel?.querySelectorAll('span') ?? []).find(
-      (el) => el.textContent === ' · ws ✓',
-    );
-    expect(ws, 'the Link card renders "· ws ✓" for a connected session').toBeDefined();
-    expect(ws?.className).not.toMatch(/text-ink-/);
-    expect(whiteAlphaContrast(ws?.className ?? '')).toBeGreaterThanOrEqual(4.5);
+    // The Link card reads "Connected ✓" — no host name, no protocol marker (owner
+    // directive 2026-09-15) — in the pane's own white tint (mode-independent), never
+    // an ink token that flips per theme.
+    const linkCaption = captions.find((el) => el.textContent?.trim() === 'Link');
+    const linkValue = linkCaption?.nextElementSibling as HTMLElement | null;
+    expect(
+      linkValue?.textContent?.trim(),
+      'the Link card reads "Connected ✓" for a connected session',
+    ).toBe('Connected ✓');
+    expect(linkValue?.textContent).not.toMatch(/ws|wss:|lk/);
+    expect(linkValue?.className).not.toMatch(/text-ink-/);
+    const pane = container.querySelector('[data-component="drawer-diagnostics"]');
+    expect(pane?.className).not.toMatch(/text-ink-/);
+    expect(whiteAlphaContrast(pane?.className ?? '')).toBeGreaterThanOrEqual(4.5);
 
     // The toolbar's muted device suffix beside the profile name.
     const toolbar = container.querySelector('[data-component="simulator-toolbar"]');
@@ -525,7 +532,12 @@ describe('SimulatorWindow — floating iPhone', () => {
     );
     const badge = container.querySelector('[data-component="transport-fallback-badge"]');
     expect(badge).not.toBeNull();
-    expect(badge?.textContent).toContain('Slow link');
+    expect(badge?.textContent).toContain('Slow connection');
+    // Transport mechanics never reach the badge or its tooltip (owner directive 2026-09-15).
+    expect(badge?.textContent).not.toMatch(/TCP|UDP|relay/i);
+    expect(badge?.getAttribute('title')).not.toMatch(
+      /\bTCP\b|\bUDP\b|\bTURN\b|\bports?\b|\bbox\b/i,
+    );
   });
 
   it('Browser mode: DEFAULT ON → native address bar in the toolbar; explicit off → device identity (founder 2026-06-21)', () => {

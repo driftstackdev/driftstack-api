@@ -314,7 +314,7 @@ describe('SimulatorWindow — harness capability health', () => {
     expect(panelCbs.interactive).toBe(false);
     expect(
       container.querySelector('[data-component="streaming-capability-error"]'),
-    ).toHaveTextContent('capture is blank');
+    ).toHaveTextContent('no video is showing');
     expect(
       container.querySelector('[data-component="dead-proxy-capability-badge"]'),
     ).toHaveTextContent('Proxy connection failed');

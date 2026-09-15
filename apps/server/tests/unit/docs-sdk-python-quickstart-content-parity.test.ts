@@ -47,7 +47,7 @@ describe('docs sdk/python-quickstart content parity', () => {
 
   it('dual sync (`Driftstack`) + async (`AsyncDriftstack`) client shape pinned: drift to silently dropping the async client would break FastAPI/asyncio integrations; drift to dropping sync would break script/Flask/Django consumers', () => {
     expect(body).toMatch(/sync \(`Driftstack`\) and async\s*\(`AsyncDriftstack`\) clients/);
-    expect(body).toMatch(/off the same wire shape/);
+    expect(body).toMatch(/with the same methods/);
   });
 
   it('install command pinned: pip + uv + poetry — 3 supported install paths. Drift to dropping uv or poetry would orphan customers using those package managers', () => {

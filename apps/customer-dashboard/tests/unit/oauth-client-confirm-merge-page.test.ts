@@ -100,7 +100,7 @@ describe('OAuth client merge confirmation page', () => {
     expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({ token: 'merge_tok_123' });
     expect(window.location.search).toBe('?next=%2Fsecurity');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*consumed this one-time token.*linked the identity provider.*do not reload or submit this link again.*check connected accounts.*provider is absent.*sign in with your password.*IDP button/i,
+      /took too long.*account may already be linked.*don't use this link again.*check connected accounts under privacy & security.*isn't listed there.*sign in with your password.*button on the sign-in page again/i,
     );
     expect(
       window.document.querySelector('[data-merge-unknown]')?.classList.contains('hidden'),

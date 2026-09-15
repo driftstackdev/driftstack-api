@@ -23,7 +23,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       </h1>
       <p class="mt-6 max-w-prose text-lg text-tk-ink-2">
         Browser subscriptions are fixed-price and enforced by concurrent-session
-        capacity, not by hours, calls, or page navigations. The
+        capacity (how many sessions can run at once), not by hours, calls, or
+        page navigations. The
         <code class="font-mono">GET /v1/account/cost</code> endpoint is a UTC-month
         estimate of Driftstack's operational cost to serve your account. It is not
         the amount charged to you and it does not replace a Stripe invoice or
@@ -45,17 +46,16 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <div>
           <dt class="text-sm font-medium text-tk-ink">Compute estimate</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            Derived from session lifecycle time in whole minutes and Driftstack's
-            internal fleet-cost rate. Session minutes are analytics for unit
+            Derived from session time in whole minutes and Driftstack's
+            internal per-minute cost rate. Session minutes are analytics for unit
             economics; your browser subscription is not charged per minute.
           </dd>
         </div>
         <div>
           <dt class="text-sm font-medium text-tk-ink">Storage (reserved)</dt>
           <dd class="mt-1 text-sm text-tk-ink-2">
-            <code class="font-mono">storageCents</code> is present for response-shape
-            stability, but no per-account storage meter feeds it in production.
-            It currently returns zero.
+            <code class="font-mono">storageCents</code> is reserved and currently
+            returns zero.
           </dd>
         </div>
         <div>
@@ -77,9 +77,9 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           <dd class="mt-1 text-sm text-tk-ink-2">
             <code class="font-mono">llmCents</code> currently returns zero, including
             for bundled-LLM users. Bundled LLM's separate status endpoint records
-            a 10-cent-per-turn included-service budget value; it is not rolled into
-            this estimate or separately itemized by Stripe today. BYOK charges stay
-            with the model provider.
+            a 10-cent-per-turn budget that is included in your plan; it is not
+            rolled into this estimate and is not a separate item on your invoice
+            today. BYOK charges stay with the model provider.
           </dd>
         </div>
       </dl>
@@ -88,7 +88,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
   <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Operator threshold state</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Threshold state</h2>
       <p class="mt-3 max-w-prose text-tk-ink-2">
         Every cost response includes a
         <code class="font-mono">thresholdState</code> field with one
@@ -101,8 +101,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >under-soft</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            The operational estimate is below the operator warning threshold for
-            your tier.
+            The operational estimate is below Driftstack's internal warning
+            threshold for your tier.
           </p>
         </li>
         <li>
@@ -111,10 +111,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >between-soft-and-hard</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            The estimate crossed the operator warning threshold but remains below
-            the higher attention threshold. The platform may publish an in-app
-            account notification and an operator log; it does not send a billing
-            email or change your subscription.
+            The estimate crossed Driftstack's internal warning threshold but
+            remains below the higher attention threshold. Driftstack may show an
+            in-app account notification; it does not send a billing email or change
+            your subscription.
           </p>
         </li>
         <li>
@@ -123,17 +123,17 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             >over-hard</span
           >
           <p class="mt-2 text-sm text-tk-ink-2">
-            The estimate crossed the operator attention threshold. This is an
-            operational signal, not a customer spending cap: it does not add an
+            The estimate crossed Driftstack's internal attention threshold. This
+            is an operational signal, not a customer spending cap: it does not add an
             overage, rate-limit new sessions, or stop work already running.
           </p>
         </li>
       </ul>
       <p class="mt-6 max-w-prose text-sm text-tk-ink-2">
         Threshold numeric values are not part of the customer response because
-        they are operator-tuned unit-economics configuration. The categorical
-        state is diagnostic context only; your concurrent-session cap remains the
-        browser-capacity enforcement boundary.
+        they are Driftstack's internal configuration. The state is diagnostic
+        context only; the only limit enforced on your account is still how many
+        sessions can run at once.
       </p>
     </div>
   </section>
@@ -144,8 +144,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <p class="mt-3 max-w-prose text-tk-ink-2">
         Endpoint:
         <code class="font-mono">GET /v1/account/cost?billing_cycle=YYYY-MM</code>.
-        Omit the parameter for the current cycle. Returns 200 with a
-        synthesised zero-breakdown for fresh accounts that haven't
+        Omit the parameter for the current cycle. Returns 200 with an
+        all-zero breakdown for fresh accounts that haven't
         accrued usage yet (no 404).
       </p>
       <pre
@@ -183,8 +183,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             Is the response real-time?
           </p>
           <p class="mt-1">
-            The endpoint recomputes each request from current lifecycle-derived
-            session minutes. It does not read a Stripe invoice or a customer
+            The endpoint recomputes on each request from your current session
+            minutes. It does not read a Stripe invoice or a customer
             usage-billing ledger.
           </p>
         </div>
@@ -194,8 +194,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
           </p>
           <p class="mt-1">
             The LLM field in this endpoint is reserved and always zero today.
-            Bundled LLM records its 10-cent-per-turn included-service budget on
-            <code class="font-mono">GET /v1/account/me/bundled-llm-settings</code>,
+            Bundled LLM tracks its 10-cent-per-turn budget (included in your plan)
+            on <code class="font-mono">GET /v1/account/me/bundled-llm-settings</code>,
             not here. BYOK usage is billed directly by your model provider.
           </p>
         </div>
@@ -204,8 +204,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
             What happens if the estimate crosses the higher threshold?
           </p>
           <p class="mt-1">
-            The platform records an operator alert and can publish an in-app
-            account notification. It does not email a customer billing warning,
+            The Driftstack team is alerted and you may see an in-app account
+            notification. It does not email a customer billing warning,
             add an invoice item, rate-limit a session, or silently stop work.
           </p>
         </div>

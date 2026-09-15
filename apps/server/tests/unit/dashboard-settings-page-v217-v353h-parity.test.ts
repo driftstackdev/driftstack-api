@@ -74,7 +74,7 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     expect(p).toMatch(/if \(!profileHydrated\) profileEditedBeforeHydration = true/);
     expect(p).toMatch(/if \(!profileEditedBeforeHydration\) \{/);
     expect(p).toMatch(/accountMatchesProfile\(account, body\)/);
-    expect(p).toMatch(/live profile matches your changes/);
+    expect(p).toMatch(/your profile shows your changes/);
     expect(p).toMatch(/Your edits are still here/);
   });
 
@@ -87,7 +87,7 @@ describe('W759 dashboard /settings page V-217 + V-204 + V-352 parity', () => {
     expect(p).toMatch(/avatarRemoveBtn\.hidden = source !== 'user'/);
     expect(p).toMatch(/\['user', 'idp', 'none'\]\.includes\(me\.avatar_source\)/);
     expect(p).toMatch(/snapshotKnownBeforeUpload &&/);
-    expect(p).toMatch(/The response was lost, but removal completed/);
+    expect(p).toMatch(/The request took too long, but your avatar was removed/);
   });
 
   it("CRITICAL V-331b act-as header passthrough pinned in settings authedFetch. Drift would let team-RBAC customers update the wrong owner's settings.", () => {

@@ -603,12 +603,12 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
 
     expect(fetchCalls).toHaveLength(0);
     expect(hydratedCount()).toBe(1);
-    expect(text(window, '[data-banner]')).toMatch(/self-workspace only/i);
+    expect(text(window, '[data-banner]')).toMatch(/only buy a plan for your own account/i);
     for (const button of window.document.querySelectorAll<HTMLButtonElement>(
       '[data-action="buy-tier"], [data-action="buy-tier-crypto"]',
     )) {
       expect(button.disabled).toBe(true);
-      expect(button.title).toMatch(/workspace picker to Self/i);
+      expect(button.title).toMatch(/"Acting as" back to Self/i);
     }
   });
 
@@ -626,11 +626,11 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       '[data-action="buy-tier-crypto"]',
     ) as HTMLButtonElement;
     expect(crypto.disabled).toBe(true);
-    expect(crypto.title).toMatch(/cross-tab locking/i);
+    expect(crypto.title).toMatch(/isn't supported in this browser/i);
     crypto.dispatchEvent(new window.Event('click', { bubbles: true }));
     await flush();
     expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(0);
-    expect(text(window, '[data-banner]')).toMatch(/cross-tab locking/i);
+    expect(text(window, '[data-banner]')).toMatch(/isn't supported in this browser/i);
   });
 
   it('requires a strict authoritative self-account identity before enabling purchases', async () => {
@@ -844,7 +844,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     browserNowMs += 2_000;
     await vi.advanceTimersByTimeAsync(2_000);
     expect(text(window, '[data-field="crypto-address"]')).toBe('—');
-    expect(text(window, '[data-crypto-modal-error]')).toMatch(/payment deadline/i);
+    expect(text(window, '[data-crypto-modal-error]')).toMatch(/has expired/i);
     expect(fetchCalls.filter((call) => /\/crypto-orders\//.test(call.url))).toHaveLength(1);
     expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBeTruthy();
   });
@@ -999,7 +999,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
       expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(1);
       expect(storedCryptoIntentKey(window, DEFAULT_SELF_ACCOUNT_ID, 'solo_manual')).toBe(key);
       expect(text(window, '[data-crypto-modal-error]')).toMatch(
-        status === 'confirming' ? /confirming on-chain/i : /partial payment/i,
+        status === 'confirming' ? /is being confirmed/i : /partial payment/i,
       );
       expect(text(window, '[data-field="crypto-address"]')).toBe('—');
       expect(
@@ -1403,7 +1403,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     expect(fetchCalls.filter((call) => /\/crypto-checkout$/.test(call.url))).toHaveLength(0);
     expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);
     expect(text(window, '[data-crypto-modal-error]')).toMatch(
-      /needs browser site storage to prevent duplicate payment orders/i,
+      /site storage turned on so we can prevent duplicate payment orders/i,
     );
   });
 
@@ -1426,7 +1426,7 @@ describe('customer-dashboard Select-tier (select-tier.astro) checkout behaviour'
     await flush();
     expect(isHidden(window, '[data-crypto-modal-error]')).toBe(false);
     const err = text(window, '[data-crypto-modal-error]');
-    expect(err).toContain('Crypto checkout is unavailable on this server');
+    expect(err).toContain("Crypto checkout isn't available right now");
     expect(err).toContain('billing@driftstack.dev');
     expect(err).toContain('ord_stub_1');
   });

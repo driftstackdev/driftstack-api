@@ -51,9 +51,9 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(body).toMatch(/data-merge-window/);
   });
 
-  it("Check-your-inbox copy pinned: 'We sent a confirmation link to the email on your existing account to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>IDP</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your IDP' copy contract stays documented. (The previous data-merge-email span was never populated → blank gap; reworded to neutral 'the email on your existing account'.)", () => {
+  it("Check-your-inbox copy pinned: 'We sent a confirmation link to the email on your existing account to verify both accounts belong to you. Click the link in that email to finish linking your <span data-merge-provider…>Google or GitHub</span> account. The link expires in <span data-merge-window…>60 minutes</span>.' — pinned so the 60-minute-default expiry text + 'finish linking your Google or GitHub' copy contract stays documented (the span default is replaced by the redeem answer's provider name). (The previous data-merge-email span was never populated → blank gap; reworded to neutral 'the email on your existing account'.)", () => {
     expect(body).toMatch(
-      /We sent a confirmation link to the email on your existing account\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*<span data-merge-provider class="font-mono">IDP<\/span> account\./,
+      /We sent a confirmation link to the email on your existing account\s*to verify both accounts belong to you\. Click the link in that email to finish linking your\s*<span data-merge-provider class="font-mono">Google or GitHub<\/span> account\./,
     );
     expect(body).toMatch(
       /The link expires in <span data-merge-window class="font-mono">60 minutes<\/span>\./,
@@ -91,7 +91,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(body).toMatch(/if \(body\.outcome === 'collision-pending-verification'\) \{/);
     expect(body).toMatch(/if \(body\.outcome === 'existing-link-revoked'\) \{/);
     expect(body).toMatch(
-      /showBanner\(\s*'This identity-provider link was previously revoked\. Sign in with your password, or click the IDP button on the login page to re-link\.',\s*\);/,
+      /showBanner\(\s*'This Google or GitHub link was removed earlier\. Sign in with your password, or use the Google or GitHub button on the sign-in page to link it again\.',\s*\);/,
     );
   });
 
@@ -103,7 +103,7 @@ describe('customer-dashboard/pages/auth/oauth-client/callback content parity', (
     expect(body).toMatch(
       /if \(!mfaChallengeToken \|\| mfaInFlight \|\| mfaOutcomeUnknown\) return/,
     );
-    expect(body).toContain('Do not submit this code again. Start a fresh sign-in.');
+    expect(body).toContain("Don't enter it again — start a fresh sign-in.");
   });
 
   it("Provider-from-redeem-answer pinned: body.provider === 'github' → 'GitHub', anything else → 'Google' for the data-merge-provider text; the retired query-string heuristic (qs.indexOf('provider=github')) is gone — the fragment hand-off carries no query string to read it from", () => {

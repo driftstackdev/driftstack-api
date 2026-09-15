@@ -240,7 +240,7 @@ describe('forgot-password page — local integration', () => {
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
     expect(submitBtn.textContent).toBe('Check inbox before retrying');
     expect(textOf(window, '[data-banner]')).toMatch(
-      /delivery is unknown.*may already have sent.*do not request another link.*inbox and spam.*newest one/i,
+      /took too long.*may already be on its way.*inbox and spam folder before requesting another link.*more than one arrives.*use the newest/i,
     );
     expect(isHidden(window, '[data-form]')).toBe(true);
     expect(isHidden(window, '[data-success]')).toBe(false);

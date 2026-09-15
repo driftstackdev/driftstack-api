@@ -74,9 +74,9 @@ describe('W755 dashboard /audit-log page V-216 + V-297 + V-354 + V-484 parity', 
     }
   });
 
-  it("CRITICAL append-only framing pinned. The 'Account-scoped events · append-only' header is the load-bearing customer-trust contract (drift to mutable would erode audit-log credibility).", () => {
+  it("CRITICAL append-only framing pinned. The 'Permanent record · entries can't be edited or deleted' header is the load-bearing customer-trust contract in customer words (drift to mutable would erode audit-log credibility).", () => {
     const p = read(PAGE);
-    expect(p).toMatch(/Account-scoped events · append-only/);
+    expect(p).toMatch(/Permanent record · entries can't be edited or deleted/);
   });
 
   it("CRITICAL 'your data, your file' GDPR framing pinned. The 'Export the full history at any time — your data, your file.' wording is the customer-facing GDPR Article 20 portability promise.", () => {
@@ -217,19 +217,19 @@ describe('W755 dashboard /audit-log page V-216 + V-297 + V-354 + V-484 parity', 
     expect(p).toMatch(/const name = m \? m\[1\] : 'audit-log\.' \+ format;/);
   });
 
-  it('CRITICAL Export 10k-row cap framing pinned. The "Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint (GET /v1/account/audit-log) with cursor pagination" wording explains the export-vs-read endpoint distinction.', () => {
+  it('CRITICAL Export 10k-row cap framing pinned. The "Each export includes up to 10,000 entries. Older entries are still available through the API — see the audit log API docs" wording explains the export-vs-read distinction in customer words and links the docs for the endpoint mechanics.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Exports cap at 10,000 rows per file\. Older entries remain accessible via the read endpoint/,
+      /Each export includes up to 10,000 entries\. Older entries are still available through the API/,
     );
-    expect(p).toMatch(/with cursor pagination\./);
+    expect(p).toContain('https://docs.driftstack.io/api/audit-log/');
   });
 
-  it("CRITICAL privacy@driftstack.dev escalation pinned. The 'Account, billing, and authentication data export on request via privacy@driftstack.dev' framing is the GDPR-DPA compliance escalation path.", () => {
+  it("CRITICAL privacy@driftstack.dev escalation pinned. The 'To export your account, billing and sign-in data, email privacy@driftstack.dev' framing is the GDPR-DPA compliance escalation path.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Account,\s*\n\s+billing, and authentication data export on request via/);
+    expect(p).toMatch(/To export your account, billing and sign-in data, email/);
     expect(p).toMatch(/>privacy@driftstack\.dev<\/code/);
   });
 

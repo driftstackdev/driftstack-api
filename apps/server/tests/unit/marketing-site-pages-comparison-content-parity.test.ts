@@ -54,13 +54,13 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     );
   });
 
-  it("12-row COMPARISON_ROWS feature taxonomy: Browser engine + Primary device target + Stealth approach + Fingerprint posture + Pricing model + Session metering surprises + Customer-controlled proxies + Data residency + GUI for human operators + SDK languages + Self-hosted option + Trial path — pinned so the 12-feature comparison-table surface stays consistent (drift to dropping rows would shrink the comparison surface; drift to changing order would lose the table's narrative flow)", () => {
+  it("12-row COMPARISON_ROWS feature taxonomy: Browser engine + Primary device target + Stealth approach + Fingerprint posture + Pricing model + Billing surprises (2026-09-15: was 'Session metering surprises') + Customer-controlled proxies + Data residency + GUI for human operators + SDK languages + Self-hosted option + Trial path — pinned so the 12-feature comparison-table surface stays consistent (drift to dropping rows would shrink the comparison surface; drift to changing order would lose the table's narrative flow)", () => {
     expect(body).toMatch(/feature: 'Browser engine',/);
     expect(body).toMatch(/feature: 'Primary device target',/);
     expect(body).toMatch(/feature: 'Stealth approach',/);
     expect(body).toMatch(/feature: 'Fingerprint posture',/);
     expect(body).toMatch(/feature: 'Pricing model',/);
-    expect(body).toMatch(/feature: 'Session metering surprises',/);
+    expect(body).toMatch(/feature: 'Billing surprises',/);
     expect(body).toMatch(/feature: 'Customer-controlled proxies',/);
     expect(body).toMatch(/feature: 'Data residency',/);
     expect(body).toMatch(/feature: 'Point-and-click app for human operators',/);
@@ -69,27 +69,29 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(body).toMatch(/feature: 'Trial path',/);
   });
 
-  it("Driftstack engine row: Apple WebKit, our own build of Apple's source code (source-level fork) — S20b plain words; pinned so the canonical engine description (Apple WebKit + source-level fork) stays consistent across pages (drift would create marketing↔homepage↔about divergence)", () => {
+  it("Driftstack engine row: Apple WebKit, our own build of Apple's source code — S20b plain words, 2026-09-15 customer-copy pass dropped the '(source-level fork)' gloss; pinned so the canonical engine description (Apple WebKit + source-level fork) stays consistent across pages (drift would create marketing↔homepage↔about divergence)", () => {
+    expect(body).toMatch(/driftstack: "Apple WebKit — our own build of Apple's source code",/);
+  });
+
+  it("Driftstack pricing-model row: 'Per concurrent session (how many run at once); hours never billed' + Driftstack billing-surprises row: 'None — one flat price within your session limit' (2026-09-15 plain words, same no-hourly-meter facts) — pinned so the no-hourly-meter + no-surprise framing survives in the table (drift to adding per-call or per-hour would create cross-page divergence with the FAQ + pricing pages)", () => {
     expect(body).toMatch(
-      /driftstack: "Apple WebKit — our own build of Apple's source code \(source-level fork\)",/,
+      /driftstack: 'Per concurrent session \(how many run at once\); hours never billed',/,
     );
+    expect(body).toMatch(/driftstack: 'None — one flat price within your session limit',/);
   });
 
-  it("Driftstack pricing-model row: 'Per concurrent session, hours unmetered' + Driftstack session-metering-surprises row: 'None — flat within concurrent cap' — pinned so the no-hourly-meter + no-surprise framing survives in the table (drift to adding per-call or per-hour would create cross-page divergence with the FAQ + pricing pages)", () => {
-    expect(body).toMatch(/driftstack: 'Per concurrent session, hours unmetered',/);
-    expect(body).toMatch(/driftstack: 'None — flat within concurrent cap',/);
-  });
-
-  it("Driftstack data-residency row: 'EU compute + database; file storage on Cloudflare R2 (EU + US replication)' (S30 2026-07-07 founder decision: soften — supersedes 'EU-only compute + storage': R2-held file objects use the default jurisdiction, so only compute + database are EU-guaranteed) + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
+  it("Driftstack data-residency row: 'Servers and database in the EU; uploaded files on cloud storage that can replicate outside the EU' (2026-09-15 plain words for the S30 2026-07-07 founder decision: soften — supersedes 'EU-only compute + storage': R2-held file objects use the default jurisdiction, so only compute + database are EU-guaranteed) + customer-controlled-proxies row: SOCKS5/OpenVPN/WireGuard per profile (shipped). 2026-05-22 — egress impl ships per planning 133 Phase 1; cell flipped from the prior 'Roadmap' framing now that the differentiator is real.", () => {
     expect(body).toMatch(
-      /driftstack: 'EU compute \+ database; file storage on Cloudflare R2 \(EU \+ US replication\)',/,
+      /driftstack: 'Servers and database in the EU; uploaded files on cloud storage that can replicate outside the EU',/,
     );
     // S30 negative pin — the absolutist cell must not silently return.
     expect(body).not.toMatch(/EU-only compute \+ storage/);
     // S20b 2026-07-06 plain words: same three protocols, same per-profile
-    // scope, same every-traffic-type coverage.
+    // scope. 2026-09-15: the blanket "every traffic type (incl. UDP/QUIC/
+    // WebRTC)" claim became the softer, plainer "WebRTC and HTTP/3 traffic
+    // can go through your proxy or VPN too" (matches /security).
     expect(body).toMatch(
-      /driftstack: 'Bring your own: SOCKS5 proxy, OpenVPN, or WireGuard VPN — per profile, covering every traffic type \(incl\. UDP\/QUIC\/WebRTC\)',/,
+      /driftstack: 'Bring your own: SOCKS5 proxy, OpenVPN, or WireGuard VPN — attached per profile\. A VPN or UDP-capable proxy carries WebRTC and HTTP\/3 too; on a TCP-only proxy, HTTP\/3 is switched off rather than leaked',/,
     );
   });
 
@@ -102,15 +104,13 @@ describe('W501.A apps/marketing-site/src/pages/comparison.astro content parity',
     expect(pricingShapeMatches.length).toBeGreaterThanOrEqual(4);
   });
 
-  it("vs Bright Data BYO-proxy framing pinned: 'Bring your own proxy network or use SOCKS5 / OpenVPN / WireGuard to whatever IP pool you've already paid for. We don't sell proxies; we don't mark up egress.' — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies). Priority order SOCKS5 / OpenVPN / WireGuard matches the API server's user-facing 503 messages + the founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred).", () => {
+  it("vs Bright Data BYO-proxy framing pinned: 'Bring the proxy network you already pay for — over SOCKS5, OpenVPN, or WireGuard. We don't sell proxies and we never charge for bandwidth.' (2026-09-15 plain words; was 'we don't mark up egress') — pinned so the 'BYO egress, no markup' positioning survives (drift to dropping would weaken the cost-comparison case against Bright Data who sells proxies). Priority order SOCKS5 / OpenVPN / WireGuard matches the API server's user-facing 503 messages + the founder verdict 2026-05-16 (Phase 1 / Phase 2 / Phase 3 deferred).", () => {
     expect(body).toMatch(
-      /Bring your own\s*proxy network or use SOCKS5 \/ OpenVPN \/ WireGuard to whatever IP\s*pool you've already paid for\. We don't sell proxies; we don't\s*mark up egress/,
+      /Bring the\s*proxy network you already pay for — over SOCKS5, OpenVPN, or\s*WireGuard\. We don't sell proxies and we never charge for\s*bandwidth/,
     );
-    // S20b 2026-07-06: the load-bearing sentence continues with a plain
-    // gloss of what egress means.
-    expect(body).toMatch(
-      /the traffic leaving for the open internet runs\s*over your own exit, so it's not ours to meter\./,
-    );
+    // The load-bearing sentence continues with the plain reason: the
+    // traffic runs over the customer's own proxy or VPN.
+    expect(body).toMatch(/bandwidth: your traffic runs through your own proxy or VPN\./);
   });
 
   it("When NOT Driftstack 3-card: Desktop-only targets + Pure HTML scraping + IP-pool-as-product — pinned so the honest-anti-recommendation 3-card list survives (drift to dropping would hide the where-Driftstack-isn't-the-fit guidance the V-472 doc-comment commits to)", () => {

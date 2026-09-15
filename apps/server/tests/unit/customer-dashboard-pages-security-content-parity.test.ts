@@ -45,7 +45,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it("MFA recovery codes shown-ONCE framing pinned: 'Save your recovery codes — these are shown ONCE' + 'Each code works once. Store them somewhere safe (password manager, printed copy, secure note). Without your authenticator AND these codes, account access requires support intervention.' — pinned so the shown-ONCE contract + support-intervention escape-hatch both survive (drift to dropping support-intervention would let lockout victims think there's no recovery path)", () => {
     expect(body).toMatch(/Save your recovery codes — these are shown ONCE/);
     expect(body).toMatch(
-      /Each code works once\. Store them somewhere safe \(password manager,\s*printed copy, secure note\)\. Without your authenticator AND these\s*codes, account access requires support intervention\./,
+      /Each code works once\. Store them somewhere safe \(password manager,\s*printed copy, secure note\)\. If you lose both your authenticator app\s*and these codes, you'll need to contact support to get back in\./,
     );
   });
 
@@ -86,7 +86,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
       `the page must state the real password-reset expiry (${String(resetMinutes)} minutes)`,
     ).toMatch(
       new RegExp(
-        `We email you a magic link to confirm\\. The link expires after ${String(resetMinutes)}\\s*\\n?\\s*minutes; old sessions stay signed in until they naturally expire\\.`,
+        `We'll email you a link to set a new password\\. The link expires after\\s*\\n?\\s*${String(resetMinutes)} minutes\\. Once you set a new password, you'll be signed out\\s*\\n?\\s*everywhere else\\.`,
       ),
     );
     expect(body).toMatch(
@@ -114,7 +114,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   // danger zone now points at the privacy-policy purge schedule.
   it('Danger-zone framing pinned: irreversible deletion + privacy-policy purge schedule + 7y Dutch-tax invoice retention + support@ mailto + #danger-zone anchor (S38: recordings/configurable-retention fictions retired)', () => {
     expect(body).toMatch(
-      /All sessions, profiles, API keys,\s*and webhook endpoints are immediately revoked, and stored account\s*data is purged on the schedule in the privacy policy\. Invoice\s*history retained per Dutch tax law \(7 years\) — not\s*deletable on\s*request\./,
+      /All sessions, profiles, API keys,\s*and webhook endpoints are immediately revoked, and stored account\s*data is purged on the schedule in the privacy policy\. Invoice\s*history is kept for 7 years as required by Dutch tax law and can't be\s*deleted on request\./,
     );
     expect(body).toMatch(
       /href="mailto:support@driftstack\.dev\?subject=Account%20deletion%20request"/,
@@ -125,16 +125,18 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
   it('Data-protection trust panel pins context-bound platform-held encryption and recorded-event audit truth', () => {
     expect(body).toMatch(/Your data is protected/);
     expect(body).toMatch(
-      /recoverable credentials are encrypted at rest with context-bound wrapping under platform-held keys\./,
+      /Saved profiles and stored credentials are encrypted in storage, and each one can only be unlocked for the account that owns it\./,
     );
-    expect(body).toMatch(/AES-256-GCM at rest/);
-    expect(body).toMatch(/Context-bound encryption/);
+    expect(body).toMatch(/Encrypted in storage/);
+    // The algorithm stays as a detail line under the plain headline.
+    expect(body).toMatch(/stored encrypted \(AES-256-GCM\)/);
+    expect(body).toMatch(/Tied to your account/);
     expect(body).toMatch(
-      /owning account and, for record-scoped stores, the exact record and value slot/,
+      /tied to the account that owns it and, for individual records, to that exact record/,
     );
-    expect(body).toMatch(/Recorded management events/);
+    expect(body).toMatch(/Changes are logged/);
     expect(body).toMatch(
-      /credential-management events that were recorded in your <a href="\/audit-log\/"[\s\S]{0,180}routine runtime use is not logged as a credential-read event\./i,
+      /Review changes to your credentials in your <a href="\/audit-log\/"[\s\S]{0,180}Everyday use of a credential during a session is not logged as a separate event\./i,
     );
     expect(body).not.toMatch(/Profiles are client-encrypted/);
     expect(body).not.toMatch(/Every credential read lands/);
@@ -143,7 +145,7 @@ describe('W497.C-security apps/customer-dashboard/src/pages/security.astro conte
     expect(body).not.toMatch(/Account \+ record bound/);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /export and deletion are request-based today; start in\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a>\./,
+      /Data export and account deletion aren't self-service yet — to get started, see\s*<a href="#danger-zone" class="text-tk-accent-text underline">the danger zone<\/a> below\./,
     );
     expect(body).not.toMatch(/export or delete anytime/);
   });

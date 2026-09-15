@@ -37,8 +37,9 @@ describe('W761 docs /api/sessions content parity', () => {
   it('CRITICAL TIER_CONCURRENT_SESSION_LIMITS table pinned with all 8 tiers + caps. Matches W749 dashboard /sessions concurrent-meter shared constant.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS` constant in/);
-    expect(p).toMatch(/`@driftstack\/api-types`/);
+    expect(p).toMatch(
+      /the\s*\n?public `@driftstack\/api-types` package also exports them as the\s*\n?`TIER_CONCURRENT_SESSION_LIMITS` constant\):/,
+    );
 
     const tierCaps: Array<[string, string]> = [
       ['free', '1'],
@@ -80,20 +81,23 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The SDK's `sessions\.create\(\)` call returns only after the\s*\n?new session reaches `ready`, but concurrent resource reads and lists can\s*\n?observe its durable `creating` reservation while the driver starts\./,
+      /The SDK's `sessions\.create\(\)` call returns only after the\s*\n?new session reaches `ready`, but concurrent resource reads and lists can\s*\n?show it as `creating` while the browser starts\./,
     );
-    expect(p).toMatch(
-      /session already `creating` or `busy` returns `409 Conflict` without a\s*\n?second driver dispatch/,
-    );
+    expect(p).toMatch(/a session that\s*\n?is already `creating` or `busy` returns `409 Conflict`/);
     expect(p).not.toMatch(/creating` state isn't directly observable/);
   });
 
   it('direct operation owner and state timestamp truth are explicit', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/Every direct driver operation atomically claims `ready` → `busy`/);
-    expect(p).toMatch(/Success settles `busy` → `ready`/);
-    expect(p).toMatch(/driver failure\s*\n?elects `busy` → terminal `errored`/);
-    expect(p).toMatch(/outcome-unknown\s*\n?`busy` owner is not automatically reclaimed/);
+    expect(p).toMatch(/Each operation moves the session from `ready` to `busy`/);
+    expect(p).toMatch(/When the\s*\n?operation succeeds the session returns to `ready`/);
+    expect(p).toMatch(/If the operation\s*\n?fails the session becomes `errored`/);
+    expect(p).toMatch(
+      /Both\s*\n?`errored` and `destroyed` are final — the session cannot be reused/,
+    );
+    expect(p).toMatch(
+      /A\s*\n?session left in `busy` after a server fault is not reset automatically/,
+    );
     expect(p).toMatch(/`last_state_at` is the most recent successful `getState` capture timestamp/);
     expect(p).not.toMatch(/most recent `getState` \/ `capture` \/\s*\n?`navigate`/);
   });
@@ -107,12 +111,11 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/does not type the password after a truncated username/);
     expect(p).toMatch(/does\s*\n?not expose a URL on this branch/);
     expect(p).toMatch(/`duration_ms` is capped at 600,000ms/);
-    expect(p).toMatch(/separate 15,000ms for teardown and\s*\n?result delivery/);
-    expect(p).toMatch(/does not extend successful login work/);
-    expect(p).toMatch(/requires an explicitly real direct-driver login capability/);
-    expect(p).toMatch(/currently\s*\n?shipped driver reports non-real capability/);
-    expect(p).toMatch(/return\s*\n?the documented `503` before session lookup, operation claim/);
-    expect(p).toMatch(/Do not send customer credentials/);
+    expect(p).toMatch(/Allow up to 15 seconds more than that for the response to\s*\n?arrive/);
+    expect(p).toMatch(/this extra time is not available for login work itself/);
+    expect(p).toMatch(/\*\*This\s*\n?endpoint is not available on any deployment today\*\*/);
+    expect(p).toMatch(/returns `503`\s*\n?before doing anything with your request or credentials/);
+    expect(p).toMatch(/Do not send\s*\n?credentials until it is\./);
     expect(p).not.toMatch(
       /logged_in` is the post-submit assessment and\s*\n?is \*\*never a false positive\*\*/,
     );
@@ -131,24 +134,24 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/`query` is required and capped at 10,000/);
     expect(p).toMatch(/"query_truncated": false/);
     expect(p).toMatch(/"query_truncated": true/);
-    expect(p).toMatch(/refuses safely before\s*\n?Return, settle, or the results wait/);
+    expect(p).toMatch(/stops safely before pressing\s*\n?Return or waiting for results/);
     expect(p).toMatch(/refusal cannot carry\s*\n?`results_visible`/);
     expect(p).toMatch(/`duration_ms` is capped at 600,000ms/);
-    expect(p).toMatch(/separate 15,000ms for teardown and result delivery/);
-    expect(p).toMatch(/does not\s*\n?extend successful search work/);
-    expect(p).toMatch(/requires an explicitly real\s*\n?direct-driver search capability/);
-    expect(p).toMatch(/There\s*\n?is no public `fill_form`/);
+    expect(p).toMatch(/Allow up to 15 seconds\s*\n?more than that for the response to arrive/);
+    expect(p).toMatch(/this extra time is not available\s*\n?for search work itself/);
+    expect(p).toMatch(/\*\*This endpoint is not available on any deployment\s*\n?today\*\*/);
+    expect(p).toMatch(/There is\s*\n?no public `fill_form`/);
   });
 
   it('CRITICAL LOCKED_ARCHETYPE_ID default + 3-purpose enum pinned. archetype defaults to iphone17_ios18_7_safari26_4; purpose defaults to production_customer with cumulative_rig_validation + test_domain_probe reserved internal.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`archetype` defaults to your tier's device when\s*\n?omitted: the locked iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4 archetype\s*\n?\(`LOCKED_ARCHETYPE_ID` = `iphone17_ios18_7_safari26_4`\) on tiers entitled to\s*\n?every device, the newest iPhone 13 archetype on the free tier\./,
+      /`archetype` defaults to your tier's device when\s*\n?omitted: iPhone 17 \/ iOS 18\.7 \/ Safari 26\.4 \(`iphone17_ios18_7_safari26_4`\)\s*\n?on tiers that include every device, or the newest iPhone 13 on the free\s*\n?tier\./,
     );
     expect(p).toMatch(/`purpose` defaults to\s*\n?`production_customer`\./);
     expect(p).toMatch(
-      /the other values\s*\n?\(`cumulative_rig_validation`, `test_domain_probe`\) are reserved\s*\n?for Driftstack-internal ops\./,
+      /`purpose` is `production_customer` for every customer session \(the\s*\n?default\); other values are reserved for Driftstack internal use\./,
     );
   });
 
@@ -157,7 +160,7 @@ describe('W761 docs /api/sessions content parity', () => {
 
     expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(p).toMatch(
-      /Any id absent from that\s*\n?response returns `400 ValidationFailed` on the `archetype` field before the\s*\n?server creates a session row or asks the driver to allocate a browser\./,
+      /Any id absent from that\s*\n?response returns `400 ValidationFailed` on the `archetype` field before a\s*\n?session is created\./,
     );
     expect(p).not.toMatch(/\bplanned ids?\b|reference-only/i);
     expect(p).toMatch(
@@ -185,18 +188,20 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/does not accept a raw `proxy` field/);
-    expect(p).toMatch(/never silently stripped or treated as an egress safeguard/);
+    expect(p).toMatch(/never silently ignored/);
     expect(p).toContain('`POST /v1/agent-sessions`');
     expect(p).toContain('`proxy_id`');
-    expect(p).toMatch(/fail closed for every body/);
-    expect(p).toMatch(/Setting the flag to `false` preserves\s*\n?proxy-free direct creation/);
+    expect(p).toMatch(
+      /On deployments that require every session to use a customer proxy, this\s*\n?endpoint and `POST \/v1\/profiles\/:id\/launch` return `400` for every request/,
+    );
+    expect(p).toMatch(/use an agent session with `proxy_id` instead/);
   });
 
   it('2026-05-20 — profile-binding flipped planned→SHIPPED (fa8cb83a). Doc now pins the wired profile_id field on POST /v1/sessions, the metadata-stamp behaviour, cross-account 404 anti-enumeration, and the cross-link to profiles.launch().', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /When `profile_id` is supplied \(2026-05-20, commit `fa8cb83a`\) the\s*\n?server inherits the profile's `archetype` as the default, stamps\s*\n?`\{profile_id, profile_name\}` into the session's `metadata`/,
+      /When `profile_id` is supplied the session uses the profile's device by\s*\n?default, records `\{profile_id, profile_name\}` in the session's\s*\n?`metadata`, and updates the profile's `last_used_at`\./,
     );
     expect(p).toMatch(
       /Cross-account\s*\n?`profile_id` returns `404` \(anti-enumeration — indistinguishable\s*\n?from a missing one\)\./,
@@ -210,7 +215,7 @@ describe('W761 docs /api/sessions content parity', () => {
     const p = read(PAGE);
     expect(p).toMatch(/"behavioral_profile": "regular"/);
     expect(p).toMatch(
-      /`behavioral_profile` \(2026-06-05\) selects the per-session behavioural\s*\n?persona[\s\S]*?`casual`, `regular`, or `power_user`\. Defaults to `regular`/,
+      /`behavioral_profile` selects how the session taps, scrolls and types —\s*\n?`casual`, `regular`, or `power_user`\. Defaults to `regular`/,
     );
   });
 
@@ -226,7 +231,7 @@ describe('W761 docs /api/sessions content parity', () => {
 
   it('navigation driver failures terminalize the session instead of advertising unsafe retry', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/failure winner becomes terminal `errored`, tears down its runtime/);
+    expect(p).toMatch(/The\s*\n?session becomes `errored` and its browser is shut down/);
     expect(p).toMatch(/subsequent operations return\s*\n?`410 Gone`/);
     expect(p).not.toMatch(/session itself stays `ready` for a retry/);
   });
@@ -257,8 +262,11 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/- `time`/);
     // The `condition` wrapper is the load-bearing shape.
     expect(p).toMatch(/"condition":\s*\{/);
-    // Billing-meter framing on `time` (not `duration`).
-    expect(p).toMatch(/`time` form counts toward your minute-meter/);
+    // Session-time framing on `time` (not `duration`): the sleep is wall-clock
+    // session time, including the free tier's per-session cap.
+    expect(p).toMatch(
+      /the sleep still counts as session\s*\n?\s+time — including toward the free tier's 20-minute per-session limit/,
+    );
     // Fictional kinds must NOT return.
     expect(p).not.toMatch(/`'navigation'`/);
     expect(p).not.toMatch(/`'duration'` \(just sleep\)/);
@@ -283,7 +291,7 @@ describe('W761 docs /api/sessions content parity', () => {
       /Idempotent\s*\n?on already-destroyed sessions\. Frees the concurrent slot\./,
     );
     expect(p).toMatch(
-      /`session\.completed` webhook subscriptions fire after the row\s*\n?flips to `destroyed`\./,
+      /`session\.completed` webhook subscriptions fire after the session's\s*\n?status becomes `destroyed`\./,
     );
   });
 
@@ -304,19 +312,17 @@ describe('W761 docs /api/sessions content parity', () => {
     expect(p).toMatch(/Team RBAC: `X-Driftstack-Account` is honored —/);
     expect(p).toMatch(/`member` can list\s+and read the owner's persisted session metadata/);
     expect(p).toMatch(/live state and\s+writes require the `admin` role/);
-    expect(p).toMatch(
-      /A member's state or write request returns\s+403 before the driver is contacted/,
-    );
+    expect(p).toMatch(/A member's state or write request returns\s+403\./);
   });
 
   it('CRITICAL team-scoped state is an admin-only secret-bearing live operation while self read:sessions is unchanged', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Despite its `GET` method, this is a live driver operation/);
-    expect(p).toMatch(/With\s+`X-Driftstack-Account`, only a team `admin` may call it/);
-    expect(p).toMatch(
-      /a team `member`\s+receives `403` before the driver or session row is touched/,
-    );
+    expect(p).toMatch(/Despite its `GET` method, this call runs against the live browser/);
+    expect(p).toMatch(/the\s+session is `busy` while it captures/);
+    expect(p).toMatch(/returns browser secrets such as\s+cookies/);
+    expect(p).toMatch(/With `X-Driftstack-Account`, only a team `admin` may call it/);
+    expect(p).toMatch(/a\s+team `member` receives `403`\./);
     expect(p).toMatch(
       /Members may still\s+use the sessions list and `GET \/v1\/sessions\/:id` for persisted metadata/,
     );
@@ -343,7 +349,7 @@ describe('W761 docs /api/sessions content parity', () => {
     }
     expect(p).toMatch(/\| 403\s+\| `forbidden`\s+\| Scope missing or team role is insufficient/);
     expect(p).toMatch(/Session is `creating` or another operation owns `busy`/);
-    expect(p).toMatch(/Session is `destroyed`\/`errored`, or destroy won; recreate/);
+    expect(p).toMatch(/Session is `destroyed`\/`errored`, or a destroy interrupted it; recreate/);
   });
 
   it('CRITICAL 7-endpoint canonical action list pinned — POST /v1/sessions + GET /v1/sessions + GET /v1/sessions/:id (single resource) + GET /v1/sessions/:id/state + POST /v1/sessions/:id/{navigate,interact,wait,capture} + DELETE /v1/sessions/:id. 2026-06-24: "Get one" now documents the real single-resource GET /v1/sessions/:id (routes/sessions.ts:475, backs sessions.get()); the live-state GET /v1/sessions/:id/state stays the "Get state" endpoint. Drift would let SDK URL generation diverge.', () => {

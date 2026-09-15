@@ -22,7 +22,7 @@ call against an iPhone Safari session, and there is no
 | `/function` (POST a JS body, get JSON back)                | No direct equivalent. Express the flow as actions; structured reads go through [`extract`](/api/sessions/#extract).                                                                                                                                                |
 | `/screenshot` + `/pdf`                                     | [`POST /v1/sessions/:id/capture`](/api/sessions/#capture) with `kind`: `screenshot`, `dom_snapshot`, or `pdf`. Bytes come back inline (base64).                                                                                                                    |
 | Concurrency you meter yourself                             | Tier-driven cap; going over returns a `429` with the stable `concurrency-limit` problem type — see [Concurrency & backpressure](/guides/concurrency/).                                                                                                             |
-| Stealth flags / fingerprint plugins                        | Archetypes (the device + OS + browser identity a session presents) plus server-side [profiles](/guides/profile-management/).                                                                                                                                       |
+| Stealth flags / fingerprint plugins                        | Device profiles (`archetype` in the API — the device, OS and browser version a session presents) plus saved [profiles](/guides/profile-management/) that you reuse across sessions.                                                                                |
 
 ## The first port: replace the WebSocket
 

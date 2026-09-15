@@ -74,8 +74,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       >
         <h2 class="text-sm font-semibold text-tk-ink">Check your inbox first</h2>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Account creation may already have completed and sent a verification email. Continue to
-          verification to enter or resend the code without submitting this signup again.
+          Your account may already have been created and a verification email sent. Don't sign up
+          again — continue to verification to enter the code or request a new one.
         </p>
         <a
           data-continue-verification
@@ -396,21 +396,21 @@ const apiBaseUrl = resolveApiBaseUrl();
           message +
             (emailStored
               ? ''
-              : ' Browser site storage is unavailable, so enter your email manually on the verification page.'),
+              : " Your browser is blocking site storage, so you'll need to enter your email on the verification page."),
         );
       }
 
       function showSignupOutcomeUnknown(email) {
         showTerminalSignupRecovery(
           email,
-          'Account-creation outcome is unknown after the request timed out. The server may already have created your account and sent its verification email. Do not submit this signup again on this page. Check your inbox and spam folder, then continue to email verification to enter or resend the code.',
+          "The request took too long, so your account may already exist. Don't sign up again. Check your inbox and spam folder, then continue to verification to enter the code or request a new one.",
         );
       }
 
       function showAcceptedSignupRecovery(email) {
         showTerminalSignupRecovery(
           email,
-          'Your account was created, but this page could not complete the verification handoff. Do not submit this signup again. Check your inbox and spam folder, then continue to email verification to enter or resend the code.',
+          "Your account was created, but this page couldn't continue automatically. Don't sign up again — check your inbox and spam folder, then continue to verification.",
         );
       }
 
@@ -422,7 +422,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.add('hidden');
         if (!canPersistSignupState()) {
           showBanner(
-            'Browser site storage is unavailable. Enable site storage and try again. No account-creation request was sent, and your entries are still here.',
+            'Your browser is blocking site storage, which signup needs. Allow it in your browser settings, then try again — nothing has been lost.',
           );
           return;
         }
@@ -638,7 +638,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // cannot keep the flow secret cannot finish at the callback.
           if (!canPersistWebSession()) {
             showBanner(
-              'Enable browser site storage before signing up with a provider. Nothing has been sent to the provider yet, so you can retry once storage is available.',
+              'Your browser is blocking site storage, which signup needs. Allow it, then try again.',
             );
             return;
           }
@@ -661,7 +661,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (!binding) {
                 throw Object.assign(
                   new Error(
-                    'Provider sign-up needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet; open the dashboard over HTTPS or create your account with an email and password.',
+                    'Signing up with Google or GitHub only works on a secure (https://) connection. Open the dashboard over https, or create your account with an email and password.',
                   ),
                   { customerSafe: true },
                 );
@@ -694,7 +694,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 'https://github.com',
               ]);
               if (!authorizeUrl) {
-                showBanner('OAuth start returned an invalid authorize URL.');
+                showBanner("Couldn't start sign-up with this provider. Try again.");
                 return;
               }
               // Persist the secret under the flow_id BEFORE leaving, and read
@@ -703,7 +703,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               // flow_id cannot be finished either (the callback page has no
               // record to look up), so it is refused here, before the IDP.
               if (typeof body.flow_id !== 'string' || body.flow_id.length === 0) {
-                showBanner('OAuth start returned no flow id.');
+                showBanner("Couldn't start sign-up with this provider. Try again.");
                 return;
               }
               const key = OAUTH_FLOW_KEY_PREFIX + body.flow_id;
@@ -716,7 +716,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 }
               } catch (_) {
                 showBanner(
-                  'This browser could not persist the sign-up flow. Enable site storage, then start a fresh sign-up.',
+                  "Your browser couldn't save the sign-up. Allow site storage, then try again.",
                 );
                 return;
               }
@@ -726,7 +726,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner(
                 controller.signal.aborted
                   ? 'Signup provider took too long. Check your connection and try again.'
-                  : window.driftstackRequestErrorMessage(err, 'OAuth start failed.'),
+                  : window.driftstackRequestErrorMessage(
+                      err,
+                      "Couldn't start sign-up with this provider. Try again.",
+                    ),
               );
             })
             .finally(() => {

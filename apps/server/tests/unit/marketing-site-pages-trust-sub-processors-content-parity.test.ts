@@ -60,7 +60,7 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
 
   it("Article 28(2) GDPR + 30-day-notice + /legal/dpa Annex 3 cross-reference framing pinned: 'This page is the customer-facing source of truth for sub-processor changes. Adding or removing an entry triggers a 30-day notice to all customers per Article 28(2) of the GDPR; the same content also lives in Annex 3 of the Data Processing Agreement' — pinned so the source-of-truth + Article 28(2) + 30-day-notice + DPA-Annex-3 4-state framing survives (drift to dropping Article 28(2) would lose the GDPR-anchored legal basis; drift to dropping the Annex 3 cross-reference would let the customer view drift from the contractual register)", () => {
     expect(body).toMatch(
-      /This page is the customer-facing source of truth for sub-processor\s*changes\. Adding or removing an entry triggers a 30-day notice to all\s*customers per Article 28\(2\) of the GDPR; the same content also lives\s*in <a href="\/legal\/dpa\/" class="text-tk-accent-text underline"\s*>Annex 3 of the Data Processing Agreement<\/a\s*>/,
+      /This page is the official list for sub-processor changes\. Adding or\s*removing an entry triggers a 30-day notice to all customers under\s*Article 28\(2\) of the GDPR; the same list appears as\s*<a href="\/legal\/dpa\/" class="text-tk-accent-text underline"\s*>Annex 3 of the Data Processing Agreement<\/a\s*>/, // 2026-09-15: "customer-facing source of truth" was internal vocabulary; the four facts survive
     );
     expect(body).not.toContain('href="/legal/dpa"');
   });
@@ -81,15 +81,16 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
   });
 
   it("Region-preference-vs-routing framing pinned (S43 2026-07-07, founder-approved): stated preference doesn't move data + database-resident data EU-resident + R2 file objects replicate EU + US under the listed transfer mechanism — the old blanket 'every customer's data … EU-jurisdiction' claim was false for R2-held objects and must not reappear", () => {
-    expect(body).toMatch(/Region preference vs\. region routing\./);
+    expect(body).toMatch(/Region preference vs\. where your data lives\./);
     expect(body).toMatch(
       /\(us \/ eu \/ apac\) is a <em>stated preference<\/em>\. It does not move\s*your data\./,
     );
+    // 2026-09-15 plain-language pass: same scope, customer words.
     expect(body).toMatch(
-      /every customer's database-resident data —\s*account, profiles, sessions, audit logs — resides on the\s*EU-resident infrastructure listed in the table above/,
+      /every customer's database records —\s*account, profiles, sessions, audit logs — are stored with the\s*EU-based providers listed in the table above/,
     );
     expect(body).toMatch(
-      /use R2's default jurisdiction, which replicates\s*between the EU and the US under the transfer mechanism\s*listed in the table\./,
+      /use R2's default\s*jurisdiction, which keeps copies in both the EU and the US\s*under the transfer mechanism listed in the table\./,
     );
     expect(body).not.toMatch(
       /every customer's data resides on the\s*EU-jurisdiction infrastructure/,
@@ -98,7 +99,7 @@ describe('W502.C apps/marketing-site/src/pages/trust/sub-processors.astro conten
 
   it('region preference remains informational and does not promise an unshipped migration', () => {
     expect(body).toMatch(
-      /The preference is informational and does not change routing or\s*residency\. Leaving it unset, or selecting us \/ eu \/ apac, produces\s*the same current placement described above\./,
+      /Today this setting is a recorded preference only\. It does not\s*change where your sessions run or where your data is stored:\s*whichever option you pick, or none, your data is placed as\s*described above\./,
     );
     expect(body).not.toMatch(/multi-region|selected a non-EU region|data is migrated/i);
   });

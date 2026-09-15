@@ -249,16 +249,34 @@ describe('shouldRefitForAspectChange — re-fit only on a real aspect change (no
   });
 });
 
-// Finding #4 — the cookies/downloads LIST polls map the three INTERNAL server
-// 'unavailable' reasons to one friendly line, while passing every other reason through
-// (RELAY_BUSY, harness messages, the calm session fallback) so actionable
+// Finding #4 — the cookies/downloads LIST polls map the server's three 'unavailable'
+// states (its current sentences AND the older internal diagnostics an out-of-date
+// server still sends) to short customer lines, while passing every other reason
+// through (RELAY_BUSY, harness messages, the calm session fallback) so actionable
 // copy still shows.
-describe('friendlyUnavailableNote — map internal diagnostics, pass through the rest', () => {
-  it('maps the three known internal reasons to a single friendly line', () => {
-    const friendly = "the session isn't live on a device right now";
-    expect(friendlyUnavailableNote('session is not live on a node')).toBe(friendly);
-    expect(friendlyUnavailableNote('session node is not connected')).toBe(friendly);
-    expect(friendlyUnavailableNote('fleet control plane not enabled')).toBe(friendly);
+describe('friendlyUnavailableNote — map the server states, pass through the rest', () => {
+  const notRunning = "this session isn't running right now";
+  const unreachable = "this session can't be reached right now — retrying";
+  const unavailable = "this feature isn't available here";
+
+  it("maps the server's three current sentences to short customer lines", () => {
+    expect(friendlyUnavailableNote('This session is not running.')).toBe(notRunning);
+    expect(
+      friendlyUnavailableNote('This session cannot be reached right now. Try again shortly.'),
+    ).toBe(unreachable);
+    expect(friendlyUnavailableNote('This feature is not available on this deployment.')).toBe(
+      unavailable,
+    );
+    // Nothing mapped names how the service is run.
+    for (const line of [notRunning, unreachable, unavailable]) {
+      expect(line).not.toMatch(/node|fleet|control plane|deployment/i);
+    }
+  });
+
+  it('still maps the older internal diagnostics an out-of-date server sends (never leaks them)', () => {
+    expect(friendlyUnavailableNote('session is not live on a node')).toBe(notRunning);
+    expect(friendlyUnavailableNote('session node is not connected')).toBe(unreachable);
+    expect(friendlyUnavailableNote('fleet control plane not enabled')).toBe(unavailable);
   });
 
   it('passes through an actionable reason verbatim (RELAY_BUSY, harness messages)', () => {

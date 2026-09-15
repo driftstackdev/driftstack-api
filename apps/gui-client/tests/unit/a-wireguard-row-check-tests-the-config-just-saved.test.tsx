@@ -265,7 +265,7 @@ describe('(n) N2 — the fleet tests the material this Mac holds, not the last l
     settingsStub.settings.apiKey = null;
     render(<ProxiesView />);
     fireEvent.click(await screen.findByRole('button', { name: /^check vpn$|^re-check$/i }));
-    expect(await screen.findByText('endpoint ok')).toBeInTheDocument();
+    expect(await screen.findByText('address ok')).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 20));
     expect(updateAccountProxy).not.toHaveBeenCalled();
     expect(testAccountProxy).not.toHaveBeenCalled();

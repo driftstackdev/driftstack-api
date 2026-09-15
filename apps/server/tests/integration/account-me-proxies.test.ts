@@ -436,7 +436,7 @@ describe('POST /v1/account/me/proxies/:id/test', () => {
     const body = res.json<{ ok: boolean; reason?: string }>();
     expect(body.ok, 'a proxy that cannot route must not test green').toBe(false);
     expect(body.reason, 'and it must say what the launch gate would say').toBe(
-      'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+      'The proxy connected but could not reach the internet. Check with your proxy provider.',
     );
   });
 
@@ -1330,7 +1330,7 @@ describe('VPN proxies — /v1/account/me/proxies (openvpn / wireguard)', () => {
       payload: { password: 'must-not-be-stored' },
     });
     expect(response.statusCode).toBe(400);
-    expect(response.body).toContain('matching VPN configuration');
+    expect(response.body).toContain('submit the full VPN configuration again');
     const listed = await fx.app.inject({
       method: 'GET',
       url: '/v1/account/me/proxies',
@@ -1537,7 +1537,7 @@ describe('POST /v1/account/me/proxies with PROFILE_MASTER_KEY unset', () => {
       payload: { label: 'home', host: '1.2.3.4', port: 1080, username: 'u', password: 'hunter2' },
     });
     expect(create.statusCode).toBe(503);
-    expect(create.json<{ detail: string }>().detail).toMatch(/encryption not configured/i);
+    expect(create.json<{ detail: string }>().detail).toMatch(/not available on this installation/i);
     // The plaintext must not survive anywhere in the refusal either.
     expect(create.body).not.toContain('hunter2');
 
@@ -1574,7 +1574,7 @@ describe('POST /v1/account/me/proxies with PROFILE_MASTER_KEY unset', () => {
       },
     });
     expect(create.statusCode, create.body).toBe(503);
-    expect(create.json<{ detail: string }>().detail).toMatch(/VPN proxies are unavailable/i);
+    expect(create.json<{ detail: string }>().detail).toMatch(/VPN proxies are not available/i);
     expect(create.body).not.toContain('AgICAgICAgICAgICAgICAgIC');
 
     const list = await fx.app.inject({
@@ -1661,7 +1661,7 @@ describe('PUT /v1/account/me/proxies/:id — losing the conditional update', () 
       payload: { label: 'renamed' },
     });
     expect(res.statusCode, res.body).toBe(409);
-    expect(res.json<{ detail: string }>().detail).toMatch(/changed concurrently/i);
+    expect(res.json<{ detail: string }>().detail).toMatch(/changed since you last loaded it/i);
   });
 
   it('404: the row is gone, so the caller is NOT told to retry', async () => {

@@ -57,9 +57,9 @@ describe('W476.B apps/gui-client/src/components/SessionStatusBadge.tsx content p
     );
   });
 
-  it('STATUS_LABEL 5-entry (Creating/Ready/Busy/Destroyed/Errored) + STATUS_TONE 5-entry mapping to Tone 5-union (neutral/success/busy/warning/error) with creating→neutral, ready→success, busy→busy, destroyed→warning, errored→error', () => {
+  it('STATUS_LABEL 5-entry (Creating/Ready/Busy/Ended/Failed — customer words, 2026-09-15) + STATUS_TONE 5-entry mapping to Tone 5-union (neutral/success/busy/warning/error) with creating→neutral, ready→success, busy→busy, destroyed→warning, errored→error', () => {
     expect(body).toMatch(
-      /const STATUS_LABEL: Record<string, string> = \{\s*creating: 'Creating',\s*ready: 'Ready',\s*busy: 'Busy',\s*destroyed: 'Destroyed',\s*errored: 'Errored',\s*\};/,
+      /const STATUS_LABEL: Record<string, string> = \{\s*creating: 'Creating',\s*ready: 'Ready',\s*busy: 'Busy',\s*destroyed: 'Ended',\s*errored: 'Failed',\s*\};/,
     );
     expect(body).toMatch(/type Tone = 'neutral' \| 'success' \| 'busy' \| 'warning' \| 'error';/);
     expect(body).toMatch(

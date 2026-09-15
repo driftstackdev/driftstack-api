@@ -135,7 +135,7 @@ describe('GET /v1/agent-sessions/:id/downloads (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<ListBody>();
     expect(body).toMatchObject({ status: 'unavailable', files: null });
-    expect(body.reason).toMatch(/not live on a node/);
+    expect(body.reason).toBe('This session is not running.');
   });
 
   it('connected node lists files → 200 { status:"ok", files:[…] }', async () => {

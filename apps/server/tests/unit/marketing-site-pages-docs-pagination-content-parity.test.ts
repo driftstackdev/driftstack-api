@@ -83,7 +83,7 @@ describe('W509.C apps/marketing-site/src/pages/docs/pagination.astro content par
 
   it("Filter composition: 'cursor encodes the filter context, so paging through filtered results is consistent. Switching filters mid-iteration requires a new cursor (omit cursor on the first filtered request).' — pinned so the cursor-encodes-filter + switch-filters-requires-new-cursor commitment survives (drift to silently mixing filters mid-walk would create subtle correctness bugs in client code)", () => {
     expect(body).toMatch(
-      /Filters compose with pagination — the cursor encodes the\s*filter context, so paging through filtered results is\s*consistent\. Switching filters mid-iteration requires a new\s*cursor \(omit <code>cursor<\/code> on the first filtered request\)\./,
+      /Filters compose with pagination, so paging through filtered\s*results is consistent\. Switching filters mid-iteration requires a new\s*cursor \(omit <code>cursor<\/code> on the first filtered request\)\./,
     );
   });
 

@@ -91,7 +91,7 @@ describe('W436.B packages/api-types/src/accounts.ts content parity', () => {
       /\*\s*V-298a — slug shape: lowercase a-z \+ 0-9 \+ hyphen, no leading or\s*\*\s*trailing hyphen, no consecutive hyphens, 3-32 chars total\./,
     );
     expect(body).toMatch(
-      /export const AccountSlugSchema = z\s*\.string\(\)\s*\.min\(3\)\s*\.max\(32\)\s*\.regex\(\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\/,\s*'Must be 3-32 chars, lowercase a-z \+ 0-9 \+ hyphen, with no leading\/trailing hyphen\.',\s*\)\s*\.refine\(\(s\) => !s\.includes\('--'\), \{\s*message: 'Slug cannot contain consecutive hyphens\.',\s*\}\);/,
+      /export const AccountSlugSchema = z\s*\.string\(\)\s*\.min\(3\)\s*\.max\(32\)\s*\.regex\(\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\/,\s*'Use 3 to 32 lowercase letters, numbers or hyphens\. It cannot start or end with a hyphen\.',\s*\)\s*\.refine\(\(s\) => !s\.includes\('--'\), \{\s*message: 'Slug cannot contain consecutive hyphens\.',\s*\}\);/,
     );
     expect(body).toMatch(
       /\*\s*V-298b — Stripe-style data-residency region preference\. 'us' \/\s*\*\s*'eu' \/ 'apac'\. Customer-stated; informational\. Actual physical\s*\*\s*region routing of compute \/ storage is governed by the DPA Annex 3\s*\*\s*sub-processor list, not this field\./,

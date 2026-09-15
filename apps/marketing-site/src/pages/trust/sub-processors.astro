@@ -38,7 +38,7 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
 
 <BaseLayout
   title="Sub-processors"
-  description="The complete list of sub-processors Driftstack engages, with regions of operation, purpose, and transfer mechanism. Source of truth for Article 28(2) sub-processor amendment notices."
+  description="The complete list of sub-processors Driftstack engages, with regions of operation, purpose, and transfer mechanism. The official list for Article 28(2) sub-processor change notices."
 >
   <PageHero label="Trust" title="Sub-processors.">
     <Breadcrumbs
@@ -52,10 +52,10 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
       the contractual basis under which any non-EU transfer happens.
     </p>
     <p class="mt-3 max-w-prose text-sm text-tk-ink-3">
-      This page is the customer-facing source of truth for sub-processor
-      changes. Adding or removing an entry triggers a 30-day notice to all
-      customers per Article 28(2) of the GDPR; the same content also lives
-      in <a href="/legal/dpa/" class="text-tk-accent-text underline"
+      This page is the official list for sub-processor changes. Adding or
+      removing an entry triggers a 30-day notice to all customers under
+      Article 28(2) of the GDPR; the same list appears as
+      <a href="/legal/dpa/" class="text-tk-accent-text underline"
         >Annex 3 of the Data Processing Agreement</a
       >.
     </p>
@@ -95,24 +95,24 @@ function changeLogKindClass(kind: SubProcessorChangeLogEntry['kind']): string {
 
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-4xl px-6 py-16">
-      <h2 class="text-2xl font-semibold text-tk-ink">Region preference vs. region routing.</h2>
+      <h2 class="text-2xl font-semibold text-tk-ink">Region preference vs. where your data lives.</h2>
       <div class="mt-6 space-y-4 text-sm text-tk-ink-2">
         <p>
           The "region" you can pick from <span class="font-mono">/settings → Region</span>
           (us / eu / apac) is a <em>stated preference</em>. It does not move
-          your data. Today, every customer's database-resident data —
-          account, profiles, sessions, audit logs — resides on the
-          EU-resident infrastructure listed in the table above,
-          regardless of region preference. File objects on Cloudflare
-          R2 (avatars, encrypted profile blobs, public status
-          snapshots) use R2's default jurisdiction, which replicates
-          between the EU and the US under the transfer mechanism
-          listed in the table.
+          your data. Today, every customer's database records —
+          account, profiles, sessions, audit logs — are stored with the
+          EU-based providers listed in the table above, regardless of
+          region preference. Files on Cloudflare R2 (avatars, encrypted
+          profile data, public status snapshots) use R2's default
+          jurisdiction, which keeps copies in both the EU and the US
+          under the transfer mechanism listed in the table.
         </p>
         <p>
-          The preference is informational and does not change routing or
-          residency. Leaving it unset, or selecting us / eu / apac, produces
-          the same current placement described above.
+          Today this setting is a recorded preference only. It does not
+          change where your sessions run or where your data is stored:
+          whichever option you pick, or none, your data is placed as
+          described above.
         </p>
       </div>
     </div>

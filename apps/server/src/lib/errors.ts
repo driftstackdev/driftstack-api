@@ -325,7 +325,7 @@ export class ProxyValidationFailedError extends ApiError {
         'The proxy rejected the supplied credentials — re-enter the username and password.',
       timeout: 'The proxy did not respond in time — it may be slow or offline. Try again shortly.',
       egress_blocked:
-        'The proxy connected but could not reach the internet — its upstream egress is blocked.',
+        'The proxy connected but could not reach the internet. Check with your proxy provider.',
       config_unresolvable:
         'This proxy’s stored configuration could not be used for a session — nothing was dialled. Open the proxy, fix or re-paste the configuration, and try again.',
     };

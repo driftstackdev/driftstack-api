@@ -30,6 +30,9 @@ function session(over: Record<string, unknown>): Record<string, unknown> {
   return {
     id: 'ses_x',
     status: 'destroyed',
+    // Every real row carries its device slug; the row renders it as the device
+    // name ("iPhone 17"), the same label every other surface uses.
+    archetype: 'iphone17_ios18_7_safari26_4',
     created_at: '2026-01-01T00:00:00Z',
     destroyed_at: null,
     last_state_at: null,
@@ -185,10 +188,12 @@ describe('a history row names the session instead of showing only its id', () =>
       ],
     });
     render(<SessionsHistoryView />);
-    // DNS resolved locally is the classic proxy leak; it was collected, stored,
-    // and rendered nowhere, so a leaking session looked exactly like a clean one.
-    const line = await screen.findByText(/DNS resolved locally/);
-    expect(line.textContent).toContain('no UDP associate');
+    // DNS resolved outside the proxy is the classic proxy leak; it was collected,
+    // stored, and rendered nowhere, so a leaking session looked exactly like a
+    // clean one. The line reads in the customer's words (no 'UDP associate').
+    const line = await screen.findByText(/DNS resolved outside the proxy/);
+    expect(line.textContent).toContain('Proxy limits: UDP not supported');
+    expect(line.textContent).not.toMatch(/associate|egress/i);
   });
 
   it('⛔ says NOTHING when the harness never reported capabilities', async () => {

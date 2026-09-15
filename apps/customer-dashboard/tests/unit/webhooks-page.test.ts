@@ -231,7 +231,7 @@ describe('webhooks page — local integration', () => {
     await flush();
     expect(fetchCalls.filter((call) => call.init?.method === 'POST')).toHaveLength(0);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toContain(
-      'Refresh the live endpoint list',
+      'Refresh your endpoint list',
     );
 
     refresh?.click();
@@ -369,7 +369,7 @@ describe('webhooks page — local integration', () => {
     expect(isHidden(window, '[data-create-reveal]')).toBe(true);
     expect(window.document.querySelector('[data-reveal-secret]')?.textContent).toBe('');
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /outcome is unknown.*refreshed list contains a new endpoint for this exact url.*secret cannot be recovered.*delete.*before creating another/i,
+      /can't be sure it finished.*endpoint with this url now appears in your list.*probably created.*secret can't be shown.*delete it, then create a new one/i,
     );
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
@@ -377,7 +377,7 @@ describe('webhooks page — local integration', () => {
     await flush();
     expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /likely created.*one-shot signing secret was lost.*delete the matching endpoint/i,
+      /probably created.*signing secret couldn't be shown.*Delete it and create a new one/i,
     );
   });
 
@@ -405,7 +405,7 @@ describe('webhooks page — local integration', () => {
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /authoritative list has no new endpoint.*retry only if the endpoint is still required/i,
+      /doesn't show a new endpoint for this URL.*Try again if you still need it/i,
     );
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush(10);
@@ -435,12 +435,12 @@ describe('webhooks page — local integration', () => {
 
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toMatch(/verify before retrying/i);
+    expect(submit.textContent).toMatch(/check before retrying/i);
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /creation is locked.*reload and review the endpoint list/i,
+      /Reload and check your endpoint list before trying again/i,
     );
   });
 
@@ -526,7 +526,7 @@ describe('webhooks page — local integration', () => {
     await flush(1);
     for (const button of [rotateBtn, deleteBtn, testBtn, editBtn]) {
       expect(button.disabled).toBe(true);
-      expect(button.title).toBe('Wait for the active webhook action to finish.');
+      expect(button.title).toBe('Wait for the current action to finish.');
     }
 
     deleteBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
@@ -609,7 +609,7 @@ describe('webhooks page — local integration', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
     expect(isHidden(window, '[data-edit-wrap]')).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /refreshed endpoint exactly matches.*save completed.*not submitted again/i,
+      /took too long, but your changes are saved/i,
     );
   });
 
@@ -635,9 +635,9 @@ describe('webhooks page — local integration', () => {
 
     const submit = editForm.querySelector('[data-edit-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toMatch(/verify before retrying/i);
+    expect(submit.textContent).toMatch(/check before retrying/i);
     expect(window.document.querySelector('[data-edit-error]')?.textContent).toMatch(
-      /outcome is unknown.*could not be refreshed.*reload and verify.*overwrite a committed change/i,
+      /took too long.*couldn't refresh the list.*reload and check this endpoint before saving again/i,
     );
     editForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -670,7 +670,7 @@ describe('webhooks page — local integration', () => {
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
     expect(window.document.querySelector('[data-rotate-secret]')?.textContent).toBe('');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*new rotation grace period.*secret cannot be recovered.*do not rotate again/i,
+      /took too long.*rotation went through.*new secret can't be shown.*don't rotate again/i,
     );
     const blockedRotate = window.document.querySelector(
       '[data-rotate="wh_endpoint"]',
@@ -682,7 +682,7 @@ describe('webhooks page — local integration', () => {
       fetchCalls.filter((c) => /\/v1\/webhooks\/wh_endpoint\/rotate-secret$/.test(c.url)),
     ).toHaveLength(1);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /rotation is locked.*reload and review the endpoint/i,
+      /rotation is paused until you reload and check this endpoint/i,
     );
   });
 
@@ -711,7 +711,7 @@ describe('webhooks page — local integration', () => {
     ) as HTMLButtonElement;
     expect(retryRotate.disabled).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /authoritative endpoint has no new rotation grace period.*retry only if rotation is still required/i,
+      /took too long and nothing seems to have changed.*try again if you still need to rotate/i,
     );
     retryRotate.click();
     await flush(10);
@@ -787,7 +787,7 @@ describe('webhooks page — local integration', () => {
     expect(current.disabled).toBe(true);
     expect(current.textContent).toContain('Test outcome unknown');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /Test-send outcome is unknown.*endpoint list was refreshed.*may already be queued.*Do not send another test/i,
+      /not sure the test was sent.*may already be on its way.*Delivery counts may take a moment.*Don't send another test/i,
     );
   });
 
@@ -824,7 +824,7 @@ describe('webhooks page — local integration', () => {
     ).toHaveLength(2);
     expect(window.document.body.textContent).toContain('Replay outcome unknown');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /Replay outcome is unknown.*delivery log was refreshed.*Do not replay this delivery again/i,
+      /not sure the replay was queued.*delivery log was refreshed.*Don't replay this delivery again/i,
     );
   });
 

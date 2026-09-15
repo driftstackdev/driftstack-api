@@ -50,7 +50,7 @@ const apiBaseUrl = resolveApiBaseUrl();
            page is reached without a token in the URL. -->
       <form data-form="verify" class="space-y-5" data-form-fallback hidden>
         <div>
-          <label class="form-label" for="verify-token"> Verification token </label>
+          <label class="form-label" for="verify-token"> Verification code </label>
           <input
             id="verify-token"
             name="token"
@@ -74,7 +74,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
 
       <div class="mt-6 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-tk-ink-3">
-        <span>Token expired or never arrived?</span>
+        <span>Code expired or never arrived?</span>
         <button
           type="button"
           data-action="resend"
@@ -184,7 +184,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (spinnerEl) spinnerEl.hidden = true;
         if (introEl) {
           introEl.textContent =
-            'Auto-verify failed. Paste the token from your email below to continue.';
+            "We couldn't verify automatically. Paste the code from your email below to continue.";
         }
       }
 
@@ -253,7 +253,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           showFallback();
           if (introEl) introEl.textContent = 'Browser storage is unavailable';
           showBanner(
-            'Enable browser site storage before using this one-time verification link. It has not been consumed, so you can retry after storage is available.',
+            'Your browser is blocking site storage, which sign-in needs. Allow it, then open the link again — it still works.',
           );
           return Promise.resolve(false);
         }
@@ -332,7 +332,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
               }
               showBanner(
-                'Your email was verified, but the new session could not be saved in this browser. Do not submit this token again. Continue to sign in instead.',
+                "Your email is verified, but your browser couldn't sign you in. Don't use this link again — just sign in.",
               );
               return;
             }
@@ -341,7 +341,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (formEl) formEl.hidden = true;
               if (spinnerEl) spinnerEl.hidden = true;
               if (unknownRecovery) unknownRecovery.hidden = false;
-              if (introEl) introEl.textContent = 'Email-verification outcome unknown';
+              if (introEl) introEl.textContent = 'Your email may already be verified';
               const rawNext = params.get('next');
               const next = safeNextPath(rawNext, window.location.origin);
               if (unknownLoginLink) {
@@ -351,7 +351,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 );
               }
               showBanner(
-                'Email-verification outcome is unknown after the request timed out. The server may already have verified your account, consumed this one-time token, and created a session whose credential did not reach this browser. Do not submit this token again. Continue to sign in; if the account is still unverified, resend the verification email below.',
+                "The request took too long, so your email may already be verified. Don't use this link again — try signing in. If sign-in says you're still unverified, request a new verification email below.",
               );
               return;
             }
@@ -460,7 +460,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   resendStatus.classList.remove('hidden');
                 }
                 showBanner(
-                  'Verification-email delivery is unknown after the request timed out. The server may already have sent it. Do not resend again on this page. Check your inbox and spam folder first; if multiple messages arrive, use the newest one. Reload this page only if nothing arrives.',
+                  "The request took too long, so we're not sure the email went out. Check your inbox and spam folder before trying again. If more than one arrives, use the newest. Reload this page if nothing arrives.",
                 );
                 return;
               }

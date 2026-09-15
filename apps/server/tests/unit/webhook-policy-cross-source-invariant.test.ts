@@ -102,7 +102,7 @@ describe('W871 Webhook policy cross-source invariant', () => {
     expect(p).toMatch(
       /RotateWebhookSecretResponseSchema = z\.object\(\{[\s\S]+?grace_expires_at: Iso8601Schema\.describe\(/,
     );
-    expect(p).toMatch(/every outbound delivery is signed with both the new \+ old secret/);
+    expect(p).toMatch(/every delivery is signed with both the new and the old secret/);
   });
 
   it('CRITICAL V-359 anchor pinned for rotate-secret response. The framing pins the secret-rotation provenance to future maintainers.', () => {
@@ -123,8 +123,10 @@ describe('W871 Webhook policy cross-source invariant', () => {
 
   it("CRITICAL apps/customer-dashboard/src/pages/webhooks.astro form helper text pins 'HTTPS required. The endpoint must respond 2xx within 10s for delivery to count as successful.' The 2-sentence framing communicates both the protocol constraint + the success criterion.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/webhooks.astro'));
-    expect(p).toMatch(/HTTPS required\./);
-    expect(p).toMatch(/respond 2xx within 10s for delivery to count\s*as successful/);
+    expect(p).toMatch(/Must start with https:\/\/\./);
+    expect(p).toMatch(
+      /reply with a success status \(2xx\)\s*within 10 seconds, or the delivery counts as failed/,
+    );
   });
 
   it("CRITICAL apps/customer-dashboard/src/pages/webhooks.astro 'New endpoint' + 'Edit endpoint' form url inputs have type=\"url\" + required + placeholder='https://...'. The HTML5 type=url + required attrs match server-side validation expectations.", () => {

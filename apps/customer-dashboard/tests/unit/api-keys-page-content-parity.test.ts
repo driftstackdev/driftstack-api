@@ -70,40 +70,41 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     // the "account_owner checked" default below.
     expect(body).toMatch(/value="account_owner"\s+checked/);
     expect(body).toMatch(
-      /<strong>account_owner<\/strong>\s*—\s*full access\. Manage webhooks, billing, mint\s+other keys/,
+      /<strong>account_owner<\/strong>\s*—\s*full access\. Manage webhooks, billing and create\s+other keys/,
     );
     expect(body).toMatch(
-      /<strong>write<\/strong>\s*—\s*create \+ drive sessions; cannot mint other keys, manage\s+webhooks, or change billing/,
+      /<strong>write<\/strong>\s*—\s*create and control sessions; can't create other keys, manage\s+webhooks or change billing/,
     );
-    expect(body).toMatch(/<strong>read<\/strong>\s*—\s*list \+ get only/);
+    expect(body).toMatch(/<strong>read<\/strong>\s*—\s*view only; can't change anything/);
     expect(body).toMatch(/<strong>granular \(advanced\)<\/strong>/);
-    expect(body).toMatch(/trusted account administration or your primary\s+automation/);
+    expect(body).toMatch(/trusted admin use or your main automation/);
     expect(body).not.toMatch(/keys driving the GUI client/);
   });
 
-  it('plaintext-shown-ONCE claim pinned on the create-reveal pane', () => {
+  it('full-key-shown-only-once claim pinned on the header + create-reveal pane', () => {
     // V-270 — single load-bearing copy line. A future copy revamp
     // must not water this down to "we'll show it again later".
-    expect(body).toMatch(/Plaintext is\s+shown ONCE on creation/);
-    expect(body).toMatch(/store it now; we can't recover it later/);
+    expect(body).toMatch(/The full key is\s+shown only once, when you create it/);
+    expect(body).toMatch(/save it right away; we can't show it again/);
     expect(body).toMatch(/This is the only time the full key is shown/);
   });
 
-  it('rotation grace-window framing pinned (deploy new key or get 401s)', () => {
-    // V-296b — rotate-reveal pane. The grace window is the only
+  it('rotation old-key framing pinned (update everything that uses it, or requests get rejected)', () => {
+    // V-296b — rotate-reveal pane. The old-key deadline is the only
     // thing between a rotation and an outage; the copy must keep
     // calling that out.
     expect(body).toMatch(/API key rotated/);
-    expect(body).toMatch(/previous key\s+keeps working for the grace window/);
-    expect(body).toMatch(/deploy the new key everywhere\s+before then or requests/);
-    expect(body).toMatch(/start returning 401/);
+    expect(body).toMatch(/The old key keeps\s+working until the time shown below/);
+    expect(body).toMatch(
+      /update everything that uses it\s+before then, or those requests will be rejected/,
+    );
   });
 
-  it('scrypt-hashed-at-rest security notice pinned + "no admin recovery path"', () => {
-    expect(body).toMatch(/API keys are scrypt-hashed at rest/);
-    expect(body).toMatch(/Driftstack staff cannot read your keys/);
-    expect(body).toMatch(/database\s+breach surfaces hashes, not keys/);
-    expect(body).toMatch(/no admin recovery\s+path exists/);
+  it('one-way-hash security notice pinned + "not even by Driftstack support"', () => {
+    expect(body).toMatch(/We store only a one-way hash of each key/);
+    expect(body).toMatch(/Driftstack staff can't read your keys/);
+    expect(body).toMatch(/would see only those hashes, not your keys/);
+    expect(body).toMatch(/A lost key can't be\s+recovered — not even by Driftstack support/);
   });
 
   it('Authorization: Bearer header convention pinned', () => {
@@ -148,7 +149,7 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
     expect(body).toMatch(/apiAccessOnly\.forEach[\s\S]*?!showPaidGuidance/);
     expect(body).toMatch(/apiWriteOnly\.forEach[\s\S]*?!showWriteControls/);
-    expect(body).toContain('selected team role is read-only');
+    expect(body).toContain('team role is read-only for the selected account');
     expect(body).toContain('Ask a team admin to create, rotate, or revoke keys.');
     expect(body).toMatch(
       /function wireRevokeButtons\(\)[\s\S]*?if \(!writeAccessVerified \|\| !writeAccessGranted\)/,
@@ -181,11 +182,13 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/if \(createInFlight\) return;/);
     expect(body.match(/signal: controller\.signal/g)?.length).toBeGreaterThanOrEqual(4);
     expect(body).toContain('Loading API keys took too long. Check your connection and retry.');
-    expect(body).toContain('Key creation timed out after the request was sent');
-    expect(body).toContain('Key rotation timed out after the request was sent');
-    expect(body).toContain('its plaintext cannot be recovered');
-    expect(body).toContain('revoke it before creating another key');
-    expect(body).toContain('revoke that new key before rotating again');
+    expect(body).toContain("The request took too long, so we can't be sure it finished. ");
+    expect(body).toContain(
+      "The request took too long, so we can't be sure the rotation finished. ",
+    );
+    expect(body).toContain("its value can't be shown again");
+    expect(body).toContain('Revoke it before creating another key');
+    expect(body).toContain('Revoke that new key before rotating again');
     expect(body).toContain('const ambiguousRevokeIds = new Set();');
     expect(body).toContain('const ambiguousRotateIds = new Set();');
     expect(body).toContain('let keySnapshot = [];');
@@ -197,11 +200,11 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
     expect(body).toMatch(/if \(createOutcomeBlocked\)/);
     expect(body).toMatch(/lockRotateAction\(sourceId, Boolean\(matchingKey\)\)/);
     expect(body).toMatch(/if \(ambiguousRotateIds\.has\(String\(id \|\| ''\)\)\)/);
-    expect(body).toContain('refreshed authoritative list has no new “');
+    expect(body).toContain("Your list doesn't show a new “");
     expect(body).toContain('async function reconcileAmbiguousRevoke(id, name)');
     expect(body).toMatch(/if \(ambiguousRevokeIds\.has\(String\(id \|\| ''\)\)\) return/);
-    expect(body).toContain('Key revocation timed out after the request was sent');
-    expect(body).toContain('Revocation likely completed; do not revoke it again.');
+    expect(body).toContain("The request took too long and we couldn't refresh your key list.");
+    expect(body).toContain("It was most likely revoked; don't revoke it again.");
     expect(body).toMatch(/btn\.disabled = outcomeUnknown/);
   });
 
@@ -216,15 +219,13 @@ describe('W357.B customer-dashboard /api-keys page content parity', () => {
 
   it('footer scope summary copy stays accurate (broad scopes only — granular not promoted here)', () => {
     // V-174 — footer summary. Mentions read/write/account_owner
-    // explicitly and recommends narrowest-scoped key.
-    expect(body).toMatch(/<code class="font-mono">read<\/code> \(list\/get-only\)/);
+    // explicitly and recommends giving each key only the access it needs.
+    expect(body).toMatch(/<code class="font-mono">read<\/code> \(view only\)/);
+    expect(body).toMatch(/<code class="font-mono">write<\/code>\s*\(create and control sessions\)/);
     expect(body).toMatch(
-      /<code class="font-mono">write<\/code>\s*\(create sessions, navigate, interact\)/,
+      /<code class="font-mono">account_owner<\/code>\s*\(also manage webhooks, billing and other keys/,
     );
-    expect(body).toMatch(
-      /<code class="font-mono">account_owner<\/code>\s*\(manage webhooks, billing, mint other keys/,
-    );
-    expect(body).toMatch(/Always create the narrowest-scoped key the job needs/);
+    expect(body).toMatch(/Give each key only the access it needs/);
   });
 
   it('SCOPE_LABEL map exposes a label for every broad scope cited in the form', () => {

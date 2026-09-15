@@ -141,9 +141,8 @@ const json = (body: unknown): Response =>
   });
 
 const REFUSAL =
-  'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.';
-const BUSY =
-  'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.';
+  'This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.';
+const BUSY = 'Our test service is busy right now. Try again in a minute.';
 const SESSION_EXIT = {
   ip: '203.0.113.9',
   country: 'NL',
@@ -507,7 +506,7 @@ describe('the Proxies grid — a refused test is a notice and a skipped row, nev
     expect(notice.className).toContain('text-ink-muted');
     expect(notice.className).not.toContain('text-status-error');
     expect(screen.queryByText('tunnel down')).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     expect(await screen.findByText('203.0.113.9')).toBeInTheDocument();
     // Persisted as the row's exit; no measurement invented.
     await waitFor(() =>
@@ -1007,7 +1006,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(notice.className).not.toContain('text-status-error');
     expect(screen.getByText('tunnel down')).toBeInTheDocument();
     expect(screen.getByText(FLEET_DOWN).className).toContain('text-status-error');
-    expect(screen.queryByText('endpoint ok')).toBeNull();
+    expect(screen.queryByText('address ok')).toBeNull();
     const entry = (await loadProbeCache()).vpn1;
     expect(entry?.fleetFailureReason).toBe(FLEET_DOWN);
     expect(entry?.exitSupersededAt).toEqual(expect.any(Number));
@@ -1022,7 +1021,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     // no-verdict one (the K2 describe below pins the pick); transience is the
     // claim here.
     expect(await screen.findByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     testAccountProxy.mockResolvedValue(NODE_BUSY);
     await clickCheck();
     expect(await screen.findByText(BUSY)).toBeInTheDocument();
@@ -1075,7 +1074,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(await screen.findByText('42ms')).toBeInTheDocument();
     await clickCheck();
     const notice = await screen.findByText(
-      'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
+      'The server did not answer, so the VPN was not tested. The address has changed since the last check; no result yet — try again.',
     );
     expect(notice.className).toContain('text-ink-muted');
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
@@ -1095,7 +1094,7 @@ describe('(i) I5 — "the server did not answer" keeps the last verdict and is a
     expect(await screen.findByText('42ms')).toBeInTheDocument();
     await clickCheck();
     expect(await screen.findByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeInTheDocument();
-    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.queryByText(/address has changed/)).toBeNull();
     expect(screen.getByText('42ms')).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.serverLatencyMs).toBe(42);
   });
@@ -1201,8 +1200,8 @@ describe('(k) K2 — an unanswered check on a row that never held a verdict says
     expect(notice.className).toContain('text-ink-muted');
     expect(notice.className).not.toContain('text-status-error');
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
-    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.queryByText(/address has changed/)).toBeNull();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     expect(screen.queryByText('tunnel down')).toBeNull();
     // The entry the check left holds the pre-flight and nothing measured.
     const entry = (await loadProbeCache()).vpn1;
@@ -1221,8 +1220,8 @@ describe('(k) K2 — an unanswered check on a row that never held a verdict says
     await clickCheck();
     expect(await screen.findByText(NO_VERDICT_YET_NOTICE)).toBeInTheDocument();
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
-    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.queryByText(/address has changed/)).toBeNull();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     expect((await loadProbeCache()).vpn1?.endpoint).toEqual({
       resolved: true,
       ip: '198.51.100.1',
@@ -1305,10 +1304,15 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
     const r = await real.testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
     expect(r).toEqual({
       ok: false,
-      reason: `${real.PLAN_EXCLUDES_FLEET_TEST_REASON} ${TIER_DETAIL}`,
+      reason: real.PLAN_EXCLUDES_FLEET_TEST_REASON,
       not_run: 'plan_excluded',
     });
-    expect(real.PLAN_EXCLUDES_FLEET_TEST_REASON).toBe('Your plan does not include VPN checks.');
+    expect(real.PLAN_EXCLUDES_FLEET_TEST_REASON).toBe(
+      'Your plan does not include OpenVPN or WireGuard proxies. Upgrade your plan to use and test them.',
+    );
+    // The server's detail names an internal feature flag and tier slug; it is the
+    // discriminator, never part of the customer's sentence.
+    expect(r.ok === false ? r.reason : '').not.toContain('vpnEgress');
   });
 
   // (i) I6 follow-up (review) — the route answers 403 for a key without the
@@ -1407,7 +1411,7 @@ describe('(i) I6 — a 403 on /test is the tier refusal, surfaced as a not_run',
     expect(notice.className).toContain('text-ink-muted');
     expect(screen.queryByText('tunnel down')).toBeNull();
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     expect(
       await screen.findByText(
         '1 VPN tunnel skipped (not included in your plan) — nothing was tested',
@@ -1446,13 +1450,16 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
     const r = await real.testAccountProxy('http://x', 'k', 'aprx_vpn', { vantage: 'fleet' });
     expect(r).toEqual({
       ok: false,
-      reason: `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
+      reason: real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
       not_run: 'desktop_credential',
     });
+    // The route-policy detail talks about API routes and credentials; it is the
+    // discriminator, never part of the customer's sentence.
+    expect(r.ok === false ? r.reason : '').not.toContain('API route');
     // (l) #9 — the next step is Settings, the one the whole app gives for a
     // missing key; "the dashboard" is named nowhere in the GUI as a place to go.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).toBe(
-      'Testing the tunnel needs an API key. Connect your API key in Settings to test it.',
+      'Testing through Driftstack needs an API key. Connect your API key in Settings to test it.',
     );
     // The toEqual above pins the whole sentence; this names the claim.
     expect(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON).not.toContain(
@@ -1502,19 +1509,17 @@ describe('(j) J4 — the free-desktop route-policy 403 is "needs an API key", ne
   it('CRITICAL the grid: the API-key sentence as a muted notice beside "endpoint ok" — never "not included in your plan", "tunnel down" or "did not answer"; Test all counts the row NOT TESTED (needs an API key from the dashboard)', async () => {
     testAccountProxy.mockResolvedValue({
       ok: false,
-      reason: `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
+      reason: real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
       not_run: 'desktop_credential',
     });
     render(<ProxiesView />);
     fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
-    const notice = await screen.findByText(
-      `${real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${ROUTE_POLICY_DETAIL}`,
-    );
+    const notice = await screen.findByText(real.DESKTOP_CREDENTIAL_FLEET_TEST_REASON);
     expect(notice.className).toContain('text-ink-muted');
     expect(screen.queryByText(/not included in your plan/)).toBeNull();
     expect(screen.queryByText('tunnel down')).toBeNull();
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
     // "not tested", like a row with no API key — not "skipped" (a refusal of
     // the row) and not the tier's clause.
     expect(

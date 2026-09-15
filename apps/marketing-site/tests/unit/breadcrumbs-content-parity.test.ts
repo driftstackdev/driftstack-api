@@ -53,7 +53,7 @@ describe('S19 Breadcrumbs component + adoption', () => {
       ['pages/trust/sub-processors.astro', "{ name: 'Sub-processors' }"],
       ['pages/trust/compliance.astro', "{ name: 'Compliance' }"],
       ['pages/trust/incidents.astro', "{ name: 'Incidents' }"],
-      ['pages/trust/cumulative-rig.astro', "{ name: 'Cumulative rig' }"],
+      ['pages/trust/cumulative-rig.astro', "{ name: 'Device fingerprint' }"],
     ];
     for (const [page, finalCrumb] of pages) {
       const body = read(page);

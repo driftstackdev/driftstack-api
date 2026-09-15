@@ -2508,7 +2508,7 @@ export function registerAgentSessionsRoutes(
         // server is authoritative) gives the customer an instant, honest message.
         if (owned.scheme === 'http') {
           throw new BadRequestError(
-            'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
+            'HTTP proxies cannot be used for browser sessions. Use a SOCKS5, OpenVPN, or WireGuard proxy instead.',
           );
         }
         // V-786 — refuse a VPN row the OWNER's tier is no longer entitled to, at
@@ -3314,7 +3314,7 @@ export function registerAgentSessionsRoutes(
         return {
           cookies: null,
           status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
+          reason: 'This feature is not available on this deployment.',
         };
       }
       // Cookies are read LIVE from the running session's jar — a closed or
@@ -3323,7 +3323,7 @@ export function registerAgentSessionsRoutes(
         return {
           cookies: null,
           status: 'unavailable' as const,
-          reason: 'session is not live on a node',
+          reason: 'This session is not running.',
         };
       }
       // The registry is keyed by the authed node_id (the JWT iss) — the same id
@@ -3333,7 +3333,7 @@ export function registerAgentSessionsRoutes(
         return {
           cookies: null,
           status: 'unavailable' as const,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         };
       }
       // Security-audit hardening (2026-06-30, MEDIUM) — this route has the exact
@@ -3503,7 +3503,7 @@ export function registerAgentSessionsRoutes(
       if (fleetControlRegistry === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
+          reason: 'This feature is not available on this deployment.',
         };
       }
       // The write targets the LIVE session's cookie store — a closed or
@@ -3511,14 +3511,14 @@ export function registerAgentSessionsRoutes(
       if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'session is not live on a node',
+          reason: 'This session is not running.',
         };
       }
       const conn = fleetControlRegistry.get(rec.nodeId);
       if (conn === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         };
       }
       // Hardening: shed the request (discriminated error, no relay) when this
@@ -3653,19 +3653,28 @@ export function registerAgentSessionsRoutes(
       });
       // Control plane not wired (stateless deploy / no fleet registry).
       if (fleetControlRegistry === undefined) {
-        return { status: 'unavailable' as const, reason: 'fleet control plane not enabled' };
+        return {
+          status: 'unavailable' as const,
+          reason: 'This feature is not available on this deployment.',
+        };
       }
       // The swap targets a LIVE session's egress — a closed or never-dispatched
       // session has none to move.
       if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
-        return { status: 'unavailable' as const, reason: 'session is not live on a node' };
+        return { status: 'unavailable' as const, reason: 'This session is not running.' };
       }
       const conn = fleetControlRegistry.get(rec.nodeId);
       if (conn === undefined) {
-        return { status: 'unavailable' as const, reason: 'session node is not connected' };
+        return {
+          status: 'unavailable' as const,
+          reason: 'This session cannot be reached right now. Try again shortly.',
+        };
       }
       if (accountProxiesService === undefined) {
-        return { status: 'unavailable' as const, reason: 'egress management not enabled' };
+        return {
+          status: 'unavailable' as const,
+          reason: 'Changing the proxy of a running session is not available on this installation.',
+        };
       }
       // See DEVICES_SUPPORT_MID_SESSION_EGRESS above. Placed AFTER validation so a
       // malformed request still gets its 422 — a caller fixing their body should not
@@ -3675,7 +3684,7 @@ export function registerAgentSessionsRoutes(
         return {
           status: 'unavailable' as const,
           reason:
-            'devices do not support changing egress on a running session yet — create a new session with this proxy_id instead',
+            'Changing the proxy of a running session is not supported yet. Create a new session with this proxy_id instead.',
         };
       }
       const proxyId = parsed.data.proxy_id;
@@ -3700,7 +3709,7 @@ export function registerAgentSessionsRoutes(
         throw new ValidationError({
           fieldErrors: {
             proxy_id: [
-              'Proxy not found for this account, or not dispatchable (only socks5 and entitled VPN schemes can carry a session).',
+              'This proxy was not found on your account, or it cannot be used for sessions. Only SOCKS5 proxies and VPNs included in your plan can be used.',
             ],
           },
           formErrors: [],
@@ -3737,8 +3746,8 @@ export function registerAgentSessionsRoutes(
           status: 'unavailable' as const,
           reason:
             vpnScheme === null
-              ? 'no probed exit identity for this proxy — run POST /v1/account/me/proxies/:id/test first'
-              : `no usable exit has been observed for this ${schemeName} tunnel — run POST /v1/account/me/proxies/:id/test?vantage=fleet (Check) or launch a session through it first`,
+              ? 'This proxy has not been tested yet. Run POST /v1/account/me/proxies/:id/test first.'
+              : `This ${schemeName} proxy has not reported a working exit yet. Run Check (POST /v1/account/me/proxies/:id/test?vantage=fleet) or start a session through it first.`,
         };
       }
       const exitIdentity = {
@@ -3788,7 +3797,7 @@ export function registerAgentSessionsRoutes(
             status: 'ok' as const,
             apply_point: null,
             reason:
-              'the node accepted the swap but did not confirm when it applies; it may have taken effect immediately',
+              'The proxy change was accepted, but it is not confirmed when it takes effect. It may already be in use.',
           };
         }
         if (outcome.status === 'error') {
@@ -3901,7 +3910,7 @@ export function registerAgentSessionsRoutes(
       if (fleetControlRegistry === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
+          reason: 'This feature is not available on this deployment.',
         };
       }
       // The step targets the LIVE session — a closed or never-dispatched session
@@ -3909,14 +3918,14 @@ export function registerAgentSessionsRoutes(
       if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'session is not live on a node',
+          reason: 'This session is not running.',
         };
       }
       const conn = fleetControlRegistry.get(rec.nodeId);
       if (conn === undefined) {
         return {
           status: 'unavailable' as const,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         };
       }
       // Hardening: per-account concurrent-relay cap (reserve before the await,
@@ -4069,7 +4078,7 @@ export function registerAgentSessionsRoutes(
         return {
           handle: null,
           status: 'error' as const,
-          reason: `account upload limit reached: at most ${binarySizeLabel(UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES)} of uploads in flight at once — wait for in-progress uploads to finish`,
+          reason: `Account upload limit reached: your account can have at most ${binarySizeLabel(UPLOAD_MAX_ACCOUNT_INFLIGHT_BYTES)} uploading at once. Wait for your current uploads to finish, then try again.`,
         };
       }
       if (inFlightCount + 1 > UPLOAD_MAX_ACCOUNT_INFLIGHT_COUNT) {
@@ -4077,7 +4086,7 @@ export function registerAgentSessionsRoutes(
           handle: null,
           status: 'error' as const,
           reason:
-            'account upload limit reached: too many concurrent uploads in flight — wait for in-progress uploads to finish',
+            'Account upload limit reached: too many uploads at once. Wait for your current uploads to finish, then try again.',
         };
       }
       // Security-audit hardening (2026-06-30, MEDIUM): the CONCURRENT caps above
@@ -4093,14 +4102,15 @@ export function registerAgentSessionsRoutes(
         return {
           handle: null,
           status: 'error' as const,
-          reason: `session upload limit reached: at most ${binarySizeLabel(SESSION_UPLOAD_MAX_LIFETIME_BYTES)} of total uploads per session — start a new session to upload more`,
+          reason: `Session upload limit reached: this session can upload at most ${binarySizeLabel(SESSION_UPLOAD_MAX_LIFETIME_BYTES)} in total. Start a new session to upload more.`,
         };
       }
       if (lifetimeCount + 1 > SESSION_UPLOAD_MAX_LIFETIME_COUNT) {
         return {
           handle: null,
           status: 'error' as const,
-          reason: 'session upload limit reached: too many files uploaded in this session',
+          reason:
+            'Session upload limit reached: too many files have been uploaded in this session. Start a new session to upload more.',
         };
       }
       accountUploadInFlightBytes.set(acct, inFlightBytes + reserveBytes);
@@ -4143,7 +4153,7 @@ export function registerAgentSessionsRoutes(
         // status — and the in-flight reservation above is already freed by the finally.
         const bytes = Buffer.from(parsed.data.dataB64, 'base64');
         if (bytes.length === 0) {
-          throw new BadRequestError('Uploaded file is empty (dataB64 decoded to 0 bytes).');
+          throw new BadRequestError('The uploaded file is empty.');
         }
         if (bytes.length > UPLOAD_MAX_FILE_BYTES) {
           throw new BadRequestError(
@@ -4155,7 +4165,7 @@ export function registerAgentSessionsRoutes(
           return {
             handle: null,
             status: 'unavailable' as const,
-            reason: 'fleet control plane not enabled',
+            reason: 'This feature is not available on this deployment.',
           };
         }
         // The upload targets the LIVE session's jail — a closed or never-dispatched
@@ -4164,7 +4174,7 @@ export function registerAgentSessionsRoutes(
           return {
             handle: null,
             status: 'unavailable' as const,
-            reason: 'session is not live on a node',
+            reason: 'This session is not running.',
           };
         }
         const conn = fleetControlRegistry.get(rec.nodeId);
@@ -4172,7 +4182,7 @@ export function registerAgentSessionsRoutes(
           return {
             handle: null,
             status: 'unavailable' as const,
-            reason: 'session node is not connected',
+            reason: 'This session cannot be reached right now. Try again shortly.',
           };
         }
         const outcome = await conn.requestUpload(
@@ -4252,14 +4262,14 @@ export function registerAgentSessionsRoutes(
         return {
           files: null,
           status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
+          reason: 'This feature is not available on this deployment.',
         };
       }
       if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
         return {
           files: null,
           status: 'unavailable' as const,
-          reason: 'session is not live on a node',
+          reason: 'This session is not running.',
         };
       }
       const conn = fleetControlRegistry.get(rec.nodeId);
@@ -4267,7 +4277,7 @@ export function registerAgentSessionsRoutes(
         return {
           files: null,
           status: 'unavailable' as const,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         };
       }
       // Hardening: per-account concurrent-relay cap (reserve before the await,
@@ -4293,7 +4303,7 @@ export function registerAgentSessionsRoutes(
           return {
             files: null,
             status: 'error' as const,
-            reason: 'unexpected data frame for list request',
+            reason: 'Could not load the list of downloaded files. Try again shortly.',
           };
         }
         return { files: null, status: 'timeout' as const };
@@ -4336,14 +4346,14 @@ export function registerAgentSessionsRoutes(
         return {
           file: null,
           status: 'unavailable' as const,
-          reason: 'fleet control plane not enabled',
+          reason: 'This feature is not available on this deployment.',
         };
       }
       if (rec.status !== 'active' || rec.nodeId === null || rec.nodeId === undefined) {
         return {
           file: null,
           status: 'unavailable' as const,
-          reason: 'session is not live on a node',
+          reason: 'This session is not running.',
         };
       }
       const conn = fleetControlRegistry.get(rec.nodeId);
@@ -4351,7 +4361,7 @@ export function registerAgentSessionsRoutes(
         return {
           file: null,
           status: 'unavailable' as const,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         };
       }
       // Hardening: per-account concurrent-relay cap (reserve before the await,
@@ -4398,7 +4408,7 @@ export function registerAgentSessionsRoutes(
           return {
             file: null,
             status: 'error' as const,
-            reason: 'unexpected list frame for fetch request',
+            reason: 'Could not fetch the downloaded file. Try again shortly.',
           };
         }
         return { file: null, status: 'timeout' as const };
@@ -4781,7 +4791,7 @@ export function registerAgentSessionsRoutes(
           }
           if (pairModeLock === undefined) {
             throw new FeatureUnavailableError(
-              'Pair-mode takeover-via-input-event requires the Redis pair-mode lock to be wired on this deployment.',
+              'Taking control of this session is not available on this installation.',
             );
           }
           const lockResult = await pairModeLock.tryAcquire({
@@ -4890,7 +4900,7 @@ export function registerAgentSessionsRoutes(
           currentState.kind === 'handback-queued'
         ) {
           throw new ConflictError(
-            `AgentSession ${req.params.id} pair-mode state is ${currentState.kind}; wait for the transition to settle before forwarding input-events.`,
+            'This session is changing control right now. Wait a moment and try again.',
           );
         }
         if (currentState.kind === 'human-driving') {
@@ -4928,10 +4938,8 @@ export function registerAgentSessionsRoutes(
       // lands, the dispatcher publishes the event via LiveKit
       // DataChannel + returns { kind: 'forwarded', duration_ms }.
       throw new FeatureUnavailableError(
-        'Live input forwarding requires a Mac fleet node with harness end-to-end ' +
-          'enabled. Pre-launch this endpoint forwards mode=manual + pair-mode-after-takeover ' +
-          'events to a stub; full activation lands with the v1.0 harness Swift work. ' +
-          'See https://docs.driftstack.io/api/agent-sessions/ for the full agent-session surface.',
+        'Live input is not available yet. ' +
+          'See https://docs.driftstack.io/api/agent-sessions/ for what the agent-session API supports today.',
       );
     },
   );
@@ -5333,11 +5341,13 @@ export function registerAgentSessionsRoutes(
     if (pre.status !== 'active' || (authority !== null && authority.status !== 'active')) {
       const latest = (await sessions.get(agentSessionId)) ?? pre;
       throw new ConflictError(
-        `Agent session is ${latest.status} (${latest.closedReason ?? `session ${latest.status}`}). Start a new agent session.`,
+        latest.status === 'paused'
+          ? 'Agent session is paused. Resume this agent session before sending another message.'
+          : `Agent session is ${latest.status}. Start a new agent session.`,
       );
     }
     throw new ConflictError(
-      'AI control is unavailable for the session’s current manual, pair, or transition state.',
+      'The AI cannot act on this session right now: a person has control, or control is changing hands. Hand control back to the AI, or wait for the change to finish, then try again.',
       { ai_control_unavailable: true, phase: 'admission' },
     );
   };
@@ -5352,7 +5362,7 @@ export function registerAgentSessionsRoutes(
       !agentTurnAdmissionMatchesSnapshot(admission, confirmedAuthority)
     ) {
       throw new ConflictError(
-        'The session control state changed while this message was being admitted.',
+        'Control of this session changed while this message was being sent. Check who is controlling the session, then send it again.',
         { ai_control_unavailable: true, phase: 'admission' },
       );
     }
@@ -5437,14 +5447,14 @@ export function registerAgentSessionsRoutes(
       result: Extract<Awaited<ReturnType<AgentRuntime['runTurn']>>, { kind: 'session-closed' }>,
       hasSettledWork: boolean,
     ): string => {
-      const lifecycle = `Agent session is ${result.session.status} (${result.reason}).`;
+      const lifecycle = `Agent session is ${result.session.status}.`;
       if (result.session.status === 'paused') {
         return hasSettledWork
-          ? `${lifecycle} Inspect partial results before resuming; do not replay settled steps automatically.`
+          ? `${lifecycle} Check the partial results before resuming, and do not repeat the steps that already completed.`
           : `${lifecycle} Resume this agent session before sending another message.`;
       }
       return hasSettledWork
-        ? `${lifecycle} Inspect partial results and do not replay them automatically in a new session.`
+        ? `${lifecycle} Check the partial results, and do not repeat them automatically in a new session.`
         : `${lifecycle} Start a new agent session.`;
     };
 
@@ -5460,7 +5470,7 @@ export function registerAgentSessionsRoutes(
       });
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
-          'Another turn is already running for this agent session. Retry after it completes.',
+          'This agent session is still working on a previous request. Wait for it to finish, then try again.',
         );
       }
       if (result.kind === 'session-closed') {
@@ -5476,7 +5486,7 @@ export function registerAgentSessionsRoutes(
       }
       if (result.kind === 'ai-control-unavailable') {
         throw new ConflictError(
-          'The session control state changed before the manual message could be recorded.',
+          'Control of this session changed before your note could be recorded. Check who is controlling the session, then try again.',
           { ai_control_unavailable: true, phase: result.phase },
         );
       }
@@ -5784,19 +5794,19 @@ export function registerAgentSessionsRoutes(
       });
       if (result.kind === 'turn-in-progress') {
         throw new ConflictError(
-          'Another turn is already running for this agent session. Retry after it completes.',
+          'This agent session is still working on a previous request. Wait for it to finish, then try again.',
         );
       }
       if (result.kind === 'account-turn-limit') {
         throw new RateLimitedError(
           1,
-          `This account already has ${result.current.toString()} AI turns running; the current limit is ${result.limit.toString()}. Retry after one finishes.`,
+          `Your account already has ${result.current.toString()} agent turns running (limit ${result.limit.toString()}). Wait for one to finish, then try again.`,
         );
       }
       if (result.kind === 'ai-control-unavailable') {
         const usage = publicUsage(result.usage, keySource);
         throw new ConflictError(
-          'AI control changed while this turn was running. No later model or browser work was started; inspect any settled partial results before taking a new action.',
+          'AI control changed while this turn was running, so it stopped early. Check the partial results before starting a new turn.',
           {
             ai_control_unavailable: true,
             phase: result.phase,
@@ -5956,7 +5966,7 @@ export function registerAgentSessionsRoutes(
     }
     if (agentTurnReceipts === undefined) {
       throw new FeatureUnavailableError(
-        'Agent-turn idempotency storage is unavailable. Do not retry this browser task without the same key; contact support.',
+        'We could not safely record this request. Do not retry it without the same Idempotency-Key. Contact support.',
       );
     }
 
@@ -5976,13 +5986,13 @@ export function registerAgentSessionsRoutes(
     const reservation = await agentTurnReceipts.reserve(receiptArgs);
     if (reservation.kind === 'mismatch') {
       throw new ConflictError(
-        'This Idempotency-Key was already used for a different agent turn or session.',
+        'This Idempotency-Key was already used for a different request or session.',
         { idempotency_status: 'mismatch' },
       );
     }
     if (reservation.kind === 'in-progress') {
       throw new ConflictError(
-        'The original agent turn is still running or its terminal outcome is unknown. Do not submit the browser task again; inspect the durable transcript before choosing a new Idempotency-Key.',
+        'The original request is still running, or its result is not known yet. Do not send it again. Check the session transcript before using a new Idempotency-Key.',
         { idempotency_status: 'in_progress' },
       );
     }

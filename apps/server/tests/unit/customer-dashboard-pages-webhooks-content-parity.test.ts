@@ -59,7 +59,10 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
   });
 
   it("HMAC-SHA256 + 5-min timestamp tolerance framing pinned: 'HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance' — pinned so the signature algorithm + replay window stay explicit (drift to dropping HMAC-SHA256 would let customers wonder which signature scheme to verify against; drift to dropping 5-min tolerance would lose the replay-attack window framing)", () => {
-    expect(body).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
+    expect(body).toMatch(/Signed event notifications sent to your server/);
+    expect(body).toMatch(
+      /Every delivery is signed \(HMAC-SHA256\) and carries a timestamp; the SDK\s*helper rejects deliveries more than 5 minutes old\./,
+    );
   });
 
   it('8-event emitted subscribe enum is rendered in create/edit; session.completed stays default-checked and silent quota subscriptions stay absent', () => {
@@ -91,13 +94,13 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("V-347 secret-shown-ONCE + verifyWebhookSignature helper-name framing pinned. Re-enabled by slice 211 after verifying the 'Copy this signing secret now…verifyWebhookSignature helper to authenticate incoming deliveries.' copy exists at webhooks.astro:193-196", () => {
     expect(body).toMatch(
-      /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to authenticate\s*incoming deliveries\./,
+      /Copy this signing secret now — it won't be shown again\. Use it with the SDK's\s*<code class="font-mono">verifyWebhookSignature<\/code> helper to check that\s*each delivery really came from Driftstack\./,
     );
   });
 
   it('V-359 rotation 24h grace framing pinned. Re-enabled by slice 229 after verifying both halves still exist (confirm prompt at webhooks.astro:1253-1255 + rotation-in-flight indicator comment at webhooks.astro:659-662)', () => {
     expect(body).toMatch(
-      /'Rotate signing secret for ' \+\s*id \+\s*'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
+      /'Rotate the signing secret for ' \+\s*id \+\s*'\?\\n\\nThe new secret is shown only once\. The old one keeps working for 24 hours so you can switch over without missing deliveries\.',/,
     );
     expect(body).toMatch(
       /\/\/ V-359 — rotation-in-flight indicator\. When the endpoint is\s*\/\/ dual-signing, surface the grace expiry inline so customers\s*\/\/ know how long they have to roll the new secret across\s*\/\/ their verifier infra\./,
@@ -142,7 +145,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("Retry + DLQ framing pinned: 'Failed deliveries retry 5× with exponential backoff before landing in the DLQ. DLQ entries are admin-replayable; no auto-retry past the initial attempts to avoid storm-on-recovery patterns.' — pinned so the 5× retry budget + the no-auto-retry-past-budget storm-prevention framing both survive (drift to dropping 'storm-on-recovery' would hide WHY auto-retry doesn't continue past 5 attempts)", () => {
     expect(body).toMatch(
-      /Failed deliveries retry 5× with exponential backoff before landing in\s*the DLQ\. DLQ entries are admin-replayable; no auto-retry past the\s*initial attempts to avoid storm-on-recovery patterns\./,
+      /If a delivery fails, we retry it up to 5 times with increasing delays\.\s*After that it's marked undelivered and kept in the delivery log, where\s*you can replay it yourself — we don't retry automatically beyond that\./,
     );
   });
 
@@ -153,7 +156,7 @@ describe('W497.B apps/customer-dashboard/src/pages/webhooks.astro content parity
 
   it("HTTPS-required + 10s 2xx framing pinned: 'HTTPS required. The endpoint must respond 2xx within 10s for delivery to count as successful.' — pinned so the protocol requirement + response-time budget stay explicit (drift to dropping HTTPS would let customers register HTTP endpoints that fail with cryptic 'TLS required' errors; drift to dropping 10s would leave customers wondering why their slow webhooks land in DLQ)", () => {
     expect(body).toMatch(
-      /HTTPS required\. The endpoint must respond 2xx within 10s for delivery to count\s*as successful\./,
+      /Must start with https:\/\/\. Your server needs to reply with a success status \(2xx\)\s*within 10 seconds, or the delivery counts as failed\./,
     );
   });
 

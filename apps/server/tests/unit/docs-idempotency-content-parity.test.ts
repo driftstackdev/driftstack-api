@@ -67,11 +67,18 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/per-account/i);
   });
 
-  it('documents endpoint-specific lifetime: permanent resource-backed creates, durable session-owned turn receipts, and provider-managed Stripe checkout', () => {
-    expect(body).toMatch(/permanent unique\s*index on the orders table/);
-    expect(body).toMatch(/session row and replay for as long as the row exists\./);
-    expect(body).toMatch(/Agent-message.*durable table/i);
-    expect(body).toMatch(/Stripe checkout-session.*follow Stripe's\s*provider-side retention/i);
+  it('documents endpoint-specific lifetime: never-expiring crypto checkout keys, session-lifetime agent-session keys, session+account-lifetime agent-message keys, and provider-managed Stripe checkout (2026-09-15: the SQL / unique-index / durable-table internals left the customer page)', () => {
+    expect(body).toMatch(
+      /\*\*Crypto checkout\*\* keys never expire: a same-key retry replays the\s*original order no matter how much later it arrives\./,
+    );
+    expect(body).toMatch(/\*\*Agent-session\*\* keys replay for as long as the session exists\./);
+    expect(body).toMatch(
+      /\*\*Agent-message\*\* keys replay for as long as the session and account exist\./,
+    );
+    expect(body).toMatch(
+      /\*\*Stripe checkout-session\*\* keys are forwarded to Stripe and follow Stripe's\s*own retention rules\./,
+    );
+    expect(body).not.toMatch(/ON CONFLICT|unique index|in-memory cache/i);
   });
 
   it('documents the empty-string-treated-as-absent rule', () => {
@@ -94,27 +101,30 @@ describe('Arc 6 docs.idempotency — apps/docs/src/pages/reference/idempotency.m
     expect(body).toMatch(/\*\*Crypto checkout\*\* does \*\*not\*\* reject/);
     expect(body).toMatch(/Idempotent-Replayed: 1/);
     expect(body).toMatch(/returns you the \*\*first\*\* order/);
-    expect(body).toMatch(/legacy agent-session create path\*\* likewise replays/);
+    expect(body).toMatch(/\*\*Agent-session create\*\* likewise replays the existing session\./);
   });
 
   it('documents the fail-closed durable agent-turn receipt and disconnect ambiguity', () => {
     expect(body).toMatch(/browser work deliberately continues after an SSE viewer\s*disconnects/);
     expect(body).toMatch(/idempotency_status: "in_progress"/);
-    expect(body).toMatch(/application-encrypt the terminal response/);
+    expect(body).toMatch(
+      /\*\*New key\*\* → the turn runs once and its result is stored encrypted\./,
+    );
+    expect(body).not.toMatch(/application-encrypt|atomically reserve|decomposition or dispatch/);
   });
 
-  it('keeps credential and control-lane churn outside completed turn identity', () => {
-    expect(body).toMatch(/explicit BYOK credential.*deliberately outside receipt identity/is);
-    expect(body).toMatch(/control\s+lane.*deliberately outside receipt identity/is);
-    expect(body).toMatch(/session later closes/);
-    expect(body).toMatch(/control lane changes between AI and manual/);
-    expect(body).toMatch(/explicit BYOKs*\n?credential rotates/);
-    expect(body).toMatch(/replays\s*\n?the original terminal result/);
-    expect(body).toMatch(/never starts another provider request or\s*\n?browser operation/);
+  it('keeps BYOK-key and AI/manual-mode churn outside completed turn identity (2026-09-15: "control lane" / "receipt identity" / "control-authority fences" were internal vocabulary and left the customer page)', () => {
     expect(body).toMatch(
-      /manual transcript turn never reads or hashes an\s*\n?irrelevant BYOK header/,
+      /Your BYOK key and the session's AI\/manual mode are not part\s*\n?of the key's identity — changing them does not change how a replay is\s*\n?matched\./,
     );
-    expect(body).toMatch(/new `Idempotency-Key` only for an intentionally\s*\n?new AI turn/);
+    expect(body).toMatch(/session later closes/);
+    expect(body).toMatch(/its mode changes between AI and manual/);
+    expect(body).toMatch(/or your BYOK key rotates/);
+    expect(body).toMatch(/replays the original result/);
+    expect(body).toMatch(/never\s*\n?starts another provider request or browser operation/);
+    expect(body).toMatch(/A manual-mode turn\s*\n?never reads the BYOK header\./);
+    expect(body).toMatch(/new `Idempotency-Key` only for an\s*\n?intentionally new AI turn/);
+    expect(body).not.toMatch(/control lane|control-authority|receipt identity/);
     expect(body).not.toMatch(/same session, message, approvals, and explicit BYOK key/i);
     expect(body).not.toMatch(/Different session\/body\/BYOK fingerprint/);
   });

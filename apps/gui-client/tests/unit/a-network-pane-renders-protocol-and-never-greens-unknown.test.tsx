@@ -132,9 +132,11 @@ describe('Network pane — protocol badges never green an unknown value', () => 
     // simply has not captured anything so far.
     expect(queryByText('No requests captured yet')).toBeNull();
     expect(text).not.toMatch(/captured yet/i);
-    // It must say something about devices not reporting, so a reader learns the
-    // pane is not waiting on them.
-    expect(text).toMatch(/don.t report|not report/i);
+    // It must say the requests are not available, so a reader learns the pane
+    // is not waiting on them (customer words since 2026-09-15: no 'devices',
+    // no 'per-request logs', no 'pane').
+    expect(text).toMatch(/aren.t available|not available/i);
+    expect(text).not.toMatch(/per-request|pane fills in/i);
     // And no rows / no green badge in the empty state.
     expect(container.querySelectorAll('[data-component="simulator-network-row"]').length).toBe(0);
     expect(badges(container).length).toBe(0);
@@ -150,12 +152,12 @@ describe('Network pane — protocol badges never green an unknown value', () => 
       <NetworkListSubscriber
         store={store}
         sessionId="agt_x"
-        note="Session control credential expired — reopen the session to refresh."
+        note="This session's access has expired — reopen the session to refresh."
         refreshing={false}
       />,
     );
     expect(container.querySelector('[data-component="simulator-network-note"]')).not.toBeNull();
-    expect(queryByText(/credential expired/)).not.toBeNull();
+    expect(queryByText(/access has expired/)).not.toBeNull();
   });
 
   it('CRITICAL does not claim "live" while a note is standing, nor over an empty table', () => {

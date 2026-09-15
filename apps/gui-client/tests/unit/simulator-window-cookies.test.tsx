@@ -442,7 +442,7 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     cookiesMock.mockResolvedValue({ status: 'ok', cookies: [] });
     setCookiesMock.mockResolvedValue({
       status: 'unavailable',
-      reason: 'session is not live on a node',
+      reason: 'This session is not running.',
     });
     const { container } = renderSim();
     openCookies(container);
@@ -545,7 +545,7 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     openCookies(container);
     await waitFor(() => {
       const pane = container.querySelector('[data-component="simulator-cookies"]');
-      if (!pane || !pane.textContent?.toLowerCase().includes('credential expired'))
+      if (!pane || !pane.textContent?.toLowerCase().includes('access has expired'))
         throw new Error('not yet');
       return pane;
     });
@@ -633,17 +633,18 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).not.toContain('next device update');
   });
 
-  it('#58: a 503 (route gated off) surfaces "cookies aren’t enabled on this deployment"', async () => {
+  it('#58: a 503 (route gated off) surfaces "cookies aren’t available here" — never "deployment"', async () => {
     cookiesMock.mockRejectedValue(new AgentSessionControlError('unavailable', 503));
     const { container } = renderSim();
     openCookies(container);
 
     const pane = await waitFor(() => {
       const p = container.querySelector('[data-component="simulator-cookies"]');
-      if (!p || !p.textContent?.includes("aren't enabled")) throw new Error('not yet');
+      if (!p || !p.textContent?.includes("aren't available")) throw new Error('not yet');
       return p;
     });
-    expect(pane.textContent).toContain("cookies aren't enabled on this deployment");
+    expect(pane.textContent).toContain("cookies aren't available here");
+    expect(pane.textContent).not.toMatch(/deployment/i);
     expect(pane.textContent).not.toContain('next device update');
   });
 
@@ -661,27 +662,29 @@ describe('SimulatorWindow — fancy Cookies pane (founder 2026-06-24)', () => {
     expect(pane.textContent).not.toContain('next device update');
   });
 
-  // Finding #4 — a 200 `unavailable` whose `reason` is one of the three INTERNAL server
-  // diagnostics is mapped to friendly customer copy by the LIST poll (the raw debug
-  // phrase must not leak). An actionable reason still passes through (see the helper
-  // unit tests in simulator-window-sizing.test.ts).
-  it('finding #4: an internal "unavailable" reason shows friendly copy, not the raw phrase', async () => {
+  // Finding #4 — a 200 `unavailable` whose `reason` is one of the server's three
+  // states is mapped to the pane's short customer line by the LIST poll (the server
+  // sentence is not pasted in as-is). An actionable reason still passes through (see
+  // the helper unit tests in simulator-window-sizing.test.ts).
+  it('finding #4: a server "unavailable" reason shows the short customer line, not the raw sentence', async () => {
     cookiesMock.mockResolvedValue({
       status: 'unavailable',
       cookies: null,
-      reason: 'session is not live on a node',
+      reason: 'This session is not running.',
     });
     const { container } = renderSim();
     openCookies(container);
 
     const pane = await waitFor(() => {
       const p = container.querySelector('[data-component="simulator-cookies"]');
-      if (!p || !p.textContent?.includes("isn't live on a device")) throw new Error('not yet');
+      if (!p || !p.textContent?.includes("isn't running")) throw new Error('not yet');
       return p;
     });
-    expect(pane.textContent).toContain("the session isn't live on a device right now");
-    // The raw internal diagnostic is NOT surfaced.
-    expect(pane.textContent).not.toContain('session is not live on a node');
+    expect(pane.textContent).toContain("this session isn't running right now");
+    // The server sentence is mapped, not surfaced verbatim — and no older internal
+    // diagnostic ever shows either.
+    expect(pane.textContent).not.toContain('This session is not running.');
+    expect(pane.textContent).not.toMatch(/on a node|control plane/i);
   });
 
   // Finding #5 — the poll self-schedules the next tick ONLY after the prior request

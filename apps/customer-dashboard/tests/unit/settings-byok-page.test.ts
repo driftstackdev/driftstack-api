@@ -309,7 +309,7 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
     expect(window.document.querySelector('[data-byok-set-at]')?.textContent).toBe('2026-05-20');
     expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
-      /save likely completed.*timestamp advanced.*Test the stored key.*do not save again/i,
+      /probably saved.*took too long to respond.*Test stored key to confirm.*only save again if that test fails/i,
     );
   });
 
@@ -339,10 +339,10 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'PUT')).toHaveLength(1);
     expect(input.value).toBe('sk-ant-api03-RETRY');
     expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
-      /outcome is still unknown.*did not advance.*input is retained/i,
+      /can't tell if your key was saved.*Your entry is still here.*try again only if it still shows no key/i,
     );
     expect(window.document.querySelector('[data-byok-error]')?.textContent).not.toMatch(
-      /likely completed/i,
+      /probably (saved|deleted)/i,
     );
   });
 
@@ -389,7 +389,7 @@ describe('settings page — BYOK Anthropic key', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
     expect(isHidden(window, '[data-byok-state="empty"]')).toBe(false);
     expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
-      /clear likely completed.*no stored key remains.*Do not clear again/i,
+      /probably deleted.*no key is saved now.*No need to try again/i,
     );
     expect((window.document.querySelector('[data-byok-clear]') as HTMLButtonElement).disabled).toBe(
       true,
@@ -420,10 +420,10 @@ describe('settings page — BYOK Anthropic key', () => {
 
     expect(isHidden(window, '[data-byok-state="set"]')).toBe(false);
     expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
-      /clear timed out.*key is still on file.*retry only if it remains present/i,
+      /took too long and your key is still saved.*try again only if it still shows as saved/i,
     );
     expect(window.document.querySelector('[data-byok-error]')?.textContent).not.toMatch(
-      /likely completed/i,
+      /probably (saved|deleted)/i,
     );
   });
 
@@ -455,7 +455,7 @@ describe('settings page — BYOK Anthropic key', () => {
 
     expect(isHidden(window, '[data-byok-state="error"]')).toBe(false);
     expect(window.document.querySelector('[data-byok-error]')?.textContent).toMatch(
-      /clear outcome is unknown.*could not be refreshed.*Reload to verify before retrying/i,
+      /took too long.*couldn't check whether your key was deleted.*Reload to check before trying again/i,
     );
     expect((window.document.querySelector('[data-byok-test]') as HTMLButtonElement).disabled).toBe(
       true,
@@ -587,14 +587,14 @@ describe('settings page — BYOK Anthropic key', () => {
     testButton.click();
     await flush();
     expect(error.textContent).toBe(
-      'The stored key could not be validated. Check or rotate it and try again.',
+      "Anthropic didn't accept the saved key. Check it, or create a new key, and try again.",
     );
     expect(error.textContent).not.toContain('x'.repeat(100));
 
     testButton.click();
     await flush();
     expect(error.textContent).toBe(
-      'The stored key could not be validated. Check or rotate it and try again.',
+      "Anthropic didn't accept the saved key. Check it, or create a new key, and try again.",
     );
     expect(testAttempts).toBe(3);
   });

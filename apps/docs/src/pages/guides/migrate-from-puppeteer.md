@@ -7,8 +7,8 @@ description: Map Puppeteer / Playwright concepts onto the Driftstack API — ses
 # Migrating from Puppeteer / Playwright
 
 Puppeteer and Playwright drive a browser process you run yourself.
-Driftstack runs the browser for you — a real iPhone Safari on a
-modified WebKit build — and you drive it over plain HTTPS calls. The
+Driftstack runs the browser for you — a real iPhone Safari — and you
+drive it over plain HTTPS calls. The
 surface is **action-based**: instead of executing your script inside
 the browser, you send discrete, typed steps (navigate, tap, type,
 wait, extract). This page maps the concepts and walks an incremental
@@ -16,11 +16,10 @@ port.
 
 ## Why teams migrate
 
-- **No browser fleet to run.** No headless containers to keep alive,
+- **No browsers to host.** No headless containers to keep alive,
   no grid to patch, no device farm to babysit.
-- **iPhone Safari, not an emulated one.** The runtime is built from
-  WebKit source; you're not configuring a Chromium build to imitate
-  a phone.
+- **iPhone Safari, not an emulated one.** It is a real iPhone Safari,
+  not a desktop browser configured to imitate a phone.
 - **Profile persistence is built in.** Cookies, local storage, and
   IndexedDB live in a server-side [profile](/guides/profile-management/)
   you can snapshot, restore, and clone through the API — replacing
@@ -110,15 +109,16 @@ itself.
   neither covers, email
   [support@driftstack.dev](mailto:support@driftstack.dev) — don't
   work around it by scraping screenshots.
-- **CDP / DevTools protocol access.** Driftstack manages WebKit out
-  of process; there is no protocol passthrough. Per-step `capture`
-  calls are the observation tool.
+- **CDP / DevTools protocol access.** Driftstack does not expose a
+  DevTools protocol. Per-step `capture` calls are the observation
+  tool.
 - **Zero-latency chaining.** Every action is an HTTPS round trip. For
   tight read loops, batch: one `extract` call with many named
   extractions replaces a dozen `$eval`s.
 - **Browser extensions / stealth plugins.** The managed browser
-  doesn't load extensions; fingerprint consistency is handled by the
-  archetype layer, not by plugins you ship.
+  doesn't load extensions; fingerprint consistency comes from the
+  [archetype](/api/archetypes/) you pick (the device, iOS and Safari
+  combination), not from plugins you ship.
 
 ## An incremental migration path
 
@@ -145,13 +145,13 @@ itself.
 - **Destroy promptly.** Sessions hold a concurrent slot until
   destroyed — always tear down in a `finally` (see
   [session lifecycle](/guides/session-lifecycle/)).
-- **Scope your runtime keys narrowly.** A CI runner needs
+- **Scope your automation keys narrowly.** A CI runner needs
   `read:sessions` + `write:sessions`, not `account_owner`. See
   [API key scopes](/reference/scopes/).
 
 ## Where to go next
 
-- **[Quickstart (curl)](/quickstart-curl/)** — see the raw wire calls end to end.
+- **[Quickstart (curl)](/quickstart-curl/)** — see the raw HTTP calls end to end.
 - **[Sessions reference](/api/sessions/)** — every action, field by field.
 - **[Profile management](/guides/profile-management/)** — the user-data-dir replacement, in depth.
 - **[Concurrency & backpressure](/guides/concurrency/)** — sizing parallel workloads.

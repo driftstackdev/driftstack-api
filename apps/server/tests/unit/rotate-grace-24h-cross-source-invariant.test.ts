@@ -77,12 +77,12 @@ describe('W901 V-296 + V-359 24h rotate-grace cross-source invariant', () => {
     expect(p).toMatch(/Null when no rotation in flight/);
   });
 
-  it("CRITICAL V-359 RotateWebhookSecret response describe — 'Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries'. The dual-signing semantics is what makes mid-rotation deliveries succeed under EITHER signature.", () => {
+  it("CRITICAL V-359 RotateWebhookSecret response describe — 'Until this time, every delivery is signed with both the new and the old secret, so you can update your verifier without missing deliveries.' The dual-signing semantics is what makes mid-rotation deliveries succeed under EITHER signature.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/webhooks.ts'));
     expect(p).toMatch(
-      /Until this timestamp, every outbound delivery is signed with both the new \+ old secret/,
+      /Until this time, every delivery is signed with both the new and the old secret/,
     );
-    expect(p).toMatch(/customer can roll their verifier across infra without dropped deliveries/);
+    expect(p).toMatch(/so you can update your verifier without missing deliveries/);
   });
 
   // ─── Shared 24h grace cardinality ────────────────────────────

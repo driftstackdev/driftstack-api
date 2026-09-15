@@ -44,11 +44,13 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
 
   it('historical proxy entries distinguish saved-proxy agent sessions from unsupported direct raw proxy data', () => {
     expect(body).toMatch(/Pass an owned saved proxy_id when creating an agent session/);
+    // 2026-09-15 plain words: same contract (no inline proxy data on the
+    // direct endpoints; a saved proxy_id on agent sessions).
     expect(body).toMatch(
-      /direct \/v1\/sessions and \/v1\/profiles\/:id\/launch verbs do not accept raw proxy data/,
+      /Proxy details cannot be passed inline to \/v1\/sessions or \/v1\/profiles\/:id\/launch — save the proxy first and use its proxy_id/,
     );
-    expect(body).toMatch(/SESSION_PROXY_REQUIRED=false keeps proxy-free direct creation available/);
-    expect(body).toMatch(/raw proxy key is rejected, never treated as proof of egress/);
+    expect(body).toMatch(/Set SESSION_PROXY_REQUIRED=false to allow sessions without a proxy/);
+    expect(body).toMatch(/Proxy details are never accepted inline/);
     expect(body).not.toMatch(/Pass proxy_id when creating a session/);
   });
 
@@ -103,12 +105,14 @@ describe('W499.A apps/marketing-site/src/pages/changelog.astro content parity', 
 
   it("2026-05-08 'GDPR Article 20 portability — full audit log export' security entry + 10K-row ceiling — pinned so the explicit Article 20 reference + the 10K cap stay consistent with the customer-dashboard audit-log page's framing (drift to dropping Article 20 reference would break the compliance-documentation traceability)", () => {
     expect(body).toMatch(/GDPR Article 20 portability — full audit log export/);
-    expect(body).toMatch(/10K-row ceiling per export with cursor pagination beyond\./);
+    expect(body).toMatch(
+      /Up to 10,000 rows per export; beyond that, page through the rest with a cursor\./,
+    );
   });
 
-  it("2026-05-03 'Two-ladder pricing live' entry: Manual ($79 Solo / $249 Team / $699 Agency) + API ($149 Starter / $499 Builder / $1,499 Scale + Enterprise) + free entry tier below both ladders — pinned so the canonical pricing structure stays consistent with the customer-dashboard select-tier and the marketing-site pricing pages (drift would create cross-page price-point divergence)", () => {
+  it("2026-05-03 'Two plan families live' entry: Manual ($79 Solo / $249 Team / $699 Agency) + API ($149 Starter / $499 Builder / $1,499 Scale + Enterprise) + free entry tier below both plan families — pinned so the canonical pricing structure stays consistent with the customer-dashboard select-tier and the marketing-site pricing pages (drift would create cross-page price-point divergence)", () => {
     expect(body).toMatch(
-      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both ladders\./,
+      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both plan families\./,
     );
   });
 

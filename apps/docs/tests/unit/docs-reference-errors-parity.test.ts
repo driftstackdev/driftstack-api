@@ -44,11 +44,12 @@ describe('W258.B docs/reference/errors ↔ PROBLEM_TYPES parity', () => {
     expect(missing).toEqual([]);
   });
 
-  it('Source-of-truth file paths exist on disk', () => {
-    const paths = [...doc.matchAll(/`(packages\/[\w./-]+\.(?:ts|py|go))`/g)].map((m) => m[1]!);
-    expect(paths.length).toBeGreaterThan(0);
-    const missing = paths.filter((p) => !existsSync(resolve(REPO_ROOT, p)));
-    expect(missing).toEqual([]);
+  it('cites no internal repository paths (2026-09-15: the source-of-truth section was how we run it, not what the customer gets)', () => {
+    const paths = [...doc.matchAll(/`((?:packages|apps)\/[\w./-]+\.(?:ts|py|go))`/g)].map(
+      (m) => m[1]!,
+    );
+    expect(paths).toEqual([]);
+    expect(doc).not.toMatch(/^## Source of truth$/m);
   });
 
   it('rate-limited + internal + transport are marked retryable', () => {

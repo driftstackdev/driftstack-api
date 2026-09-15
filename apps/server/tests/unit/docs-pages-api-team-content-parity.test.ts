@@ -49,15 +49,17 @@ describe('W766 docs /api/team content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*Owner account\.\*\* The account that pays the subscription\./);
-    expect(p).toMatch(/\*\*Member account\.\*\* A separate `accounts` row/);
-    expect(p).toMatch(/\*\*Invite\.\*\* A pending double-opt-in record in `team_invites`\./);
+    expect(p).toMatch(/\*\*Member account\.\*\* A separate account \(own login, own email\)/);
+    expect(p).toMatch(/\*\*Invite\.\*\* A pending invitation created by the owner and accepted/);
     expect(p).toMatch(/\*\*Role\.\*\* `member` \(read-only on owner resources\) or `admin` \(full/);
   });
 
   it('CRITICAL invite sha256-token-hashed-at-rest + 7-day expiry pinned. Drift to plaintext storage would erode security; drift to a different TTL would mismatch W757 dashboard 7-day-accept-link framing.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Token-hashed at\s*\n?\s+rest \(sha256\), 7-day expiry\./);
+    expect(p).toMatch(
+      /created by the owner and accepted\s*\n?\s+by the invitee\. Expires after 7 days\./,
+    );
   });
 
   it('CRITICAL X-Driftstack-Account header acting-on-behalf framing pinned with curl example shape. Drift to dropping the example would lose the canonical demo of the V-326e team-RBAC contract.', () => {

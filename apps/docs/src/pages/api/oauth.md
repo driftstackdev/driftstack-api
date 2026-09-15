@@ -22,8 +22,8 @@ upgrade if they have not expired or been revoked.
 
 > Bearer API keys (`ds_live_…`) and OAuth access tokens BOTH use the
 > `Authorization: Bearer <token>` header on `/v1/*` requests. The
-> server differentiates by token prefix; both surfaces respect the
-> same scope + rate-limit + audit pipeline.
+> server differentiates by token prefix; both surfaces follow the
+> same scope, rate-limit and audit rules.
 
 ## When to use this
 
@@ -39,7 +39,7 @@ just use an API key.
 
 ## Register a client
 
-Client registration is currently **admin-gated** — talk to
+Client registration is currently **handled by support** — email
 [support@driftstack.dev](mailto:support@driftstack.dev) with:
 
 - your app's label (shown to the customer on the consent screen)
@@ -119,7 +119,7 @@ Approval returns the browser to the registered `redirect_uri` with
 `?code=…&state=…`. Cancellation returns
 `?error=access_denied&state=…`. Verify `state` exactly in either case.
 
-## 2 — Customer approves (provider-internal)
+## 2 — Customer approves (handled by the dashboard)
 
 `POST /v1/oauth/authorize/complete` (interactive dashboard session required)
 
@@ -357,15 +357,14 @@ while `invalid_request` means the request itself is malformed.
   encoded fields. Introspection and revocation require the same
   confidential-client credentials used at `/v1/oauth/token` and are
   bound to that client's own tokens.
-- **Provider state is persistent.** Client secrets, pending consent
-  handles, authorization codes and access tokens are stored only as
-  SHA-256 digests. Pending consent survives API restarts/replicas, and
-  an issued `oat_` bearer enters the same account/scope/rate-limit/audit
-  pipeline as an API key.
+- **Secrets are hashed.** Client secrets, pending consents,
+  authorization codes and access tokens are stored only as hashes. An
+  issued `oat_` token follows the same scope, rate-limit and audit
+  rules as an API key.
 - **Refresh tokens are NOT issued.** When a token expires, the
   customer must re-authorize. This is intentional; refresh tokens
   are an attack surface and 1-hour TTL access tokens are a workable
   trade-off for the kinds of integrations Driftstack hosts.
-- **Same scope set as API keys.** The OAuth `scope` value is parsed
-  through `ApiKeyScopeSchema` — see the [API keys page](/api/api-keys/)
+- **Same scope set as API keys.** The OAuth `scope` value uses the
+  same scope list as API keys — see the [API keys page](/api/api-keys/)
   for the full scope catalog.

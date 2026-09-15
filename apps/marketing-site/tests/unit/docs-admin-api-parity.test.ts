@@ -70,11 +70,14 @@ describe('W265.C /docs/admin-api ↔ /v1/admin/crypto-orders/* route parity', ()
   });
 
   it('documents the staff web-session allowlist and forbids the fictional admin CLI/archive', () => {
-    expect(page).toContain('<code>DRIFTSTACK_STAFF_EMAILS</code>');
-    expect(page).toContain('<code>DRIFTSTACK_OWNER_EMAIL</code>');
+    expect(page).toMatch(/only to accounts on a staff\s+allowlist/);
+    expect(page).toMatch(/for an account on a fixed staff allowlist/);
+    // Environment-variable names are server configuration, not customer copy.
+    expect(page).not.toMatch(/DRIFTSTACK_STAFF_EMAILS|DRIFTSTACK_OWNER_EMAIL/);
     expect(page).toMatch(/generated\s+OpenAPI document is the authoritative current route list/);
     expect(page).toMatch(/does\s+not publish a separate admin-key CLI/);
-    expect(page).toMatch(/does not claim an active R2 archive pipeline/);
+    expect(page).toMatch(/Retention follows the published legal and\s+operational policy/);
+    expect(page).not.toMatch(/R2 archive/);
     expect(page).not.toMatch(/drift admin keys (?:create|revoke)/);
     expect(page).not.toMatch(/archived to R2 after 90 days/);
   });

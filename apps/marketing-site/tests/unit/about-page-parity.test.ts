@@ -34,9 +34,10 @@ describe('W262.B /about ↔ live posture parity', () => {
     }
   });
 
-  it('F-5 (Issue 5) customer-configurable egress framing on the about page: the prior "on the roadmap" parenthetical was replaced (commit 87e37383) with explicit SOCKS5/WireGuard/OpenVPN listing + cross-link to /trust/security-overview for "the security posture". The honest-disclosure surface for the impl state has moved to security.astro (gated by W499.D against actual server source).', () => {
-    expect(page).toMatch(/customer-configurable\s+egress \(SOCKS5 · WireGuard · OpenVPN/);
-    expect(page).not.toMatch(/customer-configurable\s+egress[\s\S]{0,80}on (?:our|the) roadmap/i);
+  it('F-5 (Issue 5) your-own-proxy-or-VPN framing on the about page: the prior "on the roadmap" parenthetical was replaced (commit 87e37383) with the explicit SOCKS5/WireGuard/OpenVPN listing + cross-link to /trust/security-overview. 2026-09-15 customer-copy pass: "customer-configurable egress" became "your own proxy or VPN" (same fact, no jargon). The honest-disclosure surface for the impl state has moved to security.astro (gated by W499.D against actual server source).', () => {
+    expect(page).toMatch(/your own proxy or VPN\s+\(SOCKS5 · WireGuard · OpenVPN\)/);
+    expect(page).not.toMatch(/customer-configurable\s+egress/);
+    expect(page).not.toMatch(/proxy or VPN[\s\S]{0,80}on (?:our|the) roadmap/i);
   });
 
   it('does not advertise SOC 2 as a live certification', () => {

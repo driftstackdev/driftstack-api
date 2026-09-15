@@ -41,10 +41,11 @@ function read(p: string): string {
 describe('W367.A marketing-site /about page content parity', () => {
   const body = read(PAGE);
 
-  it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope (S20c 2026-07-06 plain-language pass: heading leads plain, precise term kept in parens)', () => {
+  it('posture 3-card section pinned: EU-resident / no-behavioural-data / honest-scope (2026-09-15 customer-copy pass: the EU heading names what is EU-resident — servers and database — with no "control plane"; the scoping the old parenthetical carried now lives in the heading itself)', () => {
     expect(body).toMatch(
-      /<h3 class="font-semibold text-tk-ink">Run from the EU \(EU-resident control plane\)<\/h3>/,
+      /<h3 class="font-semibold text-tk-ink">Servers and database in the EU<\/h3>/,
     );
+    expect(body, 'the internal term must not return on this page').not.toMatch(/control plane/);
     expect(body).toMatch(
       /<h3 class="font-semibold text-tk-ink">No behavioural data collection<\/h3>/,
     );
@@ -59,9 +60,14 @@ describe('W367.A marketing-site /about page content parity', () => {
     // S30 negative pin — the blanket object-storage-in-EU claim must
     // not silently return.
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
+    // 2026-09-15 customer-copy pass: the transfer disclosure names what
+    // transfers (running sessions, the optional AI agent, the live video
+    // stream) without naming how sessions are run; the SCC gloss moved
+    // inline. The US-transfer + SCC + DPF disclosure itself is unchanged.
     expect(body).toMatch(
-      /Session execution and a few processors[\s\S]{0,120}transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*Framework/,
+      /Running sessions, the optional AI agent, and the live video\s*stream transfer data to the US under Standard Contractual\s*Clauses \(the EU's standard legal contract for sending data\s*abroad\) and the EU-US Data Privacy Framework\. Nothing is\s*transferred that isn't disclosed\./,
     );
+    expect(body, 'how sessions are run is not customer copy').not.toMatch(/Mac fleet/);
     // Drift sentinel — the absolute "single-region / no transatlantic
     // flows" claim contradicted the real sub-processor list (US
     // processors under SCCs + DPF). It MUST NOT come back.
@@ -95,7 +101,11 @@ describe('W367.A marketing-site /about page content parity', () => {
     // S20c 2026-07-06 plain-language pass: card titles lead with the
     // plain promise; the precise terms (staging rehearsal, Article
     // 28(2), source escrow) stay in the title or body.
-    expect(body).toMatch(/Per-merge security audit, on a cadence/);
+    // 2026-09-15 customer-copy pass: the audit card title says what the
+    // customer gets (ongoing audits, published findings), not the
+    // engineering process ("per-merge", "cadence").
+    expect(body).toMatch(/Ongoing security audits, with findings published/);
+    expect(body).not.toMatch(/Per-merge security audit/);
     expect(body).toMatch(/Disaster recovery, rehearsed before it's needed/);
     expect(body).toMatch(/30 days' warning before we change vendors — Article 28\(2\)/);
     expect(body).toMatch(/If we ever shut down, you keep the software \(source escrow\)/);
@@ -109,17 +119,18 @@ describe('W367.A marketing-site /about page content parity', () => {
     expect(body).not.toMatch(/Disaster recovery rehearsed pre-launch/);
   });
 
-  it('DR runbook scope pinned: 11 rehearsable scenarios (host loss / Postgres / R2 / cert / multi-day Hetzner) — S20c 2026-07-06: each scenario keeps its precise name with a plain gloss in parens', () => {
-    expect(body).toMatch(/Eleven disaster-recovery \(DR\) scenarios documented/);
+  it('DR runbook scope pinned: 11 rehearsable scenarios (dead server / corrupted database / stored files / certificate / multi-day hosting outage) — 2026-09-15 customer-copy pass: each scenario is named in plain words, with no vendor or component names', () => {
+    expect(body).toMatch(
+      /Eleven disaster scenarios are written up with step-by-step\s+recovery instructions/,
+    );
     // Specific scenario callouts — a future copy edit that drops
     // any of these forces a discussion about coverage.
     for (const scenario of [
-      'host loss',
-      'Postgres corruption',
-      'Redis loss',
-      'R2 object loss',
-      'signing-key rotation under attack',
-      'multi-day Hetzner regional outage',
+      'a dead server',
+      'a corrupted database',
+      'loss of the cache or of stored files',
+      'a compromised signing',
+      'a multi-day outage at our hosting',
     ]) {
       expect(body, `DR scenario missing: ${scenario}`).toContain(scenario);
     }
@@ -158,13 +169,15 @@ describe('W367.A marketing-site /about page content parity', () => {
     // plugin competitor. A future copy softening to "stealth
     // bundles" would break the entire positioning.
     expect(body).toMatch(/we run Apple's WebKit\s+source code/);
-    expect(body).toMatch(/there's nothing for detection to\s+find/);
+    // 2026-09-15 customer-copy pass reflowed the line break inside the
+    // sentence; the claim is unchanged.
+    expect(body).toMatch(/there's nothing for\s+detection to\s+find/);
   });
 
-  it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led EU-residency framing — S30 2026-07-07 (founder decision: soften): "your account data" + "(EU-resident control plane)" replace the blanket "your data" + "(EU-resident infrastructure)" since R2-held file objects replicate EU + US', () => {
+  it('R9 hero claim pinned: "One engine. One product. Engineered for fidelity." + capability-led EU-residency framing — S30 2026-07-07 (founder decision: soften): "your account data" replaces the blanket "your data" since R2-held file objects replicate EU + US; 2026-09-15 customer-copy pass dropped the "(EU-resident control plane)" parenthetical, which restated the sentence in an internal term', () => {
     expect(body).toMatch(/One engine\. One product\. Engineered for fidelity\./);
     expect(body).toMatch(
-      /Our servers and your account data live in the EU \(EU-resident\s*control plane\), and the scope stays deliberately narrow/,
+      /Our servers and your account data live in the EU, and the scope\s*stays deliberately narrow/,
     );
     // S30 negative pin — the blanket form must not silently return.
     expect(body).not.toMatch(/your data live in the EU \(EU-resident\s*infrastructure\)/);

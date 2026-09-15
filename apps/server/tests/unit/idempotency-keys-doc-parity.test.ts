@@ -26,14 +26,15 @@ function read(path: string): string {
 describe('W239.A idempotency-keys doc parity', () => {
   const doc = read(DOC_PATH);
 
-  it('admin idempotency-metrics endpoint exists and is cross-linked', () => {
+  it('admin idempotency-metrics endpoint exists but the customer page does not point at admin routes', () => {
     expect(read(ADMIN_ROUTE)).toMatch(/'\/v1\/admin\/crypto-orders\/idempotency-metrics'/);
-    expect(doc).toMatch(/\/v1\/admin\/crypto-orders\/idempotency-metrics/);
+    expect(doc).not.toMatch(/\/v1\/admin\//);
   });
 
-  it('body-mismatch counter is referenced when present in the service', () => {
+  it('body-mismatch recording is described in customer words when present in the service', () => {
     expect(read(SVC_PATH)).toMatch(/bodyMismatches:/);
-    expect(doc).toMatch(/body_mismatches/);
+    expect(doc).toMatch(/The server records the mismatch so support can spot/);
+    expect(doc).not.toMatch(/body_mismatches/);
   });
 
   it('does not assert "no validation" without the body-mismatch caveat', () => {

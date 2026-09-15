@@ -364,7 +364,7 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
 
     const gap = missing(container, 'server');
     expect(gap?.textContent).toContain('no number');
-    expect(gap?.getAttribute('title')).toContain('reported no timing');
+    expect(gap?.getAttribute('title')).toContain('recorded no response time');
     expect(gap?.getAttribute('title')).not.toContain('has not measured this proxy yet');
   });
 
@@ -379,8 +379,8 @@ describe('the Proxies row shows BOTH vantages, each named', () => {
     await screen.findByText('42ms');
 
     const gap = missing(container, 'server');
-    expect(gap?.textContent).toContain('none free');
-    expect(gap?.getAttribute('title')).toContain('no checker was free');
+    expect(gap?.textContent).toContain('busy');
+    expect(gap?.getAttribute('title')).toContain('Driftstack was busy');
     // Not a failure: the row is not accused of anything.
     expect(screen.queryByText('fails from Driftstack')).toBeNull();
   });

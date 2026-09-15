@@ -41,8 +41,11 @@ describe('W262.C /trust/security-overview ↔ live evidence parity', () => {
   });
 
   it('customer-configurable egress is marked SHIPPED (emerald ✓, per profile). 2026-05-22 — flipped from amber ○ "(roadmap)" after the SocksProxyBackend impl + bootstrap wire landed per planning 133 Phase 1. Without an attached config, traffic still exits via Driftstack EU egress.', () => {
-    expect(page).toMatch(/Customer-configurable egress \(per profile\)/);
-    expect(page).toMatch(/Driftstack's own EU network egress/);
+    // 2026-09-15 plain-language pass: same shipped claim, customer words.
+    expect(page).toMatch(/Your own proxy or VPN, per profile/);
+    // 2026-09-15: aligned with /security ("Driftstack's managed exit") —
+    // sessions run on US hardware, so "own EU network" overstated the region.
+    expect(page).toMatch(/Driftstack's\s+managed exit/);
   });
 
   it('webhook signing claim matches the live HMAC scheme (Stripe + NowPayments + outbound)', () => {

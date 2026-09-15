@@ -15,12 +15,13 @@ yourself rather than emailing support.
 
 `POST /v1/webhook-deliveries/:deliveryId/replay`
 
-Resets the delivery to `pending` so the worker re-fires it on the next
-poll cycle — up to 60 seconds, since the delivery worker polls once a
-minute. Scoped to the **effective** account: the delivery must belong to
+Resets the delivery to `pending`; Driftstack re-sends it within about a
+minute (up to 60 seconds).
+
+Scoped to the **effective** account: the delivery must belong to
 a webhook endpoint your own account owns, or one owned by the account you
 are acting as via `X-Driftstack-Account`. Replay re-fires the delivery, so
-it takes the write gate — acting as a team owner requires `admin` on that
+it counts as a write — acting as a team owner requires `admin` on that
 team, and without the header your key needs `account_owner`. Returns the
 updated delivery.
 
@@ -55,7 +56,7 @@ Response (200):
 3. List the DLQ deliveries:
    `GET /v1/webhooks/:webhookId/deliveries?status=dlq`
 4. Replay each one: `POST /v1/webhook-deliveries/:deliveryId/replay`.
-   Within a minute the worker re-fires and (if your endpoint is
+   Within a minute Driftstack re-sends them and (if your endpoint is
    healthy) marks them `delivered`.
 
 ## SDK examples

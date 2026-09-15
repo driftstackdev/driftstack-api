@@ -220,7 +220,7 @@ describe('POST /v1/account/me/proxies/:id/test — vantage', () => {
     expect(body.os_fingerprint).toEqual({
       os: 'windows',
       confidence: 'medium',
-      reason: 'initial TTL 128 with a Windows option layout',
+      reason: 'Based on how this proxy responds to a network connection.',
       observed_ip: '198.51.100.7',
       observed_via: 'proxy_host',
     });
@@ -830,7 +830,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
     expect(body.measured_from).toBe('fleet');
-    expect(body.reason).toMatch(/busy with another tunnel or test/);
+    expect(body.reason).toMatch(/test service is busy right now/);
     // (d) — the machine-readable "nothing ran": a client branches on THIS, not
     // on the sentence, so a busy Mac never renders as a tunnel that is down.
     expect(body.not_run).toBe('node_busy');
@@ -868,7 +868,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
       headers: auth(fx),
     });
     const body2 = res2.json<Record<string, unknown>>();
-    expect(body2.reason).toMatch(/could not be completed on the measuring Mac/);
+    expect(body2.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // (d) — still "nothing ran", under its own value: not the busy token, and
     // never absent (absent would let a client read it as a measured failure).
     expect(body2.not_run).toBe('node_error');
@@ -937,7 +937,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     'exit_ip',
     'os_fingerprint',
   ] as const;
-  const NO_NODE = /No checker was free to test this VPN tunnel/;
+  const NO_NODE = /Our test service is busy right now\. Try again in a minute/;
 
   it('(h) CRITICAL with NO node connected a wireguard row is a not_run:no_node labelled control_plane — never the cp TCP probe, never a tunnel verdict', async () => {
     // Also the vacuity control for the dispatch arms above: the registry IS
@@ -1290,7 +1290,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     expect(res.statusCode, res.body).toBe(200);
     const body = res.json<Record<string, unknown>>();
     expect(body.ok).toBe(false);
-    expect(body.reason).toMatch(/private, loopback, link-local, or metadata address/);
+    expect(body.reason).toMatch(/private or local network address/);
     expect(body.reason).not.toMatch(/could not be read/);
     expect(body.not_run).toBe('unresolvable');
     expect(probeSpy).not.toHaveBeenCalled();
@@ -1308,7 +1308,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
 describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a live session holds the VPN tunnel', () => {
   const WG_PRIV = 'yAnz5TF+lXXJte14tji3zlMNq+hd2rYUIgJBgB3fBmk=';
   const WG_PUB = 'xTIBA5rboUvnH4htodjb6e697QjLERt1NAB4mZqp8Dg=';
-  const REFUSAL = /in use by a live session/;
+  const REFUSAL = /being used by a running session/;
 
   async function makeWireGuardProxy(): Promise<string> {
     const res = await fx.app.inject({
@@ -1418,8 +1418,8 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
     expect(body.reason).toMatch(REFUSAL);
     // (h) finding 24 — the copy promises "its exit is shown from that session"
     // ONLY when a stored exit is actually attached (it is, below).
-    expect(body.reason).toMatch(/its exit is shown from that session/);
-    expect(body.reason).toMatch(/End the session to test the tunnel\./);
+    expect(body.reason).toMatch(/exit IP shown is from that session/);
+    expect(body.reason).toMatch(/End the session to check the VPN\./);
     // No node measured this, so it is NOT a fleet answer and names no node.
     expect(body.measured_from).toBe('control_plane');
     expect('node_id' in body).toBe(false);
@@ -1464,7 +1464,7 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — refused while a
     // the GUI cannot show ("run Check for the exit" sits beside it): the next
     // step alone.
     expect(body.reason).not.toMatch(/its exit is shown/);
-    expect(body.reason).toMatch(/End the session to test the tunnel\./);
+    expect(body.reason).toMatch(/End the session to check the VPN\./);
   });
 
   it('CRITICAL (ii) a CLOSED session on the proxy does not block — the probe runs and is a fleet answer', async () => {
@@ -1895,9 +1895,9 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     const body = await fleetTest(id);
     expect(body.ok).toBe(false);
     expect(body.not_run).toBe('live_session');
-    expect(body.reason).toMatch(/its exit is shown from the last check/);
+    expect(body.reason).toMatch(/exit IP shown is from its last check/);
     expect(body.reason).not.toMatch(/from that session/);
-    expect(body.reason).toMatch(/End the session to test the tunnel\./);
+    expect(body.reason).toMatch(/End the session to check the VPN\./);
     // The exit still rides along, dated by its observation — only the prose changed.
     expect((body.exit_observed as { ip?: string })?.ip).toBe('203.0.113.9');
     expect((body.exit_observed as { observed_at?: string })?.observed_at).toBe(
@@ -1917,7 +1917,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     await startSessionOn(id);
     const body = await fleetTest(id);
     expect(body.not_run).toBe('live_session');
-    expect(body.reason).toMatch(/its exit is shown from that session/);
+    expect(body.reason).toMatch(/exit IP shown is from that session/);
     expect(body.reason).not.toMatch(/last check/);
   });
 
@@ -2236,7 +2236,7 @@ describe('(i) I3 / I7 — the stored exit: named by its source, contradicted by 
     const body = await fleetTest(id);
     expect(body.not_run).toBe('live_session');
     expect(body.reason).toBe(
-      'This VPN is in use by a live session. End the session to test the tunnel.',
+      'This VPN is being used by a running session. End the session to check the VPN.',
     );
     expect('exit_observed' in body, 'a contradicted exit is not attached').toBe(false);
     // The stored exit and its stamp are untouched — nothing was dispatched.

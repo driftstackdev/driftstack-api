@@ -80,9 +80,12 @@ describe('W853 TeamRole cross-source invariant', () => {
 
   it("CRITICAL apps/customer-dashboard/src/pages/team.astro RBAC comment pinned: 'reads work for both member and admin roles; writes require admin'. The dashboard documents the V-298c RBAC contract — drift would mislead customer-facing copy.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/team.astro'));
-    // Allow flexibility in <code> wrapping + word ordering.
-    expect(p).toMatch(/reads work for both[\s\S]+?<code>member<\/code>[\s\S]+?<code>admin<\/code>/);
-    expect(p).toMatch(/writes require <code>admin<\/code>/);
+    // Customer-facing footer states the asymmetry in plain words; the
+    // frontmatter comment keeps the role vocabulary.
+    expect(p).toMatch(/Members can view everything; only admins can make changes\./);
+    expect(p).toMatch(
+      /Reads accept both 'member' and\s*\/\/\s*'admin' roles; writes require 'admin'/,
+    );
   });
 
   // ─── 2-role cardinality ──────────────────────────────────────

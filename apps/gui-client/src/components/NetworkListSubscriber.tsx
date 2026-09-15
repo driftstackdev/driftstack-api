@@ -174,7 +174,7 @@ export function NetworkListSubscriber({
             type="button"
             data-action="clear-network"
             aria-label="Clear the request list"
-            title="Clear the list shown here (the device keeps recording)"
+            title="Clear the list shown here"
             disabled={!hasEntries}
             onClick={() => store.clearView()}
             className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-0.5 font-sans text-[10px] text-white/80 transition-colors hover:bg-white/10 disabled:opacity-40"
@@ -233,7 +233,7 @@ export function NetworkListSubscriber({
           >
             <div>No network activity to show.</div>
             <div className="mt-1 text-white/30">
-              Devices don&rsquo;t report per-request logs yet — this pane fills in once they do.
+              Network requests aren&rsquo;t available for sessions yet.
             </div>
           </div>
         ) : filtered.length === 0 ? (

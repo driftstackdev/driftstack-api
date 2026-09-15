@@ -156,7 +156,7 @@ describe('a reason an SDK branches on must be documented', () => {
     );
     const section = md.slice(md.indexOf('## Test a proxy'), md.indexOf('## Route a session'));
     expect(section, 'the page must say the test runs the launch check for socks5').toMatch(
-      /same check the launch gate runs/,
+      /same check Driftstack runs before\s+launching a session/,
     );
     expect(
       section,

@@ -22,10 +22,11 @@
 //     intermediate state.
 //   • sort by label localeCompare.
 //   • window.confirm destroy guard with `Remove "${label}"
-//     from the fleet?` prompt.
+//     from your saved servers?` prompt.
 //   • Per-member display: ok-pill with durationMs / unreachable
-//     pill + error message; driver + playwrightBrowser + version
-//     line.
+//     pill + error message; version-only line (the driver mode the
+//     ping also learns is never shown — owner directive 2026-09-15:
+//     customer copy says WHAT they get, never HOW we run it).
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -43,9 +44,9 @@ function read(p: string): string {
 describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => {
   const body = read(LIB);
 
-  it("V-346 framing pinned: 'V-346 — Fleet view. Lists Mac mini fleet members the founder has declared locally; pings each member's /version on demand to surface reachability + driver mode + version.' + local-only-registry framing 'Local-only registry (tauri-plugin-store). The fleet is the founder's choice of API server URLs to ping; no server-side fleet management. Each member is a (label, baseUrl) pair.' + V-244 placeholder replacement note", () => {
+  it("V-346 framing pinned: 'V-346 — Fleet view. Lists Mac mini fleet members the founder has declared locally; pings each member's /version on demand to surface reachability + version.' + local-only-registry framing 'Local-only registry (tauri-plugin-store). The fleet is the founder's choice of API server URLs to ping; no server-side fleet management. Each member is a (label, baseUrl) pair.' + V-244 placeholder replacement note", () => {
     expect(body).toMatch(
-      /\/\/ V-346 — Fleet view\. Lists Mac mini fleet members the founder has\s*\/\/ declared locally; pings each member's \/version on demand to surface\s*\/\/ reachability \+ driver mode \+ version\./,
+      /\/\/ V-346 — Fleet view\. Lists Mac mini fleet members the founder has\s*\/\/ declared locally; pings each member's \/version on demand to surface\s*\/\/ reachability \+ version\./,
     );
     expect(body).toMatch(
       /\/\/ Local-only registry \(tauri-plugin-store\)\. The fleet is the\s*\/\/ founder's choice of API server URLs to ping; no server-side fleet\s*\/\/ management\. Each member is a \(label, baseUrl\) pair\./,
@@ -73,7 +74,7 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     );
     expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
     expect(body).toMatch(
-      /const refresh = useCallback\(async \(\) => \{\s*setLoadError\(null\);\s*try \{\s*const all = await listFleetMembers\(\);\s*setMembers\(all\);\s*\} catch \(err\) \{\s*setLoadError\(\s*humanizeError\(\s*err,\s*"Couldn't read the saved fleet\. Check the app's file permissions and try again\.",\s*\),\s*\);\s*\} finally \{\s*setLoading\(false\);\s*\}\s*\}, \[\]\);/,
+      /const refresh = useCallback\(async \(\) => \{\s*setLoadError\(null\);\s*try \{\s*const all = await listFleetMembers\(\);\s*setMembers\(all\);\s*\} catch \(err\) \{\s*setLoadError\(\s*humanizeError\(\s*err,\s*"Couldn't read your saved servers\. Check the app's file permissions and try again\.",\s*\),\s*\);\s*\} finally \{\s*setLoading\(false\);\s*\}\s*\}, \[\]\);/,
     );
     expect(body).toContain('const ping = useCallback((member: FleetMember): Promise<void> => {');
     expect(body).toContain("setPings((prev) => ({ ...prev, [member.id]: 'pending' }));");
@@ -97,7 +98,7 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     );
     expect(body).toContain("disabled={p === 'pending'}");
     expect(body).toContain("aria-busy={p === 'pending'}");
-    expect(body).toContain("{p === 'pending' ? 'Pinging…' : 'Ping'}");
+    expect(body).toContain("{p === 'pending' ? 'Checking…' : 'Check'}");
   });
 
   it('Form lifecycle: startCreate / startEdit both setTimeout 0 focus to first input; submitForm: validateDraft + setForm errors if !ok + addFleetMember or updateFleetMember(editedId) which DROPS the stale ping (audit 2026-09-08) + reset via setForm({...EMPTY_DRAFT_FORM}) + refresh()', () => {
@@ -120,20 +121,24 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     expect(body).toContain('setActionError(');
   });
 
-  it('destroy guard: branded useConfirm(`Remove "${member.label}" from the fleet?`) early-return if !confirmed + then removeFleetMember + clean up pings[id] entry (delete) + refresh() — pinned so accidental Remove clicks have an abort path with no recoverable trash bin (window.confirm is flaky in the Tauri WKWebView, so the branded modal is the reliable shape)', () => {
+  it('destroy guard: branded useConfirm(`Remove "${member.label}" from your saved servers?`) early-return if !confirmed + then removeFleetMember + clean up pings[id] entry (delete) + refresh() — pinned so accidental Remove clicks have an abort path with no recoverable trash bin (window.confirm is flaky in the Tauri WKWebView, so the branded modal is the reliable shape)', () => {
     expect(body).toContain('async function destroy(member: FleetMember): Promise<void> {');
-    expect(body).toContain("{ confirmLabel: 'Remove' }");
+    expect(body).toMatch(
+      /confirm\(`Remove "\$\{member\.label\}" from your saved servers\?`, \{\s*confirmLabel: 'Remove',?\s*\}\)/,
+    );
     expect(body).toContain('await removeFleetMember(member.id);');
     expect(body).toContain('delete next[member.id];');
   });
 
-  it("Per-member ping display: 'pinging…' intermediate / ok pill 'ok · {durationMs}ms' in status-ready / unreachable pill in status-error; driver+playwrightBrowser+version conditional line with `(${playwrightBrowser})` suffix when present + ` · v${version}` suffix when present + driver ?? 'unknown' fallback", () => {
+  it("Per-member ping display: 'checking…' intermediate / ok pill 'ok · {durationMs}ms' in status-ready / unreachable pill in status-error; version-only 'Version {version}' line when the ping returned one — the driver + playwrightBrowser the ping also learns are NEVER rendered (owner directive 2026-09-15: how the server runs is not customer copy)", () => {
     expect(body).toMatch(
-      /\{p === 'pending' && <span className="text-2xs text-ink-muted">pinging…<\/span>\}\s*\{p && p !== 'pending' && p\.ok && \(\s*<span className="rounded-full bg-status-ready\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-ready">\s*ok · \{p\.durationMs\}ms\s*<\/span>\s*\)\}\s*\{p && p !== 'pending' && !p\.ok && \(\s*<span className="rounded-full bg-status-error\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-error">\s*unreachable\s*<\/span>\s*\)\}/,
+      /\{p === 'pending' && \(\s*<span className="text-2xs text-ink-muted">checking…<\/span>\s*\)\}\s*\{p && p !== 'pending' && p\.ok && \(\s*<span className="rounded-full bg-status-ready\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-ready">\s*ok · \{p\.durationMs\}ms\s*<\/span>\s*\)\}\s*\{p && p !== 'pending' && !p\.ok && \(\s*<span className="rounded-full bg-status-error\/20 px-2 py-0\.5 text-2xs font-medium uppercase tracking-wide text-status-error">\s*unreachable\s*<\/span>\s*\)\}/,
     );
     expect(body).toMatch(
-      /driver: <span className="mono">\{p\.driver \?\? 'unknown'\}<\/span>\s*\{p\.playwrightBrowser \? ` \(\$\{p\.playwrightBrowser\}\)` : ''\}\s*\{p\.version \? ` · v\$\{p\.version\}` : ''\}/,
+      /\{p && p !== 'pending' && p\.ok && p\.version && \(\s*<p className="mt-1 text-2xs text-ink-muted">Version \{p\.version\}<\/p>\s*\)\}/,
     );
+    expect(body).not.toMatch(/p\.driver/);
+    expect(body).not.toMatch(/p\.playwrightBrowser/);
   });
 
   it('Field subcomponent: section-label + children + error?: optional inline status-error message — pinned so the form-field convention stays consistent (no inline error-message duplication)', () => {
@@ -142,9 +147,9 @@ describe('W482.C apps/gui-client/src/views/FleetView.tsx content parity', () => 
     );
   });
 
-  it("Load-error state: when !loading && loadError !== null → 'Couldn't load the fleet' status-error label + the error message + 'Try again' button (onClick=refresh); empty state is gated on loadError === null so a failed read shows the error, not the misleading 'No fleet members yet'", () => {
+  it("Load-error state: when !loading && loadError !== null → 'Couldn't load your server list' status-error label + the error message + 'Try again' button (onClick=refresh); empty state is gated on loadError === null so a failed read shows the error, not the misleading 'No servers yet'", () => {
     expect(body).toMatch(
-      /\{!loading && loadError !== null && \(\s*<div className="flex flex-col items-center gap-3 rounded border border-surface-divider bg-surface-raised p-8 text-center">\s*<span className="section-label text-status-error">Couldn't load the fleet<\/span>/,
+      /\{!loading && loadError !== null && \(\s*<div className="flex flex-col items-center gap-3 rounded border border-surface-divider bg-surface-raised p-8 text-center">\s*<span className="section-label text-status-error">Couldn't load your server list<\/span>/,
     );
     expect(body).toMatch(
       /<button type="button" className="btn-secondary" onClick=\{\(\) => void refresh\(\)\}>\s*Try again\s*<\/button>/,

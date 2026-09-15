@@ -66,7 +66,7 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint', () => {
     expect(body.os_fingerprint).toEqual({
       os: 'windows',
       confidence: 'medium',
-      reason: 'initial TTL 128 with a Windows option layout',
+      reason: 'Based on how this proxy responds to a network connection.',
       observed_ip: '198.51.100.7',
       observed_via: 'proxy_host',
     });
@@ -77,7 +77,7 @@ describe('POST /v1/account/me/proxies/:id/test — os_fingerprint', () => {
     expect(persisted?.osFingerprint).toEqual({
       os: 'windows',
       confidence: 'medium',
-      reason: 'initial TTL 128 with a Windows option layout',
+      reason: 'Based on how this proxy responds to a network connection.',
       observed_ip: '198.51.100.7',
       observed_via: 'proxy_host',
     });

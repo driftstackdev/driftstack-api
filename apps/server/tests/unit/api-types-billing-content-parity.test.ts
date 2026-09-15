@@ -70,7 +70,7 @@ describe('W433.C packages/api-types/src/billing.ts content parity', () => {
       /\* Target tier\. Must be a self-serve paid tier \(not 'free' or 'enterprise'\)\./,
     );
     expect(body).toMatch(
-      /tier: z\.enum\(PURCHASABLE_TIERS, \{\s*message: 'tier must be a self-serve paid tier \(free and enterprise excluded\)',\s*\}\),/,
+      /tier: z\.enum\(PURCHASABLE_TIERS, \{\s*message: 'Choose a paid plan\. Free and Enterprise plans cannot be selected here\.',\s*\}\),/,
     );
     // Per-occurrence negative. A refine is a runtime predicate that JSON Schema
     // cannot represent, so the generated spec published all eight tiers and

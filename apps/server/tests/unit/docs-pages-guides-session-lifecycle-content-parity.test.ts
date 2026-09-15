@@ -38,12 +38,11 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL session-is-iPhone-Safari-on-WebKit-fork framing pinned. The 'A session is one running iPhone Safari instance on the modified WebKit fork. Every session occupies one of your account\\'s concurrent slots from creation until destruction' wording matches W761 /api/sessions opening.", () => {
+  it("CRITICAL session-is-one-iPhone-Safari-browser framing pinned. The 'A session is one running iPhone Safari browser. Every session occupies one of your account\\'s concurrent slots from creation until destruction' wording matches W761 /api/sessions opening (2026-09-15 plain words: the WebKit-fork build detail is how we run it, not what the customer gets).", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /A \*\*session\*\* is one running iPhone Safari instance on the modified WebKit fork\./,
-    );
+    expect(p).toMatch(/A \*\*session\*\* is one running iPhone Safari browser\./);
+    expect(p).not.toMatch(/modified WebKit fork/);
     expect(p).toMatch(
       /Every session occupies one of your account's concurrent slots from creation until destruction;/,
     );
@@ -60,7 +59,12 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     // S31 2026-07-07 (fable-truth-audit) — the diagram edge is the free-tier duration cap.
     expect(p).toMatch(/│ OR free-tier 20-min cap/);
     expect(p).not.toMatch(/idle ≥ idle_timeout/);
-    expect(p).toMatch(/`errored` on driver failure/);
+    expect(p).toMatch(/`errored` if the browser fails/);
+    // 2026-09-15 plain words — the creating→ready edge label no longer leaks the
+    // driver-allocation/handshake mechanics; the padded label must still align.
+    expect(p).toMatch(/\(transient — the browser {12}┌───────┐/);
+    expect(p).toMatch(/is being started\) {18}└───────┘/);
+    expect(p).not.toMatch(/driver allocation \+ handshake/);
     // The fictional `active` state must NOT return in the diagram.
     expect(p).not.toMatch(/│ active │/);
   });
@@ -69,11 +73,17 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The SDK's `sessions\.create\(\)` call returns only after the server-side transition reaches `ready`[\s\S]+?concurrent resource read or list can observe the durable `creating` reservation/,
+      /`sessions\.create\(\)` returns only once the session is `ready`, although a list or read made at the same time can still show it as `creating`\./,
     );
-    expect(p).toMatch(/Every direct driver operation atomically claims `ready` → `busy`/);
-    expect(p).toMatch(/another operation returns `409 Conflict` without a second driver dispatch/);
-    expect(p).toMatch(/driver failure elects terminal `errored`/);
+    expect(p).toMatch(
+      /Each driving call \(navigate, interact, wait, capture\) moves the session from `ready` to `busy`; while it is `creating` or `busy`, any other call returns `409 Conflict`\./,
+    );
+    expect(p).toMatch(/When the call succeeds the session goes back to `ready`\./);
+    expect(p).toMatch(
+      /If the browser fails, the session becomes `errored`; if you destroy the session mid-call, it becomes `destroyed` and the interrupted call returns `410 Gone`\./,
+    );
+    // 2026-09-15 plain words — the execution internals must not return.
+    expect(p).not.toMatch(/harness|driver dispatch|durable `creating` reservation|elects terminal/);
     expect(p).not.toMatch(/you don't observe `creating` separately/);
     // The previous fictional framing must NOT return.
     expect(p).not.toMatch(/once the session is `active` and ready/);
@@ -148,28 +158,33 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     );
   });
 
-  it("CRITICAL realistic-input behavioural-simulation framing pinned. The 'Subject to the realistic-input behavioural-simulation layer that ships with every session' wording matches the V-NNN modified-WebKit input-emulation contract.", () => {
+  it("CRITICAL interact framing pinned in plain words. The 'tap, scroll, type, or press keys on the page' wording names the four interact kinds (matches /api/sessions action.kind) without the behavioural-simulation-layer mechanics (2026-09-15 owner directive: human-like motion is a per-profile mode, not a promise on every interaction).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /synthesise touch \/ scroll \/ type input on the iPhone Safari runtime\. Subject to the realistic-input behavioural-simulation layer that ships with every session\./,
+      /\*\*`POST \/v1\/sessions\/:id\/interact`\*\* — tap, scroll, type, or press keys on the page\./,
     );
+    expect(p).not.toMatch(/behavioural-simulation layer|iPhone Safari runtime/);
   });
 
-  it('state shape, operation-owner polling and team-admin secret boundary are pinned', () => {
+  it('state shape, busy-while-capturing polling advice and team-admin secret boundary are pinned', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /live page introspection: current `url`, `title`, cookies \+ `local_storage`, and a `captured_at` timestamp\.[\s\S]+?it at low frequency only while the resource is `ready`/,
+      /live page introspection: current `url`, `title`, cookies \+ `local_storage`, and a `captured_at` timestamp\.[\s\S]+?poll it sparingly and only while the session is `ready`/,
     );
     expect(p).toMatch(
-      /use `GET \/v1\/sessions\/:id` or the list endpoint to observe persisted `creating` \/ `busy` metadata/,
+      /\(a call made while the session is `busy` returns `409`\); to check `creating` \/ `busy` without tying up the session, use `GET \/v1\/sessions\/:id` or the list endpoint instead\./,
     );
-    expect(p).toMatch(/When acting as a team owner, state requires the `admin` role/);
     expect(p).toMatch(
-      /a `member` remains able to read list\/detail metadata but receives `403` for state before the session is claimed/,
+      /When acting as a team owner, state requires the `admin` role because it returns browser secrets such as cookies and local storage/,
+    );
+    expect(p).toMatch(
+      /a `member` can still read list\/detail metadata but gets `403` for state, and the session is left untouched\./,
     );
     expect(p).toMatch(/Self-account `read:sessions` access is unchanged/);
+    // 2026-09-15 plain words — driver-ownership vocabulary must not return.
+    expect(p).not.toMatch(/claimed driver operation|driver owner|contacts the live driver/);
   });
 
   it("CRITICAL capture R2-EU-presigned-URL framing pinned. The 'Captures are stored on the EU-resident object-storage sub-processor (Cloudflare R2) and the response includes a signed URL that\\'s valid for a bounded window (~15 minutes). Persist the bytes if you need them long-term' wording matches W770 /api/account avatar EU-jurisdiction R2 + 1h-presigned + the GDPR data-residency framing.", () => {
@@ -254,26 +269,28 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
       /`429 Too Many Requests` \(`https:\/\/errors\.driftstack\.dev\/tier-limit`\)/,
     );
     expect(p).toMatch(
-      /`404 Not Found` — session ID doesn't exist \(or already destroyed and TTL-evicted\)\./,
+      /`404 Not Found` — session ID doesn't exist \(or was destroyed and has since been cleaned up\)\./,
     );
     expect(p).toMatch(
-      /`409 Conflict` — a direct driver operation found the session `creating`, or another operation already owns `busy`/,
+      /`409 Conflict` — the session is still `creating`, or another operation is already running \(`busy`\); retry once it reports `ready`\./,
     );
     expect(p).toMatch(
       /`410 Gone` \(`https:\/\/errors\.driftstack\.dev\/session-destroyed`\) — the session is `destroyed` or `errored`, or this operation lost a race to destroy/,
     );
     expect(p).not.toMatch(/`navigate` after destroy/);
-    expect(p).toMatch(/`502 Bad Gateway` \/ `503 Service Unavailable` — driver-side error/);
+    expect(p).toMatch(
+      /`502 Bad Gateway` \/ `503 Service Unavailable` — the browser session hit an error, or the requested feature is not available \(`driver-error` \/ `driver-not-integrated` \/ `feature-unavailable`\)\./,
+    );
+    // 2026-09-15 plain words — storage/driver internals must not return.
+    expect(p).not.toMatch(/TTL-evicted|direct driver operation|driver-side error/);
   });
 
-  it('outcome-unknown busy ownership is never automatically reclaimed', () => {
+  it('a busy session left behind by a server crash is never automatically reset', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /A `busy` row with an outcome-unknown owner is not automatically reset after a server crash/,
+      /A session left in `busy` after a server crash is not reset automatically: the operation that was running may already have changed the page, and repeating it could duplicate that work\. Destroy the session and create a fresh one\./,
     );
-    expect(p).toMatch(
-      /automatic reclaim would risk replaying work that may already have changed the page/,
-    );
+    expect(p).not.toMatch(/outcome-unknown owner|automatic reclaim/);
   });
 
   it("CRITICAL session.completed + session.failed webhook events pinned. The 2-terminal-event set + 'Intermediate state transitions (e.g. a hypothetical session.created) are not on the bus today' wording explains the no-intermediate-events contract.", () => {
@@ -293,7 +310,16 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).not.toMatch(
       /destroyed cleanly \(customer-driven destroy, or the free-tier duration cap\)/,
     );
-    expect(p).toMatch(/`session\.failed` — session terminated due to a runtime \/ driver error\./);
+    expect(p).toMatch(
+      /`session\.failed` — the session ended because of an unrecoverable error \(for example, a timeout or a crash during a page action\)\. Create a new session to continue\./,
+    );
+    // 2026-09-15 plain words — the other session events name what the customer
+    // gets, not the control plane / harness that produces them.
+    expect(p).toMatch(
+      /`session\.egress_capability_changed` — the session reported its proxy capabilities\./,
+    );
+    expect(p).toMatch(/`session\.challenge_detected` — the session detected a bot-check/);
+    expect(p).not.toMatch(/control plane|harness|runtime \/ driver error/);
     expect(p).toMatch(
       /Intermediate state transitions \(e\.g\. a hypothetical `session\.created`\) are not on the bus today/,
     );
@@ -310,15 +336,16 @@ describe('W781 docs /guides/session-lifecycle content parity', () => {
     expect(p).toMatch(/Plan your workflow to recreate cleanly when a long pause is expected\./);
   });
 
-  it("CRITICAL session-level quotas-not-customer-facing framing pinned. The 'Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter' wording matches W769 + ADR-004 pricing.", () => {
+  it("CRITICAL no-per-session-bandwidth-or-memory-limits framing pinned. The 'The limit that governs sessions is your tier's concurrent-session cap' wording matches W769 + ADR-004 pricing (2026-09-15 plain words: 'fleet-level enforcement' is how we run it and is gone).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Session-level resource quotas \(per-session bandwidth, memory\) are not customer-facing today\./,
+      /There are no per-session bandwidth or memory limits for you to manage today\./,
     );
     expect(p).toMatch(
-      /Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter\./,
+      /The limit that governs sessions is your tier's concurrent-session cap \(rate limits and profile caps are separate — see Error shapes above\)\./,
     );
+    expect(p).not.toMatch(/Fleet-level enforcement/);
   });
 
   it('CRITICAL Next-steps 3-link set pinned — profile-management + webhooks/events + api/versioning.', () => {

@@ -63,7 +63,7 @@ describe('W338.A /quickstart tier-cap parity', () => {
   it('does not present the restricted Free desktop credential as a curl or sandbox key', () => {
     expect(body).toMatch(/This code quickstart requires a paid tier with API access/);
     expect(body).toMatch(/restricted\s*`ds_test_…` device credential/);
-    expect(body).toMatch(/not a general sandbox or SDK key/);
+    expect(body).toMatch(/not an API, SDK, or sandbox key/);
     expect(curl).toMatch(/this HTTP quickstart is paid-only/i);
     expect(curl).toMatch(/not a general sandbox\/customer key/);
     expect(curl).toMatch(/Customer keys on every paid tier, including Manual/);
@@ -77,7 +77,7 @@ describe('W338.A /quickstart tier-cap parity', () => {
       /The core create, drive, capture, and destroy\s*\n?lifecycle uses plain HTTPS calls/,
     );
     expect(curl).toMatch(
-      /Live video and event streams use their\s*\n?documented streaming transports/,
+      /Live video and session events\s*\n?are not part of this walkthrough; see the\s*\n?\[live video guide\]\(\/guides\/live-video\/\) and\s*\n?\[webhook events\]\(\/webhooks\/events\/\) for those\./,
     );
     expect(curl).not.toMatch(/Every Driftstack feature is a plain HTTPS call/);
   });

@@ -69,14 +69,14 @@ describe('W627 R7-R17 marketing additions content parity', () => {
 
     it("differentiator sub-claims preserved in the Stat technical props (S20b 2026-07-06 plain-language pass: same facts — canvas+WebGL population-matched hashes glossed as the hidden 'device photos' sites take, Apple WebKit source code glossed as the engine inside every iPhone's Safari, code-or-dashboard access paths); the injects-nothing descriptor lives in the proof section Engine-deep card", () => {
       expect(body).toMatch(
-        /The hidden 'device photos' sites take to spot fakes \(canvas \+ WebGL hashes\) match millions of real iPhones — not a new unique value per session like every other API/,
+        /The hidden checks websites run to spot fakes get the answers a real iPhone gives — measured against real devices, check by check/,
       );
-      expect(body).toMatch(/Driftstack injects nothing, so there's nothing to find\./);
+      expect(body).toMatch(/Driftstack injects\s*no stealth JavaScript/);
       expect(body).toMatch(
-        /Built from Apple's WebKit source code — the engine inside every iPhone's Safari, the same one your iOS users run/,
+        /Runs a build of Apple's own WebKit — the engine family behind Safari on every iPhone — not a Chromium browser dressed up as a phone/,
       );
       expect(body).toMatch(
-        /From code — TypeScript, Python, or Go — or point-and-click from the dashboard\. Same engine either way/,
+        /From code — TypeScript, Python, or Go — or point and click in the desktop app\. Same browser either way/,
       );
     });
 
@@ -92,22 +92,24 @@ describe('W627 R7-R17 marketing additions content parity', () => {
 
     it('R9 capability-led headline pinned ("Built by engineers, not a growth team.") + "people who write the WebKit patches" body copy', () => {
       expect(body).toMatch(/Built by engineers, not a growth team\./);
-      expect(body).toMatch(/Driftstack is built by the people who write the WebKit\s*patches/);
       expect(body).toMatch(
-        /no\s*cold-outreach sales team \(SDRs\), no upsell ladder, no product direction\s*chosen by investors/,
+        /Driftstack is built by the engineers who work on the browser engine\s*itself/,
+      );
+      expect(body).toMatch(
+        /no outbound sales team, no upsell ladder, no product\s*direction chosen by investors/,
       );
       expect(body).not.toMatch(/roadmap chosen/i);
     });
 
     it('3-card posture grid pinned (Design partner direct-engineer-access + Honest pricing one-concurrent-metric + Sovereignty your-account-data-stays-in-EU) — each card has its eyebrow label + headline + sub-processors cross-link in the Sovereignty card. S30 2026-07-07 (founder decision: soften): the Sovereignty card title scoped to "Your account data" and the body discloses that R2-held uploaded files can replicate outside the EU.', () => {
-      expect(body).toMatch(/Design partner/);
+      expect(body).toMatch(/Direct line/);
       expect(body).toMatch(/Direct engineer access/);
       expect(body).toMatch(/Honest pricing/);
       expect(body).toMatch(/One concurrent metric/);
       expect(body).toMatch(/Sovereignty/);
       expect(body).toMatch(/Your account data stays in the EU/);
       expect(body).toMatch(
-        /uploaded files use Cloudflare's storage network,\s*which can replicate outside the EU/,
+        /uploaded files use Cloudflare's storage network,\s*which can keep copies outside the EU/,
       );
       expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
       expect(body).not.toMatch(/href="\/trust\/sub-processors"/);
@@ -150,7 +152,7 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     const body = read(INDEX);
 
     it('Section eyebrow + headline pinned ("Same signals as a physical iPhone. Not \\"close enough\\".") + canonical /trust/security-overview/ cross-link for the live posture', () => {
-      expect(body).toMatch(/What detection systems see/);
+      expect(body).toMatch(/What websites see/);
       expect(body).toMatch(/Same signals as a physical iPhone\. Not "close enough"\./);
       expect(body).toMatch(/href="\/trust\/security-overview\/"/);
       expect(body).not.toMatch(/href="\/trust\/security-overview"/);
@@ -159,25 +161,25 @@ describe('W627 R7-R17 marketing additions content parity', () => {
     it('7-signal table rows pinned (User-agent / Canvas hash / WebGL renderer / Audio fingerprint (AudioContext) / Core Text metrics / JavaScript engine timing / Fingerprint across sessions — the 7th row added 2026-05-16 to make the population-stable claim concrete; S20b 2026-07-06 plain-language labels) + Driftstack-column values + population-stable footnote', () => {
       // Left-column signal names.
       expect(body).toMatch(/<span class="text-tk-ink">User-agent<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">Canvas hash<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">WebGL renderer<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">Audio fingerprint \(AudioContext\)<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">Core Text metrics<\/span>/);
-      expect(body).toMatch(/<span class="text-tk-ink">JavaScript engine timing<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Canvas fingerprint<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">WebGL \(graphics chip\)<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Audio fingerprint<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">Text rendering<\/span>/);
+      expect(body).toMatch(/<span class="text-tk-ink">JavaScript engine<\/span>/);
       expect(body).toMatch(/<span class="text-tk-ink">Fingerprint across sessions<\/span>/);
       // Right-column Driftstack values — concrete brand/engine references.
       expect(body).toMatch(/Apple GPU/);
-      expect(body).toMatch(/JSCore/);
-      expect(body).toMatch(/population-stable/);
+      expect(body).toMatch(/JavaScriptCore/);
+      expect(body).toMatch(/blends in with real iPhones/);
       // S20b: the plain-language footnote decoding the load-bearing row.
-      expect(body).toMatch(/population-stable = the same value millions of real iPhones/);
+      expect(body).toMatch(/Blends in = the answers a real iPhone gives/);
     });
 
     it("Stealth-Chromium comparison column pinned (spoofed user-agent / 3x leaks Chromium / leaks system / Chrome's V8 / 100% unique hashes per session — the explicit fingerprint-uniqueness contrast added 2026-05-16)", () => {
       expect(body).toMatch(/Stealth Chromium/);
-      expect(body).toMatch(/leaks Chromium/);
+      expect(body).toMatch(/gives away Chromium/);
       expect(body).toMatch(/Chrome's V8/);
-      expect(body).toMatch(/100% unique/);
+      expect(body).toMatch(/unique to that browser/);
     });
   });
 

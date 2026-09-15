@@ -40,13 +40,15 @@ describe('W763 docs /api/profiles content parity', () => {
 
     expect(p).toMatch(/A \*\*profile\*\* is a named, persistent browser identity Driftstack/);
     expect(p).toMatch(/remembers between sessions\. Cookies, `localStorage`, `IndexedDB`,/);
-    expect(p).toMatch(/service workers, and any state the underlying WebKit engine/);
+    expect(p).toMatch(/service workers, and any other state the browser retains are kept/);
   });
 
   it('CRITICAL PROFILES_PER_TIER table pinned with all 8 tiers + caps. Matches W752 dashboard /profiles tier-display constant + V-136 server-side enforcement.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Values\s*\n?mirror `PROFILES_PER_TIER` in `@driftstack\/api-types`:/);
+    expect(p).toMatch(
+      /The caps are\s*\n?below \(the public `@driftstack\/api-types` package also exports them as\s*\n?`PROFILES_PER_TIER`\):/,
+    );
 
     const tierCaps: Array<[string, string]> = [
       ['free', '1'],
@@ -85,7 +87,7 @@ describe('W763 docs /api/profiles content parity', () => {
       /both `member` and `admin` can\s*\n?read the owner's taxonomy, but only `admin` can replace it\./,
     );
     expect(p).toMatch(
-      /The\s*\n?server resolves that effective owner before body validation and\s*\n?stores the taxonomy under the same owner as the profile collection\./,
+      /The\s*\n?taxonomy is stored under the same owner as the profile collection\./,
     );
     expect(p).toMatch(/With no header, the calling account remains the owner\./);
   });
@@ -121,7 +123,7 @@ describe('W763 docs /api/profiles content parity', () => {
 
     expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(p).toMatch(
-      /Any id absent from the current response is rejected before the profile\s*\n?repository is read or written\./,
+      /Any id absent from the current response is rejected before anything\s*\n?is written\./,
     );
     expect(p).not.toMatch(/\bplanned id\b|reference-only/i);
     expect(p).toMatch(
@@ -135,12 +137,14 @@ describe('W763 docs /api/profiles content parity', () => {
   it('states the current egress contract without future or backend-implementation copy', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/intentionally have no per-session\s*\n?egress field/);
+    expect(p).toMatch(/intentionally have no per-session\s*\n?proxy field/);
     expect(p).toContain('`POST /v1/agent-sessions`');
     expect(p).toContain('`proxy_id`');
     expect(p).toMatch(/same 120-character maximum as direct\s*\n?session creation/);
     expect(p).toMatch(/body is strict: any other key, including raw `proxy`/);
-    expect(p).toMatch(/direct surface has no typed consumed egress authority/);
+    expect(p).toMatch(
+      /`400` on deployments that require every session to use a customer proxy —\s*\n?\s+use a saved `proxy_id`\s*\n?\s+with `POST \/v1\/agent-sessions` instead\./,
+    );
     expect(p).not.toMatch(/request body lacks a `proxy`\s*\n?key entirely/);
     expect(p).not.toMatch(
       /not available on\s*\n?this endpoint|execution backend behind both|real device fleet/i,
@@ -192,7 +196,7 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(
       /Snapshots are immutable point-in-time metadata records of a\s*\n?profile\. The parent profile keeps evolving — its archetype, name,\s*\n?description,/,
     );
-    expect(p).toMatch(/Browser state \(cookies, logins\)\s*\n?is NOT captured at v1/);
+    expect(p).toMatch(/Browser state \(cookies, logins\)\s*\n?is NOT captured today/);
   });
 
   it("CRITICAL snapshot-id prefix 'psnap_' pinned. Drift to a different prefix would break SDK type discriminators.", () => {
@@ -317,16 +321,14 @@ describe('W763 docs /api/profiles content parity', () => {
     expect(p).toMatch(
       /A session is bound to a profile at creation time\s*\n?\(`POST \/v1\/sessions \{ profile_id \}`\)/,
     );
-    expect(p).toMatch(
-      /on destroy, any state mutations are\s*\n?persisted back to the profile row's underlying storage\./,
-    );
+    expect(p).toMatch(/on destroy, any changes are saved back to\s*\n?the profile\./);
   });
 
-  it("CRITICAL concurrent-sessions-serialised framing pinned. The 'Concurrent sessions on the SAME profile are serialised at the driver layer to avoid state-merge conflicts' wording explains the no-multi-write contract.", () => {
+  it("CRITICAL one-live-session-per-profile framing pinned. The 'A profile can only be used by one live session at a time: creating a second session with the same profile_id is refused with 409 profile-in-use' wording explains the no-multi-write contract in customer words (ProfileInUseError + profile-session-lock).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Concurrent\s*\n?sessions on the SAME profile are serialised at the driver layer\s*\n?to avoid state-merge conflicts\./,
+      /A profile can only be used by one live session at a\s*\n?time: creating a second session with the same `profile_id` is refused\s*\n?with `409 profile-in-use` until the first session has ended, so saved\s*\n?cookies and logins are never overwritten by a competing session\./,
     );
   });
 

@@ -13,8 +13,8 @@ describe('V-534.N sessionStatusLabelFor', () => {
     expect(sessionStatusLabelFor('creating')).toBe('Creating');
     expect(sessionStatusLabelFor('ready')).toBe('Ready');
     expect(sessionStatusLabelFor('busy')).toBe('Busy');
-    expect(sessionStatusLabelFor('destroyed')).toBe('Destroyed');
-    expect(sessionStatusLabelFor('errored')).toBe('Errored');
+    expect(sessionStatusLabelFor('destroyed')).toBe('Ended');
+    expect(sessionStatusLabelFor('errored')).toBe('Failed');
   });
 
   it('falls back to the raw status for unknown values', () => {

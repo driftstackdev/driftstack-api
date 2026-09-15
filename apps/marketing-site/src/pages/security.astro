@@ -16,20 +16,20 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="Security"
-  description="How Driftstack protects customer keys and content: TLS and HSTS, one-way API-key hashing, account-bound encryption at rest, signed webhooks, and customer-owned live-session access."
+  description="How Driftstack protects your keys and content: encrypted connections, API keys nobody can read back, encrypted storage tied to your account, signed webhooks, and live sessions with no built-in way for our staff to join."
   ogImage="/og/security.png"
 >
   <!-- Hero -->
-  <PageHero label="Security" title="Keys protected at rest. Live media not retained by default.">
+  <PageHero label="Security" title="Your keys stay protected. Live sessions are not kept by default.">
     <p class="mt-5 max-w-2xl text-lg leading-8 text-tk-ink-2">
-      Driftstack stores customer API keys as one-way hashes and wraps
-      recoverable credentials with context-bound encryption under
-      platform-held keys. The owning account is part of the protected
-      context; record and value-slot identity are also bound where the
-      store has a stable record identity. Live-session media is processed only to
-      run and stream the session and is not retained by default. Session
-      metadata and agent transcripts follow their documented retention
-      periods. The architecture below makes those boundaries concrete.
+      Driftstack stores your API keys as one-way hashes and encrypts any
+      credential that must stay usable, tying that encryption to your
+      account so a stored credential cannot be read under a different
+      account. Live-session media — the video and any audio of a running
+      session — is processed only to run and stream your session and is
+      not kept by default. Session records and agent transcripts are kept
+      for their documented retention periods. The sections below explain
+      each of these.
     </p>
     <p class="mt-4 max-w-2xl text-sm text-tk-ink-3">
       This page is security in plain terms. The deep technical posture —
@@ -61,16 +61,14 @@ import CtaBand from '../components/CtaBand.astro';
         <p class="mt-3 text-tk-ink-2">
           All traffic to us is HTTPS — encrypted the whole way.
           Cloudflare, our edge network, handles the encryption first
-          (terminating TLS at the edge) and strictly verifies it is
-          really talking to our own server at Hetzner (full "strict"
-          origin validation) before passing anything on. The API
-          server speaks TLS 1.2 / 1.3 only and sets a 2-year HSTS
-          header with <code>includeSubDomains</code> + <code>preload</code>
-          — an instruction that makes browsers refuse to ever connect
-          to us unencrypted. No unencrypted page (plaintext HTTP)
+          and verifies it is really talking to our own server before
+          passing anything on. Our API server accepts only TLS 1.2
+          and 1.3 and tells browsers (via a 2-year HSTS header with
+          <code>includeSubDomains</code> and <code>preload</code>)
+          never to connect to us unencrypted. No plain-HTTP page
           exists on any customer-facing path. You identify yourself by
-          sending your API key along with each request (a "Bearer"
-          key) — no client certificates to install.
+          sending your API key with each request — no client
+          certificates to install.
         </p>
       </div>
 
@@ -82,24 +80,27 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">
-          02 · Egress
+          02 · Proxies
         </p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
-          Sessions can leave through your configured SOCKS5 exit.
+          Sessions can use your own SOCKS5 proxy.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">Per-profile SOCKS5; capability reported after launch.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Per-profile SOCKS5; UDP support shown once the session is running.</p>
         <p class="mt-3 text-tk-ink-2">
-          A profile can attach a public SOCKS5 proxy as its exit to the
-          internet (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>).
-          Driftstack validates the configuration and basic reachability
-          before launch, blocks internal proxy targets, and requests
-          remote DNS. UDP / WebRTC / QUIC routing depends on the proxy's
-          reported UDP capability and is shown after launch. Without an
-          attached config, session traffic exits via Driftstack-managed
-          infrastructure. We never store destination response bodies —
-          the pages your sessions visit. See
+          A profile can attach a SOCKS5 proxy at a public address as its
+          exit to the internet (<a href="/glossary/#egress" class="text-tk-accent-text underline">egress</a>),
+          so websites see the proxy's address instead of ours. Before the
+          session starts we check the proxy details and that the proxy can
+          be reached, and website address lookups go through the proxy
+          too, so they do not reveal your real location. Proxies on
+          private or local addresses (for example localhost or a home
+          network address) are not accepted. Whether WebRTC and HTTP/3
+          traffic can use the proxy depends on your proxy's UDP support,
+          and is shown once the session is running. Without a proxy
+          attached, session traffic exits through Driftstack's managed
+          exit. We never store the pages your sessions visit. See
           <a href="/trust/security-overview/" class="text-tk-accent-text underline">/trust/security-overview</a>
-          for the full posture.
+          for the full picture.
         </p>
       </div>
 
@@ -118,16 +119,15 @@ import CtaBand from '../components/CtaBand.astro';
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">Stored only as one-way scrypt hashes — never readable.</p>
         <p class="mt-3 text-tk-ink-2">
-          API keys are scrambled one-way with scrypt (logN=15) — a
-          deliberately slow scrambling algorithm that makes guessing
-          impractical — before they ever touch the database. The
-          readable key is shown exactly once, when you create it;
-          after that there is no path — admin, support, ops — to
-          recover it. A database breach surfaces scrambled values
-          (hashes), not keys. To keep requests fast, a just-verified
-          key is remembered for 30 seconds in a protected in-memory
-          cache (sha256-keyed) — speed without weakening how keys are
-          stored.
+          API keys are scrambled one-way with scrypt — a deliberately
+          slow algorithm that makes guessing impractical — before they
+          ever touch the database. The readable key is shown exactly
+          once, when you create it; after that nobody at Driftstack —
+          admin, support or operations — can recover it. A database
+          breach would expose scrambled values, not keys. To keep
+          requests fast, a key that was just checked is remembered in
+          protected short-term memory for 30 seconds — speed without
+          weakening how keys are stored.
         </p>
       </div>
 
@@ -174,16 +174,15 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">
           Your whole team can look. Only admins can change.
         </h3>
-        <p class="mt-2 font-mono text-xs text-tk-ink-3">Admin / member roles, scope-gated writes.</p>
+        <p class="mt-2 font-mono text-xs text-tk-ink-3">Admin and member roles; only admins can make changes.</p>
         <p class="mt-3 text-tk-ink-2">
           Team members can see everything on the owner's account, but
-          only admin-role members can change anything (role-based
-          access control — RBAC). Sessions, profiles, webhooks, API
-          keys, email preferences — every change is permission-checked
-          before it runs (the role check sits at the route layer).
-          Successfully recorded audit entries identify who acted (the
-          member) separately from whose account it was (the owner).
-          Team owners review recorded activity via
+          only admins can change anything (role-based access control).
+          Sessions, profiles, webhooks, API keys, email preferences —
+          every change is permission-checked before it runs. Audit
+          entries record who acted (the member) separately from whose
+          account it was (the owner). Owners can review recorded
+          activity in the dashboard's audit log or via
           <code class="font-mono">/v1/account/audit-log</code>.
         </p>
       </div>
@@ -202,22 +201,20 @@ import CtaBand from '../components/CtaBand.astro';
           Live-session media is not retained by default.
         </h3>
         <p class="mt-2 font-mono text-xs text-tk-ink-3">
-          DTLS-SRTP live media; no administrative staff join path.
+          Live session media is encrypted in transit (DTLS-SRTP); there is no built-in way for Driftstack staff to join your session.
         </p>
         <p class="mt-3 max-w-prose text-tk-ink-2">
-          Driftstack's control plane stores license metadata, session
-          metadata (id, lifecycle status, timestamps), and aggregate
-          usage counters. Live-session media is encrypted in transport,
-          processed through LiveKit to deliver the stream, and dropped
-          when the session ends. The product exposes no administrative
-          path for Driftstack staff to join a customer's live session.
-          Requested screenshots, DOM snapshots, and PDFs pass through
-          the API inline and are not retained by the Capture endpoint;
-          desktop recordings stay on the customer's device and are not
-          uploaded. For self-hosted deployments, even session metadata
-          stays inside your network; only license-validity heartbeats —
-          periodic "is this license still valid?" check-ins — reach our
-          servers.
+          Driftstack keeps license details, session records (id, status,
+          timestamps) and aggregate usage counts. Live-session streams
+          are encrypted in transit, used to deliver the session to you,
+          and dropped when the session ends. Driftstack staff have no
+          built-in way to join a customer's live session. Screenshots,
+          page snapshots and PDFs you request are returned directly in
+          the API response and are not stored; desktop recordings stay
+          on your own computer and are not uploaded. For self-hosted
+          deployments, even session records stay inside your network;
+          only periodic "is this license still valid?" check-ins reach
+          our servers.
         </p>
       </div>
     </div>
@@ -272,13 +269,12 @@ import CtaBand from '../components/CtaBand.astro';
         {/* S30 2026-07-07 (founder decision: soften) — R2 dropped from
             the all-in-the-EU list: file objects live on Cloudflare R2
             in the default jurisdiction (EU + US replication). */}
-        Compute and database in the EU (Hetzner in
-        Falkenstein, Germany + Neon EU + Upstash EU). Uploaded files
-        (avatars, for example) sit on Cloudflare R2, which can
-        replicate outside the EU. Session execution may run elsewhere under SCCs (the EU's
-        Standard Contractual Clauses for lawful data transfer abroad)
-        + the EU-US Data Privacy Framework. Detail in the same
-        sub-processors list.
+        Servers and database are in the EU (Hetzner, Germany; Neon EU;
+        Upstash EU). Uploaded files (avatars, for example) are on
+        Cloudflare R2, which can keep copies outside the EU. Sessions
+        may run outside the EU under the EU's Standard Contractual
+        Clauses (SCCs) and the EU-US Data Privacy Framework. Details in
+        the sub-processor list.
       </li>
     </ul>
   </Section>
@@ -300,14 +296,14 @@ import CtaBand from '../components/CtaBand.astro';
           Edge
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          Cloudflare TLS 1.3 + WAF
+          Encrypted connections, automated abuse blocked
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          All inbound traffic terminates at Cloudflare's edge. Full
-          (strict) SSL/TLS validation against Let's Encrypt origin
-          certificates ensures the request actually reached our origin
-          and not a man-in-the-middle. Bot Fight Mode + WAF rules block
-          automated abuse before it reaches the origin.
+          All traffic enters through Cloudflare. Cloudflare verifies
+          the certificate on our own server before forwarding anything,
+          so a request cannot be quietly intercepted on the way in.
+          Cloudflare's firewall and bot protection block automated
+          abuse before it reaches our servers.
         </p>
       </div>
       <div class="card p-6">
@@ -320,18 +316,15 @@ import CtaBand from '../components/CtaBand.astro';
           Origin
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          A locked-down server (nginx + UFW + fail2ban)
+          A locked-down server
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Our server at Hetzner runs the nginx web server with modern
-          encryption only (TLS 1.2 + 1.3, Mozilla's recommended
-          intermediate cipher suite, HSTS preload-eligible). A
-          firewall (UFW) leaves exactly three doors open: remote
-          administration (port 22, SSH), a redirect that bounces old
-          unencrypted requests (port 80) onto the encrypted door, and
-          the encrypted door itself (port 443, TLS). Repeat attackers
-          get their address banned automatically at the kernel level
-          (fail2ban).
+          Our server accepts only modern encrypted connections (TLS 1.2
+          and 1.3 with Mozilla's recommended cipher settings, HSTS
+          preload-eligible). A firewall allows only administrative
+          access and web traffic, and any unencrypted web request is
+          redirected to the encrypted connection. Repeat attackers have
+          their address banned automatically.
         </p>
       </div>
       <div class="card p-6">
@@ -344,7 +337,7 @@ import CtaBand from '../components/CtaBand.astro';
           Application
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          Auth gate + scope check + rate limit
+          Three checks on every request
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Every authenticated request passes three checks, in order:
@@ -352,10 +345,9 @@ import CtaBand from '../components/CtaBand.astro';
           allowed to do this specific thing (scope check — granular
           per-resource permissions like
           <code class="font-mono">read:sessions</code>)? And has this
-          account sent too many requests too fast (rate limit —
-          per-account token buckets backed by Redis with Postgres
-          fallback)? A request that fails any check is refused on the
-          spot — it never reaches the rest of the system.
+          account sent too many requests too fast (rate limit)? A
+          request that fails any check is refused on the spot — it
+          never reaches the rest of the system.
         </p>
       </div>
       <div class="card p-6">
@@ -371,19 +363,16 @@ import CtaBand from '../components/CtaBand.astro';
           Encryption at rest + isolation
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          API keys are one-way scrambled (scrypt-hashed) with a unique
-          random ingredient per key ("per-key salts"), so recovering
-          the original is impossible by design. Account passwords use
-          the same slow scrambler (KDF). Secrets that must stay
-          usable — two-factor login seeds (MFA TOTP secrets),
-          Anthropic API keys you bring for the AI agent (BYOK), and
-          the keys that authenticate desktop-app control commands
-          (gui_control_keys) — live encrypted in AES-256-GCM
-          ciphertext under an encryption key that exists only on our
-          server, decrypted in-memory only at
-          execution time and never logged. The database (Postgres)
-          and cache (Redis) providers additionally encrypt everything
-          they store ("encryption at rest").
+          API keys are stored as one-way hashes (scrypt, with a unique
+          random salt per key), so recovering the original key is
+          impossible by design. Account passwords are protected the
+          same way. Secrets that must stay usable — two-factor login
+          secrets, any Anthropic API key you bring for the AI agent,
+          and the keys that authenticate desktop-app control commands —
+          are stored encrypted (AES-256-GCM) under a key that exists
+          only on our server, decrypted in memory only when needed and
+          never written to logs. Our database and cache providers also
+          encrypt everything they store (encryption at rest).
         </p>
       </div>
       <div class="card p-6">
@@ -399,11 +388,12 @@ import CtaBand from '../components/CtaBand.astro';
           Recorded customer audit trail
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Successfully recorded account-security and management events
-          are append-only at the record level: API key lifecycle, MFA
-          enrollment, profile changes, webhook secret rotations, login
-          and password changes. Routine credential use is not emitted as
-          a read event. Customers export available records via the dashboard or
+          Account-security and management events — API key creation,
+          rotation and revocation, two-factor (MFA) enrollment, profile
+          changes, webhook secret rotations, logins and password
+          changes — are recorded and cannot be edited after the fact.
+          Everyday use of an API key is not recorded in the audit
+          trail. You can export your records from the dashboard or via
           <code class="font-mono">/v1/account/audit-log/export</code>
           (your data-portability right under GDPR Article 20).
         </p>
@@ -418,16 +408,14 @@ import CtaBand from '../components/CtaBand.astro';
           Observability
         </p>
         <h3 class="mt-2 text-lg font-medium text-tk-ink">
-          Sentry + structured logs
+          Errors tracked, content never logged
         </h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           Server errors go to Sentry, our error-tracking service (EU
-          region), with personal data scrubbed out first (PII
-          scrubbing). Request logs are machine-readable technical
-          records (Pino structured JSON), and unusually slow database
-          queries are flagged automatically (the slow-query log). No
-          customer request body or response body is logged — only
-          metadata sufficient to reconstruct what happened.
+          region), with personal data scrubbed out first. Request logs
+          record only technical details — never the body of your
+          request or of our response — just enough to reconstruct what
+          happened.
         </p>
       </div>
     </div>
@@ -472,20 +460,19 @@ import CtaBand from '../components/CtaBand.astro';
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Session hijacking</strong> via cross-site or
-                cross-account access. Mitigation: every route restricts
-                lookups to your own account at the database layer; a
-                probe at another account's data gets a plain "not
-                found" (cross-account lookups return 404, never 403 —
-                the response never even confirms the thing exists).
+                cross-account access. Mitigation: every lookup is
+                restricted to your own account; a probe at another
+                account's data gets a plain "not found" (cross-account
+                lookups return 404, never 403 — the response never even
+                confirms the thing exists).
               </span>
             </li>
             <li class="flex gap-3">
               <span class="text-tk-accent-text">•</span>
               <span>
                 <strong>Brute-force auth attempts</strong>. Mitigation:
-                per-IP rate limits on login and key-check endpoints;
-                automatic IP bans at the
-                origin host level (fail2ban).
+                rate limits per IP address on login and API key checks;
+                IP addresses that keep failing are banned automatically.
               </span>
             </li>
             <li class="flex gap-3">
@@ -506,21 +493,21 @@ import CtaBand from '../components/CtaBand.astro';
               <span class="text-tk-accent-text">→</span>
               <span>
                 <strong>Customer's destination response content.</strong>
-                The control plane stores session metadata only — never
-                response bodies. Whatever your code does inside a
-                session is your threat model, not ours.
+                Driftstack keeps only basic session details (id, status,
+                timestamps) — never the content of the pages your
+                sessions visit. Whatever your code does inside a
+                session is yours to secure, not ours.
               </span>
             </li>
             <li class="flex gap-3">
               <span class="text-tk-accent-text">→</span>
               <span>
                 <strong>Detection-vendor cat-and-mouse evolution.</strong>
-                Our anti-detection posture is engine-level (Apple's
-                WebKit source code, not a JavaScript patch layered on
-                top at run time — a "shim") and continuously
-                updated; we can't promise forever-perfect parity
-                against every detection vendor. See the
-                <a href="/trust/cumulative-rig/" class="text-tk-accent-text underline">cumulative-rig
+                Our anti-detection work is built into the browser
+                itself rather than added on afterwards, and is
+                continuously updated; we can't promise forever-perfect
+                parity against every detection vendor. See the
+                <a href="/trust/cumulative-rig/" class="text-tk-accent-text underline">cumulative rig
                 methodology</a> for what we do guarantee.
               </span>
             </li>
@@ -538,10 +525,11 @@ import CtaBand from '../components/CtaBand.astro';
               <span class="text-tk-accent-text">→</span>
               <span>
                 <strong>Nation-state actors with sub-processor access.</strong>
-                We assume the EU sub-processors (Hetzner, Neon, Upstash,
-                Cloudflare) operate under their published security
-                posture; we don't add additional anti-nation-state
-                defense layers at the application tier.
+                We assume our hosting providers (listed on the
+                <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processors page</a>)
+                operate under their published security posture; we
+                don't add extra defences against government-level
+                attackers on top of that.
               </span>
             </li>
           </ul>
@@ -551,16 +539,15 @@ import CtaBand from '../components/CtaBand.astro';
   </section>
 
   <!-- V-503 — supply chain -->
-  <Section label="Supply chain" title="Locked stack. Pinned versions. Audited dependencies.">
+  <Section label="Supply chain" title="A stable stack. Every update checked before it ships.">
     <div class="mt-8 grid gap-8 md:grid-cols-3">
       <div>
-        <h3 class="text-base font-medium text-tk-ink">Locked stack</h3>
+        <h3 class="text-base font-medium text-tk-ink">A stable stack</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,
-          Redis 7. The stack rarely changes; every update to an
-          outside software component (a dependency-bump PR) is
-          security-scanned (`npm audit` review) and must pass the full
-          test suite (a green test gate) before it lands.
+          We run on a small, stable set of well-known components
+          (Node.js, TypeScript, Postgres, Redis) that rarely changes.
+          Every update to an outside component is security-scanned and
+          must pass our full automated test suite before it lands.
         </p>
       </div>
       {/* S26 2026-07-06 (#132) — accuracy fix (audit M3): this card
@@ -573,15 +560,14 @@ import CtaBand from '../components/CtaBand.astro';
            that waits for CI (.github/workflows/dependabot-auto-merge.yml,
            V-148). */}
       <div>
-        <h3 class="text-base font-medium text-tk-ink">Dependabot</h3>
+        <h3 class="text-base font-medium text-tk-ink">Automatic dependency updates</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Automated dependency-update proposals, opened weekly across
-          every ecosystem we ship — the server and web apps, the
-          Python and Go SDKs, the desktop client, and the CI pipeline
-          itself. Nothing merges unless the full automated test suite
-          passes (CI); only the smallest class of update (bug-fix-only
-          patch releases) may merge automatically, and anything bigger
-          waits for human review.
+          Every week, updates to outside software components are
+          proposed automatically across everything we ship — the
+          server, the web apps, the SDKs, and the desktop app. Nothing
+          is accepted unless the full automated test suite passes; only
+          small bug-fix updates go in automatically, and anything
+          bigger waits for human review.
         </p>
       </div>
       {/* S26 2026-07-06 (#132) — accuracy fix (audit H1): this card
@@ -598,17 +584,14 @@ import CtaBand from '../components/CtaBand.astro';
            the public /version endpoint reporting the deployed git SHA
            (apps/server/src/lib/app.ts V-195). */}
       <div>
-        <h3 class="text-base font-medium text-tk-ink">Locked installs, gated deploys</h3>
+        <h3 class="text-base font-medium text-tk-ink">Releases are tested, approved, and reversible</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
-          Every dependency version is pinned in a lockfile checked
-          into the repository, and CI installs exactly those pinned
-          versions. A release reaches production only through a gated
-          pipeline: staging first, then an explicit manual approval or
-          a deliberately cut release tag. The pipeline health-checks
-          the new build the moment it is live and automatically rolls
-          back to the previous version if that check fails — and
-          anyone can verify exactly which source-code revision
-          production is running via our public /version endpoint.
+          Every software component is fixed to an exact version. A
+          release reaches production only after running on a test copy
+          first and being explicitly approved. The moment a release is
+          live it is health-checked and automatically rolled back if
+          that check fails — and anyone can see exactly which version
+          is running at <code class="font-mono">api.driftstack.dev/version</code>.
         </p>
       </div>
     </div>

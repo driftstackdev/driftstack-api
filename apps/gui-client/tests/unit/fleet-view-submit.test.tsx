@@ -33,10 +33,10 @@ describe('FleetView form submission', () => {
       }),
     );
     render(<FleetView />);
-    await screen.findByRole('button', { name: 'Add member' });
+    await screen.findByRole('button', { name: 'Add server' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    fireEvent.change(screen.getByPlaceholderText('mac-mini-eu-west-1'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Add server' }));
+    fireEvent.change(screen.getByPlaceholderText('office-server'), {
       target: { value: 'mac-mini-test' },
     });
     fireEvent.change(screen.getByPlaceholderText('http://10.0.0.5:3000'), {
@@ -51,7 +51,7 @@ describe('FleetView form submission', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Saving…' })).toBeDisabled());
     expect(screen.getByRole('button', { name: 'Saving…' })).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
-    expect(screen.getByPlaceholderText('mac-mini-eu-west-1')).toBeDisabled();
+    expect(screen.getByPlaceholderText('office-server')).toBeDisabled();
     expect(fleet.addFleetMember).toHaveBeenCalledTimes(1);
 
     finishSave?.({
@@ -82,24 +82,24 @@ describe('FleetView form submission', () => {
     );
     render(<FleetView />);
 
-    const rowPing = await screen.findByRole('button', { name: 'Ping' });
+    const rowPing = await screen.findByRole('button', { name: 'Check' });
     fireEvent.click(rowPing);
     fireEvent.click(rowPing);
 
-    const pendingRow = await screen.findByRole('button', { name: 'Pinging…' });
+    const pendingRow = await screen.findByRole('button', { name: 'Checking…' });
     expect(pendingRow).toBeDisabled();
     expect(pendingRow).toHaveAttribute('aria-busy', 'true');
     expect(fleet.pingFleetMember).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ping all' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Check all' }));
     await waitFor(() =>
-      expect(screen.getAllByRole('button', { name: 'Pinging…' })).toHaveLength(2),
+      expect(screen.getAllByRole('button', { name: 'Checking…' })).toHaveLength(2),
     );
     expect(fleet.pingFleetMember).toHaveBeenCalledTimes(1);
 
     finishPing?.({ ok: true, durationMs: 12, version: 'abc123' });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Ping' })).toBeEnabled());
-    expect(screen.getByRole('button', { name: 'Ping all' })).toBeEnabled();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Check' })).toBeEnabled());
+    expect(screen.getByRole('button', { name: 'Check all' })).toBeEnabled();
     expect(screen.getByText('ok · 12ms')).toBeInTheDocument();
   });
 
@@ -110,10 +110,10 @@ describe('FleetView form submission', () => {
 
     render(<FleetView />);
 
-    expect(await screen.findByText("Couldn't load the fleet")).toBeInTheDocument();
+    expect(await screen.findByText("Couldn't load your server list")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Couldn't read the saved fleet. Check the app's file permissions and try again.",
+        "Couldn't read your saved servers. Check the app's file permissions and try again.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Users\/founder/)).toBeNull();
@@ -125,10 +125,10 @@ describe('FleetView form submission', () => {
       new Error('sqlite write failed at /private/var/folders/secret/settings.json'),
     );
     render(<FleetView />);
-    await screen.findByRole('button', { name: 'Add member' });
+    await screen.findByRole('button', { name: 'Add server' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Add member' }));
-    fireEvent.change(screen.getByPlaceholderText('mac-mini-eu-west-1'), {
+    fireEvent.click(screen.getByRole('button', { name: 'Add server' }));
+    fireEvent.change(screen.getByPlaceholderText('office-server'), {
       target: { value: 'mac-mini-test' },
     });
     fireEvent.change(screen.getByPlaceholderText('http://10.0.0.5:3000'), {
@@ -140,7 +140,7 @@ describe('FleetView form submission', () => {
 
     expect(
       await screen.findByText(
-        "Couldn't save the fleet member. Check the app's file permissions and try again.",
+        "Couldn't save this server. Check the app's file permissions and try again.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/private\/var\/folders/)).toBeNull();

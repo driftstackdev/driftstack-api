@@ -130,7 +130,9 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
 
   it('3 failure modes pinned: underpayment / late payment / wrong currency (S20b plain words, all 3 escalation paths intact)', () => {
     expect(body).toMatch(/<strong>Underpayment<\/strong>/);
-    expect(body).toMatch(/the order is marked <code>partial<\/code>/);
+    // 2026-09-15: the internal status code no longer shows on the page.
+    expect(body).toMatch(/the order is marked as partially paid/);
+    expect(body).not.toMatch(/<code>partial<\/code>/);
     expect(body).toMatch(/<strong>Late payment<\/strong>/);
     expect(body).toMatch(/<strong>Wrong currency<\/strong>/);
     expect(body).toMatch(
@@ -152,8 +154,9 @@ describe('W376.C marketing-site /pricing/crypto page content parity', () => {
   });
 
   it("'card-billing path is the right channel for refunds' Stripe-fallback claim pinned", () => {
+    // 2026-09-15 plain words: same card-fallback fact, no processor name.
     expect(body).toMatch(
-      /If you need a refund mechanism, our card-billing path \(Stripe\)\s+is the right channel/,
+      /If you think you might need a refund, pay by card instead\. Card\s+refunds follow the standard rules in the refund policy\./,
     );
   });
 

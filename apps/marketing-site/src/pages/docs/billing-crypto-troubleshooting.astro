@@ -29,7 +29,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         every order on your account with its current state.</li>
       <li><strong>API</strong> — <code>GET /v1/billing/crypto-orders</code>
         returns the same list, newest first.</li>
-      <li><strong>Email</strong> — every order mint sends a
+      <li><strong>Email</strong> — every new order sends a
         confirmation email with the order id in the subject line.</li>
     </ul>
 
@@ -37,7 +37,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ol>
       <li>
         <strong>Check the block explorer first.</strong> Paste your
-        TX hash into the canonical explorer for the network you used
+        TX hash into the block explorer for the network you used
         (mempool.space, etherscan, tronscan, etc). If the explorer
         shows <strong>not yet broadcast</strong>, the issue is on
         your wallet side — retry the send. If it shows
@@ -53,9 +53,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         then <code>paid</code>.
       </li>
       <li>
-        <strong>Wait at least 30 minutes.</strong> Mempool congestion
-        + RPC propagation lag can easily push a normally-fast network
-        to 15+ minutes. If you're past 30 min with a confirmed TX,
+        <strong>Wait at least 30 minutes.</strong> Network congestion
+        can easily push a normally-fast network to 15+ minutes. If you're past 30 min with a confirmed TX,
         skip to the support escalation below.
       </li>
     </ol>
@@ -68,7 +67,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <ul>
       <li>The exchange rate moved between when we generated the quote and when your wallet broadcast.</li>
       <li>Network fees were deducted on your side and we received less than the displayed amount.</li>
-      <li>You sent the wrong coin to the right address (e.g. USDC instead of USDT) and our deposit detector saw partial value.</li>
+      <li>You sent the wrong coin to the right address (e.g. USDC instead of USDT) and we received only partial value.</li>
     </ul>
     <p>
       Partial orders need a human. Email
@@ -99,7 +98,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Symptom: I sent funds on the wrong network</h2>
     <p>
-      USDC-ERC20 vs USDC-TRC20 is the classic landmine. The displayed
+      USDC-ERC20 vs USDC-TRC20 is the most common mistake. The displayed
       deposit address only works on the network shown in the checkout
       UI. If you sent on a different network:
     </p>
@@ -160,14 +159,14 @@ curl -H "Authorization: Bearer $DRIFTSTACK_API_KEY" \\
     </p>
     <ul>
       <li>Your account email (or account_id if you have it handy).</li>
-      <li>The <code>order_id</code> we minted at checkout.</li>
+      <li>The <code>order_id</code> shown at checkout.</li>
       <li>The TX hash (any explorer link is fine).</li>
       <li>The network you sent on (Ethereum mainnet, Tron, BSC, etc.).</li>
       <li>A screenshot of your wallet's send confirmation if you
         still have it.</li>
     </ul>
     <p>
-      Response SLA is 1 business day on the free trial + paid tiers;
+      Response SLA is 1 business day on the Free plan and paid tiers;
       enterprise contracts get a per-contract SLA. Most payment
       escalations resolve same-day once we have the TX hash.
     </p>

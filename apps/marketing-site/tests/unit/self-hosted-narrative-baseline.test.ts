@@ -20,9 +20,11 @@ function read(p: string): string {
 describe('W305.C /self-hosted narrative baseline', () => {
   const body = read(PAGE);
 
-  it('describes the two-box architecture (control plane + customer hardware)', () => {
-    expect(body).toMatch(/control plane/i);
-    expect(body).toMatch(/hardware/i);
+  it('describes the two-sided architecture (Driftstack coordination service + customer hardware)', () => {
+    // 2026-09-15 owner directive: "control plane" is banned on customer
+    // surfaces; the page now names the two sides in plain words.
+    expect(body).toMatch(/Driftstack's coordination service starts and\s+manages sessions/);
+    expect(body).toMatch(/hardware you own/i);
   });
 
   it('references Mac hardware as the session runtime', () => {

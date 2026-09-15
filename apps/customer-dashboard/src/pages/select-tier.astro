@@ -73,9 +73,9 @@ function accessLabel(tier: AccountTier): string {
 function aiLabel(tier: AccountTier): string {
   const features = TIER_FEATURES[tier];
   if (!features.aiAgent || features.llmBilling === null) return 'Not included';
-  if (features.llmBilling === 'byok_only') return 'BYOK';
-  if (features.llmBilling === 'byok_or_bundled') return 'BYOK or $0.10/turn';
-  return 'BYOK or contracted bundled';
+  if (features.llmBilling === 'byok_only') return 'Your own key';
+  if (features.llmBilling === 'byok_or_bundled') return 'Your own key or $0.10/turn';
+  return 'Your own key or custom rate';
 }
 ---
 
@@ -86,15 +86,15 @@ function aiLabel(tier: AccountTier): string {
   <div class="relative overflow-hidden">
     <div class="hero-glow" aria-hidden="true"></div>
     <div class="relative mx-auto max-w-4xl px-6 py-16" data-page="select-tier">
-      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Choose your tier</p>
+      <p class="font-mono text-xs uppercase tracking-widest text-tk-accent-text">Choose your plan</p>
       <h1 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink md:text-4xl">
         Pick a plan.
       </h1>
     <p class="mt-3 text-sm text-tk-ink-2">
-      Every tier runs the same verified browser engine and can use every
-      currently available archetype. Operational limits and optional capabilities
-      differ — compare concurrency, profiles, storage, saved proxies, access,
-      and AI billing below. Cancel or downgrade anytime — your plan stays active
+      Every plan uses the same browser engine and every available device
+      profile. The differences are in limits and extras — compare sessions at
+      once, profiles, storage, saved proxies, access and AI billing below.
+      Cancel or downgrade anytime — your plan stays active
       through the end of the period you've already paid for. We don't
       provide automatic refunds for unused time. If you're an EU/UK
       consumer and want to cancel within 14 days of first subscribing,
@@ -127,10 +127,10 @@ function aiLabel(tier: AccountTier): string {
         <span data-field="plan-note-title">You're on the free plan</span>
       </h2>
       <p class="mt-2 text-sm text-tk-ink-2" data-field="plan-note-body">
-        Free includes 1 profile, 1 concurrent session, and sessions up
-        to 20 minutes each in the desktop GUI — no card required, and it
-        never expires. API access, VPN egress, and the AI agent require a
-        paid tier.
+        Free includes 1 profile, 1 session at a time, and sessions up
+        to 20 minutes each in the desktop app — no card needed, and it
+        never expires. API access, VPN routing and the AI agent need a
+        paid plan.
       </p>
     </div>
 
@@ -161,7 +161,7 @@ function aiLabel(tier: AccountTier): string {
             <p class="mt-1 text-2xl font-semibold text-tk-ink">{t.price}</p>
             <dl class="mt-4 space-y-1 text-sm text-tk-ink-2">
               <div class="flex justify-between">
-                <dt>Concurrent</dt>
+                <dt>Sessions at once</dt>
                 <dd class="font-mono">{TIER_CONCURRENT_SESSION_LIMITS[t.id].toString()}</dd>
               </div>
               <div class="flex justify-between">
@@ -247,7 +247,7 @@ function aiLabel(tier: AccountTier): string {
           </button>
         </div>
         <div data-crypto-modal-loading class="mt-6 text-sm text-tk-ink-3">
-          Minting payment address…
+          Creating payment address…
         </div>
         <div
           data-crypto-modal-error
@@ -489,10 +489,10 @@ function aiLabel(tier: AccountTier): string {
 
       function cryptoCheckoutUnavailableReason() {
         if (!cryptoWorkspaceSupported) {
-          return 'Switch the workspace picker to Self before starting a payment.';
+          return 'Switch "Acting as" back to Self before starting a payment.';
         }
         if (!cryptoIntentLocksAvailable) {
-          return 'Secure crypto checkout needs browser cross-tab locking support.';
+          return "Crypto checkout isn't supported in this browser. Try an up-to-date version of Chrome, Firefox, Safari or Edge.";
         }
         return billingUnavailableReason;
       }
@@ -671,7 +671,7 @@ function aiLabel(tier: AccountTier): string {
                   return Promise.reject(
                     window.driftstackResponseError(r, {
                       detail:
-                        'Card checkout is unavailable on this server. Use crypto checkout if it is offered below, or email billing@driftstack.dev.',
+                        "Card checkout isn't available right now. Pay with crypto if it's offered below, or email billing@driftstack.dev.",
                     }),
                   );
                 }
@@ -878,7 +878,11 @@ function aiLabel(tier: AccountTier): string {
 
       function withCryptoIntentLock(tier, work, signal) {
         if (!cryptoIntentLocksAvailable) {
-          return Promise.reject(new Error('Secure crypto checkout needs browser locking support.'));
+          return Promise.reject(
+            new Error(
+              "Crypto checkout isn't supported in this browser. Try an up-to-date version of Chrome, Firefox, Safari or Edge.",
+            ),
+          );
         }
         const scope = cryptoIntentScope(tier);
         if (!scope) {
@@ -940,16 +944,16 @@ function aiLabel(tier: AccountTier): string {
       function cryptoStatusMessage(status, orderId) {
         if (status === 'confirming') {
           return (
-            'Order ' +
+            'Your payment for order ' +
             orderId +
-            ' is confirming on-chain. Do not send another payment or start another order.'
+            " is being confirmed. Don't send another payment or start another order."
           );
         }
         if (status === 'partial') {
           return (
             'Order ' +
             orderId +
-            ' received a partial payment. Do not send again here; contact billing@driftstack.dev.'
+            " received a partial payment. Don't send more here — email billing@driftstack.dev."
           );
         }
         if (status === 'paid') {
@@ -1063,7 +1067,7 @@ function aiLabel(tier: AccountTier): string {
           hideCryptoPaymentAddress(
             'Order ' +
               entry.orderId +
-              ' reached its payment deadline. Reopen checkout to verify it before sending.',
+              ' has expired. Close this window and start again to get a fresh address before sending anything.',
           );
           return;
         }
@@ -1076,7 +1080,7 @@ function aiLabel(tier: AccountTier): string {
           hideCryptoPaymentAddress(
             'Order ' +
               entry.orderId +
-              ' reached its payment deadline. Reopen checkout to verify it before sending.',
+              ' has expired. Close this window and start again to get a fresh address before sending anything.',
           );
         }, Math.min(remaining, CRYPTO_MAX_TIMER_MS));
       }
@@ -1113,7 +1117,7 @@ function aiLabel(tier: AccountTier): string {
             hideCryptoPaymentAddress(
               window.driftstackRequestErrorMessage(
                 err,
-                'Order status could not be verified. Do not send payment until you reopen checkout.',
+                "We couldn't check the order status. Don't send anything — close this window and reopen checkout.",
               ),
             );
           }
@@ -1129,11 +1133,13 @@ function aiLabel(tier: AccountTier): string {
             return;
           }
           if (!cryptoWorkspaceSupported) {
-            showBanner('Switch the workspace picker to Self before starting a payment.');
+            showBanner('Switch "Acting as" back to Self before starting a payment.');
             return;
           }
           if (!cryptoIntentLocksAvailable) {
-            showBanner('Secure crypto checkout needs browser cross-tab locking support.');
+            showBanner(
+              "Crypto checkout isn't supported in this browser. Try an up-to-date version of Chrome, Firefox, Safari or Edge.",
+            );
             return;
           }
           if (!billingDataAvailable) {
@@ -1172,7 +1178,7 @@ function aiLabel(tier: AccountTier): string {
                 let idempotencyKey = readOrCreateCryptoIntentKey(tier);
                 if (!idempotencyKey) {
                   showCryptoError(
-                    'Secure crypto checkout needs browser site storage to prevent duplicate payment orders. Enable site storage and try again.',
+                    "Crypto checkout needs your browser's site storage turned on so we can prevent duplicate payment orders. Enable it and try again.",
                   );
                   return;
                 }
@@ -1209,7 +1215,7 @@ function aiLabel(tier: AccountTier): string {
                   const body = validateCryptoCheckoutBody(decoded, tier);
                   if (!body) {
                     showCryptoError(
-                      'Crypto checkout returned an incomplete response. Try again with the same payment intent.',
+                      'Something went wrong starting crypto checkout. Try again.',
                     );
                     return;
                   }
@@ -1220,7 +1226,7 @@ function aiLabel(tier: AccountTier): string {
                     const retired = compareRetireCryptoIntentKey(tier, idempotencyKey);
                     if (!retired) {
                       showCryptoError(
-                        'The completed payment intent could not be retired safely. Reload before starting another payment.',
+                        'Reload the page before starting another payment.',
                       );
                       return;
                     }
@@ -1228,7 +1234,7 @@ function aiLabel(tier: AccountTier): string {
                       idempotencyKey = readOrCreateCryptoIntentKey(tier);
                       if (!idempotencyKey) {
                         showCryptoError(
-                          'Secure crypto checkout needs browser site storage to start a new payment.',
+                          "Crypto checkout needs your browser's site storage turned on to start a new payment.",
                         );
                         return;
                       }
@@ -1248,8 +1254,8 @@ function aiLabel(tier: AccountTier): string {
                   if (body.provider === 'stub') {
                     cryptoOrderCache.delete(tier);
                     showCryptoError(
-                      'Crypto checkout is unavailable on this server. Use card checkout, or email ' +
-                        'billing@driftstack.dev with order_id ' +
+                      "Crypto checkout isn't available right now. Pay by card, or email " +
+                        'billing@driftstack.dev with order ID ' +
                         body.order_id +
                         ' for manual payment instructions.',
                     );
@@ -1260,7 +1266,7 @@ function aiLabel(tier: AccountTier): string {
                   if (!candidate) {
                     cryptoOrderCache.delete(tier);
                     hideCryptoPaymentAddress(
-                      'Crypto checkout returned malformed payment details. Do not send payment; retry with the same payment intent.',
+                      "We couldn't get valid payment details. Don't send anything yet — close this window and try again.",
                     );
                     return;
                   }
@@ -1283,7 +1289,7 @@ function aiLabel(tier: AccountTier): string {
                     hideCryptoPaymentAddress(
                       window.driftstackRequestErrorMessage(
                         err,
-                        'Order status could not be verified. Do not send payment; retry with the same payment intent.',
+                        "We couldn't confirm the order. Don't send anything yet — close this window and try again.",
                       ),
                     );
                     return;
@@ -1296,7 +1302,7 @@ function aiLabel(tier: AccountTier): string {
                     const retired = compareRetireCryptoIntentKey(tier, idempotencyKey);
                     if (!retired) {
                       showCryptoError(
-                        'The completed payment intent could not be retired safely. Reload before starting another payment.',
+                        'Reload the page before starting another payment.',
                       );
                       return;
                     }
@@ -1304,7 +1310,7 @@ function aiLabel(tier: AccountTier): string {
                       idempotencyKey = readOrCreateCryptoIntentKey(tier);
                       if (!idempotencyKey) {
                         showCryptoError(
-                          'Secure crypto checkout needs browser site storage to start a new payment.',
+                          "Crypto checkout needs your browser's site storage turned on to start a new payment.",
                         );
                         return;
                       }
@@ -1340,7 +1346,7 @@ function aiLabel(tier: AccountTier): string {
           } catch (err) {
             showCryptoError(
               err && err.name === 'AbortError'
-                ? 'Minting the payment address took too long. Check your connection and try again.'
+                ? 'Creating the payment address took too long. Check your connection and try again.'
                 : window.driftstackRequestErrorMessage(
                     err,
                     'Could not start crypto checkout. Try again.',
@@ -1410,10 +1416,10 @@ function aiLabel(tier: AccountTier): string {
       if (!cryptoWorkspaceSupported) {
         setBillingAuthority(
           false,
-          'Switch the workspace picker to Self before starting a payment.',
+          'Switch "Acting as" back to Self before starting a payment.',
         );
         showBanner(
-          'Plan purchases are self-workspace only. Switch the workspace picker to Self before starting a payment.',
+          'You can only buy a plan for your own account. Switch "Acting as" back to Self first.',
         );
         if (typeof window.dashboardHydrated === 'function') {
           window.dashboardHydrated();

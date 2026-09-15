@@ -34,12 +34,12 @@ const apiBaseUrl = resolveApiBaseUrl();
     class="mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
     data-page="oauth-callback"
   >
-    <p class="section-label">OAuth callback</p>
+    <p class="section-label">Google or GitHub sign-in</p>
     <h1 class="mt-5 text-4xl font-semibold tracking-tight text-tk-ink" style="letter-spacing: -0.02em;">
       Signing you in…
     </h1>
     <p class="mt-3 text-sm text-tk-ink-2" data-field="intro">
-      Completing the handshake with your identity provider. One moment.
+      Finishing sign-in with Google or GitHub. One moment.
     </p>
 
     <div class="auth-card mt-8">
@@ -54,8 +54,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div>
           <h2 class="text-base font-semibold text-tk-ink">Finish two-factor verification</h2>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Your identity provider is verified. Enter the code from your authenticator app.
-            This challenge expires in <span data-mfa-expiry class="font-mono">5 minutes</span>.
+            Your Google or GitHub sign-in is confirmed. Enter the code from your authenticator app
+            within <span data-mfa-expiry class="font-mono">5 minutes</span>.
           </p>
         </div>
         <div data-mfa-code-row>
@@ -104,7 +104,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <p class="mt-2 text-sm text-tk-ready-text">
           We sent a confirmation link to the email on your existing account
           to verify both accounts belong to you. Click the link in that email to finish linking your
-          <span data-merge-provider class="font-mono">IDP</span> account.
+          <span data-merge-provider class="font-mono">Google or GitHub</span> account.
           The link expires in <span data-merge-window class="font-mono">60 minutes</span>.
         </p>
       </div>
@@ -202,7 +202,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           window.location.href = redirectTo;
         } catch (_) {
           showBanner(
-            'Sign-in completed, but this browser could not persist the session. Do not reload this callback. Enable site storage, then start a fresh sign-in.',
+            "You signed in, but your browser couldn't save the session. Don't reload this page — allow site storage, then sign in again from the start.",
           );
         }
       }
@@ -217,7 +217,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         mfaOutcomeUnknown = false;
         banner.classList.add('hidden');
         if (intro) {
-          intro.textContent = 'Your identity provider is verified. Finish with your second factor.';
+          intro.textContent = 'Your Google or GitHub sign-in is confirmed. Enter your two-factor code to finish.';
         }
         if (body.challenge_expires_at && mfaExpiry) {
           const minutes = Math.max(
@@ -262,7 +262,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (!canPersistWebSession()) {
             showBanner(
-              'Enable browser site storage before completing this one-time MFA sign-in. The challenge has not been consumed, so you can retry after storage is available.',
+              'Your browser is blocking site storage, which sign-in needs. Allow it, then enter your code again.',
             );
             return;
           }
@@ -301,7 +301,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               const token = body && body.session && body.session.token;
               if (!token)
                 throw Object.assign(
-                  new Error('The server did not return a session. Sign in again.'),
+                  new Error('Sign-in could not be completed. Return to sign-in and try again.'),
                   { customerSafe: true },
                 );
               mfaChallengeToken = null;
@@ -318,7 +318,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                   if (link) link.textContent = 'Start a fresh sign-in';
                 }
                 showBanner(
-                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this code again. Start a fresh sign-in.',
+                  "The request took too long, so your code may already have been used. Don't enter it again — start a fresh sign-in.",
                 );
                 return;
               }
@@ -374,20 +374,20 @@ const apiBaseUrl = resolveApiBaseUrl();
       function oauthErrorMessage(code) {
         switch (code) {
           case 'idp_denied':
-            return 'The identity provider did not complete sign-in (access was denied or cancelled). Return to sign-in and try again.';
+            return "Google or GitHub didn't complete the sign-in (it was cancelled or denied). Return to sign-in and try again.";
           case 'state_invalid':
             return 'This sign-in link is not valid for this dashboard. Return to sign-in and start again.';
           case 'state_replayed':
             return 'This sign-in link has already been used or has expired. Return to sign-in and start again.';
           case 'missing_code':
-            return 'The identity provider returned without a sign-in code. Return to sign-in and try again.';
+            return "Google or GitHub didn't send back what we need to sign you in. Return to sign-in and try again.";
           case 'provider_unavailable':
             return 'This sign-in provider is not available right now. Sign in with your password, or try again later.';
           case 'exchange_failed':
           case 'userinfo_failed':
-            return 'The identity provider could not confirm your account. Return to sign-in and try again.';
+            return "Google or GitHub couldn't confirm your account. Return to sign-in and try again.";
           default:
-            return 'OAuth sign-in failed. Return to sign-in and try again.';
+            return 'Sign-in with Google or GitHub failed. Return to sign-in and try again.';
         }
       }
 
@@ -444,11 +444,11 @@ const apiBaseUrl = resolveApiBaseUrl();
         }
         if (body.outcome === 'existing-link-revoked') {
           showBanner(
-            'This identity-provider link was previously revoked. Sign in with your password, or click the IDP button on the login page to re-link.',
+            'This Google or GitHub link was removed earlier. Sign in with your password, or use the Google or GitHub button on the sign-in page to link it again.',
           );
           return;
         }
-        showBanner('Unexpected outcome: ' + (body.outcome || '<missing>'));
+        showBanner('Something went wrong. Return to sign-in and try again.');
       }
 
       // Failure path. On a timeout the one-time hand-off code may already be
@@ -457,11 +457,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (err && err.name === 'AbortError') {
           if (unknownRecovery) unknownRecovery.classList.remove('hidden');
           showBanner(
-            'OAuth sign-in outcome is unknown after the request timed out. The server may already have exchanged this one-time callback code, created a session whose credential did not reach this browser, or sent an account-link confirmation email. Do not reload or submit this callback URL again. Check your inbox first; if no confirmation email arrives, return to sign-in and start a fresh provider authorization.',
+            "The request took too long, so we're not sure what happened. Don't reload this page. Check your inbox for a confirmation email first; if nothing arrives, return to sign-in and try again.",
           );
           return;
         }
-        showBanner(window.driftstackRequestErrorMessage(err, 'OAuth callback failed.'));
+        showBanner(
+          window.driftstackRequestErrorMessage(
+            err,
+            'Sign-in with Google or GitHub failed. Return to sign-in and try again.',
+          ),
+        );
       }
 
       // ── v2: fragment hand-off ──────────────────────────────────────
@@ -478,7 +483,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         window.history.replaceState(window.history.state, '', window.location.pathname);
         if (!canPersistWebSession()) {
           showBanner(
-            'Enable browser site storage before completing this one-time provider sign-in. The hand-off code was not redeemed; start a fresh sign-in once storage is available.',
+            'Your browser is blocking site storage, which sign-in needs. Allow it, then start sign-in again.',
           );
           return;
         }
@@ -525,7 +530,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         showBanner('This link cannot complete a sign-in. Return to sign-in and try again.');
         return;
       }
-      showBanner('Missing callback parameters.');
+      showBanner(
+        'This page needs to be opened from a Google or GitHub sign-in. Return to sign-in and try again.',
+      );
     })();
   </script>
 </DashboardLayout>

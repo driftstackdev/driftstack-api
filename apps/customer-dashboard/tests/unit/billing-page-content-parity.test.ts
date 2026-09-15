@@ -60,7 +60,7 @@ describe('W360.B customer-dashboard /billing page content parity', () => {
   it('current-plan display pinned (free-tier upgrade CTA + subscribed tier)', () => {
     // Free accounts (the default, no subscription) see an upgrade CTA;
     // subscribed accounts see their tier. No trial-pack purchase UI.
-    expect(body).toMatch(/Upgrade to a paid tier to unlock concurrent caps/);
+    expect(body).toMatch(/Upgrade to a paid plan for higher limits and more features/);
     expect(body).toMatch(/No active subscription/);
     expect(body).toMatch(/href="\/select-tier\/"/);
     // The deleted endpoint must not reappear in any form.

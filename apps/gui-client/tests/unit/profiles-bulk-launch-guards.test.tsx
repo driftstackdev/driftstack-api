@@ -372,7 +372,7 @@ describe('ProfilesView bulk launch guards', () => {
 
     fireEvent.click(bulkLaunchButton());
     // The cap message surfaces up front; no confirm opens and no create fires.
-    expect(await screen.findByText(/Concurrent session cap reached/i)).toBeTruthy();
+    expect(await screen.findByText(/Session limit reached/i)).toBeTruthy();
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(agentCreate).not.toHaveBeenCalled();
   });
@@ -394,7 +394,7 @@ describe('ProfilesView bulk launch guards', () => {
       expect(launches.length).toBeGreaterThan(0);
       for (const btn of launches) {
         expect(btn).toBeDisabled();
-        expect(btn.getAttribute('title')).toMatch(/Concurrent session cap reached/i);
+        expect(btn.getAttribute('title')).toMatch(/Session limit reached/i);
       }
     });
   });

@@ -13,6 +13,9 @@ const body = readFileSync(
 describe('product-updates source-of-truth links', () => {
   it('names the changelog and API documentation as the two current references', () => {
     expect(body).toContain('released customer-facing changes');
-    expect(body).toContain('current HTTP contract');
+    // 2026-09-15 customer-copy pass: "the current HTTP contract" became
+    // "what the API does today" — same reference, no developer-speak.
+    expect(body).toContain('what the API does today');
+    expect(body).not.toContain('HTTP contract');
   });
 });

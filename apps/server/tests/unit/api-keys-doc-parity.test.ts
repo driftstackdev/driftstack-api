@@ -72,8 +72,11 @@ describe('W217.B api-keys doc parity', () => {
   it('documents the real tier, device-credential, rotation, and audit-field boundary', () => {
     expect(TIER_FEATURES.free.apiAccess).toBe(false);
     expect(doc).toContain('Customer-key format: <code>ds_live_&lt;random&gt;</code>');
-    expect(doc).toContain('restricted <code>ds_test_…</code> device credential');
-    expect(doc).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(doc).toContain('The Free plan signs in through the desktop app.');
+    expect(doc).toMatch(
+      /does not come with a\s+customer API key, an SDK key, or a sandbox credential/,
+    );
+    expect(doc).not.toMatch(/ds_test_|device credential|during request parsing/);
     expect(doc).toContain('A Free dashboard web session can list and revoke keys');
     expect(doc).toContain('create and rotate return an RFC 9457');
     expect(doc).toContain('<code>last_used_at</code>');

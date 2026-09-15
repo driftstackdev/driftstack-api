@@ -64,14 +64,14 @@ describe('W340.B /api-keys SCOPE_LABEL parity', () => {
     expect(page).toMatch(/SCOPE_LABEL\[s\]\s*\|\|\s*s/);
   });
 
-  it('header copy pins the "plaintext shown ONCE" posture (key-creation guarantee)', () => {
+  it('header copy pins the "full key shown only once" posture (key-creation guarantee)', () => {
     // This is the most important customer-safety claim on the
     // page; keep it explicit so a copy revamp can't tone it down.
-    expect(page).toMatch(/Plaintext is\s+shown ONCE on creation/);
-    expect(page).toMatch(/we can't recover it later/);
+    expect(page).toMatch(/The full key is\s+shown only once, when you create it/);
+    expect(page).toMatch(/we can't show it again/);
   });
 
-  it('header copy pins the "Revocation is immediate" guarantee', () => {
-    expect(page).toMatch(/Revocation is\s+immediate/);
+  it('header copy pins the "Revoking a key takes effect immediately" guarantee', () => {
+    expect(page).toMatch(/Revoking a key takes effect immediately/);
   });
 });

@@ -184,7 +184,7 @@ describe('RecipesView detail half', () => {
         { kind: 'interact', action: 'tap', selector: '#buy' },
         { kind: 'interact', action: 'type', selector: '#qty', value: '2' },
         { kind: 'interact', action: 'scroll' },
-        { kind: 'wait', condition: 'visible', selector: '#done', timeoutMs: 5000 },
+        { kind: 'wait', condition: 'selector_visible', selector: '#done', timeoutMs: 5000 },
         { kind: 'wait', condition: 'idle' },
         { kind: 'capture', capture: 'screenshot' },
         { kind: 'scroll', direction: 'down', amount_px: 400 },
@@ -200,20 +200,32 @@ describe('RecipesView detail half', () => {
     expect(await screen.findByText('https://shop.example/cart')).toBeInTheDocument();
     expect(screen.getByText('tap #buy')).toBeInTheDocument();
     expect(screen.getByText('type #qty = “2”')).toBeInTheDocument();
-    // 'scroll' appears as the interact summary AND as the scroll kind chip (x2),
-    // so an exact-text count is the assertion, not a single-match lookup.
-    expect(screen.getAllByText('scroll', { exact: true })).toHaveLength(3);
-    expect(screen.getByText('until visible #done (5000ms)')).toBeInTheDocument();
-    expect(screen.getByText('until idle')).toBeInTheDocument();
-    expect(screen.getByText('screenshot')).toBeInTheDocument();
+    // 'scroll' is the interact summary (once); the chips read 'Scroll' — the
+    // interact·scroll arm plus the two scroll-kind steps — so exact-text counts
+    // are the assertion, not a single-match lookup.
+    expect(screen.getAllByText('scroll', { exact: true })).toHaveLength(1);
+    expect(screen.getAllByText('Scroll', { exact: true })).toHaveLength(3);
+    // Wait and capture details read in plain words — no 'selector_visible' /
+    // 'dom_snapshot' wire tokens, and timeouts in seconds.
+    expect(screen.getByText('until #done is visible (up to 5 s)')).toBeInTheDocument();
+    expect(screen.getByText('until the page finishes loading')).toBeInTheDocument();
+    expect(screen.getByText('a picture of the screen')).toBeInTheDocument();
     expect(screen.getByText('down 400px')).toBeInTheDocument();
     expect(screen.getByText('up')).toBeInTheDocument();
-    expect(screen.getByText('pause 1200ms')).toBeInTheDocument();
+    expect(screen.getByText('pause for 1.2 s')).toBeInTheDocument();
     expect(screen.getByText('read ~80 words')).toBeInTheDocument();
     expect(screen.getByText('pause')).toBeInTheDocument();
-    // The kind chips: interact carries its action, everything else is bare.
-    expect(screen.getAllByText('interact · tap')).toHaveLength(1);
-    expect(screen.getAllByText('navigate')).toHaveLength(1);
+    // The kind chips read in plain words — an interact step is tagged by its
+    // action, and no raw discriminant ('interact', 'behavioral_pause') leaks.
+    expect(screen.getAllByText('Tap')).toHaveLength(1);
+    expect(screen.getAllByText('Type')).toHaveLength(1);
+    expect(screen.getAllByText('Go to')).toHaveLength(1);
+    expect(screen.getAllByText('Wait')).toHaveLength(2);
+    expect(screen.getAllByText('Screenshot')).toHaveLength(1);
+    expect(screen.getAllByText('Pause')).toHaveLength(3);
+    expect(
+      screen.queryByText(/interact · |behavioral_pause|selector_visible|dom_snapshot|^navigate$/),
+    ).toBeNull();
   });
 
   it('search filters on label and description, and says so when nothing matches', async () => {

@@ -115,7 +115,7 @@ describe('magic-link consume page', () => {
 
     expect(fetchCalls).toHaveLength(0);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /enable browser site storage.*has not been consumed.*retry/i,
+      /blocking site storage.*sign-in needs.*open the link again.*still works/i,
     );
     const form = window.document.querySelector('[data-form="magic-link"]') as HTMLFormElement;
     expect(form.classList.contains('hidden')).toBe(false);
@@ -159,7 +159,7 @@ describe('magic-link consume page', () => {
       window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /one-time sign-in link was accepted.*could not finish the session.*do not use this link again.*fresh sign-in link/i,
+      /sign-in link was accepted.*couldn't finish signing you in.*don't use this link again.*request a fresh one/i,
     );
     const form = window.document.querySelector('[data-form="magic-link"]') as HTMLFormElement;
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
@@ -177,7 +177,7 @@ describe('magic-link consume page', () => {
       window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /one-time sign-in link was accepted.*do not use this link again/i,
+      /sign-in link was accepted.*don't use this link again/i,
     );
   });
 
@@ -194,7 +194,7 @@ describe('magic-link consume page', () => {
       window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*consumed this one-time link.*credential did not reach this browser.*do not try this link again.*fresh sign-in link/i,
+      /took too long.*this link may already have been used.*don't try it again.*fresh sign-in link/i,
     );
     expect(window.document.querySelector('[data-unknown-recovery] a')?.getAttribute('href')).toBe(
       '/login/',
@@ -284,7 +284,7 @@ describe('magic-link consume page', () => {
     expect(mfaForm.classList.contains('hidden')).toBe(false);
     expect(code.value).toBe('123456');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+      /blocking site storage.*sign-in needs.*enter your code again/i,
     );
   });
 
@@ -313,7 +313,7 @@ describe('magic-link consume page', () => {
       window.document.querySelector('[data-unknown-recovery]')?.classList.contains('hidden'),
     ).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /two-factor verification was accepted.*do not submit this code again.*fresh sign-in link/i,
+      /your code was accepted.*couldn't finish signing you in.*don't enter that code again.*fresh sign-in link/i,
     );
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -342,7 +342,7 @@ describe('magic-link consume page', () => {
 
     expect(mfaForm.classList.contains('hidden')).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /MFA sign-in outcome is unknown.*one-time challenge.*do not submit this code again.*fresh sign-in link/i,
+      /took too long.*your code may already have been used.*don't enter it again.*fresh sign-in link/i,
     );
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();

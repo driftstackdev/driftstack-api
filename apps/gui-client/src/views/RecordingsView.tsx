@@ -185,8 +185,7 @@ export function RecordingsView({ onOpen }: RecordingsViewProps): JSX.Element {
               <span className="mono text-base font-medium text-ink-muted">{list.length}</span>
             </h2>
             <p className="mt-1 text-xs text-ink-secondary">
-              Recordings persist on this machine (app data); frames load on demand when you open
-              one.
+              Recordings are saved on this computer and load when you open them.
             </p>
           </div>
           {list.length > 0 && (
@@ -491,7 +490,7 @@ function Thumb({
       ) : (
         <div className="flex flex-col items-center gap-1.5 text-ink-muted">
           <FilmGlyph size={large ? 26 : 22} />
-          <span className="mono text-2xs">{r.hydrated ? 'frames on disk' : 'no frames'}</span>
+          <span className="mono text-2xs">{r.hydrated ? 'saved' : 'no frames'}</span>
         </div>
       )}
       <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 mono text-2xs text-white">
@@ -519,7 +518,7 @@ function Empty({ loading }: { loading: boolean }): JSX.Element {
       <EmptyState
         icon={<FilmGlyph size={22} />}
         title="No recordings yet"
-        description="Recordings capture every frame of a live session for replay + audit. Open a live session, hit Record, and frames stream into memory while the session runs — they persist on this machine and survive an app restart."
+        description="Recordings capture a live session so you can replay it later. Open a live session and press Record. Recordings are saved on this computer."
       />
     </div>
   );

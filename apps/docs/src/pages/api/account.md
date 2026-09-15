@@ -21,8 +21,8 @@ folders and tags stay with the profiles they organize.
 
 Requires the broad `read` scope; `account_owner` also satisfies this
 gate. Zero-scope, write-only, and resource-granular keys cannot read
-the account's login identity, team memberships, MFA flag, or presigned
-avatar URL.
+the account's login identity, team memberships, MFA flag, or avatar
+URL.
 
 ```ts
 const me = await client.account.me();
@@ -39,8 +39,8 @@ Returns the account's full self-visible state:
 | `status`                    | enum           | `active` / `suspended` / `deleted`.                                                                                                                                                                                    |
 | `timezone`                  | string \| null | IANA name (`Europe/Amsterdam`); null means UTC fallback for client renders.                                                                                                                                            |
 | `slug`                      | string \| null | — readable handle (lowercase a-z + 0-9 + hyphen, 3-32 chars). Null when unset.                                                                                                                                         |
-| `region`                    | enum \| null   | — stated infrastructure-region preference (`us` / `eu` / `apac`). Informational for v1; routing is governed by [DPA Annex 3](https://driftstack.io/legal/dpa/#annex-3--sub-processors).                                |
-| `avatar_url`                | string \| null | Selected image URL: the customer's short-lived (1h) presigned R2 upload, otherwise the linked-sign-in provider fallback. Null when neither source is available.                                                        |
+| `region`                    | enum \| null   | — your stated region preference (`us` / `eu` / `apac`). Informational only; where your data is processed is governed by [DPA Annex 3](https://driftstack.io/legal/dpa/#annex-3--sub-processors).                       |
+| `avatar_url`                | string \| null | Selected image URL: a short-lived (1 hour) link to your uploaded image, otherwise the image from your linked sign-in provider. Null when neither source is available.                                                  |
 | `avatar_source`             | enum           | `user` for a removable customer upload, `idp` for the read-only linked-sign-in fallback, or `none`. Use this field—not the URL host—to decide whether to offer Remove.                                                 |
 | `mfa_enrolled`              | boolean        | True once TOTP enrolment is verified.                                                                                                                                                                                  |
 | `concurrent_session_cap`    | number         | Per-tier active-session ceiling.                                                                                                                                                                                       |
@@ -77,11 +77,11 @@ Returns the same shape as `GET /v1/account/me` with the new values applied.
 
 `POST /v1/account/me/avatar` —
 
-Inline base64 body. The image is stored on Cloudflare R2 in the
-public-readable bucket (its storage network can replicate outside the
-EU). The response includes a presigned read URL, which is a stable
-time-limited link rather than an access control — anyone holding the
-object URL can fetch it. Treat an avatar as public content.
+Inline base64 body. The image is stored with Cloudflare R2 in a
+publicly readable bucket (its storage network can replicate outside the
+EU). The response includes a time-limited read link, which is not an
+access control — anyone holding the link can fetch the image. Treat an
+avatar as public content.
 Field shape:
 
 ```json
@@ -96,10 +96,9 @@ Field shape:
 - Returns `{ avatar_url, content_type, bytes }`.
 
 `DELETE /v1/account/me/avatar` clears the avatar pointer on your
-account, so the image stops being served from `/v1/account/me`. The R2
-object itself is left in place and there is no sweeper collecting
-orphaned keys today, so a previously-shared object URL keeps resolving.
-Do not treat the delete as an erasure of the image.
+account, so the image stops being served from `/v1/account/me`. The
+image file itself is not deleted, so a previously shared link keeps
+working. Do not treat the delete as an erasure of the image.
 
 ## Active sign-ins
 
@@ -131,7 +130,7 @@ for _, s := range list.Data {
 
 The entry with `current: true` is the calling session itself.
 IP addresses are deliberately omitted; user-agents are reduced to
-OS + browser bucket per the anonymity. Revoke individual
+OS + browser. Revoke individual
 sessions with `revokeWebSession(id)` / `revoke_web_session(id)` /
 `RevokeWebSession(ctx, id)`. Revoke every other session in one
 call with `revokeAllOtherWebSessions()` / equivalent.
@@ -186,8 +185,8 @@ for (const bucket of cfg.buckets) {
 }
 ```
 
-`source` is `tier_default` for unbounded tier-derived caps or
-`override` when staff has applied a per-account adjustment;
+`source` is `tier_default` for your tier's normal caps or
+`override` when support has applied a per-account adjustment;
 `override_expires_at` is non-null in the override case.
 
 ## Email preferences
@@ -199,9 +198,8 @@ const prefs = await client.emailPreferences.list();
 await client.emailPreferences.optOut('billing-renewal-reminder');
 ```
 
-Critical emails (verification, password-reset, billing-failure)
-are not opt-outable —
-they're absent from the `OptOutableEmailEvent` enum on purpose.
+Critical emails (verification, password reset, billing failure) are
+always sent and cannot be turned off.
 
 ## Audit log
 

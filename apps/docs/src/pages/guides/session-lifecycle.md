@@ -6,21 +6,21 @@ description: The full lifecycle of a Driftstack session — create, drive, captu
 
 # Session lifecycle
 
-A **session** is one running iPhone Safari instance on the modified WebKit fork. Every session occupies one of your account's concurrent slots from creation until destruction; understanding the lifecycle is the difference between using your tier's capacity well and burning slots on stuck sessions.
+A **session** is one running iPhone Safari browser. Every session occupies one of your account's concurrent slots from creation until destruction; understanding the lifecycle is the difference between using your tier's capacity well and burning slots on stuck sessions.
 
 ## States
 
-The wire-level `session.status` enum has five values: `creating` / `ready` / `busy` / `destroyed` / `errored`.
+The `session.status` field has five values: `creating` / `ready` / `busy` / `destroyed` / `errored`.
 
 ```
               create
                 │
                 ▼
-            ┌──────────┐  (transient — server resolves        ┌───────┐
+            ┌──────────┐  (transient — the browser            ┌───────┐
             │ creating │───────────────────────────────────▶  │ ready │
-            └──────────┘   driver allocation + handshake)     └───────┘
+            └──────────┘   is being started)                  └───────┘
                                                                   │  ▲
-                                              navigate / interact │  │ ack / settle
+                                              navigate / interact │  │ call finishes
                                               / wait / capture    │  │
                                                                   ▼  │
                                                               ┌──────┐
@@ -33,10 +33,10 @@ The wire-level `session.status` enum has five values: `creating` / `ready` / `bu
                                                             ┌───────────┐
                                                             │ destroyed │
                                                             └───────────┘
-                                                            (or `errored` on driver failure)
+                                                            (or `errored` if the browser fails)
 ```
 
-The SDK's `sessions.create()` call returns only after the server-side transition reaches `ready` (the driver is allocated and the harness is responding), but a concurrent resource read or list can observe the durable `creating` reservation. Every direct driver operation atomically claims `ready` → `busy`; while the session is `creating` or `busy`, another operation returns `409 Conflict` without a second driver dispatch. Success settles `busy` → `ready`. A driver failure elects terminal `errored`; an explicit destroy can instead win terminal `destroyed`, and the losing operation returns `410 Gone` without stale success/failure events.
+`sessions.create()` returns only once the session is `ready`, although a list or read made at the same time can still show it as `creating`. Each driving call (navigate, interact, wait, capture) moves the session from `ready` to `busy`; while it is `creating` or `busy`, any other call returns `409 Conflict`. When the call succeeds the session goes back to `ready`. If the browser fails, the session becomes `errored`; if you destroy the session mid-call, it becomes `destroyed` and the interrupted call returns `410 Gone`.
 
 ## Concurrency
 
@@ -92,11 +92,11 @@ console.log(result.final_url, result.status, result.duration_ms);
 
 `wait_until` controls when the call returns. `load` returns on the `load` event; `domcontentloaded` is faster but earlier; `networkidle` waits until network is quiet for a brief window — best for SPAs that load content after the initial render.
 
-**`POST /v1/sessions/:id/interact`** — synthesise touch / scroll / type input on the iPhone Safari runtime. Subject to the realistic-input behavioural-simulation layer that ships with every session.
+**`POST /v1/sessions/:id/interact`** — tap, scroll, type, or press keys on the page.
 
 **`POST /v1/sessions/:id/wait`** — block until a selector appears, a URL pattern is reached, or a timeout elapses.
 
-**`GET /v1/sessions/:id/state`** — live page introspection: current `url`, `title`, cookies + `local_storage`, and a `captured_at` timestamp. It is itself a claimed driver operation, so poll it at low frequency only while the resource is `ready`; use `GET /v1/sessions/:id` or the list endpoint to observe persisted `creating` / `busy` metadata without competing for the driver owner. When acting as a team owner, state requires the `admin` role because it exposes browser secrets and contacts the live driver; a `member` remains able to read list/detail metadata but receives `403` for state before the session is claimed. Self-account `read:sessions` access is unchanged.
+**`GET /v1/sessions/:id/state`** — live page introspection: current `url`, `title`, cookies + `local_storage`, and a `captured_at` timestamp. This call runs in the live browser session and marks it `busy` while it captures, so poll it sparingly and only while the session is `ready` (a call made while the session is `busy` returns `409`); to check `creating` / `busy` without tying up the session, use `GET /v1/sessions/:id` or the list endpoint instead. When acting as a team owner, state requires the `admin` role because it returns browser secrets such as cookies and local storage; a `member` can still read list/detail metadata but gets `403` for state, and the session is left untouched. Self-account `read:sessions` access is unchanged.
 
 ## Capture
 
@@ -133,7 +133,7 @@ Python and Go SDK examples follow the same pattern (`with` block in Python sync;
 
 ## Auto-destroy: the free-tier duration cap
 
-Paid-tier sessions are never auto-destroyed — a forgotten session holds its concurrent slot until you destroy it, which is why the `try / finally` pattern above matters. On the free tier, a session is capped at 20 minutes of wall-clock time; when the cap is reached the runtime destroys it for you. There is no idle timeout on any tier.
+Paid-tier sessions are never auto-destroyed — a forgotten session holds its concurrent slot until you destroy it, which is why the `try / finally` pattern above matters. On the free tier, a session is capped at 20 minutes of wall-clock time; when the cap is reached Driftstack destroys it for you. There is no idle timeout on any tier.
 
 ## Error shapes
 
@@ -142,10 +142,10 @@ Every error returned by the session endpoints conforms to the [problem+json shap
 - `429 Too Many Requests` (`https://errors.driftstack.dev/rate-limited`) — global / per-bucket rate limit exceeded. `Retry-After` carries the wait time.
 - `429 Too Many Requests` (`https://errors.driftstack.dev/concurrency-limit`) — concurrent-session cap reached. Wait for an active session to finish.
 - `429 Too Many Requests` (`https://errors.driftstack.dev/tier-limit`) — a tier-derived cap (e.g. profile count) is reached.
-- `404 Not Found` — session ID doesn't exist (or already destroyed and TTL-evicted).
-- `409 Conflict` — a direct driver operation found the session `creating`, or another operation already owns `busy`; retry only after the resource reports `ready`.
+- `404 Not Found` — session ID doesn't exist (or was destroyed and has since been cleaned up).
+- `409 Conflict` — the session is still `creating`, or another operation is already running (`busy`); retry once it reports `ready`.
 - `410 Gone` (`https://errors.driftstack.dev/session-destroyed`) — the session is `destroyed` or `errored`, or this operation lost a race to destroy; create a fresh session.
-- `502 Bad Gateway` / `503 Service Unavailable` — driver-side error (`driver-error` / `driver-not-integrated` / `feature-unavailable`).
+- `502 Bad Gateway` / `503 Service Unavailable` — the browser session hit an error, or the requested feature is not available (`driver-error` / `driver-not-integrated` / `feature-unavailable`).
 
 The SDKs map these to typed error classes — catch `RateLimitError`, `ConcurrencyLimitError`, the tier-limit class (`TierLimitError` in TypeScript, `QuotaExceededError` in Python and Go), `SessionDestroyedError`, `DriverError`, etc. The full mapping lives at [/reference/errors](/reference/errors/).
 
@@ -154,18 +154,18 @@ The SDKs map these to typed error classes — catch `RateLimitError`, `Concurren
 If you've configured a webhook endpoint, terminal session events fire on the bus:
 
 - `session.completed` — one per logical destroy of a non-terminal session: a customer-driven destroy, the free-tier duration cap, or an account suspension reclaiming its live sessions. The last two also send `auto_destroyed: true` and a `reason`; branch on `auto_destroyed` if you attribute completions.
-- `session.failed` — session terminated due to a runtime / driver error.
-- `session.egress_capability_changed` — the control plane ingested an egress capability report from the session harness. It fires on **every** report, not only when the state changed: there is no change detection on the path, so identical consecutive reports each emit an event with a fresh `event_id`. Treat it as "here is the current capability state" and compare against what you last stored, rather than as a transition signal. Note also that `warnings` carries streaming faults (`streaming_blank`, `streaming_failed`) alongside egress ones like `dead_proxy`, so an egress-named event can fire when only the video stream degraded.
-- `session.challenge_detected` — the in-session harness flagged a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
-- `session.profile_save_failed` — a profile-backed session did not replace the stored profile at teardown. Failure reasons are terminal and the next restore will be stale; `superseded` is benign and means a newer saved profile won the conditional write.
+- `session.failed` — the session ended because of an unrecoverable error (for example, a timeout or a crash during a page action). Create a new session to continue.
+- `session.egress_capability_changed` — the session reported its proxy capabilities. It fires on **every** report, not only when the state changed: there is no change detection, so identical consecutive reports each emit an event with a fresh `event_id`. Treat it as "here is the current capability state" and compare against what you last stored, rather than as a transition signal. Note also that `warnings` carries video-stream faults (`streaming_blank`, `streaming_failed`) alongside proxy ones like `dead_proxy`, so this event can fire when only the video stream degraded.
+- `session.challenge_detected` — the session detected a bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / …). The session auto-pauses; resolve the challenge (e.g. in the live view) and it resumes.
+- `session.profile_save_failed` — a profile-backed session did not replace the stored profile at teardown. Failure reasons are terminal and the next restore will be stale; `superseded` is harmless and means a newer save of the same profile landed first.
 
-Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today. Read the session resource or list endpoint for persisted lifecycle status; do not poll `sessions.getState` while another driver operation owns `busy`. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
+Intermediate state transitions (e.g. a hypothetical `session.created`) are not on the bus today. Read the session resource or list endpoint for persisted lifecycle status; do not poll `sessions.getState` while the session is `busy` with another operation. See the [webhook events catalog](/webhooks/events/) for full payload shapes and signature verification.
 
 ## Notes
 
 - A destroyed session requires a fresh `sessions.create()`; sessions are not resumable after destroy. Plan your workflow to recreate cleanly when a long pause is expected.
-- A `busy` row with an outcome-unknown owner is not automatically reset after a server crash. Destroy it and create a fresh session; automatic reclaim would risk replaying work that may already have changed the page.
-- Session-level resource quotas (per-session bandwidth, memory) are not customer-facing today. Fleet-level enforcement runs internally; tier concurrent caps are the only customer-visible meter.
+- A session left in `busy` after a server crash is not reset automatically: the operation that was running may already have changed the page, and repeating it could duplicate that work. Destroy the session and create a fresh one.
+- There are no per-session bandwidth or memory limits for you to manage today. The limit that governs sessions is your tier's concurrent-session cap (rate limits and profile caps are separate — see Error shapes above).
 
 ## Next steps
 

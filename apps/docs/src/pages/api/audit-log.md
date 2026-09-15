@@ -60,7 +60,7 @@ The `actor_type` enum:
 - `customer` — a human action through the dashboard or an API call
   with a customer-issued bearer.
 - `system` — an automated event (Stripe-driven tier changes, email
-  verification, scheduled-job side-effects).
+  verification, scheduled jobs).
 - `staff` — a Driftstack support-team action against the account
   (rare; recorded for transparency).
 
@@ -76,7 +76,7 @@ correlation. Self-action audit entries have
 `actor_account_id == account_id`.
 
 `actor_key_id` is `key_<key-uuid>` for API-key calls and `null` for
-web-session calls (the dashboard audit emitters record no key id). It
+web-session calls (dashboard actions record no key id). It
 is also `null` for `system` and `staff` events.
 
 `ip_address` and `user_agent` (top-level fields on the entry) are
@@ -99,18 +99,14 @@ per-row and independent of the reader: an owner self-reading their
 OWN log still gets `null` on a cross-account-caused row, exactly
 as a team member reading the owner's log does.
 
-**Caveat:** the auth-flow audit events
-(`account.email_verified`, `account.login`, `account.logout`,
-`account.password_changed`) currently store `issued_from_ip` +
-`user_agent` inside `payload` in addition to (not instead of) the
-row-level columns above. On a self-caused row those payload fields
-are visible to the owner (same Article-15 rationale). On a
-cross-account-caused OR cross-account-READ row (a team member
-using `X-Driftstack-Account` to view the owner's log) the server
-scrubs `issued_from_ip` / `source_ip` / `ip_address` / `user_agent`
-/ `issued_user_agent` out of `payload` in addition to nulling the
-top-level `ip_address` / `user_agent` fields — no data backfill
-needed since the scrub runs at read/export serialization time.
+**Note:** the account security events (`account.email_verified`,
+`account.login`, `account.logout`, `account.password_changed`) also
+record the caller's IP address and user agent inside `payload`, as
+`issued_from_ip` and `user_agent`. On rows for actions you performed
+yourself, these are visible to you. On a cross-account-caused row, or
+when a team member reads the owner's log via `X-Driftstack-Account`,
+they are removed from `payload` as well as from the top-level
+`ip_address` / `user_agent` fields.
 
 ## Action catalog
 
@@ -127,9 +123,9 @@ needed since the scrub runs at read/export serialization time.
 | `api_key.minted`                      | customer           | POST /v1/api-keys                                                                                                                                                                                                                                                                                                       |
 | `api_key.rotated`                     | customer           | POST /v1/api-keys/:id/rotate . 24h grace                                                                                                                                                                                                                                                                                |
 | `api_key.revoked`                     | customer           | DELETE /v1/api-keys/:id                                                                                                                                                                                                                                                                                                 |
-| `session.created`                     | customer           | New session row inserted                                                                                                                                                                                                                                                                                                |
+| `session.created`                     | customer           | New session created                                                                                                                                                                                                                                                                                                     |
 | `session.destroyed`                   | customer or system | Session reached `destroyed`                                                                                                                                                                                                                                                                                             |
-| `profile.created`                     | customer           | POST /v1/profiles, /clone (— `payload.cloned_from: "profile_<uuid>"`), or /v1/profile-snapshots/:id/restore (— `payload.restored_from_snapshot: "psnap_<uuid>"`). Pre-existing format asymmetry: `cloned_from` uses an internal `profile_` prefix; `restored_from_snapshot` uses the public `psnap_` prefix.            |
+| `profile.created`                     | customer           | POST /v1/profiles, /clone (— `payload.cloned_from: "profile_<uuid>"`), or /v1/profile-snapshots/:id/restore (— `payload.restored_from_snapshot: "psnap_<uuid>"`). Note the format difference: `cloned_from` uses a `profile_` prefix; `restored_from_snapshot` uses the public `psnap_` prefix.                         |
 | `profile.deleted`                     | customer           | DELETE /v1/profiles/:id (soft delete — recoverable from the recycle bin)                                                                                                                                                                                                                                                |
 | `recipe.created`                      | customer           | POST /v1/recipes — `payload.label`, `payload.agent_session_id`, `payload.intent_count`. `actor_key_id` names the credential that saved it.                                                                                                                                                                              |
 | `recipe.deleted`                      | customer           | DELETE /v1/recipes/:id — `payload.label` carries the deleted recipe's name, because the row is the only trace that survives the delete. `actor_key_id` names the credential that removed it.                                                                                                                            |
@@ -148,22 +144,22 @@ needed since the scrub runs at read/export serialization time.
 | `team.member_removed`                 | customer           | Owner removed a member. Payload: `{ revoked_api_key_ids }` — the API keys that member had minted on your account, revoked as part of the removal. Empty when they had minted none, and keys created before this was recorded are not listed because they carry no creator.                                              |
 | `team.updated`                        | customer           | Owner renamed a team. Payload: `{ previous_name, name }` — the old name is carried because an entry saying only "renamed" cannot answer the one question anybody asks of it. `previous_name` is null if the team's prior name could not be read.                                                                        |
 | `admin.refund_recorded`               | staff              | Support recorded a Stripe refund post-hoc                                                                                                                                                                                                                                                                               |
-| `admin.support_note`                  | staff              | Free-form support-operator note attached to the account                                                                                                                                                                                                                                                                 |
-| `agent.decompose.claude`              | system             | Per-turn AI agent decompose() call against Claude. Payload: result-kind discriminant + token counts + cost cents (operator-only surface; the customer sees the plan/clarify/refuse in their dashboard chat UI).                                                                                                         |
-| `agent.decompose.deterministic`       | system             | Per-turn AI agent decompose() call against the deterministic decomposer. Payload: result-kind discriminant (no token / cost counters — deterministic is free).                                                                                                                                                          |
-| `agent_session.pair_mode.takeover`    | customer           | POST /v1/agent-sessions/:id/takeover — pair-mode state-machine transition out of `ai-driving`. Payload: `{ from, to, client_id }`.                                                                                                                                                                                      |
-| `agent_session.pair_mode.handback`    | customer           | POST /v1/agent-sessions/:id/handback — pair-mode state-machine transition out of `human-driving`. Payload: `{ from, to }`.                                                                                                                                                                                              |
-| `agent_session.pair_mode.timeout`     | system             | Heartbeat timeout sweep promoted the pair-mode session back to `ai-driving` after 30s of no client heartbeat. Payload: `{ from, to }`.                                                                                                                                                                                  |
-| `agent_session.mode.changed`          | customer           | POST /v1/agent-sessions/:id/mode — operational-mode switch (`manual` ↔ `ai` ↔ `pair`). Payload: `{ from, to }` where both are mode strings. Useful for incident investigation when a session unexpectedly switched modes mid-run.                                                                                       |
-| `agent_session.created`               | customer           | POST /v1/agent-sessions — agent-session minted on the AI layer. Distinct from `session.created` which audits the underlying driver session. Payload: `{ agent_session_id, initial_mode }`.                                                                                                                              |
-| `agent_session.destroyed`             | customer           | DELETE /v1/agent-sessions/:id — customer-initiated close on the agent-layer. Distinct from `session.destroyed` which audits the underlying driver session. Payload: `{ agent_session_id, reason }` where `reason` is the closeWithReason discriminator (`'customer-closed'` on this route).                             |
-| `account.byok_anthropic_key_set`      | customer           | PUT /v1/account/me/byok-anthropic-key — customer set or rotated their BYOK Anthropic key. Payload: `{ outcome }` (bounded label; NO key prefix per Q2 2026-05-17 verdict).                                                                                                                                              |
+| `admin.support_note`                  | staff              | Free-form support note attached to the account                                                                                                                                                                                                                                                                          |
+| `agent.decompose.claude`              | system             | An AI agent turn was planned by Claude. Payload: result kind + token counts + cost cents (the customer sees the resulting plan / clarify / refuse in the dashboard chat).                                                                                                                                               |
+| `agent.decompose.deterministic`       | system             | An AI agent turn was planned without a model call. Payload: result kind (no token / cost counters — these turns are free).                                                                                                                                                                                              |
+| `agent_session.pair_mode.takeover`    | customer           | POST /v1/agent-sessions/:id/takeover — pair-mode transition out of `ai-driving`. Payload: `{ from, to, client_id }`.                                                                                                                                                                                                    |
+| `agent_session.pair_mode.handback`    | customer           | POST /v1/agent-sessions/:id/handback — pair-mode transition out of `human-driving`. Payload: `{ from, to }`.                                                                                                                                                                                                            |
+| `agent_session.pair_mode.timeout`     | system             | The pair-mode session returned to `ai-driving` automatically after 30s without a client heartbeat. Payload: `{ from, to }`.                                                                                                                                                                                             |
+| `agent_session.mode.changed`          | customer           | POST /v1/agent-sessions/:id/mode — mode switch (`manual` ↔ `ai` ↔ `pair`). Payload: `{ from, to }` where both are mode strings. Useful for incident investigation when a session unexpectedly switched modes mid-run.                                                                                                   |
+| `agent_session.created`               | customer           | POST /v1/agent-sessions — an agent session was created. Distinct from `session.created`, which records the underlying browser session. Payload: `{ agent_session_id, initial_mode }`.                                                                                                                                   |
+| `agent_session.destroyed`             | customer           | DELETE /v1/agent-sessions/:id — the customer closed the agent session. Distinct from `session.destroyed`, which records the underlying browser session. Payload: `{ agent_session_id, reason }` (`'customer-closed'` on this route).                                                                                    |
+| `account.byok_anthropic_key_set`      | customer           | PUT /v1/account/me/byok-anthropic-key — customer set or rotated their BYOK Anthropic key. Payload: `{ outcome }` — never the key or its prefix.                                                                                                                                                                         |
 | `account.byok_anthropic_key_cleared`  | customer           | DELETE /v1/account/me/byok-anthropic-key — customer cleared their BYOK Anthropic key. Payload: `{ outcome }`.                                                                                                                                                                                                           |
-| `account.byok_anthropic_key_tested`   | customer           | POST /v1/account/me/byok-anthropic-key/test — connection test. Payload: `{ outcome }` ∈ {`ok`, `invalid`, `quota_exceeded`, `unknown`} (`not_wired` can appear on historical pre-live-tester rows).                                                                                                                     |
-| `proxy.created`                       | customer           | Saved proxy created (egress config) via `POST /v1/account/me/proxies`. Payload: `{ proxy_id, label, scheme }` where `scheme` ∈ {`socks5`, `http`, `openvpn`, `wireguard`}. NEVER carries secret material (password / private key / .ovpn config).                                                                       |
+| `account.byok_anthropic_key_tested`   | customer           | POST /v1/account/me/byok-anthropic-key/test — connection test. Payload: `{ outcome }` ∈ {`ok`, `invalid`, `quota_exceeded`, `unknown`} (older rows may carry `not_wired`).                                                                                                                                              |
+| `proxy.created`                       | customer           | Saved proxy created via `POST /v1/account/me/proxies`. Payload: `{ proxy_id, label, scheme }` where `scheme` ∈ {`socks5`, `http`, `openvpn`, `wireguard`}. NEVER carries secret material (password / private key / .ovpn config).                                                                                       |
 | `proxy.updated`                       | customer           | Saved proxy updated via `PUT /v1/account/me/proxies/:id`. Payload: `{ proxy_id, label, scheme }`. Secret material is never logged.                                                                                                                                                                                      |
 | `proxy.deleted`                       | customer           | Saved proxy deleted via `DELETE /v1/account/me/proxies/:id`. Payload: `{ proxy_id, label, scheme }`.                                                                                                                                                                                                                    |
-| `account.bundled_llm_consent_changed` | customer           | Customer toggled bundled-LLM consent (switches the billing rail between BYOK-required and deployment-fallback). Payload: `{ from, to }`.                                                                                                                                                                                |
+| `account.bundled_llm_consent_changed` | customer           | Customer toggled bundled-LLM consent (whether agent sessions may use Driftstack's bundled model when no BYOK key is set). Payload: `{ from, to }`.                                                                                                                                                                      |
 | `account.email_preferences_changed`   | customer           | PUT /v1/account/email-preferences — customer toggled the opt-in/out flag for a transactional email category. Payload: `{ event_type, opted_in }`.                                                                                                                                                                       |
 
 ## Filter examples
@@ -240,8 +236,8 @@ the following shapes:
 Other action types carry minimal payloads (often just one or two
 contextual fields — e.g. `account.logout` carries the web
 `session_id`; `account.password_changed` carries
-`via: "password_reset"` plus the network-identity fields noted in
-the caveat above). Consumers should default-handle unknown payload
+`via: "password_reset"` plus the IP address and user agent noted in
+the note above). Consumers should default-handle unknown payload
 shapes gracefully; new fields are additive.
 
 ## Export

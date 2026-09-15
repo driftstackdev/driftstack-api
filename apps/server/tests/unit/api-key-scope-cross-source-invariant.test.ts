@@ -161,9 +161,9 @@ describe('W861 ApiKeyScope cross-source invariant', () => {
     }
   });
 
-  it("CRITICAL apps/customer-dashboard/src/pages/api-keys.astro pins the 'granular do not satisfy broad' framing. The dashboard documents the V-481 contract — drift would mislead customer-facing copy.", () => {
+  it("CRITICAL apps/customer-dashboard/src/pages/api-keys.astro pins the 'a granular key can only do exactly what you tick' framing. The dashboard documents the V-481 contract in customer words — drift would mislead customer-facing copy.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/api-keys.astro'));
-    expect(p).toMatch(/Granular scopes do not satisfy broad checks/);
+    expect(p).toMatch(/A granular key can only do exactly what you tick/);
   });
 
   // ─── 6 + 13 = 19 cardinality ─────────────────────────────────

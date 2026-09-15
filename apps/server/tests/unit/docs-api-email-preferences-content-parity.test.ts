@@ -65,12 +65,12 @@ describe('docs/api/email-preferences content parity', () => {
     expect(body).toMatch(/- `signup-verification` — required to activate the account\./);
     expect(body).toMatch(/- `password-reset` — security-critical\./);
     expect(body).toMatch(
-      /- `billing-failure` — fires on a failed subscription charge\s*\(Stripe `invoice\.payment_failed`\); tells you when the automatic\s*retry happens, or that none is scheduled\./,
+      /- `billing-failure` — fires on a failed subscription charge; tells\s*you when the automatic retry happens, or that none is scheduled\./,
     );
     expect(body).toMatch(
       /- `status-incident-created` \/ `status-incident-resolved` — only\s*to customers explicitly subscribed via `\/status`/,
     );
-    expect(body).toMatch(/- Security notices under GDPR Art\. 34/);
+    expect(body).toMatch(/- Security notices required under GDPR Art\. 34\./);
   });
 
   it("Team RBAC member-read + admin-write framing pinned: 'A team member with a valid membership can read the OWNER's preferences by passing X-Driftstack-Account: acc_<owner-uuid>. Both member and admin roles are allowed for the read.' + '403 forbidden — set on an OWNER's preferences via X-Driftstack-Account requires admin role on that team; member is read-only on writes.' — pinned so the X-Driftstack-Account team-member-read + admin-only-write contract all stay documented", () => {
@@ -82,11 +82,12 @@ describe('docs/api/email-preferences content parity', () => {
     );
   });
 
-  it("Source-of-truth pointer + dashboard-immediate-toggle framing pinned: 'apps/server/src/services/email.ts:TEMPLATES' + 'OptOutableEmailEventSchema' + 'packages/api-types/src/accounts.ts' + 'apps/server/src/routes/email-preferences.ts' + 'apps/server/src/services/email-preferences.ts' + 'apps/server/src/db/email-preferences-repo.ts' + 'Changes apply immediately on toggle (no save button).' — pinned so the canonical source-of-truth navigation contract stays documented (drift to a different schema/route/service path would orphan this doc from the implementation)", () => {
-    expect(body).toMatch(/`apps\/server\/src\/services\/email\.ts:TEMPLATES`/);
-    expect(body).toMatch(/`OptOutableEmailEventSchema` enum is the canonical opt-outable\s*set/);
+  it("Full-list cross-link + dashboard-immediate-toggle framing pinned: the page points customers at /reference/emails/ for the complete catalogue instead of internal source paths, states that anything outside the opt-outable table always sends, and keeps 'Changes apply immediately on toggle (no save button).'", () => {
     expect(body).toMatch(
-      /Routes: `apps\/server\/src\/routes\/email-preferences\.ts`\. Schema:\s*`packages\/api-types\/src\/accounts\.ts:OptOutableEmailEventSchema`\./,
+      /See \[Emails Driftstack sends\]\(\/reference\/emails\/\) for the full list;\s*anything not in the opt-outable table above always sends\./,
+    );
+    expect(body).not.toMatch(
+      /apps\/server\/src|packages\/api-types\/src|OptOutableEmailEventSchema/,
     );
     expect(body).toMatch(/Changes apply immediately on toggle \(no save button\)\./);
   });

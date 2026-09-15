@@ -33,7 +33,7 @@ const BUCKETS = [
   },
   {
     name: 'sessions:create',
-    desc: 'POST /v1/sessions — burst-sensitive; throttled tighter than `global` to keep one customer from saturating the fleet.',
+    desc: 'POST /v1/sessions — burst-sensitive; throttled tighter than `global` because starting a browser is expensive.',
     soloBurst: '10 burst',
     soloSustained: '2 req/min',
     apiBuilderBurst: '60 burst',
@@ -189,9 +189,9 @@ Content-Type: application/problem+json
     <h2>Concurrent sessions</h2>
     <p>
       Separate from per-bucket request rate, your tier caps the
-      number of <em>concurrently running</em> sessions. The caps
-      mirror <code>TIER_CONCURRENT_SESSION_LIMITS</code> exactly;
-      see <a href="https://docs.driftstack.io/guides/concurrency/">/docs/concurrency</a> for the
+      number of <em>concurrently running</em> sessions (how many run
+      at once). See
+      <a href="https://docs.driftstack.io/guides/concurrency/">/docs/concurrency</a> for the
       authoritative table + backoff guidance.
     </p>
     <p>
@@ -219,11 +219,10 @@ Content-Type: application/problem+json
 
     <h2>Testing rate-limit behaviour locally</h2>
     <p>
-      The self-hosted dev stack (see the
-      <a href="https://github.com/driftstackdev/driftstack-api/blob/main/docs/runbooks/self-hosted-mac-local.md">self-hosted mac local</a>
-      runbook) runs the same rate-limit code path against a local
-      Redis. Use it to exercise your 429 handling without consuming
-      real production budget.
+      If you run Driftstack self-hosted, it returns the same 429
+      responses as the cloud service, so you can exercise your 429
+      handling there without using your production budget. See
+      <a href="/self-hosted/">Self-hosted</a> for details.
     </p>
 
     <h2>Support</h2>

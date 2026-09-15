@@ -118,10 +118,10 @@ export const OpenVpnProxyConfigSchema = z.object({
     .min(1)
     .max(256 * 1024)
     .refine((blob) => OVPN_CLIENT_DIRECTIVE_RE.test(blob), {
-      message: 'OpenVPN config must contain a `client` directive (received a non-client .ovpn).',
+      message: 'This OpenVPN file must be a client configuration: it needs a `client` line.',
     })
     .refine((blob) => OVPN_REMOTE_DIRECTIVE_RE.test(blob), {
-      message: 'OpenVPN config must contain a `remote <host> <port>` directive.',
+      message: 'This OpenVPN file needs a `remote` line with the server address.',
     }),
   username: z.string().min(1).max(256).optional(),
   password: z.string().min(1).max(256).optional(),
@@ -184,10 +184,10 @@ const WG_IP_LIST_RE = /^[ \t]*[0-9A-Fa-f:.]+(?:[ \t]*,[ \t]*[0-9A-Fa-f:.]+)*[ \t
 
 export const WireGuardProxyConfigSchema = z.object({
   private_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
-    message: 'private_key must be a 44-char base64 curve25519 key',
+    message: 'private_key must be a valid WireGuard key (44 characters, base64)',
   }),
   peer_public_key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, {
-    message: 'peer_public_key must be a 44-char base64 curve25519 key',
+    message: 'peer_public_key must be a valid WireGuard key (44 characters, base64)',
   }),
   // [Peer] PresharedKey — the optional post-quantum symmetric key wg(8) mixes
   // into the handshake. A provider that issues one REQUIRES it: a peer
@@ -219,7 +219,7 @@ export const WireGuardProxyConfigSchema = z.object({
     .string()
     .max(1024)
     .regex(WG_CIDR_LIST_RE, {
-      message: 'allowed_ips must be a comma-separated list of CIDRs (no newlines)',
+      message: 'allowed_ips must be a comma-separated list of IP ranges, such as 0.0.0.0/0',
     })
     .default('0.0.0.0/0'),
   // [Interface] Address (e.g. 10.7.0.2/32) — the harness userspace WireGuard
@@ -238,7 +238,7 @@ export const WireGuardProxyConfigSchema = z.object({
     })
     .max(128)
     .regex(WG_CIDR_LIST_RE, {
-      message: 'address must be a comma-separated list of CIDRs (no newlines)',
+      message: 'address must be a comma-separated list of IP ranges, such as 10.7.0.2/32',
     }),
   dns: z
     .string()

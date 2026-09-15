@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Account proxies
-description: Register your own SOCKS5, HTTP, OpenVPN, or WireGuard proxies against your account and route a session's egress through a SOCKS5, OpenVPN, or WireGuard one. Secrets are encrypted at rest under your account key and never echoed back.
+description: Register your own SOCKS5, HTTP, OpenVPN, or WireGuard proxies against your account and route a session's traffic through a SOCKS5, OpenVPN, or WireGuard one. Secrets are encrypted at rest under your account key and never echoed back.
 ---
 
 # Account proxies
@@ -9,14 +9,13 @@ description: Register your own SOCKS5, HTTP, OpenVPN, or WireGuard proxies again
 The **account proxies** surface lets you register your own proxies
 against your Driftstack account and route an
 [agent session](/api/agent-sessions/)'s traffic through one — so a
-session browses from your egress IP instead of the default. Four
-schemes can be **registered**: `socks5`, `http`, `openvpn`, and
+session browses from your proxy's IP address instead of the default.
+Four schemes can be **registered**: `socks5`, `http`, `openvpn`, and
 `wireguard`.
 
-Three of them can currently **route a browser session**: `socks5`
-(dialled by the control plane) and `openvpn` / `wireguard` (tunnelled
-at the browser host). `http` proxies can be stored and managed here,
-but are not a session-dispatch target on this deployment — passing an
+Three of them can currently **route a browser session**: `socks5`,
+`openvpn`, and `wireguard`. `http` proxies can be stored and managed
+here, but cannot carry a session on this deployment — passing an
 `http` proxy to a session create is refused with `400`, not silently
 ignored.
 
@@ -74,25 +73,22 @@ endpoint (parsed from your `.ovpn` / `wg0.conf`).
 `exit_observed` is the last exit identity seen **through** the proxy —
 `{ ip, country, timezone, observed_via, observed_at }` — or `null` when
 nothing has observed one yet. `observed_via` is `session` (a live session
-reported it) or `probe` (a fleet-vantage test measured it); `country` and
-`timezone` are `null` when they could not be resolved. For an OpenVPN or
+reported it) or `probe` (a Driftstack proxy test measured it); `country` and
+`timezone` are `null` when they could not be determined. For an OpenVPN or
 WireGuard proxy this is the only source of its location and timezone short
-of running a test, since only a session or a fleet node can see through the
-tunnel. `null` means not observed, never "no location".
+of running a test, since only a session or a Driftstack test can see through
+the tunnel. `null` means not observed, never "no location".
 
-`exit_superseded_at` is when a fleet-vantage test found the tunnel **down**
-while `exit_observed` was set (ISO 8601), or `null` when never contradicted.
-The stored exit is kept — it is still the last exit seen, at its own
-`observed_at` — and this dates the contradiction: a client adopting
-`exit_observed` from the list refuses an observation dated at or before
-`exit_superseded_at` (the Driftstack GUI does, and stamps its own cache), so a
-client that never ran the failing test agrees with the one that did. The next
-exit observation (a session's report or a test that saw an exit through a
-usable tunnel) clears it; a verdict whose `exit_ip` is not the tunnel's exit —
-`can_route: false` with the measuring Mac's own address — is a down verdict
-and sets it. A test that was refused or could not run (`not_run`) measured
-nothing and never sets it, and while it is set a `not_run` reply attaches no
-`exit_observed` at all (see the test endpoint below).
+`exit_superseded_at` is when a later Driftstack test found the tunnel
+**down** after `exit_observed` was recorded (ISO 8601), or `null` if that
+never happened. The stored exit is kept as the last one seen, at its own
+`observed_at`; clients should ignore an `exit_observed` dated at or before
+`exit_superseded_at` (the desktop app does). The next successful observation
+— a session report or a test that saw an exit through a working tunnel —
+clears it; a test that finds the tunnel down sets it. A test that could not
+run (`not_run`) measured nothing and never sets it, and while it is set a
+`not_run` reply carries no `exit_observed` at all (see
+[Test a proxy](#test-a-proxy)).
 
 ## List
 
@@ -129,7 +125,8 @@ shouldn't.
 the account. Crossing it on `POST /v1/account/me/proxies` returns `400`
 with `Proxy limit reached (<cap>). Delete an existing proxy to add
 another.` — note this is a `400`, not the `429 Tier limit` the profile
-cap uses. Values mirror `PROXIES_PER_TIER` in `@driftstack/api-types`:
+cap uses. The caps are below (the public `@driftstack/api-types` package
+also exports them as `PROXIES_PER_TIER`):
 
 | Tier            | Saved proxies |
 | --------------- | ------------: |
@@ -151,9 +148,10 @@ this page can print.
 For a VPN scheme, the secret config rides a nested block. `host`/`port`
 are the display endpoint (most clients fill them from the parsed config).
 
-**OpenVPN** — paste the full `.ovpn` as `config_blob` (must contain a
-`client` directive and a `remote <host> <port>` directive; up to 256 KiB).
-`username`/`password` are optional inline credentials:
+**OpenVPN** — paste the full `.ovpn` as `config_blob` (it must be a client
+configuration: it needs a `client` line and a `remote` line with the server
+address; up to 256 KiB). `username`/`password` are optional inline
+credentials:
 
 ```json
 {
@@ -169,12 +167,13 @@ are the display endpoint (most clients fill them from the parsed config).
 }
 ```
 
-**WireGuard** — the `private_key` and `peer_public_key` are 44-char
-base64 curve25519 keys; `endpoint` is `host:port` (an IPv6 host may be
-bracketed, `[2001:db8::1]:51820`); `address` is the interface address
+**WireGuard** — the `private_key` and `peer_public_key` are WireGuard
+keys (44 characters, base64); `endpoint` is `host:port` (an IPv6 host may
+be bracketed, `[2001:db8::1]:51820`); `address` is the interface address
 (e.g. `10.7.0.2/32`) and is required; `allowed_ips` defaults to
-`0.0.0.0/0`; `dns` is optional; `preshared_key` (44-char base64) is
-optional and only needed when the peer requires a pre-shared key:
+`0.0.0.0/0`; `dns` is optional; `preshared_key` (also a 44-character
+base64 key) is optional and only needed when the peer requires a
+pre-shared key:
 
 ```json
 {
@@ -194,8 +193,9 @@ optional and only needed when the peer requires a pre-shared key:
 ```
 
 The `config_blob` / `private_key` / `preshared_key` are write-only — the response returns
-`has_secret: true`, never the secret. VPN proxies require encryption to
-be configured server-side; if it isn't, create returns `503`.
+`has_secret: true`, never the secret. On an installation where VPN
+proxies are not available, create returns `503` with the message
+`VPN proxies are not available on this installation.`
 
 Required scope: `account_owner` — a broad `write` key is not sufficient.
 
@@ -212,19 +212,18 @@ Every field is optional. For the password on a **SOCKS5 or HTTP** proxy:
 **VPN proxies are different.** On a saved `openvpn` or `wireguard` proxy,
 sending `password` at all — a new value _or_ `null` — without also
 sending `scheme` and the matching config block is rejected with `400`:
-`A VPN password can only be changed by resubmitting the matching VPN
-configuration.` The credential is wrapped together with the config, so
-there is no way to rotate one without the other. To change a VPN
-password, resubmit the full VPN body as you would on create.
+`To change a VPN password, submit the full VPN configuration again.` The
+credential is stored together with the config, so there is no way to
+change one without the other. To change a VPN password, resubmit the
+full VPN body as you would on create.
 
 `404` if the id isn't one of your proxies.
 
-`409` — `Proxy changed concurrently. Retry the update.` The update is a
-compare-and-set on `scheme`: the route reads the saved proxy, then writes
-only if the scheme is still what it read. If something else changed the
-scheme in between — a second dashboard tab, a concurrent API call — the
-write is refused rather than silently applied to a proxy that is no
-longer the one you edited. Re-read the proxy and reissue the update. A
+`409` — `This proxy changed since you last loaded it. Refresh and try
+again.` Something else — another dashboard tab or a concurrent API call —
+changed this proxy's `scheme` between your read and your write, so the
+write was refused instead of being applied to a proxy that is no longer
+the one you edited. Re-read the proxy and reissue the update. A
 `409` here means the row still exists; a `404` means it is gone.
 
 Required scope: `account_owner` — a broad `write` key is not sufficient.
@@ -241,10 +240,10 @@ Required scope: `account_owner` — a broad `write` key is not sufficient.
 `POST /v1/account/me/proxies/{id}/test`
 
 Answers one question: **would a session launched through this proxy work right
-now?** For a `socks5` proxy that is the same check the launch gate runs — TCP
-connect, SOCKS5 handshake, authentication, `CONNECT`, and a real request through
-the tunnel — so a green test and a successful launch mean the same thing. Always
-`200`; a proxy that fails the test is a result, not an error:
+now?** For a `socks5` proxy that is the same check Driftstack runs before
+launching a session — it connects, authenticates, and makes a real request
+through the proxy — so a green test and a successful launch mean the same
+thing. Always `200`; a proxy that fails the test is a result, not an error:
 
 ```json
 { "ok": true, "latency_ms": 142 }
@@ -253,21 +252,21 @@ the tunnel — so a green test and a successful launch mean the same thing. Alwa
 ```json
 {
   "ok": false,
-  "reason": "The proxy connected but could not reach the internet. Its upstream egress is blocked."
+  "reason": "The proxy connected but could not reach the internet. Check with your proxy provider."
 }
 ```
 
 `reason` is a fixed sentence written for a person to read and act on, drawn from
-the same four cases the launch gate reports (see
+the same four cases a refused launch reports (see
 [Why a launch is refused](#why-a-launch-is-refused)). It is not an enum — branch
-on the `reason` field of a `422` instead. Raw socket, DNS, TLS, and remote proxy
-response text never reach the API response.
+on the `reason` field of a `422` instead. Raw error text from the network or
+from the proxy itself never appears in the response.
 
 A proxy that authenticates but cannot route is the case worth knowing about: it
 looks healthy to anything that only opens the port, and it fails every launch.
 This test reports it.
 
-An `ok: false` result that also carries `not_run` is **not a verdict about the
+An `ok: false` result that also carries `not_run` is **not a result about the
 proxy** — nothing was measured. Branch on `not_run`, never on the `reason`
 prose, before treating the result as a failed proxy:
 
@@ -275,7 +274,7 @@ prose, before treating the result as a failed proxy:
 {
   "ok": false,
   "not_run": "live_session",
-  "reason": "This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.",
+  "reason": "This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.",
   "measured_from": "control_plane",
   "exit_observed": {
     "ip": "203.0.113.9",
@@ -288,44 +287,44 @@ prose, before treating the result as a failed proxy:
 }
 ```
 
-- `live_session` — a `vantage=fleet` test of an `openvpn` / `wireguard` proxy
-  was refused because a live session is browsing through it. A second tunnel on
-  a one-connection VPN account would drop that session, so the control plane
-  dispatches nothing. `measured_from` is `control_plane` (no node measured
-  this) and `exit_observed`, when present, is the exit that session observed —
-  the same `exit_observed` the proxy object lists — so a client can still show
-  where the tunnel exits. End the session to test the tunnel.
-- `node_busy` — the fleet node that would measure it is holding another tunnel
-  or test; try again in a minute.
-- `node_error` — the node could not run the probe (a config it could not
-  bring up, a handshake or a timeout).
-- `no_node` — a `vantage=fleet` test of an `openvpn` / `wireguard` proxy that
-  no fleet node measured. The `reason` says which: none was free or the
-  dispatch timed out (try again in a minute), or the deployment has no fleet
-  set up (a retry will not change that). The control plane cannot bring a
-  tunnel up, so it does not fall back to a TCP check of the tunnel endpoint (a
-  UDP endpoint would read as "down"). `measured_from` is `control_plane` and
-  `exit_observed`, when present, is the stored exit a session observed.
+- `live_session` — a `?vantage=fleet` test of an `openvpn` / `wireguard`
+  proxy was skipped because a live session is browsing through this VPN. A
+  second connection on a one-connection VPN account would drop that session,
+  so nothing was tested. `measured_from` is `control_plane` (nothing measured
+  the tunnel) and `exit_observed`, when present, is the exit that session saw
+  — the same `exit_observed` the proxy object lists — so a client can still
+  show where the tunnel exits. End the session to test the tunnel.
+- `node_busy` — the tester is busy with another tunnel or test; try again in
+  a minute.
+- `node_error` — the tunnel could not be brought up (a bad config, a
+  handshake failure, or a timeout).
+- `no_node` — a `?vantage=fleet` test of an `openvpn` / `wireguard` proxy
+  that was not run. The `reason` says which: no tester was free or the
+  request timed out (try again in a minute), or VPN testing is not set up on
+  this deployment (a retry will not change that). In this case there is no
+  fallback to a plain reachability check of the tunnel endpoint.
+  `measured_from` is `control_plane` and `exit_observed`, when present, is
+  the stored exit a session observed.
 
 The `exit_observed` beside a `not_run` is the proxy's **stored** observation,
 not something this test measured, so it carries `observed_at` — when it was
 observed (`null` for an observation recorded before the field existed). Date
-it by that, never by the reply: a fleet test that later found the tunnel down
-can postdate it. A stored exit a fleet test has since contradicted (the
-proxy's `exit_superseded_at` is set) is **not attached** — and the
-`live_session` reason then does not say the exit is shown — because the last
-check found the tunnel down and produced no exit to show.
+it by that, never by the reply: a later test that found the tunnel down can
+postdate it. A stored exit a later test has since contradicted (the proxy's
+`exit_superseded_at` is set) is **not attached** — and the `live_session`
+reason then does not say the exit is shown — because the last check found the
+tunnel down and produced no exit to show.
 
 Absent `not_run`, an `ok: false` result is a measurement. Two of those are
-worth knowing for a VPN proxy on `vantage=fleet`: a stored configuration the
-control plane cannot read (the `reason` says to re-add it — a retry will not
-help), and a **403** when the account's tier no longer includes VPN egress —
-the same refusal the launch path gives, never disguised as "no Mac was free".
+worth knowing for a VPN proxy on a `?vantage=fleet` test: a stored
+configuration Driftstack cannot read (the `reason` says to re-add it — a retry
+will not help), and a **403** when your tier no longer includes VPN proxies —
+the same refusal you get when launching a session through it.
 
-Two cases fall back to a plain TCP-reachability check, which confirms the port
-answers and nothing more: an `openvpn` or `wireguard` wire on the default
-`vantage=cp` (there is no `host:port` to dial for the tunnel itself), and a
-deployment with no proxy connectivity probe configured.
+Two cases fall back to a plain reachability check, which confirms the address
+answers and nothing more: an `openvpn` or `wireguard` proxy on the default
+test (`vantage=cp`), which does not connect the tunnel itself, and a
+deployment where the full tunnel test is not available.
 
 Required scope: `account_owner` — a broad `write` key is not sufficient.
 
@@ -338,11 +337,11 @@ Pass `proxy_id` when you
 { "profile_id": "prof_...", "proxy_id": "a1b2c3d4-..." }
 ```
 
-The session's egress is routed through that proxy. The `proxy_id` must
+The session's traffic is routed through that proxy. The `proxy_id` must
 be one of your account's proxies (an unknown or not-owned id returns
 `404`), and its scheme must be one that can route a session — an
 `http` proxy returns `400` with a message naming the supported
-schemes. Omit it to use the default egress.
+schemes. Omit it to use the default connection.
 
 > The Driftstack desktop app manages this for you: add a proxy under
 > **Proxies**, set it as a profile's default, and launching the profile
@@ -362,7 +361,7 @@ The problem body carries a `reason` alongside the human `detail`:
   "type": "https://errors.driftstack.dev/proxy-validation-failed",
   "title": "Proxy validation failed",
   "status": 422,
-  "detail": "The proxy connected but could not reach the internet — its upstream egress is blocked.",
+  "detail": "The proxy connected but could not reach the internet. Check with your proxy provider.",
   "reason": "egress_blocked",
   "resource": "proxy"
 }
@@ -370,19 +369,19 @@ The problem body carries a `reason` alongside the human `detail`:
 
 `reason` is a closed set. Branch on it — `detail` is prose and may be reworded.
 
-| Reason                | What it means                                                                                                                                                                                            | What fixes it                                                                                                           |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `unreachable`         | Nothing answered at `host:port`.                                                                                                                                                                         | Check the host, the port, and that the proxy is online.                                                                 |
-| `auth_failed`         | The proxy answered and rejected the username or password.                                                                                                                                                | Re-enter the credentials.                                                                                               |
-| `timeout`             | The proxy accepted the connection but did not finish in time.                                                                                                                                            | It is overloaded or half-down; retry, then change proxy.                                                                |
-| `egress_blocked`      | The proxy authenticated, then refused or failed to reach the destination.                                                                                                                                | Ask the provider — this is usually plan, quota, or an ACL.                                                              |
-| `config_unresolvable` | The stored configuration could not be used, so **nothing was dialled**. The other four reasons are verdicts from a real round-trip through the proxy; this one is not a measurement of the proxy at all. | Open the proxy and fix or re-paste its configuration. Checking the host and port will not help — they were never tried. |
+| Reason                | What it means                                                                                                                                                                                           | What fixes it                                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `unreachable`         | Nothing answered at `host:port`.                                                                                                                                                                        | Check the host, the port, and that the proxy is online.                                                                 |
+| `auth_failed`         | The proxy answered and rejected the username or password.                                                                                                                                               | Re-enter the credentials.                                                                                               |
+| `timeout`             | The proxy accepted the connection but did not finish in time.                                                                                                                                           | It is overloaded or half-down; retry, then change proxy.                                                                |
+| `egress_blocked`      | The proxy authenticated, then refused or failed to reach the destination.                                                                                                                               | Ask the provider — this is usually plan, quota, or an ACL.                                                              |
+| `config_unresolvable` | The stored configuration could not be used, so **nothing was dialled**. The other four reasons are results from a real round-trip through the proxy; this one is not a measurement of the proxy at all. | Open the proxy and fix or re-paste its configuration. Checking the host and port will not help — they were never tried. |
 
 `egress_blocked` is the one that surprises people. The credentials are correct
 and the proxy is up, so anything that only checks reachability calls it healthy;
 the provider is simply declining to route. A provider that has suspended an
 account, exhausted its bandwidth quota, or restricted destinations by ruleset
-answers every `CONNECT` this way. Nothing on the Driftstack side will change it.
+refuses every request this way. Nothing on the Driftstack side will change it.
 
 To distinguish "this proxy is broken" from "this provider is refusing
 everything", test a second proxy from a different provider: if that one launches,

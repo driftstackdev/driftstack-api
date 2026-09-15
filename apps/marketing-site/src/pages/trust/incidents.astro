@@ -73,7 +73,7 @@ function severityClass(s: Incident['severity']): string {
   </PageHero>
 
   <!-- What we publish -->
-  <Section label="What we publish" title="Public-incident bar." class="bg-tk-surface">
+  <Section label="What we publish" title="What counts as a public incident." class="bg-tk-surface">
     <ul class="mt-6 grid gap-4 md:grid-cols-2">
       <li class="card bg-tk-raised p-5">
         <p class="text-sm font-medium text-tk-ink">
@@ -81,10 +81,9 @@ function severityClass(s: Incident['severity']): string {
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
           Any period during which the API or dashboard returned errors
-          (technically: non-2xx responses) to
-          real customer requests — including partial problems, e.g.
-          one hosting region (Hetzner) affected, or one of our
-          vendors (a sub-processor) down.
+          to real customer requests — including partial problems, such
+          as an outage in one Hetzner hosting location, or one of our
+          vendors (a sub-processor) being down.
         </p>
       </li>
       <li class="card bg-tk-raised p-5">
@@ -93,10 +92,9 @@ function severityClass(s: Incident['severity']): string {
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
           Any unauthorized access, data exposure, or compromise of our
-          encryption or signing keys (a cryptographic integrity
-          event). We post notice within the legally required
-          notification window; full details follow once forensic
-          analysis is complete.
+          encryption or signing keys. We post notice within the legally
+          required notification window; full details follow once our
+          investigation is complete.
         </p>
       </li>
       <li class="card bg-tk-raised p-5">
@@ -104,10 +102,10 @@ function severityClass(s: Incident['severity']): string {
           Sub-processor incidents
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
-          When an upstream sub-processor (Hetzner / Neon / Upstash /
+          When one of our sub-processors (Hetzner / Neon / Upstash /
           Cloudflare / Postmark / Stripe / Sentry) has an incident
           affecting our customers, we summarise their post-mortem and
-          link the upstream report.
+          link to their report.
         </p>
       </li>
       <li class="card bg-tk-raised p-5">
@@ -115,11 +113,10 @@ function severityClass(s: Incident['severity']): string {
           Maintenance windows
         </p>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Pre-announced windows for planned work — database upgrades
-          or restructuring (migrations, schema changes) and
-          security-certificate renewals (certificate rotations).
-          Notice at least 72 hours in advance;
-          customers can subscribe to advance notifications via
+          Pre-announced windows for planned work, such as database
+          upgrades or security-certificate renewals.
+          Notice at least 72 hours in advance; you can subscribe to
+          these notices under
           <a href="https://app.driftstack.io/settings/"
             class="text-tk-accent-text underline">/settings → email preferences</a>.
         </p>

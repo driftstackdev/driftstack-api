@@ -1699,9 +1699,9 @@ function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
             🌍
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent-text">Network egress</span>
+            <span className="section-label text-accent-text">Proxies &amp; VPNs</span>
             <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
-              Egress proxies
+              Proxies
               <span className="mono ml-2 text-base font-normal text-ink-muted">
                 {MARKETING_PROXY_TALLY.total}
               </span>
@@ -1720,7 +1720,9 @@ function ProxiesFrame({ children }: { children: ReactNode }): JSX.Element {
               </b>{' '}
               WebRTC + QUIC
               <span className="text-surface-divider">·</span>
-              <span className="text-ink-muted">protected locally · encrypted sync at launch</span>
+              <span className="text-ink-muted">
+                protected on this device · synced encrypted when a session starts
+              </span>
             </p>
           </div>
         </div>

@@ -291,8 +291,8 @@ function friendlySessionEndCopy(
   }
   if (/^(proxy_|egress_)/.test(normalized) || normalized === 'network_shim_boot_failed') {
     return {
-      outcome: 'Connection route unavailable',
-      explanation: 'The secure connection route for this session could not be established.',
+      outcome: 'Proxy connection failed',
+      explanation: 'The session could not connect through its proxy.',
     };
   }
   if (
@@ -321,8 +321,8 @@ function friendlySessionEndCopy(
     normalized === 'session_errored'
   ) {
     return {
-      outcome: 'Live worker unavailable',
-      explanation: 'The live worker stopped, so this session could not continue.',
+      outcome: 'Session stopped unexpectedly',
+      explanation: 'Something on our side stopped this session, so it could not continue.',
     };
   }
   if (normalized === 'session_ended') {
@@ -1227,16 +1227,15 @@ export function AgentSessionPanel({
                 <span>
                   {publisher === 'publishing'
                     ? 'Almost there — the video stream is arriving…'
-                    : 'Connected — starting the browser… a cold start can take a few seconds.'}
+                    : 'Connected — starting the browser… this can take a few seconds.'}
                 </span>
               </>
             ) : (
               <>
                 <span>
-                  Couldn’t show the live view — the stream connected, but no video arrived from the
-                  automation device. The task itself may still have run; this is usually temporary,
-                  so press Retry. If it keeps happening, the device’s screen capture may need
-                  attention.
+                  Couldn’t show the live view — connected, but no video arrived. The task itself may
+                  still have run. This is usually temporary, so press Retry. If it keeps happening,
+                  contact support.
                 </span>
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   {/* #59 — a no-stream launch can recover on a fresh connect (the worker

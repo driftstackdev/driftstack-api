@@ -62,7 +62,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Recovery codes are scrypt-hashed — one-way scrambled,
               mirroring API key handling. Dangerous admin actions
               demand a fresh MFA check even if you're already signed
-              in (a "step-up" gate on destructive admin paths).
+              in (a "step-up" check before risky admin actions).
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/mfa-totp.ts · apps/server/src/services/mfa.ts
@@ -92,25 +92,20 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-tk-ink">BYOK Anthropic keys + gui_control_keys + Mac LiveKit secrets: AES-256-GCM at rest</p>
+            <p class="font-medium text-tk-ink">Your Anthropic key, desktop-app control keys and live-video credentials: encrypted at rest (AES-256-GCM)</p>
             <p class="mt-1 text-sm text-tk-ink-2">
               Three kinds of secrets that would be as damaging as
-              passwords if leaked ("plaintext-equivalent" material)
-              live in AES-256-GCM ciphertext under the same
-              host-resident encryption key as MFA TOTP secrets:
-              (1) your own Anthropic API key, if you bring one for
-              the AI agent (BYOK — bring your own key); (2) the
-              per-session keys that authenticate desktop-app control
-              commands (gui_control_keys — HMAC keys); and (3) the
-              LiveKit secrets each Mac in our fleet registers via
-              POST /v1/mac-nodes/register, which the platform uses
-              to create the short-lived video-access tokens (JWTs)
-              the desktop app needs to watch a live session. All three
-              are decrypted in-memory only at execution time, never
-              logged, never echoed in responses. Our logging and
-              error-reporting layers also scrub secrets automatically
-              (Pino-redact + Sentry-scrub) in case one ever ends up
-              inside a message.
+              passwords if leaked are stored encrypted (AES-256-GCM)
+              under the same server-held key as two-factor login
+              secrets: (1) your own Anthropic API key, if you bring
+              one for the AI agent; (2) the per-session keys that
+              authenticate desktop-app control commands; and (3) the
+              live-video credentials we use to issue the short-lived
+              access tokens the desktop app needs to watch a session.
+              All three are decrypted in memory only when needed,
+              never logged, and never returned in responses. Our
+              logging and error-reporting also scrub secrets
+              automatically in case one ever ends up inside a message.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/services/byok-anthropic.ts · apps/server/src/lib/byok-anthropic-encryption.ts · apps/server/src/lib/livekit-secret-encryption.ts
@@ -123,43 +118,38 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 
   <section class="border-t border-tk-border bg-tk-surface/40">
     <div class="mx-auto max-w-5xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Transport &amp; egress</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Transport &amp; proxies</h2>
       <ul class="mt-6 space-y-4">
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-tk-ink">TLS 1.3 on every customer-facing path</p>
+            <p class="font-medium text-tk-ink">Every connection is encrypted (TLS 1.2 or newer)</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Cloudflare, our edge network, enforces strict TLS 1.3
-              encryption all the way to our own servers behind
-              <code class="font-mono">api.driftstack.dev</code> +
-              <code class="font-mono">app.driftstack.io</code> (the
-              origins). No unencrypted page (plaintext HTTP) exists on
-              any path — every release is automatically checked for
-              this before it ships; the deploy pipeline's TLS
-              check rejects the release otherwise.
+              Every connection to our servers
+              (<code class="font-mono">api.driftstack.dev</code> and
+              <code class="font-mono">app.driftstack.io</code>) is
+              encrypted with TLS 1.2 or newer, through Cloudflare, our
+              edge network. No unencrypted (plain HTTP) page exists on
+              any path, and every release is checked for this
+              automatically before it ships.
             </p>
           </div>
         </li>
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-tk-ink">Customer-configurable egress (per profile)</p>
+            <p class="font-medium text-tk-ink">Your own proxy or VPN, per profile</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Each profile can attach its own egress — its own exit
-              to the internet: a SOCKS5 proxy with full
-              UDP/WebRTC/QUIC tunnelling (the video-call and
-              modern-web traffic types many proxies drop), an OpenVPN
-              file (.ovpn), or a WireGuard file (.conf). A session
-              bound to the profile connects to your proxy or VPN
-              ("dials the tunnel") before the browser launches, and
-              address-lookup traffic can't slip out around it (DNS
-              leaks blocked).
-              Without an attached config, session traffic exits via
-              Driftstack's own EU network egress. Driftstack does
-              not log session-traffic payloads (the destination URLs
-              you visit, the page content that comes back); the proxy
-              layer passes traffic through without storing it.
+              Each profile can use its own exit to the internet: a
+              SOCKS5 proxy, an OpenVPN file (.ovpn), or a WireGuard
+              file (.conf). Driftstack checks the configuration before
+              launch and asks your proxy to handle DNS lookups so they
+              are not sent around it. Whether UDP, WebRTC and QUIC
+              traffic travels through a SOCKS5 proxy depends on what
+              your proxy supports, and is shown after launch. Without
+              one attached, session traffic exits through Driftstack's
+              managed exit. Driftstack does not store the content of
+              the pages your sessions load.
             </p>
           </div>
         </li>
@@ -196,17 +186,15 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
             <p class="font-medium text-tk-ink">
-              Inbound webhooks (Stripe, NowPayments) signature-verified
-              before any state mutation
+              Payment notifications (Stripe, NowPayments) are
+              signature-verified before anything changes on your account
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
               Payment notifications must prove they're genuine before
               we change anything on your account. Stripe: timestamp +
-              sha256 HMAC. NowPayments: HMAC-SHA512 over the
-              normalised (canonical-keyed) JSON. A shared raw-body
-              parser ensures the exact bytes the signature was
-              computed over are the bytes the verifier sees — nothing
-              can be altered in transit without detection.
+              HMAC-SHA256. NowPayments: HMAC-SHA512 over the normalised
+              JSON. The signature check runs over the exact bytes we
+              received, so a message altered in transit is rejected.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               apps/server/src/lib/stripe-signing.ts ·
@@ -225,17 +213,17 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
           <div>
-            <p class="font-medium text-tk-ink">EU control plane</p>
+            <p class="font-medium text-tk-ink">Core services hosted in the EU</p>
             {/* S30 2026-07-07 (founder decision: soften) — R2 is the
                 default jurisdiction (EU + US replication), not the
                 .eu-jurisdiction endpoint; wording aligned with
                 https://docs.driftstack.io/reference/data-residency/. */}
             <p class="mt-1 text-sm text-tk-ink-2">
-              Compute (Hetzner Nuremberg), database (Neon Frankfurt),
-              object storage (Cloudflare R2, EU + US replication). The
-              iPhone Safari session-execution fleet runs on MacStadium
-              hardware (US) under SCCs (the EU's Standard Contractual
-              Clauses for lawful data transfer abroad) + the EU-US
+              Servers in Falkenstein, Germany (Hetzner); database in
+              Frankfurt (Neon); file storage on Cloudflare R2, which
+              keeps copies in both the EU and the US. iPhone Safari
+              sessions run on US infrastructure (MacStadium) under the
+              EU's Standard Contractual Clauses (SCCs) and the EU-US
               Data Privacy Framework — see
               <a href="https://docs.driftstack.io/reference/data-residency/" class="text-tk-accent-text underline"
                 >data residency</a
@@ -251,14 +239,14 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <div>
             <p class="font-medium text-tk-ink">Direct captures and local recordings</p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Screenshots and captures are returned directly inside the API
-              response as inline bytes and are not retained by the capture
-              endpoint. The desktop recorder stores streamed frames on the
-              operator's machine and does not upload them through the recording
-              workflow. See
+              Screenshots and other captures you request through the API
+              are returned to you directly in the response, and the capture
+              service keeps no copy — you decide where to store them.
+              Desktop recordings are saved only on your own computer; the
+              recording feature never uploads them. See
               <a href="/docs/recordings/" class="text-tk-accent-text underline"
                 >/docs/recordings</a
-              > for the exact storage boundary.
+              > for exactly what is and isn't stored.
             </p>
           </div>
         </li>
@@ -281,7 +269,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
 
   <section class="border-t border-tk-border bg-tk-surface">
     <div class="mx-auto max-w-5xl px-6 py-16">
-      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Observability &amp; incident response</h2>
+      <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Monitoring &amp; incident response</h2>
       <ul class="mt-6 space-y-4">
         <li class="flex gap-4">
           <span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100 text-center text-xs font-bold leading-5 text-emerald-700">✓</span>
@@ -290,8 +278,9 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               Public incident history + status page
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Customer-impacting outages are posted publicly within
-              the incident-response SLA window. Live status at
+              Customer-impacting outages are posted publicly; root
+              cause and remediation follow within seven days of the
+              incident closing. Live status at
               <a href="https://status.driftstack.io" class="text-tk-accent-text underline">status.driftstack.io</a>;
               historical archive at
               <a href="/trust/incidents/" class="text-tk-accent-text underline">/trust/incidents</a>.
@@ -323,13 +312,11 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
               We rehearse failures on purpose (chaos engineering)
             </p>
             <p class="mt-1 text-sm text-tk-ink-2">
-              Vendor (sub-processor) outages, the database switching
-              to its backup (DB failover), the Redis cache going down,
-              webhook-signature failures — all covered by scripted
-              drills in <code class="font-mono">scripts/chaos/</code>.
-              Drills run as simulations by default (dry-run); actually
-              breaking things (execute mode) requires
-              explicit operator opt-in.
+              Vendor outages, the database switching to its backup,
+              the cache going down, webhook-signature failures — each
+              is covered by a scripted drill. Drills run as simulations
+              by default; actually breaking things requires a
+              deliberate, explicit decision by our team.
             </p>
             <p class="mt-1 text-xs font-mono text-tk-ink-3">
               scripts/chaos/
@@ -352,7 +339,7 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
           <p class="mt-3 max-w-prose text-tk-ink-2">
             The
             <a href="/security/" class="text-tk-accent-text underline">architecture deep-dive at /security</a>
-            walks the six-pillar surface in detail. For current compliance
+            explains all six security promises in detail. For current compliance
             status and vulnerability reporting, see
             <a href="/trust/compliance/" class="text-tk-accent-text underline"
               >/trust/compliance</a

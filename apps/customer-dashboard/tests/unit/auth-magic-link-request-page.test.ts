@@ -83,7 +83,7 @@ describe('magic-link request page', () => {
     expect(fetchCalls[0]?.url).toMatch(/\/v1\/auth\/magic-link\/request$/);
     expect(fetchCalls[0]?.init?.signal?.aborted).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /delivery is unknown.*may already have sent.*do not request another link.*inbox and spam.*newest one/i,
+      /took too long.*may already be on its way.*inbox and spam folder before requesting another link.*more than one arrives.*use the newest/i,
     );
     expect(form.classList.contains('hidden')).toBe(true);
     expect(window.document.querySelector('[data-success]')?.classList.contains('hidden')).toBe(

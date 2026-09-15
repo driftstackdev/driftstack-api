@@ -90,7 +90,7 @@ describe('team invite acceptance page', () => {
     expect(fetchCalls[0]?.init?.method).toBe('POST');
     expect(JSON.parse(String(fetchCalls[0]?.init?.body))).toEqual({ token: 'invite_tok_123' });
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*joined you to the team.*consumed this single-use invite.*do not reload or submit this link again.*open Team to check access.*access is absent.*team owner.*new invite/i,
+      /took too long.*you may already be on the team.*don't use this link again.*open team to check.*don't have access.*team owner.*new invite/i,
     );
     expect(
       window.document.querySelector('[data-accept-unknown]')?.classList.contains('hidden'),

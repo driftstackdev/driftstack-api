@@ -19,10 +19,14 @@ describe('/docs/recordings current product contract', () => {
     expect(body).toContain('portable JSON envelope');
   });
 
-  it('pins local persistence and lazy frame hydration', () => {
-    expect(body).toContain('Active recordings are finalised when their provider closes');
-    expect(body).toMatch(/index is\s+restored when the app starts/);
-    expect(body).toMatch(/frame data is loaded only when a\s+recording is opened/);
+  it('pins local persistence and lazy playback loading', () => {
+    expect(body).toMatch(
+      /If you close the app while a recording is still in progress, it is saved\s+automatically/,
+    );
+    expect(body).toMatch(
+      /recordings are listed when the app starts and loaded\s+when you open one/,
+    );
+    expect(body).not.toMatch(/provider closes|frame data/);
   });
 
   it('documents the separate API capture contract', () => {

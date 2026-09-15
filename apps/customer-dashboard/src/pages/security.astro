@@ -53,38 +53,38 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div>
           <h2 class="text-lg font-semibold text-tk-ink">Your data is protected</h2>
           <p class="text-sm text-tk-ink-2">
-            Saved profile state and recoverable credentials are encrypted at rest with context-bound wrapping under platform-held keys.
+            Saved profiles and stored credentials are encrypted in storage, and each one can only be unlocked for the account that owns it.
           </p>
         </div>
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM at rest</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Encrypted in storage</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Profile state is stored as ciphertext; when it is used, the platform unwraps its bound key for that authorized session.
+            Profiles are stored encrypted (AES-256-GCM) and are only unlocked while an authorized session is using them.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Envelope binding</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Context-bound encryption</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Account binding</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Tied to your account</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Authenticated encryption binds wrapped values to the owning account and, for record-scoped stores, the exact record and value slot.
+            Encrypted data is tied to the account that owns it and, for individual records, to that exact record, so it can't be read from anywhere else.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Credential audit</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Recorded management events</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Activity record</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Changes are logged</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Review credential-management events that were recorded in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Routine runtime use is not logged as a credential-read event.
+            Review changes to your credentials in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Everyday use of a credential during a session is not logged as a separate event.
           </p>
         </div>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
-        Full model at
-        <a href="https://driftstack.io/trust/security-overview/" class="text-tk-accent-text underline">driftstack.io/trust</a>
-        · export and deletion are request-based today; start in
-        <a href="#danger-zone" class="text-tk-accent-text underline">the danger zone</a>.
+        Read more at
+        <a href="https://driftstack.io/trust/security-overview/" class="text-tk-accent-text underline">driftstack.io/trust</a>.
+        Data export and account deletion aren't self-service yet — to get started, see
+        <a href="#danger-zone" class="text-tk-accent-text underline">the danger zone</a> below.
       </p>
     </section>
 
@@ -112,8 +112,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           Change password
         </button>
         <p class="text-xs text-tk-ink-3">
-          We email you a magic link to confirm. The link expires after 60
-          minutes; old sessions stay signed in until they naturally expire.
+          We'll email you a link to set a new password. The link expires after
+          60 minutes. Once you set a new password, you'll be signed out
+          everywhere else.
         </p>
       </div>
     </section>
@@ -132,10 +133,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             Two-factor authentication
           </h2>
           <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-            Add a TOTP code from your authenticator app on top of your password.
-            Recovery codes are issued at enrollment — store them somewhere safe;
-            without your authenticator AND your recovery codes, account access
-            requires support intervention.
+            Add a code from your authenticator app on top of your password.
+            You'll get recovery codes when you set it up — keep them somewhere
+            safe. If you lose both your authenticator app and your recovery
+            codes, you'll need to contact support to get back in.
           </p>
         </div>
         <span
@@ -149,9 +150,9 @@ const apiBaseUrl = resolveApiBaseUrl();
       <!-- Enroll flow (hidden when already enrolled). -->
       <div class="mt-6 hidden space-y-4" data-section="mfa-enroll">
         <p class="text-sm text-tk-ink-2">
-          Click <strong>Set up</strong> to generate a fresh secret. Scan the QR
-          (or paste the manual-entry secret into your authenticator app), then
-          enter the 6-digit code to confirm.
+          Click <strong>Set up</strong> to get a QR code. Scan it with your
+          authenticator app (or type in the setup key), then enter the 6-digit
+          code from the app to confirm.
         </p>
         <button type="button" data-button="mfa-start" class="btn-primary text-sm">
           Set up two-factor authentication
@@ -161,7 +162,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div class="hidden space-y-4 rounded-lg border border-tk-border bg-tk-bg p-4" data-section="mfa-enroll-step">
           <p class="text-sm text-tk-ink-2">
             Open your authenticator app (1Password, Authy, Google Authenticator, etc.)
-            and either scan the QR or paste the manual secret.
+            and either scan the QR code or type in the setup key.
           </p>
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start">
             <div
@@ -172,14 +173,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             </div>
             <div class="min-w-0 flex-1">
               <label class="block text-xs font-medium uppercase tracking-wide text-tk-ink-3"
-                >Manual secret</label>
+                >Setup key</label>
               <code
                 data-field="mfa-secret-base32"
                 class="mt-1 block break-all rounded bg-tk-surface px-2 py-1 font-mono text-xs text-tk-ink ring-1 ring-slate-200"
               >—</code>
               <p class="mt-2 text-xs text-tk-ink-3">
-                SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app
-                supports).
+                Works with any authenticator app using its standard settings.
               </p>
             </div>
           </div>
@@ -227,8 +227,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
         <p class="mt-1 text-xs text-tk-accent-text">
           Each code works once. Store them somewhere safe (password manager,
-          printed copy, secure note). Without your authenticator AND these
-          codes, account access requires support intervention.
+          printed copy, secure note). If you lose both your authenticator app
+          and these codes, you'll need to contact support to get back in.
         </p>
         <ul
           class="mt-3 grid grid-cols-2 gap-2 font-mono text-sm text-tk-accent-text"
@@ -280,8 +280,9 @@ const apiBaseUrl = resolveApiBaseUrl();
           </button>
         </div>
         <p class="text-xs text-tk-ink-3">
-          Disabling clears your TOTP secret + invalidates all recovery codes.
-          Requires a fresh authenticator code (step-up reauth) to confirm.
+          Disabling removes two-factor from your account and cancels all
+          recovery codes. You'll be asked for a fresh code from your
+          authenticator app to confirm.
         </p>
       </div>
 
@@ -303,7 +304,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             inputmode="numeric"
             maxlength="11"
             placeholder="123456 or recovery"
-            aria-label="MFA step-up code"
+            aria-label="Two-factor code"
             class="w-44 rounded-md border border-tk-accent/40 px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
           <button type="button" data-button="mfa-step-up-submit" class="btn-primary text-sm">
@@ -377,11 +378,10 @@ const apiBaseUrl = resolveApiBaseUrl();
         Connected accounts
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
-        IDPs (Google / GitHub) linked to your account. Each link lets you
-        sign in via that provider. Revoking the link on the provider side
-        (e.g. Google → Security → Third-party access) automatically marks
-        it inactive here on next sign-in attempt; password sign-in
-        continues to work either way.
+        Google or GitHub accounts linked to yours. Each one lets you sign in
+        with that provider. If you remove Driftstack's access in Google or
+        GitHub, the link is marked inactive here the next time you try to use
+        it. Password sign-in keeps working either way.
       </p>
       <ul class="mt-6 divide-y divide-tk-border" data-list="oauth-links">
         <li class="py-3 text-sm text-tk-ink-3" data-field="oauth-links-empty">
@@ -389,8 +389,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         </li>
       </ul>
       <p class="mt-3 text-xs text-tk-ink-3" data-field="oauth-links-disabled" hidden>
-        Sign-in-with-Google / GitHub isn't configured on this server.
-        Password sign-in continues to work.
+        Sign in with Google or GitHub isn't available right now. Password
+        sign-in works as usual.
       </p>
     </section>
 
@@ -405,8 +405,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         Recent activity
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
-        API key mints + revokes, session lifecycle events, and other account
-        changes. Newest first; filtered to your own account.
+        API keys created or revoked, sessions started or ended, and other
+        account changes. Newest first.
       </p>
       <ul class="mt-6 divide-y divide-tk-border" data-list="audit-log">
         <li class="py-3 text-sm text-tk-ink-3" data-field="audit-empty">
@@ -424,16 +424,16 @@ const apiBaseUrl = resolveApiBaseUrl();
         Account deletion is irreversible. All sessions, profiles, API keys,
         and webhook endpoints are immediately revoked, and stored account
         data is purged on the schedule in the privacy policy. Invoice
-        history retained per Dutch tax law (7 years) — not deletable on
-        request.
+        history is kept for 7 years as required by Dutch tax law and can't be
+        deleted on request.
       </p>
       <p class="mt-3 text-xs text-tk-err-text">
-        Deletion is currently processed by emailing
+        To delete your account, email
         <a
           href="mailto:support@driftstack.dev?subject=Account%20deletion%20request"
           class="underline">support@driftstack.dev</a
-        > so we can confirm + walk the data-portability export with
-        you before the irreversible step.
+        >. We'll confirm it's you and help you export your data first,
+        because deletion can't be undone.
       </p>
     </section>
   </div>
@@ -624,7 +624,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!auditList) return;
         if (entries.length === 0) {
           auditList.innerHTML =
-            '<li class="py-3 text-sm text-tk-ink-3">No recent activity yet — your first key mint, session create, or other account event will appear here.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No recent activity yet. Events like creating an API key or starting a session will appear here.</li>';
           return;
         }
         auditList.innerHTML = entries
@@ -694,7 +694,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!oauthLinksList) return;
         if (links.length === 0) {
           oauthLinksList.innerHTML =
-            '<li class="py-3 text-sm text-tk-ink-3">No third-party sign-in linked yet. Sign in with Google or GitHub from /login to link.</li>';
+            '<li class="py-3 text-sm text-tk-ink-3">No Google or GitHub account linked yet. Sign in with Google or GitHub from the login page to link one.</li>';
           return;
         }
         oauthLinksList.innerHTML = links
@@ -703,7 +703,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               ? 'last sign-in ' + escapeHtml(fmtRelative(link.last_login_at))
               : 'never used';
             const revokedFrag = link.last_revoked_at
-              ? ' · <span class="text-tk-busy-text">revoked upstream — sign in to re-link</span>'
+              ? ' · <span class="text-tk-busy-text">access removed at the provider — sign in with it again to re-link</span>'
               : '';
             const manageUrl = providerManageUrl(link.provider);
             const manageFrag = manageUrl
@@ -941,11 +941,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (err && err.name === 'AbortError') {
               const refreshed = await loadWebSessions();
               showBanner(
-                'Session-revocation outcome is unknown after the request timed out. ' +
+                "The request took too long, so we're not sure it finished. " +
                   (refreshed
-                    ? 'Active sign-ins were refreshed. '
-                    : "We couldn't refresh active sign-ins. ") +
-                  'If this sign-in is gone, revocation completed. If it still appears, retry the revocation.',
+                    ? 'The list below is up to date. '
+                    : "We couldn't refresh the list, so reload the page to check. ") +
+                  "If this sign-in is no longer listed, it was revoked. If it's still there, try again.",
               );
               return;
             }
@@ -1012,11 +1012,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                 if (err && err.name === 'AbortError') {
                   const refreshed = await loadWebSessions();
                   showBanner(
-                    'Bulk session-revocation outcome is unknown after the request timed out. ' +
+                    "The request took too long, so we're not sure it finished. " +
                       (refreshed
-                        ? 'Active sign-ins were refreshed. '
-                        : "We couldn't refresh active sign-ins. ") +
-                      'If only the current sign-in remains, every other session was revoked. If others still appear, retry sign-out.',
+                        ? 'The list below is up to date. '
+                        : "We couldn't refresh the list, so reload the page to check. ") +
+                      'If only this sign-in is left, the others were signed out. If others are still listed, try again.',
                   );
                   return;
                 }
@@ -1037,7 +1037,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           return;
         }
         if (!passwordResetAvailable || !accountEmail) {
-          showBanner('Wait for your account email to load. Reload Security if loading failed.');
+          showBanner('Wait for your account email to load. Reload this page if loading failed.');
           return;
         }
         if (passwordResetInFlight || passwordResetOutcomeUnknown) return;
@@ -1070,7 +1070,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             passwordResetOutcomeUnknown = true;
             if (btn) btn.textContent = 'Check inbox before retrying';
             showBanner(
-              'Password-reset outcome is unknown after the request timed out. The email may have been sent. Check your inbox and spam before doing anything; if multiple reset emails arrive, use the newest one and ignore the others. Reload Security to request another only if no message arrives.',
+              "The request took too long, so we're not sure the email went out. Check your inbox and spam folder first. If more than one reset email arrives, use the newest. If nothing arrives, reload this page and try again.",
             );
             return;
           }
@@ -1478,7 +1478,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             dim +
             ' ' +
             dim +
-            '" shape-rendering="crispEdges" role="img" aria-label="MFA QR code">' +
+            '" shape-rendering="crispEdges" role="img" aria-label="Two-factor QR code">' +
             '<rect width="' +
             dim +
             '" height="' +
@@ -1499,7 +1499,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           mfaQrTarget.innerHTML = dsQrSvg(otpauthUri);
         } catch (_err) {
           mfaQrTarget.innerHTML =
-            '<span class="px-2 text-center text-xs text-tk-ink-3">Couldn’t draw the QR — enter the manual key shown below.</span>';
+            '<span class="px-2 text-center text-xs text-tk-ink-3">Couldn’t draw the QR code — type in the setup key shown below.</span>';
         }
       }
 
@@ -1547,7 +1547,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (generation !== mfaRefreshGeneration) return false;
             if (showLoadError) {
-              showBanner(securityErrorMessage(err, "Couldn't load MFA status. Try again."));
+              showBanner(securityErrorMessage(err, "Couldn't load two-factor status. Try again."));
             }
             return false;
           })
@@ -1569,7 +1569,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         clearMfaError();
         if (mfaStart) {
           mfaStart.disabled = true;
-          mfaStart.textContent = 'Generating secret…';
+          mfaStart.textContent = 'Setting up…';
         }
         authedFetch('/v1/account/mfa/enroll', { method: 'POST' })
           .then((r) =>
@@ -1587,10 +1587,10 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (mfaVerifyInput) mfaVerifyInput.value = '';
             // Stays disabled — the enroll step below is now the live
             // flow; the secret shown there must remain the pending one.
-            if (mfaStart) mfaStart.textContent = 'Secret generated — scan the QR below';
+            if (mfaStart) mfaStart.textContent = 'Scan the QR code below';
           })
           .catch((err) => {
-            showMfaError(securityErrorMessage(err, 'Could not start MFA enrollment. Try again.'));
+            showMfaError(securityErrorMessage(err, "Couldn't start two-factor setup. Try again."));
             if (mfaStart) {
               mfaStart.disabled = false;
               mfaStart.textContent = 'Set up two-factor authentication';
@@ -1646,9 +1646,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (err && err.name === 'AbortError') {
               const refreshed = await loadMfa(false);
               showBanner(
-                'Enrollment outcome is unknown after the request timed out. ' +
-                  (refreshed ? 'MFA status was refreshed. ' : "We couldn't refresh MFA status. ") +
-                  'If MFA now shows enrolled, the returned recovery codes cannot be recovered; regenerate them while you still have authenticator access. If it remains not enrolled, start enrollment again.',
+                "The request took too long, so we're not sure it finished. " +
+                  (refreshed
+                    ? 'The status above is up to date. '
+                    : "We couldn't refresh the status, so reload the page to check. ") +
+                  "If two-factor now shows as enrolled, your recovery codes weren't shown — generate new ones now while you still have your authenticator app. If it still shows as not enrolled, start setup again.",
               );
               return;
             }
@@ -1679,7 +1681,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           mfaRecoveryList.querySelectorAll('li'),
         ).map((li) => li.textContent || '');
         const text =
-          'Driftstack — MFA recovery codes\n' +
+          'Driftstack — two-factor recovery codes\n' +
           'Generated ' +
           new Date().toISOString() +
           '\n\nEach code works once. Store somewhere safe.\n\n' +
@@ -1753,9 +1755,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (err && err.name === 'AbortError') {
               const actionLabel = action === 'disable' ? 'Disable two-factor' : 'Regenerate';
               showStepUpError(
-                'MFA proof outcome is unknown after the request timed out. Cancel this prompt and retry ' +
+                "The request took too long, so we're not sure your code was accepted. Cancel this prompt and try " +
                   actionLabel +
-                  ' first: the session may already be MFA-fresh. If the step-up prompt returns, enter a new current authenticator code or an unused recovery code.',
+                  " again — it may go through without asking for a code. If you're asked again, enter a new code from your authenticator app or an unused recovery code.",
               );
               return;
             }
@@ -1809,15 +1811,15 @@ const apiBaseUrl = resolveApiBaseUrl();
                 mfaStatusBadge && mfaStatusBadge.textContent === 'enrolled';
               if (refreshed && !stillEnrolled) {
                 showBanner(
-                  'MFA-disable outcome was unknown after the request timed out. MFA status was refreshed and now shows not enrolled; disable likely completed, so do not submit it again.',
+                  'The request took too long, but two-factor now shows as off, so it was probably disabled. No need to try again.',
                 );
               } else if (refreshed) {
                 showBanner(
-                  'MFA-disable outcome was unknown after the request timed out. MFA status was refreshed and still shows enrolled; obtain a fresh code before retrying disable.',
+                  'The request took too long and two-factor still shows as on. Get a fresh code and try again.',
                 );
               } else {
                 showBanner(
-                  "MFA-disable outcome is unknown after the request timed out, and we couldn't refresh MFA status. Reload Security to verify before retrying disable.",
+                  "The request took too long and we couldn't refresh the status. Reload this page to check before trying again.",
                 );
               }
               return;
@@ -1887,9 +1889,11 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (err && err.name === 'AbortError') {
               const refreshed = await loadMfa(false);
               showBanner(
-                'Recovery-code regeneration outcome is unknown after the request timed out. ' +
-                  (refreshed ? 'MFA status was refreshed. ' : "We couldn't refresh MFA status. ") +
-                  'If the server accepted the request, every old recovery code is invalid and the replacement codes cannot be recovered. Regenerate once more only when you intentionally want another replacement set, and keep authenticator access available.',
+                "The request took too long, so we're not sure it finished. " +
+                  (refreshed
+                    ? 'The status above is up to date. '
+                    : "We couldn't refresh the status, so reload the page to check. ") +
+                  "If it did finish, your old recovery codes no longer work and the new ones weren't shown. Generate codes again only if you want a fresh set, and keep your authenticator app handy.",
               );
               return;
             }

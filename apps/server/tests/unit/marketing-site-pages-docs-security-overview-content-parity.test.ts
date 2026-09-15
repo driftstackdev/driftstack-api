@@ -55,7 +55,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
 
   it("At-rest 4-control framing pinned: 'All customer data in Postgres is on encrypted volumes (managed by Neon).' + 'API key plaintext is never stored — keys are hashed with scrypt (logN=15) at mint time.' + 'OAuth client secrets are similarly hashed before storage.' + 'MFA seeds are AES-256 encrypted with a key from the MFA_ENCRYPTION_KEY env, never written in plaintext.' — pinned so the 4-at-rest control (encrypted-volumes + scrypt-logN=15 + OAuth-hashed + MFA-AES-256 with MFA_ENCRYPTION_KEY) commitment survives (drift to a different hash function would create marketing↔crypto-engineering divergence)", () => {
     expect(body).toMatch(
-      /<strong>At rest:<\/strong> All customer data in Postgres is on\s*encrypted volumes \(managed by Neon\)\. API key plaintext is\s*<strong>never<\/strong> stored — keys are hashed with\s*<code>scrypt<\/code> \(logN=15\) at mint time\. OAuth client\s*secrets are similarly hashed before storage\. MFA seeds are\s*AES-256 encrypted with a key from the\s*<code>MFA_ENCRYPTION_KEY<\/code> env, never written in\s*plaintext\./,
+      /<strong>At rest:<\/strong> All customer data in Postgres is on\s*encrypted volumes \(managed by Neon\)\. API key plaintext is\s*<strong>never<\/strong> stored — keys are hashed with\s*<code>scrypt<\/code> \(logN=15\) at mint time\. OAuth client\s*secrets are similarly hashed before storage\. MFA seeds are\s*AES-256 encrypted at rest, never written in plaintext\./,
     );
   });
 
@@ -71,7 +71,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
       /<strong>Object storage:<\/strong> Customer-generated artefacts\s*that land in Cloudflare R2 use server-side encryption \(S3-SSE\);\s*underlying objects are never publicly listable\. The desktop app's\s*recorder saves streamed session frames locally on the operator's\s*machine; those recordings are not uploaded by the recording workflow\.\s*See <a href="\/docs\/recordings\/">\/docs\/recordings<\/a> for the boundary\./,
     );
     expect(body).toMatch(
-      /<strong>Profile state:<\/strong> Per-profile browser state\s*\(cookies, localStorage, IndexedDB\) lives in the WebKit driver\s*layer as per-profile encrypted files on disk on the driver\s*host \(the MacStadium fleet, US\)\. The Postgres profile row\s*\(EU\) holds metadata only — name, archetype, description\./,
+      /<strong>Profile state:<\/strong> Per-profile browser state\s*\(cookies, localStorage, IndexedDB\) is stored as per-profile\s*encrypted files on the browser hosts \(MacStadium, US\)\. The\s*database record \(EU\) holds metadata only — name, device\s*profile, description\./,
     );
   });
 
@@ -92,7 +92,7 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
 
   it("Network + infrastructure 4-bullet framing pinned: 'Driftstack runs primarily in the EU (Hetzner Falkenstein / Nuremberg). Customer-facing API endpoints are served from the EU region today; multi-region routing is on the roadmap.' + 'Postgres is managed by Neon (EU) with point-in-time recovery. Object storage (R2) is geo-replicated across Cloudflare's EU + US regions; presigned access is location-agnostic.' + 'Customer data egress to non-EU regions is restricted to the subprocessors enumerated below and on the sub-processor list.' + 'Rate-limiting is enforced application-side via token buckets (per-account + per-IP); DDoS absorption is handled at the CDN edge.' — pinned so the EU-primary Hetzner + Neon-PITR + R2-EU+US-geo-replicated + per-account+per-IP-token-buckets + edge-DDoS-absorption commitment survives", () => {
     expect(body).toMatch(
-      /Driftstack runs <strong>primarily in the EU<\/strong> \(Hetzner\s*Falkenstein \/ Nuremberg\)\./,
+      /Driftstack runs <strong>primarily in the EU<\/strong> \(Hetzner,\s*Falkenstein, Germany\)\./,
     );
     expect(body).toMatch(
       /Postgres is managed by Neon \(EU\) with point-in-time recovery\.\s*Object storage \(R2\) is geo-replicated across Cloudflare's\s*EU \+ US regions; presigned access is location-agnostic\./,
@@ -105,15 +105,15 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
     );
   });
 
-  it("Browser-sandbox 3-bullet framing pinned: 'Driftstack does not execute customer-supplied script bodies server-side — the API surface is action-based (navigate / interact / wait / capture). Arbitrary script eval is intentionally not exposed.' + 'Each session is one isolated WebKit instance backed by an ephemeral context; cross-session state never bleeds. Persistence between sessions only happens via the customer-managed profile mechanism (encrypted browser state on the driver host — the MacStadium fleet, US).' + 'Concurrent-session caps per tier act as the primary cost-control + abuse-mitigation primitive; exceeding the cap returns 429 with the concurrency-limit RFC 7807 type.' — pinned so the no-server-side-script-eval + one-WebKit-per-session + profile-as-only-persistence + concurrency-cap-as-cost-control + 429 concurrency-limit RFC 7807 commitment survives", () => {
+  it("Browser-sandbox 3-bullet framing pinned: 'Driftstack does not execute customer-supplied script bodies server-side — the API surface is action-based (navigate / interact / wait / capture). Arbitrary script eval is intentionally not exposed.' + 'Each session is one isolated WebKit instance backed by an ephemeral context; cross-session state never bleeds. Persistence between sessions only happens via the customer-managed profile mechanism (encrypted browser state on the driver host — the MacStadium fleet, US).' + 'Per-tier caps on how many sessions run at once are the primary cost-control and abuse-mitigation mechanism; exceeding the cap returns 429 with the concurrency-limit RFC 7807 type.' — pinned so the no-server-side-script-eval + one-WebKit-per-session + profile-as-only-persistence + concurrency-cap-as-cost-control + 429 concurrency-limit RFC 7807 commitment survives", () => {
     expect(body).toMatch(
       /Driftstack does not execute customer-supplied script bodies\s*server-side — the API surface is action-based\s*\(<code>navigate<\/code> \/ <code>interact<\/code> \/\s*<code>wait<\/code> \/ <code>capture<\/code>\)\. Arbitrary script\s*eval is intentionally not exposed\./,
     );
     expect(body).toMatch(
-      /Each session is one isolated WebKit instance backed by an\s*ephemeral context; cross-session state never bleeds\.\s*Persistence between sessions only happens via the\s*customer-managed <strong>profile<\/strong> mechanism\s*\(encrypted browser state on the driver host — the MacStadium\s*fleet, US\)\./,
+      /Each session runs in its own isolated browser that starts\s*fresh; state never leaks between sessions\.\s*Persistence between sessions only happens via the\s*customer-managed <strong>profile<\/strong> mechanism\s*\(encrypted browser state on the browser hosts — MacStadium,\s*US\)\./,
     );
     expect(body).toMatch(
-      /Concurrent-session caps per tier act as the primary\s*cost-control \+ abuse-mitigation primitive; exceeding the cap\s*returns <code>429<\/code> with the\s*<code>concurrency-limit<\/code> RFC 7807 type\./,
+      /Per-tier caps on how many sessions run at once are the primary\s*cost-control and abuse-mitigation mechanism; exceeding the cap\s*returns <code>429<\/code> with the\s*<code>concurrency-limit<\/code> RFC 7807 type\./,
     );
   });
 
@@ -137,9 +137,13 @@ describe('W521.C apps/marketing-site/src/pages/docs/security-overview.astro cont
       /<a href="\/docs\/audit-log\/">Account audit log<\/a> — every\s*mutation on your account \(key mints, profile changes, billing\s*events\)\./,
     );
     expect(body).toMatch(
-      /Session logs — per-session navigation \+ console output\s*retained per tier\./,
+      /Session activity — the pages visited in your agent sessions, per\s*profile, via the <a href="\/api-reference\/">API<\/a>\s*\(<code>GET \/v1\/profiles\/:id\/activity<\/code>\)\./,
     );
-    expect(body).toMatch(/Cost ledger — every billable event, queryable via the API\./);
+    expect(body).toMatch(
+      /<a href="\/docs\/cost-monitoring\/">Operational cost estimate<\/a> — a\s*per-month estimate of what it costs to serve your account\. It is not\s*an invoice\./,
+    );
+    // Neither console-output retention nor a per-event billable ledger exists.
+    expect(body).not.toMatch(/console output|Cost ledger|every billable event/);
   });
 
   it("Incident response + vulnerability reporting framing pinned: 'See /docs/incident-policy for the disclosure timeline + the status page cadence. Security-relevant incidents are disclosed within 72h of confirmation; we do not bury exposure events.' + 'Email security@driftstack.dev with the details. We respond within 1 business day. Our vulnerability disclosure policy covers safe-harbour for good-faith research; please review it before testing.' — pinned so the 72h-disclosure + don't-bury-exposure + 1-business-day-SLA + /legal/vulnerability-disclosure safe-harbour commitment survives (drift to softening 72h or 1-business-day would weaken procurement-trust)", () => {

@@ -15,7 +15,10 @@ describe('legacy roadmap route release-truth parity', () => {
 
   it('uses the live API documentation for current capability truth', () => {
     expect(page).toContain('https://docs.driftstack.io/api/');
-    expect(page).toContain('current HTTP contract');
+    // 2026-09-15 customer-copy pass: "the current HTTP contract" became
+    // "what the API does today" — same reference, no developer-speak.
+    expect(page).toContain('what the API does today');
+    expect(page).not.toContain('HTTP contract');
   });
 
   it('contains no staged feature taxonomy or delivery promise', () => {

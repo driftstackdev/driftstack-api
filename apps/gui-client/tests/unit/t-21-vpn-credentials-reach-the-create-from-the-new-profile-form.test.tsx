@@ -146,10 +146,10 @@ describe('T-21 — VPN credentials reach the create from the New-Profile proxy f
       target: { value: OVPN },
     });
     // The auth fields the old inline form OMITTED — the whole point of T-21.
-    fireEvent.change(screen.getByLabelText(/Auth username \(optional\)/i), {
+    fireEvent.change(screen.getByLabelText(/VPN username \(optional\)/i), {
       target: { value: 'vpnuser' },
     });
-    fireEvent.change(screen.getByLabelText(/Auth password \(optional\)/i), {
+    fireEvent.change(screen.getByLabelText(/VPN password \(optional\)/i), {
       target: { value: 'vpnpass' },
     });
 

@@ -79,7 +79,7 @@ const PAYLOADS: Record<string, Record<string, unknown>> = {
 /** The endpoints the customer docs promise honour the header. */
 function documentedEndpoints(): string[] {
   const page = readFileSync(DOCS_PAGE, 'utf8');
-  const start = page.indexOf('honoured on these explicitly wired endpoints');
+  const start = page.indexOf('The header is honoured on these endpoints');
   if (start < 0) return [];
   // The bullet list runs until the paragraph that starts "Every other endpoint".
   const end = page.indexOf('Every other endpoint', start);

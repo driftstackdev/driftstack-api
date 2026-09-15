@@ -44,12 +44,12 @@ describe('customer-dashboard/pages/auth/oauth-client/confirm-merge content parit
     expect(body).toMatch(/data-banner/);
   });
 
-  it("Missing-token banner copy + /login fallback link framing pinned: 'Missing token query parameter. Click the link in the verify-merge email.' + '<a href=\"/login\"…>login page</a>'. Drift to a different fallback URL would break the user's recovery path", () => {
+  it("Missing-token banner copy + /login fallback link framing pinned: 'This page needs to be opened from the link in your confirmation email.' + '<a href=\"/login\"…>sign-in page</a>'. Drift to a different fallback URL would break the user's recovery path", () => {
     expect(body).toMatch(
-      /showBanner\("Missing 'token' query parameter\. Click the link in the verify-merge email\."\);/,
+      /showBanner\('This page needs to be opened from the link in your confirmation email\.'\);/,
     );
     expect(body).toMatch(
-      /Link expired or invalid\? Sign in via password \+ retry the IDP\s*button from the <a\s*href="\/login\/"/,
+      /Link expired or not working\? Sign in with your password, then use the Google or GitHub\s*button on the <a\s*href="\/login\/"/,
     );
   });
 

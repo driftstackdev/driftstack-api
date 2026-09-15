@@ -85,13 +85,13 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
     );
     expect(body).toMatch(/<li><code>status<\/code> — terminal or in-flight status\.<\/li>/);
     expect(body).toMatch(
-      /<li><code>payment_id<\/code> — NowPayments invoice ID, empty\s*if no IPN has hit\.<\/li>/,
+      /<li><code>payment_id<\/code> — NowPayments invoice ID, empty\s*until a payment notification has arrived\.<\/li>/,
     );
     expect(body).toMatch(
       /<li><code>customer_note<\/code> — customer-supplied note,\s*empty if unset\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li><code>internal_note<\/code> — admin-only ops note, empty\s*if unset\.<\/li>/,
+      /<li><code>internal_note<\/code> — admin-only internal note, empty\s*if unset\.<\/li>/,
     );
     expect(body).toMatch(/<li><code>created_at<\/code> — ISO-8601 UTC timestamp\.<\/li>/);
     expect(body).toMatch(
@@ -127,8 +127,9 @@ describe('W508.C apps/marketing-site/src/pages/docs/admin-csv-export.astro conte
 
   it("GUI Download CSV button + 'mints a blob URL client-side so the download honours the Bearer auth header' pinned — pinned so the GUI-button-uses-blob-URL pattern + the auth-header-preservation rationale survive (drift to documenting a direct-link would surprise customers who try and find the API rejects credential-less direct links; this is the same pattern as the customer-dashboard CSV download)", () => {
     expect(body).toMatch(
-      /The admin GUI \(<code>Crypto orders \(admin\)<\/code> view\) has a\s*<strong>Download CSV<\/strong> button that calls this endpoint\s*with whatever <code>status<\/code> and <code>search<\/code>\s*filters are currently active\. The button mints a blob URL\s*client-side so the download honours the Bearer auth header\./,
+      /The admin GUI \(<code>Crypto orders \(admin\)<\/code> view\) has a\s*<strong>Download CSV<\/strong> button that calls this endpoint\s*with whatever <code>status<\/code> and <code>search<\/code>\s*filters are currently active\./,
     );
+    expect(body).not.toMatch(/blob URL|Bearer auth header/);
   });
 
   it('file exists at canonical path', () => {

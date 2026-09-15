@@ -56,10 +56,10 @@ The teammate signs up at <https://app.driftstack.io/signup/> using
 the invitee email address (must match exactly), then clicks the
 accept link from the invite email.
 
-The link takes them to the dashboard's `/team/accept` page; the
-page calls `POST /v1/team/invites/accept` with the token from the
-URL. Server validates that the signed-in account's email matches
-the invitee email + writes the membership row.
+The link takes them to the dashboard's `/team/accept` page, which
+checks that the signed-in account's email matches the invitation
+and adds them to the team. To accept programmatically instead, use
+`POST /v1/team/invites/accept` (see the [API reference](/api/team/)).
 
 If the teammate already has an account (under the same email),
 they can sign in first and then click the accept link.
@@ -71,7 +71,7 @@ listing every owner they're a member of. The dashboard sidebar
 displays an **Acting as** picker that:
 
 - Lists the member's own account (default) + each owner team.
-- Persists the selection to `localStorage.ds_act_as_account`.
+- Remembers your selection in this browser.
 - Auto-injects `X-Driftstack-Account: acc_<owner-uuid>` on every
   subsequent dashboard fetch.
 
@@ -124,17 +124,16 @@ Role gating:
   widened to read-only members. A `member` acting on an owner gets `403`
   there while the plain session list still works.
 - **Live session state** (`GET /v1/sessions/:id/state`): `admin` only.
-  It claims the driver and returns cookies/local storage; `member` gets
-  `403` before any session or driver mutation.
+  It returns the live session's cookies and local storage; `member` gets
+  `403` and the session is left untouched.
 - **Write endpoints** (POST / PATCH / DELETE / api-keys rotate):
   `admin` role only. `member` gets `403`.
 
-Team-resource session and agent-session routes use dual rate-limit
-accounting after those role checks. The member first spends from their
-own bucket. A distinct selected owner then spends from the same bucket
-key and cost, using the owner's current tier and active override.
-Owner exhaustion returns a generic 429 with `Retry-After`; it does not
-reveal the owner's policy or refund the member's already-consumed token.
+Session and agent-session requests made on behalf of an owner count
+against two rate limits: yours first, then the owner's, based on the
+owner's plan. If the owner's limit is exhausted you get a generic 429
+with `Retry-After`. The response does not include the owner's limit
+details, and the request still counts against your own limit.
 
 Endpoints that honor the header:
 
@@ -152,11 +151,8 @@ Endpoints that honor the header:
 | Usage             | GET, `/series`                                                                                                                                                                                                                              |
 | Billing           | `GET /v1/billing` only — checkout and portal sessions are per-caller                                                                                                                                                                        |
 
-This table was previously narrower than the server: it named four profile
-methods where every profile route honors the header, and omitted webhook
-PATCH, rotate-secret and test entirely. If you are unsure about a route
-not listed here, the safe assumption is that it operates on your own
-account.
+If you are unsure about a route not listed here, the safe assumption is
+that it operates on your own account.
 
 Endpoints that do NOT honor the header (operate on the caller's
 own account regardless):
@@ -180,14 +176,13 @@ owner's resources, that entry is written to the OWNER's audit log
 with:
 
 - `account_id`: the owner.
-- `actor_account_id`: the member when that endpoint propagates team
-  actor context.
-- `actor_key_id`: the member's API key id when that context is
-  propagated.
+- `actor_account_id`: the member, when that endpoint records who
+  acted.
+- `actor_key_id`: the member's API key id, when that is recorded.
 
-Not every endpoint currently emits an audit entry or propagates team
-actor context. Treat these actor fields as endpoint-specific
-provenance, not as a complete record of every team action.
+Not every endpoint currently writes an audit entry or records who
+acted. Treat these actor fields as a per-endpoint detail, not as a
+complete record of every team action.
 
 So the owner sees, in their audit log, "Member alice@example.com
 (`acc_…`) created session `ses_…` on this account at 2026-05-08
@@ -220,10 +215,9 @@ curl -X DELETE https://api.driftstack.dev/v1/team/members/$MEMBERSHIP_ID \
   -H "Authorization: Bearer $OWNER_KEY"
 ```
 
-The membership row is deleted; the member's auth-cache is
-invalidated immediately so their `X-Driftstack-Account` header
-stops working on the next request. Their own account stays — only
-the team relationship is severed.
+The member is removed immediately; their `X-Driftstack-Account`
+header stops working on the next request. Their own account stays —
+only the team relationship is severed.
 
 A `team.member_removed` audit entry lands on the owner's log; the
 member is NOT separately notified by Driftstack (the owner can do
@@ -240,12 +234,11 @@ the caller's own team (as noted above, `/v1/team/*` never honors
 `X-Driftstack-Account`, so an admin calling invite would be
 inviting people to their _own_ team, not the owner's). The owner
 is always implicitly "admin" on their own team (no separate
-membership row).
+membership record).
 
-Each admin retains an independent actor budget, but all admins targeting
-the same owner share that owner's budget. For example, simultaneous
-session creates by two admins contend on one owner
-`sessions:create` bucket; adding admins never multiplies owner capacity.
+Each admin has their own rate limit, but all admins acting on the same
+owner share the owner's limit; adding admins never increases the
+owner's capacity.
 
 ### Read-only collaborators
 
@@ -266,7 +259,7 @@ flow is:
 
 1. Owner (or admin member) rotates → new key, 24h grace on the old.
 2. Teammates have 24h to swap deployments to the new key.
-3. After 24h the old key auto-expires server-side.
+3. After 24h the old key expires automatically.
 
 Teammates calling the rotation endpoint themselves require admin
 role + `X-Driftstack-Account` header pointing at the owner.

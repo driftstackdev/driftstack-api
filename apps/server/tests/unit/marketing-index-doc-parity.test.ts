@@ -64,7 +64,7 @@ describe('W246.D marketing-site /index doc parity', () => {
   it('S30 2026-07-07 (founder decision: soften) EU residency softened: "EU-hosted by default." headline (supersedes M.3\'s "EU-only by default." — DB-resident data is EU-Hetzner-true, but file objects live on Cloudflare R2 default jurisdiction with EU + US replication) + "Your account data lives on EU servers." plain-English body + "operational metadata we need to bill" framing. Infra-tier readers get the detail via the /trust/sub-processors cross-link.', () => {
     expect(doc).toMatch(/EU-hosted by default/);
     expect(doc).toMatch(/Your account data lives on EU servers/);
-    expect(doc).toMatch(/operational metadata we need to bill/);
+    expect(doc).toMatch(/only what we need to bill you/);
     expect(doc).not.toMatch(/Hetzner\s*Falkenstein, Neon EU, and Cloudflare R2/);
     // Prior infra-tier wording must NOT return.
     expect(doc).not.toMatch(/Customer data stays in the EU/);

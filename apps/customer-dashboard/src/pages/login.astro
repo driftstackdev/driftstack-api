@@ -370,7 +370,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         banner.classList.add('hidden');
         if (!canPersistWebSession()) {
           showBanner(
-            'Enable browser site storage before signing in. No sign-in request was sent, so your entries are still here and you can retry after storage is available.',
+            'Your browser is blocking site storage, which sign-in needs. Allow it in your browser settings, then try again — nothing has been lost.',
           );
           return;
         }
@@ -424,7 +424,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (err && err.sessionPersistenceFailure) {
               showBanner(
-                'Sign-in succeeded, but this browser could not persist the session. Enable site storage, then sign in again.',
+                "You signed in, but your browser couldn't save the session. Allow site storage, then sign in again.",
               );
               return;
             }
@@ -507,7 +507,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 resendOutcomeUnknown = true;
                 if (resendStatus)
                   resendStatus.textContent =
-                    'Delivery is unknown after the request timed out. The server may already have sent a verification email. Do not resend again on this page. Check your inbox and spam folder; if multiple messages arrive, use the newest one. Reload only if nothing arrives.';
+                    "The request took too long, so we're not sure the email went out. Check your inbox and spam folder before trying again. If more than one arrives, use the newest. Reload this page if nothing arrives.";
                 return;
               }
               if (resendStatus)
@@ -652,7 +652,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (!canPersistWebSession()) {
             showBanner(
-              'Enable browser site storage before submitting this one-time MFA challenge. It has not been consumed, so you can retry after storage is available.',
+              'Your browser is blocking site storage, which sign-in needs. Allow it, then enter your code again.',
             );
             return;
           }
@@ -687,14 +687,14 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (mfaAccepted) {
                 recoverFromUnknownMfaOutcome();
                 showBanner(
-                  'Two-factor verification was accepted, but this browser could not finish the session. Do not submit this challenge or recovery code again. Enter your password below to start a fresh sign-in and MFA challenge.',
+                  "Your code was accepted, but your browser couldn't finish signing you in. Don't enter that code again — sign in again with your password and a new code.",
                 );
                 return;
               }
               if (controller.signal.aborted) {
                 recoverFromUnknownMfaOutcome();
                 showBanner(
-                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this challenge or recovery code again. Enter your password below to start a fresh sign-in and MFA challenge.',
+                  "The request took too long, so your code may already have been used. Don't enter it again — sign in again with your password and a new code.",
                 );
                 return;
               }
@@ -816,7 +816,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // too). Refuse before anything is minted server-side.
           if (!canPersistWebSession()) {
             showBanner(
-              'Enable browser site storage before signing in with a provider. Nothing has been sent to the provider yet, so you can retry once storage is available.',
+              'Your browser is blocking site storage, which sign-in needs. Allow it, then try again.',
             );
             return;
           }
@@ -833,7 +833,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               if (!binding) {
                 throw Object.assign(
                   new Error(
-                    'Provider sign-in needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet; open the dashboard over HTTPS or sign in with your password.',
+                    'Signing in with Google or GitHub only works on a secure (https://) connection. Open the dashboard over https, or sign in with your password.',
                   ),
                   { customerSafe: true },
                 );
@@ -869,7 +869,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 'https://github.com',
               ]);
               if (!authorizeUrl) {
-                showBanner('OAuth start failed: invalid authorize URL');
+                showBanner("Couldn't start sign-in with this provider. Try again.");
                 return;
               }
               // Persist the secret under the flow_id BEFORE leaving, and read
@@ -878,7 +878,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               // flow_id cannot be finished either (the callback page has no
               // record to look up), so it is refused here, before the IDP.
               if (typeof body.flow_id !== 'string' || body.flow_id.length === 0) {
-                showBanner('OAuth start failed: no flow id in the response.');
+                showBanner("Couldn't start sign-in with this provider. Try again.");
                 return;
               }
               const key = OAUTH_FLOW_KEY_PREFIX + body.flow_id;
@@ -891,7 +891,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 }
               } catch (_) {
                 showBanner(
-                  'This browser could not persist the sign-in flow. Enable site storage, then start a fresh sign-in.',
+                  "Your browser couldn't save the sign-in. Allow site storage, then try again.",
                 );
                 return;
               }
@@ -901,7 +901,10 @@ const apiBaseUrl = resolveApiBaseUrl();
               showBanner(
                 controller.signal.aborted
                   ? 'Sign-in provider took too long. Check your connection and try again.'
-                  : window.driftstackRequestErrorMessage(err, 'OAuth start failed.'),
+                  : window.driftstackRequestErrorMessage(
+                      err,
+                      "Couldn't start sign-in with this provider. Try again.",
+                    ),
               );
             })
             .finally(() => {

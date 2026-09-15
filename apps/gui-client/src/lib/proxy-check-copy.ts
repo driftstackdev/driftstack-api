@@ -26,11 +26,11 @@ export const RECHECK_ACTION = 'Re-check';
 
 /** #10 / #11 — what the VPN check does, in the customer's words (the grid
  *  button title and the card menu label share it). */
-export const CHECK_VPN_TITLE = `${CHECK_VPN_ACTION} — resolves the endpoint, then brings the tunnel up and measures its latency and exit.`;
+export const CHECK_VPN_TITLE = `${CHECK_VPN_ACTION} — checks the address, connects the VPN and measures its latency and exit.`;
 
 /** #2 — what an HTTP row's check does: the address, nothing more. */
 export const CHECK_ENDPOINT_TITLE =
-  'Check that this address resolves — the proxy itself is verified when a session launches.';
+  'Check that this address can be found — the proxy itself is verified when a session launches.';
 
 /** #2 — an HTTP row's exit cell: no exit prompt, because no check here measures one. */
 export const HTTP_VERIFIED_AT_LAUNCH = 'verified at launch';
@@ -55,10 +55,10 @@ export const VPN_NO_EXIT_YET_TITLE = `No exit measured yet. Run ${CHECK_VPN_ACTI
  *  the full sentence as its title; the grid renders the full sentence. Derived,
  *  never retyped — `EXIT_GEO_UNAVAILABLE` stays byte-identical to the literal
  *  the grid shipped. */
-export const EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable';
-export const EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the probe did not complete`;
+export const EXIT_GEO_UNAVAILABLE_SHORT = 'exit location unknown';
+export const EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the check did not complete`;
 export const EXIT_GEO_UNAVAILABLE_TITLE =
-  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
+  'The proxy accepted the connection and login, but no traffic made it through. Try the test again.';
 
 /** #3 — the card's latency slot for a VPN row with no fleet number: nothing
  *  was ever measured, so "stale" (a number that aged) is the wrong word. */
@@ -68,7 +68,7 @@ export const VPN_LATENCY_NOT_MEASURED = 'not measured';
  *  measured through the tunnel. `VPN_NO_EXIT_YET_TITLE` was used here and
  *  asserted "No exit measured yet" two rows above the exit it contradicted;
  *  this sentence names only what is missing. */
-export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel yet. Run ${CHECK_VPN_ACTION} to measure it.`;
+export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this VPN yet. Run ${CHECK_VPN_ACTION} to measure it.`;
 
 /** (o) — the Proxies grid's "tunnel up · no latency" pill ((i) I4: the test Mac
  *  brought the tunnel up and observed the exit but reported no number). The
@@ -76,7 +76,7 @@ export const VPN_NO_LATENCY_YET_TITLE = `No latency measured through this tunnel
  *  with a "no exit yet" title beside the exit that reply put on the row; both
  *  surfaces now carry this one sentence. */
 export const VPN_TUNNEL_UP_NO_LATENCY_TITLE =
-  'The tunnel came up and was measured, but no latency was reported.';
+  'The VPN connected and was measured, but no latency was reported.';
 
 /** (o) — the pre-flight of a VPN/HTTP row is a DNS resolve of its endpoint. When
  *  it does NOT resolve, nothing downstream ran: no tunnel, no latency, no exit.
@@ -84,8 +84,8 @@ export const VPN_TUNNEL_UP_NO_LATENCY_TITLE =
  *  T-20; the profile card said "not measured" + "no exit measured yet — run
  *  Check VPN", promising a check that cannot bring the tunnel up. This is the
  *  card's word for the exit line; the pill carries the resolver's message. */
-export const ENDPOINT_UNRESOLVED = 'unresolved';
-export const ENDPOINT_UNRESOLVED_EXIT_TITLE = `The endpoint did not resolve, so no exit could be measured. Fix the address, then ${RECHECK_ACTION}.`;
+export const ENDPOINT_UNRESOLVED = 'address unknown';
+export const ENDPOINT_UNRESOLVED_EXIT_TITLE = `The address could not be found, so no exit could be measured. Fix the address, then ${RECHECK_ACTION}.`;
 
 /** #9 — the ONE next step for a missing API key, everywhere a proxy check
  *  needs one. Settings is the place the customer can go from here; "the
@@ -106,11 +106,11 @@ export const MISSING_API_KEY_NEXT_STEP = `${CONNECT_API_KEY_IN_SETTINGS} to test
  *  step with no button; and wherever the two gates meet, the KEY is checked
  *  first — a customer with no key cannot store anything, so the key is the
  *  blocker to name. */
-export const VPN_NOT_STORED_CHECK_NOTICE = `Endpoint resolves. Launch a session through this proxy once to store it on your account; then ${CHECK_VPN_ACTION} can test the tunnel.`;
+export const VPN_NOT_STORED_CHECK_NOTICE = `Address found. Launch a session through this VPN once to save it to your account; then ${CHECK_VPN_ACTION} can test it.`;
 /** The Test-all tally's short form of the same reason (one clause per row). */
 export const VPN_NOT_STORED_TALLY_REASON =
   'not stored on your account yet — launch a session through it once';
-export const VPN_NO_API_KEY_CHECK_NOTICE = `Endpoint resolves. ${MISSING_API_KEY_NEXT_STEP}.`;
+export const VPN_NO_API_KEY_CHECK_NOTICE = `Address found. ${MISSING_API_KEY_NEXT_STEP}.`;
 
 /**
  * (V2 2026-09-12, owner: "openvpn … not showing info measurements of proxy
@@ -132,7 +132,7 @@ export const VPN_NO_API_KEY_CHECK_NOTICE = `Endpoint resolves. ${MISSING_API_KEY
  * customer — and it is the one refusal a retry can never fix.
  */
 export const VPN_PLAN_EXCLUDED_CHECK_NOTICE =
-  'Endpoint resolves. Your plan does not include VPN proxies, so the tunnel could not be tested and a session cannot launch through it. Upgrade to use OpenVPN or WireGuard.';
+  'Address found. Your plan does not include VPN proxies, so this VPN could not be tested and sessions cannot use it. Upgrade to use OpenVPN or WireGuard.';
 /** The Test-all tally's clause for the same refusal. */
 export const VPN_PLAN_EXCLUDED_TALLY_REASON = 'not included in your plan';
 /** The Test-all tally's clause when the store failed for any other reason. */
@@ -155,7 +155,7 @@ export const VPN_STORE_FAILED_TALLY_REASON = 'could not be stored on your accoun
  * sentence says which config it describes.
  */
 export const VPN_STALE_CONFIG_CHECK_NOTICE =
-  'Endpoint resolves. This Mac’s copy of the configuration could not be sent to your account, so the result below describes the configuration stored earlier — not the one saved here. Try the check again.';
+  'Address found. Your latest VPN settings could not be sent to your account, so this result is for the settings saved earlier. Try the check again.';
 
 /** (j) J4 / #9 — the free-desktop credential cannot reach the test route: the
  *  row is "not tested", with the same next step a row with no key gets. */
@@ -171,6 +171,6 @@ export const RETEST_ACTION = 'Re-test';
  *  endpoint resolved and whose tunnel was never brought up. The card's health
  *  pill reads the same cache entry (it once said 'not measured' for it), so
  *  both surfaces read these two strings. */
-export const ENDPOINT_OK_PILL = 'endpoint ok';
+export const ENDPOINT_OK_PILL = 'address ok';
 export const ENDPOINT_OK_TITLE =
-  'The endpoint resolved. The tunnel itself is measured once the proxy is stored on your account, and verified at launch.';
+  'The address was found. The connection itself is tested once the proxy is saved to your account, and verified when a session launches.';

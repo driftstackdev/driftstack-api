@@ -62,7 +62,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
 
   it('two-ladder pricing entry pinned exactly (Manual $79/$249/$699 + API $149/$499/$1,499 + Enterprise + free entry tier)', () => {
     expect(body).toMatch(
-      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both ladders\./,
+      /Manual \(\$79\/mo Solo \/ \$249\/mo Team \/ \$699\/mo Agency\) and API \(\$149\/mo Starter \/ \$499\/mo Builder \/ \$1,499\/mo Scale \+ custom Enterprise\)\. A free entry tier sits below both plan families\./,
     );
   });
 
@@ -73,7 +73,7 @@ describe('W370.A marketing-site /changelog page content parity', () => {
   });
 
   it('live crypto checkout entry pins processor, currencies, events, and default rail', () => {
-    expect(body).toContain('Crypto checkout is live for self-serve paid tiers');
+    expect(body).toContain('Crypto checkout is live for paid plans'); // 2026-09-15: "self-serve paid tiers" → "paid plans"
     expect(body).toContain('BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments');
     expect(body).toContain('crypto.order.paid and crypto.order.failed');
     expect(body).toContain('Stripe remains the default way to pay');
@@ -107,15 +107,18 @@ describe('W370.A marketing-site /changelog page content parity', () => {
 
   it("public status-page entry pinned (independent surface: control-plane outage doesn't take it down)", () => {
     expect(body).toMatch(/Public status page at status\.driftstack\.io/);
+    // 2026-09-15: "control-plane" is banned on customer surfaces.
     expect(body).toMatch(
-      /independent of api\.driftstack\.dev so a control-plane outage does not take the status page down/,
+      /runs separately from api\.driftstack\.dev, so it stays up even if the API is down/,
     );
   });
 
   it('GDPR Article 20 audit-log export entry pinned (CSV / JSON + 10K-row ceiling + cursor)', () => {
     expect(body).toMatch(/GDPR Article 20 portability/);
     expect(body).toMatch(/\/v1\/account\/audit-log\/export/);
-    expect(body).toMatch(/10K-row ceiling per export with cursor pagination beyond/);
+    expect(body).toMatch(
+      /Up to 10,000 rows per export; beyond that, page through the rest with a cursor/,
+    );
   });
 
   it('entries in reverse-chronological order (newest first)', () => {

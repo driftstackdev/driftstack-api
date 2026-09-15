@@ -9,7 +9,8 @@ description: Per-tier rate limit defaults — token-bucket capacity, refill rate
 Driftstack enforces per-tier token-bucket rate
 limits on every authenticated `/v1/*` call. The limits are
 intentional anti-abuse caps (runaway scripts, accidental DoS),
-not the pricing meter. Pricing is concurrent-only per ADR-004.
+not the pricing meter. Pricing is based only on how many sessions run at
+once (concurrent sessions).
 
 ## Four bucket keys
 
@@ -19,10 +20,9 @@ Every authenticated request selects exactly one bucket key:
   have a dedicated bucket below.
 - **`sessions:create`** — the two session-creating calls,
   `POST /v1/sessions` and `POST /v1/profiles/:id/launch`. Lower
-  cap because session creation is the most expensive op in the
-  system (driver allocation, archetype hydration, fingerprint
-  pinning); a profile launch creates a session too, so it draws
-  on the same cap rather than a separate one.
+  cap because starting a browser is the most expensive operation; a
+  profile launch creates a session too, so it draws on the same cap
+  rather than a separate one.
 - **`agent_sessions:message`** —
   `POST /v1/agent-sessions/:id/message` only. Isolated from
   `global` so an LLM-driven message loop can't drain the
@@ -106,12 +106,11 @@ consumed and is not refunded.
 
 ## Per-account overrides
 
-Driftstack staff can configure per-account overrides via
-`/v1/admin/rate-limit-overrides`. Customers reaching legitimate
-high-throughput workloads (Enterprise, agencies running scraping
-jobs across many domains) are bumped above the per-tier default
-on request. Email `support@driftstack.dev` with workload shape +
-expected steady-state RPS.
+Driftstack support can configure per-account overrides. Customers
+reaching legitimate high-throughput workloads (Enterprise, agencies
+running scraping jobs across many domains) are bumped above the
+per-tier default on request. Email `support@driftstack.dev` with
+workload shape + expected steady-state RPS.
 
 ## Reading your current cap
 
@@ -185,13 +184,8 @@ Note the one semantic difference: `ratelimit-reset` is relative
 delta-seconds, while `x-ratelimit-reset` is an absolute unix-seconds
 timestamp. Parse whichever form your tooling expects.
 
-## Source of truth
+## Reporting a discrepancy
 
-The numbers above are mirrored from
-`packages/api-types/src/common.ts:TIER_RATE_LIMIT_DEFAULTS` —
-the API server reads from the same constant via
-`bucketConfigFor()` in
-`apps/server/src/services/rate-limit.ts`. Customer dashboard +
-this docs page must agree with the server. If you spot a
-discrepancy, file a bug at
+The limits above are the same ones the API enforces and the same ones shown
+in your dashboard. If you notice a mismatch, email
 [support@driftstack.dev](mailto:support@driftstack.dev).

@@ -72,12 +72,14 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   it('M.3 + M.6 — "One iPhone among millions." why-works hero (M.3 Plan Item 5 dedupe; "Indistinguishable" now appears once on the page in the hero h1 brand line) + multi-archetype iPhone family + Safari 26.4-26.5 launch-window reference (M.6 Path A per founder verdict 2026-05-17) + launch-blocking-bug fidelity commitment', () => {
     expect(body).toMatch(/One iPhone among millions\./);
     // M.6 Path A: multi-archetype launch family + Safari 26.5 span.
-    expect(body).toMatch(/iPhone\s+15 Pro/);
-    expect(body).toMatch(/iPhone 16 Pro/);
-    expect(body).toMatch(/iPhone 17 lineup/);
-    expect(body).toMatch(/iOS 18\.7\s*\/ Safari 26\.4/);
-    expect(body).toMatch(/Safari 26\.5/);
-    expect(body).toMatch(/launch-blocking bug/);
+    // 2026-09-15: the device sentence is BOUND to DEVICE_SUPPORT (capabilities.ts)
+    // instead of hand-naming three models — the catalog spans 19 models.
+    expect(body).toMatch(/import \{ DEVICE_SUPPORT \} from '\.\.\/data\/capabilities'/);
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.deviceFamilies\}/);
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.selectableCount\}/);
+    expect(body).toMatch(/\{DEVICE_SUPPORT\.safariVersions\}/);
+    expect(body).toMatch(/iPhone 17 on iOS 18\.7 \/ Safari 26\.4/);
+    expect(body).toMatch(/Nothing bolted on top/);
     // The pre-dedupe wording must NOT return at this slot — it was
     // the load-bearing repetition Item 5 fixes.
     expect(body).not.toMatch(
@@ -103,19 +105,19 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
   it('metering framing pinned (v2 trust band): "One metric. Concurrent sessions. That\'s it." + no-per-call-markup + no-per-element-fees + 200-pages-on-one-session example', () => {
     expect(body).toMatch(/One metric\. Concurrent sessions\. That's it\./);
     expect(body).toMatch(/No per-call markup\. No\s*per-element fees\./);
-    expect(body).toMatch(/Visit 200 pages on one session for the cost of\s*visiting one\./);
+    expect(body).toMatch(/Visit 200 pages on one\s*session for the cost of\s*visiting one\./);
   });
 
   it('S30 2026-07-07 (founder decision: soften) EU residency softened: "EU-hosted by default." headline (supersedes M.3\'s "EU-only by default." — DB-resident data is EU-Hetzner-true, but file objects live on Cloudflare R2 default jurisdiction with EU + US replication, so the absolutist claim over-promised) + plain-English body ("Your account data lives on EU servers. We don\'t log what your sessions visit or do — only the operational metadata we need to bill") + sub-processors cross-link.', () => {
     expect(body).toMatch(/EU-hosted by default\./);
     expect(body).toMatch(/Your account data lives on EU servers\./);
-    expect(body).toMatch(/only the operational metadata we need to bill/);
+    expect(body).toMatch(/only what we need to bill you/);
     // S20b 2026-07-06: the billing-metadata triple reads in plain words
     // (duration / archetype glossed via the glossary link / cap usage).
     expect(body).toMatch(
-      /how long a\s*session ran, which iPhone model \+ iOS \+ Safari combination it used/,
+      /how long a session ran, which\s*iPhone model, iOS and Safari version it used/,
     );
-    expect(body).toMatch(/how much of your concurrent cap it used/);
+    expect(body).toMatch(/how many sessions\s*you had running at once/);
     expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
     // Prior framings must NOT return at this slot.
     expect(body).not.toMatch(/Customer data stays in the EU\./);
@@ -131,7 +133,7 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
 
   it('egress state is current: per-profile SOCKS5 / OpenVPN / WireGuard is live, with the security cross-link and no aspirational proxy-swap copy', () => {
     expect(body).toMatch(
-      /Customer-configurable egress — attaching your own internet exit \(a\s*SOCKS5 proxy, OpenVPN, or WireGuard\) to each profile — is live/,
+      /route each profile's traffic through your own SOCKS5\s*proxy, OpenVPN, or WireGuard connection today/,
     );
     expect(body).not.toMatch(/swapping the proxy on a session that's already running/);
     expect(body).toMatch(/href="\/trust\/security-overview\/"/);
@@ -171,11 +173,9 @@ describe('W371.A marketing-site /index (homepage) content parity', () => {
     expect(body).toMatch(/Apple's engine\. Not a Chromium copy\./);
     // S20b 2026-07-06 plain-language pass: Core Text + the pipeline are now
     // glossed inline; the same capability sentence survives with glosses.
+    expect(body).toMatch(/Driftstack runs its own build of Apple's WebKit, from Apple's\s*source/);
     expect(body).toMatch(
-      /WebKit \(the browser engine\),\s*Core Text \(Apple's text-drawing system\)/,
-    );
-    expect(body).toMatch(
-      /rendering pipeline produce your fingerprint the way Apple wrote\s*them, in the order Apple intended\./,
+      /are drawn the way an iPhone draws them,\s*checked against real devices\./,
     );
   });
 

@@ -21,7 +21,7 @@ const EMAIL_EVENTS = [
   {
     type: 'signup-welcome',
     label: 'Signup welcome',
-    description: 'Once-after-verification onboarding email.',
+    description: 'A welcome email sent once, after you verify your address.',
   },
   {
     type: 'session-failed-first',
@@ -32,23 +32,23 @@ const EMAIL_EVENTS = [
     type: 'session-success-first',
     label: 'First session success',
     description:
-      'One-time activation email after your first session completes successfully. Subsequent sessions don\'t notify; the dashboard takes over.',
+      'A one-time email after your first successful session. You won\'t get emails for later sessions.',
   },
   {
     type: 'tier-changed',
     label: 'Subscription tier changed',
-    description: 'Confirmation when your tier changes via the Stripe portal.',
+    description: 'Confirmation when your plan changes through the Stripe portal.',
   },
   {
     type: 'billing-receipt',
     label: 'Billing receipts',
-    description: 'Per-invoice receipt emails. Stripe receipts continue regardless.',
+    description: 'A receipt for each invoice. Stripe\'s own receipts are sent either way.',
   },
   {
     type: 'billing-renewal-reminder',
     label: 'Renewal reminder',
     description:
-      'Heads-up email ~7 days before each subscription renewal so you can update payment method or change tier ahead of time.',
+      'A reminder about 7 days before each renewal so you can update your payment method or change plan in time.',
   },
 ] as const;
 ---
@@ -98,9 +98,9 @@ const EMAIL_EVENTS = [
         Display &amp; locale
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
-        Avatar, display name, timezone and data residency. Your timezone is
-        saved to your account and returned by the API for your own tooling —
-        timestamps shown here are in UTC.
+        Avatar, display name, timezone and preferred data region. Your
+        timezone is saved for your own use through the API; times shown here
+        are in UTC.
       </p>
       <form data-form="profile" class="mt-6 space-y-4">
         {/* V-352b — avatar upload */}
@@ -140,7 +140,7 @@ const EMAIL_EVENTS = [
                 on Cloudflare R2 in the default jurisdiction (EU + US
                 replication), so the "(EU)" tag over-claimed. */}
             <p class="text-xs text-tk-ink-3">
-              PNG, JPEG, or WebP. Max 2 MB. Stored privately on Cloudflare R2.
+              PNG, JPEG or WebP, up to 2 MB. Stored privately.
             </p>
             <p data-field="avatar-source" class="text-xs text-tk-ink-3">No avatar set.</p>
             <p
@@ -175,7 +175,7 @@ const EMAIL_EVENTS = [
         </div>
         <div>
           <label class="block text-sm font-medium text-tk-ink-2" for="profile-timezone">
-            Timezone (IANA)
+            Timezone
           </label>
           <input
             id="profile-timezone"
@@ -187,13 +187,13 @@ const EMAIL_EVENTS = [
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
-            IANA name like <code class="font-mono">Europe/Amsterdam</code> or
+            For example <code class="font-mono">Europe/Amsterdam</code> or
             <code class="font-mono">America/Los_Angeles</code>. Leave blank for UTC.
           </p>
         </div>
         <div>
           <label class="block text-sm font-medium text-tk-ink-2" for="profile-slug">
-            Account handle (slug)
+            Account handle
           </label>
           <input
             id="profile-slug"
@@ -207,14 +207,14 @@ const EMAIL_EVENTS = [
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 font-mono text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
-            Lowercase a-z, 0-9, and hyphen. 3-32 chars. A unique handle for
-            your account, saved and returned by the API alongside the account
-            UUID. Leave blank to keep using the account UUID.
+            3–32 characters: lowercase letters, numbers and hyphens. A short
+            unique name for your account that you can use instead of the
+            account ID. Leave blank to keep using the ID.
           </p>
         </div>
         <div>
           <label class="block text-sm font-medium text-tk-ink-2" for="profile-region">
-            Data-residency region (preference)
+            Preferred data region
           </label>
           <select
             id="profile-region"
@@ -229,9 +229,8 @@ const EMAIL_EVENTS = [
             <option value="apac">apac — Asia-Pacific</option>
           </select>
           <p class="mt-1 text-xs text-tk-ink-3">
-            Customer-stated preference. Currently informational; physical
-            region routing of compute and storage is governed by the
-            sub-processor list (see <a href="https://driftstack.io/trust/sub-processors/" class="text-tk-accent-text underline">driftstack.io/trust/sub-processors</a>).
+            This is a preference only and doesn't change where your data is
+            stored today. See <a href="https://driftstack.io/trust/sub-processors/" class="text-tk-accent-text underline">driftstack.io/trust/sub-processors</a> for where data is processed.
           </p>
         </div>
         <p
@@ -274,8 +273,8 @@ const EMAIL_EVENTS = [
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
         Builder and Scale use a flat <strong class="font-medium text-tk-ink-2">$0.10 per agent turn</strong>;
-        Enterprise uses your contracted custom rate. A stored Anthropic BYOK key takes
-        priority, bills through Anthropic, and does not consume this bundled cap.
+        Enterprise uses your contracted custom rate. If you've saved your own Anthropic
+        API key, it's used first, billed by Anthropic, and doesn't count toward this limit.
       </p>
 
       <div data-bundled-state="loading" class="mt-6 text-sm text-tk-ink-3">
@@ -319,13 +318,13 @@ const EMAIL_EVENTS = [
           />
           <span class="text-sm text-tk-ink-2">
             <strong class="block font-medium text-tk-ink">Enable bundled AI</strong>
-            Allow agent turns to use Driftstack's bundled provider when no BYOK key is available.
+            Let the AI agent use Driftstack's built-in AI when you haven't saved your own Anthropic key.
           </span>
         </label>
 
         <div>
           <label for="bundled-cap-usd" class="block text-sm font-medium text-tk-ink-2">
-            Monthly bundled-AI cap (USD)
+            Monthly bundled AI limit (USD)
           </label>
           <div class="mt-1 flex max-w-xs items-center rounded-md border border-tk-border bg-tk-bg focus-within:border-tk-accent focus-within:ring-1 focus-within:ring-tk-accent/30">
             <span class="pl-3 text-sm text-tk-ink-3" aria-hidden="true">$</span>
@@ -343,7 +342,7 @@ const EMAIL_EVENTS = [
             />
           </div>
           <p class="mt-1 text-xs text-tk-ink-3">
-            Exact range $0–$10,000. A $0 cap blocks bundled usage even when enabled.
+            Between $0 and $10,000. A $0 limit stops all bundled AI use, even when it's enabled.
           </p>
         </div>
 
@@ -391,12 +390,12 @@ const EMAIL_EVENTS = [
             <path d="M16 12h6M19 9v6" />
           </svg>
         </span>
-        Anthropic API key (BYOK)
+        Your own Anthropic API key
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
-        Bring your own Anthropic key so AI agent turns bill to your Anthropic console.
-        Stored encrypted at rest; we never read or log the plaintext after you submit
-        it. <a
+        Use your own Anthropic key so AI agent usage is billed to your Anthropic account.
+        It's stored encrypted, and we never read or log the key after you save it.
+        <a
           href="https://console.anthropic.com/settings/keys"
           target="_blank"
           rel="noopener noreferrer"
@@ -409,7 +408,7 @@ const EMAIL_EVENTS = [
       </div>
 
       <div data-byok-state="empty" class="mt-6 hidden">
-        <p class="text-sm text-tk-ink-2">No key on file. Agent sessions fall back to the bundled key (if enabled on your tier).</p>
+        <p class="text-sm text-tk-ink-2">No key saved. AI agent sessions use Driftstack's built-in AI instead (if your plan includes it).</p>
       </div>
 
       <div data-byok-state="set" class="mt-6 hidden space-y-2">
@@ -485,9 +484,9 @@ const EMAIL_EVENTS = [
       </form>
 
       <p id="byok-test-help" class="mt-3 text-xs text-tk-ink-3">
-        After saving, Test stored key sends a 1-token completion using the encrypted key
-        on file. Clear removes the stored ciphertext; agent turns immediately fall back
-        to the bundled key (if available).
+        After saving, Test stored key makes a small request to Anthropic to check the key
+        works. Clear deletes the saved key; the AI agent then uses Driftstack's built-in
+        AI (if your plan includes it).
       </p>
     </section>
 
@@ -502,16 +501,15 @@ const EMAIL_EVENTS = [
         Email notifications
       </h2>
       <p class="mt-2 text-sm text-tk-ink-3">
-        Security + financial emails (signup verification, password reset,
-        billing failure, support replies) always go out. Below are the
-        optional lifecycle emails — toggle off any you don't want.
+        Security and billing emails (verification, password reset, failed
+        payments, support replies) are always sent. The emails below are
+        optional — switch off any you don't want.
       </p>
       <p class="mt-2 text-sm text-tk-ink-3">
-        Cancelling a subscription sends no email of its own. The only
-        message it can produce is "Subscription tier changed" below, so
-        switching that off means no email arrives when a subscription ends.
-        Either way the change is recorded in your billing state and your
-        audit log.
+        When you cancel, the only email you may get is "Subscription tier
+        changed" below. If you switch that off, you won't get an email when
+        your subscription ends. The change still shows on your Billing page
+        and in your audit log.
       </p>
       <div class="mt-6 space-y-3" data-list="email-prefs">
         {
@@ -839,7 +837,7 @@ const EMAIL_EVENTS = [
             showProfileError(
               requestErrorMessage(
                 err,
-                'Could not load your current profile. Editing is unavailable; reload to try again.',
+                "Couldn't load your profile, so editing is unavailable. Reload to try again.",
               ),
             );
           });
@@ -917,19 +915,19 @@ const EMAIL_EVENTS = [
                     sourceBeforeUpload !== 'user'
                   ) {
                     showAvatarStatus(
-                      'The response was lost, but your uploaded avatar is now active. Do not upload it again.',
+                      'The request took too long, but your new avatar is now showing. No need to upload it again.',
                     );
                     return;
                   }
                   showAvatarError(
                     source === 'user'
-                      ? 'The response was lost. The current uploaded avatar was refreshed; check the image before trying again.'
-                      : 'Upload was not confirmed. The current avatar was refreshed; try again only if the new image is not shown.',
+                      ? 'The request took too long. We refreshed your avatar — check the image before trying again.'
+                      : "The request took too long and we couldn't confirm the upload. We refreshed your avatar — try again only if the new image isn't shown.",
                   );
                 })
                 .catch(() => {
                   showAvatarError(
-                    'The upload outcome is unknown. Reload the page and check the avatar before trying again.',
+                    "The request took too long and we couldn't check the result. Reload the page and check your avatar before trying again.",
                   );
                 });
             })
@@ -995,18 +993,18 @@ const EMAIL_EVENTS = [
                   if (source !== 'user') {
                     showAvatarStatus(
                       source === 'idp'
-                        ? 'The response was lost, but removal completed. Your linked-account image is now shown.'
-                        : 'The response was lost, but removal completed. No uploaded avatar remains.',
+                        ? 'The request took too long, but your avatar was removed. Your linked-account image is now shown.'
+                        : 'The request took too long, but your avatar was removed.',
                     );
                     return;
                   }
                   showAvatarError(
-                    'Removal did not complete; the uploaded avatar is still active. It is safe to try again.',
+                    "The request took too long and your avatar is still there. It's safe to try again.",
                   );
                 })
                 .catch(() => {
                   showAvatarError(
-                    'The removal outcome is unknown. Reload the page and check the avatar before trying again.',
+                    "The request took too long and we couldn't check the result. Reload the page and check your avatar before trying again.",
                   );
                 });
             })
@@ -1089,18 +1087,18 @@ const EMAIL_EVENTS = [
                 .then((account) => {
                   if (accountMatchesProfile(account, body)) {
                     showProfileStatus(
-                      'Saved. The response was lost, but the live profile matches your changes.',
+                      'Saved. The request took too long, but your profile shows your changes.',
                       6000,
                     );
                     return;
                   }
                   showProfileError(
-                    'The save was not confirmed and the live profile differs. Your edits are still here; review them before trying again.',
+                    "The request took too long and your profile doesn't show your changes yet. Your edits are still here — check them before trying again.",
                   );
                 })
                 .catch(() => {
                   showProfileError(
-                    'The save outcome is unknown. Your edits are still here; copy them, then reload to verify before trying again.',
+                    "The request took too long and we couldn't check whether it saved. Your edits are still here — copy them, then reload to check before trying again.",
                   );
                 });
             })
@@ -1240,8 +1238,8 @@ const EMAIL_EVENTS = [
         }
         if (bundledStatus) {
           bundledStatus.textContent = status.consent
-            ? 'Bundled AI is enabled when no BYOK key is available.'
-            : 'Bundled AI is disabled; BYOK sessions are unaffected.';
+            ? "Bundled AI is used when you haven't saved your own Anthropic key."
+            : 'Bundled AI is off. Sessions using your own Anthropic key are unaffected.';
         }
         hideBundledError();
         setBundledPanel('ready');
@@ -1289,11 +1287,11 @@ const EMAIL_EVENTS = [
       function desiredBundledSettings() {
         const raw = bundledCapUsd ? bundledCapUsd.value.trim() : '';
         if (!/^(?:0|[1-9]\d{0,3}|10000)(?:\.\d{1,2})?$/.test(raw)) {
-          throw new Error('Enter a cap from $0 to $10,000 with at most two decimal places.');
+          throw new Error('Enter a limit from $0 to $10,000 with at most two decimal places.');
         }
         const cents = Math.round(Number(raw) * 100);
         if (!Number.isInteger(cents) || cents < 0 || cents > 1_000_000) {
-          throw new Error('Enter a cap from $0 to $10,000 with at most two decimal places.');
+          throw new Error('Enter a limit from $0 to $10,000 with at most two decimal places.');
         }
         return {
           consent: Boolean(bundledConsent && bundledConsent.checked),
@@ -1311,7 +1309,7 @@ const EMAIL_EVENTS = [
           try {
             desired = desiredBundledSettings();
           } catch (err) {
-            showBundledError(err instanceof Error ? err.message : 'Enter a valid monthly cap.');
+            showBundledError(err instanceof Error ? err.message : 'Enter a valid monthly limit.');
             return;
           }
 
@@ -1338,7 +1336,7 @@ const EMAIL_EVENTS = [
               setTimeout(() => hideBanner(noticeGeneration), 3000);
             } else {
               showBundledError(
-                'The live settings differ from what you submitted. Review the current values before trying again.',
+                "The saved settings don't match what you entered. Check the current values before trying again.",
               );
             }
           } catch (err) {
@@ -1351,28 +1349,30 @@ const EMAIL_EVENTS = [
                   live.cap_cents === desired.monthly_cap_usd_cents
                 ) {
                   const noticeGeneration = showBanner(
-                    'AI billing settings saved. The response was lost, but the live settings match.',
+                    'AI billing settings saved. The request took too long, but your settings show the change.',
                   );
                   setTimeout(() => hideBanner(noticeGeneration), 5000);
                 } else {
                   showBundledError(
-                    'The save did not complete; the form now shows the live settings. Review them before trying again.',
+                    "The request took too long and the save didn't go through. The form now shows your current settings — check them before trying again.",
                   );
                 }
               } catch {
                 bundledKnown = false;
                 if (bundledLoadError) {
                   bundledLoadError.textContent =
-                    'The save outcome is unknown and live settings could not be refreshed. Reload to verify before retrying.';
+                    "The request took too long and we couldn't refresh your settings. Reload to check before trying again.";
                 }
-                if (bundledStatus) bundledStatus.textContent = 'AI billing save outcome unknown.';
+                if (bundledStatus) {
+                  bundledStatus.textContent = "We couldn't confirm the AI billing save.";
+                }
                 setBundledPanel('error');
               }
             } else if (mutationAccepted) {
               bundledKnown = false;
               if (bundledLoadError) {
                 bundledLoadError.textContent =
-                  'The save was accepted, but the live settings could not be refreshed. Reload to verify; do not submit the same change again yet.';
+                  "Your settings were saved, but we couldn't refresh them. Reload to check before making the same change again.";
               }
               if (bundledStatus) bundledStatus.textContent = 'AI billing settings need a refresh.';
               setBundledPanel('error');
@@ -1408,7 +1408,7 @@ const EMAIL_EVENTS = [
         });
         if (emailPrefsStatus) {
           emailPrefsStatus.textContent =
-            'Toggle off any lifecycle email you do not want. Changes save automatically.';
+            "Switch off any email you don't want. Changes save automatically.";
         }
       }
 
@@ -1459,20 +1459,20 @@ const EMAIL_EVENTS = [
                   input.checked = liveOptedIn;
                   if (liveOptedIn === optedIn) {
                     const noticeGeneration = showBanner(
-                      'Email preference saved. The response was lost, but the live setting matches.',
+                      'Email preference saved. The request took too long, but the setting shows your change.',
                     );
                     setTimeout(() => hideBanner(noticeGeneration), 5000);
                     return;
                   }
                   showBanner(
-                    'The save did not complete; the checkbox now shows the live preference. Review it before trying again.',
+                    "The request took too long and the save didn't go through. The checkbox now shows your current setting — check it before trying again.",
                   );
                 })
                 .catch(() => {
                   input.indeterminate = true;
                   input.dataset.outcomeUnknown = 'true';
                   showBanner(
-                    'The email preference outcome is unknown. Reload to verify it before changing this setting again.',
+                    "The request took too long and we couldn't check whether it saved. Reload to check before changing this setting again.",
                   );
                 });
             }
@@ -1561,10 +1561,10 @@ const EMAIL_EVENTS = [
           byokTestBtn.title = busy
             ? 'Wait for the current key action to finish'
             : hasStoredKey
-              ? 'Test the encrypted key currently on file'
+              ? 'Check that your saved key works'
               : byokMetadataKnown
                 ? 'Save a key before testing'
-                : 'Wait for stored-key status to load';
+                : 'Wait for the key status to load';
         }
         if (byokClearBtn) {
           byokClearBtn.disabled = busy || !hasStoredKey;
@@ -1572,10 +1572,10 @@ const EMAIL_EVENTS = [
           byokClearBtn.title = busy
             ? 'Wait for the current key action to finish'
             : hasStoredKey
-              ? 'Remove the encrypted key currently on file'
+              ? 'Delete your saved key'
               : byokMetadataKnown
                 ? 'No stored key to clear'
-                : 'Wait for stored-key status to load';
+                : 'Wait for the key status to load';
         }
       }
 
@@ -1680,7 +1680,7 @@ const EMAIL_EVENTS = [
             // S35 2026-07-07 (fable-frontend-audit) — a load FAILURE is
             // not an empty keyring: showing 'empty' here told a customer
             // with a stored key "No key on file" on any transient non-2xx.
-            byokShowError(requestErrorMessage(err, 'Could not load stored-key status. Try again.'));
+            byokShowError(requestErrorMessage(err, "Couldn't check whether a key is saved. Try again."));
             byokMetadataKnown = false;
             syncByokActionControls();
             byokShowState('error');
@@ -1750,20 +1750,20 @@ const EMAIL_EVENTS = [
                 if (advanced) {
                   byokInput.value = '';
                   byokShowError(
-                    'The save likely completed before the response timed out: the stored-key timestamp advanced. Test the stored key before relying on it; do not save again unless that test fails.',
+                    'Your key was probably saved — the request just took too long to respond. Use Test stored key to confirm; only save again if that test fails.',
                   );
                 } else if (refreshed !== undefined) {
                   byokShowError(
-                    'The save outcome is still unknown after the timeout; stored-key metadata did not advance. Your input is retained. Wait a moment, check the stored status, and retry only if it remains unchanged.',
+                    "The request took too long and we can't tell if your key was saved. Your entry is still here. Wait a moment, check the status above, and try again only if it still shows no key.",
                   );
                 } else {
                   byokShowError(
-                    'The save outcome is unknown after the timeout, and stored-key status could not be refreshed. Your input is retained. Check the status before retrying.',
+                    "The request took too long and we couldn't check whether your key was saved. Your entry is still here. Reload to check the status before trying again.",
                   );
                 }
                 return;
               }
-              byokShowError(requestErrorMessage(err, 'Could not save the provider key. Try again.'));
+              byokShowError(requestErrorMessage(err, "Couldn't save the key. Try again."));
             })
             .finally(() => {
               if (byokSaveBtn) {
@@ -1778,7 +1778,7 @@ const EMAIL_EVENTS = [
         byokTestBtn.addEventListener('click', () => {
           if (!token) return;
           if (!byokMetadataKnown || !byokMetadata.hasKey) {
-            byokShowError('Save the key and wait for stored-key status before testing.');
+            byokShowError('Save the key and wait for its status to load before testing.');
             return;
           }
           if (!beginByokAction('test')) return;
@@ -1804,13 +1804,13 @@ const EMAIL_EVENTS = [
                 byokShowError(
                   reason.length > 0 && reason.length <= BYOK_TEST_REASON_MAX_CHARS
                     ? reason
-                    : 'The stored key could not be validated. Check or rotate it and try again.',
+                    : "Anthropic didn't accept the saved key. Check it, or create a new key, and try again.",
                 );
               }
             })
             .catch((err) => {
               showByokTestFeedback('Test ⚠');
-              byokShowError(requestErrorMessage(err, 'Could not test the provider key. Try again.'));
+              byokShowError(requestErrorMessage(err, "Couldn't test the key. Try again."));
             })
             .finally(() => {
               endByokAction('test');
@@ -1824,7 +1824,7 @@ const EMAIL_EVENTS = [
           if (!beginByokAction('clear')) return;
           try {
             if (!(await window.driftstackConfirm(
-              'Clear your stored Anthropic key? Agent sessions will fall back to the bundled key (if available on your tier).',
+              "Delete your saved Anthropic key? The AI agent will use Driftstack's built-in AI instead (if your plan includes it).",
               { confirmLabel: 'Clear key', destructive: true },
             ))) return;
             const response = await boundedFetch(
@@ -1845,19 +1845,19 @@ const EMAIL_EVENTS = [
               const refreshed = await loadByokAnthropic();
               if (refreshed?.hasKey === false) {
                 byokShowError(
-                  'The clear likely completed before the response timed out: no stored key remains. Do not clear again.',
+                  'Your key was probably deleted — the request just took too long to respond, and no key is saved now. No need to try again.',
                 );
               } else if (refreshed?.hasKey === true) {
                 byokShowError(
-                  'The clear timed out, and the key is still on file. Wait a moment and retry only if it remains present.',
+                  'The request took too long and your key is still saved. Wait a moment and try again only if it still shows as saved.',
                 );
               } else {
                 byokShowError(
-                  'The clear outcome is unknown after the timeout, and stored-key status could not be refreshed. Reload to verify before retrying.',
+                  "The request took too long and we couldn't check whether your key was deleted. Reload to check before trying again.",
                 );
               }
             } else {
-              byokShowError(requestErrorMessage(err, 'Could not clear the provider key. Try again.'));
+              byokShowError(requestErrorMessage(err, "Couldn't delete the key. Try again."));
             }
           } finally {
             endByokAction('clear');

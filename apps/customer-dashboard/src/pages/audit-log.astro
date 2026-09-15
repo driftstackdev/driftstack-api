@@ -51,7 +51,7 @@ const ACTION_LABEL: Record<string, string> = {
   // transitions surfaced on the customer audit log.
   'agent_session.pair_mode.takeover': 'Pair-mode takeover requested',
   'agent_session.pair_mode.handback': 'Pair-mode handback requested',
-  'agent_session.pair_mode.timeout': 'Pair-mode heartbeat timeout',
+  'agent_session.pair_mode.timeout': 'Pair-mode timed out (control returned to the agent)',
   // Slice 6 follow-up 2026-05-20 — Slice 3 setMode change (Slice 3
   // POST /:id/mode) lands a customer audit row too.
   'agent_session.mode.changed': 'Agent session mode changed',
@@ -64,23 +64,23 @@ const ACTION_LABEL: Record<string, string> = {
   // founder verdict 2026-05-17). Customer sees WHICH decomposer
   // ran for each turn — Claude (bundled / BYOK) vs deterministic
   // (rule-based fallback).
-  'agent.decompose.claude': 'Agent turn decomposed (Claude)',
-  'agent.decompose.deterministic': 'Agent turn decomposed (deterministic)',
+  'agent.decompose.claude': 'Agent turn planned by Claude',
+  'agent.decompose.deterministic': 'Agent turn planned by built-in rules',
   // 2026-05-20 — BYOK Anthropic key-management events. Customer
   // needs to audit every mutation on their stored Anthropic
   // credential. Payload carries the test outcome label on _tested;
   // _set + _cleared have empty payload (no key-prefix per Q2
   // verdict 2026-05-17).
-  'account.byok_anthropic_key_set': 'BYOK Anthropic key set / rotated',
-  'account.byok_anthropic_key_cleared': 'BYOK Anthropic key cleared',
-  'account.byok_anthropic_key_tested': 'BYOK Anthropic key tested',
+  'account.byok_anthropic_key_set': 'Your own Anthropic API key saved or replaced',
+  'account.byok_anthropic_key_cleared': 'Your own Anthropic API key removed',
+  'account.byok_anthropic_key_tested': 'Your own Anthropic API key tested',
   // Saved-proxy lifecycle — emitted by the live account-proxies API
   // (POST/DELETE /v1/account/me/proxies) on egress-config changes.
   'proxy.created': 'Saved proxy created',
   'proxy.updated': 'Saved proxy updated',
   'proxy.deleted': 'Saved proxy deleted',
   // 2026-05-20 — bundled-LLM consent toggle.
-  'account.bundled_llm_consent_changed': 'Bundled-LLM consent changed',
+  'account.bundled_llm_consent_changed': 'Bundled AI consent changed',
   // 2026-05-20 — email-preferences opt-in/out toggle.
   'account.email_preferences_changed': 'Email preferences changed',
 };
@@ -139,23 +139,23 @@ const FILTER_OPTIONS = [
   // timeout transition the customer's pair-mode session ran through.
   { value: 'agent_session.pair_mode.takeover', label: 'Pair-mode takeover requested' },
   { value: 'agent_session.pair_mode.handback', label: 'Pair-mode handback requested' },
-  { value: 'agent_session.pair_mode.timeout', label: 'Pair-mode heartbeat timeout' },
+  { value: 'agent_session.pair_mode.timeout', label: 'Pair-mode timed out (control returned to the agent)' },
   { value: 'agent_session.mode.changed', label: 'Agent session mode changed' },
   { value: 'agent_session.created', label: 'Agent session created' },
   { value: 'agent_session.destroyed', label: 'Agent session destroyed' },
   // v2-#5 Q.1.f — agent decomposer per-turn events.
-  { value: 'agent.decompose.claude', label: 'Agent turn decomposed (Claude)' },
-  { value: 'agent.decompose.deterministic', label: 'Agent turn decomposed (deterministic)' },
+  { value: 'agent.decompose.claude', label: 'Agent turns planned by Claude' },
+  { value: 'agent.decompose.deterministic', label: 'Agent turns planned by built-in rules' },
   // 2026-05-20 — BYOK Anthropic key-management events.
-  { value: 'account.byok_anthropic_key_set', label: 'BYOK Anthropic key set / rotated' },
-  { value: 'account.byok_anthropic_key_cleared', label: 'BYOK Anthropic key cleared' },
-  { value: 'account.byok_anthropic_key_tested', label: 'BYOK Anthropic key tested' },
+  { value: 'account.byok_anthropic_key_set', label: 'Your own Anthropic API key saved or replaced' },
+  { value: 'account.byok_anthropic_key_cleared', label: 'Your own Anthropic API key removed' },
+  { value: 'account.byok_anthropic_key_tested', label: 'Your own Anthropic API key tested' },
   // Saved-proxy lifecycle — emitted by the live account-proxies API.
   { value: 'proxy.created', label: 'Saved proxies created' },
   { value: 'proxy.updated', label: 'Saved proxies updated' },
   { value: 'proxy.deleted', label: 'Saved proxies deleted' },
   // 2026-05-20 — bundled-LLM consent toggle.
-  { value: 'account.bundled_llm_consent_changed', label: 'Bundled-LLM consent changes' },
+  { value: 'account.bundled_llm_consent_changed', label: 'Bundled AI consent changes' },
   // 2026-05-20 — email-preferences opt-in/out toggle.
   { value: 'account.email_preferences_changed', label: 'Email preference changes' },
 ] as const;
@@ -172,10 +172,10 @@ const FILTER_OPTIONS = [
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3">Account-scoped events · append-only</p>
+        <p class="text-sm text-tk-ink-3">Permanent record · entries can't be edited or deleted</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Audit log</h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Every action on your account: API key lifecycle, session activity, subscription changes.
+          Every action on your account: API key changes, session activity, subscription updates.
           Export the full history at any time — your data, your file.
         </p>
       </div>
@@ -237,7 +237,7 @@ const FILTER_OPTIONS = [
 
     <details data-more-filters class="mb-4 rounded-lg border border-tk-border bg-tk-bg p-4">
       <summary class="cursor-pointer text-sm font-medium text-tk-ink-2">
-        Date range · actor · target resource
+        Date range · who · which item
       </summary>
       <div class="mt-4 grid gap-4 sm:grid-cols-2 md:grid-cols-4">
         <div>
@@ -248,7 +248,7 @@ const FILTER_OPTIONS = [
             type="datetime-local"
             class="mt-1 w-full rounded-md border border-tk-border px-2 py-1 text-sm"
           />
-          <p class="mt-1 text-[11px] text-tk-ink-3">Inclusive lower bound.</p>
+          <p class="mt-1 text-[11px] text-tk-ink-3">Includes this time.</p>
         </div>
         <div>
           <label for="audit-to" class="block text-xs font-medium text-tk-ink-2">To</label>
@@ -258,10 +258,10 @@ const FILTER_OPTIONS = [
             type="datetime-local"
             class="mt-1 w-full rounded-md border border-tk-border px-2 py-1 text-sm"
           />
-          <p class="mt-1 text-[11px] text-tk-ink-3">Inclusive upper bound.</p>
+          <p class="mt-1 text-[11px] text-tk-ink-3">Includes this time.</p>
         </div>
         <div>
-          <label for="audit-actor" class="block text-xs font-medium text-tk-ink-2">Actor</label>
+          <label for="audit-actor" class="block text-xs font-medium text-tk-ink-2">Who</label>
           <select
             id="audit-actor"
             data-filter-actor
@@ -275,7 +275,7 @@ const FILTER_OPTIONS = [
         </div>
         <div>
           <label for="audit-target" class="block text-xs font-medium text-tk-ink-2"
-            >Target resource id</label
+            >Item ID</label
           >
           <input
             id="audit-target"
@@ -357,11 +357,9 @@ const FILTER_OPTIONS = [
     </div>
 
     <p class="mt-6 text-xs text-tk-ink-3">
-      Exports cap at 10,000 rows per file. Older entries remain accessible via the read endpoint
-      (<code class="font-mono">GET /v1/account/audit-log</code>) with cursor pagination. Account,
-      billing, and authentication data export on request via <code class="font-mono"
-        >privacy@driftstack.dev</code
-      >.
+      Each export includes up to 10,000 entries. Older entries are still available through the API —
+      see the <a href="https://docs.driftstack.io/api/audit-log/" class="text-tk-accent-text underline">audit log API docs</a>.
+      To export your account, billing and sign-in data, email <code class="font-mono">privacy@driftstack.dev</code>.
     </p>
   </div>
 
@@ -445,7 +443,7 @@ const FILTER_OPTIONS = [
             return '';
           case 'webhook_endpoint.secret_rotated':
             return p.grace_expires_at
-              ? ' · grace ends ' + escapeHtml(String(p.grace_expires_at).slice(0, 19) + ' UTC')
+              ? ' · old secret works until ' + escapeHtml(String(p.grace_expires_at).slice(0, 19) + ' UTC')
               : '';
           case 'team.member_invited':
             return p.email ? ' · ' + escapeHtml(String(p.email)) : '';

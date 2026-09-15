@@ -288,8 +288,8 @@ describe('W420.C apps/server/src/routes/account-me.ts content parity', () => {
     expect(body.match(/const id = parseProxyId\(/g)).toHaveLength(3);
     expect(body).toContain("existing.scheme === 'openvpn' || existing.scheme === 'wireguard'");
     expect(body).toContain('expectedScheme: existing.scheme');
-    expect(body).toContain(
-      "throw new ConflictError('Proxy changed concurrently. Retry the update.')",
+    expect(body).toMatch(
+      /throw new ConflictError\(\s*'This proxy changed since you last loaded it\. Refresh and try again\.',?\s*\)/,
     );
   });
 

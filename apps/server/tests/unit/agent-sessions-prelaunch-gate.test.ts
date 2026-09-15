@@ -516,7 +516,7 @@ describe('runProxyPrelaunchGate — null resolveForDispatch blocks the launch (#
       expect(err).toBeInstanceOf(ProxyValidationFailedError);
       const problem = (err as ProxyValidationFailedError).toProblem();
       expect(problem.detail).toBe(
-        'The proxy connected but could not reach the internet — its upstream egress is blocked.',
+        'The proxy connected but could not reach the internet. Check with your proxy provider.',
       );
       expect(JSON.stringify(problem)).not.toContain('remote prose');
       expect(JSON.stringify(problem)).not.toContain('do-not-reflect');

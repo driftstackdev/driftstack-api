@@ -69,6 +69,6 @@ describe('W243.D cost-monitoring doc parity', () => {
 
   it('synthesises a zero breakdown for fresh accounts (200, not 404)', () => {
     expect(route).toMatch(/Not 404 — for a fresh account/);
-    expect(doc).toMatch(/synthesised zero-breakdown[\s\S]*?no 404/i);
+    expect(doc).toMatch(/all-zero breakdown[\s\S]*?no 404/i);
   });
 });

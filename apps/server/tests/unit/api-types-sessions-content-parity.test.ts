@@ -56,7 +56,7 @@ describe('W435.A packages/api-types/src/sessions.ts content parity', () => {
 
   it("ArchetypeSchema: lowercase alphanumeric + underscore regex '^[a-z0-9_]+$' min 3 max 60", () => {
     expect(body).toMatch(
-      /export const ArchetypeSchema = z\s*\.string\(\)\s*\.regex\(\/\^\[a-z0-9_\]\+\$\/, \{ message: 'archetype slug is lowercase alphanumeric \+ underscores' \}\)\s*\.min\(3\)\s*\.max\(60\);/,
+      /export const ArchetypeSchema = z\s*\.string\(\)\s*\.regex\(\/\^\[a-z0-9_\]\+\$\/, \{\s*message: 'device profile id is lowercase letters, digits and underscores',?\s*\}\)\s*\.min\(3\)\s*\.max\(60\);/,
     );
   });
 

@@ -27,7 +27,7 @@ describe('W622 sdk-python generated + openapi content parity', () => {
     expect(body).toMatch(/Driftstack API for iPhone Safari automation\./);
     expect(body).toMatch(/Versioned public contract under \/v1\./);
     expect(body).not.toMatch(/pre-launch|subject to change/i);
-    expect(body).toMatch(/## Team RBAC: X-Driftstack-Account header \(V-326e\)/);
+    expect(body).toMatch(/## Team RBAC: X-Driftstack-Account header/);
     expect(body).toMatch(
       /Members of a team can scope any \/v1\/\* request to the OWNER's resources/,
     );

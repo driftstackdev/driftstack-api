@@ -26,9 +26,13 @@ function read(p: string): string {
 describe('W332.B /security egress framing (shipped)', () => {
   const body = read(PAGE);
 
-  it('section header reads plain "Egress" (no "(roadmap)" hedge)', () => {
-    expect(body).toMatch(/02 · Egress/);
-    expect(body).not.toMatch(/02 · Egress \(roadmap\)/);
+  it('section header reads plain "Proxies" (no "(roadmap)" hedge)', () => {
+    // 2026-09-15 plain-language pass: the eyebrow label dropped the
+    // glossary word "Egress" for "Proxies"; the body still links the
+    // glossary entry.
+    expect(body).toMatch(/02 · Proxies/);
+    expect(body).not.toMatch(/02 · Proxies \(roadmap\)/);
+    expect(body).not.toMatch(/02 · Egress/);
   });
 
   it('lists the egress modality that is actually wired server-side (SOCKS5) and keeps its capability caveat', () => {
@@ -40,18 +44,22 @@ describe('W332.B /security egress framing (shipped)', () => {
     // apps/server/tests/unit/security-page-doc-parity.test.ts (W246.A,
     // green) forbids both words on this page until a backend ships.
     // Marketing must not re-advertise them here first.
-    expect(body).toMatch(/02 · Egress/);
-    expect(body).toMatch(/Per-profile SOCKS5; capability reported after launch\./);
+    expect(body).toMatch(/02 · Proxies/);
+    expect(body).toMatch(/Per-profile SOCKS5; UDP support shown once the session is running\./);
     expect(body).toMatch(
-      /UDP \/ WebRTC \/ QUIC routing depends on the proxy's\s+reported UDP capability/,
+      /Whether WebRTC and HTTP\/3\s+traffic can use the proxy depends on your proxy's UDP support,\s+and is shown once the session is running/,
     );
     expect(body).not.toMatch(/OpenVPN/);
     expect(body).not.toMatch(/WireGuard/);
   });
 
   it('describes egress as a per-profile capability (shipped) with its fail-closed limits', () => {
-    expect(body).toMatch(/A profile can attach a public SOCKS5 proxy as its exit/);
-    expect(body).toMatch(/blocks internal proxy targets, and requests\s+remote DNS/);
+    // 2026-09-15 plain-language pass: same facts (public address only,
+    // pre-launch reachability check, DNS through the proxy, private /
+    // local targets rejected) in customer words.
+    expect(body).toMatch(/A profile can attach a SOCKS5 proxy at a public address as its\s+exit/);
+    expect(body).toMatch(/website address lookups go through the proxy\s+too/);
+    expect(body).toMatch(/Proxies on\s+private or local addresses[\s\S]{0,90}are not accepted/);
     expect(body).not.toMatch(/DNS\s+leaks blocked/);
   });
 });

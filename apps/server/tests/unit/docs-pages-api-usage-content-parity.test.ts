@@ -55,7 +55,7 @@ describe('W769 docs /api/usage content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`totals\.session_minute` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\. A granular usage\s*\n?\s+primitive for analytics; not gated against a per-tier cap\./,
+      /`totals\.session_minute` — wall-clock minutes a session was\s*\n?\s+active, summed across the calendar month\. For your own analytics;\s*\n?\s+not capped per tier\./,
     );
     // The fictional plural must NOT return.
     expect(p).not.toMatch(/`totals\.session_minutes`/);
@@ -66,14 +66,14 @@ describe('W769 docs /api/usage content parity', () => {
   it("CRITICAL navigates/interacts/waits free-across-tiers framing pinned. The 'Free across all tiers; surfaced for observability' wording matches W754 dashboard /usage ADR-004 'count everything, charge for nothing-but-concurrent' framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Free across all tiers; surfaced for\s*\n?\s+observability\./);
+    expect(p).toMatch(/Free on all tiers; shown for your information\./);
   });
 
   it("CRITICAL quotas.session_minute-is-null framing pinned (2026-06-24, ADR-004). The previous pin asserted a '402-style billing-overage signal at the BillingService layer' but services/usage.ts:60-125 sets session_minute (and every other key) to null for every tier — no overage enforcement exists. The doc now states 'quotas.session_minute — null on every tier ... no per-minute meter is gated; the field is preserved (rather than removed) so the response shape stays stable'.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`quotas\.session_minute` — `null` on every tier\. Per ADR-004 the\s*\n?\s+paid tiers are concurrent-only and no per-minute meter is gated;\s*\n?\s+the field is preserved \(rather than removed\) so the response\s*\n?\s+shape stays stable\./,
+      /`quotas\.session_minute` — `null` on every tier\. Paid tiers are\s*\n?\s+priced on concurrent sessions only, so there is no monthly cap on\s*\n?\s+minutes; the field is preserved \(rather than removed\) so the\s*\n?\s+response shape stays stable\./,
     );
     // The retired overage-signal framing must NOT return.
     expect(p).not.toMatch(/402-style billing-overage/);
@@ -87,7 +87,7 @@ describe('W769 docs /api/usage content parity', () => {
       /`quotas\.session_minute` is `null` for every tier, including\s*\n?enterprise \(no per-meter cap is gated at any tier\)\./,
     );
     expect(p).toMatch(
-      /The free tier\s*\n?instead enforces a 20-minute \*\*per-session\*\* wall-clock cap\s*\n?\(`MAX_SESSION_MINUTES_PER_TIER` free → 20\)/,
+      /The free tier\s*\n?instead enforces a 20-minute \*\*per-session\*\* wall-clock cap — a\s*\n?session auto-destroys after 20 minutes/,
     );
     // Fictional key must NOT return.
     expect(p).not.toMatch(/`quotas\.profiles_limit`/);
@@ -130,7 +130,7 @@ describe('W769 docs /api/usage content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The locked tier table is driven by `TIER_CONCURRENT_SESSION_LIMITS`\s*\n?and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
+      /Each tier has a fixed limit on concurrent sessions and saved profiles\s*\n?\(the public `@driftstack\/api-types` package also exports them as\s*\n?`TIER_CONCURRENT_SESSION_LIMITS` and `PROFILES_PER_TIER`\):/,
     );
   });
 
@@ -161,10 +161,10 @@ describe('W769 docs /api/usage content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Per ADR-004 the paid tiers are concurrent-only: there is no monthly\s*\n?session-minute meter and no per-meter overage billing\./,
+      /Paid tiers are priced on concurrent sessions only: there is no monthly\s*\n?session-minute meter and no per-meter overage billing\./,
     );
     expect(p).toMatch(
-      /The only minute-based bound is\s*\n?the free tier's 20-minute per-session wall-clock cap, enforced at\s*\n?the session-lifecycle layer \(the session auto-destroys\), not as a\s*\n?billing event\./,
+      /The only minute-based bound is\s*\n?the free tier's 20-minute per-session wall-clock cap, enforced by\s*\n?the session itself \(it auto-destroys\), not as a billing event\./,
     );
     // The retired overage/Stripe + quota-warning-webhook framing must NOT return.
     expect(p).not.toMatch(/Stripe overage billing/);
@@ -186,10 +186,11 @@ describe('W769 docs /api/usage content parity', () => {
   it("CRITICAL usage_records-source-of-truth + empty-state-is-expected framing pinned. The 'The usage_records table is the source of truth ... The dashboard currently renders zeros for buckets that predate the writers landing in production; that\\'s expected empty-state, not a bug.' wording matches W754 dashboard /usage V-014/V-015 framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/The `usage_records` table is the source of truth/);
+    expect(p).toMatch(/## Historical data/);
     expect(p).toMatch(
-      /The dashboard\s*\n?currently renders zeros for buckets that predate the writers\s*\n?landing in production; that's expected empty-state, not a bug\./,
+      /Usage history starts from the date usage tracking launched\. Days\s*\n?before that show as zero in the dashboard and in `\/series` results\.\s*\n?This is expected and does not mean data is missing\./,
     );
+    expect(p, 'internal table names must not appear').not.toMatch(/usage_records/);
     // 2026-06-24: the broken placeholder "(per the +\n." fragment that
     // followed "source of truth" was removed — it must not return.
     expect(p).not.toMatch(/the source of truth \(per the \+/);

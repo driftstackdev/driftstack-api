@@ -47,8 +47,7 @@ Response (200):
 }
 ```
 
-Required scope: `account_owner` (the service gates this read on
-`account_owner` — a bare `read` key is not sufficient).
+Required scope: `account_owner` (a bare `read` key is not sufficient).
 
 ### Team RBAC
 
@@ -75,15 +74,14 @@ Response: `204 No Content`.
 
 Errors:
 
-- `400 bad-request` — `event_type` is not in the opt-outable enum
-  (e.g. customer tried to opt out of `signup-verification`, which
-  is operational).
+- `400 bad-request` — `event_type` is not one of the opt-outable
+  categories (e.g. customer tried to opt out of `signup-verification`,
+  which is operational).
 - `403 forbidden` — set on an OWNER's preferences via
   `X-Driftstack-Account` requires `admin` role on that team;
   `member` is read-only on writes.
 
-Required scope: `account_owner` (the service gates this write on
-`account_owner` — a broad `write` key is not sufficient).
+Required scope: `account_owner` (a broad `write` key is not sufficient).
 
 ## Opt-outable categories
 
@@ -102,30 +100,19 @@ These ALWAYS send regardless of preferences:
 
 - `signup-verification` — required to activate the account.
 - `password-reset` — security-critical.
-- `billing-failure` — fires on a failed subscription charge
-  (Stripe `invoice.payment_failed`); tells you when the automatic
-  retry happens, or that none is scheduled. Payment problems are
-  customer-action-needed, so this one always sends.
+- `billing-failure` — fires on a failed subscription charge; tells
+  you when the automatic retry happens, or that none is scheduled.
+  Payment problems need your action, so this one always sends.
 - `status-incident-created` / `status-incident-resolved` — only
   to customers explicitly subscribed via `/status` (separate
   opt-in surface, not part of email preferences).
-- Security notices under GDPR Art. 34 — see
-  `docs/runbooks/incidents.md` §3.4.
+- Security notices required under GDPR Art. 34.
 
-The full list of email templates lives in
-`apps/server/src/services/email.ts:TEMPLATES`. The
-`OptOutableEmailEventSchema` enum is the canonical opt-outable
-set — categories absent from that enum are operational by design.
+See [Emails Driftstack sends](/reference/emails/) for the full list;
+anything not in the opt-outable table above always sends.
 
 ## Customer-dashboard surface
 
 The `/settings → Email` section on the customer dashboard
 renders this endpoint visually with toggle switches per
 category. Changes apply immediately on toggle (no save button).
-
-## Source of truth
-
-Routes: `apps/server/src/routes/email-preferences.ts`. Schema:
-`packages/api-types/src/accounts.ts:OptOutableEmailEventSchema`.
-Service: `apps/server/src/services/email-preferences.ts`. Repo:
-`apps/server/src/db/email-preferences-repo.ts`.

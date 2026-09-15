@@ -162,14 +162,14 @@ describe('create-profile modal "Test connection" draft validation', () => {
     const open = await screen.findByRole('button', { name: 'Create your first profile' });
     fireEvent.click(open);
     // The redesigned device picker lives on the default '📱 Identity' tab. Each
-    // list row carries a '✓ bit-exact' (selectable) or 'reference' badge; a row
+    // list row carries a '✓ Verified' (selectable) or 'reference' badge; a row
     // is keyboard-selectable (tabindex 0) iff its status is in
     // SELECTABLE_STATUSES {launch, available}. The picker must NOT regress to
     // status==='launch' (which left only iPhone 17 clickable).
-    const bitExact = await screen.findAllByText('✓ bit-exact');
+    const bitExact = await screen.findAllByText('✓ Verified');
     // The full catalog (1 launch + 80 available) → far more than one selectable row.
     expect(bitExact.length).toBeGreaterThan(1);
-    // Each '✓ bit-exact' badge sits inside a SELECTABLE option row (focusable,
+    // Each '✓ Verified' badge sits inside a SELECTABLE option row (focusable,
     // not aria-disabled).
     for (const badge of bitExact) {
       const row = badge.closest('[role="option"]');

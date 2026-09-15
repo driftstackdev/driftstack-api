@@ -131,10 +131,10 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     expect(body).toMatch(/authorization: `Bearer \$\{draftKey\}`/);
     expect(body).toMatch(/res\.status === 401/);
     expect(body).toMatch(
-      /In self-hosted mode the key must be created on that server's own dashboard — a key from app\.driftstack\.io won't authenticate here\./,
+      /For a self-hosted server the key must be created in that server's own dashboard — a key from app\.driftstack\.io won't work here\./,
     );
     expect(body).toMatch(/Double-check it, or create a new one at app\.driftstack\.io\/api-keys\./);
-    expect(body).toMatch(/Saved\. Key authenticated ✓/);
+    expect(body).toMatch(/Saved\. Key works ✓/);
   });
 
   it("Telemetry 3-radio tri-state (null=platform default / true / false): platformDefaultLabel = cloudBaseUrl ? 'on (cloud default)' : 'off (self-hosted default)' + effectiveTelemetry derived state (null falls back to cloud↔'on' / non-cloud↔'off')", () => {
@@ -159,16 +159,16 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("Sign-out branded useConfirm pinned with 'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.' wording — pinned so customer understands the difference between local sign-out and full server-side revocation (migrated off window.confirm, which is flaky in the Tauri WKWebView)", () => {
+  it("Sign-out branded useConfirm pinned with 'Sign out on this computer? Your API key is removed from this app only. It stays valid until you revoke it in the web dashboard.' wording — pinned so customer understands the difference between local sign-out and full server-side revocation (migrated off window.confirm, which is flaky in the Tauri WKWebView; plain-words rewrite 2026-09-15)", () => {
     expect(body).toMatch(
-      /await confirm\(\s*'Sign out of this device\? This forgets the API key locally; the key is NOT revoked on the server\. Revoke it from the dashboard if you want to fully invalidate it\.',/,
+      /await confirm\(\s*'Sign out on this computer\? Your API key is removed from this app only\. It stays valid until you revoke it in the web dashboard\.',/,
     );
   });
 
-  it("Connected card: 'Pointing at <mono>{baseUrl}</mono> with key <mono>{maskApiKey(settings.apiKey)}</mono>' — the inline slice(0,12)+slice(-4) mask was replaced by the shared, prefix-aware maskApiKey helper (imported from ../components/ApiKeyMaskedSpan; strips the known ds_live_ prefix + shows only 4+4 of the body) because the old inline slice leaked 16 contiguous real chars (audit); first-run instruction 'Sign in with your browser to mint a fresh API key bound to your account, or paste an existing key from app.driftstack.io/api-keys below.'", () => {
+  it("Connected card: 'Connected to <mono>{baseUrl}</mono> with key <mono>{maskApiKey(settings.apiKey)}</mono>' — the inline slice(0,12)+slice(-4) mask was replaced by the shared, prefix-aware maskApiKey helper (imported from ../components/ApiKeyMaskedSpan; strips the known ds_live_ prefix + shows only 4+4 of the body) because the old inline slice leaked 16 contiguous real chars (audit); first-run instruction 'Sign in with your browser to create an API key for your account, or paste an existing key from app.driftstack.io/api-keys below.' (plain words, no 'mint' / 'bound' — 2026-09-15)", () => {
     expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
     expect(body).toMatch(
-      /Pointing at <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}[\s\S]{0,400}?<span className="mono">\{maskApiKey\(settings\.apiKey\)\}<\/span>\./,
+      /Connected to <span className="mono">\{settings\.baseUrl\}<\/span> with key\{' '\}[\s\S]{0,400}?<span className="mono">\{maskApiKey\(settings\.apiKey\)\}<\/span>\./,
     );
     expect(body).not.toMatch(
       /\{settings\.apiKey\?\.slice\(0, 12\) \?\? ''\}…\{settings\.apiKey\?\.slice\(-4\) \?\? ''\}/,
@@ -177,10 +177,10 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     // app.driftstack.io/api-keys pointer; self-hosted explains the key
     // must come from the customer's own server (deployment-bound keys).
     expect(body).toMatch(
-      /Sign in with your browser to mint a fresh API key bound to your account, or paste an\s*existing key from <span className="mono">app\.driftstack\.io\/api-keys<\/span> below\./,
+      /Sign in with your browser to create an API key for your account, or paste an\s*existing key from <span className="mono">app\.driftstack\.io\/api-keys<\/span> below\./,
     );
     expect(body).toMatch(
-      /Paste a key created on your own server's dashboard\. A key from\{' '\}\s*<span className="mono">app\.driftstack\.io<\/span> won't authenticate against a\s*self-hosted server — keys are bound to the deployment that minted them\./,
+      /Paste a key created in your own server's dashboard\. A key from\{' '\}\s*<span className="mono">app\.driftstack\.io<\/span> won't work with a self-hosted\s*server\s*— each key only works with the server that created it\./,
     );
   });
 
@@ -196,13 +196,13 @@ describe('W483.B apps/gui-client/src/views/SettingsView.tsx content parity', () 
     );
   });
 
-  it("API key field: reveal toggle (password ↔ text input) + 'Hide'/'Show' button + autoComplete='off' + spellCheck={false}; framing 'Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret Service); never sent anywhere except your configured API server.'", () => {
+  it("API key field: reveal toggle (password ↔ text input) + 'Hide'/'Show' button + autoComplete='off' + spellCheck={false}; framing 'Stored securely on this computer and only ever sent to the server you choose below.' (the three OS credential-store names are implementation detail, not customer copy — 2026-09-15)", () => {
     expect(body).toMatch(/<input\s*type=\{reveal \? 'text' : 'password'\}\s*value=\{draftKey\}/);
     expect(body).toMatch(
       /<button type="button" className="btn-secondary" onClick=\{\(\) => setReveal\(\(r\) => !r\)\}>\s*\{reveal \? 'Hide' : 'Show'\}/,
     );
     expect(body).toMatch(
-      /Stored in your OS keychain \(macOS Keychain \/ Windows Credential Manager \/ Linux Secret\s*Service\); never sent anywhere except your configured API server\./,
+      /Stored securely on this computer and only ever sent to the server you choose below\./,
     );
   });
 

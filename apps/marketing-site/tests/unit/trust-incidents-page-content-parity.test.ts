@@ -80,7 +80,7 @@ describe('W376.A marketing-site /trust/incidents page content parity', () => {
 
   it('sub-processor incident-reporting list pinned (Hetzner/Neon/Upstash/Cloudflare/Postmark/Stripe/Sentry)', () => {
     expect(body).toMatch(
-      /When an upstream sub-processor \(Hetzner \/ Neon \/ Upstash \/\s+Cloudflare \/ Postmark \/ Stripe \/ Sentry\) has an incident\s+affecting our customers, we summarise their post-mortem and\s+link the upstream report\./,
+      /When one of our sub-processors \(Hetzner \/ Neon \/ Upstash \/\s+Cloudflare \/ Postmark \/ Stripe \/ Sentry\) has an incident\s+affecting our customers, we summarise their post-mortem and\s+link to their report\./,
     );
   });
 

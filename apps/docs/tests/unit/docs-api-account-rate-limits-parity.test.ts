@@ -66,8 +66,9 @@ describe('W257.A docs/api/account-rate-limits ↔ live rate-limit surface', () =
     expect(doc).toMatch(/"type":\s*"https:\/\/errors\.driftstack\.dev\/rate-limited"/);
   });
 
-  it('cross-account admin override endpoint is registered', () => {
-    expect(doc).toContain('/v1/admin/rate-limit-overrides');
+  it('the override path is described to the customer without naming the internal admin route, which stays registered', () => {
+    expect(doc).toMatch(/Support reviews the\s+request, applies the override, and lets you know\./);
+    expect(doc).not.toContain('/v1/admin/');
     expect(adminRoute).toContain(`'/v1/admin/rate-limit-overrides'`);
   });
 

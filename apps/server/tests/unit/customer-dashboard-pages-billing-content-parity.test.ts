@@ -126,7 +126,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
 
   it("Tax + receipts framing pinned: 'All prices in USD. VAT/BTW added per region per applicable EU rules. Stripe handles tax computation + invoicing per ADR-002.' — pinned so the EU-VAT framing + the ADR-002 Stripe-tax delegation reference survive (drift to handling tax ourselves would violate ADR-002 + create compliance liability)", () => {
     expect(body).toMatch(
-      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\.\s*Stripe handles tax computation \+ invoicing per ADR-002\./,
+      /All prices in USD\. VAT is added where required by EU rules\. Tax and\s*invoicing are handled by Stripe\./,
     );
   });
 
@@ -136,7 +136,7 @@ describe('W494.C apps/customer-dashboard/src/pages/billing.astro content parity'
     expect(body).toMatch(/Billing state unavailable/);
     expect(body).toMatch(/data-action="portal"\s*disabled\s*aria-disabled="true"/);
     expect(body).toMatch(
-      /Invoice history and permanent receipt URLs are available in the\s*Stripe Customer Portal\./,
+      /Your invoices and receipts are in the Stripe customer portal —\s*open it with the Manage in Stripe portal button above\./,
     );
     expect(body).toMatch(
       /if \(!token\) \{\s*renderBillingUnavailable\(\s*'Billing state unavailable',\s*'Sign in to load your subscription and renewal details\.',\s*'unavailable',\s*\);[\s\S]*?showBanner\('Sign in to see live billing state\.'\);[\s\S]*?window\.dashboardHydrated\(\);[\s\S]*?return;/,

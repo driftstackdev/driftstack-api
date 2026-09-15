@@ -81,10 +81,11 @@ describe('desktop app access public truth', () => {
       expect(body, name).not.toMatch(/Request desktop app/);
     }
     // Say the unsigned posture out loud rather than letting a first-launch
-    // Gatekeeper/SmartScreen block read as a broken download.
-    expect(overview).toMatch(/Not OS-code-signed yet/);
-    expect(welcome).toMatch(/not OS-code-signed yet/);
-    expect(pricing).toMatch(/not OS-code-signed yet/);
+    // OS block read as a broken download — in customer words on every surface
+    // (2026-09-15 plain-words pass).
+    expect(overview).toMatch(/may show a security warning on first launch/);
+    expect(welcome).toMatch(/isn't yet signed with Apple or Microsoft/);
+    expect(pricing).toMatch(/isn't yet signed with Apple or Microsoft/);
     expect(welcome).toMatch(/macOS, Windows (and|or) Linux/);
     expect(pricing).toMatch(/macOS, Windows and Linux/);
     expect(overview).toMatch(/macOS, Windows and Linux/);
@@ -99,9 +100,11 @@ describe('desktop app access public truth', () => {
   });
 
   it('keeps browser device credentialing separate from paid-tier API guidance', () => {
-    expect(welcome).toMatch(/restricted device credential for the\s+app, not a customer API key/);
+    expect(welcome).toMatch(
+      /the app gets its own limited sign-in credential, so\s+you don't need an API key/,
+    );
     expect(overview).toContain('<p class="font-medium text-tk-ink">API quickstart</p>');
-    expect(overview).toContain('Paid-tier code walkthrough on docs.');
+    expect(overview).toContain('Step-by-step guide to the API (paid plans).');
     expect(overview).toContain('https://docs.driftstack.io/quickstart/');
     expect(overview).not.toMatch(/Get the app[\s\S]{0,240}docs\.driftstack\.io\/quickstart/);
   });

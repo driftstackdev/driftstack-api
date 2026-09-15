@@ -47,7 +47,7 @@ describe('docs/api/usage content parity', () => {
       /`quotas\.session_minute` is `null` for every tier, including\s*enterprise \(no per-meter cap is gated at any tier\)\./,
     );
     expect(body).toMatch(
-      /Per ADR-004 the paid tiers are concurrent-only: there is no monthly\s*session-minute meter and no per-meter overage billing\./,
+      /Paid tiers are priced on concurrent sessions only: there is no monthly\s*session-minute meter and no per-meter overage billing\./,
     );
     // The retired overage/Stripe + quota-warning-webhook framing must NOT return.
     expect(body).not.toMatch(/Stripe overage billing/);
@@ -67,7 +67,7 @@ describe('docs/api/usage content parity', () => {
 
   it("8-tier quota table snapshot pinned: 2-column (concurrent / profiles) — free (1/1) + solo_manual (1/10) + team_manual (3/50) + agency_manual (8/200) + api_starter (2/25) + api_builder (8/100) + api_scale (24/500) + enterprise (32/custom). + 'driven by TIER_CONCURRENT_SESSION_LIMITS and PROFILES_PER_TIER in @driftstack/api-types' source-of-truth pointer. 2026-06-24: the previous 3rd 'Session minutes / month' column (with per-tier monthly numbers) was removed — per ADR-004 (services/usage.ts retired hours metering) there is no monthly session-minute meter. Concurrent + profiles still match the tier-cap source-of-truth.", () => {
     expect(body).toMatch(
-      /`TIER_CONCURRENT_SESSION_LIMITS`\s*and `PROFILES_PER_TIER` in `@driftstack\/api-types`/,
+      /the public `@driftstack\/api-types` package also exports them as\s*`TIER_CONCURRENT_SESSION_LIMITS` and `PROFILES_PER_TIER`/,
     );
     expect(body).toMatch(/\|\s*`free`\s*\|\s+1 \|\s+1 \|/);
     expect(body).toMatch(/\|\s*`solo_manual`\s*\|\s+1 \|\s+10 \|/);

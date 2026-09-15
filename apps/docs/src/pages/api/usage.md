@@ -58,18 +58,17 @@ Response (200):
   `interact`, `wait`, `state_capture`, `screenshot_capture`. Both
   maps always carry all six keys.
 - `totals.session_minute` — wall-clock minutes a session was
-  active, summed across the calendar month. A granular usage
-  primitive for analytics; not gated against a per-tier cap.
-- `totals.navigate` / `interact` / `wait` — count of each driver
-  action invoked. Free across all tiers; surfaced for
-  observability.
+  active, summed across the calendar month. For your own analytics;
+  not capped per tier.
+- `totals.navigate` / `interact` / `wait` — count of each session
+  action you invoked. Free on all tiers; shown for your information.
 - `totals.state_capture` / `screenshot_capture` — count of state
   reads + screenshot endpoint hits. Same: count-only, no per-tier
   cap.
-- `quotas.session_minute` — `null` on every tier. Per ADR-004 the
-  paid tiers are concurrent-only and no per-minute meter is gated;
-  the field is preserved (rather than removed) so the response
-  shape stays stable.
+- `quotas.session_minute` — `null` on every tier. Paid tiers are
+  priced on concurrent sessions only, so there is no monthly cap on
+  minutes; the field is preserved (rather than removed) so the
+  response shape stays stable.
 - `quotas.<other>` is `null` for record types that are unmetered
   (the operation-count meters are free / count-only). A non-null
   value here would mean a hard cap exists; cross-check against
@@ -77,10 +76,9 @@ Response (200):
 
 `quotas.session_minute` is `null` for every tier, including
 enterprise (no per-meter cap is gated at any tier). The free tier
-instead enforces a 20-minute **per-session** wall-clock cap
-(`MAX_SESSION_MINUTES_PER_TIER` free → 20) — a session
-auto-destroys after 20 minutes — but that is a session-lifecycle
-bound, not a monthly meter, and is not surfaced here.
+instead enforces a 20-minute **per-session** wall-clock cap — a
+session auto-destroys after 20 minutes — but that is a per-session
+limit, not a monthly meter, and is not surfaced here.
 
 This endpoint does not surface the concurrent-sessions cap or the
 profile-count cap — those are tier-table values enforced at create
@@ -151,8 +149,9 @@ for _, b := range series.Buckets {
 
 ## Quota / tier caps
 
-The locked tier table is driven by `TIER_CONCURRENT_SESSION_LIMITS`
-and `PROFILES_PER_TIER` in `@driftstack/api-types`. Snapshot:
+Each tier has a fixed limit on concurrent sessions and saved profiles
+(the public `@driftstack/api-types` package also exports them as
+`TIER_CONCURRENT_SESSION_LIMITS` and `PROFILES_PER_TIER`):
 
 | Tier            | Concurrent sessions | Profiles |
 | --------------- | ------------------: | -------: |
@@ -165,14 +164,13 @@ and `PROFILES_PER_TIER` in `@driftstack/api-types`. Snapshot:
 | `api_scale`     |                  24 |      500 |
 | `enterprise`    |                  32 |   custom |
 
-Per ADR-004 the paid tiers are concurrent-only: there is no monthly
+Paid tiers are priced on concurrent sessions only: there is no monthly
 session-minute meter and no per-meter overage billing. The
 operation counters (`navigate` / `interact` / `wait` /
-`state_capture` / `screenshot_capture`) are surfaced for
-observability and are never charged. The only minute-based bound is
-the free tier's 20-minute per-session wall-clock cap, enforced at
-the session-lifecycle layer (the session auto-destroys), not as a
-billing event.
+`state_capture` / `screenshot_capture`) are shown for your
+information and are never charged. The only minute-based bound is
+the free tier's 20-minute per-session wall-clock cap, enforced by
+the session itself (it auto-destroys), not as a billing event.
 
 ## Auth + scoping
 
@@ -188,8 +186,8 @@ team scopes — member roles read the owner's usage.
 | 403    | `forbidden`         | X-Driftstack-Account points at an account the caller isn't a member of |
 | 400    | `validation-failed` | `days` outside [1, 90] on /series                                      |
 
-## Backend notes
+## Historical data
 
-The `usage_records` table is the source of truth. The dashboard
-currently renders zeros for buckets that predate the writers
-landing in production; that's expected empty-state, not a bug.
+Usage history starts from the date usage tracking launched. Days
+before that show as zero in the dashboard and in `/series` results.
+This is expected and does not mean data is missing.

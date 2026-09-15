@@ -105,7 +105,7 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     );
   });
 
-  it('OpenAPI input-event route description pins the modifier vocabulary + the harness-drops-DOM-names warning', () => {
+  it('OpenAPI input-event route description pins the modifier vocabulary + the device-ignores-DOM-names warning', () => {
     const lib = resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts');
     const body = read(lib);
     expect(body).toMatch(
@@ -114,9 +114,11 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     expect(body).toMatch(
       /Modifier vocabulary \(keyDown \/ keyUp `modifiers` array\): use the canonical 4-name set 'cmd' \| 'ctrl' \| 'shift' \| 'option'/,
     );
-    expect(body).toMatch(/map 1:1 onto Quartz CGEventFlags on the macOS harness side/);
     expect(body).toMatch(
-      /DOM-standard names \(Shift \/ Control \/ Alt \/ Meta\) round-trip through the schema unchanged but the harness decoder drops them\./,
+      /map 1:1 onto the macOS modifier flags \(Quartz CGEventFlags\) on the device/,
+    );
+    expect(body).toMatch(
+      /DOM-standard names \(Shift \/ Control \/ Alt \/ Meta\) pass schema validation unchanged but the device ignores them\./,
     );
   });
 
@@ -126,11 +128,14 @@ describe('Slice 6 LK.6 modifier vocabulary cross-SDK parity', () => {
     const go = read(resolve(REPO_ROOT, 'apps/docs/src/pages/sdk/go-quickstart.md'));
     for (const body of [ts, py, go]) {
       expect(body).toMatch(/### Modifier vocabulary/);
-      expect(body).toMatch(/canonical 4-name set/);
-      expect(body).toMatch(/Quartz `CGEventFlags`/);
+      // 2026-09-15 plain words — the customer docs name the four names and say
+      // DOM names are ignored; the Quartz/harness mapping stays in the SDK
+      // docstrings + OpenAPI description pinned above, not on the docs site.
+      expect(body).toMatch(/canonical 4-name set — `cmd`, `ctrl`, `shift`, `option`:/);
       expect(body).toMatch(
-        /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*through the schema unchanged but the harness decoder drops them\./,
+        /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) are accepted but\s*ignored\./,
       );
+      expect(body).not.toMatch(/Quartz|harness/);
     }
     expect(ts).toMatch(/modifiers: \['cmd', 'shift'\]/);
     expect(py).toMatch(/"modifiers": \["cmd", "shift"\]/);

@@ -17,8 +17,8 @@ const STATUS_LABEL: Record<string, string> = {
   creating: 'Creating',
   ready: 'Ready',
   busy: 'Busy',
-  destroyed: 'Destroyed',
-  errored: 'Errored',
+  destroyed: 'Ended',
+  errored: 'Failed',
 };
 
 type Tone = 'neutral' | 'success' | 'busy' | 'warning' | 'error';

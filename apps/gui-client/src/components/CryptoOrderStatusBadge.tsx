@@ -23,7 +23,7 @@ export interface CryptoOrderStatusBadgeProps {
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'Awaiting payment',
-  confirming: 'Confirming on-chain',
+  confirming: 'Confirming payment',
   paid: 'Paid',
   failed: 'Failed',
   partial: 'Partial — contact support',

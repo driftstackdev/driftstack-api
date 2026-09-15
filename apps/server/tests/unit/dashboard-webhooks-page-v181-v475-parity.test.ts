@@ -39,14 +39,21 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
   it('CRITICAL HMAC-SHA256 + 5-minute timestamp tolerance pinned. The header copy "HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance" is the canonical security framing matching the server-side W676 stripe-signing parity + V-273 webhook-delivery toolkit.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
+    expect(p).toMatch(/Signed event notifications sent to your server/);
+    expect(p).toMatch(
+      /Every delivery is signed \(HMAC-SHA256\) and carries a timestamp; the SDK\s*\n\s+helper rejects deliveries more than 5 minutes old\./,
+    );
   });
 
   it('CRITICAL per-endpoint signing-secret framing pinned — "Each endpoint gets its own signing secret; verify with the SDK\'s verifyWebhookSignature helper". Drift would suggest a shared/account-wide secret (which would be a much weaker compromise blast-radius).', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Each endpoint gets\s*\n\s+its own signing secret; verify with the SDK's/);
-    expect(p).toMatch(/<code class="font-mono">verifyWebhookSignature<\/code> helper\./);
+    expect(p).toMatch(
+      /Each endpoint gets\s*\n\s+its own signing secret so you can check that a notification really came\s*\n\s+from Driftstack/,
+    );
+    expect(p).toMatch(
+      /<code class="font-mono">verifyWebhookSignature<\/code> helper does this\s*\n\s+for you\./,
+    );
   });
 
   it("CRITICAL secret-shown-ONCE-on-creation framing pinned. The 'Copy this signing secret now — it won't be shown again. Use it with the SDK\\'s verifyWebhookSignature helper to authenticate' wording matches the W750 api-key shown-ONCE security framing.", () => {
@@ -55,7 +62,9 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     expect(p).toMatch(
       /Copy this signing secret now — it won't be shown again\. Use it with the SDK's/,
     );
-    expect(p).toMatch(/verifyWebhookSignature<\/code> helper to authenticate/);
+    expect(p).toMatch(
+      /verifyWebhookSignature<\/code> helper to check that\s*\n\s+each delivery really came from Driftstack\./,
+    );
   });
 
   it("CRITICAL V-475 in-page rotate-reveal pane framing pinned. The 'rotate-secret in-page reveal. Replaces the window.prompt shown in earlier slices; some browsers block prompts in non-interactive contexts' wording explains WHY rotate uses an inline reveal not a prompt.", () => {
@@ -86,7 +95,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Copy the new secret now — it won't be shown again\. The old secret stays\s*\n\s+valid for the grace window below; roll your verifier forward before\s*\n\s+then or the next delivery will fail signature check\./,
+      /Copy the new secret now — it won't be shown again\. The old secret keeps\s*\n\s+working until the time shown below\. Update your server with the new\s*\n\s+secret before then, or it will start rejecting deliveries\./,
     );
   });
 
@@ -130,7 +139,7 @@ describe('W753 dashboard /webhooks page V-181 + V-475 parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'Rotate signing secret for ' \+\s*\n\s+id \+\s*\n\s+'\?\\n\\nThe new secret is shown ONCE\. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries\.',/,
+      /'Rotate the signing secret for ' \+\s*\n\s+id \+\s*\n\s+'\?\\n\\nThe new secret is shown only once\. The old one keeps working for 24 hours so you can switch over without missing deliveries\.',/,
     );
   });
 

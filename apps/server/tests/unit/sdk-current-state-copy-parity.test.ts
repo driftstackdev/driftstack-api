@@ -35,7 +35,7 @@ describe('SDK and OpenAPI current-state copy', () => {
 
   it('keeps deployment-dependent FeatureUnavailable guidance honest and actionable', () => {
     expect(joined).toMatch(/BYOK Anthropic key storage is unavailable on deployments without/);
-    expect(joined).toMatch(/No compatible egress backend is available on this deployment/);
+    expect(joined).toMatch(/Session proxy configuration is not available on this deployment/);
     // The input-event statement moved to its own PER-SDK check below. It was
     // /deployment without a compatible harness returns/ asserted against `joined`, which was
     // wrong twice over: the wording required the SDKs to frame input forwarding as

@@ -138,7 +138,7 @@ export const SERVER_DID_NOT_ANSWER_NOTICE =
  *  grid and the profile card, which run the same pre-flight → fleet sequence
  *  and must say the same thing about the same cache. */
 export const ENDPOINT_MOVED_NO_VERDICT_NOTICE =
-  'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.';
+  'The server did not answer, so the VPN was not tested. The address has changed since the last check; no result yet — try again.';
 
 /** (k) K2 — the I5 notice for a row that has NO verdict to stand: no cache
  *  entry before this check, a prior pre-flight that did not resolve (its write
@@ -518,7 +518,7 @@ export type ListExitRow = Pick<AccountProxyMeta, 'id' | 'exit_observed' | 'exit_
 /** (i) I7 — the sentence a Mac that never ran the failing test shows for a
  *  tunnel the list says a fleet check found down. Names no cause — the list
  *  carries the contradiction's date, not the node's reason. */
-export const LIST_TUNNEL_DOWN_REASON = 'The last check could not bring this tunnel up.';
+export const LIST_TUNNEL_DOWN_REASON = 'The last check could not connect this VPN.';
 
 /** The list's `exit_superseded_at`, as a time — or undefined when the row was
  *  never contradicted, the server predates the field, or the value is not a
@@ -1135,7 +1135,7 @@ export function vpnStoreRefusal(err: unknown): { notice: string; tally: string }
     }
     if (isDesktopCredentialRefusalDetail(detail)) {
       return {
-        notice: `Endpoint resolves. ${DESKTOP_CREDENTIAL_FLEET_TEST_REASON}`,
+        notice: `Address found. ${DESKTOP_CREDENTIAL_FLEET_TEST_REASON}`,
         tally: DESKTOP_CREDENTIAL_NEXT_STEP,
       };
     }
@@ -1149,7 +1149,7 @@ export function vpnStoreRefusal(err: unknown): { notice: string; tally: string }
         ? ` Driftstack said: ${detail}`
         : ' The server did not answer; try the check again.';
   return {
-    notice: `Endpoint resolves. Couldn't store this VPN on your account, so the tunnel was not tested.${said}`,
+    notice: `Address found. Couldn't save this VPN to your account, so it was not tested.${said}`,
     tally: VPN_STORE_FAILED_TALLY_REASON,
   };
 }

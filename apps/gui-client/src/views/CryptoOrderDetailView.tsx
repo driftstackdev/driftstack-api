@@ -23,6 +23,22 @@ import { useCancelOrder } from '../lib/use-cancel-order';
 import { useCryptoOrder, type CryptoOrderEvent } from '../lib/use-crypto-order';
 import { CryptoReceiptView } from './CryptoReceiptView';
 
+/** Plain-words label for a timeline event's source. The wire tag is an enum
+ *  the server already trims for customers, but "ipn" still means nothing to a
+ *  first-time buyer, so each tag is spelled out here. */
+function eventSourceLabel(source: CryptoOrderEvent['source']): string {
+  switch (source) {
+    case 'create':
+      return 'order created';
+    case 'ipn':
+      return 'payment update received';
+    case 'cancel':
+      return 'order cancelled';
+    case 'expired':
+      return 'payment window expired';
+  }
+}
+
 function EventsTimeline({ events }: { events: CryptoOrderEvent[] }): JSX.Element {
   if (events.length === 0) {
     return <p className="text-sm text-ink-secondary">No events recorded yet.</p>;
@@ -36,7 +52,7 @@ function EventsTimeline({ events }: { events: CryptoOrderEvent[] }): JSX.Element
         >
           <span className="flex items-center gap-2">
             <CryptoOrderStatusBadge status={e.status} size="sm" />
-            <span className="text-xs text-ink-secondary">via {e.source}</span>
+            <span className="text-xs text-ink-secondary">{eventSourceLabel(e.source)}</span>
           </span>
           <span className="text-xs text-ink-secondary">{formatTimestamp(e.at)}</span>
         </li>
@@ -107,8 +123,8 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
       )}
       {(order.status === 'confirming' || order.status === 'partial') && (
         <p className="text-xs text-ink-secondary">
-          Payment activity has been detected on-chain. Cancellation is no longer self-service —
-          contact support to reconcile or refund.
+          A payment has been detected for this order, so it can no longer be cancelled here. Contact
+          support if you need to cancel it or request a refund.
         </p>
       )}
     </>
@@ -138,10 +154,10 @@ export function CryptoOrderDetailView(props: CryptoOrderDetailViewProps): JSX.El
           <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
             <h3 className="text-base font-semibold">Cancel this order?</h3>
             <p className="text-sm">
-              Order <span className="font-mono text-xs">{order.order_id}</span> will be marked
-              cancelled. You can still mint a new order afterwards. Crypto payments are{' '}
-              <strong>non-refundable</strong>; cancelling only stops the pending pay window — if
-              you've already sent crypto, contact support to reconcile.
+              Order <span className="font-mono text-xs">{order.order_id}</span> will be cancelled.
+              You can create a new order afterwards. Crypto payments are{' '}
+              <strong>non-refundable</strong> — if you've already sent payment, contact support
+              before cancelling.
             </p>
             <div className="flex justify-end gap-2">
               <button

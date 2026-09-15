@@ -116,7 +116,7 @@ describe('W434.C packages/api-types/src/webhooks.ts content parity', () => {
       /\/\/ V-359 — POST \/v1\/webhooks\/:id\/rotate-secret response\. Surfaces the\s*\/\/ fresh plaintext secret ONCE alongside metadata about the grace\s*\/\/ window during which both the old \+ new secrets are accepted by the\s*\/\/ server's outbound dual-sign\./,
     );
     expect(body).toMatch(
-      /export const RotateWebhookSecretResponseSchema = z\.object\(\{\s*id: WebhookEndpointIdSchema,\s*secret: z\.string\(\)\.describe\('Fresh plaintext signing secret\. Returned ONCE\.'\),\s*secret_prefix: z\.string\(\),\s*prev_secret_prefix: z\s*\.string\(\)\s*\.describe\('First chars of the prior secret, kept active during grace\.'\),\s*grace_expires_at: Iso8601Schema\.describe\(\s*'Until this timestamp, every outbound delivery is signed with both the new \+ old secret so the customer can roll their verifier across infra without dropped deliveries\.',\s*\),\s*\}\);/,
+      /export const RotateWebhookSecretResponseSchema = z\.object\(\{\s*id: WebhookEndpointIdSchema,\s*secret: z\.string\(\)\.describe\('Fresh plaintext signing secret\. Returned ONCE\.'\),\s*secret_prefix: z\.string\(\),\s*prev_secret_prefix: z\s*\.string\(\)\s*\.describe\('First chars of the prior secret, kept active during grace\.'\),\s*grace_expires_at: Iso8601Schema\.describe\(\s*'Until this time, every delivery is signed with both the new and the old secret, so you can update your verifier without missing deliveries\.',\s*\),\s*\}\);/,
     );
   });
 

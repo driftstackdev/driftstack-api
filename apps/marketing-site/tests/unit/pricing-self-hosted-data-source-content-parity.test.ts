@@ -123,10 +123,11 @@ describe('W386.A marketing-site src/data/pricing.ts self-hosted data-source cont
 
   it('SELF_HOSTED_SOURCE_ACCESS: 3-tier record (Solo+Pro=compiled software / Enterprise adds read-only source review — S20b 2026-07-06 plain-language labels, same 2-level differentiation)', () => {
     expect(body).toMatch(/export const SELF_HOSTED_SOURCE_ACCESS: Record<string, string> = \{/);
-    expect(body).toMatch(/self_hosted_solo: 'Compiled software \(build artifacts\)',/);
-    expect(body).toMatch(/self_hosted_pro: 'Compiled software \(build artifacts\)',/);
+    // 2026-09-15 plain words: 'build artifacts' → 'ready-to-run software'.
+    expect(body).toMatch(/self_hosted_solo: 'Ready-to-run software',/);
+    expect(body).toMatch(/self_hosted_pro: 'Ready-to-run software',/);
     expect(body).toMatch(
-      /self_hosted_enterprise: 'Compiled software \+ read-only source-code review access',/,
+      /self_hosted_enterprise: 'Ready-to-run software \+ read-only access to the source code',/,
     );
   });
 

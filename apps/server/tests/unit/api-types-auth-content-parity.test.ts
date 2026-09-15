@@ -68,16 +68,16 @@ describe('W435.C packages/api-types/src/auth.ts content parity', () => {
       /\/\/ Password rules: minimum 12, maximum 128\. We do NOT impose composition\s*\/\/ rules \(NIST 800-63B-3 explicitly recommends against forcing\s*\/\/ uppercase\/digits\/symbols mixes\)\. Length is the lever that matters\./,
     );
     expect(body).toMatch(
-      /export const AuthPasswordSchema = z\s*\.string\(\)\s*\.min\(12\)\s*\.max\(128\)\s*\.describe\('Account password — 12-128 chars; no composition rules per NIST 800-63B'\);/,
+      /export const AuthPasswordSchema = z\s*\.string\(\)\s*\.min\(12\)\s*\.max\(128\)\s*\.describe\('Account password — 12 to 128 characters\. No other rules\.'\);/,
     );
   });
 
-  it('AuthToken: URL-safe regex [A-Za-z0-9_-]+ + 32..256 + sha256-hashed at rest framing', () => {
+  it('AuthToken: URL-safe regex [A-Za-z0-9_-]+ + 32..256 + plain customer describe (the sha256-at-rest framing lives in the comment)', () => {
     expect(body).toMatch(
       /\/\/ Opaque single-use token returned by signup-verify \/ magic-link request \/\s*\/\/ password-reset request as a URL-safe string\. Stored sha256-hashed\./,
     );
     expect(body).toMatch(
-      /export const AuthTokenSchema = z\s*\.string\(\)\s*\.min\(32\)\s*\.max\(256\)\s*\.regex\(\/\^\[A-Za-z0-9_-\]\+\$\/\)\s*\.describe\('URL-safe single-use auth token; sha256-hashed at rest'\);/,
+      /export const AuthTokenSchema = z\s*\.string\(\)\s*\.min\(32\)\s*\.max\(256\)\s*\.regex\(\/\^\[A-Za-z0-9_-\]\+\$\/\)\s*\.describe\(\s*'Single-use token from the link in your verification, sign-in, or password-reset email\.',?\s*\);/,
     );
   });
 

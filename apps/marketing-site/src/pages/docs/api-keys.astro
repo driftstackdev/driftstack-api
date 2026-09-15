@@ -43,9 +43,8 @@ const GRANULAR = [
     </p>
 
     <p>
-      Free uses browser sign-in in the desktop app. That flow stores a
-      restricted <code>ds_test_…</code> device credential automatically; it is
-      not a customer API key, a general SDK key, or a sandbox credential.
+      The Free plan signs in through the desktop app. It does not come with a
+      customer API key, an SDK key, or a sandbox credential.
     </p>
 
     <h2>Minting a key</h2>
@@ -56,9 +55,7 @@ const GRANULAR = [
       the hash; if you lose the plaintext, revoke and mint a new one.
     </p>
     <p>
-      Customer-key format: <code>ds_live_&lt;random&gt;</code>. The
-      <code>ds_live_</code> prefix is how Driftstack detects "this
-      looks like an API key" during request parsing.
+      Customer-key format: <code>ds_live_&lt;random&gt;</code>.
     </p>
     <p>
       A Free dashboard web session can list and revoke keys retained from

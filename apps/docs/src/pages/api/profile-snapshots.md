@@ -12,7 +12,7 @@ archetype, name, and description, frozen as they were at capture
 time. Snapshots stay meaningful even after the source profile is
 renamed, re-archetyped, or deleted.
 
-**What a snapshot does NOT capture at v1: browser state.**
+**What a snapshot does NOT capture today: browser state.**
 Cookies, `localStorage`, IndexedDB, and logins are not copied into
 the snapshot, and restoring one does not bring them back. The
 snapshot's state field is empty and must not be used as a browser-state
@@ -29,7 +29,7 @@ model:
   description remain unchanged even as the source profile keeps
   changing.
 
-Restoring a snapshot creates a **new profile row** carrying the
+Restoring a snapshot creates a **new profile** carrying the
 snapshot's frozen archetype + description — the source profile is
 untouched, and the new profile starts with fresh (empty) browser
 state.
@@ -207,8 +207,8 @@ Errors:
 - `409 conflict` — a profile with the requested `name` already
   exists.
 - `429 tier-limit` — the new profile would push the account over
-  its `PROFILES_PER_TIER` cap. Snapshot restore counts against
-  the same cap as profile-create.
+  its profile cap. Snapshot restore counts against the same cap as
+  profile-create.
 
 Required scope: `write` or `write:profiles`.
 
@@ -243,36 +243,27 @@ This event filters cleanly via the query parameters; see
 
 ## Tier-cap interaction
 
-Snapshots themselves are NOT counted against `PROFILES_PER_TIER`.
+Snapshots themselves are NOT counted against your profile cap.
 You can hold many snapshots per profile, and many snapshots per
 account, without affecting your profile-cap budget.
 
 Restoring a snapshot DOES count: the new profile created from the
-restore is subject to the same `PROFILES_PER_TIER` cap as a
-manually-created profile. If your tier is at-cap, the restore
-returns `429 tier-limit` and the customer must either delete a
-profile first or upgrade tier.
+restore is subject to the same profile cap as a manually-created
+profile. If your tier is at-cap, the restore returns `429 tier-limit`
+and the customer must either delete a profile first or upgrade tier.
 
 ## Storage characteristics
 
-Snapshots are plain metadata rows stored separately from live profiles —
-at v1 no browser-state payload is stored anywhere (the state
-field is always empty). Each snapshot freezes the
-source profile's archetype + name (`parent_archetype` /
-`parent_name`) at capture time, so a snapshot stays meaningful even
-after the parent profile is renamed, re-archetyped, or deleted.
-There is no per-account snapshot quota at v1.
+Snapshots are metadata only, stored separately from live profiles —
+no browser state is stored (the state field is always empty). Each
+snapshot freezes the source profile's archetype + name
+(`parent_archetype` / `parent_name`) at capture time, so a snapshot
+stays meaningful even after the parent profile is renamed,
+re-archetyped, or deleted. There is no per-account snapshot quota
+today.
 
 ## SDK access
 
 The TypeScript / Python / Go SDKs expose snapshots under the
 `profile_snapshots` resource. See the SDK quickstart for your
 language for the idiomatic code shape.
-
-## Source of truth
-
-Routes: `apps/server/src/routes/profile-snapshots.ts`. Service
-
-- tier-cap enforcement: `apps/server/src/services/profile-
-snapshots.ts`. Schema:
-  `packages/api-types/src/profiles.ts`.

@@ -306,7 +306,7 @@ describe('settings page — email notification preferences', () => {
     expect(checkbox.indeterminate).toBe(false);
     expect(checkbox.disabled).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
-      'live setting matches',
+      'the setting shows your change',
     );
   });
 
@@ -335,7 +335,7 @@ describe('settings page — email notification preferences', () => {
     expect(checkbox.indeterminate).toBe(false);
     expect(checkbox.disabled).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
-      'checkbox now shows the live preference',
+      'checkbox now shows your current setting',
     );
   });
 
@@ -369,7 +369,7 @@ describe('settings page — email notification preferences', () => {
     expect(checkbox.indeterminate).toBe(true);
     expect(checkbox.disabled).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toContain(
-      'outcome is unknown',
+      "couldn't check whether it saved",
     );
   });
 

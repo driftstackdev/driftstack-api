@@ -6,12 +6,11 @@ description: Subscriptions, the Stripe Customer Portal redirect, and reading you
 
 # Billing
 
-All Driftstack billing is a thin layer over Stripe. The Driftstack
-API mints checkout sessions + portal URLs; the customer interacts
-with the Stripe-hosted UI directly. Driftstack receives webhook
-events from Stripe (`invoice.paid`, `customer.subscription.updated`,
-etc.) and reflects them into the account's `subscription` row +
-audit-log + email notifications.
+Driftstack billing runs on Stripe. The API gives you checkout and
+portal links; you pay for and manage your subscription in Stripe's
+hosted pages. When Stripe reports a change, Driftstack updates your
+subscription state, records it in your audit log, and sends you an
+email notification.
 
 ## Read billing state
 
@@ -68,18 +67,11 @@ customer to `checkout_url`; Stripe handles card collection +
 `success_url`.
 
 **Both URL fields are optional, and omitting them is the path that works
-for everyone.** When absent, the server substitutes its own configured
-return URLs (`STRIPE_SUCCESS_URL` and a `DASHBOARD_ORIGIN`-derived cancel
-URL) and no allowlist check applies — so a self-hosted deployment gets a
-working checkout that returns to its own origin without touching any
-source.
-
-If you DO send them, they are validated against a **hardcoded** allowlist
-of three origins (`https://app.driftstack.io` and two local-development
-origins). That list is deliberately not env-driven — a typo in
-environment config would silently re-open the redirect hole the check
-exists to close — so it is edited in source under review. Sending any
-other origin returns `400`. Contact support to have an origin added.
+for everyone.** When absent, the customer is returned to the Driftstack
+dashboard after checkout. If you do send them, each URL's origin must be
+on the allowlist (`https://app.driftstack.io`, plus local-development
+origins); any other origin returns `400`. Contact support to have an
+origin added.
 
 ## Open the Stripe Customer Portal
 
@@ -92,8 +84,8 @@ const { portal_url } = await client.billing.createPortalSession();
 Returns a short-lived one-time URL into Stripe's hosted Customer
 Portal. The customer manages their payment method, downloads
 invoices, cancels, or upgrades / downgrades from the portal.
-Driftstack receives the resulting Stripe events via webhook + the
-account's `subscription` row updates.
+Driftstack picks up the resulting changes from Stripe and updates
+the account's subscription state.
 
 The portal URL is single-use and short-lived. Mint a fresh one
 each time the customer clicks "Manage subscription" — don't cache.
@@ -108,14 +100,13 @@ straight to the portal without any client-side code. A fetch client that
 does not follow redirects can read `Location` itself.
 
 Requires the same `admin:billing` scope as the POST above, and returns the
-same `503` when billing is not wired in the deployment. Unlike `GET
+same `503` when billing is not enabled on the deployment. Unlike `GET
 /v1/billing`, this route does **not** honour `X-Driftstack-Account` — only
 the owner manages the owner's billing.
 
 ## Webhook events from Stripe → Driftstack → Customer
 
-When Stripe fires `customer.subscription.updated` (or any of the
-~10 lifecycle events Driftstack subscribes to), Driftstack
+When Stripe reports a subscription change, Driftstack
 records the change in the account's audit log
 (`subscription.tier_changed` with `payload.from` + `payload.to`).
 That audit row is the source of truth for programmatic subscription-change

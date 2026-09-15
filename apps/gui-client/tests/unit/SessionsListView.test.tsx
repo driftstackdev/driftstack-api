@@ -69,7 +69,8 @@ describe('V-534.P SessionsListView — ready', () => {
     expect(screen.getByText('sess_2')).toBeTruthy();
     // SessionStatusBadge surfaces the label per status.
     expect(screen.getByRole('status', { name: /session status: ready/i })).toBeTruthy();
-    expect(screen.getByRole('status', { name: /session status: errored/i })).toBeTruthy();
+    // The 'errored' status renders as the customer word 'Failed' (SessionStatusBadge).
+    expect(screen.getByRole('status', { name: /session status: failed/i })).toBeTruthy();
   });
 });
 

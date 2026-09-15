@@ -100,7 +100,7 @@ describe('W345.A /docs/sessions parity', () => {
     // enforces it (SelectableArchetypeIdSchema's isSelectableArchetypeId
     // refine) plus the default_archetype_id fallback the catalog owns.
     expect(body).toMatch(
-      /<code>archetype<\/code> identifies an exact device, iOS, and\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
+      /The <code>archetype<\/code> field identifies an exact device, iOS,\s*and Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
     );
     expect(body).toMatch(/<code>default_archetype_id<\/code>/);
     const catalogId = CreateSessionRequestSchema.safeParse({ archetype: LOCKED_ARCHETYPE_ID });

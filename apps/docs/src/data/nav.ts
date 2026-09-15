@@ -224,8 +224,8 @@ export const DOC_NAV: DocNavSection[] = [
           },
           { href: '/api/agent-sessions/#import-cookies', label: 'Import cookies', method: 'POST' },
           {
-            href: '/api/agent-sessions/#change-the-sessions-egress',
-            label: "Change the session's egress",
+            href: '/api/agent-sessions/#change-the-sessions-proxy',
+            label: "Change the session's proxy",
             method: 'POST',
           },
           {
@@ -439,8 +439,8 @@ export const DOC_NAV: DocNavSection[] = [
             method: 'GET',
           },
           {
-            href: '/api/oauth/#2--customer-approves-provider-internal',
-            label: '2 — Customer approves (provider-internal)',
+            href: '/api/oauth/#2--customer-approves-handled-by-the-dashboard',
+            label: '2 — Customer approves (handled by the dashboard)',
             method: 'POST',
           },
           {

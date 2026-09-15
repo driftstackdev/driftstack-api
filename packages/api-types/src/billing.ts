@@ -34,7 +34,7 @@ export const CreateCheckoutSessionRequestSchema = z.object({
    * Same accepted set, same rejection message, accurate published contract.
    */
   tier: z.enum(PURCHASABLE_TIERS, {
-    message: 'tier must be a self-serve paid tier (free and enterprise excluded)',
+    message: 'Choose a paid plan. Free and Enterprise plans cannot be selected here.',
   }),
   billing_period: BillingPeriodSchema,
   /**

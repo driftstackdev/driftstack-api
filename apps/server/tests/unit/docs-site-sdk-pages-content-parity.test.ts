@@ -28,15 +28,16 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
       expect(body).toMatch(/^\s*<h1>SDKs<\/h1>/m);
     });
 
-    it('Intro paragraph — load-bearing "identical resource shapes from the same Zod single source of truth" architectural claim. Drift here would silently break the customer-facing promise that the 3 SDKs are wire-compatible, generated from one canonical schema in @driftstack/api-types.', () => {
+    it('Intro paragraph — load-bearing "identical resource shapes" promise, stated in customer terms (what you learn in one SDK carries over to the others). The Zod / @driftstack/api-types build mechanics were removed from the customer page and must not return.', () => {
       expect(body).toMatch(
         /Driftstack ships first-party SDKs for TypeScript, Python, and Go\. All SDKs expose identical/,
       );
       expect(body).toMatch(
-        /resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\) generated from/,
+        /resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\), so what/,
       );
-      expect(body).toMatch(/the same Zod single source of truth in/);
-      expect(body).toMatch(/<code>@driftstack\/api-types<\/code>/);
+      expect(body).toMatch(/you learn in one SDK carries over to the others\./);
+      expect(body).not.toMatch(/Zod single source of truth/);
+      expect(body).not.toMatch(/<code>@driftstack\/api-types<\/code>/);
     });
 
     it('TypeScript card — @driftstack/sdk, npm install command + status "published, pre-1.0" (the only one of the 3 SDKs in actual public production). S22.1 (2026-07-06): card chrome re-pinned on tk-* tokens (tk-border/tk-surface/tk-ink ladder + ambient shadow). Drift here would mislead customers about which SDK is safe to depend on today.', () => {
@@ -65,13 +66,16 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     });
   });
 
-  it('typescript-quickstart.md: laser-focused-5-minute framing + Node 18+ (22 LTS recommended) + ESM-only + lazy auth (no construct-time network) + try/finally destroy-session-or-idle-timeout pinned. Re-enabled by slice 318 after the R4 V-NNN scrub (commit b46b8d4124b) removed the V-504 anchor; the doc now leads with the bare em-dash form "— laser-focused..."', () => {
+  it('typescript-quickstart.md: five-minute framing (a complete sentence, not the old bare em-dash fragment) + Node 18+ (22 LTS recommended) + dual-publish + lazy auth (no construct-time network) + try/finally destroy-session pinned.', () => {
     const body = read(TS);
     expect(body).toMatch(/^title: TypeScript \/ Node\.js quickstart$/m);
     expect(body).toMatch(/^# TypeScript quickstart$/m);
-    expect(body).toMatch(/^— laser-focused 5-minute path to a working TypeScript Driftstack$/m);
-    expect(body).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended;/);
-    expect(body).toMatch(/`engines\.node: ">=18"`/);
+    expect(body).toMatch(
+      /^A five-minute path to a working TypeScript Driftstack session\. For the$/m,
+    );
+    expect(body).not.toMatch(/laser-focused/);
+    expect(body).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended\)\./);
+    expect(body).not.toMatch(/engines\.node/);
     expect(body).toMatch(/npm install @driftstack\/sdk/);
     // 2026-06-24: @driftstack/sdk is dual-published (package.json main
     // ./dist/index.cjs + exports["."].require), NOT ESM-only.
@@ -98,11 +102,12 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(existsSync(TS)).toBe(true);
   });
 
-  it('python-quickstart.md: laser-focused-5-minute framing + Python 3.10+ + sync(Driftstack)+async(AsyncDriftstack) clients off same wire shape + uv/poetry alt install + asyncio.run(main()) pinned. Re-enabled by slice 319 post the R4 V-NNN scrub (V-504 anchor removed; doc leads with bare em-dash)', () => {
+  it('python-quickstart.md: five-minute framing (a complete sentence, not the old bare em-dash fragment) + Python 3.10+ + sync(Driftstack)+async(AsyncDriftstack) clients with the same methods + uv/poetry alt install + asyncio.run(main()) pinned.', () => {
     const body = read(PY);
     expect(body).toMatch(/^title: Python quickstart$/m);
     expect(body).toMatch(/^# Python quickstart$/m);
-    expect(body).toMatch(/^— laser-focused 5-minute path to a working Python Driftstack$/m);
+    expect(body).toMatch(/^A five-minute path to a working Python Driftstack session\. For the$/m);
+    expect(body).not.toMatch(/laser-focused/);
     expect(body).toMatch(
       /- Python 3\.10\+ \(the SDK uses modern type hints \+ structural matches\)\./,
     );
@@ -110,7 +115,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/# or: uv add driftstack-sdk/);
     expect(body).toMatch(/# or: poetry add driftstack-sdk/);
     expect(body).toMatch(/The package ships both sync \(`Driftstack`\) and async/);
-    expect(body).toMatch(/\(`AsyncDriftstack`\) clients off the same wire shape\./);
+    expect(body).toMatch(/\(`AsyncDriftstack`\) clients with the same methods\./);
     expect(body).toMatch(/from driftstack import Driftstack/);
     expect(body).toMatch(/from driftstack import AsyncDriftstack/);
     expect(body).toMatch(
@@ -123,7 +128,8 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     const body = read(GO);
     expect(body).toMatch(/^title: Go quickstart$/m);
     expect(body).toMatch(/^# Go quickstart$/m);
-    expect(body).toMatch(/^— laser-focused 5-minute path to a working Go Driftstack$/m);
+    expect(body).toMatch(/^A five-minute path to a working Go Driftstack session\. For the$/m);
+    expect(body).not.toMatch(/laser-focused/);
     expect(body).toMatch(/- Go 1\.22\+ \(the SDK uses generic constraints \+ `slices` package\)\./);
     expect(body).not.toMatch(/- Go 1\.21\+/);
     expect(body).toMatch(/go get github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
@@ -159,7 +165,7 @@ describe('W601 (W632-restructured) apps/docs/sdk pages content parity', () => {
     expect(body).toMatch(/- \*\*MAJOR\*\* bump on breaking changes/);
     expect(body).toMatch(/- \*\*MINOR\*\* bump on backwards-compatible feature additions\./);
     expect(body).toMatch(/- \*\*PATCH\*\* bump on backwards-compatible bug fixes\./);
-    expect(body).toMatch(/The control plane \(`apps\/server`\) is NOT versioned/);
+    expect(body).toMatch(/The Driftstack server itself is not versioned/);
     expect(body).toMatch(/versioned via the `\/v1\/` URL prefix; breaking changes there bump to/);
     expect(body).toMatch(/`\/v2\/`\./);
     expect(body).toMatch(/^## Pre-1\.0 stability$/m);

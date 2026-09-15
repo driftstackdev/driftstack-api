@@ -25,7 +25,7 @@ describe('docs/api/recipes content parity', () => {
 
   it('Recipes overview pins the immutable snapshot as a durable reference without claiming replay', () => {
     expect(body).toMatch(
-      /A \*\*recipe\*\* is an immutable snapshot of a finished\s*\[agent-session\]\(\/api\/agent-sessions\/\) — the structured intent_log\s*plus the full transcript at the moment of capture\. Recipes preserve\s*a completed flow as a durable reference without re-running decomposition/,
+      /A \*\*recipe\*\* is an immutable snapshot of a finished\s*\[agent-session\]\(\/api\/agent-sessions\/\) — the structured intent_log\s*plus the full transcript at the moment of capture\. Recipes preserve\s*a completed flow as a durable reference you can inspect without running\s*the session again/,
     );
   });
 
@@ -41,7 +41,7 @@ describe('docs/api/recipes content parity', () => {
       /"id": "rec_<uuid>",\s*"account_id": "<account-uuid>",\s*"agent_session_id": "agt_<uuid> \| null",\s*"label": "my checkout flow",/,
     );
     expect(body).toMatch(
-      /`agent_session_id` is `null` when the originating agent-session\s*has been deleted \(ON DELETE SET NULL — the recipe survives the\s*source session's lifecycle\)\./,
+      /`agent_session_id` is `null` when the originating agent-session\s*has been deleted \(the recipe survives when the session is deleted\)\./,
     );
     expect(body).toMatch(
       /`intent_count` is the length of the\s*flattened intent_log\. The list endpoint omits the intent array for\s*payload weight; fetch a single recipe with `GET \/v1\/recipes\/\{id\}`\s*to get its public `intent_log`\./,
@@ -83,7 +83,7 @@ describe('docs/api/recipes content parity', () => {
 
   it("Intent log assembly framing pinned: 'the server walks the source agent-session's transcript and flatMaps every plan-executed agent turn's structured intents array into a single intent_log. The result is captured atomically (insert-once; never edited) so the historical snapshot survives any later session activity.' + 'Operator + user transcript entries don't carry intents — only agent turns from a successful decompose+execute step contribute. A session that ran exclusively in mode=manual will produce a recipe with intent_count: 0 (because manual sessions log operator entries, not decomposer plans). That's expected — the recipe is still useful as a transcript-only snapshot.' — pinned so the flatMap-plan-executed + insert-once + manual-session-intent_count-0-is-expected contract all stay documented", () => {
     expect(body).toMatch(
-      /the server walks the source agent-session's\s*transcript and flatMaps every `plan-executed` agent turn's\s*structured `intents` array into a single `intent_log`\. The result\s*is captured atomically \(insert-once; never edited\) so the\s*historical snapshot survives any later session activity\./,
+      /Driftstack gathers the `intents` from every `plan-executed` agent turn\s*in the source session's transcript into a single `intent_log`\. The\s*result is captured once and never edited, so the snapshot survives any\s*later session activity\./,
     );
     expect(body).toMatch(
       /A session that ran exclusively in `mode='manual'` will produce a\s*recipe with `intent_count: 0`/,
@@ -123,7 +123,7 @@ describe('docs/api/recipes content parity', () => {
   it('intent-log storage docs pin encryption plus copy-on-serialize redaction', () => {
     expect(body).toMatch(/Recipe payloads are encrypted at rest\./);
     expect(body).toMatch(
-      /Public detail serialization\s*works from a copy and removes sensitive type values without changing\s*the stored intent log/,
+      /Sensitive `type` values are\s*removed from the API response, not from the stored recipe, so the\s*stored snapshot stays exact/,
     );
   });
 

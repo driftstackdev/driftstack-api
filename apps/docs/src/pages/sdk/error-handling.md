@@ -12,15 +12,14 @@ exceptions. Catch by category for control-flow logic; catch the
 base type for blanket logging.
 
 The hierarchy is consistent across TypeScript / Python / Go — the
-type names + URI mapping are kept in sync via a single source of
-truth (`PROBLEM_TYPE_TO_ERROR` per language, generated against the
-server's OpenAPI 3.1 spec).
+same problem-type URIs map to matching errors in every SDK. The
+table below lists the class name in each language (a couple of
+names differ per language — see the naming note).
 
 ## Hierarchy
 
 Server problem-type URIs live under the stable
-`https://errors.driftstack.dev/<slug>` host and are pinned by
-`PROBLEM_TYPES` in `@driftstack/api-types`. Dispatch on the slug,
+`https://errors.driftstack.dev/<slug>` host. Dispatch on the slug,
 not on HTTP status.
 
 | Server problem-type slug              | TS class                       | Python exception               | Go type                                              | Retryable |

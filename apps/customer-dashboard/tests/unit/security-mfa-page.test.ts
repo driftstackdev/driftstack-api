@@ -354,7 +354,7 @@ describe('security page — MFA (2FA) disable', () => {
 
     expect(isHidden(window, '[data-section="mfa-step-up"]')).toBe(false);
     expect(window.document.querySelector('[data-field="mfa-step-up-error"]')?.textContent).toMatch(
-      /proof outcome is unknown.*cancel this prompt and retry Disable two-factor first.*may already be MFA-fresh.*new current authenticator code or an unused recovery code/i,
+      /not sure your code was accepted.*cancel this prompt and try Disable two-factor again.*may go through without asking for a code.*new code from your authenticator app or an unused recovery code/i,
     );
 
     (
@@ -453,7 +453,7 @@ describe('security page — MFA (2FA) disable', () => {
       'not enrolled',
     );
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome was unknown.*status was refreshed.*not enrolled.*likely completed.*do not submit it again/i,
+      /took too long.*two-factor now shows as off.*probably disabled.*No need to try again/i,
     );
   });
 
@@ -477,7 +477,7 @@ describe('security page — MFA (2FA) disable', () => {
       'enrolled',
     );
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome was unknown.*status was refreshed.*still shows enrolled.*fresh code before retrying/i,
+      /took too long.*two-factor still shows as on.*Get a fresh code and try again/i,
     );
   });
 });
@@ -593,7 +593,7 @@ describe('security page — MFA recovery-codes regenerate (enrolled)', () => {
     expect(fetchCalls.filter((c) => /\/v1\/account\/mfa$/.test(c.url)).length).toBeGreaterThan(1);
     expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*status was refreshed.*old recovery code is invalid.*cannot be recovered.*intentionally want another replacement/i,
+      /not sure it finished.*status above is up to date.*old recovery codes no longer work.*new ones weren't shown.*only if you want a fresh set/i,
     );
   });
 
@@ -695,7 +695,7 @@ describe('security page — MFA (2FA) enrollment verify', () => {
     );
     expect(isHidden(window, '[data-section="mfa-recovery"]')).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*status was refreshed.*recovery codes cannot be recovered.*regenerate.*authenticator access/i,
+      /not sure it finished.*status above is up to date.*recovery codes weren't shown.*generate new ones now.*authenticator app/i,
     );
   });
 });

@@ -100,7 +100,7 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
       /<strong><code>customer<\/code><\/strong> — action performed\s*by an authenticated API key or web session\. The\s*<code>actor_account_id<\/code> \+ <code>actor_key_id<\/code>\s*fields identify which account \/ key performed it\./,
     );
     expect(body).toMatch(
-      /<strong><code>system<\/code><\/strong> — automated action by\s*Driftstack infrastructure \(e\.g\. scheduled-job triggered\s*revocation, expired-card subscription downgrade\)\./,
+      /<strong><code>system<\/code><\/strong> — automated action by\s*Driftstack \(e\.g\. a scheduled revocation, or a subscription\s*downgrade after a card expired\)\./,
     );
     expect(body).toMatch(
       /<strong><code>staff<\/code><\/strong> — Driftstack staff\s*performed the action via internal admin tools\. Used for\s*refund recording, support-note insertion, and exceptional\s*manual interventions\. We notify the affected account by\s*email when this happens for any action that modifies state\./,
@@ -131,18 +131,20 @@ describe('W518.B apps/marketing-site/src/pages/docs/audit-log.astro content pari
       /Standard cursor pagination — see <a href="\/docs\/pagination\/">\/docs\/pagination<\/a>\.\s*Sort order is <code>timestamp DESC<\/code> with <code>id DESC<\/code>\s*tiebreaker, so newest entries appear first\./,
     );
     expect(body).toMatch(
-      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*header, the server returns the <strong>owner's<\/strong> audit\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*roles are read-allowed on this surface \(\s*<code>effectiveAccountId<\/code> behaviour\)/,
+      /<code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;<\/code>\s*header, the server returns the <strong>owner's<\/strong> audit\s*log — both <code>member<\/code> and <code>admin<\/code> team\s*roles can read it\./,
     );
     expect(body).toMatch(
-      /The same effective-account header gate applies to\s*<code>\/v1\/account\/audit-log\/export<\/code>\./,
+      /The same <code>X-Driftstack-Account<\/code> header behaviour applies to\s*<code>\/v1\/account\/audit-log\/export<\/code>\./,
     );
+    // Internal identifier must not appear in customer copy.
+    expect(body).not.toMatch(/effectiveAccountId/);
     // Internal V-anchors must NOT bleed into customer-facing copy.
     expect(body).not.toMatch(/\(V-330b\s/);
   });
 
   it("Indefinite-retention framing pinned: 'Audit log entries are retained indefinitely, on every tier — there is no tier-based retention window and no scheduled prune job. An account's entries are removed only when the account itself is deleted (a cascading delete tied to the account record, not a time-based sweep).' + SIEM-export-cron pattern framing — pinned so the honest no-prune-job/indefinite-retention statement survives (a fictional 5-tier retention table + 'pruned by a nightly sweep' claim was corrected 2026-06-30: account_audit_log has no expires_at/retention column and the only real audit-shaped sweep, AuditArchiveService, explicitly excludes this table — see apps/server/src/services/audit-archive.ts AUDIT_TABLES. Drift back to a fabricated retention promise would re-create a compliance-adjacent doc/code mismatch; drift to dropping the SIEM-export-cron suggestion would orphan customers who want their own offline retention copy)", () => {
     expect(body).toMatch(
-      /Audit log entries are retained <strong>indefinitely<\/strong>,\s*on every tier — there is no tier-based retention window and no\s*scheduled prune job\. An account's entries are removed only when\s*the account itself is deleted \(a cascading delete tied to the\s*account record, not a time-based sweep\)\./,
+      /Audit log entries are retained <strong>indefinitely<\/strong>,\s*on every tier — there is no tier-based retention window\. An\s*account's entries are removed only when the account itself is\s*deleted\./,
     );
     expect(body).toMatch(
       /most\s*enterprise customers ship a daily cron that calls the endpoint\s*with <code>from=yesterday&amp;to=today<\/code> and forwards the\s*response into their SIEM\./,

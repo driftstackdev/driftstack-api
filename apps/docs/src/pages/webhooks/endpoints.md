@@ -41,8 +41,8 @@ inbound delivery.
   . When non-null, Driftstack is dual-signing every outbound
   delivery: the single `x-driftstack-signature` header carries
   BOTH HMACs as two comma-separated `v1=` entries
-  (`t=<sec>,v1=<new>,v1=<old>`), so customers can roll the new
-  secret across their verifier infrastructure without dropped
+  (`t=<sec>,v1=<new>,v1=<old>`), so you can roll the new
+  secret out to your servers without dropped
   deliveries. There is no separate header — one signature header
   carries both signatures.
 - `consecutive_failures` increments on each failed delivery + zeros
@@ -76,9 +76,9 @@ plaintext signing secret in `secret`:
 }
 ```
 
-> **Save the secret now.** It's shown ONCE; Driftstack stores a versioned
-> AES-256-GCM envelope and decrypts it only in the delivery worker while
-> signing. Subsequent reads return the prefix, never the plaintext secret.
+> **Save the secret now.** It is shown ONCE. Driftstack stores it encrypted,
+> and later reads return only the `secret_prefix`, never the full secret. If
+> you lose it, rotate the secret to get a new one.
 
 Errors:
 
@@ -114,14 +114,14 @@ All fields optional; pass any subset. Empty body is rejected (400).
 useful for maintenance windows or post-incident cooldowns. Resume
 with `active: true`.
 
-`409 Conflict` if the endpoint is soft-deleted (`disabled_at` is
-set); the row is a tombstone, mint a fresh endpoint instead.
+`409 Conflict` if the endpoint has been deleted (`disabled_at` is
+set); a deleted endpoint cannot be reactivated — create a new one instead.
 
 ## Delete
 
 `DELETE /v1/webhooks/:id`
 
-Soft-deletes the endpoint by setting `disabled_at`. Pending
+Marks the endpoint as deleted by setting `disabled_at`. Pending
 deliveries fail terminally (no retry); historical deliveries stay
 queryable for the standard retention window. Idempotent — re-
 deletes return 204 no-op.
@@ -130,7 +130,7 @@ deletes return 204 no-op.
 
 `POST /v1/webhooks/:id/test`
 
-Enqueues a synthetic `test.ping` delivery to the endpoint
+Queues a `test.ping` test delivery to the endpoint
 regardless of subscription. Lets you verify your handler is
 reachable + signature-verifies before relying on the endpoint for
 real events.
@@ -145,7 +145,7 @@ Returns `202 Accepted`:
 }
 ```
 
-The delivery flows through the same dispatcher as production events:
+The delivery goes through the same delivery path as production events:
 HMAC-signed, retried on failure per the standard backoff, audit-
 logged as `webhook_delivery.replayed` with `payload.via:
 send_test_event`.
@@ -185,7 +185,7 @@ Steps to roll:
 2. Update your verifier to use the new secret. Both HMACs arrive
    in the single `x-driftstack-signature` header, so a verifier
    that checks every `v1=` entry needs no other change.
-3. Deploy the verifier change across your fleet within 24 hours.
+3. Deploy the verifier change to all your servers within 24 hours.
 4. The old secret stops working at `grace_expires_at`; subsequent
    deliveries carry only the new-secret `v1=` entry.
 

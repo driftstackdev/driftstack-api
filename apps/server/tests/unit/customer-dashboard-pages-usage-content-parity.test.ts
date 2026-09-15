@@ -91,13 +91,13 @@ describe('W495.A apps/customer-dashboard/src/pages/usage.astro content parity', 
 
   it("Empty-data state: allZero → 'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.' — pinned so customers with newly-onboarded accounts (zero usage) see a positive 'data is loaded' message rather than confused by all-zero tiles (drift to silent zero would leave customers uncertain whether the fetch failed or they really have no activity)", () => {
     expect(body).toMatch(
-      /const allZero = Object\.values\(totals\)\.every\(\(v\) => !v \|\| v === 0\);\s*if \(allZero\) \{\s*showBanner\(\s*'Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions\.',\s*\);/,
+      /const allZero = Object\.values\(totals\)\.every\(\(v\) => !v \|\| v === 0\);\s*if \(allZero\) \{\s*showBanner\(\s*'Live usage loaded\. No activity in the current period yet — counts will fill in as you run sessions\.',\s*\);/,
     );
   });
 
   it("ADR-004 framing pinned: 'None of these counters drive billing. Concurrent caps are the only meter per ADR-004. We surface counts so you can spot pipeline regressions — e.g. a sudden 10× spike in navigates may indicate a runaway script.' — pinned so the 'no per-event billing' contract stays explicit (drift to dropping ADR-004 reference would let customers assume they're being charged per navigate/capture; drift to dropping the regression-spotting framing would lose the 'why' for surfacing these counters at all)", () => {
     expect(body).toMatch(
-      /None of these counters drive billing\. Concurrent caps are the only meter\s*per ADR-004\. We surface counts so you can spot pipeline regressions —\s*e\.g\. a sudden 10× spike in navigates may indicate a runaway script\./,
+      /None of these counts affect your bill — your plan only limits how many\s*sessions run at once\. They're here to help you spot problems, like a\s*sudden 10× jump in page loads from a runaway script\./,
     );
   });
 

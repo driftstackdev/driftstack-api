@@ -123,8 +123,8 @@ describe('W384.B gui-client SessionStatusBadge content parity', () => {
     expect(body).toMatch(/creating: 'Creating',/);
     expect(body).toMatch(/ready: 'Ready',/);
     expect(body).toMatch(/busy: 'Busy',/);
-    expect(body).toMatch(/destroyed: 'Destroyed',/);
-    expect(body).toMatch(/errored: 'Errored',/);
+    expect(body).toMatch(/destroyed: 'Ended',/);
+    expect(body).toMatch(/errored: 'Failed',/);
   });
 
   it('Tone union: 5 literals (neutral/success/busy/warning/error)', () => {
@@ -172,7 +172,7 @@ describe('W384.B gui-client CryptoOrderStatusBadge content parity', () => {
 
   it('STATUS_LABEL: 5 customer-facing labels pinned', () => {
     expect(body).toMatch(/pending: 'Awaiting payment',/);
-    expect(body).toMatch(/confirming: 'Confirming on-chain',/);
+    expect(body).toMatch(/confirming: 'Confirming payment',/);
     expect(body).toMatch(/paid: 'Paid',/);
     expect(body).toMatch(/failed: 'Failed',/);
     expect(body).toMatch(/partial: 'Partial — contact support',/);

@@ -279,7 +279,7 @@ describe('api-keys page — local integration', () => {
     expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
     expect(isHidden(window, '[data-api-access-notice]')).toBe(false);
     expect(window.document.querySelector('[data-api-access-notice]')?.textContent).toContain(
-      'Free sessions',
+      'On the Free plan',
     );
     for (const element of window.document.querySelectorAll('[data-api-access-only]')) {
       expect(element.classList.contains('hidden')).toBe(true);
@@ -388,7 +388,7 @@ describe('api-keys page — local integration', () => {
     expect(isHidden(window, '[data-rotate="key_active"]')).toBe(true);
     expect(isHidden(window, '[data-revoke="key_active"]')).toBe(true);
     expect(window.document.querySelector('[data-api-access-notice]')?.textContent).toContain(
-      'selected team role is read-only',
+      'team role is read-only for the selected account',
     );
 
     const createButton = window.document.querySelector('[data-show-create]') as HTMLButtonElement;
@@ -509,9 +509,9 @@ describe('api-keys page — local integration', () => {
 
   // S35 2026-07-07 (fable-frontend-audit) — fmtIso used to floor
   // (now - date)/day, so any FUTURE timestamp rendered "-1 days ago":
-  // every rotated key displayed "grace ends -1 days ago" for its entire
+  // every rotated key displayed "expires -1 days ago" for its entire
   // 24h grace window.
-  it('rotated key with a future grace expiry renders "grace ends in Nh" — never "-1 days ago"', async () => {
+  it('rotated key with a future grace expiry renders "expires in Nh" — never "-1 days ago"', async () => {
     const graceKey = {
       ...ACTIVE_KEY,
       id: 'key_grace',
@@ -525,11 +525,11 @@ describe('api-keys page — local integration', () => {
     win = window;
     await flush();
     const text = window.document.querySelector('[data-list]')?.textContent ?? '';
-    expect(text).toContain('grace ends in 23h');
+    expect(text).toContain('expires in 23h');
     expect(text).not.toContain('days ago');
   });
 
-  it('a future grace expiry under an hour renders "grace ends in <1h"', async () => {
+  it('a future grace expiry under an hour renders "expires in <1h"', async () => {
     const graceKey = {
       ...ACTIVE_KEY,
       id: 'key_grace_soon',
@@ -543,7 +543,7 @@ describe('api-keys page — local integration', () => {
     win = window;
     await flush();
     const text = window.document.querySelector('[data-list]')?.textContent ?? '';
-    expect(text).toContain('grace ends in <1h');
+    expect(text).toContain('expires in <1h');
   });
 
   it('create: POSTs {name, scopes}, reveals the one-shot plaintext', async () => {
@@ -724,8 +724,8 @@ describe('api-keys page — local integration', () => {
 
     expect(window.document.querySelector('[data-list]')?.textContent).toContain('Ambiguous key');
     const warning = window.document.querySelector('[data-create-error]')?.textContent ?? '';
-    expect(warning).toMatch(/outcome is unknown/i);
-    expect(warning).toMatch(/plaintext cannot be recovered/i);
+    expect(warning).toMatch(/can't be sure it finished/i);
+    expect(warning).toMatch(/value can't be shown again/i);
     expect(warning).toMatch(/revoke it before creating another key/i);
     expect(isHidden(window, '[data-created-reveal]')).toBe(true);
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
@@ -736,7 +736,7 @@ describe('api-keys page — local integration', () => {
       fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
     ).toHaveLength(1);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /likely created.*one-shot plaintext was lost.*revoke the matching key/i,
+      /probably created.*timed out before its full value could be shown.*revoke the new key/i,
     );
   });
 
@@ -762,7 +762,7 @@ describe('api-keys page — local integration', () => {
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(false);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /authoritative list has no new.*retry key.*retry only if the key is still required/i,
+      /doesn't show a new .*retry key.*likely wasn't created.*Try again if you still need it/i,
     );
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -793,14 +793,14 @@ describe('api-keys page — local integration', () => {
 
     const submit = form.querySelector('[data-create-submit]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toMatch(/verify before retrying/i);
+    expect(submit.textContent).toMatch(/check before retrying/i);
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     expect(
       fetchCalls.filter((c) => c.init?.method === 'POST' && /\/v1\/api-keys$/.test(c.url)),
     ).toHaveLength(1);
     expect(window.document.querySelector('[data-create-error]')?.textContent).toMatch(
-      /creation timed out.*key list could not be refreshed.*reload and verify/i,
+      /took too long.*couldn't refresh your key list.*Reload and check it before trying again/i,
     );
   });
 
@@ -935,8 +935,8 @@ describe('api-keys page — local integration', () => {
 
     expect(rowCount(window)).toBe(2);
     const warning = window.document.querySelector('[data-banner]')?.textContent ?? '';
-    expect(warning).toMatch(/rotation timed out.*outcome is unknown/i);
-    expect(warning).toMatch(/plaintext cannot be recovered/i);
+    expect(warning).toMatch(/can't be sure the rotation finished/i);
+    expect(warning).toMatch(/value can't be shown again/i);
     expect(warning).toMatch(/before rotating again/i);
     expect(isHidden(window, '[data-rotate-reveal]')).toBe(true);
     const blockedRotate = window.document.querySelector(
@@ -949,7 +949,7 @@ describe('api-keys page — local integration', () => {
       fetchCalls.filter((c) => /\/v1\/api-keys\/key_active\/rotate$/.test(c.url)),
     ).toHaveLength(1);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /rotation is locked.*reload and review the key list/i,
+      /rotation attempt may have already gone through.*check your key list before rotating/i,
     );
   });
 
@@ -983,7 +983,7 @@ describe('api-keys page — local integration', () => {
     ) as HTMLButtonElement;
     expect(retryRotate.disabled).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /authoritative list has no new.*ci key.*successor.*retry only if rotation is still required/i,
+      /doesn't show a new .*ci key.*Try again only if you still need to rotate/i,
     );
     retryRotate.click();
     await flush();
@@ -1048,7 +1048,7 @@ describe('api-keys page — local integration', () => {
     expect(uncertainRevoke.textContent).toBe('Check status');
     expect(uncertainRotate.disabled).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*still shows.*active.*completion may be delayed.*do not revoke it again/i,
+      /can't be sure it finished.*still shows.*active.*taking a moment.*don't revoke it again yet/i,
     );
 
     uncertainRevoke.dispatchEvent(new window.Event('click'));
@@ -1073,7 +1073,7 @@ describe('api-keys page — local integration', () => {
 
     expect(window.document.querySelector('[data-revoke="key_active"]')).toBeNull();
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*no longer shows.*active.*revocation likely completed.*do not revoke it again/i,
+      /can't be sure it finished.*no longer shows.*as active.*most likely revoked.*don't revoke it again/i,
     );
   });
 

@@ -36,7 +36,7 @@ Authorization: Bearer $ADMIN_KEY</code></pre>
       admin GUI as the "Payment ID" filter input next to the search
       box. Distinct from the fuzzy <code>search</code> param (which
       walks order_id / product / customer_note) so the lookup is
-      O(scan) but unambiguous.
+      unambiguous.
     </p>
 
     <h2>"My order is stuck in pending"</h2>
@@ -113,9 +113,7 @@ Authorization: Bearer $ADMIN_KEY</code></pre>
       emitted by these transitions carries a <code>reason</code>
       field with one of <code>ipn</code> / <code>expired</code> /
       <code>swept</code>. This event is customer-subscribable
-      via <code>POST /v1/webhooks</code> (in
-      <code>SubscribableWebhookEventTypeSchema</code> as of
-      2026-05-22, migration 0064); see
+      via <code>POST /v1/webhooks</code>; see
       <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>
       for the payload contract. Ops can read the same source via
       the <code>/events</code> endpoint above for retrospective
@@ -145,9 +143,8 @@ Authorization: Bearer ds_admin_…`}</code></pre>
       <code>/v1/admin/crypto-orders/idempotency-metrics</code>. A
       non-zero number means at least one client is reusing keys
       across distinct intents — usually a hardcoded constant where
-      a generated UUID belongs. The structured warn log
-      (<code>event: 'crypto_checkout_idempotency_body_mismatch'</code>)
-      carries the account id; grep for the offending integration.
+      a generated UUID belongs. Support can identify the affected
+      account from the recorded mismatch.
     </p>
 
     <h2>Related</h2>

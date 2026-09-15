@@ -33,7 +33,7 @@ const VALID = {
 
 // The server's own sentences (packages/api-types egress.ts, via the built dist the GUI
 // resolves). Pinned verbatim: the whole point is that the form says what the 400 would.
-const ADDRESS_REFUSAL = 'address must be a comma-separated list of CIDRs (no newlines)';
+const ADDRESS_REFUSAL = 'address must be a comma-separated list of IP ranges, such as 10.7.0.2/32';
 const DNS_REFUSAL = 'dns must be a comma-separated list of IP addresses (no newlines)';
 
 /** A raw wg0.conf carrying the given [Peer] extra line, for the raw-text arms. */
@@ -74,7 +74,9 @@ describe('wireguardRefusal — the WireGuard block the server would refuse', () 
   it('is the whole server schema, not a hand-picked field list: a malformed key is named by ITS field', () => {
     const r = wireguardRefusal('wireguard', { ...VALID, private_key: 'PRIV_KEY_AAA' }, conf());
     expect(r?.field).toBe('private_key');
-    expect(r?.reason).toMatch(/private_key must be a 44-char base64 curve25519 key/);
+    expect(r?.reason).toMatch(
+      /private_key must be a valid WireGuard key \(44 characters, base64\)/,
+    );
   });
 
   it('accepts a WELL-FORMED PresharedKey line — the parser carries it and the fleet honours it (deployed 2026-09-10), so refusing it would block a config that works', () => {

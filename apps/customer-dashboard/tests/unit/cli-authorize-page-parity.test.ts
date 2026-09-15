@@ -61,7 +61,7 @@ describe('W251.B /cli/authorize page ↔ auth-cli routes parity', () => {
     expect(page).toMatch(/let authorizeOutcomeUnknown = false/);
     expect(page).toMatch(/if \(authorizeOutcomeUnknown\) \{/);
     expect(page).toMatch(/Return to desktop/);
-    expect(page).toMatch(/Do not retry this link/);
-    expect(page).toMatch(/start a fresh browser sign-in from the desktop app/);
+    expect(page).toMatch(/Don't retry this link/);
+    expect(page).toMatch(/start "Sign in with browser" again from the app/);
   });
 });

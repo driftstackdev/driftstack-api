@@ -60,9 +60,11 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
   });
 
   it('missing-token UX: data-missing block + back-to-/forgot-password cross-link', () => {
-    expect(body).toMatch(/<div\s*data-missing[\s\S]*?No reset token in URL/);
     expect(body).toMatch(
-      /Open the page from the link in your reset email, or\s+<a\s*href="\/forgot-password\/"\s*class="[^"]+"\s*>\s*request a new one\s*<\/a\s*>/,
+      /<div\s*data-missing[\s\S]*?This page needs to be opened from the link in your reset email/,
+    );
+    expect(body).toMatch(
+      /If that link doesn't work,\s+<a\s*href="\/forgot-password\/"\s*class="[^"]+"\s*>\s*request a new one\s*<\/a\s*>/,
     );
     expect(existsSync(FORGOT)).toBe(true);
     // Token-absent branch swaps form for missing UI.
@@ -110,8 +112,8 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
     expect(body).toContain('recovery_code: recoveryCode');
     expect(body).toContain('let mfaChallengeToken = null;');
     expect(body).not.toMatch(/localStorage\.setItem\([^,]+, mfaChallengeToken\)/);
-    expect(body).toContain('MFA sign-in outcome is unknown after the request timed out.');
-    expect(body).toContain('Do not submit this code again. Sign in afresh with your new password');
+    expect(body).toContain('The request took too long, so your code may already have been used.');
+    expect(body).toContain("Don't enter it again — sign in with your new password");
   });
 
   it('withSidebar={false} pre-auth layout', () => {
@@ -144,22 +146,26 @@ describe('W372.B customer-dashboard /reset-password page content parity', () => 
 
   it('preflights reset and MFA persistence and terminally handles every accepted response failure', () => {
     expect(body.match(/if \(!canPersistWebSession\(\)\)/g)).toHaveLength(2);
-    expect(body).toContain('It has not been consumed, so your password entries are still here');
-    expect(body).toContain('It has not been consumed, so you can retry after storage is available');
+    expect(body).toContain(
+      'Allow it, then try again — the link still works and your entries are still here',
+    );
+    expect(body).toContain('Allow it, then enter your code again');
     expect(body).toMatch(/let mfaAccepted = false;/);
     expect(body).toMatch(/if \(response\.ok\) \{\s*mfaAccepted = true;/);
     expect(body).toMatch(/if \(mfaAccepted\) \{\s*showMfaTerminal\(/);
-    expect(body).toContain('Do not submit this link again. Sign in with your new password');
-    expect(body).toContain('Do not submit this code again. Sign in afresh with your new password');
+    expect(body).toContain("Don't use this link again — sign in with your new password");
+    expect(body).toContain("Don't enter that code again — sign in with your new password");
   });
 
   it('never replays a consumed reset link after an ambiguous timeout', () => {
     expect(body).toContain('data-unknown-recovery');
     expect(body).toContain('Try signing in with the new password');
     expect(body).toContain('Request a fresh reset link');
-    expect(body).toContain('Password-reset outcome is unknown because the request timed out.');
-    expect(body).toContain('consumed this one-time link');
-    expect(body).toContain('Do not submit this link again.');
+    expect(body).toContain(
+      'The request took too long, so your password may already have been changed.',
+    );
+    expect(body).toContain('try signing in with the new password you just entered');
+    expect(body).toContain("Don't use this link again");
     expect(body).toContain('submitBtn.disabled = on || resetOutcomeUnknown;');
   });
 });

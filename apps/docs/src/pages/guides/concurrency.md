@@ -16,9 +16,7 @@ and the clean way to back off in each SDK.
 
 ## Concurrent-session caps
 
-The caps match the shared `TIER_CONCURRENT_SESSION_LIMITS` constant
-in `@driftstack/api-types` — the server enforces from the same
-constant, so this table can't silently drift:
+These are the caps the API enforces:
 
 | Tier            | Cap | Notes                                                      |
 | --------------- | --: | ---------------------------------------------------------- |

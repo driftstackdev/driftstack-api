@@ -33,7 +33,7 @@ All three SDKs follow [SemVer 2.0.0](https://semver.org/spec/v2.0.0.html):
   a runtime error in an existing method, correcting a documented but
   wrong return type, performance improvements.
 
-The control plane (`apps/server`) is NOT versioned — its API is
+The Driftstack server itself is not versioned — its API is
 versioned via the `/v1/` URL prefix; breaking changes there bump to
 `/v2/`. SDKs follow whichever API version they target. Today every
 SDK targets `/v1/`; targeting a different API major requires an SDK
@@ -110,9 +110,8 @@ The three SDKs MUST stay in lockstep on:
   `QuotaExceededError` in Python and Go, and `driver-not-integrated`
   has a dedicated class only in TypeScript — Python and Go map that
   problem type onto `DriverError`, so a caller there cannot tell it
-  apart from a driver failure by class. Both are explicit entries in
-  each SDK's problem-type registry. A THIRD divergence would be drift,
-  and is what the cross-source invariant guards.
+  apart from a `driver-error` by class. Both are explicit entries in
+  each SDK's problem-type registry.
 - Webhook signature verification helper. `verifyWebhookSignature` in
   TS, `verify_webhook_signature` in Python, `VerifyWebhookSignature`
   in Go.
@@ -137,37 +136,16 @@ In customer code:
 packages/sdk-go v0.1.5`. Bump via `go get -u`.
 
 Production deployments SHOULD pin exact versions
-(`"@driftstack/sdk": "0.1.5"`) and bump deliberately. Driftstack's
-own integration tests pin exact versions via lockfiles.
+(`"@driftstack/sdk": "0.1.5"`) and bump deliberately.
 
-## Release process
+## Releases
 
-Each SDK's release process:
-
-1. Land changes on `main` per the standard push-to-main pattern.
-2. CHANGELOG.md entry added/updated in the same commit as the change.
-3. Version bump in package metadata (`package.json` /
-   `pyproject.toml` / Go module tag) is a SEPARATE commit, named
-   `<sdk> v<version>`.
-4. Publish:
-   - TS: `npm publish` from `packages/sdk-typescript/`.
-   - Python: `python -m build && python -m twine upload` from
-     `packages/sdk-python/`.
-   - Go: tag the commit with `packages/sdk-go/v<version>` (Go module
-     sub-directory tagging).
-5. GitHub release post with the CHANGELOG-entry copy + migration
-   guide if breaking.
-
-Publish steps require Driftstack release approval.
+Each SDK release ships with a CHANGELOG entry and a GitHub release
+post that includes a migration guide when the release is breaking.
 
 ## Cross-references
 
 - Each SDK's `CHANGELOG.md` for the running history.
-- `docs/decisions.md` D-021 for the original SDK package decision
-  (TypeScript-first, expanded to Python and Go).
-- `packages/api-types/` for the Zod schemas that drive
-  `openapi.json` generation; any schema change here propagates to
-  all three SDKs at re-generation time.
 
 ## Current support boundaries
 

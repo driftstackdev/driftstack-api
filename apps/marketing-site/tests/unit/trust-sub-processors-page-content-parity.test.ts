@@ -63,17 +63,18 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
   });
 
   it('"region preference vs region routing" honesty framing pinned (S43 2026-07-07: scoped to database-resident data; R2 file objects replicate EU + US)', () => {
-    expect(body).toMatch(/Region preference vs\. region routing\./);
+    expect(body).toMatch(/Region preference vs\. where your data lives\./);
     expect(body).toMatch(/It does not move\s+your data/);
     // S43 2026-07-07 (founder-approved) — the old blanket "every
     // customer's data resides on the EU-jurisdiction infrastructure"
     // claim was false for R2-held file objects (default jurisdiction,
-    // EU + US replication). Now scoped honestly.
+    // EU + US replication). Now scoped honestly. 2026-09-15 plain-language
+    // pass: same scope, customer words.
     expect(body).toMatch(
-      /every customer's database-resident data —\s+account, profiles, sessions, audit logs — resides on the\s+EU-resident infrastructure listed in the table above/,
+      /every customer's database records —\s+account, profiles, sessions, audit logs — are stored with the\s+EU-based providers listed in the table above/,
     );
     expect(body).toMatch(
-      /use R2's default jurisdiction, which replicates\s+between the EU and the US under the transfer mechanism\s+listed in the table/,
+      /use R2's default\s+jurisdiction, which keeps copies in both the EU and the US\s+under the transfer mechanism listed in the table/,
     );
     expect(body).not.toMatch(
       /every customer's data resides on the\s+EU-jurisdiction infrastructure/,
@@ -130,7 +131,7 @@ describe('W376.B marketing-site /trust/sub-processors page content parity', () =
 
   it('region preference is informational and all choices retain the current placement', () => {
     expect(body).toMatch(
-      /The preference is informational and does not change routing or\s+residency\. Leaving it unset, or selecting us \/ eu \/ apac, produces\s+the same current placement described above\./,
+      /Today this setting is a recorded preference only\. It does not\s+change where your sessions run or where your data is stored:\s+whichever option you pick, or none, your data is placed as\s+described above\./,
     );
     expect(body).not.toMatch(/multi-region rollout/i);
   });

@@ -55,10 +55,13 @@ describe('W243.A incident-policy doc parity', () => {
   it.skipIf(incidentIsSubscribable)(
     'identifies incident.* as internal events rather than customer webhooks',
     () => {
+      // 2026-09-15: the page no longer explains the internal event plumbing
+      // (customer copy says what you get, not how we run it); the customer-facing
+      // fact it must state is the email path, and it must not present
+      // incident.* as a webhook event.
       expect(body).toMatch(
-        /are admin-audit \/ internal SSE event types, not customer webhook\s+subscription values/,
+        /To get notified by email when an incident is\s+filed or resolved, subscribe via/,
       );
-      expect(body).toMatch(/Email subscription is the customer-facing\s+notification path/);
       expect(body).not.toMatch(/Webhook event type is\s*<code>incident\.created<\/code>/i);
       expect(body).not.toMatch(/not yet|future webhook/i);
     },

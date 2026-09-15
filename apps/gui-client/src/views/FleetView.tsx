@@ -1,6 +1,6 @@
 // V-346 — Fleet view. Lists Mac mini fleet members the founder has
 // declared locally; pings each member's /version on demand to surface
-// reachability + driver mode + version.
+// reachability + version.
 //
 // Local-only registry (tauri-plugin-store). The fleet is the
 // founder's choice of API server URLs to ping; no server-side fleet
@@ -70,7 +70,7 @@ export function FleetView(): JSX.Element {
       setLoadError(
         humanizeError(
           err,
-          "Couldn't read the saved fleet. Check the app's file permissions and try again.",
+          "Couldn't read your saved servers. Check the app's file permissions and try again.",
         ),
       );
     } finally {
@@ -102,7 +102,7 @@ export function FleetView(): JSX.Element {
             durationMs: 0,
             error: humanizeError(
               err,
-              "Couldn't reach this fleet member. Check its URL and try again.",
+              "Couldn't reach this server. Check its address and try again.",
             ),
           },
         }));
@@ -192,7 +192,7 @@ export function FleetView(): JSX.Element {
       setActionError(
         humanizeError(
           err,
-          "Couldn't save the fleet member. Check the app's file permissions and try again.",
+          "Couldn't save this server. Check the app's file permissions and try again.",
         ),
       );
     } finally {
@@ -202,7 +202,11 @@ export function FleetView(): JSX.Element {
   }
 
   async function destroy(member: FleetMember): Promise<void> {
-    if (!(await confirm(`Remove "${member.label}" from the fleet?`, { confirmLabel: 'Remove' })))
+    if (
+      !(await confirm(`Remove "${member.label}" from your saved servers?`, {
+        confirmLabel: 'Remove',
+      }))
+    )
       return;
     try {
       setActionError(null);
@@ -262,15 +266,14 @@ export function FleetView(): JSX.Element {
             <IconServer />
           </span>
           <div className="min-w-0 flex-1">
-            <span className="section-label text-accent-text">Cluster</span>
+            <span className="section-label text-accent-text">Self-hosted</span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
-              Mac mini fleet
+              Your servers
             </h2>
             <p className="mt-1 max-w-2xl text-sm text-ink-secondary">
-              Local-only registry of Driftstack control-plane URLs. Add each Mac mini's API server
-              URL; "Ping all" hits every member's <code className="mono">/version</code> and
-              surfaces reachability, driver mode, and version. The fleet topology lives in this
-              app's settings store; nothing is sent to a server.
+              A list of your own Driftstack servers, saved only on this computer and never uploaded.
+              Add each server's address, then use “Check all” to see whether each one is reachable
+              and which version it runs.
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -281,10 +284,10 @@ export function FleetView(): JSX.Element {
               disabled={members.length === 0 || pingingAll}
               aria-busy={pingingAll}
             >
-              {pingingAll ? 'Pinging…' : 'Ping all'}
+              {pingingAll ? 'Checking…' : 'Check all'}
             </button>
             <button type="button" className="btn-primary" onClick={startCreate}>
-              Add member
+              Add server
             </button>
           </div>
         </div>
@@ -296,13 +299,13 @@ export function FleetView(): JSX.Element {
           to summarize. */}
       {sorted.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat icon={<IconServer />} l="Members" value={members.length} sub="registered URLs" />
+          <Stat icon={<IconServer />} l="Servers" value={members.length} sub="saved addresses" />
           <Stat
             icon={<IconCheck />}
             l="Reachable"
             value={reachable}
             accent
-            sub={pinged > 0 ? `${pinged} pinged` : 'ping to check'}
+            sub={pinged > 0 ? `${pinged} checked` : 'run “Check all”'}
           />
           <Stat
             icon={<IconAlert />}
@@ -312,9 +315,9 @@ export function FleetView(): JSX.Element {
           />
           <Stat
             icon={<IconClock />}
-            l="Unpinged"
+            l="Not checked"
             value={Math.max(0, members.length - pinged)}
-            sub={pinged < members.length ? 'run “Ping all”' : 'all checked'}
+            sub={pinged < members.length ? 'run “Check all”' : 'all checked'}
           />
         </div>
       )}
@@ -350,7 +353,7 @@ export function FleetView(): JSX.Element {
               <input
                 type="text"
                 disabled={saving}
-                placeholder="mac-mini-eu-west-1"
+                placeholder="office-server"
                 value={form.draft.label}
                 onChange={(e) =>
                   setForm({ ...form, draft: { ...form.draft, label: e.target.value } })
@@ -358,7 +361,7 @@ export function FleetView(): JSX.Element {
                 className="w-full rounded bg-surface-inset px-2.5 py-1.5 text-sm text-ink-primary border border-surface-divider focus-visible:border-accent focus-visible:outline-none"
               />
             </Field>
-            <Field label="Base URL" error={form.errors.baseUrl}>
+            <Field label="Server address" error={form.errors.baseUrl}>
               <input
                 type="text"
                 disabled={saving}
@@ -375,7 +378,7 @@ export function FleetView(): JSX.Element {
                 <input
                   type="text"
                   disabled={saving}
-                  placeholder="rack 3, port 8 — workflow A"
+                  placeholder="Main office — used for workflow A"
                   value={form.draft.notes ?? ''}
                   onChange={(e) =>
                     setForm({
@@ -399,11 +402,11 @@ export function FleetView(): JSX.Element {
         </form>
       )}
 
-      {loading && <SkeletonRows rows={3} label="Loading fleet…" />}
+      {loading && <SkeletonRows rows={3} label="Loading your servers…" />}
 
       {!loading && loadError !== null && (
         <div className="flex flex-col items-center gap-3 rounded border border-surface-divider bg-surface-raised p-8 text-center">
-          <span className="section-label text-status-error">Couldn't load the fleet</span>
+          <span className="section-label text-status-error">Couldn't load your server list</span>
           <p className="max-w-md text-sm text-ink-secondary">{loadError}</p>
           <button type="button" className="btn-secondary" onClick={() => void refresh()}>
             Try again
@@ -420,7 +423,7 @@ export function FleetView(): JSX.Element {
             <IconServer />
           </span>
           <p className="max-w-md text-sm leading-relaxed text-ink-secondary">
-            No fleet members yet. Click "Add member" to register the first Mac mini's API URL.
+            No servers yet. Click "Add server" to save the address of your first Driftstack server.
           </p>
         </section>
       )}
@@ -454,7 +457,9 @@ export function FleetView(): JSX.Element {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-medium text-ink-primary">{m.label}</p>
-                      {p === 'pending' && <span className="text-2xs text-ink-muted">pinging…</span>}
+                      {p === 'pending' && (
+                        <span className="text-2xs text-ink-muted">checking…</span>
+                      )}
                       {p && p !== 'pending' && p.ok && (
                         <span className="rounded-full bg-status-ready/20 px-2 py-0.5 text-2xs font-medium uppercase tracking-wide text-status-ready">
                           ok · {p.durationMs}ms
@@ -468,12 +473,11 @@ export function FleetView(): JSX.Element {
                     </div>
                     <p className="mt-1 mono text-2xs text-ink-secondary">{m.baseUrl}</p>
                     {m.notes !== null && <p className="mt-1 text-2xs text-ink-muted">{m.notes}</p>}
-                    {p && p !== 'pending' && p.ok && (
-                      <p className="mt-1 text-2xs text-ink-muted">
-                        driver: <span className="mono">{p.driver ?? 'unknown'}</span>
-                        {p.playwrightBrowser ? ` (${p.playwrightBrowser})` : ''}
-                        {p.version ? ` · v${p.version}` : ''}
-                      </p>
+                    {/* Only the version is customer copy. The ping also learns the
+                        server's driver mode, which describes how the server runs and
+                        is deliberately not shown (owner directive 2026-09-15). */}
+                    {p && p !== 'pending' && p.ok && p.version && (
+                      <p className="mt-1 text-2xs text-ink-muted">Version {p.version}</p>
                     )}
                     {p && p !== 'pending' && !p.ok && p.error && (
                       <p className="mt-1 text-2xs text-status-error">{p.error}</p>
@@ -488,7 +492,7 @@ export function FleetView(): JSX.Element {
                     disabled={p === 'pending'}
                     aria-busy={p === 'pending'}
                   >
-                    {p === 'pending' ? 'Pinging…' : 'Ping'}
+                    {p === 'pending' ? 'Checking…' : 'Check'}
                   </button>
                   <button
                     type="button"

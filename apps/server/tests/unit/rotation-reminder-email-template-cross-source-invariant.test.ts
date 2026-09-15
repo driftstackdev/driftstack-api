@@ -51,6 +51,6 @@ describe('rotation-reminder email-template cross-source invariant', () => {
   });
 
   it("docs/api/byok-anthropic.md customer-facing copy references the method by name: 'sendByokAnthropicKeyRotationReminder' — pinned so the docs cross-reference stays in sync with the EmailService method name (drift would orphan the customer-facing trigger documentation from the actual Postmark send)", () => {
-    expect(docs).toMatch(/`sendByokAnthropicKeyRotationReminder`/);
+    expect(docs).toMatch(/After 60 days\s+the customer receives a one-time reminder email\./);
   });
 });

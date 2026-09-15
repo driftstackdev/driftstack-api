@@ -23,12 +23,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>The scope</h2>
     <p>
-      Every admin endpoint is preHandler-gated on
-      <code>driftstack_internal_admin</code>. Customer key-management
-      APIs cannot grant that scope. Production staff access uses a
-      normal authenticated web session whose exact account email is
-      present in the server's boot-time staff allowlist; the configured
-      project-owner account is included in that authority. There is no
+      Every admin endpoint requires the
+      <code>driftstack_internal_admin</code> scope, which customer
+      key-management APIs cannot grant. Staff access uses a normal
+      signed-in web session for an account on a fixed staff allowlist;
+      the project-owner account is included in that list. There is no
       public or self-service "promote to admin" operation. The route
       examples below are not an exhaustive specification — the generated
       OpenAPI document is the authoritative current route list.
@@ -166,26 +165,25 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
     <h2>Audit logging</h2>
     <p>
-      Every admin write lands in <code>admin_audit_log</code> with the
-      acting admin key id, the action, the resource it touched, and
-      a timestamp. The customer-facing
+      Every change made through the admin API is recorded in a separate
+      admin audit log with the acting staff identity, the action, the
+      resource it touched, and a timestamp. The customer-facing
       <a href="/docs/audit-log/">audit log</a> page documents the
-      schema. This page does not claim an active R2 archive pipeline;
-      retention follows the published legal and operational policy.
+      record format. Retention follows the published legal and
+      operational policy.
     </p>
 
     <h2>Staff access and revocation</h2>
     <p>
       Staff sign in through the same web-session flow as other users. At
-      authentication time, the server adds
-      <code>driftstack_internal_admin</code> only when the account email matches
-      <code>DRIFTSTACK_STAFF_EMAILS</code> or the configured
-      <code>DRIFTSTACK_OWNER_EMAIL</code>. The allowlist is loaded at boot, so a
-      configuration change requires a controlled API restart.
+      authentication time, the server grants
+      <code>driftstack_internal_admin</code> only to accounts on a staff
+      allowlist. That list is read when the service starts, so changing it
+      takes a controlled restart.
     </p>
     <p>
-      Revoke the affected web session and remove the email from staff authority
-      (or change the owner configuration) before that restart. Customer-facing
+      Revoke the affected web session and remove the account from the staff
+      allowlist before that restart. Customer-facing
       key creation and rotation can never mint this staff scope. Driftstack does
       not publish a separate admin-key CLI.
     </p>

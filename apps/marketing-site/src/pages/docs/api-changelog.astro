@@ -26,7 +26,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         The recipe library gains its read/management path:
         <code>GET /v1/recipes</code> (cursor-paginated list, newest
         first), <code>GET /v1/recipes/&#123;id&#125;</code> (a single
-        recipe in full, including the replayable
+        recipe in full, including the recorded
         <code>intent_log</code>), and
         <code>DELETE /v1/recipes/&#123;id&#125;</code> (204 No Content;
         not idempotent). Joins the existing <code>POST /v1/recipes</code>
@@ -40,11 +40,11 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
       <li>
         <strong>API — Live video for agent sessions (LiveKit WebRTC).</strong>
         New <code>POST /v1/agent-sessions/&#123;id&#125;/livekit-token</code>
-        endpoint mints a per-Mac LiveKit JWT for WebRTC subscribers
-        (the customer dashboard, the desktop GUI client, or any other
+        endpoint returns a LiveKit token for WebRTC subscribers
+        (the customer dashboard, the desktop app, or any other
         LiveKit-aware tool). <code>POST /v1/agent-sessions</code>
         now also auto-populates a <code>livekit</code> field on the 201
-        response when the deployment is LiveKit-ready, so clients can
+        response when live video is enabled, so clients can
         skip the round-trip and connect to the room immediately on
         create. Token TTL is 24h; the room name is always the
         agent_session id. Backward-compatible — the field is optional;
@@ -52,20 +52,6 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <a href="https://docs.driftstack.io/api/agent-sessions/">/api/agent-sessions</a>
         and integration guide at
         <a href="https://docs.driftstack.io/guides/live-video/">/guides/live-video</a>.
-      </li>
-      <li>
-        <strong>API — Mac-node LiveKit credential registration.</strong>
-        New <code>POST /v1/mac-nodes/register</code> admin endpoint
-        accepts per-Mac LiveKit API credentials on harness boot. The
-        API secret is encrypted at rest under the existing
-        <code>MFA_ENCRYPTION_KEY</code> (same envelope as BYOK Anthropic
-        + gui_control_key + MFA TOTP); plaintext is decrypted in-memory
-        only at JWT-mint time. Every successful registration writes a
-        <code>mac_node.livekit_registered</code> row to the admin audit
-        log attributing the operator + recording the
-        <code>mac_node_id</code> + <code>ws_url</code> — the audit
-        payload deliberately omits the api_key + api_secret so secret
-        material never leaks via audit replay.
       </li>
       <li>
         <strong>SDKs — <code>LiveKitInfo</code> type across TS / Python / Go.</strong>
@@ -78,29 +64,20 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         optional so older SDKs parse the response unchanged.
       </li>
       <li>
-        <strong>Auth — derivation paths match dashboard routes.</strong>
-: the DASHBOARD_ORIGIN-derived defaults now land on
-        the customer-dashboard's real file-based routes
-        (<code>/verify-email</code>, <code>/reset-password</code>)
-        instead of the previous <code>/auth/&lt;flow&gt;</code> paths
- that 404'd. Sister fix to
+        <strong>Auth — email links open the right dashboard pages.</strong>
+        Verification and password-reset emails now link to working
+        dashboard pages (<code>/verify-email</code>,
+        <code>/reset-password</code>) instead of a page that did not
+        exist.
       </li>
       <li>
         <strong>Dashboard — auto-verify on the verify-email page.</strong>
-B: when the user clicks the verification link in
+        When the user clicks the verification link in
         their email, the dashboard now reads
         <code>?token=…</code> from the URL and submits it
         automatically — previously the user was asked to copy + paste
         the token they'd just clicked. The form stays mounted as a
         fallback (token absent / mail client mangled the link).
-      </li>
-      <li>
-        <strong>Server — runtime URLs centralized on DASHBOARD_ORIGIN.</strong>
-: lifecycle emails, team-invite emails, and Stripe
-        success/cancel/portal defaults now all source from
-        <code>config.dashboardOrigin</code>. Removes scattered
-        <code>https://app.driftstack.io</code> literals + the
-        legacy <code>PUBLIC_DASHBOARD_URL</code> env var.
       </li>
       <li>
         <strong>Docs — Emails reference page.</strong>
@@ -111,19 +88,16 @@ B: when the user clicks the verification link in
         with the API endpoints for preference management.
       </li>
       <li>
-        <strong>Auth — DASHBOARD_ORIGIN now drives email link URLs.</strong>
-: a single <code>DASHBOARD_ORIGIN</code> env var
-        derives the three auth-flow email URLs (verify-email,
-        magic-link, password-reset). Production boot now refuses
-        to start if any URL still resolves to <code>localhost</code>
-        — fixes the case where a real customer received a
-        verification email with a localhost link.
+        <strong>Auth — email links always point at your dashboard.</strong>
+        Verification, magic-link and password-reset emails now always
+        link to your Driftstack dashboard. Fixes a bug where a
+        verification email could arrive with an unusable link.
       </li>
       <li>
         <strong>Docs — API security headers reference.</strong>
         New page at
         <a href="/docs/api-security-headers/">/docs/api-security-headers</a>
-        listing the HSTS, Cache-Control, CORS, CORP, and helmet
+        listing the HSTS, Cache-Control, CORS, and CORP
         defaults we set. Useful for security reviewers and
         integrators auditing the response surface.
       </li>
@@ -134,20 +108,17 @@ B: when the user clicks the verification link in
         Clicking clears every active filter in one go.
       </li>
       <li>
-        <strong>GUI — problem+json detail across all crypto hooks.</strong>
-        Extended the 4xx detail surfacing to all customer +
-        admin-crypto hooks (15 total). Removed the inline detail-
-        parsing code from <code>useCancelOrder</code> +
-        <code>useAdminInternalNote</code> in favour of the shared
-        helper.
+        <strong>GUI — problem+json detail across all crypto views.</strong>
+        Every customer and admin crypto view now shows the server's
+        <code>detail</code> message on 4xx errors.
       </li>
       <li>
         <strong>GUI — surface server problem+json detail on 4xx.</strong>
-        Customer-facing hooks now read the RFC 7807
+        Customer-facing views now read the RFC 7807
         <code>detail</code> field from 4xx responses, so the user
         sees the server-provided message instead of just
-        "HTTP 400". Wired into the order list + PDF / .txt receipt
-        download hooks.
+        "HTTP 400". Applies to the order list and the PDF / .txt
+        receipt downloads.
       </li>
       <li>
         <strong>API — date-window validation.</strong>
@@ -168,8 +139,8 @@ B: when the user clicks the verification link in
         The customer history view now exposes the server's
         <code>next_cursor</code> as a "Load more" button at the
         bottom of the table. Auto-refresh pauses once the user
-        loads beyond the first page so appended rows don't get
-        clobbered.
+        loads beyond the first page so appended rows are not
+        overwritten.
       </li>
       <li>
         <strong>API — admin CSV export accepts date range.</strong>
@@ -236,11 +207,11 @@ B: when the user clicks the verification link in
       </li>
       <li>
         <strong>api-types — <code>ListCryptoOrdersQuery</code> exported.</strong>
-        <code>@driftstack/api-types</code> now ships a Zod schema +
-        type for the customer list query, mirroring the server's
-        accepted parameters. The TypeScript SDK reuses it so its
-        <code>list()</code> options stay in lockstep with the
-        server-side enum.
+        <code>@driftstack/api-types</code> now includes a schema and
+        TypeScript type for the query options accepted by
+        <code>GET /v1/billing/crypto-orders</code>. The TypeScript
+        SDK's <code>list()</code> options use the same type, so they
+        always match what the API accepts.
       </li>
       <li>
         <strong>GUI — auto-refresh history view on pending.</strong>
@@ -253,9 +224,9 @@ B: when the user clicks the verification link in
       <li>
         <strong>Security — <code>/v1/admin/*</code> no-store (broadened).</strong>
         The existing no-store header on
-        <code>/v1/admin/crypto-orders</code> was promoted to an
-        app-level hook covering all <code>/v1/admin/*</code>
-        responses (accounts, audit, sessions, webhooks, etc.).
+        <code>/v1/admin/crypto-orders</code> now covers all
+        <code>/v1/admin/*</code> responses (accounts, audit,
+        sessions, webhooks, etc.).
         Admin data is operational and caller-private — no caching
         anywhere.
       </li>
@@ -266,7 +237,7 @@ B: when the user clicks the verification link in
         <code>Cache-Control: no-store, private</code>. Defense-in-
         depth against shared/proxy caches and browser back-forward
         cache holding caller-private data after logout. Mirrors the
-        existing <code>/v1/admin/crypto-orders</code> hook.
+        existing <code>/v1/admin/crypto-orders</code> behaviour.
       </li>
       <li>
         <strong>SDK — <code>{`list({status,limit})`}</code>.</strong>
@@ -280,8 +251,8 @@ B: when the user clicks the verification link in
         <strong>OpenAPI — customer list <code>?status=</code> + <code>?limit=</code> documented.</strong>
         The customer list endpoint's <code>status</code> and
         <code>limit</code> query parameters now appear in the spec
-        with their enum values. Codegen clients pick up the typed
-        filter automatically on regeneration.
+        with their enum values. Generated clients pick up the typed
+        filter automatically when you regenerate.
       </li>
       <li>
         <strong>API — customer order list <code>?status=</code> filter.</strong>
@@ -295,11 +266,10 @@ B: when the user clicks the verification link in
         <strong>GUI — receipt PDF + .txt download.</strong>
         The customer-facing receipt view now has both a
         <strong>Download PDF</strong> and a <strong>Download .txt</strong>
-        button. They blob-fetch
-        <code>{`/v1/billing/crypto-orders/:id/receipt.{pdf,txt}`}</code>
-        with the Bearer token attached and synthesize an anchor
-        click — the endpoints are auth-gated, so a plain link
-        wouldn't work.
+        button. Both buttons download from
+        <code>{`/v1/billing/crypto-orders/:id/receipt.{pdf,txt}`}</code>.
+        The endpoint requires authentication, so it can't be opened
+        as a plain link.
       </li>
       <li>
         <strong>SDK — typed CryptoOrders resource.</strong>
@@ -314,8 +284,8 @@ B: when the user clicks the verification link in
         <strong>OpenAPI — full crypto surface documented.</strong>
         Quote, daily, pending-age, idempotency-metrics, CSV
         export, and admin apply-ipn endpoints are now in the spec.
- Combined with/AY/AZ the entire crypto surface
-        (customer + admin) is machine-readable.
+        The entire crypto surface (customer + admin) is now
+        machine-readable.
       </li>
       <li>
         <strong>OpenAPI — receipt endpoints documented.</strong>
@@ -329,15 +299,15 @@ B: when the user clicks the verification link in
         <strong>OpenAPI — admin crypto endpoints documented.</strong>
         The six core admin crypto endpoints (list, get, events,
         internal-note, sweep, stats) now appear in the spec under
-        <code>admin</code> + <code>crypto</code> tags. Ops
-        integrators can codegen from <code>/openapi.json</code>
-        instead of hand-rolling clients.
+        <code>admin</code> + <code>crypto</code> tags. Integrators
+        can generate clients from <code>/openapi.json</code>
+        instead of writing them by hand.
       </li>
       <li>
         <strong>OpenAPI — crypto endpoints documented.</strong>
         The five customer-facing crypto endpoints (checkout, list,
         get-one, update-note, cancel) now appear in
-        <code>/openapi.json</code> and on the Scalar UI at
+        <code>/openapi.json</code> and in the interactive reference at
         <code>/docs</code>. Tagged with <code>billing</code> +
         <code>crypto</code> for filtering.
       </li>
@@ -347,8 +317,8 @@ B: when the user clicks the verification link in
         <code>GET /v1/billing/crypto-orders/:id</code> now set
         <code>Cache-Control: no-store, private</code>. Order state
         flips mid-checkout (pending → confirming → paid), so
-        nothing should cache the response. Defensive: requests are
-        already auth-gated.
+        nothing should cache the response. Defensive: these endpoints
+        already require authentication.
       </li>
       <li>
         <strong>Customer — pay-window hint on pending orders.</strong>
@@ -356,16 +326,15 @@ B: when the user clicks the verification link in
         an <code>expires_at</code> ISO timestamp on pending
         envelopes, set to <code>created_at + 60 minutes</code>.
         Null on non-pending orders. Informational only — actual
-        expiry is enforced by the admin sweep + the customer
-        cancel endpoint.
+        expiry is enforced server-side.
       </li>
       <li>
         <strong>Customer — order events on the detail envelope.</strong>
         <code>GET /v1/billing/crypto-orders/:id</code> now returns
         an <code>events</code> array on the envelope with the
         order's append-only state-transition log. Same shape as
-        the admin endpoint added below; the customer-facing view
-        rewrites the internal <code>swept</code> source to
+        the admin endpoint added below; on the customer endpoint,
+        orders expired by Driftstack show the source
         <code>expired</code>. Backward-compatible — older callers
         that ignore unknown fields continue to work.
       </li>
@@ -389,11 +358,10 @@ B: when the user clicks the verification link in
         has the provider-side identifier.
       </li>
       <li>
-        <strong>Idempotency-key body-fingerprint check.</strong>
-        Replays whose request body fingerprint differs from the
-        stored one increment a new <code>body_mismatches</code>
-        counter and fire a structured warn log. The contract is
-        unchanged (still replays the original order). See
+        <strong>Idempotency-key body-mismatch check.</strong>
+        Replays whose request body differs from the original are
+        now recorded so support can spot accidental key reuse. The
+        contract is unchanged (still replays the original order). See
         <a href="/docs/idempotency-keys/">/docs/idempotency-keys</a>.
       </li>
       <li>
@@ -402,14 +370,6 @@ B: when the user clicks the verification link in
         <a href="/docs/crypto-orders-ops-runbook/">/docs/crypto-orders-ops-runbook</a>
         — the support workflow for stuck orders, duplicate-charge
         claims, and reconciliation.
-      </li>
-      <li>
-        <strong>Admin — idempotency-key telemetry.</strong>
-        <code>GET /v1/admin/crypto-orders/idempotency-metrics</code>
-        returns process-lifetime counters
-        (<code>replays</code> + <code>first_writes</code>) for the
-        checkout idempotency cache. Useful for spotting client-side
-        retry storms.
       </li>
       <li>
         <strong>Integration guide.</strong>
@@ -433,8 +393,8 @@ B: when the user clicks the verification link in
         <code>reason</code> tag of <code>ipn</code>,
         <code>expired</code>, or <code>swept</code>. Idempotent —
         re-running a sweep over already-failed orders does not
-        re-emit. Customers can subscribe through
-        <code>SubscribableWebhookEventTypeSchema</code> (see
+        re-emit. Customers can subscribe via
+        <code>POST /v1/webhooks</code> (see
         <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>).
       </li>
       <li>
@@ -489,8 +449,8 @@ B: when the user clicks the verification link in
         <strong>Events — <code>crypto.order.paid</code> emitted server-side.</strong>
         Emitted when an order transitions to paid (account-scoped,
         single-fire, idempotent re-deliver of the same IPN doesn't
-        re-emit). Customers can subscribe through
-        <code>SubscribableWebhookEventTypeSchema</code> — see
+        re-emit). Customers can subscribe via
+        <code>POST /v1/webhooks</code> — see
         <a href="https://docs.driftstack.io/webhooks/crypto-events/">/docs/webhooks-crypto-events</a>.
       </li>
     </ul>
@@ -521,10 +481,9 @@ B: when the user clicks the verification link in
     <ul>
       <li>
         <strong>Crypto orders — initial release.</strong>
-        <code>POST /v1/billing/crypto-checkout</code> mints orders;
-        the IPN webhook from NowPayments at
-        <code>POST /webhooks/nowpayments/ipn</code> drives the order
-        state machine. Customer-facing list at
+        <code>POST /v1/billing/crypto-checkout</code> creates orders;
+        payment notifications from NowPayments move each order
+        through its states. Customer-facing list at
         <code>GET /v1/billing/crypto-orders</code>; admin surface at
         <code>GET /v1/admin/crypto-orders</code>.
       </li>

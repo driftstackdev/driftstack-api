@@ -45,13 +45,16 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(ERR)).toBe(true);
   });
 
-  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (concurrent-only per ADR-004) + 3 bucket keys (global + sessions:create + agent_sessions:message) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed, which left an orphaned "reference." lead-in; that residue has since been removed so the intro reads as the intended sentence. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so LLM-driven message loops can\'t drain global.', () => {
+  it('reference/rate-limits.md: token-bucket anti-abuse-not-pricing-meter (pricing is concurrent sessions only; the ADR-004 id left the customer page 2026-09-15) + 3 bucket keys (global + sessions:create + agent_sessions:message) + 8-tier defaults pinned. Re-enabled by slice 306 — the V-505 anchor was R4-scrubbed, which left an orphaned "reference." lead-in; that residue has since been removed so the intro reads as the intended sentence. v2-#8 sub-slice 8.20 added the agent_sessions:message bucket so LLM-driven message loops can\'t drain global.', () => {
     const body = read(RL);
     expect(body).toMatch(/^title: Rate limits$/m);
     expect(body).toMatch(/^Driftstack enforces per-tier token-bucket rate$/m);
     expect(body).toMatch(/Driftstack enforces per-tier token-bucket rate/);
     expect(body).toMatch(/intentional anti-abuse caps \(runaway scripts, accidental DoS\),/);
-    expect(body).toMatch(/not the pricing meter\. Pricing is concurrent-only per ADR-004\./);
+    expect(body).toMatch(
+      /not the pricing meter\. Pricing is based only on how many sessions run at\s*\n?once \(concurrent sessions\)\./,
+    );
+    expect(body).not.toMatch(/ADR-004/);
     expect(body).toMatch(/^## Four bucket keys$/m);
     // S36 2026-07-07 (fable-truth-audit): global is only drained by calls
     // WITHOUT a dedicated bucket — each call consumes exactly one bucket.
@@ -80,7 +83,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(RL)).toBe(true);
   });
 
-  it('reference/scopes.md: 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular verb:resource) + L-001 gui_control special scope pinned. Re-enabled by slice 307 — V-505 (header anchor), V-481 (Granular subtitle), and V-174 (admin-legacy table cell) were all R4-scrubbed; the table cell now says "Pre-alias" instead of "Pre-V-174 alias"', () => {
+  it('reference/scopes.md: 3 categories (Broad read/write/admin + Account-control account_owner/driftstack_internal_admin + Granular verb:resource) + gui_control special scope pinned in customer words (2026-09-15: "Manual-control plane" + the L-001 id left the page). Re-enabled by slice 307 — V-505 (header anchor), V-481 (Granular subtitle), and V-174 (admin-legacy table cell) were all R4-scrubbed; the table cell now says "Pre-alias" instead of "Pre-V-174 alias"', () => {
     const body = read(SC);
     expect(body).toMatch(/^title: API key scopes$/m);
     expect(body).toMatch(/^Every Driftstack API key carries a set of$/m);
@@ -95,11 +98,14 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(body).toMatch(
       /Satisfies `account_owner` and customer `admin:\*` scopes, but never the staff-only `driftstack_internal_admin` scope\./,
     );
-    expect(body).toMatch(/\| `gui_control`\s+\| special\s+\| Manual-control plane/);
+    expect(body).toMatch(
+      /\| `gui_control`\s+\| special\s+\| Manual control of a live session from the desktop app/,
+    );
     // V-788 — was /Self-hosted GUI workflow only/, a boundary the code does not enforce.
     expect(body).toMatch(
-      /Intended for the self-hosted GUI workflow \(locked-decision L-001\); it is never granted unless a mint request asks for it, but no tier or deployment check restricts who may ask\./,
+      /Only added to a key when you ask for it while creating the key — a broad `read`, `write` or `admin` key does not include it\. Nothing restricts who may ask for it: any account that can create API keys may request it\./,
     );
+    expect(body).not.toMatch(/control plane|L-001/);
     expect(body, 'the overstated claim must not come back').not.toMatch(
       /Self-hosted GUI workflow only/,
     );
@@ -151,7 +157,7 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     expect(existsSync(EV)).toBe(true);
   });
 
-  it('webhooks/replay.md: 5-retry-exp-backoff-then-DLQ + POST /v1/webhook-deliveries/:id/replay + reset-to-pending + ~30s next-cycle + account-scoped + empty body + 200 response shape pinned', () => {
+  it('webhooks/replay.md: 5-retry-exp-backoff-then-DLQ + POST /v1/webhook-deliveries/:id/replay + reset-to-pending + re-sent within about a minute (up to 60s; the worker/poll-cycle internals left the page 2026-09-15) + account-scoped + empty body + 200 response shape pinned', () => {
     const body = read(RP);
     expect(body).toMatch(/^title: Replaying webhook deliveries$/m);
     expect(body).toMatch(/^# Replaying webhook deliveries$/m);
@@ -161,8 +167,8 @@ describe('W604 apps/docs reference + webhooks pages content parity', () => {
     // meaningless "POST Endpoint" sub-node in the docs tree); renamed.
     expect(body).toMatch(/^## Replay a delivery$/m);
     expect(body).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
-    expect(body).toMatch(/Resets the delivery to `pending` so the worker re-fires it on the next/);
-    expect(body).toMatch(/poll cycle — up to 60 seconds/);
+    expect(body).toMatch(/Resets the delivery to `pending`; Driftstack re-sends it within about a/);
+    expect(body).toMatch(/minute \(up to 60 seconds\)\./);
     // V-1122 — the replay is scoped to the EFFECTIVE account, not the calling
     // one. This pin anchored on "Account-scoped:" rather than the ownership
     // clause, which is why the sweep that corrected the other six surfaces did

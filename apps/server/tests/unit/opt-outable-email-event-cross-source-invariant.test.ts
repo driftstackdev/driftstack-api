@@ -254,7 +254,9 @@ describe('W864 OptOutableEmailEvent cross-source invariant', () => {
       // Only the sentence that makes the always-sent claim, not the whole page — elsewhere
       // these files legitimately discuss cancellation.
       const claim =
-        /(?:Security \+ financial emails|Critical emails) \(([^)]*)\)/s.exec(text)?.[1] ?? null;
+        /(?:Security \+ financial emails|Security and billing emails|Critical emails) \(([^)]*)\)/s.exec(
+          text,
+        )?.[1] ?? null;
       if (claim === null) {
         offenders.push(`${path}: the always-sent sentence could not be read`);
         continue;

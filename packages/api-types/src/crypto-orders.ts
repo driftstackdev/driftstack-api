@@ -62,11 +62,9 @@ export const CreateCryptoCheckoutRequestSchema = z.object({
    */
   product: z
     .enum(PURCHASABLE_TIERS, {
-      message: 'product must be a self-serve paid tier (free and enterprise excluded)',
+      message: 'product must be a paid plan (free and enterprise excluded)',
     })
-    .describe(
-      'SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable).',
-    ),
+    .describe('SKU; one of the paid plan ids (free and enterprise are not purchasable).'),
   price_cents: z.number().int().positive().max(1_000_000),
   price_currency: z
     .string()
@@ -186,9 +184,9 @@ export const CryptoQuoteRequestSchema = z.object({
    */
   product: z
     .enum(PURCHASABLE_TIERS, {
-      message: 'product must be a self-serve paid tier (free and enterprise excluded)',
+      message: 'product must be a paid plan (free and enterprise excluded)',
     })
-    .describe('SKU to quote; one of the self-serve paid tier ids.'),
+    .describe('SKU to quote; one of the paid plan ids.'),
   price_currency: z
     .string()
     .length(3)

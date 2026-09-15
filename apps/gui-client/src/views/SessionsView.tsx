@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type JSX, type React
 import { ErrorBanner } from '../components/ErrorBanner';
 import { RelativeTime } from '../components/RelativeTime';
 import { LiveElapsed } from '../components/LiveElapsed';
+import { tierLabelFor } from '../components/TierBadge';
 import { useSettings } from '../lib/SettingsContext';
 import { useToasts } from '../lib/toasts';
 import { useConfirm } from '../components/ConfirmProvider';
@@ -21,6 +22,7 @@ import {
   LIVE_AGENT_SESSION_STATUSES,
 } from '../lib/active-agent-sessions';
 import { useExclusiveAsyncAction } from '../lib/use-exclusive-async-action';
+import { formatDeviceName } from './ProfilesView';
 
 // Consistency #5 — the minimal agent-session shape SessionsView renders. A
 // profile launch creates an `agt_` AGENT session (no driver row), which the
@@ -99,7 +101,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
       const before = prev.get(session.id);
       if (before !== undefined && before !== 'errored' && session.status === 'errored') {
         pushToast({
-          title: 'Session errored',
+          title: 'Session failed',
           body: `${session.label ?? session.id} stopped unexpectedly.`,
           tone: 'warn',
         });
@@ -252,7 +254,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
           // red banner the user then has to act on manually (journey audit M9).
           if (
             await confirm(
-              "This deployment routes every session through a proxy, and you don't have one saved yet. Add a SOCKS5 server in Proxies, then come back to start a session.",
+              "Every session runs through a proxy, and you don't have one saved yet. Add a SOCKS5 proxy in Proxies, then come back to start a session.",
               { confirmLabel: 'Open Proxies' },
             )
           ) {
@@ -268,10 +270,10 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
         // by a no-identity session on a slot/bill they didn't intend, and is
         // pointed at the profile-based launch when they want a saved identity.
         const proceed = await confirm(
-          `Start a quick session with NO saved profile?\n\n` +
-            `• No persistent identity — cookies/logins won't be saved or restored.\n` +
+          `Start a quick session without a profile?\n\n` +
+            `• Logins and cookies won't be saved.\n` +
             `• Uses the default device and your first saved proxy (${first.label}).\n\n` +
-            `For a saved identity + a device/proxy you choose, launch a profile from Profiles instead.`,
+            `To keep logins and choose the device and proxy, launch a profile from Profiles instead.`,
           { confirmLabel: 'Start quick session' },
         );
         if (!proceed) return;
@@ -328,7 +330,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
       // misclick in the dense session grid doesn't kill a running session.
       if (
         !(await confirm(
-          'Stop this session now? The live browser is torn down immediately and anything in progress is lost.',
+          'Stop this session now? The browser closes immediately and anything in progress is lost.',
           { confirmLabel: 'Stop session' },
         ))
       )
@@ -354,7 +356,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
     await runMutation(async () => {
       if (
         !(await confirm(
-          'Stop this running session now? The live browser is torn down immediately and anything in progress is lost.',
+          'Stop this running session now? The browser closes immediately and anything in progress is lost.',
           { confirmLabel: 'Stop session' },
         ))
       )
@@ -389,10 +391,13 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
   // The primary New-session control, shared verbatim by the hero + the empty
   // state so behavior (cap-gating, busy label, title) stays identical wherever
   // it appears. Presentation-only wrapper — no logic change.
+  // The plan is named the way Billing names it (tierLabelFor: solo_manual →
+  // "Personal"), never the raw tier id.
+  const tier = accountMe?.tier;
   const capTitle = atConcurrentCap
-    ? `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
-        accountMe?.tier ?? 'this tier'
-      }). Destroy a session or upgrade to spawn more.`
+    ? `Session limit reached (${(concurrentCap ?? 0).toString()} at a time on your ${
+        typeof tier === 'string' ? tierLabelFor(tier) : 'current'
+      } plan). Stop a session or upgrade to run more.`
     : undefined;
   const visibleError = mutationError ?? state.error;
 
@@ -440,7 +445,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
               {counts.errored > 0 && (
                 <>
                   <span className="text-surface-divider">·</span>
-                  <span className="font-semibold text-status-error">{counts.errored} errored</span>
+                  <span className="font-semibold text-status-error">{counts.errored} failed</span>
                 </>
               )}
             </p>
@@ -502,9 +507,7 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
             // count until the server count loads.
             value={concurrentActive ?? activeCount}
             sub={
-              concurrentCap !== null
-                ? `of ${concurrentCap.toString()} concurrent cap`
-                : 'no fixed cap'
+              concurrentCap !== null ? `of ${concurrentCap.toString()} at a time` : 'no fixed limit'
             }
           />
           <Stat
@@ -516,19 +519,19 @@ export function SessionsView({ onGoToSettings, onGoToProxies }: SessionsViewProp
           />
           <Stat
             icon={<IconAlert />}
-            l="Errored"
+            l="Failed"
             value={counts.errored}
             sub={counts.errored > 0 ? 'needs attention' : 'all healthy'}
           />
           <Stat
             icon={<IconSlots />}
-            l="Slots free"
+            l="Can still start"
             value={
               concurrentCap !== null && concurrentActive !== null
                 ? Math.max(0, concurrentCap - concurrentActive)
                 : state.sessions.length
             }
-            sub={atConcurrentCap ? 'at cap' : 'available'}
+            sub={atConcurrentCap ? 'limit reached' : 'more sessions'}
           />
         </div>
       )}
@@ -754,9 +757,9 @@ function SessionsEmptyState({
           No active sessions yet
         </h3>
         <p className="max-w-md text-sm leading-relaxed text-ink-secondary">
-          A session is one running iPhone Safari instance. Click New session above to spin one up —
-          sessions show up here with a live status while they run. Each one uses a concurrent slot
-          until you destroy it or it idle-times-out.
+          A session is one running iPhone Safari browser. Click New session to start one. Sessions
+          appear here with a live status while they run, and each one counts toward your session
+          limit until you stop it or it times out after inactivity.
         </p>
       </div>
       <button
@@ -840,7 +843,7 @@ function SessionCard({
       <div className="flex items-center justify-between gap-2">
         <StatusPill status={session.status} />
         <span className="mono truncate text-[11px] text-ink-muted" title={session.archetype}>
-          {session.archetype}
+          {formatDeviceName(session.archetype)}
         </span>
       </div>
 
@@ -853,7 +856,7 @@ function SessionCard({
         {egress !== null ? (
           <>
             <span className="mono min-w-0 truncate text-[10.5px] text-ink-secondary">
-              {egress.udp_associate ? 'SOCKS5 · UDP relay' : 'SOCKS5 egress'}
+              {egress.udp_associate ? 'SOCKS5 · UDP supported' : 'SOCKS5 · TCP only'}
             </span>
             <span
               className={`ml-auto shrink-0 rounded-[5px] px-1.5 py-px text-[9px] font-bold uppercase tracking-wide ${
@@ -863,15 +866,15 @@ function SessionCard({
               }`}
               title={
                 egress.udp_associate
-                  ? 'UDP relay verified — QUIC + WebRTC tunnel through this exit.'
-                  : 'No UDP relay reported — sessions fall back to h2 / TURN-over-TCP.'
+                  ? 'This proxy supports UDP, so HTTP/3 and WebRTC work through it.'
+                  : 'This proxy is TCP only, so HTTP/3 is switched off and WebRTC uses a fallback.'
               }
             >
-              {egress.udp_associate ? 'UDP' : 'TCP'}
+              {egress.udp_associate ? 'Full' : 'Limited'}
             </span>
           </>
         ) : (
-          <span className="text-[10.5px] text-ink-muted">egress pending report</span>
+          <span className="text-[10.5px] text-ink-muted">proxy details pending</span>
         )}
       </div>
 
@@ -921,6 +924,17 @@ function SessionCardSkeleton(): JSX.Element {
   );
 }
 
+// Customer-facing words for the raw status enum: 'errored' / 'destroyed' are
+// internal vocabulary. Unknown statuses fall through to the raw word (capitalized
+// by the wrapper) so a newer server never renders blank.
+const STATUS_PILL_LABEL: Record<string, string> = {
+  creating: 'Creating',
+  ready: 'Ready',
+  busy: 'Busy',
+  destroyed: 'Ended',
+  errored: 'Failed',
+};
+
 function StatusPill({ status }: { status: Session['status'] }): JSX.Element {
   const dotColor =
     status === 'ready'
@@ -942,7 +956,7 @@ function StatusPill({ status }: { status: Session['status'] }): JSX.Element {
   return (
     <span className="inline-flex items-center gap-1.5 text-xs font-medium capitalize">
       <span className={`status-pip ${dotColor} ${pulse}`} />
-      <span className={textColor}>{status}</span>
+      <span className={textColor}>{STATUS_PILL_LABEL[status] ?? status}</span>
     </span>
   );
 }

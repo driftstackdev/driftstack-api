@@ -56,7 +56,7 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     ).toBeGreaterThanOrEqual(2);
     expect(body).toMatch(/let endpointDataAvailable = false;/);
     expect(body).toMatch(/let endpointListLoading = false;/);
-    expect(body).toMatch(/if \(!endpointDataAvailable\) \{[\s\S]*?Refresh the live endpoint list/);
+    expect(body).toMatch(/if \(!endpointDataAvailable\) \{[\s\S]*?Refresh your endpoint list/);
     expect(body).toMatch(/endpointDataAvailable = false;\s*syncEndpointAuthority/);
     expect(body).toMatch(/endpointDataAvailable = true;\s*syncEndpointAuthority/);
     expect(body).toContain(
@@ -76,9 +76,9 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
   it('reconciles ambiguous one-shot-secret mutations before suggesting recovery', () => {
     expect(body).toContain("timeoutError.name = 'AbortError'");
     expect(body).toContain('refreshEndpointList(false)');
-    expect(body).toContain('Create outcome is unknown after the request timed out.');
-    expect(body).toContain('Rotation outcome is unknown after the request timed out.');
-    expect(body).toContain('signing secret cannot be recovered');
+    expect(body).toContain("The request took too long, so we can't be sure it finished.");
+    expect(body).toContain("the rotation went through — and the new secret can't be shown");
+    expect(body).toContain("its signing secret can't be shown");
     expect(body).toContain('const uncertainRotationIds = new Set();');
     expect(body).toContain('let endpointSnapshot = [];');
     expect(body).toMatch(/!endpointIdsBefore\.has\(endpoint\.id\)/);
@@ -90,17 +90,17 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(body).toMatch(/currentGrace && currentGrace !== previousGrace/);
     expect(body).toMatch(/uncertainRotationIds\.add\(String\(id\)\)/);
     expect(body).toMatch(/if \(uncertainRotationIds\.has\(String\(id\)\)\)/);
-    expect(body).toContain('refreshed authoritative list has no new endpoint for this URL');
-    expect(body).toContain('refreshed authoritative endpoint has no new rotation grace period');
+    expect(body).toContain("Your list doesn't show a new endpoint for this URL");
+    expect(body).toContain('nothing seems to have changed. Try again if you still need to rotate.');
   });
 
   it('treats accepted webhook edits as authoritative and reconciles timeout ambiguity', () => {
     expect(body).toContain('The PATCH body is unused. Accepted status is authoritative');
     expect(body).toContain('let editOutcomeBlocked = false;');
     expect(body).toMatch(/const refreshed = await refreshEndpointList\(false\)/);
-    expect(body).toContain('the refreshed endpoint exactly matches your changes');
-    expect(body).toContain('the refreshed endpoint does not match your changes');
-    expect(body).toContain('another save could overwrite a committed change');
+    expect(body).toContain('The request took too long, but your changes are saved.');
+    expect(body).toContain("the endpoint doesn't show your changes");
+    expect(body).toContain('Reload and check this endpoint before saving again.');
     expect(body).toMatch(/editSubmit\.disabled = editOutcomeBlocked/);
 
     const start = body.indexOf('if (editForm) {');
@@ -112,10 +112,10 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
   it('terminally guards ambiguous replay and test-enqueue outcomes', () => {
     expect(body).toContain('const uncertainReplayIds = new Set();');
     expect(body).toContain('const uncertainTestEndpointIds = new Set();');
-    expect(body).toContain('Replay outcome is unknown after the request timed out.');
-    expect(body).toContain('Test-send outcome is unknown after the request timed out.');
-    expect(body).toContain('Do not replay this delivery again on this page');
-    expect(body).toContain('Do not send another test from this page');
+    expect(body).toContain("we're not sure the replay was queued");
+    expect(body).toContain("we're not sure the test was sent");
+    expect(body).toContain("Don't replay this delivery again from this page");
+    expect(body).toContain("Don't send another test from this page");
     expect(body).toMatch(/if \(!id \|\| uncertainReplayIds\.has\(String\(id\)\)\) return;/);
     expect(body).toMatch(/if \(!id \|\| uncertainTestEndpointIds\.has\(String\(id\)\)\) return;/);
   });
@@ -141,13 +141,16 @@ describe('W362.B customer-dashboard /webhooks page content parity', () => {
     expect(eventValues.has('test.ping')).toBe(false);
   });
 
-  it('HMAC-SHA256 + 5-minute timestamp tolerance posture pinned (V-359)', () => {
-    expect(body).toMatch(/HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance/);
+  it('HMAC-SHA256 + 5-minute timestamp tolerance posture pinned (V-359) — a detail line under the plain headline', () => {
+    expect(body).toMatch(/Signed event notifications sent to your server/);
+    expect(body).toMatch(
+      /Every delivery is signed \(HMAC-SHA256\) and carries a timestamp; the SDK\s+helper rejects deliveries more than 5 minutes old\./,
+    );
   });
 
   it('10s 2xx delivery deadline pinned (matches server retry contract)', () => {
     expect(body).toMatch(
-      /endpoint must respond 2xx within 10s for delivery to count\s+as successful/,
+      /reply with a success status \(2xx\)\s+within 10 seconds, or the delivery counts as failed/,
     );
   });
 

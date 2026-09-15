@@ -37,10 +37,10 @@ describe('the Cookies pane note survives a loaded jar', () => {
   it('CRITICAL a note renders WITH a loaded jar — it used to be unreachable', () => {
     const { container, queryByText } = renderPane(
       [{ domain: 'example.com', name: 'sid', value: 'abc' }],
-      'Session control credential expired — reopen the session to refresh.',
+      "This session's access has expired — reopen the session to refresh.",
     );
     expect(container.querySelector('[data-component="simulator-cookies-note"]')).not.toBeNull();
-    expect(queryByText(/credential expired/)).not.toBeNull();
+    expect(queryByText(/access has expired/)).not.toBeNull();
   });
 
   it('CRITICAL a note renders with an EMPTY-but-loaded jar too', () => {

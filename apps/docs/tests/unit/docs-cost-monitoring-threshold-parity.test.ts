@@ -60,10 +60,12 @@ describe('cost-monitoring docs ↔ runtime truth', () => {
     expect(DOC).toMatch(/Stripe-issued invoices[\s\S]*NowPayments receipt, for payment truth/);
   });
 
-  it('pins the separate LLM included budget and operator-only threshold effect', () => {
-    expect(DOC).toMatch(/10-cent-per-turn\s+value is an included-service monthly budget guardrail/);
-    expect(DOC).toMatch(/not\s+included in this estimate or separately itemized by Stripe/);
-    expect(DOC).toMatch(/operator-tuned unit-economics thresholds/);
+  it('pins the separate LLM monthly budget and the Driftstack-set threshold effect', () => {
+    expect(DOC).toMatch(/Its 10 cents per\s+turn counts against your bundled-LLM monthly budget/);
+    expect(DOC).toMatch(
+      /not included\s+in this estimate or separately itemized on your Stripe invoice/,
+    );
+    expect(DOC).toMatch(/compares the estimate with thresholds\s+Driftstack sets/);
     expect(DOC).toMatch(
       /does not add an\s+invoice item, email a customer billing warning, rate-limit/,
     );

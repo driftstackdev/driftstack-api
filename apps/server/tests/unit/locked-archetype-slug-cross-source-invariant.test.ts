@@ -43,10 +43,10 @@ describe('locked-archetype-slug cross-source invariant', () => {
 
   it('docs/guides/profile-management.md names the locked slug + current device decode while directing clients to the server-authoritative live default', () => {
     expect(profileDoc).toMatch(/`iphone17_ios18_7_safari26_4`/);
-    expect(profileDoc).toMatch(/current iPhone 17 on iOS 18\.7 with Safari 26\.4/);
+    expect(profileDoc).toMatch(/iPhone 17 on iOS 18\.7 with Safari 26\.4/);
     expect(profileDoc).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(profileDoc).toMatch(
-      /clients should read it at runtime instead of predicting or constructing a slug/,
+      /read it from the API at runtime instead of predicting or constructing a slug/,
     );
     expect(profileDoc).not.toMatch(/when iOS 18\.8 ships/);
   });
@@ -55,9 +55,12 @@ describe('locked-archetype-slug cross-source invariant', () => {
     expect(profileApi).toMatch(/"archetype": "iphone17_ios18_7_safari26_4",/);
   });
 
-  it("docs/guides/profile-management.md commits to profile-archetype-pin stability: 'a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the locked default rolls forward' — pinned so the no-surprise-iOS-bump contract stays documented (drift to auto-bumping pinned profiles would surprise downstream behavioural-detection systems)", () => {
+  it("docs/guides/profile-management.md commits to profile-archetype-pin stability: 'a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the default moves to a newer iPhone' — pinned so the no-surprise-iOS-bump contract stays documented (drift to auto-bumping pinned profiles would make a returning profile show up on a different iOS version)", () => {
     expect(profileDoc).toMatch(
-      /a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the locked default rolls forward/,
+      /a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone/,
+    );
+    expect(profileDoc).toMatch(
+      /a returning profile shouldn't suddenly show up on a different iOS version/,
     );
   });
 

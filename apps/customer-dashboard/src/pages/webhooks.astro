@@ -29,16 +29,19 @@ const apiBaseUrl = resolveApiBaseUrl();
     <header class="mb-10 flex flex-wrap items-start justify-between gap-6">
       <div>
         <p class="text-sm text-tk-ink-3">
-          HMAC-SHA256-signed event delivery · 5-minute timestamp tolerance
+          Signed event notifications sent to your server
         </p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">
           Webhook endpoints
         </h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Subscribe to session lifecycle, egress, challenge, profile-save,
-          payment, and key-revocation events. Each endpoint gets
-          its own signing secret; verify with the SDK's
-          <code class="font-mono">verifyWebhookSignature</code> helper.
+          Get notified when a session finishes or fails, a challenge appears, a
+          profile fails to save, a session's proxy status changes, a crypto
+          payment completes or fails, or an API key is revoked. Each endpoint gets
+          its own signing secret so you can check that a notification really came
+          from Driftstack — the SDK's
+          <code class="font-mono">verifyWebhookSignature</code> helper does this
+          for you.
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -64,7 +67,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           data-show-create
           disabled
           aria-disabled="true"
-          title="Live endpoints must load before creating another."
+          title="Wait for your endpoints to load before creating one."
           class="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
         >New endpoint</button>
       </div>
@@ -99,8 +102,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm shadow-sm focus:border-tk-accent focus:outline-none focus:ring-1 focus:ring-tk-accent/30"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
-            HTTPS required. The endpoint must respond 2xx within 10s for delivery to count
-            as successful.
+            Must start with https://. Your server needs to reply with a success status (2xx)
+            within 10 seconds, or the delivery counts as failed.
           </p>
         </div>
         <div>
@@ -188,7 +191,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             data-create-submit
             disabled
             aria-disabled="true"
-            title="Live endpoints must load before creating another."
+            title="Wait for your endpoints to load before creating one."
             class="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             Create endpoint
@@ -216,8 +219,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       </h2>
       <p class="mt-1 text-sm text-tk-ready-text">
         Copy this signing secret now — it won't be shown again. Use it with the SDK's
-        <code class="font-mono">verifyWebhookSignature</code> helper to authenticate
-        incoming deliveries.
+        <code class="font-mono">verifyWebhookSignature</code> helper to check that
+        each delivery really came from Driftstack.
       </p>
       <pre
         data-reveal-secret
@@ -250,9 +253,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         Signing secret rotated
       </h2>
       <p class="mt-1 text-sm text-tk-accent-text">
-        Copy the new secret now — it won't be shown again. The old secret stays
-        valid for the grace window below; roll your verifier forward before
-        then or the next delivery will fail signature check.
+        Copy the new secret now — it won't be shown again. The old secret keeps
+        working until the time shown below. Update your server with the new
+        secret before then, or it will start rejecting deliveries.
       </p>
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
         Endpoint
@@ -433,8 +436,8 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
       <h2 class="text-lg font-semibold tracking-tight text-tk-ink">No webhook endpoints yet</h2>
       <p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">
-        Subscribe to events when sessions complete, fail, crypto orders settle,
-        or quota thresholds trip. POST + URL + event list = endpoint.
+        Get notified when sessions finish or fail, crypto payments complete, and
+        more. Just add a URL and pick the events you want.
       </p>
       {/* S32 2026-07-07 (fable-frontend-audit) — was <a href="#new">, a
           dead anchor (no #new target, no handler): the primary CTA for
@@ -445,7 +448,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         data-show-create
         disabled
         aria-disabled="true"
-        title="Live endpoints must load before creating another."
+        title="Wait for your endpoints to load before creating one."
         class="btn-primary mt-6 inline-flex disabled:cursor-not-allowed disabled:opacity-50"
         >Create endpoint</button
       >
@@ -471,9 +474,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     </ul>
 
     <p class="mt-8 text-xs text-tk-ink-3">
-      Failed deliveries retry 5× with exponential backoff before landing in
-      the DLQ. DLQ entries are admin-replayable; no auto-retry past the
-      initial attempts to avoid storm-on-recovery patterns.
+      If a delivery fails, we retry it up to 5 times with increasing delays.
+      After that it's marked undelivered and kept in the delivery log, where
+      you can replay it yourself — we don't retry automatically beyond that.
+      Every delivery is signed (HMAC-SHA256) and carries a timestamp; the SDK
+      helper rejects deliveries more than 5 minutes old.
     </p>
   </div>
 
@@ -545,7 +550,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const revealDismiss = root.querySelector('[data-reveal-dismiss]');
 
       function syncEndpointAuthority(reason) {
-        const unavailableReason = reason || 'Live endpoints must load before creating another.';
+        const unavailableReason = reason || 'Wait for your endpoints to load before creating one.';
         showCreateBtns.forEach((button) => {
           button.disabled = !endpointDataAvailable;
           button.setAttribute('aria-disabled', endpointDataAvailable ? 'false' : 'true');
@@ -564,7 +569,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           refreshBtn.disabled = refreshDisabled;
           refreshBtn.setAttribute('aria-disabled', refreshDisabled ? 'true' : 'false');
           if (!token) refreshBtn.title = 'Available after sign-in.';
-          else if (endpointListLoading) refreshBtn.title = 'Refreshing live endpoints.';
+          else if (endpointListLoading) refreshBtn.title = 'Refreshing your endpoints.';
           else refreshBtn.removeAttribute('title');
         }
         if (!endpointDataAvailable && ul) {
@@ -584,7 +589,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!endpointDataAvailable) {
           showBanner(
             token
-              ? 'Refresh the live endpoint list before creating another endpoint.'
+              ? 'Refresh your endpoint list before creating another endpoint.'
               : 'Sign in to create webhook endpoints.',
           );
           return;
@@ -628,13 +633,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (createOutcomeBlocked) {
             showCreateError(
               createOutcomeReason === 'created'
-                ? 'This endpoint was likely created, but its one-shot signing secret was lost with the timed-out response. Delete the matching endpoint before creating another.'
-                : 'Endpoint creation is locked because the prior outcome could not be verified. Reload and review the endpoint list before retrying.',
+                ? "This endpoint was probably created, but its signing secret couldn't be shown because the request timed out. Delete it and create a new one."
+                : 'Reload and check your endpoint list before trying again.',
             );
             return;
           }
           if (!endpointDataAvailable) {
-            showCreateError('Refresh the live endpoint list before creating another endpoint.');
+            showCreateError('Refresh your endpoint list before creating another endpoint.');
             return;
           }
           if (createError) {
@@ -721,12 +726,12 @@ const apiBaseUrl = resolveApiBaseUrl();
                   createOutcomeReason = 'unverified';
                 }
                 showCreateError(
-                  'Create outcome is unknown after the request timed out. ' +
+                  "The request took too long, so we can't be sure it finished. " +
                     (matchingEndpoint
-                      ? 'The refreshed list contains a new endpoint for this exact URL, so creation likely completed but its signing secret cannot be recovered. Delete that endpoint before creating another.'
+                      ? "An endpoint with this URL now appears in your list, so it was probably created — but its signing secret can't be shown. Delete it, then create a new one."
                       : refreshed
-                        ? 'The refreshed authoritative list has no new endpoint for this URL; retry only if the endpoint is still required.'
-                        : "We couldn't refresh the endpoint list. Reload and verify it before retrying; another submission could create a duplicate endpoint with another one-shot secret."),
+                        ? "Your list doesn't show a new endpoint for this URL, so it probably wasn't created. Try again if you still need it."
+                        : "We couldn't refresh your endpoint list. Reload and check it before trying again, so you don't create a duplicate."),
                 );
                 return;
               }
@@ -749,19 +754,19 @@ const apiBaseUrl = resolveApiBaseUrl();
                 createSubmit.textContent = createOutcomeBlocked
                   ? createOutcomeReason === 'created'
                     ? 'Already created'
-                    : 'Verify before retrying'
+                    : 'Check before retrying'
                   : 'Create endpoint';
                 if (!endpointDataAvailable) {
                   createSubmit.setAttribute(
                     'title',
-                    'Refresh the live endpoint list before creating another endpoint.',
+                    'Refresh your endpoint list before creating another endpoint.',
                   );
                 } else if (createOutcomeBlocked) {
                   createSubmit.setAttribute(
                     'title',
                     createOutcomeReason === 'created'
-                      ? 'Delete the newly matched endpoint before creating another.'
-                      : 'Reload and verify the endpoint list before retrying.',
+                      ? 'Delete the endpoint that was just created before creating another.'
+                      : 'Reload and check the endpoint list before trying again.',
                   );
                 } else {
                   createSubmit.removeAttribute('title');
@@ -804,7 +809,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function endpointCard(e) {
         const mutationInFlight = endpointMutationIdsInFlight.has(String(e.id));
         const mutationDisabledAttributes = mutationInFlight
-          ? ' disabled aria-disabled="true" title="Wait for the active webhook action to finish."'
+          ? ' disabled aria-disabled="true" title="Wait for the current action to finish."'
           : '';
         const mutationDisabledClass = mutationInFlight ? ' cursor-not-allowed opacity-60' : '';
         const events = (e.events || [])
@@ -835,14 +840,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           counts.dlq > 0
             ? '<button type="button" data-open-deliveries="' +
               escapeHtml(e.id) +
-              '" data-open-deliveries-status="dlq" class="text-sm font-medium text-tk-err-text hover:underline">Review DLQ (' +
+              '" data-open-deliveries-status="dlq" class="text-sm font-medium text-tk-err-text hover:underline">Review undelivered (' +
               counts.dlq +
               ')</button>'
             : '';
         const testButton = uncertainTestEndpointIds.has(String(e.id))
           ? '<button type="button" data-test="' +
             escapeHtml(e.id) +
-            '" disabled title="A test delivery may already have been queued. Verify the delivery log before reloading." class="text-sm text-amber-700">Test outcome unknown</button>'
+            '" disabled title="A test may already have been sent. Check the delivery log before reloading." class="text-sm text-amber-700">Test outcome unknown</button>'
           : '<button type="button" data-test="' +
             escapeHtml(e.id) +
             '"' +
@@ -853,7 +858,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const rotateButton = uncertainRotationIds.has(String(e.id))
           ? '<button type="button" data-rotate="' +
             escapeHtml(e.id) +
-            '" disabled title="The previous rotation outcome is unknown. Reload and verify before rotating again." class="text-sm text-amber-700">Rotation outcome unknown</button>'
+            '" disabled title="The last rotation may not have finished. Reload and check before rotating again." class="text-sm text-amber-700">Rotation outcome unknown</button>'
           : '<button type="button" data-rotate="' +
             escapeHtml(e.id) +
             '"' +
@@ -879,7 +884,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           // know how long they have to roll the new secret across
           // their verifier infra.
           (e.rotation_grace_expires_at
-            ? '<span class="rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-busy-text" title="Old secret stays valid until this time. Roll your verifier forward before then.">rotating · ends ' +
+            ? '<span class="rounded-full bg-tk-accent/10 px-2 py-0.5 text-xs font-medium uppercase tracking-wide text-tk-busy-text" title="The old secret works until this time. Update your server with the new secret before then.">rotating · ends ' +
               escapeHtml(fmtIsoDay(e.rotation_grace_expires_at)) +
               '</span>'
             : '') +
@@ -933,7 +938,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<dd class="mt-1 font-mono text-lg font-medium text-tk-accent-text">' +
           counts.failed.toLocaleString('en-US') +
           '</dd></div>' +
-          '<div><dt class="text-xs text-tk-ink-3">DLQ</dt>' +
+          '<div><dt class="text-xs text-tk-ink-3">Undelivered</dt>' +
           '<dd class="mt-1 font-mono text-lg font-medium ' +
           dlqClass +
           '">' +
@@ -972,7 +977,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         endpointActionButtons(endpointId).forEach((button) => {
           button.disabled = true;
           button.setAttribute('aria-disabled', 'true');
-          button.setAttribute('title', 'Wait for the active webhook action to finish.');
+          button.setAttribute('title', 'Wait for the current action to finish.');
         });
         return true;
       }
@@ -991,8 +996,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             button.setAttribute(
               'title',
               testBlocked
-                ? 'A test delivery may already have been queued. Verify the delivery log before reloading.'
-                : 'The previous rotation outcome is unknown. Reload and verify before rotating again.',
+                ? 'A test may already have been sent. Check the delivery log before reloading.'
+                : 'The last rotation may not have finished. Reload and check before rotating again.',
             );
           } else {
             button.removeAttribute('aria-disabled');
@@ -1004,6 +1009,15 @@ const apiBaseUrl = resolveApiBaseUrl();
       function fmtIsoMin(iso) {
         if (!iso) return '—';
         return new Date(iso).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+      }
+
+      // Plain labels for the raw delivery statuses the API returns. The
+      // status VALUES (filter options, data attributes) stay as the API
+      // spells them; only what the customer reads changes.
+      function deliveryStatusLabel(status) {
+        if (status === 'in_flight') return 'in progress';
+        if (status === 'dlq') return 'undelivered';
+        return status;
       }
 
       function deliveryRow(d) {
@@ -1022,7 +1036,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         const replayBtn = !replayable
           ? ''
           : uncertainReplayIds.has(String(d.id))
-            ? '<span class="text-xs font-medium text-amber-700" title="This delivery may already have been requeued. Verify its state before reloading.">Replay outcome unknown</span>'
+            ? '<span class="text-xs font-medium text-amber-700" title="This delivery may already have been replayed. Check the delivery log before reloading.">Replay outcome unknown</span>'
             : '<button type="button" data-replay="' +
               escapeHtml(d.id) +
               '" class="text-xs text-tk-accent-text hover:underline">Replay</button>';
@@ -1033,7 +1047,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           '<span class="' +
           statusClass +
           '">' +
-          escapeHtml(d.status) +
+          escapeHtml(deliveryStatusLabel(d.status)) +
           '</span>' +
           '<span class="font-mono text-xs text-tk-ink-2">' +
           escapeHtml(d.event_type) +
@@ -1076,7 +1090,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           ['', 'pending', 'in_flight', 'delivered', 'failed', 'dlq']
             .map((s) => {
               const sel = s === (status || '') ? ' selected' : '';
-              const label = s === '' ? 'All statuses' : s;
+              const label = s === '' ? 'All statuses' : deliveryStatusLabel(s);
               return '<option value="' + escapeHtml(s) + '"' + sel + '>' + escapeHtml(label) + '</option>';
             })
             .join('') +
@@ -1090,7 +1104,9 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (state.items.length === 0) {
           body =
             '<p class="text-sm text-tk-ink-3">No deliveries' +
-            (state.status ? ' with status "' + escapeHtml(state.status) + '"' : '') +
+            (state.status
+              ? ' with status "' + escapeHtml(deliveryStatusLabel(state.status)) + '"'
+              : '') +
             '.</p>';
         } else {
           const list =
@@ -1281,11 +1297,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                     state ? state.status : '',
                   );
                   showBanner(
-                    'Replay outcome is unknown after the request timed out. ' +
+                    "The request took too long, so we're not sure the replay was queued. " +
                       (refreshed
-                        ? 'The delivery log was refreshed, but it cannot prove whether the async replay ran. '
+                        ? "The delivery log was refreshed, but it can't show yet whether the replay ran. "
                         : "We couldn't refresh the delivery log. ") +
-                      'Do not replay this delivery again on this page; verify its state before reloading.',
+                      "Don't replay this delivery again from this page — check the delivery log first, then reload.",
                   );
                   return;
                 }
@@ -1463,7 +1479,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             active: active,
           };
           if (!beginEndpointMutation(editingEndpointId)) {
-            showEditError('Wait for the active webhook action to finish.');
+            showEditError('Wait for the current action to finish.');
             return;
           }
           editInFlight = true;
@@ -1522,20 +1538,18 @@ const apiBaseUrl = resolveApiBaseUrl();
                   JSON.stringify(liveEvents) === JSON.stringify(desiredEndpoint.events);
                 if (exactMatch) {
                   hideEdit();
-                  showBanner(
-                    'The save response timed out, but the refreshed endpoint exactly matches your changes. The save completed and was not submitted again.',
-                  );
+                  showBanner('The request took too long, but your changes are saved.');
                   return;
                 }
                 if (refreshed) {
                   showEditError(
-                    'The save response timed out, and the refreshed endpoint does not match your changes. Review the live values, then retry only if the update is still needed.',
+                    "The request took too long and the endpoint doesn't show your changes. Check the current values, then try again if needed.",
                   );
                   return;
                 }
                 editOutcomeBlocked = true;
                 showEditError(
-                  'The save outcome is unknown and the endpoint list could not be refreshed. Reload and verify the live endpoint before retrying; another save could overwrite a committed change.',
+                  "The request took too long and we couldn't refresh the list. Reload and check this endpoint before saving again.",
                 );
                 return;
               }
@@ -1553,7 +1567,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 editSubmit.disabled = editOutcomeBlocked;
                 editSubmit.setAttribute('aria-busy', 'false');
                 editSubmit.textContent = editOutcomeBlocked
-                  ? 'Verify before retrying'
+                  ? 'Check before retrying'
                   : 'Save changes';
               }
             });
@@ -1611,8 +1625,8 @@ const apiBaseUrl = resolveApiBaseUrl();
                     refreshed && endpointSnapshot.some((e) => String(e.id) === String(id));
                   showBanner(
                     stillListed
-                      ? 'The request timed out and the endpoint is still listed — try deleting again.'
-                      : 'The request timed out, but the endpoint is no longer listed — the delete appears to have completed.',
+                      ? 'The request took too long and the endpoint is still listed — try deleting again.'
+                      : 'The request took too long, but the endpoint is no longer listed, so it was deleted.',
                   );
                   return;
                 }
@@ -1755,7 +1769,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               actionButtonsInFlight.delete(btn);
               endEndpointMutation(id);
               showBanner(
-                'Rotation is locked because the previous outcome was confirmed or could not be verified. Reload and review the endpoint before rotating again.',
+                'Rotation is paused until you reload and check this endpoint.',
               );
               return;
             }
@@ -1765,9 +1779,9 @@ const apiBaseUrl = resolveApiBaseUrl();
             const previousGrace = previousEndpoint?.rotation_grace_expires_at || null;
             if (
               !(await window.driftstackConfirm(
-                'Rotate signing secret for ' +
+                'Rotate the signing secret for ' +
                   id +
-                  '?\n\nThe new secret is shown ONCE. The old secret stays active for 24h so your verifier can roll forward without dropped deliveries.',
+                  '?\n\nThe new secret is shown only once. The old one keeps working for 24 hours so you can switch over without missing deliveries.',
                 { confirmLabel: 'Rotate secret', destructive: true },
               ))
             ) {
@@ -1816,23 +1830,22 @@ const apiBaseUrl = resolveApiBaseUrl();
                     if (currentButton) {
                       currentButton.disabled = true;
                       currentButton.textContent = rotationAdvanced
-                        ? 'Rotation completed — secret lost'
-                        : 'Verify before rotating';
+                        ? 'Rotated — secret not shown'
+                        : 'Check before rotating';
                       currentButton.setAttribute(
                         'title',
                         rotationAdvanced
-                          ? 'Reload after updating or deleting this endpoint; rotating again would replace the lost secret.'
-                          : 'Reload and verify this endpoint before rotating again.',
+                          ? 'Reload after deleting or replacing this endpoint. Rotating again would replace a secret you never saw.'
+                          : 'Reload and check this endpoint before rotating again.',
                       );
                     }
                   }
                   showBanner(
-                    'Rotation outcome is unknown after the request timed out. ' +
-                      (rotationAdvanced
-                        ? 'The refreshed endpoint has a new rotation grace period, so rotation completed but its one-shot signing secret cannot be recovered. Do not rotate again; reload after deciding whether to delete or replace this endpoint.'
-                        : refreshed
-                          ? 'The refreshed authoritative endpoint has no new rotation grace period; retry only if rotation is still required.'
-                          : "We couldn't refresh the endpoint list. Reload and verify it before rotating again; another rotation could replace an unrecoverable secret."),
+                    rotationAdvanced
+                      ? "The request took too long, but the rotation went through — and the new secret can't be shown. Don't rotate again. Reload, then decide whether to delete or replace this endpoint."
+                      : refreshed
+                        ? 'The request took too long and nothing seems to have changed. Try again if you still need to rotate.'
+                        : "The request took too long and we couldn't refresh your endpoint list. Reload and check it before rotating again.",
                   );
                   return;
                 }
@@ -1849,7 +1862,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                 const rotationBlocked = uncertainRotationIds.has(String(id));
                 btn.disabled = rotationBlocked;
                 btn.setAttribute('aria-busy', 'false');
-                btn.textContent = rotationBlocked ? 'Verify before rotating' : original;
+                btn.textContent = rotationBlocked ? 'Check before rotating' : original;
                 endEndpointMutation(id);
               });
           });
@@ -1890,7 +1903,7 @@ const apiBaseUrl = resolveApiBaseUrl();
                     .then((b) => Promise.reject(window.driftstackResponseError(r, b)));
                 }
                 showBanner(
-                  'Test event queued. Check your endpoint and the delivery log to confirm receipt.',
+                  'Test event sent. Check your server and the delivery log to confirm it arrived.',
                 );
               })
               .catch(async (err) => {
@@ -1899,11 +1912,11 @@ const apiBaseUrl = resolveApiBaseUrl();
                   uncertainTestEndpointIds.add(String(id));
                   const refreshed = await refreshEndpointList(false);
                   showBanner(
-                    'Test-send outcome is unknown after the request timed out. ' +
+                    "The request took too long, so we're not sure the test was sent — it may already be on its way. " +
                       (refreshed
-                        ? 'The endpoint list was refreshed, but delivery counts may update later. '
-                        : "We couldn't refresh the endpoint list. ") +
-                      'The test event may already be queued. Do not send another test from this page; verify the delivery log before reloading.',
+                        ? 'Delivery counts may take a moment to update. '
+                        : "We couldn't refresh your endpoint list. ") +
+                      "Don't send another test from this page. Check the delivery log, then reload.",
                   );
                   return;
                 }
@@ -1941,7 +1954,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (endpointListLoading) return Promise.resolve(false);
         endpointListLoading = true;
         endpointDataAvailable = false;
-        syncEndpointAuthority('Refreshing the live endpoint list.');
+        syncEndpointAuthority('Refreshing your endpoint list.');
         return boundedFetch(apiBaseUrl + '/v1/webhooks', {
           // Every mutation (create/edit/delete/rotate/test) carries the act-as
           // team header; the LIST must too, or acting-as a team renders the
@@ -1983,7 +1996,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           })
           .catch((err) => {
             endpointDataAvailable = false;
-            syncEndpointAuthority('Refresh the live endpoint list to restore actions.');
+            syncEndpointAuthority('Refresh your endpoint list to enable actions again.');
             // S32 2026-07-07 (fable-frontend-audit) — the old copy said
             // "Showing preview data below", but no preview data is ever
             // rendered (MOCK_WEBHOOKS was dead code) — the customer was left
@@ -2008,7 +2021,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             syncEndpointAuthority(
               endpointDataAvailable
                 ? undefined
-                : 'Refresh the live endpoint list to restore actions.',
+                : 'Refresh your endpoint list to enable actions again.',
             );
           });
       }

@@ -51,7 +51,9 @@ describe('W255.B docs/api/team ↔ /v1/team/* parity', () => {
     expect(route).toMatch(/'\/v1\/team\/members\/:id'/);
   });
 
-  it('invite tokens are sha256-hashed at rest with 7-day expiry', () => {
-    expect(doc).toMatch(/Token-hashed at\s+rest \(sha256\), 7-day expiry/);
+  it('invites are created by the owner, accepted by the invitee, and expire after 7 days', () => {
+    expect(doc).toMatch(
+      /created by the owner and accepted\s+by the invitee\. Expires after 7 days\./,
+    );
   });
 });

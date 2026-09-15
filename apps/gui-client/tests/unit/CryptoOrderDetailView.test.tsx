@@ -247,8 +247,10 @@ describe('V-534.AD CryptoOrderDetailView', () => {
     );
     render(<CryptoOrderDetailView orderId="ord_42" />);
     const timeline = await waitFor(() => screen.getByLabelText('Order events timeline'));
-    expect(timeline.textContent).toContain('via create');
-    expect(timeline.textContent).toContain('via ipn');
+    // Sources render in plain words; the wire tags never reach the screen.
+    expect(timeline.textContent).toContain('order created');
+    expect(timeline.textContent).toContain('payment update received');
+    expect(timeline.textContent).not.toMatch(/via |ipn/);
     // Timestamps render via formatTimestamp (locale absolute time), not raw ISO.
     expect(timeline.textContent).toContain(formatTimestamp('2026-05-11T09:00:00.000Z'));
   });

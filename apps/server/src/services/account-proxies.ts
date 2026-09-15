@@ -144,7 +144,7 @@ function unreadableDetail(vpn: boolean): string {
  *  update route answers the same classification with, so a customer who reads
  *  one and then the other is not told two different stories. */
 export const UNSAFE_TARGET_DETAIL =
-  'This VPN configuration targets a private, loopback, link-local, or metadata address, which Driftstack will not route to. Fix the endpoint (or DNS) and save it again.';
+  'This VPN configuration points at a private or local network address, which cannot be used. Change the server address (or DNS) to a public internet address and save it again.';
 
 /**
  * ⚠️ WHY THE WORD BELOW IS ALWAYS "missing", and why an "invalid" clause was

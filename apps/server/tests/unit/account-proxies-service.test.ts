@@ -769,7 +769,7 @@ describe('(V4) every REACHABLE ProxyUnresolvableReason is asserted by code AND s
     });
     expect(r.config).toBeNull();
     expect(r.reason).toBe('config_refused_target');
-    expect(r.detail).toContain('private, loopback, link-local, or metadata address');
+    expect(r.detail).toContain('private or local network address');
     expect(r.detail).not.toContain(UNREADABLE_SENTENCE);
   });
 
@@ -788,7 +788,7 @@ describe('(V4) every REACHABLE ProxyUnresolvableReason is asserted by code AND s
     });
     expect(r.config).toBeNull();
     expect(r.reason).toBe('config_refused_target');
-    expect(r.detail).toContain('private, loopback, link-local, or metadata address');
+    expect(r.detail).toContain('private or local network address');
   });
 
   it('VACUITY CONTROL — the same WireGuard fixture with a PUBLIC endpoint resolves, with no reason at all', async () => {

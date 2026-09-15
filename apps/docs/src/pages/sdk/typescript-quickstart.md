@@ -6,14 +6,12 @@ description: 5-minute getting-started for the @driftstack/sdk TypeScript client.
 
 # TypeScript quickstart
 
-— laser-focused 5-minute path to a working TypeScript Driftstack
-session. For the multi-language overview see the [combined quickstart](/quickstart/).
+A five-minute path to a working TypeScript Driftstack session. For the
+multi-language overview see the [combined quickstart](/quickstart/).
 
 ## Prerequisites
 
-- Node.js 18+ (Node 22 LTS recommended; the SDK declares
-  `engines.node: ">=18"` and is built / tested against the same
-  toolchain Driftstack runs in production).
+- Node.js 18+ (Node 22 LTS recommended).
 - Any paid Driftstack tier, including Manual. Free is supported through the
   desktop app, whose browser sign-in automatically stores a restricted
   `ds_test_…` device credential; that credential is not a general SDK or
@@ -151,8 +149,8 @@ with no extra arguments and your verifier won't drop deliveries.
 ## Pair-mode takeover (interactive AI sessions)
 
 For sessions where a human needs to step in mid-flight, the SDK
-exposes pair-mode helpers that drive the same takeover state
-machine the dashboard uses.
+exposes pair-mode helpers that drive the same takeover flow the
+dashboard uses.
 
 ```ts
 // Create or upgrade a session into pair mode.
@@ -183,34 +181,29 @@ const back = await client.agentSessions.handback(session.id);
 console.log(back.pair_mode_state.kind); // handback-pending
 ```
 
-The state machine kinds you'll see: `ai-driving`,
-`takeover-pending`, `takeover-queued` (when the runtime is
-mid-decompose), `human-driving`, `handback-pending`,
-`handback-queued`. The dashboard polls `agent-sessions/:id` to
-display the current kind.
+The states you'll see: `ai-driving`, `takeover-pending`,
+`takeover-queued` (the AI is still working on its current step; the
+takeover request waits until it finishes), `human-driving`,
+`handback-pending`, `handback-queued`. The dashboard polls
+`agent-sessions/:id` to display the current kind.
 
-> **⚠️ The handback half of this loop cannot complete on any deployment today.**
-> `takeover()` works and parks the session in `takeover-pending`. Advancing from there to
-> `human-driving` requires the `takeover-grant` transition, and **nothing emits it** — the
-> harness has no control-plane surface to fire it yet (tracked in
-> `docs/internal/cross-agent-control-plane-contract.md`). Consequences you will actually
-> observe:
+> **⚠️ Handback cannot complete on any deployment today.** `takeover()` works and
+> leaves the session in `takeover-pending`, but no session can currently advance from
+> there to `human-driving`. What you will see:
 >
-> - `handback()` returns **409 `pair-mode-conflict`** every time, because
->   `handback-request` is only accepted from `human-driving`.
-> - `human-driving`, `handback-pending` and `handback-queued` are **unreachable**, so a UI
->   that branches on them is dead code.
-> - After 30s without a client heartbeat the sweep silently returns the session to
->   `ai-driving`, so a parked takeover expires on its own.
+> - `handback()` returns **409 `pair-mode-conflict`** every time, because handback is
+>   only accepted from `human-driving`.
+> - `human-driving`, `handback-pending` and `handback-queued` are never reached, so a UI
+>   that branches on them will not run.
+> - A session left in `takeover-pending` returns to `ai-driving` on its own after 30
+>   seconds without a client heartbeat.
 >
-> Drive live sessions through the desktop Simulator's control channel until the emitter
-> ships.
+> Until this ships, use the desktop Simulator to control live sessions by hand.
 
 ### Modifier vocabulary
 
 `keyDown` / `keyUp` events accept a `modifiers` array. Use the
-canonical 4-name set — these map 1:1 onto Quartz `CGEventFlags`
-on the macOS harness side:
+canonical 4-name set — `cmd`, `ctrl`, `shift`, `option`:
 
 ```ts
 await client.agentSessions.sendInputEvent(
@@ -220,8 +213,8 @@ await client.agentSessions.sendInputEvent(
 );
 ```
 
-DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
-through the schema unchanged but the harness decoder drops them.
+DOM-standard names (`Shift / Control / Alt / Meta`) are accepted but
+ignored.
 The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
 `@driftstack/api-types` if you want to reference it from your code.
 
@@ -230,17 +223,16 @@ The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
 - [Session lifecycle reference](/guides/session-lifecycle/) — states,
   the free-tier 20-minute duration cap, reconnect semantics.
 - [Profile management](/guides/profile-management/) — persistent
-  identity slots that survive across sessions.
-- [Agent sessions](/api/agent-sessions/) — natural-language
-  decompose-and-execute on top of the regular driver surface;
-  AI / manual / pair modes, live SSE transcript stream, and the
-  LiveKit-based live video subscription (auto-populated `livekit`
-  field on session-create, or re-mint via
-  `client.agentSessions.livekitToken(id)` after the 24h token TTL).
+  profiles that survive across sessions.
+- [Agent sessions](/api/agent-sessions/) — let an AI agent drive a
+  session from plain-language instructions; AI / manual / pair modes,
+  a live transcript stream, and live video (the `livekit` field on the
+  create response, or `client.agentSessions.livekitToken(id)` for a
+  fresh token after 24 hours).
 - [Bundled LLM](/api/bundled-llm/) and
-  [BYOK Anthropic](/api/byok-anthropic/) — the two LLM rails
-  agent sessions can use; bring your own key OR consent to the
-  deployment-fallback budget.
+  [BYOK Anthropic](/api/byok-anthropic/) — the two ways to supply an
+  AI model: bring your own key, or opt in to the bundled model with a
+  monthly budget.
 - [Idempotency keys](/reference/idempotency/) — `Idempotency-Key` is
   honoured on agent sessions and the billing checkouts, and NOT on
   `POST /v1/sessions`; retrying that one mints a second session.

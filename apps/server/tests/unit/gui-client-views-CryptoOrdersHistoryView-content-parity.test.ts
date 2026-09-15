@@ -109,13 +109,13 @@ describe('W484.A apps/gui-client/src/views/CryptoOrdersHistoryView.tsx content p
     );
   });
 
-  it("Cancel-confirm modal: role='dialog' aria-modal='true' aria-label='Confirm order cancellation' + 'Cancel this order?' h3 + non-refundable disclaimer 'Crypto payments are non-refundable; cancelling only stops the pending pay window — if you've already sent crypto, contact support to reconcile.' + 'Keep order' button (default focus + safer action) + 'Confirm cancel' status-error button — pinned so the misclick-cancellation footgun stays guarded", () => {
+  it("Cancel-confirm modal: role='dialog' aria-modal='true' aria-label='Confirm order cancellation' + 'Cancel this order?' h3 + non-refundable disclaimer 'Crypto payments are non-refundable — if you've already sent payment, contact support before cancelling.' (plain words — no 'mint' / 'pay window' / 'reconcile', 2026-09-15) + 'Keep order' button (default focus + safer action) + 'Confirm cancel' status-error button — pinned so the misclick-cancellation footgun stays guarded", () => {
     expect(body).toMatch(
       /ref=\{cancelDialogRef\}\s*role="dialog"\s*aria-modal="true"\s*aria-label="Confirm order cancellation"/,
     );
     expect(body).toMatch(/<h3 className="text-base font-semibold">Cancel this order\?<\/h3>/);
     expect(body).toMatch(
-      /Order <span className="font-mono text-xs">\{cancelConfirmFor\}<\/span> will be marked\s*cancelled\. You can still mint a new order afterwards\. Crypto payments are\{' '\}\s*<strong>non-refundable<\/strong>; cancelling only stops the pending pay window — if\s*you've already sent crypto, contact support to reconcile\./,
+      /Order <span className="font-mono text-xs">\{cancelConfirmFor\}<\/span> will be cancelled\.\s*You can create a new order afterwards\. Crypto payments are\{' '\}\s*<strong>non-refundable<\/strong> — if you've already sent payment, contact support\s*before cancelling\./,
     );
     expect(body).toMatch(
       /<button\s*type="button"\s*onClick=\{\(\) => setCancelConfirmFor\(null\)\}/,

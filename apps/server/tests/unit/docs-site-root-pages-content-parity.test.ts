@@ -127,17 +127,17 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(
       /2\. \*\*Deployment mode\*\* — radio: \*\*Cloud\*\* \(`https:\/\/api\.driftstack\.dev`\) or \*\*Self-hosted\*\*/,
     );
-    // 2026-05-20 — port 7780→3000 (DEFAULT_SETTINGS.baseUrl shift per
-    // 6d117edb / beed59db; matches the port apps/server binds to in dev).
-    expect(body).toMatch(/defaults to `http:\/\/localhost:3000`/);
+    // 2026-09-15 — the dev port and package path left the customer page (how
+    // we run it, not what the customer gets); the step now names what to paste.
+    expect(body).toMatch(/\(you paste the URL of your own Driftstack server\)\./);
     expect(body).toMatch(/3\. \*\*Sign in\*\* — use \*\*Sign in with browser\*\* by default/);
     expect(body).toMatch(/calls `GET \/v1\/account\/me` to validate it/);
     expect(body).toMatch(/4\. \*\*First profile\*\* \(skippable\)/);
     expect(body).toMatch(/The wizard calls `POST \/v1\/profiles`/);
-    expect(body).toMatch(/5\. \*\*Done\*\* — flag flipped; main app shell takes over\./);
+    expect(body).toMatch(/5\. \*\*Done\*\* — setup is complete and the main app opens\./);
     expect(body).toMatch(/^## Where credentials live$/m);
     expect(body).toMatch(
-      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain/,
+      /\*\*Device credential or fallback API key\*\* — stored in the macOS Keychain\./,
     );
     expect(body).toMatch(/It never lands in `settings\.json` on disk\./);
     expect(body).toMatch(/^## Switching deployments$/m);
@@ -165,9 +165,9 @@ describe('W600 apps/docs root pages content parity', () => {
     expect(body).toMatch(/installs it,\s*\n?and relaunches the app/);
     expect(body).toMatch(/^## Troubleshooting$/m);
     expect(body).toMatch(/\*\*"Authentication failed"\*\*/);
-    expect(body).toMatch(/\*\*"Couldn't reach control plane"\*\*/);
+    expect(body).toMatch(/\*\*"Couldn't reach the server"\*\*/);
     expect(body).toMatch(/check \[status\.driftstack\.io\]\(https:\/\/status\.driftstack\.io\)/);
-    expect(body).toMatch(/\*\*Wizard re-fires on every launch\*\*/);
+    expect(body).toMatch(/\*\*The setup wizard appears on every launch\*\*/);
     expect(body).toMatch(/\*\*"You do not have permission" on activation\*\*/);
     expect(body).toMatch(/^## Next steps$/m);
     expect(existsSync(LICENSE)).toBe(true);

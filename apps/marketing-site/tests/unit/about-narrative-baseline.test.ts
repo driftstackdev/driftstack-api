@@ -34,8 +34,9 @@ describe('W334.B /about narrative baseline', () => {
   it('EU control-plane posture: compute + database are EU-resident (S30 2026-07-07 founder decision: soften — object storage dropped from the EU list since R2-held files replicate EU + US), session execution + a few processors transfer to the US under SCCs + EU-US DPF (matches the real sub-processor list); vendor names live on /trust/sub-processors, the about-page card links there instead of enumerating vendors inline', () => {
     expect(body).toMatch(/Compute and database run in the EU/);
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
+    // 2026-09-15 customer-copy pass: SCC gloss moved inline, "+" became "and".
     expect(body).toMatch(
-      /transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy/,
+      /transfer data to the US under Standard Contractual\s*Clauses \(the EU's standard legal contract for sending data\s*abroad\) and the EU-US Data Privacy Framework/,
     );
     expect(body).not.toMatch(/Single-region — no silent transatlantic data/);
     expect(body).toMatch(/href="\/trust\/sub-processors\/"/);
@@ -65,8 +66,9 @@ describe('W334.B /about narrative baseline', () => {
     expect(body).not.toMatch(/SOC 2|ISO 27001/i);
   });
 
-  it('F-5 (Issue 5) customer-configurable egress framing on about page: the prior "(the last is on the roadmap; see /trust/security-overview for what\'s shipped today)" parenthetical was rewritten in scoped commit 87e37383 to "(SOCKS5 · WireGuard · OpenVPN — see /trust/security-overview for the security posture)". Aspirational "on the roadmap" language is gone from this page; the honest-disclosure surface for the egress impl state is now security.astro (gated by W499.D against actual server source).', () => {
-    expect(body).toMatch(/customer-configurable\s+egress \(SOCKS5 · WireGuard · OpenVPN/);
-    expect(body).not.toMatch(/customer-configurable\s+egress[\s\S]{0,80}roadmap/i);
+  it('F-5 (Issue 5) your-own-proxy-or-VPN framing on about page: the prior "(the last is on the roadmap; see /trust/security-overview for what\'s shipped today)" parenthetical was rewritten in scoped commit 87e37383 to the explicit SOCKS5 · WireGuard · OpenVPN listing; 2026-09-15 customer-copy pass renamed "customer-configurable egress" to "your own proxy or VPN". Aspirational "on the roadmap" language is gone from this page; the honest-disclosure surface for the egress impl state is now security.astro (gated by W499.D against actual server source).', () => {
+    expect(body).toMatch(/your own proxy or VPN\s+\(SOCKS5 · WireGuard · OpenVPN\)/);
+    expect(body).not.toMatch(/customer-configurable\s+egress/);
+    expect(body).not.toMatch(/proxy or VPN[\s\S]{0,80}roadmap/i);
   });
 });

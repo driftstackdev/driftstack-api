@@ -46,11 +46,12 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
 
   it('pins the staff web-session allowlist and generated-OpenAPI authority boundary', () => {
     expect(body).toMatch(
-      /Every admin endpoint is preHandler-gated on\s*<code>driftstack_internal_admin<\/code>\. Customer key-management\s*APIs cannot grant that scope\./,
+      /Every admin endpoint requires the\s*<code>driftstack_internal_admin<\/code> scope, which customer\s*key-management APIs cannot grant\./,
     );
     expect(body).toMatch(
-      /normal authenticated web session whose exact account email is\s*present in the server's boot-time staff allowlist/,
+      /normal\s*signed-in web session for an account on a fixed staff allowlist/,
     );
+    expect(body).not.toMatch(/preHandler|boot-time/);
     expect(body).toMatch(/no\s*public or self-service "promote to admin" operation/);
     expect(body).toMatch(/generated\s*OpenAPI document is the authoritative current route list/);
   });
@@ -126,22 +127,24 @@ describe('W518.A apps/marketing-site/src/pages/docs/admin-api.astro content pari
 
   it('pins admin audit rows without claiming an unwired R2 archive', () => {
     expect(body).toMatch(
-      /Every admin write lands in <code>admin_audit_log<\/code> with the\s*acting admin key id, the action, the resource it touched, and\s*a timestamp\./,
+      /Every change made through the admin API is recorded in a separate\s*admin audit log with the acting staff identity, the action, the\s*resource it touched, and a timestamp\./,
     );
-    expect(body).toMatch(/does not claim an active R2 archive pipeline/);
+    expect(body).toMatch(/Retention follows the published legal and\s*operational policy\./);
+    expect(body).not.toMatch(/R2 archive|admin_audit_log/);
     expect(body).not.toMatch(/archived to R2 after 90 days/);
     expect(body).toMatch(
-      /The customer-facing\s*<a href="\/docs\/audit-log\/">audit log<\/a> page documents the\s*schema\./,
+      /The customer-facing\s*<a href="\/docs\/audit-log\/">audit log<\/a> page documents the\s*record format\./,
     );
   });
 
   it('pins implemented staff allowlist access and controlled revocation without a fictional CLI', () => {
     expect(body).toMatch(
-      /server adds\s*<code>driftstack_internal_admin<\/code> only when the account email matches\s*<code>DRIFTSTACK_STAFF_EMAILS<\/code> or the configured\s*<code>DRIFTSTACK_OWNER_EMAIL<\/code>/,
+      /server grants\s*<code>driftstack_internal_admin<\/code> only to accounts on a staff\s*allowlist\. That list is read when the service starts, so changing it\s*takes a controlled restart\./,
     );
     expect(body).toMatch(
-      /Revoke the affected web session and remove the email from staff authority/,
+      /Revoke the affected web session and remove the account from the staff\s*allowlist before that restart/,
     );
+    expect(body).not.toMatch(/DRIFTSTACK_STAFF_EMAILS|DRIFTSTACK_OWNER_EMAIL/);
     expect(body).toMatch(/does\s+not publish a separate admin-key CLI/);
     expect(body).not.toMatch(/drift admin keys (?:create|revoke)/);
   });

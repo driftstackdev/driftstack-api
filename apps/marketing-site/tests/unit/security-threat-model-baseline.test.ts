@@ -42,6 +42,8 @@ describe('W325.B /security threat-model baseline', () => {
   it("frames the customer's remote-target threat as out of scope", () => {
     // The doc must be clear that protecting the target site is the
     // customer's threat model, not Driftstack's.
-    expect(body).toMatch(/your threat model, not ours/i);
+    // 2026-09-15 plain-language pass: "your threat model, not ours" ->
+    // "yours to secure, not ours".
+    expect(body).toMatch(/inside a\s+session is yours to secure, not ours/i);
   });
 });

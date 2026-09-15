@@ -61,9 +61,10 @@ describe('W351.A /docs/pagination parity', () => {
     expect(body).toMatch(/<code>id DESC<\/code>\s*as the tiebreaker/);
   });
 
-  it('cursor opacity claim (base64 tuple, treat as black box) is pinned', () => {
-    expect(body).toMatch(/<strong>opaque<\/strong>/);
-    expect(body).toMatch(/base64-encoded/);
+  it('cursor opacity claim (treat as black box, encoding not described) is pinned', () => {
+    expect(body).toMatch(/<strong>opaque<\/strong>; treat them as black boxes/);
+    // An opaque cursor's encoding is not documented on the page.
+    expect(body).not.toMatch(/base64-encoded|tuples of/);
     expect(body).toMatch(/Don't parse or modify cursor strings/);
   });
 

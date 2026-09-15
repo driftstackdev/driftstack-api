@@ -8,13 +8,8 @@ description: Public status surface — overall health, component breakdown, inci
 
 The `/v1/status/*` surface backs the public Driftstack status site. It
 is intentionally **unauthenticated** — visitors don't have accounts —
-and IP-rate-limited at the edge. Cache-Control headers are set so a
-CDN (Cloudflare Pages in front of `status.driftstack.io`) can coalesce
-concurrent viewers onto one origin call.
-
-Distinct from `/health`, `/healthz`, and `/ready`, which are
-infrastructure-facing liveness / readiness probes consumed by the
-orchestrator. `/v1/status` is what HUMANS see.
+and rate-limited per IP. Snapshot and incident responses are cacheable
+for 30 seconds (see the `Cache-Control` headers below).
 
 ## Snapshot
 
@@ -48,16 +43,15 @@ Response (`200`):
 
 `overall_status` and per-component `status` are one of:
 
-- `operational` — probe succeeded within timeout
-- `degraded` — probe failed (transient error or timeout)
+- `operational` — the health check succeeded within its timeout
+- `degraded` — the health check failed (transient error or timeout)
 - `major_outage` — a service-wide outage affecting multiple components
 
 Aggregation: any `major_outage` → overall `major_outage`; otherwise
 any `degraded` → overall `degraded`; otherwise `operational`.
 
-`Cache-Control: public, max-age=30` — the snapshot is recomputed
-on every request, but the CDN coalesces requests within the 30s
-window.
+`Cache-Control: public, max-age=30` — the snapshot may be served from
+cache for up to 30 seconds.
 
 ## Incident feed
 
@@ -124,7 +118,7 @@ Response (`200`):
 ```
 
 Non-public incidents return `404` — the route deliberately returns the
-same shape as "incident doesn't exist" so probes can't enumerate
+same shape as "incident doesn't exist" so nobody can enumerate
 private incidents.
 
 ## Live stream
@@ -150,9 +144,8 @@ object (same shape as `GET /v1/status/incidents`), and `update` is the
 incident update that triggered the event.
 
 Heartbeat: a comment line is emitted every 30 seconds to keep the
-connection alive through proxies (Cloudflare's idle timeout is 60s;
-others vary). Comments start with `:` and are ignored by EventSource
-clients per the SSE spec.
+connection alive through proxies. Comments start with `:` and are
+ignored by EventSource clients per the SSE spec.
 
 Example (TypeScript browser):
 
@@ -172,7 +165,7 @@ Connection caps: the stream is public and unauthenticated, so it is
 bounded — **10 concurrent connections per IP** and **500 in total**.
 Past either, the request is refused with `503 feature-unavailable`
 (`Status stream at capacity; retry shortly.`) and a `Retry-After: 30`
-header, before the connection is upgraded.
+header, before the stream starts.
 
 The per-IP figure is the one worth designing around: browsers open one
 connection per tab, and everyone behind a single office NAT or corporate
@@ -185,8 +178,8 @@ one that does not will loop.
 
 `GET /v1/status/sla`
 
-Rolling 30-day uptime per probe target, computed from the
-system_health_probes table.
+Rolling 30-day uptime per monitored target, computed from
+Driftstack's automated health checks.
 
 Response (`200`):
 
@@ -208,9 +201,9 @@ Response (`200`):
 }
 ```
 
-Each probe target runs every 60 seconds, so the 30-day window holds
+Each target is checked every 60 seconds, so the 30-day window holds
 ~43,200 checks. `uptimePct` is `okCount / totalProbes * 100` rounded to
-three decimal places, and is `100` for a target with no probes yet.
+three decimal places, and is `100` for a target with no checks yet.
 `lastFailureAt` is `null` when the target has not failed inside the
 window. The window itself is reported as the `windowStart`/`windowEnd`
 timestamps rather than a day count.
@@ -281,17 +274,13 @@ Subscriber-token errors (expired token, already-used confirm token)
 also return `404` — surfacing them as distinct codes would let an
 attacker probe whether a given token had been issued.
 
-## Implementation notes
+## Notes
 
 - **Caching.** `/v1/status`, `/v1/status/incidents`, and the detail
-  route all send `Cache-Control: public, max-age=30`. The status site
-  polls every 30 seconds for live updates; the CDN serves the cached
-  response to concurrent viewers, sparing the origin.
-- **SSE auth.** The stream endpoint is unauthenticated by design —
-  there's no per-customer access concept on the status page.
-  Connection limits are enforced by Fastify + the per-IP TCP ceiling
-  at the OS / Cloudflare layer.
-- **Component probes.** Each component check runs with a 1.5 second
-  timeout. A timeout counts as `degraded`, not `major_outage` — the
-  status page doesn't surface "everything is on fire" without explicit
-  incident-management intent.
+  route all send `Cache-Control: public, max-age=30`; the status site
+  polls at that interval.
+- **Stream auth.** The stream endpoint is unauthenticated by design —
+  there's no per-customer access concept on the status page — and
+  capped per IP as described above.
+- **Component checks.** Each component check runs with a 1.5 second
+  timeout. A timeout counts as `degraded`, not `major_outage`.

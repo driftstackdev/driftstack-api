@@ -64,13 +64,13 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
   it('Slice 6 — documents the canonical modifier vocabulary + the harness-drops-DOM-names warning + the 3-SDK constant export locations', () => {
     expect(body).toMatch(/### Modifier vocabulary/);
     expect(body).toMatch(/`'cmd' \| 'ctrl' \| 'shift' \| 'option'`/);
-    // W3C key-action modifiers is the primary mapping (genuine WebKit key
-    // events); Quartz CGEventFlags is the legacy fallback. Wrap-tolerant.
-    expect(body).toMatch(/W3C key-action modifiers/);
-    expect(body).toMatch(/Quartz\s*`CGEventFlags`/);
+    // 2026-09-15 plain words — the W3C/Quartz mapping is how input is executed,
+    // not something the customer acts on; the four names are what they need.
+    expect(body).toMatch(/Use these four names:/);
     expect(body).toMatch(
-      /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) round-trip\s*\n?through the schema unchanged but the harness decoder drops them\./,
+      /DOM-standard names \(`Shift \/ Control \/ Alt \/ Meta`\) are accepted but\s*\n?ignored — use the four names above\./,
     );
+    expect(body).not.toMatch(/harness|Quartz|W3C/);
     expect(body).toMatch(/TS SDK re-exports `CANONICAL_MODIFIER_NAMES`/);
     expect(body).toMatch(
       /Python SDK exports\s*\n?`CANONICAL_MODIFIER_NAMES` from `driftstack\.resources\.agent_sessions`/,
@@ -84,8 +84,10 @@ describe('Arc 6 docs.live-video — guides/live-video.md parity', () => {
   });
 
   it('documents the 24-hour token TTL + how to handle expiry', () => {
-    expect(body).toMatch(/24-hour HS256 JWTs/);
+    expect(body).toMatch(/Tokens are valid for 24 hours and are only checked when you\s+connect/);
     expect(body).toMatch(/mint a fresh\s+token/);
+    // The signing scheme and per-Mac secret are internals a customer cannot act on.
+    expect(body).not.toMatch(/HS256|per-Mac secret/);
   });
 
   it('links to the gui-client reference implementation paths', () => {

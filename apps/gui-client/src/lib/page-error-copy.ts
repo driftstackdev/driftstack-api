@@ -32,11 +32,11 @@ export function pageErrorCopy(err: PageErrorInfo): string {
       // Don't tell the customer to "check the address": a share of DNS failures are
       // Driftstack's own (e.g. HTTP/3 resolution failing closed), where the address is
       // fine. State the fact, not a next action that may be a wild goose chase.
-      return "Couldn't resolve this site’s address (DNS lookup failed).";
+      return "Couldn't find this site’s address.";
     case 'tls':
       // Don't blame the site's certificate: a share of TLS failures are Driftstack's own
       // validator refusing a chain the OS would accept. Name the handshake, not a party.
-      return 'Secure connection failed — the TLS handshake didn’t complete (the site, the network, or the proxy).';
+      return 'Secure connection failed — the site, your network, or the proxy may be the cause.';
     case 'http': {
       // HTTP statuses are user-comprehensible, so keep the number — but lead with
       // plain "what happened" copy rather than a bare "HTTP 404".

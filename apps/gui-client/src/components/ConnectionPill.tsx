@@ -44,7 +44,7 @@ export function ConnectionPill({ status, baseUrl, onClick }: Props): JSX.Element
       ? `Last ok ${formatLastOk(status.lastOkAt)} · ${baseUrl}`
       : status.state === 'offline'
         ? `${status.lastError ?? 'Unknown error'} · ${baseUrl}`
-        : `Probing ${baseUrl}…`;
+        : `Checking the connection to ${baseUrl}…`;
   return (
     <button
       type="button"

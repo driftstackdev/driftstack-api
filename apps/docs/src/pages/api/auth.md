@@ -20,12 +20,12 @@ Driftstack has three auth surfaces:
 
 All three use the same `Authorization: Bearer <token>` header. Paid
 customer keys use `ds_live_…`; the desktop device flow returns a
-provenance-bound credential (`ds_test_…` on Free); web sessions are
+device credential (`ds_test_…` on Free); web sessions are
 opaque base64 tokens. The server enforces the stored credential type
 and account tier as well as the token shape.
 
 Ordinary customer API keys and OAuth access tokens are rejected while
-their account is on Free, even if authentication was previously cached.
+their account is on Free, on every request.
 They resume after an upgrade unless separately revoked or expired. The
 response is the normal RFC 9457 `403 Forbidden`, with actionable detail:
 `The "apiAccess" feature is not available on the "free" tier. Upgrade to a tier that includes this feature.`
@@ -227,8 +227,8 @@ factor within a 15-minute freshness window.
 { "code": "123456" }
 ```
 
-Returns `200`; no new session issued — the existing session row
-gets `mfa_satisfied_at = now()`.
+Returns `200`; no new session is issued — the existing session's
+`mfa_satisfied_at` is set to now.
 
 ## Magic link
 
@@ -324,9 +324,8 @@ Step 2 — **Bind** — the user signs in to the dashboard (if not already),
 types the `user_code` shown by the initiating device, and clicks
 Authorize. The dashboard hits
 `POST /v1/auth/cli-authorize/bind-device-code` with the user's
-web-session bearer; the server mints a provenance-bound device credential
-on the calling account and stores only its encrypted envelope under a hashed code
-identifier (Redis, 2-minute post-bind TTL).
+web-session bearer; the server creates a device credential on the calling
+account, stored encrypted; the desktop app must collect it within 2 minutes.
 
 ## Exchange for the device credential
 

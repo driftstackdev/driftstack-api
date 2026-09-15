@@ -38,19 +38,19 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
       /<span class="font-mono text-sm text-tk-accent-text">\$0 · no card<\/span>/,
     );
     expect(body).toMatch(
-      /Your account is already on the free plan: 1 profile, 1 concurrent\s*session of up to 20 minutes\. No subscription, no expiry/,
+      /Your account is already on the free plan: 1 profile, 1 session at a time, each\s*session of up to 20 minutes\. No subscription, no expiry/,
     );
     expect(body).toMatch(
       /<a href="\/" class="btn-primary inline-flex">\s*Go to your dashboard\s*<\/a>/,
     );
   });
 
-  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + paid customer keys/SDK automation", () => {
+  it("Monthly-tiers framing (R6 plain language): '$79–$1,499 / mo' + paid API keys / SDK from your own code", () => {
     expect(body).toMatch(
       /<span class="font-mono text-sm text-tk-ink-3">\$79–\$1,499 \/ mo<\/span>/,
     );
     expect(body).toMatch(
-      /Upgrade to a paid plan for more concurrency, more profiles, customer API\s*keys, and SDK automation — Personal for hand-\s*driven sessions, all the way up to API Scale for high-volume\s*automation\. Cancel anytime\./,
+      /Upgrade to a paid plan to run more sessions at once, save more profiles, and\s*use API keys and the SDK from your own code — Personal for hand-\s*driven sessions, all the way up to API Scale for high-volume\s*automation\. Cancel anytime\./,
     );
     expect(body).toMatch(
       /<a href="\/select-tier\/" class="btn-secondary mt-4 inline-flex">View tiers<\/a>/,
@@ -65,16 +65,19 @@ describe('W491.B apps/customer-dashboard/src/pages/welcome.astro content parity'
     );
     expect(body).toMatch(/Your card details stay between you\s*and Stripe — we never see them\./);
     // Step 2 — the app is a PUBLIC cross-platform download; browser sign-in then
-    // provisions the restricted app credential. Not OS-code-signed.
+    // gives the app its own limited credential. Not signed with Apple or Microsoft
+    // yet, said in customer words (2026-09-15 plain-words pass).
     expect(body).toMatch(
-      /Download the desktop app for macOS, Windows or Linux, then choose\s*browser sign-in\. Driftstack provisions a restricted device\s*credential for the app; that's where Free customers launch and drive\s*iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s*macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
+      /Download the desktop app for macOS, Windows or Linux, then choose\s*browser sign-in\. The app signs in with its own limited credential,\s*and that's where Free customers launch and drive iPhone Safari\s*sessions\. Your computer may show a security warning on first launch\s*because the app isn't yet signed with Apple or Microsoft; this is expected\./,
     );
     expect(body).toContain('https://github.com/driftstackdev/driftstack-api/releases/latest');
-    // Step 3 — customer keys/SDK automation require a paid API tier.
+    // Step 3 — API keys / running sessions from code require a paid plan with API access.
     expect(body).toMatch(
-      /On an API-enabled paid tier, create a customer API key for SDK\s*automation\. Customer keys can be revoked or rotated any time;\s*Free desktop sign-in does not require one\./,
+      /On a paid plan with API access, create an API key to run sessions\s*from your own code\. Keys can be revoked or rotated any time; the\s*Free plan's desktop sign-in doesn't need one\./,
     );
-    expect(body).toMatch(/restricted device credential for the\s+app, not a customer API key/);
+    expect(body).toMatch(
+      /the app gets its own limited sign-in credential, so\s+you don't need an API key/,
+    );
     expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
     // The numbered-circle visual treatment: glow-red bordered round badges 1/2/3.
     expect(body).toMatch(/rounded-full border border-tk-accent\/40 bg-tk-accent\/10/);

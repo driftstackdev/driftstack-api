@@ -46,7 +46,7 @@ describe('W365.A marketing-site /security page parity', () => {
 
   it('6 numbered pillar slots present (transport / egress / api-keys / webhooks / rbac / live-media). 2026-07-17 (e36e5b4e2) — pillar 06 renamed from "No-customer-data-access posture" to "Live-media handling": the old pillar claimed screenshots / DOM snapshots / cookies "never reach our servers", which the Capture endpoint contradicts (they pass through the API inline and are simply not retained). The narrower implemented boundary is pinned here; the overclaimed label is negatively pinned so it cannot return.', () => {
     expect(body).toMatch(/01 · Transport/);
-    expect(body).toMatch(/02 · Egress/);
+    expect(body).toMatch(/02 · Proxies/); // 2026-09-15: plain label; glossary "egress" linked in the body
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept in parens
@@ -57,33 +57,37 @@ describe('W365.A marketing-site /security page parity', () => {
   });
 
   it('egress framed as the SHIPPED per-profile SOCKS5 exit, with UDP/QUIC + remote DNS stated as proxy-dependent. 2026-07-17 (e36e5b4e2) — OpenVPN / WireGuard pins retired: no server-side egress backend exists (only SocksProxyBackend implements SessionEgressService), the pre-launch proxy gate skips VPN schemes, and the green sibling guard apps/server/tests/unit/security-page-doc-parity.test.ts (W246.A) forbids both words on this page. The unconditional "UDP/WebRTC/QUIC tunnelling" + "DNS leaks blocked" absolutes are negatively pinned — the impl makes both proxy-capability-dependent.', () => {
-    expect(body).toMatch(/02 · Egress/);
-    expect(body).toMatch(/A profile can attach a public SOCKS5 proxy as its exit/);
-    expect(body).toMatch(/Per-profile SOCKS5; capability reported after launch\./);
+    // 2026-09-15 plain-language pass: same facts, customer words.
+    expect(body).toMatch(/02 · Proxies/);
+    expect(body).toMatch(/A profile can attach a SOCKS5 proxy at a public address as its\s+exit/);
+    expect(body).toMatch(/Per-profile SOCKS5; UDP support shown once the session is running\./);
     // Fail-closed limitation disclosures — load-bearing.
-    expect(body).toMatch(/blocks internal proxy targets, and requests\s+remote DNS/);
+    expect(body).toMatch(/website address lookups go through the proxy\s+too/);
+    expect(body).toMatch(/Proxies on\s+private or local addresses[\s\S]{0,90}are not accepted/);
     expect(body).toMatch(
-      /UDP \/ WebRTC \/ QUIC routing depends on the proxy's\s+reported UDP capability/,
+      /Whether WebRTC and HTTP\/3\s+traffic can use the proxy depends on your proxy's UDP support/,
     );
     expect(body).toMatch(
-      /Without an\s+attached config, session traffic exits via Driftstack-managed\s+infrastructure/,
+      /Without a proxy\s+attached, session traffic exits through Driftstack's managed\s+exit/,
     );
-    expect(body).toMatch(/We never store destination response bodies/);
+    expect(body).toMatch(/We never store the pages your sessions visit/);
     // The two claims the implementation contradicts must stay gone.
     expect(body).not.toMatch(/DNS\s+leaks blocked/);
     expect(body).not.toMatch(/that many proxies drop/);
   });
 
-  it('scrypt logN=15 + 30s sha256-keyed auth cache parameters pinned (falsifiable claims)', () => {
-    expect(body).toMatch(/scrypt \(logN=15\)/);
-    // S20c 2026-07-06 plain-language pass: same 30s sha256-keyed cache
-    // fact, said plainly.
+  it('scrypt + 30s auth cache claims pinned (falsifiable claims; the logN=15 parameter lives on docs/security-overview)', () => {
+    // 2026-09-15 plain-language pass: the tuning parameter and the
+    // cache-key hash moved off the plain-terms page (see
+    // security-scrypt-claim-parity for the logN pin); the algorithm
+    // name, the 30-second window and the no-recovery-path claim stay.
+    expect(body).toMatch(/API keys are scrambled one-way with scrypt/);
     expect(body).toMatch(
-      /remembered for 30 seconds in a protected in-memory\s+cache \(sha256-keyed\)/,
+      /a key that was just checked is remembered in\s+protected short-term memory for 30 seconds/,
     );
     // The "Plaintext is returned exactly once" claim is the same
     // promise customer-dashboard /api-keys makes — load-bearing.
-    expect(body).toMatch(/The\s+readable key is shown exactly once, when you create it/);
+    expect(body).toMatch(/The readable key is shown exactly\s+once, when you create it/);
   });
 
   it('webhook signature shape t=<timestamp>,v1=<hex> + 5-min replay window pinned (V-359)', () => {
@@ -108,11 +112,14 @@ describe('W365.A marketing-site /security page parity', () => {
     // S30 2026-07-07 (founder decision: soften): "Cloudflare R2 EU"
     // dropped from the in-the-EU parenthetical — R2 file objects live
     // in the default jurisdiction and can replicate outside the EU.
+    // 2026-09-15 plain-language pass: "Compute" -> "Servers", the
+    // city dropped (this page said Falkenstein while /trust said
+    // Nuremberg; the country is what the customer needs).
     expect(body).toMatch(
-      /Compute and database in the EU \(Hetzner in\s+Falkenstein, Germany \+ Neon EU \+ Upstash EU\)\./,
+      /Servers and database are in the EU \(Hetzner, Germany; Neon EU;\s+Upstash EU\)\./,
     );
     expect(body).toMatch(
-      /Uploaded files\s+\(avatars, for example\) sit on Cloudflare R2, which can\s+replicate outside the EU\./,
+      /Uploaded files \(avatars, for example\) are on\s+Cloudflare R2, which can keep copies outside the EU\./,
     );
     // S30 negative pin — the blanket claim must not silently return.
     expect(body).not.toMatch(/Compute, database, object storage all in the EU/);
@@ -198,11 +205,18 @@ describe('W365.A marketing-site /security page parity', () => {
   // post-deploy health-check with automatic rollback, public
   // /version SHA endpoint — deploy.yml / server-deploy.yml
   // V-549.A/B / app.ts V-195).
-  it('supply-chain section pinned: Node 22 LTS / Dependabot (no Renovate) / locked installs + gated deploys', () => {
-    expect(body).toMatch(/Node 22 LTS/);
-    expect(body).toMatch(/<h3 class="text-base font-medium text-tk-ink">Dependabot<\/h3>/);
+  // 2026-09-15 plain-language pass: the framework list, the tool name
+  // (Dependabot) and the deploy-pipeline vocabulary left the customer
+  // page; the same controls are pinned in customer words.
+  it('supply-chain section pinned: stable stack / automatic dependency updates (no Renovate) / tested, approved, reversible releases', () => {
     expect(body).toMatch(
-      /only\s+the smallest class of update \(bug-fix-only\s+patch releases\) may merge automatically/,
+      /small, stable set of well-known components\s+\(Node\.js, TypeScript, Postgres, Redis\) that rarely changes/,
+    );
+    expect(body).toMatch(
+      /<h3 class="text-base font-medium text-tk-ink">Automatic dependency updates<\/h3>/,
+    );
+    expect(body).toMatch(
+      /only\s+small bug-fix updates go in automatically, and anything\s+bigger waits for human review/,
     );
     // The false SBOM/signed-image claims must stay gone. (The word
     // "Renovate" may only appear inside the S26 explanatory comment;
@@ -212,13 +226,13 @@ describe('W365.A marketing-site /security page parity', () => {
     expect(body).not.toMatch(/container image\) is cryptographically signed/);
     expect(body).not.toMatch(/SBOM, in the standard/);
     // The honest deploy controls pinned.
-    expect(body).toMatch(/pinned in a lockfile checked\s+into the repository/);
+    expect(body).toMatch(/Every software component is fixed to an exact version/);
     expect(body).toMatch(
-      /staging first, then an explicit manual approval or\s+a deliberately cut release tag/,
+      /reaches production only after running on a test copy\s+first and being explicitly approved/,
     );
-    expect(body).toMatch(/automatically rolls\s+back to the previous version if that check fails/);
+    expect(body).toMatch(/automatically rolled back if\s+that check fails/);
     expect(body).toMatch(
-      /which source-code revision\s+production is running via our public\s+\/version endpoint/,
+      /anyone can see exactly which version\s+is running at <code class="font-mono">api\.driftstack\.dev\/version<\/code>/,
     );
   });
 });

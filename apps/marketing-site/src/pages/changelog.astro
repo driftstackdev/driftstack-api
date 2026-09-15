@@ -20,13 +20,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-07-03',
     category: 'launch',
     title: 'A clearer driftstack.io',
-    body: 'The public site has been redesigned. Plainer language on every page — what each thing does first, with the precise technical claims kept in the small print. A rebuilt homepage shows the desktop app and the fleet of open iPhone sessions it drives. The site now ships its brand typography (self-hosted, no third-party requests), the groundwork for an accessible light theme is in place, and shared links get a fresh preview card. Prices, plans, and the API are unchanged.',
+    body: 'The public site has been redesigned. Plainer language on every page — what each thing does first, with the precise technical claims kept in the small print. A rebuilt homepage shows the desktop app and the open iPhone sessions it drives. The site now ships its brand typography (self-hosted, no third-party requests), the groundwork for an accessible light theme is in place, and shared links get a fresh preview card. Prices, plans, and the API are unchanged.',
   },
   {
     date: '2026-06-16',
     category: 'launch',
     title: 'Route sessions through your own proxies',
-    body: 'You can now register your own SOCKS5 proxies against your account and run an agent session through one, so websites see your proxy\'s address as where the browsing comes from (your egress IP). Manage them in the desktop app under Proxies or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass an owned saved proxy_id when creating an agent session to choose the exit per run. The direct /v1/sessions and /v1/profiles/:id/launch verbs do not accept raw proxy data. Proxy passwords are stored encrypted while saved on our servers (encrypted at rest) under your account\'s own key and are never shown back to anyone, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.io/api/proxies.',
+    body: 'You can now register your own SOCKS5 proxies against your account and run an agent session through one, so websites see your proxy\'s address as where the browsing comes from. Manage them in the desktop app under Proxies or via the API at /v1/account/me/proxies — list, create, update, delete, and test reachability. Pass an owned saved proxy_id when creating an agent session to choose the exit per run. Proxy details cannot be passed inline to /v1/sessions or /v1/profiles/:id/launch — save the proxy first and use its proxy_id. Proxy passwords are stored encrypted while saved on our servers (encrypted at rest) under your account\'s own key and are never shown back to anyone, and hosts pointed at private or internal addresses are rejected. Documented at docs.driftstack.io/api/proxies.',
   },
   {
     date: '2026-06-16',
@@ -38,19 +38,19 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-06-11',
     category: 'launch',
     title: 'Desktop app: the session viewer is now a real phone browser',
-    body: 'The live session view in the desktop app grew up: an editable address bar with reload, browser-style tabs (each tab is one of your concurrent sessions — sessions started from the dashboard or API appear automatically), an iPhone-style device frame that matches your session’s real screen shape (toggleable for pixel-level debugging), a page-loading bar, and honest page-error overlays (DNS, TLS, HTTP status, timeout) with one-click retry. Launching a profile now always lands you in a working viewer: deployments without live video streaming fall back to the direct viewer automatically, and an empty stream room says so instead of showing a black screen. The Dev Logs panel now also captures every failing API call and every visible error, so self-hosted debugging no longer needs devtools.',
+    body: 'The live session view in the desktop app grew up: an editable address bar with reload, browser-style tabs (each tab is one of your concurrent sessions — sessions started from the dashboard or API appear automatically), an iPhone-style device frame that matches your session’s real screen shape (toggleable for pixel-level debugging), a page-loading bar, and honest page-error overlays (DNS, TLS, HTTP status, timeout) with one-click retry. Launching a profile now always lands you in a working viewer: deployments without live video streaming fall back to the direct viewer automatically, and if a stream hasn\'t started yet the viewer says so instead of showing a black screen. The Dev Logs panel now also captures every failing API call and every visible error, so self-hosted debugging no longer needs devtools.',
   },
   {
     date: '2026-06-11',
     category: 'sdk',
     title: 'Sensitive-field typing + page lifecycle on session state',
-    body: "Two additive API surfaces. (1) The type action accepts sensitive: true for card numbers, OTPs and PINs — the human-typing simulation then makes no visible corrections while typing them, so per-keystroke validation and auto-submit-on-length can't misfire (password fields get this automatically; the flag covers values the DOM can't reveal). All three SDKs carry it. (2) GET /v1/sessions/:id/state now includes page_state — the page lifecycle as the browser sees it (loading / loaded / errored, with error kind and HTTP status on failures) — so pollers can render loading and error states without screenshot guesswork. Both are documented at docs.driftstack.io/api/sessions.",
+    body: "Two additive API surfaces. (1) The type action accepts sensitive: true for card numbers, OTPs and PINs — the human-typing simulation then makes no visible corrections while typing them, so per-keystroke validation and auto-submit-on-length can't misfire (password fields get this automatically; the flag is for fields the page doesn't mark as secret). All three SDKs carry it. (2) GET /v1/sessions/:id/state now includes page_state — the page lifecycle as the browser sees it (loading / loaded / errored, with error kind and HTTP status on failures) — so pollers can render loading and error states without screenshot guesswork. Both are documented at docs.driftstack.io/api/sessions.",
   },
   {
     date: '2026-06-11',
     category: 'self-hosted',
     title: 'Self-hosted: sessions no longer require a proxy',
-    body: 'On self-hosted deployments, direct sessions can reach the internet from your own machine, so SESSION_PROXY_REQUIRED=false keeps proxy-free direct creation available. Unset follows backend inference; true or inferred true now fails the entire direct /v1/sessions and /v1/profiles/:id/launch surface closed because those verbs have no typed consumed egress authority. A raw proxy key is rejected, never treated as proof of egress. Customer-controlled proxy routing uses an owned saved proxy_id on /v1/agent-sessions.',
+    body: 'On self-hosted deployments, sessions can reach the internet directly from your own machine, so a proxy is no longer required. Set SESSION_PROXY_REQUIRED=false to allow sessions without a proxy. When it is true (or left unset on a deployment that has proxy routing configured), POST /v1/sessions and POST /v1/profiles/:id/launch are refused entirely, because those endpoints cannot route through a proxy. Proxy details are never accepted inline. To run a session through your own proxy, create an agent session via POST /v1/agent-sessions with the proxy_id of a saved proxy.',
   },
   {
     date: '2026-06-11',
@@ -85,8 +85,8 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-29',
     category: 'pricing',
-    title: 'Manual-ladder plans renamed: Personal, Team, Agency',
-    body: 'The three Manual-ladder plans now have clearer names — Personal (formerly Solo Manual), Team (formerly Team Manual), and Agency (formerly Agency Manual) — so the personal-vs-team distinction reads at a glance. Prices, profile counts, concurrent caps, and the underlying tier identifiers are unchanged: this is a display-name change only, so existing subscriptions and API tier ids (solo_manual / team_manual / agency_manual) are unaffected. The API ladder (API Starter / Builder / Scale) and Enterprise keep their names.',
+    title: 'Manual plans renamed: Personal, Team, Agency',
+    body: 'The three Manual plans now have clearer names — Personal (formerly Solo Manual), Team (formerly Team Manual), and Agency (formerly Agency Manual) — so the personal-vs-team distinction reads at a glance. Prices, profile counts, concurrent caps, and the underlying tier identifiers are unchanged: this is a display-name change only, so existing subscriptions and API tier ids (solo_manual / team_manual / agency_manual) are unaffected. The API plans (API Starter / Builder / Scale) and Enterprise keep their names.',
   },
   {
     date: '2026-05-27',
@@ -95,43 +95,43 @@ const ENTRIES: readonly ChangelogEntry[] = [
     // S43 2026-07-07 (founder-approved) — claims fix: "starts on the
     // API ladder" was false (every paid tier includes API access, per
     // TIER_FEATURES); the free tier's manual-only claim is true.
-    body: 'The entry tier is now a perpetual free tier: $0 forever, one persistent profile, one concurrent session, manual sessions up to 20 minutes each, driven from the desktop GUI client, no card required. It is manual-only — programmatic API/SDK access comes with the paid tiers. There is no expiry, no credit to run out, and no usage metering. This replaces the previous one-time $2.99 trial pack entirely.',
+    body: 'The entry tier is now a perpetual free tier: $0 forever, one persistent profile, one concurrent session, manual sessions up to 20 minutes each, driven from the desktop app, no card required. It is manual-only — programmatic API/SDK access comes with the paid tiers. There is no expiry, no credit to run out, and no usage metering. This replaces the previous one-time $2.99 trial pack entirely.',
   },
   {
     date: '2026-05-22',
     category: 'pricing',
     title: 'Crypto checkout is live via NowPayments',
-    body: 'Crypto checkout is live for self-serve paid tiers ($79/mo and up). Pay with BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments from the billing dashboard; orders move pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default way to pay; Enterprise pays by bank wire. Crypto payments are non-refundable. Full reference at docs.driftstack.io/api/billing-crypto.',
+    body: 'Crypto checkout is live for paid plans ($79/mo and up). Pay with BTC, LTC, USDT, USDC, ETH, or XMR through NowPayments from the billing dashboard; orders move pending → confirming → paid as on-chain confirmations land. crypto.order.paid and crypto.order.failed are emitted and subscribable via POST /v1/webhooks. Stripe remains the default way to pay; Enterprise pays by bank wire. Crypto payments are non-refundable. Full reference at docs.driftstack.io/api/billing-crypto.',
   },
   {
     date: '2026-05-20',
     category: 'launch',
     title: 'Account notification stream (SSE) — cost / incident / audit / session events',
-    body: "Your account now has a single live event feed — real-time alerts your code or the desktop app can listen to — via the new GET /v1/account/me/notifications Server-Sent Events (SSE) endpoint. Four kinds in v0: cost.threshold_alert (fires on tier-spend transitions; warn / critical / resolved), incident.broadcast (customer-visible status incidents with minor / major / outage severity), audit.high_severity (selective republish for high-severity audit actions like api_key.revoked / byok_anthropic.key_set / team.member_removed), and session.errored (driver-terminal errors before customer destroy). Each event is labelled by kind (the SSE event: header), so code can listen for only the kinds it cares about — EventSource.addEventListener('cost.threshold_alert', ...). The desktop GUI client ships with the wired panel: subscribeNotifications + useNotifications hook + NotificationToastStack overlay component already mounted at the App shell. First version: if the connection drops it reconnects itself after ~3 seconds (native EventSource auto-reconnect), but events sent while you were disconnected aren't replayed yet (in-memory bus, no Last-Event-ID resume). Full reference at docs.driftstack.io/api/account-notifications.",
+    body: "Your account now has a single live event feed — real-time alerts your code or the desktop app can listen to — via the new GET /v1/account/me/notifications Server-Sent Events (SSE) endpoint. Four kinds to start: cost.threshold_alert (spend warnings: warn / critical / resolved), incident.broadcast (status incidents: minor / major / outage), audit.high_severity (high-severity account actions such as an API key being revoked or a team member removed), and session.errored (a session ended with an error). Each event carries its kind as the SSE event name, so your code can listen for only the kinds it cares about — for example EventSource.addEventListener('cost.threshold_alert', ...). The desktop app shows these as notifications. First version: if the connection drops it reconnects itself after about 3 seconds, but events sent while you were disconnected aren't replayed yet. Full reference at docs.driftstack.io/api/account-notifications.",
   },
   {
     date: '2026-05-20',
     category: 'launch',
     title: 'Antidetect-browser-style profile launch (one-shot)',
-    body: 'POST /v1/sessions now accepts an optional profile_id field; cross-account profile_id returns 404 (anti-enumeration). New POST /v1/profiles/:id/launch wraps the sessions.create path into a single round-trip — server inherits the profile\'s archetype, stamps {profile_id, profile_name} into session metadata, and bumps the profile\'s last_used_at fire-and-forget. The dashboard /profiles page gains a per-row Launch primary CTA placed before Clone/Export/Snapshot/Delete; the desktop GUI client already exposed Launch since the earlier antidetect-browser hub restructure. SDK helpers shipped in all three languages: client.profiles.launch(id, body?) in TypeScript + Python (sync + async); ProfilesResource.Launch(ctx, profileID, body) in Go. Full reference at docs.driftstack.io/api/profiles#launch.',
+    body: 'POST /v1/sessions now accepts an optional profile_id; a profile_id that is not in your account returns 404. New POST /v1/profiles/:id/launch starts a session from a saved profile in a single call — the session uses the profile\'s device profile, records the profile\'s id and name in the session metadata, and updates the profile\'s last-used time. The dashboard /profiles page gains a Launch button on every row; the desktop app already had one. SDK helpers shipped in all three languages: client.profiles.launch(id, body?) in TypeScript + Python (sync + async); ProfilesResource.Launch(ctx, profileID, body) in Go. Full reference at docs.driftstack.io/api/profiles#launch.',
   },
   {
     date: '2026-05-18',
     category: 'launch',
     title: 'Live video for agent sessions (LiveKit WebRTC)',
-    body: 'Every Mac in the Driftstack fleet now runs its own LiveKit server; agent sessions publish their browser video stream into a per-session room. POST /v1/agent-sessions/{id}/livekit-token mints a 24-hour subscriber JWT; session-create auto-populates the same join info inline on the response so clients connect immediately. The desktop GUI client gains AgentSessionPanel (livekit-client subscriber) + LivekitConnectionBadge (live/reconnecting/error state) + DataChannel input forwarding (keyboard + mouse → Quartz CGEvents on the Mac) + dev-mode RTT measurement. Full reference at docs.driftstack.io/api/agent-sessions.',
+    body: 'Agent sessions now stream live video of the browser. POST /v1/agent-sessions/{id}/livekit-token returns a 24-hour viewer token, and the create-session response includes the same join details so clients can connect immediately. The desktop app shows the live stream with a connection-status badge and forwards your keyboard and mouse input to the session. Full reference at docs.driftstack.io/api/agent-sessions.',
   },
   {
     date: '2026-05-18',
     category: 'launch',
     title: 'Agent sessions: natural-language automation with AI / manual / pair modes',
-    body: 'Tell any session what to do in plain language (a chat-style decompose-and-execute loop layered on top of any driver session). Send a user message ("open https://example.com and capture a screenshot"); the server\'s decomposer translates it into concrete browser steps — structured intents (navigate, interact, wait, capture) — and the runtime executes them. Three operational modes: AI (default — every message goes through decompose), manual (pass-through for clients driving via their own UI), and pair (interactive takeover state machine — AI drives by default, the customer can take over and hand back). Live transcript via Server-Sent Events on /v1/agent-sessions/{id}/transcript with Last-Event-ID resume. Full reference at docs.driftstack.io/api/agent-sessions.',
+    body: 'Tell any session what to do in plain language. Send a message ("open https://example.com and capture a screenshot") and Driftstack turns it into concrete browser steps — navigate, interact, wait, capture — and runs them. Three modes: AI (default — the agent carries out every message), manual (you drive through your own UI), and pair (the AI drives by default; you can take over and hand back at any time). Live transcript via Server-Sent Events on /v1/agent-sessions/{id}/transcript, with resume after a dropped connection. Full reference at docs.driftstack.io/api/agent-sessions.',
   },
   {
     date: '2026-05-18',
     category: 'launch',
     title: 'BYOK Anthropic API keys + bundled-LLM rail for agent sessions',
-    body: 'Two ways to power the agent-session decomposer. BYOK — bring your own Anthropic key via PUT /v1/account/me/byok-anthropic-key (AES-256-GCM at rest; never echoed in responses; rotate, clear, and test-connection endpoints are live). Bundled LLM — opt in via PATCH /v1/account/me/bundled-llm-settings; the decomposer then uses a deployment-managed Anthropic budget with monthly used, remaining, and refused totals. Per-request override is available through x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.io/api/byok-anthropic and docs.driftstack.io/api/bundled-llm.',
+    body: 'Two ways to power the AI in agent sessions. BYOK — bring your own Anthropic key via PUT /v1/account/me/byok-anthropic-key (stored encrypted; never shown back in responses; rotate, clear, and test-connection endpoints are live). Bundled LLM — opt in via PATCH /v1/account/me/bundled-llm-settings; agent sessions then run on a Driftstack-provided monthly allowance, with used, remaining, and refused totals reported. Per-request override is available through x-byok-anthropic-api-key on /v1/agent-sessions/{id}/message. Full references at docs.driftstack.io/api/byok-anthropic and docs.driftstack.io/api/bundled-llm.',
   },
   {
     date: '2026-05-18',
@@ -155,7 +155,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-09',
     category: 'launch',
     title: 'Account region preference (US / EU / APAC)',
-    body: 'Set an infrastructure region preference from /settings → Region. The selector records account preference; it does not change data location. Driftstack runs on EU-jurisdiction infrastructure for every account today; the full processor and transfer details are listed at /trust/sub-processors.',
+    body: 'Set a region preference from /settings → Region. It records your preference only; it does not change where your data is stored. Every account\'s data is stored on servers under EU jurisdiction today; the full provider and transfer details are listed at /trust/sub-processors.',
   },
   {
     date: '2026-05-09',
@@ -167,13 +167,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-09',
     category: 'security',
     title: 'Webhook signing-secret rotation with 24-hour grace',
-    body: 'Rotate any webhook endpoint\'s signing secret from /webhooks → Rotate secret. The new plaintext is shown once; the old secret stays valid for 24 hours so you can roll the new value across your verifier infrastructure without dropped deliveries. Driftstack dual-signs every outbound delivery during the grace inside the single x-driftstack-signature header (t=…,v1=<new>,v1=<old>); SDK verifiers in TypeScript, Python, and Go check every v1= entry and accept the delivery if either matches.',
+    body: 'Rotate any webhook endpoint\'s signing secret from /webhooks → Rotate secret. The new plaintext is shown once; the old secret stays valid for 24 hours so you can roll the new value out to your systems without dropped deliveries. Driftstack dual-signs every outbound delivery during the grace inside the single x-driftstack-signature header (t=…,v1=<new>,v1=<old>); SDK verifiers in TypeScript, Python, and Go check every v1= entry and accept the delivery if either matches.',
   },
   {
     date: '2026-05-09',
     category: 'security',
     title: 'Active sign-ins list + per-session revoke',
-    body: 'See every browser session currently signed in to your account from /settings → Active sign-ins. Revoke any individual session, or sign out of every other session at once. IPs are intentionally omitted; user-agents are reduced to OS + browser bucket so the dashboard renders signal without surfacing fingerprintable strings.',
+    body: 'See every browser session currently signed in to your account from /settings → Active sign-ins. Revoke any individual session, or sign out of every other session at once. IP addresses are intentionally left out, and each sign-in shows just the operating system and browser name rather than the full browser identity string.',
   },
   {
     date: '2026-05-09',
@@ -182,13 +182,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     // S30 2026-07-07 (founder decision: soften) — avatars live on
     // Cloudflare R2 in the default jurisdiction (EU + US replication),
     // so "EU-resident" was dropped from this entry.
-    body: 'Upload a 2 MB PNG/JPEG/WebP avatar from /settings (stored in private object storage; presigned read URLs). Set a lowercase a-z + 0-9 + hyphen account "slug" as a stable handle for support tickets, billing references, and audit entries. Per-vendor breakdown on /trust/sub-processors.',
+    body: 'Upload a 2 MB PNG/JPEG/WebP avatar from /settings (stored privately and served through short-lived links). Set a lowercase a-z + 0-9 + hyphen account "slug" as a stable handle for support tickets, billing references, and audit entries. Per-vendor breakdown on /trust/sub-processors.',
   },
   {
     date: '2026-05-09',
     category: 'launch',
     title: 'Webhook test deliveries from the dashboard',
-    body: 'Click "Send test" on any webhook endpoint and Driftstack dispatches a synthetic test.ping event through the same delivery infrastructure as production events: HMAC-signed, retried on failure, audit-logged. Lets you confirm your handler signature-checks correctly before relying on it for real events. test.ping is delivery-side only — you can\'t subscribe to it.',
+    body: 'Click "Send test" on any webhook endpoint and Driftstack sends a test.ping event the same way real events are sent: signed, retried on failure, and recorded in the audit log. Lets you confirm your handler signature-checks correctly before relying on it for real events. test.ping is delivery-side only — you can\'t subscribe to it.',
   },
   {
     date: '2026-05-09',
@@ -206,7 +206,7 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-08',
     category: 'sdk',
     title: 'PlaywrightDriver added for self-hosted local development',
-    body: 'Set DRIVER=playwright + PLAYWRIGHT_BROWSER=webkit|chromium|firefox to run end-to-end smoke tests against a real browser without waiting for the WebKit fork to integrate. Dev/E2E only — production stays on DRIVER=webkit (the modified WebKit fork). Self-hosted Mac runbook at docs/runbooks/self-hosted-mac-local.md walks through the entire local-stack setup; npm run dev:all starts every surface concurrently.',
+    body: 'Self-hosted developers can set DRIVER=playwright with PLAYWRIGHT_BROWSER=webkit|chromium|firefox to run local end-to-end tests against a standard browser. For local development and testing only — live sessions always run on Driftstack\'s real iPhone Safari engine.',
   },
   {
     date: '2026-05-08',
@@ -218,13 +218,13 @@ const ENTRIES: readonly ChangelogEntry[] = [
     date: '2026-05-08',
     category: 'launch',
     title: 'Public status page at status.driftstack.io',
-    body: 'Live system status, incident history, and a 30-day SLA panel. Subscribe by email for incident notifications (double-opt-in, per-email unsubscribe link). The site is independent of api.driftstack.dev so a control-plane outage does not take the status page down.',
+    body: 'Live system status, incident history, and a 30-day SLA panel. Subscribe by email for incident notifications (double-opt-in, per-email unsubscribe link). The status page runs separately from api.driftstack.dev, so it stays up even if the API is down.',
   },
   {
     date: '2026-05-08',
     category: 'security',
     title: 'GDPR Article 20 portability — full audit log export',
-    body: 'Customers can now export their complete account audit log as CSV or JSON via /v1/account/audit-log/export from the dashboard. 10K-row ceiling per export with cursor pagination beyond.',
+    body: 'Customers can now export their complete account audit log as CSV or JSON via /v1/account/audit-log/export from the dashboard. Up to 10,000 rows per export; beyond that, page through the rest with a cursor.',
   },
   {
     date: '2026-05-04',
@@ -235,8 +235,8 @@ const ENTRIES: readonly ChangelogEntry[] = [
   {
     date: '2026-05-03',
     category: 'pricing',
-    title: 'Two-ladder pricing live',
-    body: 'Manual ($79/mo Solo / $249/mo Team / $699/mo Agency) and API ($149/mo Starter / $499/mo Builder / $1,499/mo Scale + custom Enterprise). A free entry tier sits below both ladders.',
+    title: 'Two plan families live',
+    body: 'Manual ($79/mo Solo / $249/mo Team / $699/mo Agency) and API ($149/mo Starter / $499/mo Builder / $1,499/mo Scale + custom Enterprise). A free entry tier sits below both plan families.',
   },
 ];
 

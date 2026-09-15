@@ -7,13 +7,12 @@ description: Bring-your-own Anthropic API key management — set, rotate, clear,
 # BYOK Anthropic key
 
 The **BYOK Anthropic key** surface lets customers store their own
-Anthropic API key against their Driftstack account so the
-[agent session](/api/agent-sessions/) decomposer runs against the
-customer's Anthropic billing rail instead of Driftstack's
-[bundled-LLM](/api/bundled-llm/). BYOK always wins over bundled-LLM
-in the resolution chain — per Driftstack design verdict Q4=A
-(2026-05-16), BYOK is the v1.0 primary path; bundled-LLM is the
-no-BYOK fallback.
+Anthropic API key against their Driftstack account so
+[agent sessions](/api/agent-sessions/) run on the customer's own
+Anthropic account instead of Driftstack's
+[bundled-LLM](/api/bundled-llm/). A stored key is always used instead
+of the bundled LLM; the bundled LLM is used only when no key is set
+(and the customer has opted in to it).
 
 ## Resource shape
 
@@ -50,8 +49,8 @@ stays inaccessible regardless.
 { "api_key": "sk-ant-api03-..." }
 ```
 
-Required scope: `account_owner` (team members can USE the resolved
-key but cannot manage it — Q3 verdict).
+Required scope: `account_owner` (team members can use the key but
+cannot manage it).
 
 Validation:
 
@@ -59,8 +58,8 @@ Validation:
   `sk-ant-` prefix; mismatched prefixes return `400 Bad Request`
   (type `…/bad-request`) with a clear message naming the expected shape.
 
-On success the key is encrypted at rest via AES-256-GCM (sealed
-with `MFA_ENCRYPTION_KEY`) and the response is the new `set_at`:
+On success the key is stored encrypted and the response is the new
+`set_at`:
 
 ```json
 { "set_at": "2026-05-18T16:42:00Z" }
@@ -84,8 +83,8 @@ rotating.
 Returns `204 No Content` on success (idempotent — clearing a
 non-existent key is also 204). Required scope: `account_owner`.
 
-After clearing, agent sessions fall through to the bundled-LLM
-leg (if the customer has opted into bundled-LLM) or surface
+After clearing, agent sessions fall back to bundled-LLM
+(if the customer has opted into bundled-LLM) or surface
 `502 ByokAnthropicRequired` (if neither path resolves). This applies
 to sessions that were already open as well — clearing takes effect
 from their next turn, not only for sessions started afterwards.
@@ -121,34 +120,28 @@ not branch on its exact contents. If no key is set on the account,
 the endpoint instead returns `400 Bad Request` (type `…/bad-request`)
 telling you to PUT a key first.
 
-The test response NEVER echoes any part of the key, Anthropic response
-body, or native transport error. Provider failures map to fixed invalid-key,
-rate-limit, service, timeout, or network guidance. Audit and metrics retain
-only a bounded outcome; they do not record the upstream response. The
+The test response NEVER echoes any part of the key, Anthropic's response
+body, or a low-level network error. Provider failures map to fixed
+invalid-key, rate-limit, service, timeout, or network guidance. The audit
+log records only the outcome, never Anthropic's response. The
 customer can review `set_at` / `last_used_at`, the test result, and the
 corresponding account-audit event.
 
 ## Encryption at rest
 
-The plaintext is encrypted with AES-256-GCM keyed by the
-deployment's `MFA_ENCRYPTION_KEY` env var (shared with encrypted
-GUI control keys). The
-canonical blob shape is `[12-byte IV | 16-byte auth tag |
-ciphertext]`. Storage column: `accounts.byok_anthropic_key_blob`
-(bytea).
-
-Rotation of `MFA_ENCRYPTION_KEY` invalidates every existing BYOK
-key — customers re-set their key after such a rotation.
+The key is encrypted at rest with AES-256-GCM and is never returned
+in any response. If Driftstack rotates its encryption key, existing
+stored keys stop working and customers need to set their key again.
 
 ## TTL + rotation reminders
 
-Stored keys carry an implicit 90-day staleness window. After 60
-days the customer receives a one-time Postmark reminder email
-(`sendByokAnthropicKeyRotationReminder`). After 90 days the
-`BYOKAnthropicService.getPlaintext({ now })` call returns null
-(treats the stored key as absent), forcing the resolution chain
-to fall through to header / bundled / fallback per the agent
-session route's posture.
+Stored keys carry an implicit 90-day staleness window. After 60 days
+the customer receives a one-time reminder email. After 90 days the
+stored key is treated as absent: a turn that sends its own
+`x-byok-anthropic-api-key` header still works, accounts that have
+opted into [bundled-LLM](/api/bundled-llm/) fall back to it, and
+otherwise the turn returns `502 byok-anthropic-required` (see
+[Errors](#errors) below).
 
 Customers can refresh the staleness window by PUTting the same
 key (resets `set_at`) — the timestamp update is enough to
@@ -162,16 +155,14 @@ satisfy the 90-day gate.
 |    401 | unauthorized            | missing or invalid bearer token                                                                                                                       |
 |    403 | forbidden               | scope check failed (write op without account_owner)                                                                                                   |
 |    502 | byok-anthropic-required | session turn resolved no key (no BYOK + no bundled-llm + no fallback) — surfaced from the agent-session message route, not from this surface directly |
-|    503 | feature-unavailable     | encrypted BYOK key storage is unavailable for this deployment (for example, encryption configuration is missing)                                      |
+|    503 | feature-unavailable     | encrypted key storage is not available on this deployment                                                                                             |
 
 ## Privacy
 
-- The plaintext key is encrypted at rest + never logged. Sentry
-  breadcrumbs around the route paths use the shared secret-redaction
-  filter.
+- The plaintext key is encrypted at rest + never logged. It never
+  appears in our error reports.
 - The API server sends the connection-test request only to the fixed
   Anthropic model-list endpoint. It does not run inference, read or proxy
   the response body, or cache the response.
-- Normal agent turns continue to use the customer's key from the
-  agent-runtime fork; the connection-test route is the only server-side
-  provider probe described here.
+- Normal agent turns use the customer's key for model calls; the
+  connection test is the only other request Driftstack makes with it.

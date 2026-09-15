@@ -56,7 +56,7 @@ describe('W366.A marketing-site /comparison page content parity', () => {
       "'Stealth approach'",
       "'Fingerprint posture'",
       "'Pricing model'",
-      "'Session metering surprises'",
+      "'Billing surprises'",
       "'Customer-controlled proxies'",
       "'Data residency'",
       "'Point-and-click app for human operators'",
@@ -114,13 +114,11 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     );
   });
 
-  it("per-row engine claim pinned: Driftstack = Apple WebKit, our own build of Apple's source code (source-level fork) — S20b plain words, same engine promise", () => {
+  it("per-row engine claim pinned: Driftstack = Apple WebKit, our own build of Apple's source code — S20b plain words, same engine promise (2026-09-15 customer-copy pass dropped the '(source-level fork)' developer gloss)", () => {
     // Load-bearing differentiator — the page promises WebKit, not
     // Chromium-with-iOS-skin. A future copy softening to "iOS-
     // optimized Chromium" would break the entire positioning.
-    expect(body).toMatch(
-      /driftstack: "Apple WebKit — our own build of Apple's source code \(source-level fork\)"/,
-    );
+    expect(body).toMatch(/driftstack: "Apple WebKit — our own build of Apple's source code"/);
     // M.6 Path A: multi-archetype + Safari 26.5 launch scope per founder
     // verdict 2026-05-17. Single-archetype framing must NOT return.
     expect(body).toMatch(
@@ -129,15 +127,15 @@ describe('W366.A marketing-site /comparison page content parity', () => {
     expect(body).not.toMatch(/driftstack: 'iPhone 16 Pro · iOS 18\.7 · Safari 26\.4'/);
   });
 
-  it('"don\'t sell proxies; we don\'t mark up egress" anti-Bright Data positioning pinned', () => {
+  it('"don\'t sell proxies and we never charge for bandwidth" anti-Bright Data positioning pinned (2026-09-15 plain words; was "we don\'t mark up egress")', () => {
     // Load-bearing commercial claim — Driftstack does not bill GB
     // egress. Pin so a future revenue add can't quietly soften it.
-    expect(body).toMatch(/We don't sell proxies; we don't\s+mark up egress/);
+    expect(body).toMatch(/We don't sell proxies and we never charge for\s+bandwidth/);
   });
 
-  it('BYOK remains no-markup while provided model access is an included-service budget, not a Stripe line item', () => {
+  it('BYOK remains no-markup while Driftstack-provided AI access is opt-in on the plans that offer it, runs against a monthly budget the customer controls, and is not billed separately (2026-09-15 plain words; the "included-service budget" / "Stripe line item" internals left the customer copy)', () => {
     expect(body).toMatch(
-      /Bring-your-own\s+Anthropic key is supported with no Driftstack markup\. Optional\s+Driftstack-provided model access draws against an enforced\s+included-service budget and is not a separate Stripe line item today/,
+      /You can use your own Anthropic key with no\s+Driftstack markup\. On plans that offer it, you can also opt in to\s+Driftstack-provided AI access, which runs against a monthly budget\s+you control and isn't billed separately today/,
     );
     expect(body).not.toMatch(/opt into bundled billing/);
   });

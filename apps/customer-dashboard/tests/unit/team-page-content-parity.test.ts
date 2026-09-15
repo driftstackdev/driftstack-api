@@ -70,8 +70,10 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     );
   });
 
-  it('"API keys remain account-scoped (shared) and admin-gated" framing pinned', () => {
-    expect(body).toMatch(/API keys remain account-scoped \(shared\) and admin-gated/);
+  it('"API keys belong to the account and are shared; only admins can manage them" framing pinned', () => {
+    expect(body).toMatch(
+      /API keys belong to the account and are shared; only\s+admins can manage them/,
+    );
   });
 
   it('localStorage key ds_web_session_token (customer-dashboard convention)', () => {
@@ -96,9 +98,9 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     expect(body).toContain("invitesList.querySelectorAll('[data-invite-email]')");
     expect(body).toContain("inviteRetryBlockReason = 'pending'");
     expect(body).toContain("inviteRetryBlockReason = 'unverified'");
-    expect(body).toContain('Reload and verify the list before retrying this email');
+    expect(body).toContain('Reload and check pending invites before trying again');
     expect(body).toContain('Already pending');
-    expect(body).toContain('Verify before retrying');
+    expect(body).toContain('Check before retrying');
     expect(body).toMatch(/const refreshed = await refresh\(false\)/);
   });
 
@@ -107,10 +109,10 @@ describe('W365.B customer-dashboard /team page content parity', () => {
   });
 
   it('reconciles ambiguous member removals against refreshed membership', () => {
-    expect(body).toContain('Member-removal outcome is unknown because the request timed out.');
-    expect(body).toContain('The team list was refreshed');
-    expect(body).toContain('removal likely completed, so do not submit it again');
-    expect(body).toContain('Verify membership before retrying');
+    expect(body).toContain("'The request took too long, but ' +");
+    expect(body).toContain(' is still listed. Try removing them again.');
+    expect(body).toContain('so they were probably removed. No need to try again');
+    expect(body).toContain("we couldn't refresh the list. Reload to check before trying again");
     expect(body).toMatch(/membersList\.querySelectorAll\('\[data-remove\]'\)/);
   });
 
@@ -129,7 +131,9 @@ describe('W365.B customer-dashboard /team page content parity', () => {
     // credentials. The team page is the only customer surface
     // that promises this; pin so a future refactor can't soften
     // it to "shared login".
-    expect(body).toMatch(/Each member uses their own login \+ their\s+own dashboard sessions/);
+    expect(body).toMatch(
+      /Everyone signs in with their own login and\s+has their own dashboard sessions/,
+    );
   });
 
   it('remove-member uses DELETE on /v1/team/members/:id (mem_ id semantics)', () => {

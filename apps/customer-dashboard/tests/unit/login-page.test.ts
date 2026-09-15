@@ -271,7 +271,9 @@ describe('login page — local integration', () => {
     expect((form.querySelector('input[name="password"]') as HTMLInputElement).value).toBe(
       'hunter2',
     );
-    expect(bannerText(window)).toMatch(/enable browser site storage.*no sign-in request was sent/i);
+    expect(bannerText(window)).toMatch(
+      /blocking site storage.*sign-in needs.*nothing has been lost/i,
+    );
   });
 
   it('detects a silently discarded session and does not navigate as signed in', async () => {
@@ -286,7 +288,7 @@ describe('login page — local integration', () => {
     expect(fetchCalls).toHaveLength(1);
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
     expect(bannerText(window)).toMatch(
-      /sign-in succeeded.*could not persist the session.*enable site storage.*sign in again/i,
+      /you signed in.*couldn't save the session.*allow site storage.*sign in again/i,
     );
   });
 
@@ -346,7 +348,7 @@ describe('login page — local integration', () => {
     expect(mfaForm.classList.contains('hidden')).toBe(false);
     expect(codeInput.value).toBe('123456');
     expect(bannerText(window)).toMatch(
-      /enable browser site storage.*one-time MFA challenge.*has not been consumed/i,
+      /blocking site storage.*sign-in needs.*enter your code again/i,
     );
   });
 
@@ -372,7 +374,7 @@ describe('login page — local integration', () => {
     expect(loginForm.classList.contains('hidden')).toBe(false);
     expect(codeInput.value).toBe('');
     expect(bannerText(window)).toMatch(
-      /two-factor verification was accepted.*do not submit this challenge.*fresh sign-in/i,
+      /your code was accepted.*couldn't finish signing you in.*don't enter that code again.*sign in again with your password and a new code/i,
     );
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -418,7 +420,7 @@ describe('login page — local integration', () => {
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
     expect(submitBtn.textContent).toBe('Verify');
     expect(bannerText(window)).toMatch(
-      /outcome is unknown.*consumed this one-time challenge.*credential did not reach.*do not submit.*start a fresh sign-in/i,
+      /took too long.*your code may already have been used.*don't enter it again.*sign in again with your password and a new code/i,
     );
   });
 
@@ -523,8 +525,10 @@ describe('login page — local integration', () => {
     expect(resendBtn.disabled).toBe(true);
     expect(resendBtn.getAttribute('aria-busy')).toBe('false');
     const status = window.document.querySelector('[data-resend-status]')?.textContent ?? '';
-    expect(status).toMatch(/delivery is unknown.*may already have sent/i);
-    expect(status).toMatch(/do not resend again.*inbox and spam.*newest one/i);
+    expect(status).toMatch(/took too long.*not sure the email went out/i);
+    expect(status).toMatch(
+      /inbox and spam folder before trying again.*use the newest.*reload this page if nothing arrives/i,
+    );
   });
 
   it('treats malformed accepted resend JSON as delivered and refuses forced repeat clicks', async () => {
@@ -637,7 +641,7 @@ describe('login page — local integration', () => {
     );
     expect(flowKeys(window)).toEqual([]);
     expect(navigations()).toBe(0);
-    expect(bannerText(window)).toBe('OAuth start failed: no flow id in the response.');
+    expect(bannerText(window)).toBe("Couldn't start sign-in with this provider. Try again.");
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('false');
   });
@@ -663,7 +667,7 @@ describe('login page — local integration', () => {
     expect(navigations()).toBe(0);
     expect(flowKeys(window)).toEqual([]);
     expect(bannerText(window)).toMatch(
-      /provider sign-in needs a secure \(https\) page with web crypto.*nothing has been sent to the provider yet.*sign in with your password/i,
+      /signing in with google or github only works on a secure \(https:\/\/\) connection.*open the dashboard over https.*sign in with your password/i,
     );
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('false');

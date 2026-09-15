@@ -48,7 +48,7 @@ describe('W848 X-Driftstack-Account header cross-source invariant', () => {
 
   it("CRITICAL apps/server/src/lib/openapi.ts documents V-326e Team RBAC + the X-Driftstack-Account header. The OpenAPI section explains the 'acc_<owner-uuid>' format + server-side validation. Drift to dropping the documentation would break customer-side SDK auto-generation.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/server/src/lib/openapi.ts'));
-    expect(p).toMatch(/## Team RBAC: X-Driftstack-Account header \(V-326e\)/);
+    expect(p).toMatch(/## Team RBAC: X-Driftstack-Account header/);
     expect(p).toMatch(
       /the `X-Driftstack-Account: acc_<owner-uuid>` request header\. The server validates that/,
     );

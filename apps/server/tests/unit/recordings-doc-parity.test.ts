@@ -31,7 +31,10 @@ describe('W217.A recordings doc parity', () => {
     expect(doc).toMatch(/Choose <strong>Record<\/strong>/);
     expect(doc).toMatch(/Choose <strong>Stop<\/strong>/);
     expect(doc).toMatch(/Open <strong>Recordings<\/strong> to replay or export it/);
-    expect(doc).toMatch(/frame data is loaded only when a\s+recording is opened for playback/);
+    expect(doc).toMatch(/recordings are listed when the app starts and loaded\s+when you open one/);
+    expect(doc).toMatch(
+      /If you close the app while a recording is still in progress, it is saved\s+automatically/,
+    );
   });
 
   it('does not claim a managed recording endpoint or webhook', () => {

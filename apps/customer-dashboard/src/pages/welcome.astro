@@ -35,12 +35,12 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
           <span class="font-mono text-sm text-tk-accent-text">$0 · no card</span>
         </div>
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
-          Your account is already on the free plan: 1 profile, 1 concurrent
+          Your account is already on the free plan: 1 profile, 1 session at a time, each
           session of up to 20 minutes. No subscription, no expiry — the best way to
-          try Driftstack before committing. The desktop app is a public download for
-          macOS, Windows and Linux. Once you have it, launch the app and
-          choose browser sign-in; that provisions a restricted device credential for the
-          app, not a customer API key.
+          try Driftstack before committing. The desktop app is a free download for
+          macOS, Windows and Linux. Once you have it, open the app and
+          choose browser sign-in — the app gets its own limited sign-in credential, so
+          you don't need an API key.
         </p>
         <div class="mt-4 flex flex-wrap gap-3">
           <a href="/" class="btn-primary inline-flex">
@@ -62,8 +62,8 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
           <span class="font-mono text-sm text-tk-ink-3">$79–$1,499 / mo</span>
         </div>
         <p class="mt-2 text-sm text-tk-ink-2 leading-relaxed">
-          Upgrade to a paid plan for more concurrency, more profiles, customer API
-          keys, and SDK automation — Personal for hand-
+          Upgrade to a paid plan to run more sessions at once, save more profiles, and
+          use API keys and the SDK from your own code — Personal for hand-
           driven sessions, all the way up to API Scale for high-volume
           automation. Cancel anytime.
         </p>
@@ -95,10 +95,10 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
           >
           <span class="leading-relaxed">
             Download the desktop app for macOS, Windows or Linux, then choose
-            browser sign-in. Driftstack provisions a restricted device
-            credential for the app; that's where Free customers launch and drive
-            iPhone Safari sessions. The builds are not OS-code-signed yet, so
-            macOS Gatekeeper or Windows SmartScreen warns on first launch.
+            browser sign-in. The app signs in with its own limited credential,
+            and that's where Free customers launch and drive iPhone Safari
+            sessions. Your computer may show a security warning on first launch
+            because the app isn't yet signed with Apple or Microsoft; this is expected.
           </span>
         </li>
         <li class="flex gap-4">
@@ -107,9 +107,9 @@ import DashboardLayout from '../layouts/DashboardLayout.astro';
             >3</span
           >
           <span class="leading-relaxed">
-            On an API-enabled paid tier, create a customer API key for SDK
-            automation. Customer keys can be revoked or rotated any time;
-            Free desktop sign-in does not require one.
+            On a paid plan with API access, create an API key to run sessions
+            from your own code. Keys can be revoked or rotated any time; the
+            Free plan's desktop sign-in doesn't need one.
           </span>
         </li>
       </ol>

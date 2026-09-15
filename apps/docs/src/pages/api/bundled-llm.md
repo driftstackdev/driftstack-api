@@ -1,26 +1,24 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Bundled LLM
-description: Customer-facing API for the bundled-LLM agent layer — opt-in consent, monthly soft cap, used / remaining / refused state.
+description: Run agent sessions on Driftstack's bundled AI model — opt-in consent, monthly soft cap, used / remaining budget.
 ---
 
 # Bundled LLM
 
-Driftstack's **bundled LLM** rail lets customers run AI-driven
-[agent sessions](/api/agent-sessions/) without supplying their own
-Anthropic API key. Driftstack hosts the decomposer and posts an
-included-service accounting value against a customer-controlled
-monthly soft cap (default $20).
+Driftstack's **bundled LLM** option lets customers run AI-driven
+[agent sessions](/api/agent-sessions/) without their own Anthropic
+API key. Each agent turn counts a fixed amount against a monthly cap
+the customer controls (default $20).
 
 Opt-in is explicit (`consent: true`) and revocable; the soft cap is
-customer-configurable up to a $10,000/month ceiling. The agent
-session route's resolution chain prefers [BYOK](/api/byok-anthropic/)
-(per-request header or stored) over bundled-LLM — bundled-LLM is
-the no-BYOK fallback.
+customer-configurable up to a $10,000/month ceiling. If the customer
+has a [BYOK](/api/byok-anthropic/) key (per-request header or stored),
+it is used instead of the bundled LLM.
 
 The settings and status endpoints are always available. Consent and
 budget enforcement surface as typed `402` responses at agent-session
-turn time (see below). If an inference dependency is unavailable, the
+turn time (see below). If the bundled model is unavailable, the
 agent-session turn endpoint returns the corresponding typed `503`;
 settings and status reads remain available.
 
@@ -55,9 +53,9 @@ used_this_month_cents)`. `month_started_at` is the UTC
 calendar-month boundary so the dashboard can render "resets on
 &lt;date&gt;" without re-deriving it.
 
-`used_this_month_cents` sums `usage_records.cost_usd_cents` over
-the rows where `record_type = 'agent_decomposer_bundled'` and
-`recorded_at >= start_of_calendar_month` (UTC).
+`used_this_month_cents` is the account's total bundled-LLM spend, in
+cents, on agent-session turns since the start of the current UTC
+calendar month (`month_started_at`).
 
 `refused_count_this_month` is a compatibility field and returns `0`.
 Refusal events (`402 BundledLlmBudgetExhausted`) are not persisted as
@@ -79,9 +77,8 @@ write-only, and zero-scope keys cannot inspect billing consent or cap.
 
 `GET /v1/account/me/bundled-llm-status`
 
-Returns the status record above. The dashboard's
-`BundledLlmStatusPanel` reads this on page-load to render consent,
-cap, used spend, and remaining budget.
+Returns the status record above. The dashboard reads this on page
+load to render consent, cap, used spend, and remaining budget.
 
 Requires the same broad `read` scope because the response includes
 account-wide month-to-date spend and remaining budget.
@@ -165,7 +162,7 @@ The SDK exposes the typed `BundledLlmBudgetExhaustedError` with
 
 ## Consent-required gate
 
-When the deployment has bundled-LLM wired but the customer hasn't
+When the deployment offers bundled-LLM but the customer hasn't
 opted in (`consent: false`), the agent session route refuses with:
 
 ```http
@@ -193,21 +190,18 @@ extension fields).
 |    402 | bundled-llm-budget-exhausted | spend reached the cap; recover via PATCH / BYOK / next month             |
 |    402 | bundled-llm-consent-required | deployment has bundled-LLM but the customer hasn't opted in              |
 
-The settings + status routes above do not return a `503`. A `503`
-for an unwired bundled-LLM service is returned on the **agent-session
-turn** route, not on these reads.
+The settings + status routes above do not return a `503`. When
+bundled-LLM is not available on the deployment, the `503` is returned
+on the **agent-session turn** route, not on these reads.
 
-## Privacy + included-service accounting
+## Privacy + how turns are counted
 
-- Standard API Builder and API Scale usage posts a flat **$0.10
-  included-service accounting value per agent turn** against the
-  customer-controlled monthly budget, independent of model choice
-  and token count. It is enforced as a service budget but is not a
-  separately itemized Stripe invoice charge today; Enterprise can
-  use a contracted custom budget. The recorder stores the posted
-  per-call amount in cents with
-  `cost_basis = 'bundled_flat_per_turn'` for auditability. It does
-  not expose Driftstack's upstream provider cost.
+- On API Builder and API Scale, each agent turn counts a flat
+  **$0.10** against the customer-controlled monthly budget, whatever
+  the model or token count. This budget is enforced by Driftstack but
+  is not a separately itemized charge on your Stripe invoice today;
+  Enterprise can use a contracted custom budget. The amount recorded
+  per turn is this flat value, not Driftstack's actual provider cost.
 - No prompt content is logged on Driftstack's side beyond what
   customers can read in their own session transcripts.
 - Bundled-LLM consent does NOT grant Driftstack any rights to

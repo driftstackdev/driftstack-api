@@ -9,8 +9,8 @@ description: Save a finished agent-session as a recipe — capture its structure
 A **recipe** is an immutable snapshot of a finished
 [agent-session](/api/agent-sessions/) — the structured intent_log
 plus the full transcript at the moment of capture. Recipes preserve
-a completed flow as a durable reference without re-running decomposition
-to inspect its intent plan.
+a completed flow as a durable reference you can inspect without running
+the session again.
 
 The current surface covers create, list, read, and delete:
 `POST /v1/recipes`, `GET /v1/recipes`, `GET /v1/recipes/{id}`, and
@@ -33,8 +33,8 @@ start a new agent-session to run another task.
 ```
 
 `agent_session_id` is `null` when the originating agent-session
-has been deleted (ON DELETE SET NULL — the recipe survives the
-source session's lifecycle). `intent_count` is the length of the
+has been deleted (the recipe survives when the session is deleted).
+`intent_count` is the length of the
 flattened intent_log. The list endpoint omits the intent array for
 payload weight; fetch a single recipe with `GET /v1/recipes/{id}`
 to get its public `intent_log`. Sensitive `type` steps retain their
@@ -140,24 +140,21 @@ returns 404, not 204.
 
 ## Intent log assembly
 
-When the route fires, the server walks the source agent-session's
-transcript and flatMaps every `plan-executed` agent turn's
-structured `intents` array into a single `intent_log`. The result
-is captured atomically (insert-once; never edited) so the
-historical snapshot survives any later session activity.
+Driftstack gathers the `intents` from every `plan-executed` agent turn
+in the source session's transcript into a single `intent_log`. The
+result is captured once and never edited, so the snapshot survives any
+later session activity.
 
-Recipe payloads are encrypted at rest. Public detail serialization
-works from a copy and removes sensitive type values without changing
-the stored intent log, preserving the exact server-side snapshot while
-preventing a read-only API key or device key from retrieving saved
-credentials.
+Recipe payloads are encrypted at rest. Sensitive `type` values are
+removed from the API response, not from the stored recipe, so the
+stored snapshot stays exact while a read-only API key or device key
+can never retrieve saved credentials.
 
-Operator + user transcript entries don't carry intents — only
-agent turns from a successful decompose+execute step contribute.
-A session that ran exclusively in `mode='manual'` will produce a
-recipe with `intent_count: 0` (because manual sessions log
-operator entries, not decomposer plans). That's expected — the
-recipe is still useful as a transcript-only snapshot.
+Only `plan-executed` agent turns carry intents — your own messages and
+manual entries do not. A session that ran exclusively in `mode='manual'` will produce a
+recipe with `intent_count: 0` (manual sessions record what you did, not
+an AI plan). That's expected — the recipe is still useful as a
+transcript-only snapshot.
 
 ## Errors
 

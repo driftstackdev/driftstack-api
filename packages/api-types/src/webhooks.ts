@@ -170,7 +170,7 @@ export const RotateWebhookSecretResponseSchema = z.object({
     .string()
     .describe('First chars of the prior secret, kept active during grace.'),
   grace_expires_at: Iso8601Schema.describe(
-    'Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries.',
+    'Until this time, every delivery is signed with both the new and the old secret, so you can update your verifier without missing deliveries.',
   ),
 });
 export type RotateWebhookSecretResponse = z.infer<typeof RotateWebhookSecretResponseSchema>;

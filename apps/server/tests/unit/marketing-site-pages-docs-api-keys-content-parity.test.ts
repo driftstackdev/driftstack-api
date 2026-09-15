@@ -76,16 +76,18 @@ describe('W516.A apps/marketing-site/src/pages/docs/api-keys.astro content parit
   });
 
   it('paid customer-key + Free desktop-device boundary and hash-only handling are pinned', () => {
-    expect(body).toMatch(
-      /Customer-key format: <code>ds_live_&lt;random&gt;<\/code>\. The\s*<code>ds_live_<\/code> prefix is how Driftstack detects "this\s*looks like an API key" during request parsing\./,
-    );
+    expect(body).toMatch(/Customer-key format: <code>ds_live_&lt;random&gt;<\/code>\./);
+    expect(body).not.toMatch(/during request parsing/);
     expect(body).toContain("You'll see the full plaintext key once —");
     expect(body).toContain(
       'copy it now and store it in your config / secret manager. We only store',
     );
     expect(body).toMatch(/if you lose the plaintext,\s+revoke and mint a new one\./);
-    expect(body).toContain('restricted <code>ds_test_…</code> device credential');
-    expect(body).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(body).toContain('The Free plan signs in through the desktop app.');
+    expect(body).toMatch(
+      /does not come with a\s+customer API key, an SDK key, or a sandbox credential/,
+    );
+    expect(body).not.toMatch(/ds_test_|device credential/);
     expect(body).toContain('A Free dashboard web session can list and revoke keys');
     expect(body).toContain('create and rotate return an RFC 9457');
   });

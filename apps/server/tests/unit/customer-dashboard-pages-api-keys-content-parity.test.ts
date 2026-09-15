@@ -53,9 +53,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).toMatch(/<input type="radio" name="scope" value="write"/);
     expect(body).toMatch(/<input type="radio" name="scope" value="read"/);
     expect(body).toMatch(/<input\s*type="radio"\s*name="scope"\s*value="granular"/);
-    expect(body).toMatch(
-      /Choose this for trusted account administration or your primary\s*automation/,
-    );
+    expect(body).toMatch(/Choose this for trusted admin use or your main automation/);
     expect(body).not.toMatch(/keys driving the GUI client/);
   });
 
@@ -64,7 +62,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
       /V-481 — granular scope picker\. Hidden by default; reveals when\s*the "granular" radio is selected\. Submits the raw array of\s*selected `verb:resource` scopes\./,
     );
     expect(body).toMatch(
-      /Granular scopes do not satisfy broad checks —\s*if you select <code class="font-mono">read:sessions<\/code> only,/,
+      /A granular key can only do exactly what you tick —\s*<code class="font-mono">read:sessions<\/code> alone can't read profiles,/,
     );
   });
 
@@ -96,30 +94,30 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     );
   });
 
-  it("'plaintext shown ONCE' framing pinned: 'Plaintext is shown ONCE on creation — store it now; we can't recover it later.' + 'This is the only time the full key is shown. Store it in your secret manager before dismissing.' — pinned so the recovery-impossibility framing survives in BOTH the header copy AND the just-created reveal (drift to dropping would lead to customers filing 'I lost my key, recover it' support tickets we can't satisfy)", () => {
+  it("'full key shown only once' framing pinned: 'The full key is shown only once, when you create it — save it right away; we can't show it again.' + 'This is the only time the full key is shown. Save it somewhere safe, such as a password manager, before dismissing.' — pinned so the recovery-impossibility framing survives in BOTH the header copy AND the just-created reveal (drift to dropping would lead to customers filing 'I lost my key, recover it' support tickets we can't satisfy)", () => {
     expect(body).toMatch(
-      /Plaintext is\s*shown ONCE on creation — store it now; we can't recover it later/,
+      /The full key is\s*shown only once, when you create it — save it right away; we can't show it again\./,
     );
     expect(body).toMatch(
-      /This is the only time the full key is shown\. Store it in your secret manager before\s*dismissing\./,
-    );
-  });
-
-  it("scrypt-at-rest security framing pinned: 'API keys are scrypt-hashed at rest. Driftstack staff cannot read your keys — a database breach surfaces hashes, not keys. If a key leaks, revoke + rotate; no admin recovery path exists.' — pinned so the scrypt + breach-resistance + no-admin-recovery framing all survives (drift to dropping would let customers assume staff can read their keys, breaking the security trust model)", () => {
-    expect(body).toMatch(
-      /API keys are scrypt-hashed at rest\. Driftstack staff cannot read your keys — a database\s*breach surfaces hashes, not keys\. If a key leaks, revoke \+ rotate; no admin recovery\s*path exists\./,
+      /This is the only time the full key is shown\. Save it somewhere safe, such as a password\s*manager, before dismissing\./,
     );
   });
 
-  it("24h grace period rotate framing pinned: 'A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.' — pinned so the dual-validity rotation window (new key minted + old key still valid for 24h) survives (drift to dropping the 24h would either cause confused 'why does my old key still work' tickets or break the zero-downtime swap UX)", () => {
+  it("one-way-hash security framing pinned: 'We store only a one-way hash of each key, so Driftstack staff can't read your keys, and anyone who got hold of our database would see only those hashes, not your keys. If a key leaks, rotate it from this page, or revoke it and create a new one. A lost key can't be recovered — not even by Driftstack support.' — pinned so the hash-only storage + breach-resistance + no-recovery framing all survives (drift to dropping would let customers assume staff can read their keys, breaking the security trust model)", () => {
     expect(body).toMatch(
-      /A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime/,
+      /We store only a one-way hash of each key, so Driftstack staff can't read your keys, and\s*anyone who got hold of our database would see only those hashes, not your keys\. If a key\s*leaks, rotate it from this page, or revoke it and create a new one\. A lost key can't be\s*recovered — not even by Driftstack support\./,
     );
   });
 
-  it("Revoke confirm + 401-immediately framing pinned: 'Revoke \"<name>\"? Apps using this key will start receiving 401 immediately. This cannot be undone.' — pinned so customers know revocation is instant + irreversible (drift to dropping 'immediately' would let customers think there's a grace window for revoke too, breaking the 'incident response' use case)", () => {
+  it("24-hour rotate framing pinned: 'The new key is shown only once. The old key keeps working for 24 hours so you can switch over without downtime.' — pinned so the dual-validity rotation window (new key created + old key still valid for 24 hours) survives (drift to dropping the 24 hours would either cause confused 'why does my old key still work' tickets or break the no-downtime switch-over UX)", () => {
     expect(body).toMatch(
-      /'Revoke "' \+\s*name \+\s*'"\? Apps using this key will start receiving 401 immediately\. This cannot be undone\.',/,
+      /The new key is shown only once\. The old key keeps working for 24 hours so you can switch over without downtime/,
+    );
+  });
+
+  it("Revoke confirm + stops-working-immediately framing pinned: 'Revoke \"<name>\"? Anything using this key will stop working immediately. This cannot be undone.' — pinned so customers know revocation is instant + irreversible (drift to dropping 'immediately' would let customers think there's a grace window for revoke too, breaking the 'incident response' use case)", () => {
+    expect(body).toMatch(
+      /'Revoke "' \+\s*name \+\s*'"\? Anything using this key will stop working immediately\. This cannot be undone\.',/,
     );
   });
 
@@ -195,7 +193,7 @@ describe('W496.C apps/customer-dashboard/src/pages/api-keys.astro content parity
     expect(body).toMatch(/\(canRotate \? '' : ' hidden'\)/);
     expect(body).toMatch(/\(canWrite \? '' : ' hidden'\)/);
     expect(body).toMatch(/if \(!showWriteControls\) \{[\s\S]*?revealPre\.textContent = ''/);
-    expect(body).toContain('selected team role is read-only');
+    expect(body).toContain('Your team role is read-only for the selected account');
     expect(
       body.match(/!writeAccessVerified \|\|\s*!writeAccessGranted/g)?.length,
     ).toBeGreaterThanOrEqual(3);

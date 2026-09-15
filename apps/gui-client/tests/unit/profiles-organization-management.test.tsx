@@ -308,7 +308,7 @@ describe('ProfilesView organization management', () => {
 
       expect(
         await screen.findByText(
-          'Saved on this Mac, but couldn’t sync the folder deletion to your account (organization). Retry the remaining sync.',
+          'Saved on this computer, but couldn’t sync the folder deletion to your account (organization). Retry the remaining sync.',
         ),
       ).toBeInTheDocument();
       expect(saveOrganization).not.toHaveBeenCalled();
@@ -561,7 +561,7 @@ describe('ProfilesView organization management', () => {
 
       expect(
         await screen.findByText(
-          'Saved on this Mac, but couldn’t sync the folder rename to your account (1 of 2 profiles). Retry the remaining sync.',
+          'Saved on this computer, but couldn’t sync the folder rename to your account (1 of 2 profiles). Retry the remaining sync.',
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText(/private-key/)).toBeNull();
@@ -773,7 +773,7 @@ describe('ProfilesView organization management', () => {
 
       expect(
         await screen.findByText(
-          'Saved on this Mac, but couldn’t sync 1 of 2 profiles to your account. Check your connection and retry.',
+          'Saved on this computer, but couldn’t sync 1 of 2 profiles to your account. Check your connection and retry.',
         ),
       ).toBeInTheDocument();
       expect(screen.queryByText('Updated 2 profiles.')).toBeNull();
@@ -795,9 +795,7 @@ describe('ProfilesView organization management', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear folder' }));
 
       expect(
-        await screen.findByText(
-          'Couldn’t save profile organization on this Mac. Check app storage and try again.',
-        ),
+        await screen.findByText('Couldn’t save profile organization on this computer. Try again.'),
       ).toBeInTheDocument();
       expect(screen.getByText('2 selected')).toBeInTheDocument();
       expect(screen.queryByText(/private\/store/)).toBeNull();

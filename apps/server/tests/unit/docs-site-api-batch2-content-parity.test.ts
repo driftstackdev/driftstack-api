@@ -48,9 +48,9 @@ describe('W606 apps/docs/api batch 2 close-out (8 modules) content parity', () =
     const body = read(P('billing.md'));
     expect(body).toMatch(/^title: Billing$/m);
     expect(body).toMatch(/^# Billing$/m);
-    expect(body).toMatch(/All Driftstack billing is a thin layer over Stripe\./);
-    expect(body).toMatch(/The Driftstack/);
-    expect(body).toMatch(/API mints checkout sessions \+ portal URLs;/);
+    expect(body).toMatch(/Driftstack billing runs on Stripe\./);
+    expect(body).toMatch(/The API gives you checkout and/);
+    expect(body).toMatch(/portal links; you pay for and manage your subscription in Stripe's/);
     expect(existsSync(P('billing.md'))).toBe(true);
   });
 

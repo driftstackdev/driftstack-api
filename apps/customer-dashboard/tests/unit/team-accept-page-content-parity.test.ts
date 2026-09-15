@@ -18,9 +18,9 @@ describe('team invitation acceptance reliability', () => {
     expect(PAGE).toContain('signal: controller.signal');
     expect(PAGE).toContain('.finally(() => window.clearTimeout(timeout))');
     expect(PAGE).toContain("err && err.name === 'AbortError'");
-    expect(PAGE).toContain('Invite-acceptance outcome is unknown after the request timed out.');
-    expect(PAGE).toContain('consumed this single-use invite');
-    expect(PAGE).toContain('Do not reload or submit this link again.');
+    expect(PAGE).toContain('The request took too long, so you may already be on the team.');
+    expect(PAGE).toContain("Don't use this link again — open Team to check.");
+    expect(PAGE).toContain("If you don't have access, ask the team owner for a new invite.");
     expect(PAGE).toContain('Open Team to check access');
     expect(PAGE).toContain('ask the team owner for a new invite');
   });
@@ -29,9 +29,7 @@ describe('team invitation acceptance reliability', () => {
     expect(PAGE).toContain('let acceptResponseAccepted = false;');
     expect(PAGE).toMatch(/if \(r\.ok\) \{\s*acceptResponseAccepted = true;\s*return;\s*\}/);
     expect(PAGE).toMatch(/if \(acceptResponseAccepted\) \{/);
-    expect(PAGE).toContain(
-      'Your invite was accepted, but this page could not finish opening Team.',
-    );
+    expect(PAGE).toContain("You're on the team, but this page couldn't open it.");
     expect(PAGE).not.toMatch(/if \(r\.ok\) return r\.json\(\)/);
   });
 

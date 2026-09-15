@@ -59,9 +59,11 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     // TEMPLATES map in opt-outable-email-event-cross-source-invariant.test.ts, so a name
     // outliving its template fails there rather than being frozen here.
     expect(body).toMatch(
-      /Security \+ financial emails \(signup verification, password reset,\s*billing failure, support replies\) always go out\. Below are the\s*optional lifecycle emails — toggle off any you don't want\./,
+      /Security and billing emails \(verification, password reset, failed\s*payments, support replies\) are always sent\. The emails below are\s*optional — switch off any you don't want\./,
     );
-    expect(body).toMatch(/Cancelling a subscription sends no email of its own\./);
+    expect(body).toMatch(
+      /When you cancel, the only email you may get is "Subscription tier\s*changed" below\./,
+    );
   });
 
   it("V-352 + V-298a + V-298b profile form contract: PATCH /v1/account/me { name, timezone, slug?, region? } with null-on-empty + IANA timezone hint — pinned so the 4-field profile mutation contract stays consistent (drift to dropping null-on-empty would force customers to keep filling fields they've cleared; drift to dropping region would orphan the V-298b data-residency preference UI)", () => {
@@ -78,21 +80,21 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/<option value="eu">eu — Europe<\/option>/);
     expect(body).toMatch(/<option value="apac">apac — Asia-Pacific<\/option>/);
     expect(body).toMatch(
-      /sub-processor list \(see <a href="https:\/\/driftstack\.io\/trust\/sub-processors\/"/,
+      /doesn't change where your data is\s*stored today\. See <a href="https:\/\/driftstack\.io\/trust\/sub-processors\/"/,
     );
   });
 
   it('profile late-load and ambiguous-save guards preserve customer input', () => {
     expect(body).toMatch(/profileEditedBeforeHydration/);
     expect(body).toMatch(/accountMatchesProfile\(account, body\)/);
-    expect(body).toMatch(/copy them, then reload to verify before trying again/);
+    expect(body).toMatch(/copy them, then reload to check before trying again/);
   });
 
   it('V-352b avatar upload contract: 2MB max + PNG/JPEG/WebP only + R2 EU storage + POST /v1/account/me/avatar { content_type, data_base64 } + DELETE /v1/account/me/avatar — pinned so the upload constraints (size + types + region) + the base64 wire format + the DELETE-to-remove contract all survive (drift to dropping size limit would let bad actors flood R2 with multi-GB avatars; drift to dropping base64 would change the wire format)', () => {
     // S30 2026-07-07 (founder decision: soften) — the "(EU)" tag
     // over-claimed: avatars live on R2 in the default jurisdiction
     // (EU + US replication). Size/type/wire-format guards unchanged.
-    expect(body).toMatch(/PNG, JPEG, or WebP\. Max 2 MB\. Stored privately on Cloudflare R2\./);
+    expect(body).toMatch(/PNG, JPEG or WebP, up to 2 MB\. Stored privately\./);
     expect(body).not.toMatch(/Cloudflare R2 \(EU\)/);
     expect(body).toMatch(/if \(file\.size > 2 \* 1024 \* 1024\) \{/);
     expect(body).toMatch(/if \(!\/\^image\\\/\(png\|jpeg\|webp\)\$\/\.test\(file\.type\)\) \{/);
@@ -139,14 +141,16 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(/data-region="bundled-llm"/);
     expect(body).toMatch(/Builder and Scale use a flat[\s\S]{0,100}\$0\.10 per agent turn/);
     expect(body).toMatch(/Enterprise uses your contracted custom rate/);
-    expect(body).toMatch(/A stored Anthropic BYOK key takes[\s\S]{0,80}priority/);
+    expect(body).toMatch(
+      /If you've saved your own Anthropic\s*API key, it's used first, billed by Anthropic/,
+    );
     expect(body).toMatch(
       /data-field="bundled-cap-usd"[\s\S]{0,250}min="0"[\s\S]{0,100}max="10000"[\s\S]{0,100}step="0\.01"/,
     );
     expect(body).toMatch(/data-field="bundled-used"/);
     expect(body).toMatch(/data-field="bundled-remaining"/);
     expect(body).toMatch(/data-field="bundled-reset"/);
-    expect(body).toMatch(/Exact range \$0–\$10,000/);
+    expect(body).toMatch(/Between \$0 and \$10,000/);
   });
 
   it('bundled-AI wiring uses dedicated load failure/retry, busy reasons, and authoritative timeout reconciliation without optimistic mutation', () => {
@@ -164,7 +168,7 @@ describe('W497.C apps/customer-dashboard/src/pages/settings.astro content parity
     expect(body).toMatch(
       /live\.consent === desired\.consent &&[\s\S]{0,100}live\.cap_cents === desired\.monthly_cap_usd_cents/,
     );
-    expect(body).toMatch(/The save outcome is unknown and live settings could not be refreshed/);
+    expect(body).toMatch(/we couldn't refresh your settings\. Reload to check before trying again/);
     expect(body).not.toMatch(/bundledConsent\.checked = desired\.consent/);
     expect(body).not.toMatch(/bundledCapUsd\.value = desired/);
   });

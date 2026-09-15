@@ -554,13 +554,17 @@ describe('agent-session-control transport', () => {
 
   it('getAgentSessionCookies passes through an inert discriminated body ({status,reason}, cookies:null)', async () => {
     mockFetch.mockResolvedValue(
-      ok({ status: 'unavailable', cookies: null, reason: 'session node is not connected' }),
+      ok({
+        status: 'unavailable',
+        cookies: null,
+        reason: 'This session cannot be reached right now. Try again shortly.',
+      }),
     );
     const res = await getAgentSessionCookies('agt_1');
     expect(res).toEqual({
       status: 'unavailable',
       cookies: null,
-      reason: 'session node is not connected',
+      reason: 'This session cannot be reached right now. Try again shortly.',
     });
   });
 
@@ -616,7 +620,7 @@ describe('agent-session-control transport', () => {
         JSON.stringify({
           status: 'unavailable',
           file: null,
-          reason: 'session node is not connected',
+          reason: 'This session cannot be reached right now. Try again shortly.',
         }),
         { headers: { 'content-type': 'application/json; charset=utf-8' } },
       ),
@@ -625,7 +629,7 @@ describe('agent-session-control transport', () => {
     await expect(fetchAgentSessionDownload('agt_1', 'report.pdf')).resolves.toEqual({
       status: 'unavailable',
       file: null,
-      reason: 'session node is not connected',
+      reason: 'This session cannot be reached right now. Try again shortly.',
     });
   });
 

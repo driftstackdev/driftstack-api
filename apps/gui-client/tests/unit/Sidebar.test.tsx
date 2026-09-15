@@ -185,20 +185,23 @@ describe('Sidebar — count badges + section gates', () => {
     expect(mockSetActiveWorkspace).toHaveBeenCalledWith(null);
   });
 
-  it('hides Cluster section on cloud baseUrl', () => {
+  it('hides the Self-hosted section on cloud baseUrl', () => {
     mockBaseUrl = 'https://api.driftstack.dev';
     mockAccountMe = buildAccountMe();
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
-    expect(screen.queryByText('Cluster')).not.toBeInTheDocument();
-    expect(screen.queryByText('Mac mini fleet')).not.toBeInTheDocument();
+    expect(screen.queryByText('Self-hosted')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your servers')).not.toBeInTheDocument();
   });
 
-  it('shows Cluster section on self-hosted baseUrl', () => {
+  it('shows the Self-hosted section on self-hosted baseUrl', () => {
     mockBaseUrl = 'https://api.acme.example';
     mockAccountMe = buildAccountMe();
     render(<Sidebar current="profiles" onNavigate={() => {}} onSignOut={() => {}} />);
-    expect(screen.getByText('Cluster')).toBeInTheDocument();
-    expect(screen.getByText('Mac mini fleet')).toBeInTheDocument();
+    expect(screen.getByText('Self-hosted')).toBeInTheDocument();
+    expect(screen.getByText('Your servers')).toBeInTheDocument();
+    // Owner directive 2026-09-15: no fleet/cluster jargon on a customer surface.
+    expect(screen.queryByText('Cluster')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mac mini fleet')).not.toBeInTheDocument();
   });
 
   it('does not render a Recordings badge when count is 0', () => {

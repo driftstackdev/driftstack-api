@@ -53,20 +53,20 @@ describe('customer-dashboard/pages/auth/magic-link-request content parity', () =
     );
   });
 
-  it('data-page="magic-link-request" + Email-me-a-sign-in-link headline + form fields (id="magic-link-email" + name="email" + type="email" + autocomplete="email" + required) + Send-magic-link button — pinned so the page-script root + form-shape + browser-autocomplete-hint contract all stay documented', () => {
+  it('data-page="magic-link-request" + Email-me-a-sign-in-link headline + form fields (id="magic-link-email" + name="email" + type="email" + autocomplete="email" + required) + Send-sign-in-link button — pinned so the page-script root + form-shape + browser-autocomplete-hint contract all stay documented', () => {
     expect(body).toMatch(/data-page="magic-link-request"/);
     expect(body).toMatch(/Email me a sign-in link/);
     expect(body).toMatch(
       /<input\s*id="magic-link-email"\s*name="email"\s*type="email"\s*required\s*autocomplete="email"/,
     );
-    expect(body).toMatch(/Send magic-link/);
+    expect(body).toMatch(/Send sign-in link/);
   });
 
-  it("Check-your-inbox card copy pinned: 'If <span data-success-email…> matches a Driftstack account, a one-shot sign-in link is on the way. The link expires in <span data-success-window…>15 minutes</span>.' — pinned so the 15-minute-default expiry text + 'if matches' anti-enumeration phrasing (NOT 'we sent to') contract stays documented", () => {
+  it("Check-your-inbox card copy pinned: 'If <span data-success-email…> matches a Driftstack account, a sign-in link is on the way. It works once and expires in <span data-success-window…>15 minutes</span>.' — pinned so the 15-minute-default expiry text + 'if matches' anti-enumeration phrasing (NOT 'we sent to') + the single-use disclosure contract stays documented", () => {
     expect(body).toMatch(
       // S21 2026-07-06: text-tk-accent-text (was text-tk-accent-soft — the
       // 13%-alpha WASH token misused as a text color; ~1.2:1, invisible).
-      /If <span data-success-email class="font-mono text-tk-accent-text"><\/span> matches a Driftstack\s*account, a one-shot sign-in link is on the way\. The link expires in <span\s*data-success-window\s*class="font-mono">15 minutes<\/span\s*>\./,
+      /If <span data-success-email class="font-mono text-tk-accent-text"><\/span> matches a Driftstack\s*account, a sign-in link is on the way\. It works once and expires in <span\s*data-success-window\s*class="font-mono">15 minutes<\/span\s*>\./,
     );
   });
 

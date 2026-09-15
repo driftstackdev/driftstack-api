@@ -37,7 +37,8 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toMatch(
       /\/\/ The live API server serves Scalar against the running OpenAPI spec\./,
     );
-    expect(body).toMatch(/Interactive reference uses Scalar — try requests against your API/);
+    expect(body).toMatch(/Try requests with your own API key directly in the browser\./);
+    expect(body).not.toMatch(/Interactive reference uses Scalar/);
     expect(body).not.toMatch(/placeholder|future iteration|until .* embeds/i);
   });
 
@@ -51,7 +52,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   it('frames the page as a curated map backed by the complete generated reference', () => {
     expect(body).toMatch(/Core routes, exact shapes\./);
     expect(body).toMatch(
-      /complete Driftstack API is documented in a standard\s+machine-readable format \(an OpenAPI 3\.1 spec\), generated from the\s+same validation rules \(Zod schemas\) the server enforces at runtime/,
+      /complete Driftstack API is documented in a standard\s+machine-readable format \(an OpenAPI 3\.1 spec\), generated from the\s+same rules the server itself enforces/,
     );
     expect(body).toMatch(
       /This page is a curated map of common resources and runnable\s+request patterns/,
@@ -132,11 +133,15 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
   });
 
   it('keeps the customer-key samples on the paid API surface and describes Free desktop access honestly', () => {
+    expect(body).toMatch(/API keys, OAuth applications, and SDK automation require a paid\s+tier/);
     expect(body).toMatch(
-      /Customer API keys, OAuth applications, and SDK automation require a\s+paid tier/,
+      /The Free plan works through the desktop app's own sign-in and\s+does not come with an API key you can use in these examples/,
     );
-    expect(body).toMatch(/browser-authorized restricted device credential/);
     expect(body).toMatch(/These API-key and SDK examples require a paid tier/);
+    expect(body).toMatch(
+      /On the Free plan,\s+sign in from the desktop app instead — no API key is needed there/,
+    );
+    expect(body).not.toMatch(/restricted device credential/);
     expect(body).not.toMatch(/Free (?:API|SDK) access/);
   });
 
@@ -194,7 +199,7 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
 
   it('Spec posture pins generated public shapes without claiming this curated page lists every endpoint', () => {
     expect(body).toMatch(
-      /Public request and response shapes are defined with Zod schemas\. The OpenAPI 3\.1 spec is generated from those schemas — there is no second source of truth\./,
+      /Public request and response shapes are defined once, and the OpenAPI 3\.1 spec is generated from those definitions — there is no second source of truth\./,
     );
     expect(body).toMatch(
       // S20c 2026-07-06 plain-language pass: rule 2 said plainly.
@@ -215,16 +220,14 @@ describe('W501.C apps/marketing-site/src/pages/api-reference.astro content parit
     expect(body).toContain('client.sessions.capture(sessionId');
   });
 
-  it("Hero CTA 2-button: 'Open interactive reference →' → API_DOCS_URL (primary) + 'Download openapi.json' → OPENAPI_JSON_URL (secondary) + 'Interactive reference uses Scalar — try requests against your API key directly in the browser.' subline — pinned so the dual-CTA path (interactive + raw json) + the Scalar reference stay visible (drift to dropping the openapi.json link would orphan tool integrators who want the raw spec)", () => {
+  it("Hero CTA 2-button: 'Open interactive reference →' → API_DOCS_URL (primary) + 'Download openapi.json' → OPENAPI_JSON_URL (secondary) + 'Try requests with your own API key directly in the browser.' subline — pinned so the dual-CTA path (interactive + raw json) + the try-it subline stay visible (drift to dropping the openapi.json link would orphan tool integrators who want the raw spec)", () => {
     expect(body).toMatch(
       /<a href=\{API_DOCS_URL\} class="btn-primary">Open interactive reference →<\/a>/,
     );
     expect(body).toMatch(
       /<a href=\{OPENAPI_JSON_URL\} class="btn-secondary">Download openapi\.json<\/a>/,
     );
-    expect(body).toMatch(
-      /Interactive reference uses Scalar — try requests against your API\s*key directly in the browser\./,
-    );
+    expect(body).toMatch(/Try requests with your own API key directly in the browser\./);
   });
 
   it('file exists at canonical path', () => {

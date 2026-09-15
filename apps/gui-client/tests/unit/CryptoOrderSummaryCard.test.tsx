@@ -75,13 +75,13 @@ describe('V-534.BF CryptoOrderSummaryCard — expires_at countdown', () => {
     expect(screen.getByText(/2h 30m remaining/i)).toBeTruthy();
   });
 
-  it('reports "pay window elapsed" when expires_at is in the past', () => {
+  it('reports "payment window closed" when expires_at is in the past', () => {
     const expiresAt = '2026-05-11T09:00:00.000Z';
     const nowMs = new Date('2026-05-11T10:00:00.000Z').getTime();
     render(
       <CryptoOrderSummaryCard order={makeOrder({ expires_at: expiresAt })} nowFn={() => nowMs} />,
     );
-    expect(screen.getByText(/pay window elapsed/i)).toBeTruthy();
+    expect(screen.getByText(/payment window closed/i)).toBeTruthy();
   });
 
   it('does NOT render Pay by row when status is not pending', () => {

@@ -595,8 +595,7 @@ const FLEET_PROXY_TEST_DEADLINE_MS = 90_000;
 
 /** T-1 — a fleet `ok:false` frame carries no `reason` (the node reports the
  *  measurement, not prose), so the client says what happened in plain words. */
-const FLEET_TEST_FAILED_REASON =
-  'The Mac that runs your profiles could not connect through this proxy.';
+const FLEET_TEST_FAILED_REASON = 'Driftstack could not connect through this proxy.';
 
 /** (i) I6 — a 403 on /test whose problem detail is the route's TIER refusal
  *  (the same one POST/PUT give a VPN row on a tier without vpnEgress). The
@@ -609,7 +608,8 @@ const FLEET_TEST_FAILED_REASON =
  *  carries no problem `type` of its own, so its sentence is the discriminator
  *  (`requireTierFeature` in the server's errors-helpers). Every other 403
  *  still throws, as before I6. */
-export const PLAN_EXCLUDES_FLEET_TEST_REASON = 'Your plan does not include VPN checks.';
+export const PLAN_EXCLUDES_FLEET_TEST_REASON =
+  'Your plan does not include OpenVPN or WireGuard proxies. Upgrade your plan to use and test them.';
 
 /** The server's tier-refusal detail: `The "<feature>" feature is not available
  *  on the "<tier>" tier. …` — matched, never reproduced. */
@@ -634,7 +634,7 @@ export function isTierRefusalDetail(detail: string | undefined): detail is strin
 // (l) #9 — the next step is the ONE the whole app gives for a missing key
 // (Settings), never "the dashboard", which the GUI names nowhere as a place
 // the customer can go from here.
-export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON = `Testing the tunnel needs an API key. ${MISSING_API_KEY_NEXT_STEP}.`;
+export const DESKTOP_CREDENTIAL_FLEET_TEST_REASON = `Testing through Driftstack needs an API key. ${MISSING_API_KEY_NEXT_STEP}.`;
 
 /** The server's route-policy detail — the shared contract's sentence, not a
  *  copy of it. (k) K1 — this used to be a hand-copied phrase in a regex, so a
@@ -696,7 +696,7 @@ export async function testAccountProxy(
       if (tierDetail !== undefined) {
         return {
           ok: false,
-          reason: `${PLAN_EXCLUDES_FLEET_TEST_REASON} ${tierDetail}`,
+          reason: PLAN_EXCLUDES_FLEET_TEST_REASON,
           not_run: 'plan_excluded',
         };
       }
@@ -707,7 +707,7 @@ export async function testAccountProxy(
       if (policyDetail !== undefined) {
         return {
           ok: false,
-          reason: `${DESKTOP_CREDENTIAL_FLEET_TEST_REASON} ${policyDetail}`,
+          reason: DESKTOP_CREDENTIAL_FLEET_TEST_REASON,
           not_run: 'desktop_credential',
         };
       }

@@ -391,7 +391,7 @@ describe('POST /v1/agent-sessions/:id/files — per-account concurrent-upload CO
     expect(body.status).toBe('error');
     expect(body.handle).toBeNull();
     // The COUNT-cap reason (distinct from the 512 MB byte-cap reason).
-    expect(body.reason).toMatch(/too many concurrent uploads/i);
+    expect(body.reason).toMatch(/too many uploads at once/i);
     expect(relayed.length).toBe(relayedBefore); // never relayed
     expect(relayed).not.toContain('overflow.bin');
 
@@ -672,7 +672,7 @@ describe('POST /v1/agent-sessions/:id/files — per-SESSION LIFETIME cap (indepe
     expect(res.statusCode).toBe(200);
     const body = res.json<FilesBody>();
     expect(body.status).toBe('error');
-    expect(body.reason).toMatch(/too many files uploaded in this session/i);
+    expect(body.reason).toMatch(/too many files have been uploaded in this session/i);
     expect(relayed.length).toBe(relayedBefore); // never relayed
   });
 
@@ -838,7 +838,7 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     expect(bodies.filter((b) => b.status === 'ok')).toHaveLength(2);
     const shed = bodies.filter((b) => b.status === 'error');
     expect(shed).toHaveLength(1);
-    expect(shed[0]!.reason).toMatch(/too many files uploaded in this session/);
+    expect(shed[0]!.reason).toMatch(/too many files have been uploaded in this session/);
     // The shed upload must never have reached the node.
     expect(entered).toHaveLength(2);
   });
@@ -886,7 +886,7 @@ describe('POST /v1/agent-sessions/:id/files — the LIFETIME cap holds under CON
     // and passed only because the message hardcoded the default — the
     // server was rejecting at a few KiB while telling the customer 2 GiB.
     expect(shed[0]!.reason).toContain(
-      `at most ${binarySizeLabel(CHUNK_B64.length * 2)} of total uploads per session`,
+      `this session can upload at most ${binarySizeLabel(CHUNK_B64.length * 2)} in total`,
     );
     expect(entered).toHaveLength(2);
   });

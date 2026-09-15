@@ -134,7 +134,7 @@ describe('agent-session response schema parity', () => {
     };
     const event = spec.components.schemas.AgentSession?.properties.error_event;
     expect(event?.description, 'error_event itself').toBe(
-      'The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one.',
+      'The most recent failure recorded for this session, at launch or while running. Null when none has been reported.',
     );
     expect(event?.properties?.detail?.description, 'detail').toBe(
       'Null when the server has nothing to add beyond `summary`.',

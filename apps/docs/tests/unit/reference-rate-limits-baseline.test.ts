@@ -49,8 +49,11 @@ describe('W329.A /reference/rate-limits baseline', () => {
     expect(body).toMatch(/Retry-After/);
   });
 
-  it('frames rate limits as anti-abuse, not pricing meter (ADR-004 consistency)', () => {
+  it('frames rate limits as anti-abuse, not pricing meter (concurrent-sessions-only pricing, in customer words)', () => {
     expect(body).toMatch(/anti-abuse/i);
-    expect(body).toMatch(/[Pp]ricing is concurrent-only/);
+    expect(body).toMatch(
+      /[Pp]ricing is based only on how many sessions run at\s*\n?once \(concurrent sessions\)/,
+    );
+    expect(body).not.toMatch(/ADR-004/);
   });
 });

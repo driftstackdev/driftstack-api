@@ -291,8 +291,8 @@ describe('DevicePicker — a row that cannot be picked says why', () => {
     expect(screen.getByText('reference')).toBeInTheDocument();
   });
 
-  it('CRITICAL VACUITY CONTROL: a selectable row shows the bit-exact mark, not a reason — so the branch above is not simply relabelling everything', () => {
+  it('CRITICAL VACUITY CONTROL: a selectable row shows the verified mark, not a reason — so the branch above is not simply relabelling everything', () => {
     render(<Harness />);
-    expect(screen.getAllByText('✓ bit-exact').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('✓ Verified').length).toBeGreaterThan(0);
   });
 });

@@ -60,9 +60,9 @@ describe('W507.C apps/marketing-site/src/pages/docs/idempotency-keys.astro conte
     expect(body).toMatch(/<strong>Read-only<\/strong> endpoints\s*do not consult the header\./);
   });
 
-  it("Key-format 3-constraint + UUIDv4 canonical-choice pinned: 'Use any opaque string up to 255 ASCII characters (no whitespace). UUIDv4 is the canonical choice and what Driftstack's own GUI client mints.' + 'Generate one per intent, not per request.' + 'Don't include user data in the key — keys appear in server logs.' — pinned so the 3-state choosing-a-key guidance survives (drift to dropping 'no whitespace' would let clients send invalid keys; drift to dropping 'one per intent' would let the dedupe window get reset per-retry; drift to dropping 'keys appear in server logs' would let customers leak PII through the key value)", () => {
+  it("Key-format 3-constraint + UUIDv4 canonical-choice pinned: 'Use any opaque string up to 255 ASCII characters (no whitespace). UUIDv4 is the recommended choice and what Driftstack's own desktop app uses.' + 'Generate one per intent, not per request.' + 'Don't include user data in the key — keys appear in server logs.' — pinned so the 3-state choosing-a-key guidance survives (drift to dropping 'no whitespace' would let clients send invalid keys; drift to dropping 'one per intent' would let the dedupe window get reset per-retry; drift to dropping 'keys appear in server logs' would let customers leak PII through the key value)", () => {
     expect(body).toMatch(
-      /Use any opaque string up to 255 ASCII characters\s*\(no whitespace\)\. UUIDv4 is the canonical choice and what\s*Driftstack's own GUI client mints\./,
+      /Use any opaque string up to 255 ASCII characters\s*\(no whitespace\)\. UUIDv4 is the recommended choice and what\s*Driftstack's own desktop app uses\./,
     );
     expect(body).toMatch(
       /Generate one per <em>intent<\/em>, not per request\. If a\s*single submit button could be clicked twice, all retries of\s*that submit use the same key\./,
@@ -98,8 +98,10 @@ describe('W507.C apps/marketing-site/src/pages/docs/idempotency-keys.astro conte
       /if you send <code>k1<\/code>\s*with price_cents=4900 first, then <code>k1<\/code> with\s*price_cents=9900, you still get the original 4900-cent order\s*back\./,
     );
     expect(body).toMatch(
-      /The server records the mismatch and surfaces\s*it as <code>body_mismatches<\/code> on the admin\s*<code>GET \/v1\/admin\/crypto-orders\/idempotency-metrics<\/code>\s*counter/,
+      /The server records the mismatch so support can spot\s*client bugs where a key is being reused across intents\./,
     );
+    // Admin-only routes and counters are not something a customer can act on.
+    expect(body).not.toMatch(/\/v1\/admin\/|body_mismatches/);
     // Internal V-anchor must NOT bleed into customer-facing copy.
     expect(body).not.toMatch(/records the mismatch \(V-666\.AR\)/);
   });

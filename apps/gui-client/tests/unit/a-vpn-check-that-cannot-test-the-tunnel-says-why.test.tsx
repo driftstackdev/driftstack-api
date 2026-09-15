@@ -164,12 +164,12 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     // stores a proxy on the account — the first launch through it does — so
     // "Store this proxy on your account" named a step with no button.
     expect(VPN_NOT_STORED_CHECK_NOTICE).toBe(
-      'Endpoint resolves. Launch a session through this proxy once to store it on your account; then Check VPN can test the tunnel.',
+      'Address found. Launch a session through this VPN once to save it to your account; then Check VPN can test it.',
     );
-    expect(VPN_NOT_STORED_CHECK_NOTICE).not.toMatch(/^Endpoint resolves\. Store /);
+    expect(VPN_NOT_STORED_CHECK_NOTICE).not.toMatch(/^Address found\. (Store|Save) /);
     expect(testAccountProxy).not.toHaveBeenCalled();
     // The pre-flight's own verdict still shows — the notice is beside it, not instead.
-    expect(screen.getByText('endpoint ok')).toBeInTheDocument();
+    expect(screen.getByText('address ok')).toBeInTheDocument();
   });
 
   // MUTATION: swap the two gates back (not-stored before no-key) → the row
@@ -203,7 +203,7 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     fireEvent.click(await screen.findByRole('button', { name: /^check vpn$/i }));
     await waitFor(() => expect(notice()).toBe(VPN_NO_API_KEY_CHECK_NOTICE));
     expect(VPN_NO_API_KEY_CHECK_NOTICE).toBe(
-      'Endpoint resolves. Connect your API key in Settings to test it.',
+      'Address found. Connect your API key in Settings to test it.',
     );
     expect(testAccountProxy).not.toHaveBeenCalled();
   });
@@ -233,10 +233,10 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     // With the same answer landing twice, "cleared and re-derived" and "sticky"
     // read identically; a different answer is what tells them apart.
     // MUTATION: drop `settle()` from handleCheckEndpoint's unresolved branch →
-    // the not-stored sentence stays beside "unresolved" → red.
+    // the not-stored sentence stays beside "address not found" → red.
     release({ resolved: false, ip: '', message: 'DNS lookup failed' });
     await waitFor(() => expect(screen.queryByText('Checking…')).toBeNull());
-    expect(screen.getByText('unresolved')).toBeInTheDocument();
+    expect(screen.getByText('address not found')).toBeInTheDocument();
     expect(notice()).toBeNull();
     expect(screen.queryByText(VPN_NOT_STORED_CHECK_NOTICE)).toBeNull();
     expect(screen.queryByText(VPN_NO_API_KEY_CHECK_NOTICE)).toBeNull();
@@ -245,7 +245,7 @@ describe('#1 — a single-row Check that cannot test the tunnel leaves a notice 
     // dropped for good. The fleet was never asked at any point.
     fireEvent.click(screen.getByRole('button', { name: /^(re-check|check vpn)$/i }));
     await waitFor(() => expect(notice()).toBe(VPN_NOT_STORED_CHECK_NOTICE));
-    expect(screen.queryByText('unresolved')).toBeNull();
+    expect(screen.queryByText('address not found')).toBeNull();
     expect(testAccountProxy).not.toHaveBeenCalled();
   });
 

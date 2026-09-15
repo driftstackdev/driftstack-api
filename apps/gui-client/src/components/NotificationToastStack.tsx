@@ -82,26 +82,45 @@ function describe(event: NotificationEvent): { title: string; body: string } {
             ? 'critical'
             : 'warn';
       const title = `Cost ${sev}: ${total} / ${hard}`;
+      // These are alert levels, not a spending cap: crossing one pauses nothing
+      // and adds nothing to an invoice (docs: api/cost-monitoring), so the body
+      // says which level was passed and that sessions keep running.
       const body =
         event.severity === 'resolved'
-          ? `Spend dropped back below ${soft} for billing cycle ${event.billingCycle}.`
-          : `Billing cycle ${event.billingCycle} crossed the ${event.currentState} threshold.`;
+          ? `Estimated spend for ${event.billingCycle} is back below the ${soft} warning level.`
+          : event.currentState === 'over-hard'
+            ? `Estimated spend for ${event.billingCycle} has passed the ${hard} attention level. Nothing is paused.`
+            : `Estimated spend for ${event.billingCycle} has passed the ${soft} warning level. Nothing is paused.`;
       return { title, body };
     }
-    case 'incident.broadcast':
+    case 'incident.broadcast': {
+      const impact =
+        event.severity === 'outage'
+          ? 'Service outage'
+          : event.severity === 'major'
+            ? 'Major disruption'
+            : 'Minor disruption';
       return {
         title: `Incident: ${event.title}`,
-        body: `Severity ${event.severity} — incident ${event.incidentId}.`,
+        body: `${impact}. See status.driftstack.io for updates.`,
       };
-    case 'audit.high_severity':
+    }
+    case 'audit.high_severity': {
+      const who =
+        event.actorType === 'customer'
+          ? 'Done from your account'
+          : event.actorType === 'admin'
+            ? 'Done by Driftstack'
+            : 'Done automatically';
       return {
         title: `Account event: ${event.action}`,
-        body: `Actor ${event.actorType}${event.targetResourceId !== null ? ` · target ${event.targetResourceId}` : ''}.`,
+        body: `${who}${event.targetResourceId !== null ? `. Affects ${event.targetResourceId}` : ''}.`,
       };
+    }
     case 'session.errored':
       return {
         title: 'Session error',
-        body: `Session ${event.sessionId} hit ${event.errorClass}.`,
+        body: `Session ${event.sessionId} stopped with an error.`,
       };
   }
 }

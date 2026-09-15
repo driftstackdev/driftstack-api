@@ -795,7 +795,7 @@ export function AgentChatView({
               className="btn-secondary px-2 py-1 text-xs disabled:opacity-50"
               title={
                 canSaveRecipe
-                  ? 'Save this chat as a replayable task you can re-run later'
+                  ? 'Save this chat as a task you can run again later'
                   : 'Run at least one task first, then save it to replay later'
               }
             >
@@ -824,8 +824,8 @@ export function AgentChatView({
             </span>
           ) : (
             <span className="text-2xs text-ink-muted">
-              Claude plans each step in real time; browser actions run in preview mode on this
-              deployment until the live device driver is switched on for your account.
+              Claude plans each step, but browser actions run in preview mode for now — they are not
+              carried out on a real device yet.
             </span>
           )}
         </div>
@@ -1011,7 +1011,7 @@ export function AgentChatView({
                 <p className="mt-0.5 text-2xs text-ink-muted">
                   {bundledLlmEnabled
                     ? 'Enabled — send your message again to continue.'
-                    : 'This deployment offers bundled AI usage billed to your account, or you can use your own Anthropic key instead.'}
+                    : 'You can use bundled AI usage billed to your account, or your own Anthropic key.'}
                 </p>
                 {bundledLlmEnableError !== null && (
                   <p className="mt-0.5 text-2xs text-status-error">{bundledLlmEnableError}</p>
@@ -1226,8 +1226,7 @@ export function AgentChatView({
           >
             <p className="section-label">Save as task</p>
             <p className="mt-1 text-xs text-ink-muted">
-              Snapshot this chat&apos;s executed steps into a replayable task you can run again from
-              Saved tasks.
+              Save the steps from this chat as a task you can run again from Saved tasks.
             </p>
             <label className="mt-3 block text-xs text-ink-secondary">
               Name
@@ -1492,7 +1491,7 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
         {watch.kind === 'idle' && (
           <WatchPlaceholder
             title="Nothing running yet"
-            body="Dispatch a task — the live device view turns on when the live driver is enabled for this deployment."
+            body="Send a task — when a live view is available, it will appear here."
           />
         )}
         {watch.kind === 'loading' && (
@@ -1513,7 +1512,7 @@ const LiveAutomationPanel = memo(function LiveAutomationPanel({
         {watch.kind === 'simulated' && (
           <WatchPlaceholder
             title="Live view unavailable"
-            body="Browser actions are simulated in this deployment, so no live device stream is available."
+            body="Browser actions run in preview mode, so there is no live view."
             tone="muted"
           />
         )}
@@ -1946,7 +1945,7 @@ function AgentResponseBody({
         </div>
       );
     case 'logged-manual':
-      return <p className="text-xs italic text-ink-muted">Logged (manual mode — no AI turn).</p>;
+      return <p className="text-xs italic text-ink-muted">Logged — no AI reply in manual mode.</p>;
     default:
       // Robustness (#14): a persisted chat rehydrated from a newer/older build, or a
       // server that ships a response.kind this build doesn't know, must not render a
@@ -2100,7 +2099,7 @@ function intentLabel(intent: AgentIntent): string {
     case 'scroll':
       return `scroll ${intent.direction}`;
     case 'behavioral_pause':
-      return 'behavioural pause';
+      return 'pause';
     default:
       // Robustness (#14): a newer server (or a rehydrated persisted chat) may carry an
       // intent.kind this build doesn't model. Surface the raw kind rather than letting
@@ -2114,7 +2113,7 @@ function UsageBadge({ usage }: { usage: AgentUsage }): JSX.Element {
   const parts: string[] = [];
   if (usage.cost_usd_cents !== undefined) parts.push(`$${(usage.cost_usd_cents / 100).toFixed(4)}`);
   const tokens = (usage.anthropic_input_tokens ?? 0) + (usage.anthropic_output_tokens ?? 0);
-  if (tokens > 0) parts.push(`${tokens} tok`);
+  if (tokens > 0) parts.push(`${tokens} tokens`);
   if (usage.model !== undefined) parts.push(modelLabel(usage.model));
   // Nothing customer-meaningful to show (no cost/tokens/model) — render nothing
   // rather than leaking the internal decomposer_kind enum (journey audit L5).

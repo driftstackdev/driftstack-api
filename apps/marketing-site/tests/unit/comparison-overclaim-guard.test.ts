@@ -21,9 +21,9 @@ function read(p: string): string {
 describe('W312.B /comparison overclaim guard', () => {
   const body = read(PAGE);
 
-  it('positions Driftstack as Apple WebKit (source-level fork)', () => {
+  it("positions Driftstack as Apple WebKit, our own build of Apple's source code (2026-09-15: the '(source-level fork)' developer gloss left the customer copy)", () => {
     expect(body).toMatch(/Apple WebKit/);
-    expect(body).toMatch(/source-level\s+fork/i);
+    expect(body).toMatch(/our own build of Apple's source code/);
   });
 
   it('positions the runtime against the multi-archetype iPhone launch family (M.6 Path A: 15 Pro / 16 Pro / 17 lineup · iOS 18.7 · Safari 26.4-26.5)', () => {

@@ -751,7 +751,7 @@ describe('(k) K3 — the list adoption acts on an EXPLICIT exit_superseded_at: n
     expect(await screen.findByText('203.0.113.9')).toBeTruthy();
     expect(screen.queryByText(LIST_TUNNEL_DOWN_REASON)).toBeNull();
     expect(screen.queryByText('tunnel down')).toBeNull();
-    expect(screen.getByText('endpoint ok')).toBeTruthy();
+    expect(screen.getByText('address ok')).toBeTruthy();
     expect((await loadProbeCache()).wg1?.fleetFailureReason).toBeUndefined();
   });
 

@@ -171,7 +171,8 @@ describe('SessionsView consistency #11 — New session confirms the bare path', 
     await waitFor(() => expect(confirmFn).toHaveBeenCalledTimes(1));
     // The confirm copy names the trade-off + the proxy it would use.
     const msg = confirmFn.mock.calls[0]?.[0] ?? '';
-    expect(msg).toMatch(/NO saved profile/i);
+    expect(msg).toMatch(/without a profile/i);
+    expect(msg).not.toMatch(/persistent identity/i);
     expect(msg).toMatch(/EU exit/);
     await waitFor(() => expect(sessionsCreate).toHaveBeenCalledTimes(1));
   });

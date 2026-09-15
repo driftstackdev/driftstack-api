@@ -143,7 +143,7 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
               type="date"
               value={createdAfter}
               onChange={(e) => setCreatedAfter(e.target.value)}
-              aria-label="Filter by created_at (inclusive lower bound)"
+              aria-label="Created on or after"
               className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs"
             />
           </label>
@@ -153,7 +153,7 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
               type="date"
               value={createdBefore}
               onChange={(e) => setCreatedBefore(e.target.value)}
-              aria-label="Filter by created_at (exclusive upper bound)"
+              aria-label="Created before"
               className="rounded border border-surface-divider bg-surface-inset px-2 py-1 text-xs"
             />
           </label>
@@ -357,10 +357,10 @@ export function CryptoOrdersHistoryView(props: CryptoOrdersHistoryViewProps = {}
           <div className="flex w-full max-w-md flex-col gap-4 rounded-md border border-surface-divider bg-surface-base p-6">
             <h3 className="text-base font-semibold">Cancel this order?</h3>
             <p className="text-sm">
-              Order <span className="font-mono text-xs">{cancelConfirmFor}</span> will be marked
-              cancelled. You can still mint a new order afterwards. Crypto payments are{' '}
-              <strong>non-refundable</strong>; cancelling only stops the pending pay window — if
-              you've already sent crypto, contact support to reconcile.
+              Order <span className="font-mono text-xs">{cancelConfirmFor}</span> will be cancelled.
+              You can create a new order afterwards. Crypto payments are{' '}
+              <strong>non-refundable</strong> — if you've already sent payment, contact support
+              before cancelling.
             </p>
             <div className="flex justify-end gap-2">
               <button

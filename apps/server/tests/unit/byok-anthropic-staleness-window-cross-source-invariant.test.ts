@@ -44,12 +44,14 @@ describe('BYOK Anthropic staleness-window cross-source invariant', () => {
     expect(docs).toMatch(/After 90 days the/);
   });
 
-  it('docs explicitly call sendByokAnthropicKeyRotationReminder — pinned so the docs + service function name stay in sync (drift on the function name would orphan the docs from the actual Postmark trigger)', () => {
-    expect(docs).toMatch(/`sendByokAnthropicKeyRotationReminder`/);
+  it('docs state the 60-day one-time reminder email in customer words (the service method name stays internal)', () => {
+    expect(docs).toMatch(/After 60 days\s+the customer receives a one-time reminder email\./);
+    expect(docs).not.toMatch(/sendByokAnthropicKeyRotationReminder/);
   });
 
-  it('docs explicitly call BYOKAnthropicService.getPlaintext({ now }) returns null on stale — pinned so the docs + service method signature stay in sync', () => {
-    expect(docs).toMatch(/`BYOKAnthropicService\.getPlaintext\(\{ now \}\)` call returns null/);
+  it('docs state that after 90 days the stored key is treated as absent — the customer-visible half of getPlaintext returning null on stale', () => {
+    expect(docs).toMatch(/After 90 days the\s+stored key is treated as absent/);
+    expect(docs).not.toMatch(/BYOKAnthropicService/);
   });
 
   it('PUT-resets-set_at contract framing pinned in docs + matches the service upsert path that touches set_at on every successful PUT (cross-confirmed by db/byok-anthropic-repo.ts upsert)', () => {

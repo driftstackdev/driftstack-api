@@ -296,7 +296,7 @@
           <span class="info-value" id="v-proto">…</span>
         </div>
         <div class="info-row">
-          <span class="info-label">UDP / QUIC</span>
+          <span class="info-label">HTTP/3</span>
           <span class="info-value" id="v-quic"><span class="badge off">Checking…</span></span>
         </div>
       </section>
@@ -357,9 +357,9 @@
         function protoLabel(p) {
           p = (p || '').toLowerCase();
           if (p === 'h3' || p.indexOf('http/3') === 0 || p.indexOf('quic') !== -1)
-            return 'HTTP/3 · QUIC over UDP';
-          if (p === 'h2' || p.indexOf('http/2') === 0) return 'HTTP/2 · TCP';
-          if (p.indexOf('http/1') === 0 || p === 'http/1.1') return 'HTTP/1.1 · TCP';
+            return 'HTTP/3';
+          if (p === 'h2' || p.indexOf('http/2') === 0) return 'HTTP/2';
+          if (p.indexOf('http/1') === 0 || p === 'http/1.1') return 'HTTP/1.1';
           return p ? p : '—';
         }
         function setQuic(on) {

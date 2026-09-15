@@ -111,23 +111,23 @@ describe('W786 docs reference/ triplet content parity', () => {
     const p = read(ERR);
 
     expect(p).toMatch(
-      /`DriverError` \(502\) and `DriverNotIntegrated` \(503\) are\s*\n?\*\*not\*\* retryable because the underlying cause is structural/,
+      /`DriverError` \(502\) and `DriverNotIntegrated` \(503\) are\s*\n?\*\*not\*\* retryable because the cause is not transient/,
     );
     expect(p).toMatch(
-      /`FeatureUnavailableError` \(503\) means an endpoint requires\s*\n?infrastructure not configured in this deployment/,
+      /`FeatureUnavailableError` \(503\) means a feature is not enabled\s*\n?on this deployment \(for example, avatar uploads\)/,
     );
     expect(p).toMatch(
       /`MfaStepUpRequiredError` \(403\) means the customer needs to\s*\n?prove fresh MFA before the request will succeed\./,
     );
   });
 
-  it('CRITICAL errors source-of-truth pointers pinned — PROBLEM_TYPES + 3 SDK error files. Drift would lose canonical impl pointers.', () => {
+  it('CRITICAL errors page cites no internal repository paths. 2026-09-15 — the "Source of truth" section (PROBLEM_TYPES + the 3 SDK error files + the contributor change rule) was how we run it, not what the customer gets; the page now ends on the customer-facing cross-references, and PROBLEM_TYPES parity is derived by docs-reference-errors-parity + errors-md-status-vs-code-parity instead of pinned as prose.', () => {
     const p = read(ERR);
 
-    expect(p).toMatch(/`packages\/api-types\/src\/problem\.ts` \(`PROBLEM_TYPES`\)/);
-    expect(p).toMatch(/`packages\/sdk-typescript\/src\/errors\.ts`/);
-    expect(p).toMatch(/`packages\/sdk-python\/src\/driftstack\/errors\.py`/);
-    expect(p).toMatch(/`packages\/sdk-go\/errors\.go`/);
+    expect(p).not.toMatch(/^## Source of truth$/m);
+    expect(p).not.toMatch(/`(?:packages|apps)\/[\w./-]+\.(?:ts|py|go)`/);
+    expect(p).toMatch(/^## Cross-references$/m);
+    expect(p).toMatch(/\[Idempotency keys\]\(\/reference\/idempotency\/\)/);
   });
 
   // ─── reference/rate-limits.md ─────────────────────────────────
@@ -141,12 +141,13 @@ describe('W786 docs reference/ triplet content parity', () => {
     );
   });
 
-  it('CRITICAL anti-abuse-not-pricing framing pinned. The "intentional anti-abuse caps (runaway scripts, accidental DoS), not the pricing meter. Pricing is concurrent-only per ADR-004" wording matches W754 + W769 + ADR-004 framing.', () => {
+  it('CRITICAL anti-abuse-not-pricing framing pinned. The "intentional anti-abuse caps (runaway scripts, accidental DoS), not the pricing meter. Pricing is based only on how many sessions run at once (concurrent sessions)" wording matches W754 + W769 (2026-09-15: the internal ADR-004 id left the customer page).', () => {
     const p = read(RL);
 
     expect(p).toMatch(
-      /The limits are\s*\n?intentional anti-abuse caps \(runaway scripts, accidental DoS\),\s*\n?not the pricing meter\. Pricing is concurrent-only per ADR-004\./,
+      /The limits are\s*\n?intentional anti-abuse caps \(runaway scripts, accidental DoS\),\s*\n?not the pricing meter\. Pricing is based only on how many sessions run at\s*\n?once \(concurrent sessions\)\./,
     );
+    expect(p).not.toMatch(/ADR-004/);
   });
 
   it('CRITICAL bucket-key and account-scope framing pinned — each route selects one key; self/control consumes once; a team actor and distinct owner consume that same key and cost', () => {
@@ -256,14 +257,13 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).not.toMatch(/capped at 30s/);
   });
 
-  it("CRITICAL per-account-overrides framing pinned. The '/v1/admin/rate-limit-overrides + support@driftstack.dev workload-shape email' wording explains the escalation path.", () => {
+  it("CRITICAL per-account-overrides framing pinned. The 'Driftstack support can configure per-account overrides + support@driftstack.dev workload-shape email' wording explains the escalation path (2026-09-15: the staff-only admin route is nothing a customer can call, so it left the page).", () => {
     const p = read(RL);
 
+    expect(p).toMatch(/Driftstack support can configure per-account overrides\./);
+    expect(p).not.toMatch(/\/v1\/admin\/rate-limit-overrides/);
     expect(p).toMatch(
-      /Driftstack staff can configure per-account overrides via\s*\n?`\/v1\/admin\/rate-limit-overrides`\./,
-    );
-    expect(p).toMatch(
-      /Email `support@driftstack\.dev` with workload shape \+\s*\n?expected steady-state RPS\./,
+      /Email `support@driftstack\.dev` with\s+workload shape \+\s+expected steady-state RPS\./,
     );
   });
 
@@ -302,12 +302,15 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).not.toMatch(/headers are emitted on every status code/i);
   });
 
-  it('CRITICAL TIER_RATE_LIMIT_DEFAULTS source-of-truth pinned. Mirror sites: packages/api-types + apps/server/src/services/rate-limit.ts bucketConfigFor().', () => {
+  it('CRITICAL rate-limits page closes with the customer-facing discrepancy route, not internal source pointers. 2026-09-15 — the TIER_RATE_LIMIT_DEFAULTS / bucketConfigFor() mirror-site section was how we run it; table-vs-code parity is derived by published-rate-limit-table-matches-the-code instead.', () => {
     const p = read(RL);
 
-    expect(p).toMatch(/`packages\/api-types\/src\/common\.ts:TIER_RATE_LIMIT_DEFAULTS`/);
-    expect(p).toMatch(/`apps\/server\/src\/services\/rate-limit\.ts`/);
-    expect(p).toMatch(/`bucketConfigFor\(\)`/);
+    expect(p).toMatch(/^## Reporting a discrepancy$/m);
+    expect(p).toMatch(
+      /The limits above are the same ones the API enforces and the same ones shown\s*\n?in your dashboard\. If you notice a mismatch, email\s*\n?\[support@driftstack\.dev\]\(mailto:support@driftstack\.dev\)\./,
+    );
+    expect(p).not.toMatch(/TIER_RATE_LIMIT_DEFAULTS|bucketConfigFor/);
+    expect(p).not.toMatch(/^## Source of truth$/m);
   });
 
   // ─── reference/scopes.md ──────────────────────────────────────
@@ -394,24 +397,21 @@ describe('W786 docs reference/ triplet content parity', () => {
     expect(p).toMatch(/\*\*Dashboard \/ customer self-service:\*\* `account_owner`/);
   });
 
-  it('CRITICAL ApiKeyScopeSchema + requireScope source-of-truth pinned. 2 server-side call sites + 41-case unit test.', () => {
+  it('CRITICAL scopes page cites no internal repository paths. 2026-09-15 — the ApiKeyScopeSchema / requireScope / scope-check.test.ts source-of-truth section was how we run it; enum-vs-page parity is derived by docs-reference-scopes-parity + the V-1057 row check above, and the page now ends on the scope-picking guidance.', () => {
     const p = read(SCP);
 
-    expect(p).toMatch(/`packages\/api-types\/src\/common\.ts:ApiKeyScopeSchema`/);
-    expect(p).toMatch(
-      /mirrored at two server-side call\s*\n?sites \(`apps\/server\/src\/lib\/errors-helpers\.ts` \+\s*\n?`apps\/server\/src\/services\/auth\.ts`\)/,
-    );
-    expect(p).toMatch(
-      /41-case unit test at\s*\n?`apps\/server\/tests\/unit\/scope-check\.test\.ts`/,
-    );
+    expect(p).not.toMatch(/^## Source of truth$/m);
+    expect(p).not.toMatch(/`(?:packages|apps)\/[\w./-]+\.ts/);
+    expect(p).toMatch(/^## Picking scopes for a new key$/m);
   });
 
-  it('CRITICAL gui_control scope locked-decision-L-001 framing pinned. V-788 — the claim this used to freeze (customer keys never carry gui_control; only enterprise self-hosted GUI keys do) was FALSE: ELEVATED_SCOPES withholds only admin + driftstack_internal_admin, so any account_owner on an apiAccess tier can mint a key carrying it. The corrected text is pinned here and kept honest by gui-control-is-a-scope-boundary-not-a-tier-one.test.ts, which derives the restriction from the code.', () => {
+  it('CRITICAL gui_control scope row pinned in customer words (2026-09-15: the control-plane wording and the internal L-001 id left the page). V-788 — the claim this used to freeze (customer keys never carry gui_control; only enterprise self-hosted GUI keys do) was FALSE: ELEVATED_SCOPES withholds only admin + driftstack_internal_admin, so any account_owner on an apiAccess tier can mint a key carrying it. The corrected text is pinned here and kept honest by gui-control-is-a-scope-boundary-not-a-tier-one.test.ts, which derives the restriction from the code.', () => {
     const p = read(SCP);
 
     expect(p).toMatch(
-      /\| `gui_control`\s+\| special\s+\| Manual-control plane \(`tap_at`, `type_focused`\)\. Intended for the self-hosted GUI workflow \(locked-decision L-001\); it is never granted unless a mint request asks for it, but no tier or deployment check restricts who may ask\./,
+      /\| `gui_control`\s+\| special\s+\| Manual control of a live session from the desktop app \(`tap_at`, `type_focused`\)\. Only added to a key when you ask for it while creating the key — a broad `read`, `write` or `admin` key does not include it\. Nothing restricts who may ask for it: any account that can create API keys may request it\./,
     );
+    expect(p).not.toMatch(/control plane|L-001/);
   });
 
   it('test file metadata — file exists at canonical path', () => {

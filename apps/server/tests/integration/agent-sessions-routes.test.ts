@@ -432,7 +432,7 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     // message instead of a 30s "the proxy may be down" timeout.
     expect(res.statusCode).toBe(400);
     expect(res.json<{ detail?: string }>().detail).toBe(
-      'HTTP proxies are unsupported for browser sessions on this deployment — use a SOCKS5, OpenVPN, or WireGuard proxy.',
+      'HTTP proxies cannot be used for browser sessions. Use a SOCKS5, OpenVPN, or WireGuard proxy instead.',
     );
   });
 
@@ -3085,8 +3085,8 @@ describe('AI-D /v1/agent-sessions/* (wired — deterministic runtime)', () => {
     expect(res.statusCode, 'an unserialised takeover must not be granted').toBe(503);
     expect(
       res.json<{ detail?: string }>().detail,
-      'and the refusal names the missing lock rather than blaming the caller',
-    ).toContain('pair-mode lock');
+      'and the refusal says taking control is unavailable here rather than blaming the caller',
+    ).toBe('Taking control of this session is not available on this installation.');
   });
 
   it('Slice 5 POST /:id/input-event on mode=pair + ai-driving WITHOUT client_id → 400 ValidationFailed (client_id required for takeover-trigger)', async () => {

@@ -58,7 +58,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("DIMENSIONS 3-group taxonomy: 'Pricing' + 'Quotas' + 'Features' — pinned so the 3-group comparison-table structure stays consistent (drift to merging groups would lose the buyer-mental-model split between $-questions / capacity-questions / feature-questions)", () => {
     expect(body).toMatch(/heading: 'Pricing',/);
-    expect(body).toMatch(/heading: 'Quotas',/);
+    expect(body).toMatch(/heading: 'Limits',/);
     expect(body).toMatch(/heading: 'Features',/);
   });
 
@@ -74,9 +74,9 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
 
   it("Quotas-group 4 rows: Saved profiles + Concurrent sessions + Session hours + Device types (archetypes) — S20b plain-language labels; pinned so the 4 quota-dimensions stay complete (drift to dropping the archetypes row would lose the per-tier device-mix differentiation; drift to dropping 'Session hours' would obscure the hour-metering boundary for the free column)", () => {
     expect(body).toMatch(/label: 'Saved profiles',/);
-    expect(body).toMatch(/label: 'Concurrent sessions',/);
+    expect(body).toMatch(/label: 'Concurrent sessions \(running at once\)',/);
     expect(body).toMatch(/label: 'Session hours',/);
-    expect(body).toMatch(/label: 'Device types \(archetypes\)',/);
+    expect(body).toMatch(/label: 'Device types',/);
   });
 
   it("Features-group 3 rows: AI agent + Audience + Support — S20b: the '(bundled LLM)' label suffix moved into the footnote that now defines BYOK/bundled in plain words; pinned so the 3 feature-dimensions stay complete (drift to dropping 'Audience' would lose the use-case anchoring; drift to dropping 'Support' would hide the per-tier SLA escalation)", () => {
@@ -92,9 +92,8 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
   });
 
   it("★ popular-tier framing pinned: '★ = team's most popular tier in active evaluations. Not a sales push — just what prospective customers are picking right now.' (S20b: 'cohort signal' reworded plain) — pinned so the honest 'data signal, not sales pressure' framing survives (drift to dropping 'Not a sales push' would let the highlight read as upsell rather than data signal)", () => {
-    expect(body).toMatch(
-      /★ = team's most popular tier in active evaluations\. Not a sales\s*push — just what prospective customers are picking right now\./,
-    );
+    // 2026-09-15 plain words — disclaimer dropped, snapshot qualifier kept.
+    expect(body).toMatch(/★ = our most popular tier right now\./);
   });
 
   it("4-card tier-switching mechanics: 'Upgrade mid-month' (immediate + prorate) + 'Downgrade at renewal' (end-of-period + readable-but-uncreatable) + 'Cancel any time' (end-of-period + 30-day-data-retention) + 'Annual vs monthly' (~20% off + monthly→annual instant / annual→monthly at term end) — pinned so the 4 tier-switching policies stay consistent (drift to dropping 'readable but uncreatable' on downgrade would surprise customers when profile-creation hits the tier cap; drift to changing the 30-day-data-retention would create marketing↔DPA divergence)", () => {
@@ -103,7 +102,7 @@ describe('W503.A apps/marketing-site/src/pages/pricing/comparison.astro content 
     // retention then DPA-schedule deletion, ~20% annual).
     expect(body).toMatch(/Upgrade mid-month/);
     expect(body).toMatch(
-      /Switching to a higher tier is immediate\. You pay only the\s*difference for the rest of the billing period \(prorated\)/,
+      /Switching to a higher tier is immediate\. You pay only the\s*difference for the rest of the billing period; the next\s*invoice reflects the upgrade\./,
     );
     expect(body).toMatch(/Downgrade at renewal/);
     expect(body).toMatch(

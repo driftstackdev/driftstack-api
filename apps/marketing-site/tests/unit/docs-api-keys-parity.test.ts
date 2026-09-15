@@ -36,8 +36,11 @@ describe('W265.A /docs/api-keys ↔ ApiKeyScopeSchema parity', () => {
   it('documents the paid customer-key and Free desktop-device boundary', () => {
     expect(TIER_FEATURES.free.apiAccess).toBe(false);
     expect(page).toContain('Customer-key format: <code>ds_live_&lt;random&gt;</code>');
-    expect(page).toContain('restricted <code>ds_test_…</code> device credential');
-    expect(page).toContain('not a customer API key, a general SDK key, or a sandbox credential');
+    expect(page).toContain('The Free plan signs in through the desktop app.');
+    expect(page).toMatch(
+      /does not come with a\s+customer API key, an SDK key, or a sandbox credential/,
+    );
+    expect(page).not.toMatch(/ds_test_|device credential|during request parsing/);
     expect(page).toContain('A Free dashboard web session can list and revoke keys');
     expect(page).toContain('create and rotate return an RFC 9457');
   });

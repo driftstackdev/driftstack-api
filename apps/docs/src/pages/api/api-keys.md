@@ -30,8 +30,8 @@ Free and resume after upgrade unless revoked or expired.
 
 `POST /v1/api-keys`
 
-Available to all paid tiers, including Manual. The entitlement check runs
-before key, audit, or webhook side effects.
+Available to all paid tiers, including Manual. If your tier does not
+include API access, the request is refused before anything is created.
 
 Request:
 
@@ -114,8 +114,8 @@ Response (201):
 ```
 
 After `grace_period_ends_at`, requests using the old key receive `401
-Unauthorized` because the existing `expires_at`-driven auth gate
-short-circuits. No separate revocation endpoint is needed.
+Unauthorized` — it expires automatically, so you don't need to revoke it
+separately.
 
 ### SDK examples
 
@@ -165,29 +165,22 @@ Idempotent. Revoking an already-revoked key returns the same `204 No
 Content` response. Revoked keys cannot be reactivated; mint a fresh
 key instead.
 
-**When it takes effect.** A revoked key stops authenticating on the next
-request that presents it — there is no propagation delay to wait out. The
-server keys its credential cache on a per-key version counter that revocation
-increments, and every cache read compares it, so an entry written before the
-revocation is rejected rather than served. Requests already in flight when you
-revoke may finish; anything arriving afterwards is refused.
-
-If the cache is unavailable the server falls back to the authoritative
-credential check, so revocation is never delayed by a cache failure — the
-failure mode is a slower request, not a longer-lived key.
+**When it takes effect.** A revoked key stops working on the next request
+that uses it — there is no delay. Requests already in flight when you revoke
+may finish; anything arriving afterwards is refused.
 
 ## Scopes
 
-| Scope                       | Capability                                                                                                                                                                                                                                                              |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`                      | Read-only access to list/get endpoints such as sessions, profiles, and usage.                                                                                                                                                                                           |
-| `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`.                                                                                                                                                                       |
-| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                                                                                                                                                                                        |
-| `gui_control`               | Manual-control plane for the desktop client. Never granted unless a mint request asks for it explicitly — but nothing restricts who may ask, so it is a scope you withhold from application keys, not one the platform withholds for you. Not obtainable through OAuth. |
-| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.                                                                                                                                                                                                    |
+| Scope                       | Capability                                                                                                                                                                                                                                                                   |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`                      | Read-only access to list/get endpoints such as sessions, profiles, and usage.                                                                                                                                                                                                |
+| `write`                     | Mutations (create/destroy sessions, profiles, etc.). Does NOT include read — pair it with `read`.                                                                                                                                                                            |
+| `account_owner`             | Self-service mutations (create/rotate/revoke API keys, billing portal redirect).                                                                                                                                                                                             |
+| `gui_control`               | Manual control of a session from the desktop app. Never granted unless a mint request asks for it explicitly — but nothing restricts who may ask, so it is a scope you withhold from application keys, not one the platform withholds for you. Not obtainable through OAuth. |
+| `driftstack_internal_admin` | Internal Driftstack staff scope; never granted to customer accounts.                                                                                                                                                                                                         |
 
 There is no default scope set — `scopes` is required on create
 (at least one entry; omitting it is a `400`). Most application
 keys should request `read` + `write` together. Issue
-`account_owner` only to keys used by the dashboard or operator
-tooling — application keys do not need it.
+`account_owner` only to keys used by the dashboard or your own
+admin tooling — application keys do not need it.

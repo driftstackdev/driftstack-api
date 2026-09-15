@@ -221,7 +221,7 @@ describe('customer-dashboard Billing (billing.astro) behaviour', () => {
     win = window;
     await flush();
     expect(isHidden(window, '[data-banner]')).toBe(false);
-    expect(text(window, '[data-banner]')).toContain('Billing is unavailable for this deployment');
+    expect(text(window, '[data-banner]')).toContain("Billing isn't available right now");
     // W588 — the mock subscription card is replaced with an honest state, not
     // left showing a fabricated tier/renew that a real customer misreads.
     expect(text(window, '[data-field="sub-tier"]')).toBe('Billing unavailable');

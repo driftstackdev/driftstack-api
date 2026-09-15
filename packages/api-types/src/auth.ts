@@ -27,7 +27,7 @@ export const AuthPasswordSchema = z
   .string()
   .min(12)
   .max(128)
-  .describe('Account password — 12-128 chars; no composition rules per NIST 800-63B');
+  .describe('Account password — 12 to 128 characters. No other rules.');
 
 // Opaque single-use token returned by signup-verify / magic-link request /
 // password-reset request as a URL-safe string. Stored sha256-hashed.
@@ -36,7 +36,9 @@ export const AuthTokenSchema = z
   .min(32)
   .max(256)
   .regex(/^[A-Za-z0-9_-]+$/)
-  .describe('URL-safe single-use auth token; sha256-hashed at rest');
+  .describe(
+    'Single-use token from the link in your verification, sign-in, or password-reset email.',
+  );
 
 // ───────────────────────────────────────────────────────────────────────────
 // Signup

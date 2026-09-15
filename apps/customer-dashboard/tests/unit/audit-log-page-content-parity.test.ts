@@ -77,8 +77,11 @@ describe('W358.B customer-dashboard /audit-log page content parity', () => {
   });
 
   it('cursor-paginated list endpoint /v1/account/audit-log pinned ↔ route registration', () => {
-    expect(body).toMatch(/GET \/v1\/account\/audit-log/);
-    expect(body).toMatch(/cursor pagination/);
+    expect(body).toMatch(/apiBaseUrl \+ '\/v1\/account\/audit-log\?'/);
+    // 2026-09-15 plain-words pass: the footer sends customers to the docs for
+    // older entries instead of naming the read endpoint + cursor mechanics.
+    expect(body).toMatch(/Older entries are still available through the API/);
+    expect(body).toContain('https://docs.driftstack.io/api/audit-log/');
     expect(body).toMatch(/params\.push\('cursor=' \+ encodeURIComponent\(cursor\)\)/);
     expect(route).toContain("'/v1/account/audit-log'");
   });

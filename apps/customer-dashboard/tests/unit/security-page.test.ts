@@ -357,7 +357,7 @@ describe('security page — web-session management (security)', () => {
     expect(btn.getAttribute('aria-busy')).toBe('false');
     expect(btn.textContent).toContain('Check inbox before retrying');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*email may have been sent.*inbox and spam.*multiple reset emails.*newest one.*reload Security.*only if no message arrives/i,
+      /not sure the email went out.*inbox and spam folder first.*more than one reset email.*use the newest.*If nothing arrives, reload this page and try again/i,
     );
 
     btn.dispatchEvent(new window.Event('click', { bubbles: true }));
@@ -505,7 +505,7 @@ describe('security page — web-session management (security)', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
     expect(window.document.querySelector('[data-revoke-id="sess_other"]')).toBeNull();
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*active sign-ins were refreshed.*sign-in is gone.*revocation completed.*still appears.*retry/i,
+      /not sure it finished.*list below is up to date.*no longer listed, it was revoked.*still there, try again/i,
     );
   });
 
@@ -535,7 +535,7 @@ describe('security page — web-session management (security)', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
     expect(window.document.querySelector('[data-revoke-id]')).toBeNull();
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*active sign-ins were refreshed.*only the current sign-in remains.*every other session was revoked.*others still appear.*retry/i,
+      /not sure it finished.*list below is up to date.*only this sign-in is left.*others were signed out.*still listed, try again/i,
     );
   });
 

@@ -87,7 +87,7 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     expect([400, 422]).toContain(res.statusCode);
   });
 
-  it('session with no assigned node → 200 { status:"unavailable", reason:"not live on a node" }', async () => {
+  it('session with no assigned node → 200 { status:"unavailable", reason:"This session is not running." }', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);
     const res = await fx.app.inject({
@@ -99,10 +99,10 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<NavigateHistoryBody>();
     expect(body).toMatchObject({ status: 'unavailable' });
-    expect(body.reason).toMatch(/not live on a node/);
+    expect(body.reason).toBe('This session is not running.');
   });
 
-  it('node assigned but not connected → 200 { status:"unavailable", reason:"not connected" }', async () => {
+  it('node assigned but not connected → 200 { status:"unavailable", reason:"cannot be reached right now" }', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);
     await fx.agentSessionsRepo!.setNodeId(id, 'node-not-connected');
@@ -115,7 +115,7 @@ describe('POST /v1/agent-sessions/:id/history (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<NavigateHistoryBody>();
     expect(body).toMatchObject({ status: 'unavailable' });
-    expect(body.reason).toMatch(/not connected/);
+    expect(body.reason).toBe('This session cannot be reached right now. Try again shortly.');
   });
 
   it('connected node confirms the step → 200 { status:"ok" } (direction relayed verbatim)', async () => {

@@ -231,7 +231,7 @@ describe('settings page — avatar source and ambiguous outcomes', () => {
       (window.document.querySelector('[data-button="avatar-remove"]') as HTMLButtonElement).hidden,
     ).toBe(false);
     expect(window.document.querySelector('[data-field="avatar-status"]')?.textContent).toContain(
-      'Do not upload it again',
+      'No need to upload it again',
     );
   });
 
@@ -265,7 +265,7 @@ describe('settings page — avatar source and ambiguous outcomes', () => {
       window.document.querySelector('[data-field="avatar-preview"] img')?.getAttribute('src'),
     ).toBe(state.avatar_url);
     expect(window.document.querySelector('[data-field="avatar-status"]')?.textContent).toContain(
-      'removal completed',
+      'your avatar was removed',
     );
   });
 });

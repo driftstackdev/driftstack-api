@@ -6,9 +6,10 @@ description: Walk-through for embedding a live video stream from a running agent
 
 # Live video for agent sessions
 
-Every Mac in the Driftstack fleet runs its own LiveKit server.
-Agent sessions publish their browser video stream into a
-per-session LiveKit room. Customer-side consumers (the customer
+Live video is delivered through LiveKit, a WebRTC streaming service.
+When it is available on your deployment (see Pre-requisites), agent
+sessions publish their browser video stream into a per-session
+LiveKit room. Customer-side consumers (the customer
 dashboard, the desktop GUI client, a third-party automation
 tool) subscribe to the room and render the video — typically
 into an `<video>` element.
@@ -26,11 +27,9 @@ integration.
   npm install livekit-client
   ```
 
-- The deployment must have at least one Mac with registered
-  LiveKit credentials. The auto-populated `livekit` field on the
-  session-create response tells you whether this is the case —
-  if the field is absent, the deployment isn't LK-ready and you
-  cannot subscribe.
+- Live video must be available on your deployment. The `livekit`
+  field on the session-create response tells you: if it is
+  present, you can subscribe; if it is absent, you cannot.
 
 ## 1. Obtain the join info
 
@@ -39,8 +38,8 @@ Two ways to get the LiveKit join info (`ws_url`, `room`,
 
 ### Option A — auto-populated on session-create
 
-The simplest path. When the deployment is LK-ready, `POST
-/v1/agent-sessions` returns the join info inline:
+The simplest path. When live video is available on your deployment,
+`POST /v1/agent-sessions` returns the join info inline:
 
 ```ts
 const session = await client.agentSessions.create({});
@@ -49,14 +48,14 @@ if (session.livekit) {
 }
 ```
 
-`session.livekit` is `undefined` on pre-LK deployments OR when
-no Mac has registered credentials yet. Clients that need a token
-in that state fall back to the explicit endpoint.
+`session.livekit` is `undefined` when live video is not yet
+available for the session. Clients that need a token in that
+state fall back to the explicit endpoint.
 
 ### Option B — explicit mint
 
-For pre-existing sessions, or to re-mint after the 24-hour token
-TTL expires:
+For pre-existing sessions, or to get a fresh token after the
+24-hour token lifetime expires:
 
 ```ts
 const livekit = await fetch(
@@ -72,9 +71,8 @@ Errors:
 
 - `404` — session unknown or cross-account (anti-enumeration)
 - `403` — session is closed (not currently subscribable)
-- `503` — no Mac has registered LiveKit yet, OR the stored
-  Mac secret can't be decrypted (ops-actionable; rotate the
-  encryption key + re-run `/v1/mac-nodes/register`)
+- `503` — live video is not available right now; contact support
+  if it persists
 
 ## 2. Connect to the room
 
@@ -99,23 +97,18 @@ await room.connect(livekit.ws_url, livekit.token);
 // You're now subscribed; video frames stream into the <video> element.
 ```
 
-`adaptiveStream` + `dynacast` are recommended — they let the
-SFU pick a smaller-resolution layer when the customer's
-bandwidth is constrained.
+`adaptiveStream` + `dynacast` are recommended — they let LiveKit
+send a lower resolution when the viewer's bandwidth is limited.
 
 ## 3. Send input back (optional)
 
-The same room carries a DataChannel for input forwarding. The Mac
-harness applies events as **genuine native input** on the session,
-session-scoped via WebKit W3C Actions:
+The same room carries a data channel for sending input. Events are
+applied to the session as real touch, keyboard and mouse input:
 
-- **Touch** — the iPhone-native, preferred path (`pointerType: touch`;
-  see below). Real `touchstart` / `touchmove` / `touchend`, no cursor.
-- **Keyboard** — W3C key actions (genuine WebKit key events).
+- **Touch** — the iPhone-native, preferred path (see below). Real
+  `touchstart` / `touchmove` / `touchend`, no cursor.
+- **Keyboard** — real key events.
 - **Mouse** variants remain for desktop-style tooling.
-
-(Off the WebDriver drive-bridge the harness falls back to a legacy
-macOS Quartz CGEvent path.)
 
 InputEvent JSON schema:
 
@@ -139,12 +132,10 @@ type InputEvent =
 ### Touch input (iPhone-native — preferred)
 
 The session is a real iPhone Safari surface, so prefer the **touch**
-vocabulary over mouse events. The harness injects touch via WebKit W3C
-Actions (`pointerType: touch`) — genuine `touchstart` / `touchmove` /
-`touchend` below the page's JS, with no mouse cursor — and owns the
-realistic touch dynamics (a `tap` expands to a micro-settled
-touchstart→touchend; a `swipe` is interpolated into an eased
-touch-move path). You send the high-level intent:
+vocabulary over mouse events. Touch is delivered as real `touchstart` /
+`touchmove` / `touchend` events with no mouse cursor, and the timing is
+handled for you (a `tap` becomes a short press; a `swipe` becomes a
+smooth drag). You send the high-level intent:
 
 ```ts
 await sendInput({ type: 'tap', x: 200, y: 430 });
@@ -152,8 +143,8 @@ await sendInput({ type: 'swipe', x1: 200, y1: 700, x2: 200, y2: 200, durationMs:
 ```
 
 - Coordinates are **device-CSS pixels** (iPhone viewport space) — scale
-  your on-screen click to device space before sending (the GUI does this
-  off the rendered stream's natural dimensions).
+  your on-screen click to device space before sending (the desktop app
+  does this using the rendered stream's natural dimensions).
 - `touchId` (0–9) lets you drive concurrent fingers for multi-touch
   (e.g. pinch); single taps/swipes don't need it.
 - `durationMs` on `swipe` is capped at 60000.
@@ -161,9 +152,9 @@ await sendInput({ type: 'swipe', x1: 200, y1: 700, x2: 200, y2: 200, durationMs:
 The `mouse*` variants remain for desktop-style tooling but the iPhone
 target has no cursor; the touch vocabulary is the canonical path.
 
-Coordinates are viewport-space logical pixels (the locked iPhone 17 /
-iOS 18.7 / Safari 26.4 archetype is 402×874 logical points / 1206×2622
-physical pixels by default). Send via the LocalParticipant:
+Coordinates are viewport-space logical pixels (the default iPhone 17 /
+iOS 18.7 / Safari 26.4 device profile is 402×874 logical points /
+1206×2622 physical pixels). Send via the LocalParticipant:
 
 ```ts
 async function sendInput(event: InputEvent, reliable = true): Promise<void> {
@@ -180,9 +171,7 @@ async function sendInput(event: InputEvent, reliable = true): Promise<void> {
 ### Modifier vocabulary
 
 `keyDown` / `keyUp` `modifiers` arrays use the canonical 4-name
-set `'cmd' | 'ctrl' | 'shift' | 'option'`. These map onto the macOS
-harness's native modifier handling — W3C key-action modifiers (Quartz
-`CGEventFlags` on the legacy fallback path):
+set `'cmd' | 'ctrl' | 'shift' | 'option'`. Use these four names:
 
 ```ts
 await sendInput({
@@ -192,8 +181,8 @@ await sendInput({
 });
 ```
 
-DOM-standard names (`Shift / Control / Alt / Meta`) round-trip
-through the schema unchanged but the harness decoder drops them.
+DOM-standard names (`Shift / Control / Alt / Meta`) are accepted but
+ignored — use the four names above.
 The TS SDK re-exports `CANONICAL_MODIFIER_NAMES` from
 `@driftstack/api-types`; the Python SDK exports
 `CANONICAL_MODIFIER_NAMES` from `driftstack.resources.agent_sessions`;
@@ -221,12 +210,11 @@ useEffect(() => {
 }, [livekit]);
 ```
 
-## Token TTL + reconnect
+## Token lifetime + reconnect
 
-Tokens are 24-hour HS256 JWTs signed with a per-Mac secret. The
-SFU only checks the token at handshake — long-lived connections
-survive past the 24h expiry without disconnect. When the
-connection drops and the client has to re-handshake, mint a fresh
+Tokens are valid for 24 hours and are only checked when you
+connect, so an open connection keeps working past the expiry. When
+the connection drops and the client has to reconnect, mint a fresh
 token via the explicit endpoint (Option B above) and reconnect.
 
 The `livekit-client` library handles transient drops + auto-

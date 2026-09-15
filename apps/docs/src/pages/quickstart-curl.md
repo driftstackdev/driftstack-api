@@ -9,9 +9,11 @@ description: Drive your first iPhone Safari session with nothing but curl — cr
 This page runs your first Driftstack session using only `curl` — no
 SDK, no install step. The core create, drive, capture, and destroy
 lifecycle uses plain HTTPS calls, so this is the fastest way to see
-that wire contract directly. Live video and event streams use their
-documented streaming transports. If you'd rather start in TypeScript,
-Python, or Go, use the [SDK quickstart](/quickstart/) instead.
+exactly what the API sends and receives. Live video and session events
+are not part of this walkthrough; see the
+[live video guide](/guides/live-video/) and
+[webhook events](/webhooks/events/) for those. If you'd rather start in
+TypeScript, Python, or Go, use the [SDK quickstart](/quickstart/) instead.
 
 You will need a Driftstack account on any paid tier (including a Manual tier)
 ([sign up](https://app.driftstack.io/signup/) or
@@ -37,14 +39,14 @@ export DRIFTSTACK_API_KEY="ds_live_…"
 Customer keys on every paid tier, including Manual, start with `ds_live_` and
 authenticate through an `Authorization: Bearer` header on every call. Free
 does not create or rotate customer keys. Its browser-authorized desktop
-credential starts with `ds_test_` and is restricted to the supported desktop
-route surface.
+credential starts with `ds_test_` and can only call the endpoints the desktop
+app itself uses.
 
 Pick the narrowest scopes that fit the job — a scope is a permission
 attached to the key. This page uses `read` + `write`: account/state
 requests are reads, while create/navigate/capture/destroy drive the
 session. Keep `account_owner` (full account control) for dashboards,
-not runtime automation. Full list: [API key scopes](/reference/scopes/).
+not for automated jobs. Full list: [API key scopes](/reference/scopes/).
 
 ## 2. Check the key works
 
@@ -109,11 +111,10 @@ curl -X POST \
 ```
 
 The `201` response is the session record, already `ready` — the
-create call holds until the phone-browser runtime is allocated and
-responding, so there's nothing to poll before you drive it. All body
-fields are optional: omitting `archetype` (the device + OS + browser
-identity the session presents) gives you the locked default shown
-above. Sessions can also start from a saved
+create call returns once the session is ready to use, so there's
+nothing to poll before you drive it. All body fields are optional:
+omitting `archetype` (the device + OS + browser identity the session
+presents) gives you the default device shown above. Sessions can also start from a saved
 [profile](/guides/profile-management/) via `profile_id`.
 
 Every session occupies one concurrent slot until you destroy it.

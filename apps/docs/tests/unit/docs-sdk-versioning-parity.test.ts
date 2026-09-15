@@ -37,24 +37,26 @@ describe('W258.D docs/sdk/versioning ↔ live SDK packages parity', () => {
     expect(go).toMatch(/func\s+VerifyWebhookSignature\b/);
   });
 
-  it('cross-referenced D-021 decision exists in docs/decisions.md', () => {
-    expect(doc).toMatch(/D-021/);
-    const decisions = read(resolve(REPO_ROOT, 'docs/decisions.md'));
-    expect(decisions).toMatch(/##\s*D-021\b/);
+  // 2026-09-15 plain words — the customer page no longer points at the internal
+  // decision log or monorepo package paths; the only cross-reference a customer
+  // can act on is each SDK's CHANGELOG, which must exist where the page says.
+  it('cross-reference footer keeps only the CHANGELOG pointer, and every SDK has one', () => {
+    expect(doc).toMatch(/Each SDK's `CHANGELOG\.md` for the running history\./);
+    expect(doc).not.toMatch(/D-021|docs\/decisions\.md|packages\/api-types/);
+    for (const pkg of ['sdk-typescript', 'sdk-python', 'sdk-go']) {
+      expect(existsSync(resolve(REPO_ROOT, `packages/${pkg}/CHANGELOG.md`))).toBe(true);
+    }
   });
 
-  it('packages/api-types cross-link target exists', () => {
-    expect(doc).toMatch(/packages\/api-types\//);
-    expect(existsSync(resolve(REPO_ROOT, 'packages/api-types'))).toBe(true);
-  });
-
-  it('release-process package paths exist on disk', () => {
-    expect(doc).toMatch(/packages\/sdk-typescript\//);
-    expect(doc).toMatch(/packages\/sdk-python\//);
-    expect(doc).toMatch(/packages\/sdk-go\//);
-    expect(existsSync(resolve(REPO_ROOT, 'packages/sdk-typescript/package.json'))).toBe(true);
-    expect(existsSync(resolve(REPO_ROOT, 'packages/sdk-python/pyproject.toml'))).toBe(true);
+  it('the Go module path the page cites exists on disk, and the Releases section promises only what customers see', () => {
+    expect(doc).toMatch(/github\.com\/driftstackdev\/driftstack-api\/packages\/sdk-go/);
     expect(existsSync(resolve(REPO_ROOT, 'packages/sdk-go/go.mod'))).toBe(true);
+    expect(doc).toMatch(/^## Releases$/m);
+    expect(doc).toMatch(
+      /Each SDK release ships with a CHANGELOG entry and a GitHub release\s*\n?post that includes a migration guide when the release is breaking\./,
+    );
+    // Publish commands, branch conventions and approval gates are how we run it.
+    expect(doc).not.toMatch(/npm publish|twine upload|push-to-main|release approval/);
   });
 
   it('all three SDKs target /v1/ today (matches SDK base-URL constants)', () => {

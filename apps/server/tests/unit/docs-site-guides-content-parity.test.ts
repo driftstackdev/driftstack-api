@@ -40,7 +40,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(existsSync(INDEX)).toBe(true);
   });
 
-  it('profile-management.md: persistent identity + cookies/localStorage/IndexedDB/stealth state + ephemeral=no-profile + 8-row tier-cap table + locked-archetype (iphone16pro_ios18_7_safari26_4) + RFC 9457 tier-limit problem-type + 3-language create examples pinned', () => {
+  it('profile-management.md: persistent identity + cookies/localStorage/IndexedDB/browser fingerprint + ephemeral=no-profile + 8-row tier-cap table + locked-archetype (iphone16pro_ios18_7_safari26_4) + RFC 9457 tier-limit problem-type + 3-language create examples pinned', () => {
     const body = read(PROFILE);
     expect(body).toMatch(/^title: Profile management$/m);
     expect(body).toMatch(/^# Profile management$/m);
@@ -48,7 +48,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
       /A \*\*profile\*\* is a persistent identity Driftstack maintains across sessions\./,
     );
     expect(body).toMatch(
-      /Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes/,
+      /Cookies, local storage, IndexedDB, and the browser fingerprint are kept between sessions/,
     );
     expect(body).toMatch(/If a session doesn't bind a profile, it starts ephemeral/);
     expect(body).toMatch(/^## Tier limits$/m);
@@ -67,7 +67,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     expect(body).toMatch(/\| API Scale\s+\| 500\s+\|/);
     expect(body).toMatch(/\| Enterprise\s+\| Custom\s+\|/);
     expect(body).toMatch(
-      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps \+ archetype counts at the fleet level instead\./,
+      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype \(device profile\) counts across the whole deployment instead\./,
     );
     expect(body).toMatch(/^## Create a profile$/m);
     expect(body).toMatch(/`iphone16pro_ios18_7_safari26_4`/);
@@ -102,9 +102,7 @@ describe('W603 apps/docs/guides pages content parity', () => {
     const body = read(SESSION);
     expect(body).toMatch(/^title: Session lifecycle$/m);
     expect(body).toMatch(/^# Session lifecycle$/m);
-    expect(body).toMatch(
-      /A \*\*session\*\* is one running iPhone Safari instance on the modified WebKit fork\./,
-    );
+    expect(body).toMatch(/A \*\*session\*\* is one running iPhone Safari browser\./);
     expect(body).toMatch(
       /Every session occupies one of your account's concurrent slots from creation until destruction/,
     );
@@ -121,10 +119,10 @@ describe('W603 apps/docs/guides pages content parity', () => {
     // V-702 — creation has a durable reservation that concurrent list/detail
     // reads can observe; direct operations require exact ready → busy admission.
     expect(body).toMatch(
-      /concurrent resource read or list can observe the durable `creating` reservation/,
+      /although a list or read made at the same time can still show it as `creating`/,
     );
     expect(body).toMatch(
-      /Every direct driver operation atomically claims `ready` → `busy`; while the session is `creating` or `busy`, another operation returns `409 Conflict`/,
+      /Each driving call \(navigate, interact, wait, capture\) moves the session from `ready` to `busy`; while it is `creating` or `busy`, any other call returns `409 Conflict`/,
     );
     expect(body).toMatch(/^## Concurrency$/m);
     expect(body).toMatch(

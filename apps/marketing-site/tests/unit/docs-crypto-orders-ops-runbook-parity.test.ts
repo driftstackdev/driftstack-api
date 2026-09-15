@@ -97,9 +97,9 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
 
   it('crypto.order.failed IS customer-subscribable (matches schema)', () => {
     expect(subscribable.has('crypto.order.failed')).toBe(true);
-    expect(body).toMatch(
-      /customer-subscribable.*<code>SubscribableWebhookEventTypeSchema<\/code>/s,
-    );
+    expect(body).toMatch(/customer-subscribable\s*via <code>POST \/v1\/webhooks<\/code>/);
+    // Internal schema + migration ids must not appear on the public page.
+    expect(body).not.toMatch(/SubscribableWebhookEventTypeSchema|migration 0064/);
   });
 
   it('/events source-tag set (create / ipn / cancel / expired / swept) pinned', () => {
@@ -123,9 +123,12 @@ describe('W358.A /docs/crypto-orders-ops-runbook parity', () => {
     expect(body).toMatch(/<code>provider_status: 'finished'<\/code>/);
   });
 
-  it('idempotency-metrics body_mismatches counter + warn log event name pinned', () => {
+  it('idempotency-metrics body_mismatches counter pinned; log event name stays internal', () => {
     expect(body).toMatch(/<code>body_mismatches<\/code>\s+counter/);
-    expect(body).toContain('crypto_checkout_idempotency_body_mismatch');
+    expect(body).toMatch(
+      /Support can identify the affected\s+account from the recorded mismatch\./,
+    );
+    expect(body).not.toContain('crypto_checkout_idempotency_body_mismatch');
   });
 
   it('CSV reconcile snippet pins status + created_after + created_before triple (V-666.BY)', () => {

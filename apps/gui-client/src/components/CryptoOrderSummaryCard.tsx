@@ -21,7 +21,7 @@ export interface CryptoOrderSummaryCardProps {
 function describeExpiry(expiresAtIso: string, nowMs: number): string {
   const expiresMs = new Date(expiresAtIso).getTime();
   const diff = expiresMs - nowMs;
-  if (diff <= 0) return 'pay window elapsed';
+  if (diff <= 0) return 'payment window closed';
   const minutes = Math.floor(diff / (60 * 1000));
   if (minutes < 1) return 'less than a minute remaining';
   if (minutes < 60) return `${minutes.toString()}m remaining`;

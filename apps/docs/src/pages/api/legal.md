@@ -13,19 +13,18 @@ document version bumps — typically a sub-processor amendment or a
 material policy change — the customer must re-accept under the
 GDPR Art. 28(2) sub-processor amendment cadence.
 
-The endpoints below are the API surface. The actual document text
-lives at `/legal/*` on the marketing site (publicly readable
-without auth) and on `docs/legal/*.md` in the repo (canonical
-source-of-truth).
+The endpoints below are the API surface. The document text itself is
+published at `/legal/*` on the marketing site (publicly readable
+without auth).
 
 ## List the catalog
 
 `GET /v1/legal/documents`
 
 Returns every legal document Driftstack publishes, with version,
-effective date, and SHA-256 content hash. Auth-gated because the
-GUI surfaces this for already-signed-in customers; the public
-text URLs serve a wider audience.
+effective date, and SHA-256 content hash. Requires authentication
+(the desktop app and dashboard use it for signed-in customers); the
+public text URLs serve everyone else.
 
 Response (200):
 
@@ -176,16 +175,6 @@ Required scope: `account_owner` (the route gates acceptance on
 ## Where the documents live
 
 - **Public (marketing site)**: `/legal/terms`, `/legal/privacy`,
-  `/legal/dpa`, `/legal/aup`. Render the same text as the
-  source-of-truth, with chrome.
-- **Canonical (repo)**: `docs/legal/*.md`. Direct git history
-  is the audit trail of changes.
+  `/legal/dpa`, `/legal/aup`. The full document text, as published.
 - **API catalog**: this endpoint set surfaces metadata; never
   the document body. Read the public URLs for the body.
-
-## Source of truth
-
-Routes: `apps/server/src/routes/legal.ts`. Service:
-`apps/server/src/services/legal.ts`. Repo:
-`apps/server/src/db/legal-repo.ts`. Catalog
-configuration: `apps/server/src/services/legal-catalog.ts`.

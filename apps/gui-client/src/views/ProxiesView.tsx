@@ -241,11 +241,11 @@ function notRunPhrase(why: AccountProxyTestNotRun): string {
     case 'live_session':
       return 'in use by a live session; end it to test the tunnel';
     case 'node_busy':
-      return 'the checker was busy; try again in a minute';
+      return 'Driftstack was busy; try again in a minute';
     case 'node_error':
       return 'the check could not complete; try again shortly';
     case 'no_node':
-      return 'no checker free';
+      return 'Driftstack could not run this test right now; try again shortly';
     case 'plan_excluded':
       return 'not included in your plan';
     case 'desktop_credential':
@@ -338,7 +338,7 @@ function formatTestAllSummary(
   if (unreachable > 0) parts.push(`${String(unreachable)} unreachable`);
   if (cannotRoute > 0) parts.push(`${String(cannotRoute)} can't route`);
   if (authFailed > 0) {
-    parts.push(`${String(authFailed)} auth failure${authFailed === 1 ? '' : 's'}`);
+    parts.push(`${String(authFailed)} login failure${authFailed === 1 ? '' : 's'}`);
   }
   if (vpn.checked > 0) {
     parts.push(tunnelsUpClause(vpn, `${String(vpn.tunnelOk)}/${String(vpn.checked)}`, vpn.checked));
@@ -423,23 +423,24 @@ const NATIVE_CHIP_LABEL = 'this Mac';
 /** Why there is no number from the Mac that runs the profiles. FOUR states —
  *  only the last of them is "nothing has been measured". */
 const SERVER_FAILED_WORD = 'no answer';
-const SERVER_FAILED_TITLE_PREFIX = 'The Mac that runs your profiles could not use this proxy:';
+const SERVER_FAILED_TITLE_PREFIX = 'Driftstack could not use this proxy:';
 const SERVER_NO_TIMING_WORD = 'no number';
 const SERVER_NO_TIMING_TITLE =
-  'The Mac that runs your profiles reached this proxy but reported no timing.';
-const NO_TEST_MAC_WORD = 'none free';
+  'Driftstack’s network reached this proxy but recorded no response time.';
+const NO_TEST_MAC_WORD = 'busy';
 const NO_TEST_MAC_LATENCY_TITLE =
-  'Not measured yet — no checker was free. This number is measured from Driftstack’s network, where your profiles run.';
+  'Not measured yet — Driftstack was busy. Test again shortly; this number is measured from Driftstack’s network, where your profiles run.';
 const NO_SERVER_NUMBER_WORD = 'not tested';
 const NO_SERVER_NUMBER_TITLE =
-  'The Mac that runs your profiles has not measured this proxy yet — only its number predicts a session.';
+  'Driftstack’s network has not measured this proxy yet. Its number is the one a session will see, because your profiles run there.';
 /** …and why there is none from this computer. An unreachable handshake did not
  *  fail to measure: it measured that it could not connect, which is a different
  *  fact and is not "has not measured this proxy yet". */
 const NATIVE_NO_CONNECT_WORD = 'no connect';
 const NATIVE_NO_CONNECT_TITLE = 'Your computer could not connect to this proxy.';
 const NATIVE_NO_TIMING_WORD = 'no number';
-const NATIVE_NO_TIMING_TITLE = 'Your computer connected to this proxy but recorded no timing.';
+const NATIVE_NO_TIMING_TITLE =
+  'Your computer connected to this proxy but recorded no response time.';
 const NO_NATIVE_NUMBER_WORD = 'not tested';
 const NO_NATIVE_NUMBER_TITLE = 'Your computer has not measured this proxy yet.';
 /** The label beside the native number, and the words the health pill borrows
@@ -1318,7 +1319,7 @@ export function ProxiesView(): JSX.Element {
         return {
           resolved: true,
           tunnelOk: null,
-          notTested: 'measured from the server only',
+          notTested: 'only the endpoint was checked; the tunnel is verified when a session starts',
         };
       }
       // (i) I4 — a fleet `ok` with no timing still brought the tunnel UP (the
@@ -1335,7 +1336,7 @@ export function ProxiesView(): JSX.Element {
       settle();
       setVpnNotices((m) => ({
         ...m,
-        [p.id]: 'The endpoint check could not run on this Mac. Try again.',
+        [p.id]: 'The address check could not run on this Mac. Try again.',
       }));
       return { resolved: null, tunnelOk: null, checkFailed: true };
     } finally {
@@ -1761,9 +1762,9 @@ export function ProxiesView(): JSX.Element {
             🌍
           </span>
           <div className="min-w-0">
-            <span className="section-label text-accent-text">Network egress</span>
+            <span className="section-label text-accent-text">Proxies &amp; VPNs</span>
             <h2 className="mt-0.5 text-[19px] font-semibold tracking-tight text-ink-primary">
-              Egress proxies
+              Proxies
               <span className="mono ml-2 text-base font-normal text-ink-muted">
                 {state.proxies.length}
               </span>
@@ -1777,7 +1778,7 @@ export function ProxiesView(): JSX.Element {
                   QUIC
                   <span className="text-surface-divider">·</span>
                   <span className="text-ink-muted">
-                    protected locally · encrypted sync at launch
+                    protected on this device · synced encrypted when a session starts
                   </span>
                 </>
               ) : (
@@ -1797,7 +1798,7 @@ export function ProxiesView(): JSX.Element {
               disabled={testingAll || testingId !== null || probeableCount === 0}
               title={
                 probeableCount === 0
-                  ? 'No SOCKS5 or VPN proxies to test — HTTP endpoints are verified at launch'
+                  ? 'No SOCKS5 or VPN proxies to test — HTTP proxies are verified when a session starts'
                   : undefined
               }
             >
@@ -1962,7 +1963,7 @@ function Empty({ loading, onAdd }: { loading: boolean; onAdd: () => void }): JSX
         </svg>
       }
       title="No proxies configured"
-      description="Add a SOCKS5 endpoint to route session traffic through your own egress IP. Proxy credentials are protected locally and synced in encrypted form to your account when used for a session."
+      description="Add a SOCKS5 proxy or VPN to route session traffic through your own IP address. Proxy credentials are protected on this device and synced in encrypted form to your account when used for a session."
       action={
         <button
           type="button"
@@ -2841,11 +2842,11 @@ function ProxyRow({
             className="rounded-sm bg-surface-divider/60 px-1 py-px text-[9px] text-ink-muted"
             title={
               result !== undefined
-                ? 'Exit down on last test — no protocols verified.'
-                : 'Never probed — click Test to check egress protocols.'
+                ? 'This proxy was down on the last test — no protocols could be checked.'
+                : 'Not tested yet — click Test to check which protocols work.'
             }
           >
-            {result !== undefined ? 'no egress' : 'untested'}
+            {result !== undefined ? 'not verified' : 'untested'}
           </span>
         )}
       </td>
@@ -2990,7 +2991,7 @@ function ProxyRow({
                   className={`text-[10px] ${endpointResult.resolved ? 'text-status-ready' : 'text-status-error'}`}
                   title={endpointResult.message}
                 >
-                  {endpointResult.resolved ? `endpoint ✓ ${endpointResult.ip}` : 'endpoint ✗'}
+                  {endpointResult.resolved ? `✓ ${endpointResult.ip}` : '✗ not found'}
                 </span>
               )}
             </div>
@@ -3093,7 +3094,7 @@ function HealthPill({
     // the proxy everywhere. (The earlier comment here excused the omission by
     // pointing at a failure sentence that was gated off for this scheme and
     // whose state was never written — a cached claim; both are fixed above.)
-    const label = !result.reachable ? 'unreachable' : !result.auth_ok ? 'auth fail' : 'no route';
+    const label = !result.reachable ? 'unreachable' : !result.auth_ok ? 'login failed' : 'no route';
     return (
       <span
         className="shrink-0 rounded-[5px] bg-status-error/12 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-status-error"
@@ -3127,8 +3128,7 @@ function HealthPill({
  *  unavailable, not because the tunnel failed anything. It names the cause and the
  *  machine that would measure it, and it does NOT tell the customer to press a button
  *  that cannot produce a value while every Mac is busy. */
-const NO_TEST_MAC_QUIC_HINT =
-  'Not measured yet — no checker was free; QUIC is measured from Driftstack’s network.';
+const NO_TEST_MAC_QUIC_HINT = `Not measured yet — Driftstack was busy. QUIC is measured from Driftstack’s network; try ${CHECK_VPN_ACTION} again in a few minutes.`;
 
 /**
  * (h) — the Protocols cell of a VPN row: ONE QUIC chip, strongest evidence
@@ -3163,17 +3163,17 @@ function VpnQuicChip({
       : quicMeasured === 'h2-only'
         ? {
             ok: false,
-            hint: 'No HTTP/3 — a live session used HTTP/2 over TCP through this tunnel.',
+            hint: 'No HTTP/3 — a live session fell back to HTTP/2 through this tunnel.',
           }
         : quicProbe === true
           ? {
               ok: true,
-              hint: 'QUIC relays through this tunnel — HTTP/3 works.',
+              hint: 'QUIC works through this tunnel — sites can use HTTP/3.',
             }
           : quicProbe === false
             ? {
                 ok: false,
-                hint: 'QUIC does not relay through this tunnel — HTTP/3 falls back to HTTP/2.',
+                hint: 'QUIC does not work through this tunnel — HTTP/3 falls back to HTTP/2.',
               }
             : null;
   if (verdict === null) {
@@ -3191,7 +3191,7 @@ function VpnQuicChip({
         title={
           noFleetMac
             ? NO_TEST_MAC_QUIC_HINT
-            : `Not measured yet — run ${CHECK_VPN_ACTION} to bring the tunnel up and test QUIC through it.`
+            : `Not measured yet — run ${CHECK_VPN_ACTION} to test QUIC through this tunnel.`
         }
       >
         QUIC untested
@@ -3265,7 +3265,7 @@ function EndpointHealthPill({
   if (!endpoint.resolved) {
     return (
       <span className={`${base} bg-status-error/12 text-status-error`} title={endpoint.message}>
-        unresolved
+        address not found
       </span>
     );
   }
@@ -3663,8 +3663,8 @@ export function ProxyForm({
       const refusal = wireguardRefusal('wireguard', initial.wireguard, '');
       if (refusal === null) return;
       setVpnHint(
-        `This saved WireGuard config is one Driftstack refuses — ${refusal.field}: ${refusal.reason}. ` +
-          'Paste or upload a corrected wg0.conf above to replace it; the saved one cannot be launched as it is.',
+        `Driftstack can't use this saved WireGuard config — ${refusal.field}: ${refusal.reason}. ` +
+          'Paste or upload a corrected wg0.conf above to replace it.',
       );
       return;
     }
@@ -3682,7 +3682,7 @@ export function ProxyForm({
       if (refusal !== null) {
         setVpnHint(
           `Line ${refusal.line.toString()}: ${refusal.reason} ` +
-            'Paste or upload a corrected .ovpn above to replace it; the saved one cannot be launched as it is.',
+            'This proxy will not work until you paste or upload a corrected .ovpn above to replace it.',
         );
       }
       return;
@@ -3734,7 +3734,7 @@ export function ProxyForm({
     }));
     setPasteVal('');
     setPasteHint(
-      `Filled ${parsed.host}:${parsed.port}${parsed.username !== null ? ' (with auth)' : ''}.`,
+      `Filled ${parsed.host}:${parsed.port}${parsed.username !== null ? ' (with username and password)' : ''}.`,
     );
   }
 
@@ -3796,7 +3796,7 @@ export function ProxyForm({
         ip: '',
         message: humanizeError(
           err,
-          "Couldn't resolve this endpoint. Check the details and try again.",
+          'The address check could not run on this Mac. Check the details and try again.',
         ),
       });
     } finally {
@@ -3867,7 +3867,7 @@ export function ProxyForm({
                 {mode === 'add' ? 'Add proxy' : 'Edit proxy'}
               </span>
               <p className="mt-0.5 text-xs text-ink-muted">
-                Route sessions through your own egress — SOCKS5, OpenVPN or WireGuard.
+                Route sessions through your own proxy or VPN — SOCKS5, OpenVPN or WireGuard.
               </p>
             </div>
             <span className="mono shrink-0 rounded-full border border-surface-divider bg-surface-inset px-2 py-0.5 text-2xs font-semibold text-ink-secondary">
@@ -4084,7 +4084,7 @@ export function ProxyForm({
             )}
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Auth username (optional)">
+            <Field label="VPN username (optional)">
               <input
                 type="text"
                 className="form-input mono"
@@ -4102,7 +4102,7 @@ export function ProxyForm({
                 autoComplete="off"
               />
             </Field>
-            <Field label="Auth password (optional)">
+            <Field label="VPN password (optional)">
               <input
                 type="text"
                 // ⛔ NOT type="password". A proxy credential is configuration the operator
@@ -4149,7 +4149,7 @@ export function ProxyForm({
           </span>
           {testResult.reachable && (
             <span className="text-ink-secondary">
-              {testResult.auth_ok ? 'auth ok' : 'auth failed'} · {testResult.latency_ms}ms · UDP{' '}
+              {testResult.auth_ok ? 'login ok' : 'login failed'} · {testResult.latency_ms}ms · UDP{' '}
               {testResult.udp_associate ? '✓' : '✗'} · route {testResult.can_route ? '✓' : '✗'}
             </span>
           )}
@@ -4171,7 +4171,9 @@ export function ProxyForm({
             className="font-semibold"
             title={resolveResult.resolved ? PROBE_ORIGIN_TITLE : undefined}
           >
-            {resolveResult.resolved ? '✓ Endpoint reachable from this Mac' : '✗ Endpoint not found'}
+            {resolveResult.resolved
+              ? '✓ Server address found from this Mac'
+              : '✗ Server address not found'}
           </span>
           <span className="text-ink-secondary">{resolveResult.message}</span>
         </div>
@@ -4183,7 +4185,7 @@ export function ProxyForm({
             className="btn-secondary"
             onClick={() => void handleTestConnection()}
             disabled={testing || locked}
-            title="Probe this proxy from this Mac — reachability, auth, latency, UDP — before saving"
+            title="Test this proxy from this Mac — connection, login, response time, UDP — before saving"
           >
             {testing ? 'Testing…' : 'Test connection'}
           </button>
@@ -4193,9 +4195,9 @@ export function ProxyForm({
             className="btn-secondary"
             onClick={() => void handleTestEndpoint()}
             disabled={resolving || locked}
-            title="Check the VPN endpoint host resolves from this Mac — full tunnel verifies at launch"
+            title="Check the VPN server address can be found from this Mac — the full VPN is verified when a session starts"
           >
-            {resolving ? 'Checking…' : 'Test endpoint'}
+            {resolving ? 'Checking…' : 'Check server'}
           </button>
         )}
         <div className="flex gap-2">

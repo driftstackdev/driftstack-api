@@ -209,7 +209,7 @@ describe('ProxiesView Test all completion summary', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Test all' }));
 
     expect(
-      await screen.findByText('Tested 3 — 1 healthy, 1 unreachable, 1 auth failure'),
+      await screen.findByText('Tested 3 — 1 healthy, 1 unreachable, 1 login failure'),
     ).toBeInTheDocument();
     expect(testProxy).toHaveBeenCalledTimes(3);
     expect(screen.getByRole('button', { name: 'Dismiss test summary' })).toBeInTheDocument();
@@ -244,7 +244,7 @@ describe('ProxiesView Test all completion summary', () => {
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute(
       'title',
-      'No SOCKS5 or VPN proxies to test — HTTP endpoints are verified at launch',
+      'No SOCKS5 or VPN proxies to test — HTTP proxies are verified when a session starts',
     );
     expect(testProxy).not.toHaveBeenCalled();
     expect(document.querySelector('[data-component="proxy-test-all-summary"]')).toBeNull();

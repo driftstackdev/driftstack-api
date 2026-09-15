@@ -10,8 +10,8 @@ You don't need to find or buy a license key. The Driftstack macOS desktop GUI
 client defaults to secure browser sign-in: authorize the device in the
 dashboard and the app automatically stores its restricted device credential.
 Free users do not create or paste a customer API key. A paid cloud customer
-key or a key minted by your self-hosted control plane remains available as an
-explicit fallback.
+key or a key created on your self-hosted Driftstack server remains available
+as a fallback.
 
 ## What you need
 
@@ -21,14 +21,14 @@ explicit fallback.
   Manual, API, and Enterprise, can activate; self-hosted
   Solo/Pro/Enterprise customers point at their own server URL.
 - Only if using the fallback: a `ds_live_…` customer key from any paid tier,
-  including Manual, or a key minted by your own self-hosted deployment.
+  including Manual, or a key created on your own self-hosted server.
 
 ## First-run flow
 
 On first launch, the GUI client opens a five-step wizard:
 
 1. **Welcome** — brand intro and a one-line value prop.
-2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL — defaults to `http://localhost:3000`, matching the port `apps/server` binds to in dev). The GUI is a control panel; the Self-hosted branch points it at a Driftstack Node server you operate yourself.
+2. **Deployment mode** — radio: **Cloud** (`https://api.driftstack.dev`) or **Self-hosted** (you paste the URL of your own Driftstack server).
 3. **Sign in** — use **Sign in with browser** by default. After you approve the
    device, the wizard exchanges the one-time code, stores the returned
    credential, and calls `GET /v1/account/me` to validate it. Free receives a
@@ -44,16 +44,16 @@ On first launch, the GUI client opens a five-step wizard:
    - ❌ unreachable — the message starts with "Couldn't reach `<url>`." and
      gives URL, connection, firewall, VPN, and self-hosted-server guidance.
    - ❌ not permitted — the privacy-safe fixed message is "You do not have
-     permission to perform this action." Check the dashboard account status
-     and team access rather than expecting server diagnostic prose in the app.
-4. **First profile** (skippable) — name + archetype picker. The wizard calls `POST /v1/profiles` against the validated client.
-5. **Done** — flag flipped; main app shell takes over.
+     permission to perform this action." Check the account status and
+     team access in the dashboard; the app does not show the server's reason.
+4. **First profile** (skippable) — name + device picker. The wizard calls `POST /v1/profiles` against the validated client.
+5. **Done** — setup is complete and the main app opens.
 
 ## Where credentials live
 
-- **Device credential or fallback API key** — stored in macOS Keychain through
-  `keyring-rs`. It never lands in `settings.json` on disk.
-- **Base URL** — stored in the Tauri settings store (`settings.json`). Plaintext is fine here; the URL alone confers no access.
+- **Device credential or fallback API key** — stored in the macOS Keychain.
+  It never lands in `settings.json` on disk.
+- **Base URL** — stored in the app's `settings.json` file. Plaintext is fine here; the URL alone confers no access.
 
 If you delete the keychain entry manually, the GUI client treats the next launch as first-run and walks you through the wizard again.
 
@@ -68,19 +68,19 @@ To re-point the GUI from cloud to self-hosted (or vice versa):
 3. Use browser sign-in for cloud, or paste the
    matching paid/self-hosted fallback key.
 
-Alternatively, edit `settings.json` (Tauri's app data dir) directly to change
-`baseUrl`, restart the app so it reloads the store, then authorize again from
+Alternatively, edit `settings.json` (in the app's data folder) directly to change
+`baseUrl`, restart the app so it picks up the change, then authorize again from
 **Settings → Account**.
 
 ## Self-hosted activation
 
 For self-hosted deployments (Driftstack Self-Hosted Solo / Pro / Enterprise):
 
-1. Stand up the control plane on your own hardware with the [self-hosted operations runbook](https://github.com/driftstackdev/driftstack-api/tree/main/docs/operations).
-2. Create an API key against your local control plane (same `/v1/api-keys` flow — requires the `account_owner` scope).
-3. In the GUI client wizard, choose **Self-hosted**, paste the URL of your control plane (e.g. `https://drift.your-company.internal`), paste the key.
+1. Set up the Driftstack server on your own hardware with the [self-hosted operations runbook](https://github.com/driftstackdev/driftstack-api/tree/main/docs/operations).
+2. Create an API key on your own server (same `/v1/api-keys` flow — requires the `account_owner` scope).
+3. In the GUI client wizard, choose **Self-hosted**, paste the URL of your server (e.g. `https://drift.your-company.internal`), paste the key.
 
-The same GUI binary works against any control plane — there is no "self-hosted edition" of the desktop app. The deployment-mode toggle is the only switch.
+The same desktop app works with cloud or self-hosted — there is no separate "self-hosted edition". The deployment-mode toggle is the only switch.
 
 ## Platform support
 
@@ -91,7 +91,6 @@ The same GUI binary works against any control plane — there is no "self-hosted
   confirm. The release artifacts _are_ signed with our Tauri updater key, which
   is what the update check below verifies — that signature proves an update came
   from us, and is a different thing from Apple code signing.
-- Local test builds use a machine-scoped development signing identity and are not distribution artifacts.
 - The release pipeline also builds Windows (`.exe`, NSIS) and Linux
   (`.AppImage`, `.deb`) bundles, but macOS on Apple silicon is the only platform
   we support. Installers are published as GitHub Releases from a `gui-v*` tag.
@@ -110,8 +109,8 @@ and relaunches the app. See [the gui-client packaging notes](https://github.com/
   the fallback, verify that the paid key belongs to the selected deployment.
   In self-hosted mode, a cloud key never works against your own server (and
   vice-versa). Settings re-validates credentials and shows the same guidance.
-- **"Couldn't reach control plane"** — for cloud, check [status.driftstack.io](https://status.driftstack.io). For self-hosted, check your control plane's `/v1/status` endpoint directly.
-- **Wizard re-fires on every launch** — macOS Keychain may be unavailable to the app. Confirm the app is signed correctly and reinstall the supplied build if it was modified or quarantined.
+- **"Couldn't reach the server"** — for cloud, check [status.driftstack.io](https://status.driftstack.io). For self-hosted, check your server's `/v1/status` endpoint directly.
+- **The setup wizard appears on every launch** — the app could not reach the macOS Keychain to store its credential. Reinstall the official build if your copy was modified or quarantined.
 - **"You do not have permission" on activation** — sign in to the dashboard
   and check the account status and selected team. If the account is active and
   access still fails, email [support@driftstack.dev](mailto:support@driftstack.dev).

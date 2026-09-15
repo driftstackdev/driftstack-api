@@ -49,11 +49,13 @@ describe('customer-dashboard auth/oauth-client/confirm-merge content parity', ()
   });
 
   it('withSidebar={false} on DashboardLayout — pinned because confirm-merge lands BEFORE the user has a session on the linked account (legacy session may have expired). Drift to a full layout would surface broken/inappropriate nav', () => {
-    expect(body).toMatch(/<DashboardLayout title="Confirm IDP link" withSidebar=\{false\}>/);
+    expect(body).toMatch(/<DashboardLayout title="Confirm account link" withSidebar=\{false\}>/);
   });
 
-  it('expired-link fallback help-text pinned: redirects customers to /login + retry the IDP button. Drift to dropping the fallback would leave customers with no recovery path on expired/invalid tokens', () => {
-    expect(body).toMatch(/Link expired or invalid\?/);
-    expect(body).toMatch(/Sign in via password \+ retry the IDP\s+button from the/);
+  it('expired-link fallback help-text pinned: redirects customers to /login + retry the Google or GitHub button. Drift to dropping the fallback would leave customers with no recovery path on expired/invalid tokens', () => {
+    expect(body).toMatch(/Link expired or not working\?/);
+    expect(body).toMatch(
+      /Sign in with your password, then use the Google or GitHub\s+button on the/,
+    );
   });
 });

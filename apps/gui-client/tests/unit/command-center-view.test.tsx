@@ -388,7 +388,7 @@ describe('CommandCenterView', () => {
     // loads). The Running tile is a button when running>0, so walk to the tile.
     const running = screen.getByText('Running').closest('button, div');
     expect(running?.textContent).toContain('2');
-    const errored = screen.getByText('Errored').closest('button, div');
+    const errored = screen.getByText('Failed').closest('button, div');
     expect(errored?.textContent).toContain('1');
   });
 

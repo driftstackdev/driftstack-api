@@ -84,7 +84,7 @@ describe('W355.B /docs/billing-crypto-troubleshooting parity', () => {
 
   it('support contact + 1-business-day SLA pinned on free-trial + paid tiers', () => {
     expect(body).toContain('support@driftstack.dev');
-    expect(body).toMatch(/Response SLA is 1 business day on the free trial \+ paid tiers/);
+    expect(body).toMatch(/Response SLA is 1 business day on the Free plan and paid tiers/);
     expect(body).toMatch(/enterprise contracts get a per-contract SLA/);
   });
 

@@ -551,7 +551,7 @@ describe('ProfilesTable', () => {
     expect(within(table).queryByText('no exit IP')).toBeNull();
     expect(within(table).queryByText('untested')).toBeNull();
     // Parity: the card renders the identical word for the identical state.
-    expect(EXIT_GEO_UNAVAILABLE_SHORT).toBe('exit geo unavailable');
+    expect(EXIT_GEO_UNAVAILABLE_SHORT).toBe('exit location unknown');
     cleanup();
     // A VPN row keeps its own sentence (the tunnel state outranks the echo state).
     render(

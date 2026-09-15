@@ -110,7 +110,7 @@ describe('W515.A apps/marketing-site/src/pages/docs/sdk-go-crypto-orders.astro c
       /poll\s*<code>client\.CryptoOrders\.Get\(ctx, orderID\)<\/code> until\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Go SDK ships\s*<code>VerifyWebhookSignature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /The Go SDK's\s*<code>VerifyWebhookSignature<\/code> verifies every event type,\s*including <code>crypto\.order\.\*<\/code>\./,
     );
   });
 

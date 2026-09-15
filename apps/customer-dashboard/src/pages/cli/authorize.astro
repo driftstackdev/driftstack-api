@@ -42,8 +42,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div data-state="missing" class="mt-8 hidden">
       <div class="rounded-lg border border-tk-accent/30 bg-tk-accent/10 px-4 py-3 text-sm text-tk-accent-text">
-        This page expects an authorization code in the URL. Open it from the Driftstack
-        desktop app's "Sign in with browser" button.
+        This page needs to be opened from the Driftstack desktop app. Use its
+        "Sign in with browser" button to get here.
       </div>
       <a href="/" class="mt-6 block text-center text-sm text-tk-accent-text underline">
         Return to dashboard
@@ -70,8 +70,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <div data-state="confirm" class="mt-8 hidden">
       <p class="text-sm text-tk-ink-2">
-        The Driftstack desktop client is requesting a restricted device key bound to your
-        account. It remains active until you revoke it from <a href="/api-keys/" class="text-tk-accent-text underline">API keys</a>.
+        The Driftstack desktop app wants to connect to your account. It stays connected until
+        you revoke it under <a href="/api-keys/" class="text-tk-accent-text underline">API keys</a>.
       </p>
       <label class="mt-6 block text-sm font-medium text-tk-ink-2">
         Verification code from the desktop app
@@ -109,7 +109,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         </button>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
-        Authorizing will mint a new restricted API key named "Desktop client".
+        Authorizing creates a limited API key named "Desktop client".
       </p>
     </div>
 
@@ -127,8 +127,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         </p>
       </div>
       <p class="mt-4 text-center text-xs text-tk-ink-3" data-fallback-hint>
-        The desktop app should reopen automatically. If it doesn't, switch back to it
-        manually — it will pick up the credentials on the next poll.
+        The desktop app should reopen automatically. If it doesn't, switch back to it — it
+        will finish connecting on its own.
       </p>
       <a href="/api-keys/" class="mt-6 block text-center text-sm text-tk-accent-text underline">
         View your API keys
@@ -462,7 +462,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               retryBtn.textContent = 'Return to desktop';
               retryBtn.title = 'Check the desktop app without sending this authorization again';
               showError(
-                'Authorization was accepted, but this page could not finish the desktop handoff. Return to the desktop app and wait for its existing poll. Do not retry this link; if the app does not connect, start a fresh browser sign-in from the desktop app.',
+                `Authorization succeeded, but this page couldn't hand back to the desktop app. Switch to the app and give it a moment. Don't retry this link; if the app doesn't connect, start "Sign in with browser" again from the app.`,
               );
               return;
             }
@@ -471,7 +471,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               retryBtn.textContent = 'Return to desktop';
               retryBtn.title = 'Check the desktop app without sending this authorization again';
               showError(
-                'The authorization response timed out, so it may already have completed. Return to the desktop app and wait for its existing poll. Do not retry this link; if the app does not connect, start a fresh browser sign-in from the desktop app.',
+                `The request took too long, but the authorization may already have gone through. Switch to the desktop app and give it a moment. Don't retry this link; if the app doesn't connect, start "Sign in with browser" again from the app.`,
               );
               return;
             }
@@ -561,7 +561,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         acceptAllBtn.textContent = 'Reload to verify';
         acceptAllBtn.title = 'Reload before sending any legal acceptance again';
         acceptStatus.textContent =
-          'Acceptance outcome is unknown. Reload to check what remains before authorizing.';
+          "We couldn't confirm your acceptance was recorded. Reload to check what still needs accepting before authorizing.";
       }
 
       function reconcileCliLegalAcceptance(attempted) {

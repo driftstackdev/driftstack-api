@@ -48,10 +48,10 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /None of these\s*\n\s+are billed individually — concurrent cap is the only meter\./,
+      /None of these are\s*\n\s+billed separately — your plan only limits how many sessions run at\s*\n\s+once\./,
     );
     expect(p).toMatch(
-      /None of these counters drive billing\. Concurrent caps are the only meter\s*\n\s+per ADR-004\./,
+      /None of these counts affect your bill — your plan only limits how many\s*\n\s+sessions run at once\./,
     );
   });
 
@@ -59,7 +59,7 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /We surface counts so you can spot pipeline regressions —\s*\n\s+e\.g\. a sudden 10× spike in navigates may indicate a runaway script\./,
+      /They're here to help you spot problems, like a\s*\n\s+sudden 10× jump in page loads from a runaway script\./,
     );
   });
 
@@ -126,7 +126,7 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
     const p = read(PAGE);
 
     expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">Screenshots<\/dt>/);
-    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">DOM snapshots<\/dt>/);
+    expect(p).toMatch(/<dt class="text-sm text-tk-ink-3">Page snapshots<\/dt>/);
   });
 
   it('CRITICAL neutral-placeholder SSG framing pinned. 2026-06-24 — the fabricated deterministic sin()+seed mockSeries generator was removed (it shipped invented numbers to every customer); the SSG sparklines paint a flat baseline (FLAT_PATH) until the live series replaces them, and tiles render an em-dash placeholder.', () => {
@@ -170,7 +170,7 @@ describe('W754 dashboard /usage page V-171 + V-014/V-015 + ADR-004 parity', () =
       /\/\/ Empty-data state — real data loaded, with no activity in this period\./,
     );
     expect(p).toMatch(
-      /'Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions\.'/,
+      /'Live usage loaded\. No activity in the current period yet — counts will fill in as you run sessions\.'/,
     );
   });
 

@@ -121,7 +121,7 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     );
   });
 
-  it("Browser sign-in 5-kind state surface: idle (button) / opening (Opening browser…) / waiting (animated pulse + Cancel) / success (Authorized. Continuing…) / error (message + Try again) — pinned so all 5 visual states stay covered + the 'idle' branch contains the 'Sign in with browser' CTA that mints the API key bound to your account and stores it in the OS keychain", () => {
+  it("Browser sign-in 5-kind state surface: idle (button) / opening (Opening browser…) / waiting (animated pulse + Cancel) / success (Authorized. Continuing…) / error (message + Try again) — pinned so all 5 visual states stay covered + the 'idle' branch contains the 'Sign in with browser' CTA whose hint says an API key is created for your account and saved securely on this computer (plain words — no 'mint' / 'bound' / 'OS keychain', owner directive 2026-09-15)", () => {
     expect(body).toMatch(/browserState\.kind === 'idle'/);
     expect(body).toMatch(/browserState\.kind === 'opening'/);
     expect(body).toMatch(/browserState\.kind === 'waiting'/);
@@ -129,19 +129,22 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/Never share it with someone who\s*contacted you/);
     expect(body).toMatch(/browserState\.kind === 'success'/);
     expect(body).toMatch(/browserState\.kind === 'error'/);
-    expect(body).toMatch(/mint an API key bound to your account and store it in the OS keychain/);
+    expect(body).toMatch(
+      /After you confirm, an\s*API key is created for your account and saved securely on this computer\./,
+    );
   });
 
-  it("Mode-step framing pinned: 'Almost everyone should choose Cloud. Self-hosted is for advanced teams running their own Mac fleet — much higher cost and operational overhead.' + cloud 'Free to start, or $79/mo Personal' + self-hosted 'License from $1,000/mo on top of the Mac hardware you provide' — pinned so the cloud-recommended framing + pricing anchors don't drift (trial pack retired 2026-05-27)", () => {
+  it("Mode-step framing pinned: 'Almost everyone should choose Cloud. Self-hosted is for advanced teams running their own servers — much higher cost and effort.' + cloud 'Free to start, or $79/mo Personal' + self-hosted 'License from $1,000/mo, on top of the Mac hardware you provide and run yourself' — pinned so the cloud-recommended framing + pricing anchors don't drift (trial pack retired 2026-05-27; 'Mac fleet' / 'operational overhead' retired 2026-09-15)", () => {
     expect(body).toMatch(
-      /Almost everyone should choose <strong>Cloud<\/strong>\. Self-hosted is for advanced teams\s*running their own Mac fleet — much higher cost and operational overhead\./,
+      /Almost everyone should choose <strong>Cloud<\/strong>\. Self-hosted is for advanced teams\s*running their own servers — much higher cost and effort\./,
     );
     expect(body).toMatch(
       /<strong>Free<\/strong> to start, or <strong>\$79\/mo<\/strong> Personal\./,
     );
     expect(body).toMatch(
-      /License from <strong>\$1,000\/mo<\/strong> on top of the Mac hardware you provide and\s*operate yourself\./,
+      /License from <strong>\$1,000\/mo<\/strong>, on top of the Mac hardware you provide and\s*run yourself\./,
     );
+    expect(body).not.toMatch(/Mac fleet|operational overhead|managed iPhone fleet|npm install/);
   });
 
   it("V-669 PROFILE_ARCHETYPE_OPTIONS derived from ARCHETYPE_REGISTRY (2026-06-19 de-dup): the catalog is no longer a hardcoded literal — it filters ARCHETYPE_REGISTRY by SELECTABLE_STATUSES ('launch' | 'available'), exactly as ProfilesView does, so a future promoted archetype appears automatically with zero wizard change. Per-id label + description lookups keep the customer-facing copy (launch-archetype iPhone 17 blurb) with a generic fallback for future entries. Pinned so the wizard stays registry-driven + never offers a non-selectable/detectably-wrong archetype.", () => {
@@ -158,10 +161,12 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(
       /const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY\.filter\(\(a\) =>\s*SELECTABLE_STATUSES\.has\(a\.status\),\s*\)\.map\(\(a\) => \(\{/,
     );
-    // The launch-archetype customer copy survives in the per-id lookup.
+    // The launch-device customer copy survives in the per-id lookup (plain words:
+    // no 'archetype' / 'bit-for-bit' / 'live catalog' — owner directive 2026-09-15).
     expect(body).toMatch(
-      /'The default launch archetype — verified bit-for-bit against a real iPhone 17\. Choose another verified device from the live catalog when its model or Safari version better matches your traffic\.',/,
+      /'The default device — verified against a real iPhone 17\. Choose another device when its model or Safari version better matches your visitors\.',/,
     );
+    expect(body).not.toMatch(/bit-for-bit/);
     expect(body).not.toMatch(/coming soon/i);
     // No hardcoded option-object literals remain (the source-of-truth is the
     // registry now, not a parallel list).
@@ -187,24 +192,27 @@ describe('W485.C apps/gui-client/src/views/FirstRunWizard.tsx content parity', (
     expect(body).toMatch(/maxLength=\{120\}/);
   });
 
-  it("Welcome step value-prop pinned: 'Real iPhone Safari sessions, on demand. Spin them up, drive them with the SDK or this desktop control panel, save profile state across runs, capture recordings.' + Cloud bullet 'No hardware, no setup — just a key and you're live.' + Self-hosted bullet 'For advanced teams running their own Mac fleet.' — pinned so the brand promise on first impression stays consistent", () => {
+  it("Welcome step value-prop pinned: 'Real iPhone Safari sessions, on demand. Start them from this app or the SDK, keep logins between runs, and record what happens.' + Cloud bullet 'run on real iPhones hosted by Driftstack. No hardware, no setup — just a key and you're live.' + Self-hosted bullet 'For advanced teams that want to host Driftstack themselves.' — pinned so the brand promise on first impression stays consistent and plain (no 'fleet', owner directive 2026-09-15)", () => {
     expect(body).toMatch(
-      /Real iPhone Safari sessions, on demand\. Spin them up, drive them with the SDK or this\s*desktop control panel, save profile state across runs, capture recordings\./,
+      /Real iPhone Safari sessions, on demand\. Start them from this app or the SDK, keep logins\s*between runs, and record what happens\./,
     );
-    expect(body).toMatch(/iPhone fleet\. No hardware, no setup — just a key and you're live\./);
     expect(body).toMatch(
-      /server you operate yourself\. For advanced teams running their own Mac fleet\./,
+      /run on real iPhones hosted\s*by Driftstack\. No hardware, no setup — just a key and you're live\./,
+    );
+    expect(body).toMatch(
+      /server you operate yourself\. For advanced teams that want to host Driftstack themselves\./,
     );
   });
 
-  it("W566: friendlyError gives mode-aware 401 guidance — self-hosted mode tells the customer the key must come from their own server's dashboard (a cloud key won't authenticate), cloud mode points at app.driftstack.io/api-keys. Pinned so the most common onboarding 401 stumble keeps a deployment-correct fix instead of a bare 'unauthorized'", () => {
+  it("W566: friendlyError gives mode-aware 401 guidance in plain words — self-hosted mode tells the customer the key must be created in their own server's dashboard (a cloud key won't work here), cloud mode points at app.driftstack.io/api-keys; neither shows the HTTP status code. Pinned so the most common onboarding 401 stumble keeps a deployment-correct fix instead of a bare 'unauthorized'", () => {
     expect(body).toMatch(/err instanceof DriftstackError && err\.status === 401/);
     expect(body).toMatch(
-      /In self-hosted mode the API key must be created on \$\{where\} — a key from\s*app\.driftstack\.io won't authenticate against your own server\./,
+      /This API key wasn't accepted\. For a self-hosted server the key must be created in \$\{where\} — a key from app\.driftstack\.io won't work here\./,
     );
     expect(body).toMatch(
-      /Authentication failed \(401\)\. Double-check the key, or create a new one at\s*app\.driftstack\.io\/api-keys\./,
+      /This API key wasn't accepted\. Double-check it, or create a new one at app\.driftstack\.io\/api-keys\./,
     );
+    expect(body).not.toMatch(/\(401\)/);
     // DriftstackError must be imported for the instanceof check to be real
     // (the SDK import also carries ARCHETYPE_REGISTRY since the 2026-06-19
     // archetype-derivation de-dup — see the V-669 pin above). Prettier may

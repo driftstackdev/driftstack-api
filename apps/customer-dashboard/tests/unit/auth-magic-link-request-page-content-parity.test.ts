@@ -33,9 +33,9 @@ describe('customer-dashboard magic-link request reliability', () => {
     expect(body).toContain('let requestOutcomeUnknown = false;');
     expect(body).toContain('if (requestOutcomeUnknown) return;');
     expect(body).toContain('if (controller.signal.aborted)');
-    expect(body).toContain('Magic-link delivery is unknown after the request timed out.');
-    expect(body).toContain('Do not request another link on this page.');
-    expect(body).toContain('use the newest one');
+    expect(body).toContain('The request took too long, so the email may already be on its way.');
+    expect(body).toContain('Check your inbox and spam folder before requesting another link.');
+    expect(body).toContain('If more than one arrives, use the newest.');
   });
 
   it('latches accepted delivery before optional non-fatal JSON parsing', () => {

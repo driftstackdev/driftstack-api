@@ -7,7 +7,7 @@ description: Where Sentry sits in Driftstack today — nothing to configure on o
 # Sentry integration
 
 > **Status:** there is no customer-configurable Sentry forwarding on
-> the Driftstack control plane today. The dashboard has no Sentry DSN
+> Driftstack today. The dashboard has no Sentry DSN
 > setting, `POST /v1/sessions` accepts no Sentry-related field, and
 > Driftstack does not fan events out to customer Sentry projects.
 > This page explains what Sentry does on Driftstack's side, and the
@@ -92,7 +92,7 @@ production project.
 ## When the session itself fails
 
 Page-level instrumentation covers errors _inside_ the page. For the
-session dying underneath it (driver fault, runtime crash), subscribe
+session dying underneath it (a browser crash, for example), subscribe
 a webhook to `session.failed` — and `session.completed` for clean
 teardowns — via [`POST /v1/webhooks`](/webhooks/endpoints/). Routing
 those into your alerting closes the loop from the other side.

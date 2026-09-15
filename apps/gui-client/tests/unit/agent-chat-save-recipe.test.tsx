@@ -328,14 +328,14 @@ describe('AgentChatView live-view token-fetch failure (friendly copy + Retry)', 
     chatState = baseChat({ session: SESSION, turns: [] });
     render(<AgentChatView />);
 
-    // The simulated-deployment copy states the current capability without a roadmap
-    // promise or alarming failure, and never leaks the raw "HTTP 503" jargon.
+    // The preview-mode copy states the current capability without a roadmap
+    // promise or alarming failure, never leaks the raw "HTTP 503" jargon, and
+    // says nothing about how the service is run (no 'deployment' / 'device stream').
     expect(await screen.findByText('Live view unavailable')).toBeTruthy();
     expect(
-      screen.getByText(
-        'Browser actions are simulated in this deployment, so no live device stream is available.',
-      ),
+      screen.getByText('Browser actions run in preview mode, so there is no live view.'),
     ).toBeTruthy();
+    expect(screen.queryByText(/deployment|device stream/i)).toBeNull();
     expect(screen.queryByText(/HTTP 503/)).toBeNull();
     // The dead-end Retry loop is GONE: a 503 never recovers here, so no Retry button.
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();

@@ -38,7 +38,7 @@ describe('V-914 the published revocation promise matches the gate', () => {
     const doc = readFileSync(DOC, 'utf8');
     expect(doc, 'the timing section').toMatch(/\*\*When it takes effect\.\*\*/);
     expect(doc, 'and the promise itself').toMatch(
-      /stops authenticating on the next\s*\n?request that presents it/,
+      /stops working on the next request\s*\n?that uses it — there is no delay/,
     );
   });
 
@@ -55,8 +55,8 @@ describe('V-914 the published revocation promise matches the gate', () => {
   });
 
   it('CRITICAL the page and the cache agree that a cache failure does not extend a key. The doc promises the fallback is a slower request rather than a longer-lived key; `get()` returns null on any error so the authoritative path runs. If that ever became fail-open, the published promise would be the dangerous kind of wrong.', () => {
-    expect(readFileSync(DOC, 'utf8'), 'the documented failure mode').toMatch(
-      /never delayed by a cache failure/,
+    expect(readFileSync(DOC, 'utf8'), 'the documented promise').toMatch(
+      /there is no delay\. Requests already in flight when you revoke\s*\n?may finish; anything arriving afterwards is refused\./,
     );
     expect(readFileSync(CACHE, 'utf8'), 'and the code that degrades to the slow path').toMatch(
       /auth cache get failed; degrading to scrypt path/,

@@ -53,16 +53,18 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
     expect(body).toMatch(
       /self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)'/,
     );
+    // 2026-09-15 plain words: same recommended models, buyer-facing
+    // reason (a larger Mac for many sessions at once / several Macs).
     expect(body).toMatch(
-      /self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)'/,
+      /self_hosted_pro: 'A larger Apple Silicon Mac for running many sessions at once \(Mac Studio M4 Max recommended\)'/,
     );
     expect(body).toMatch(
-      /self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)'/,
+      /self_hosted_enterprise: 'Several Apple Silicon Macs \(Mac Studio Ultra \/ Mac Pro recommended\)'/,
     );
   });
 
   it('"session content never leaves your perimeter" privacy framing pinned', () => {
-    expect(body).toMatch(/Sessions never leave your perimeter/);
+    expect(body).toMatch(/Sessions never leave your network/); // 2026-09-15: "perimeter" → plain "network"
     // S20c 2026-07-06 plain-language pass: same 4-state scope + the
     // nothing-through-vendor-servers promise, plain words lead.
     expect(body).toMatch(
@@ -72,8 +74,10 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
 
   it('control-plane scope claim pinned (sees license + metadata, never session itself)', () => {
     // S20c 2026-07-06 plain-language pass: metadata glossed inline.
+    // 2026-09-15: "control plane" is banned on customer surfaces; the
+    // sees-only-license-and-basic-details scope is unchanged.
     expect(body).toMatch(
-      /Driftstack's control plane sees your license and\s+basic session details — when a session started, which profile\s+ran \(session metadata\) — never the session itself/,
+      /Driftstack sees only your license and basic session\s+details — when a session started, which profile ran — never the\s+session itself/,
     );
   });
 
@@ -90,7 +94,7 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
   });
 
   it('sustained-10+-concurrent break-even framing pinned (volume tier)', () => {
-    expect(body).toMatch(/sustained 10\+ concurrent across the month/);
+    expect(body).toMatch(/10 or more,\s+sustained through a whole month/); // 2026-09-15 plain words
   });
 
   it('4-step process pinned (01 Contact sales / 02 Procure hardware / 03 Onboard / 04 Run)', () => {
@@ -106,9 +110,9 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
 
   it('sales@driftstack.dev contact + current guided sales-led availability', () => {
     expect(body).toMatch(/mailto:sales@driftstack\.dev\?subject=Self-Hosted%20inquiry/);
-    expect(body).toMatch(/Self-hosted is available through a guided sales-led engagement\./);
+    expect(body).toMatch(/Self-hosted is set up together with our sales team, step by step\./);
     expect(body).toMatch(
-      /qualify the workload, plan the hardware and network, onboard\s+the deployment, and run a joint smoke test/,
+      /check that the work is a good fit, plan the hardware and\s+network, install and set up your deployment, and run a first\s+live test/,
     );
     expect(body).toMatch(/Available now through Contact Sales · scoped and supported directly/);
     expect(body).not.toMatch(
@@ -122,24 +126,29 @@ describe('W370.C marketing-site /self-hosted page content parity', () => {
   });
 
   it('ASCII architecture diagram present with secure-channel callout', () => {
-    expect(body).toMatch(/YOUR INFRA[\s\S]+?DRIFTSTACK ORCHESTRATION/);
-    expect(body).toMatch(/Mac fleet/);
-    expect(body).toMatch(/Control plane/);
+    // 2026-09-15: banned words (fleet / control plane / orchestration)
+    // left the diagram; the two sides and the HTTPS link survive.
+    expect(body).toMatch(/YOUR MACS[\s\S]+?DRIFTSTACK SERVICE/);
+    expect(body).toMatch(/Your Macs/);
+    expect(body).toMatch(/Driftstack service/);
     expect(body).toMatch(/secure ───/);
-    expect(body).toMatch(/channel/);
+    expect(body).toMatch(/connection/);
     expect(body).toMatch(/\(HTTPS\)/);
   });
 
   it('egress posture pinned: WebKit sessions exit via your network (DC / VPN / BYO SOCKS5 + OpenVPN + WG). 2026-05-22 — "roadmap: BYO" flipped to shipped capability per planning 133 Phase 1.', () => {
-    expect(body).toMatch(/WebKit sessions exit via your network/);
-    expect(body).toMatch(/DC \/ VPN \//);
-    expect(body).toMatch(/BYO SOCKS5 \+/);
-    expect(body).toMatch(/OpenVPN \+ WG/);
+    expect(body).toMatch(/Sessions reach the web through your network/);
+    expect(body).toMatch(/direct, VPN,/);
+    expect(body).toMatch(/SOCKS5 \//);
+    expect(body).toMatch(/OpenVPN \//);
+    expect(body).toMatch(/WireGuard\)/);
   });
 
   it('"Concurrent capacity bounded by your hardware, not by license" pinned (cap framing)', () => {
     // Distinguishes self-hosted from SaaS — tier licensing
     // doesn't gate concurrent count on owned hardware.
-    expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
+    expect(body).toMatch(
+      /How many sessions can run at once depends on your hardware, not your license\./,
+    );
   });
 });

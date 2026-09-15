@@ -25,7 +25,7 @@ describe('W304.B /index hero baseline', () => {
 
   it('hero cites the source-level WebKit differentiator', () => {
     expect(body).toMatch(/WebKit/);
-    expect(body).toMatch(/C\+\+|source-level|source code/i);
+    expect(body).toMatch(/C\+\+|source-level|source code|Apple's\s*source/i);
   });
 
   it('hero leads with the free-tier entry CTA', () => {

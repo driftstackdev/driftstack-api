@@ -34,22 +34,24 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/V-270 — wired the New-key form \+ revoke confirmation flow\./);
   });
 
-  it('CRITICAL plaintext-shown-ONCE-on-creation framing pinned. The header copy — "Plaintext is shown ONCE on creation — store it now; we can\'t recover it later. Revocation is immediate." — is the load-bearing security framing.', () => {
+  it('CRITICAL full-key-shown-only-once framing pinned. The header copy — "The full key is shown only once, when you create it — save it right away; we can\'t show it again. Revoking a key takes effect immediately." — is the load-bearing security framing.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /Plaintext is\s*\n\s+shown ONCE on creation — store it now; we can't recover it later\. Revocation is\s*\n\s+immediate\./,
+      /The full key is\s*\n\s+shown only once, when you create it — save it right away; we can't show it again\.\s*\n\s+Revoking a key takes effect immediately\./,
     );
   });
 
-  it('CRITICAL scrypt-hash + no-admin-recovery security framing pinned. The wording — "API keys are scrypt-hashed at rest. Driftstack staff cannot read your keys — a database breach surfaces hashes, not keys" — is the customer-facing breach-resilience contract.', () => {
+  it('CRITICAL one-way-hash + no-recovery security framing pinned. The wording — "We store only a one-way hash of each key, so Driftstack staff can\'t read your keys, and anyone who got hold of our database would see only those hashes, not your keys" — is the customer-facing breach-resilience contract.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /API keys are scrypt-hashed at rest\. Driftstack staff cannot read your keys — a database/,
+      /We store only a one-way hash of each key, so Driftstack staff can't read your keys, and/,
     );
-    expect(p).toMatch(/breach surfaces hashes, not keys/);
-    expect(p).toMatch(/If a key leaks, revoke \+ rotate; no admin recovery/);
-    expect(p).toMatch(/path exists/);
+    expect(p).toMatch(/would see only those hashes, not your keys/);
+    expect(p).toMatch(
+      /If a key\s*\n\s+leaks, rotate it from this page, or revoke it and create a new one/,
+    );
+    expect(p).toMatch(/A lost key can't be\s*\n\s+recovered — not even by Driftstack support/);
   });
 
   it('CRITICAL 4-broad-scope set pinned — account_owner / write / read / granular. Drift to adding or dropping a top-level radio would force customers to scroll through 8+ tiers; the 4-shape is what fits on the create-form panel.', () => {
@@ -100,11 +102,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/value="read:audit"/);
   });
 
-  it("CRITICAL revoke-confirm prompt pinned — 'Apps using this key will start receiving 401 immediately. This cannot be undone.' The 401-immediately framing is the load-bearing customer-warning before destructive action.", () => {
+  it("CRITICAL revoke-confirm prompt pinned — 'Anything using this key will stop working immediately. This cannot be undone.' The stops-working-immediately framing is the load-bearing customer-warning before destructive action.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'Revoke "' \+\s*\n\s+name \+\s*\n\s+'"\? Apps using this key will start receiving 401 immediately\. This cannot be undone\.',/,
+      /'Revoke "' \+\s*\n\s+name \+\s*\n\s+'"\? Anything using this key will stop working immediately\. This cannot be undone\.',/,
     );
   });
 
@@ -125,11 +127,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/the create-flow pane\./);
   });
 
-  it("CRITICAL rotate-confirm 24h grace-period framing pinned. The wording — 'the old key keeps working for a 24h grace period so you can swap deployments without downtime' — is the load-bearing operator framing that allows zero-downtime rotation.", () => {
+  it("CRITICAL rotate-confirm 24-hour framing pinned. The wording — 'The old key keeps working for 24 hours so you can switch over without downtime' — is the load-bearing customer framing that allows a no-downtime rotation.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /'Rotate "' \+\s*\n\s+name \+\s*\n\s+'"\? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime\.',/,
+      /'Rotate "' \+\s*\n\s+name \+\s*\n\s+'"\? The new key is shown only once\. The old key keeps working for 24 hours so you can switch over without downtime\.',/,
     );
   });
 
@@ -160,12 +162,12 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     );
   });
 
-  it('CRITICAL "Key created — copy it now" reveal pane pinned. The "This is the only time the full key is shown. Store it in your secret manager before dismissing." framing is the load-bearing one-shot-copy customer-comms.', () => {
+  it('CRITICAL "Key created — copy it now" reveal pane pinned. The "This is the only time the full key is shown. Save it somewhere safe, such as a password manager, before dismissing." framing is the load-bearing one-shot-copy customer-comms.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Key created — copy it now/);
     expect(p).toMatch(
-      /This is the only time the full key is shown\. Store it in your secret manager before\s*\n\s+dismissing\./,
+      /This is the only time the full key is shown\. Save it somewhere safe, such as a password\s*\n\s+manager, before dismissing\./,
     );
   });
 
@@ -248,11 +250,11 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).not.toContain('Showing preview data below.');
   });
 
-  it("CRITICAL key-row 'grace ends' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent-text\">grace ends <iso>' as inline metadata (S23 2026-07-06 AA text tone). Drift would hide the grace-deadline from the customer.", () => {
+  it("CRITICAL key-row 'expires' inline annotation pinned. When a key has expires_at set (post-rotation), the row shows ' · <span class=\"text-tk-accent-text\">expires <iso>' as inline metadata (S23 2026-07-06 AA text tone). Drift would hide the old-key deadline from the customer.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-tk-accent-text">grace ends ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
+      /\(k\.expires_at\s*\n\s+\? ' · <span class="text-tk-accent-text">expires ' \+\s*\n\s+escapeHtml\(fmtIso\(k\.expires_at\)\) \+\s*\n\s+'<\/span>'\s*\n\s+: ''\)/,
     );
   });
 
@@ -284,10 +286,8 @@ describe('W750 dashboard /api-keys page V-182 + V-270 + V-296b + V-481 parity', 
     expect(p).toMatch(/const canRotate = canWrite && apiAccessVerified && apiAccessGranted;/);
     expect(p).toMatch(/\(canRotate \? '' : ' hidden'\) \+/);
     expect(p).toMatch(/rotateAction \+\s*'<button type="button" data-revoke="'/);
-    expect(p).toContain(
-      'Existing keys remain visible to authorized owners and team admins so they can revoke them.',
-    );
-    expect(p).toContain('Creation and rotation stay disabled until plan access can be checked.');
+    expect(p).toContain('Existing keys are still listed so an owner or admin can revoke them.');
+    expect(p).toContain('creating or rotating keys is paused until we can. Reload to try again.');
     // d6dd0d28b — /v1/usage (act-as forwarded) stays the ONLY tier authority;
     // /v1/account/me is fetched caller-only so the selected owner can never
     // self-authorize its own team role.

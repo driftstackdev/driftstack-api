@@ -137,18 +137,19 @@ const OS_LABEL: Record<Exclude<FingerprintedOs, 'unknown'>, string> = {
  */
 const UNAVAILABLE_HINT: Record<OsFingerprintUnavailable, string> = {
   vpn_tunnel:
-    'OS not measured: a VPN tunnel does not expose a proxy stack to read, so no test can produce one here.',
+    'OS not measured: the OS check is not available for VPN connections, so no test can produce one here.',
   not_observed:
     'OS not measured: the proxy refused the connection used for the reading. Run Test again.',
-  observer_off: 'OS not measured: OS detection is switched off on this deployment.',
+  observer_off:
+    'OS not measured: the OS check is turned off, so running Test will not produce one.',
 };
 
 /** The one-line `reason` carried on the placeholder record, for any consumer that
  *  reads `reason` rather than the verdict's hint. Same fact, shorter. */
 const UNAVAILABLE_REASON: Record<OsFingerprintUnavailable, string> = {
-  vpn_tunnel: 'a VPN tunnel has no SOCKS5 stack to fingerprint',
-  not_observed: 'the proxy refused the connection the fingerprint needs',
-  observer_off: 'stack fingerprinting is off on this deployment',
+  vpn_tunnel: 'the OS check is not available for VPN connections',
+  not_observed: 'the proxy refused the connection the check needs',
+  observer_off: 'the OS check is turned off',
 };
 
 /**
@@ -204,7 +205,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'unknown',
       glyph: '…',
       label: 'OS',
-      hint: 'Measuring this proxy’s stack — the test you started is still running.',
+      hint: 'Checking this proxy’s operating system — your test is still running.',
     };
   }
   // (o) O3 — a cause the control plane REPORTED outranks the shape of the record it
@@ -336,7 +337,7 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'match',
       glyph: '✓',
       label,
-      hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device it fronts.${vantageSentence(fp)}`,
+      hint: `Your proxy presents as ${label} to websites (${fp.confidence} confidence) — it matches the iOS device behind it.${vantageSentence(fp)}`,
     };
   }
   return {

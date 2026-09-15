@@ -45,7 +45,7 @@ describe('W311.C /team invite-flow ↔ server parity', () => {
   });
 
   it('page promises a 7-day accept link', () => {
-    expect(page).toMatch(/7[- ]day\s+accept\s+link/i);
+    expect(page).toMatch(/link that works for 7 days/i);
   });
 
   it('server invite TTL is 7 * 24 * 60 * 60 * 1000 ms (matches 7-day claim)', () => {

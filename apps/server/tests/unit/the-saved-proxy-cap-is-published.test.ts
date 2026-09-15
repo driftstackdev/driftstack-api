@@ -112,7 +112,7 @@ describe('V-1065 the saved proxy cap is published', () => {
 
     const route = readFileSync(ROUTE, 'utf8');
     expect(route, 'the route no longer enforces the VPN password rule').toMatch(
-      /A VPN password can only be changed by resubmitting the matching VPN configuration\./,
+      /To change a VPN password, submit the full VPN configuration again\./,
     );
     expect(
       route,
@@ -123,10 +123,10 @@ describe('V-1065 the saved proxy cap is published', () => {
   it('CRITICAL V-1067 the page documents the 409 the update can return, and the route still returns it. The PUT is a compare-and-set on `scheme`, so a concurrent change refuses the write rather than applying it to a proxy the caller no longer recognises. A customer who is not told cannot write the re-read-and-retry their integration needs, and the failure looks like an intermittent rejection with no stated cause.', () => {
     const body = doc();
     expect(body, 'the 409 is no longer documented on the update section').toMatch(
-      /`409` — `Proxy changed concurrently\. Retry the update\.`/,
+      /`409` — `This proxy changed since you last loaded it\. Refresh and try\s*\n?again\.`/,
     );
-    expect(body, 'the compare-and-set mechanism is no longer explained').toMatch(
-      /compare-and-set on `scheme`/,
+    expect(body, 'the scheme-changed cause is no longer explained').toMatch(
+      /changed this proxy's `scheme` between your read and your write/,
     );
     // The 404/409 distinction is the half a caller acts on: retry one, stop on
     // the other. The integration suite pins the same distinction behaviourally.
@@ -136,7 +136,7 @@ describe('V-1065 the saved proxy cap is published', () => {
 
     const route = readFileSync(ROUTE, 'utf8');
     expect(route, 'the route no longer throws the concurrent-change conflict').toMatch(
-      /throw new ConflictError\('Proxy changed concurrently\. Retry the update\.'\)/,
+      /throw new ConflictError\(\s*'This proxy changed since you last loaded it\. Refresh and try again\.',?\s*\)/,
     );
     expect(
       route,
@@ -217,7 +217,7 @@ describe('V-1065 the saved proxy cap is published', () => {
       /classifyUnsafeHost\(host\)/,
     );
     expect(route, 'the route no longer refuses a private proxy host').toMatch(
-      /Proxy host must not target a private, loopback, link-local, or metadata address\./,
+      /The proxy host must be a public internet address\. Private or local network addresses are not allowed\./,
     );
   });
 });

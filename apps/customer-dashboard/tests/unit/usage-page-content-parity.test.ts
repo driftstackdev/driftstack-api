@@ -69,18 +69,18 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
     expect(route).toContain("'/v1/usage/series'");
   });
 
-  it('ADR-004 framing pinned: concurrent caps are the only meter (counters non-billing)', () => {
+  it('ADR-004 framing pinned in plain words: only concurrent sessions are limited (counters non-billing)', () => {
     expect(body).toMatch(
-      /None of these counters drive billing\. Concurrent caps are the only meter\s+per ADR-004/,
+      /None of these counts affect your bill — your plan only limits how many\s+sessions run at once/,
     );
     expect(body).toMatch(
-      /None of these\s+are billed individually — concurrent cap is the only meter/,
+      /None of these are\s+billed separately — your plan only limits how many sessions run at\s+once/,
     );
   });
 
   it('empty-data banner pinned ("Live usage loaded. No activity in the current period yet")', () => {
     expect(body).toMatch(
-      /Live usage loaded\. No activity in the current period yet — counts will populate as you run sessions/,
+      /Live usage loaded\. No activity in the current period yet — counts will fill in as you run sessions/,
     );
   });
 
@@ -126,10 +126,10 @@ describe('W363.B customer-dashboard /usage page content parity', () => {
     );
   });
 
-  it('runaway-script framing pinned: 10× spike in navigates as the surface use-case', () => {
+  it('runaway-script framing pinned: 10× jump in page loads as the surface use-case', () => {
     // Customer-facing copy that explains why we surface the
     // counters at all (operational visibility, not billing).
-    expect(body).toMatch(/a sudden 10× spike in navigates may indicate a runaway script/);
+    expect(body).toMatch(/like a\s+sudden 10× jump in page loads from a runaway script/);
   });
 
   it('tier label renders the friendly plan name, not the raw tier id (TIER_DISPLAY_NAMES mapping mirrors index/billing)', () => {

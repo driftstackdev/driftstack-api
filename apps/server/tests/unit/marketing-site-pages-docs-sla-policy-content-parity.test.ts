@@ -56,7 +56,7 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     expect(body).not.toMatch(/<code>solo_manual<\/code><\/td><td>99\.5%/);
     // §9.1/§9.2 tier split quoted from the ToS.
     expect(body).toMatch(
-      /the Free, Manual-ladder\s*\(Personal, Team, Agency\), API Starter, and API Builder tiers are\s*provided <strong>without<\/strong> a contractually-binding\s*service level agreement/,
+      /the Free, Manual plan family\s*\(Personal, Team, Agency\), API Starter, and API Builder tiers are\s*provided <strong>without<\/strong> a contractually-binding\s*service level agreement/,
     );
     expect(body).toMatch(
       /first-response SLA on Severity-1 incidents of four\s*\(4\) hours on API Scale and one \(1\) hour on Enterprise/,
@@ -83,7 +83,8 @@ describe('W512.A apps/marketing-site/src/pages/docs/sla-policy.astro content par
     expect(body).toMatch(
       /Scheduled maintenance windows announced &gt;72h in advance\s*on <a href="https:\/\/status\.driftstack\.io">status\.driftstack\.io<\/a>\./,
     );
-    expect(body).toMatch(/Maintenance windows are capped at 4h\/month and rarely\s*triggered/);
+    expect(body).toMatch(/Maintenance windows are capped at 4h\/month and rarely\s*needed/);
+    expect(body).not.toMatch(/rolling restarts/);
     expect(body).toMatch(
       /Failures attributable to a customer-supplied\s*<code>target_url<\/code>, profile state, or script/,
     );

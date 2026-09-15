@@ -89,14 +89,14 @@ describe('W740 dashboard select-tier page V-184a + V-501 parity', () => {
 
     expect(p).toMatch(/You're on the free plan/);
     expect(p).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and sessions up\s+to 20 minutes each/,
+      /Free includes 1 profile, 1 session at a time, and sessions up\s+to 20 minutes each/,
     );
   });
 
   it('CRITICAL shared engine/archetype boundary and real enforced differences are explicit while legal refund copy remains intact.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /Every tier runs the same verified browser engine and can use every\s+currently available archetype\. Operational limits and optional capabilities\s+differ — compare concurrency, profiles, storage, saved proxies, access,\s+and AI billing below/,
+      /Every plan uses the same browser engine and every available device\s+profile\. The differences are in limits and extras — compare sessions at\s+once, profiles, storage, saved proxies, access and AI billing below/,
     );
     expect(p).not.toMatch(/Only concurrent caps and profile\s+counts change/);
     expect(p).toMatch(

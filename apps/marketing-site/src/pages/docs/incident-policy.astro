@@ -85,8 +85,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
         <a href="mailto:support@driftstack.dev">support@driftstack.dev</a>
         and Slack channel monitoring. We acknowledge within 30 min
         during EU business hours.</li>
-      <li><strong>Internal alerting:</strong> Sentry + cost-monitoring
-        thresholds page on-call. Anything that warrants customer
+      <li><strong>Internal alerting:</strong> our error and cost
+        monitoring pages the on-call engineer. Anything that warrants customer
         comms gets escalated to a public status-page entry.</li>
     </ul>
 
@@ -111,23 +111,22 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
     <p>
       <strong>Note:</strong> <code>incident.created</code> /
       <code>incident.updated</code> / <code>incident.resolved</code>
-      are admin-audit / internal SSE event types, not customer webhook
-      subscription values. Email subscription is the customer-facing
+      are internal event names, not webhook event types you can
+      subscribe to. Email subscription is the customer-facing
       notification path.
     </p>
 
     <h2>SLA + credit policy</h2>
     <p>
-      Driftstack's SLA is on the <strong>API control plane</strong>
-      (session create + lifecycle endpoints). The dashboard and SDK
+      Driftstack's SLA covers the <strong>API</strong>
+      (session create and lifecycle endpoints). The dashboard and SDK
       distribution are best-effort.
     </p>
     <p>
       Tier-by-tier SLA targets, the windowing methodology, the
       credit bands, and the dispute process all live in
       <a href="/docs/sla-policy/">/docs/sla-policy</a> — that is the
-      authoritative reference. Tier identifiers used there match
-      the <code>AccountTier</code> enum exactly.
+      authoritative reference.
     </p>
 
     <h2>Reading SLA data from the API</h2>
@@ -150,8 +149,7 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 }`}</code></pre>
     <p>
       No auth — status surface is public. Window is a fixed rolling
-      30 days. Field names are camelCase (the SLA report serialises
-      its internal model directly).
+      30 days. Field names are camelCase.
     </p>
 
     <h2>Postmortems</h2>

@@ -67,7 +67,8 @@ describe('W355.A /docs/admin-api-pagination parity', () => {
     expect(body).toMatch(
       /malformed cursor[\s\S]{0,200}empty page with\s*<code>next_cursor: null<\/code>/,
     );
-    expect(body).toMatch(/prefers a benign\s*empty result/);
+    // The page calls cursors opaque; it must not describe their encoding.
+    expect(body).not.toMatch(/base64url|decode internals|overflow probe/);
   });
 
   it('filter composition (status + search + account_id) named on the page', () => {

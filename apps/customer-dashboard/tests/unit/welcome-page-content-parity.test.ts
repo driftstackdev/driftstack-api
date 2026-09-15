@@ -37,10 +37,10 @@ function read(p: string): string {
 describe('W367.B customer-dashboard /welcome page content parity', () => {
   const body = read(PAGE);
 
-  it('free-tier figures pinned: Start free / $0 · no card / 1 profile / 1 concurrent / no expiry', () => {
+  it('free-tier figures pinned: Start free / $0 · no card / 1 profile / 1 session at a time / no expiry', () => {
     expect(body).toMatch(/Start free/);
     expect(body).toMatch(/\$0 · no card/);
-    expect(body).toMatch(/1 profile, 1 concurrent/);
+    expect(body).toMatch(/1 profile, 1 session at a time/);
     expect(body).toMatch(/No subscription, no expiry/);
     // No residual trial-pack purchase figures.
     expect(body).not.toMatch(/\$2\.99/);
@@ -62,17 +62,20 @@ describe('W367.B customer-dashboard /welcome page content parity', () => {
       /Start free with no card — or pick a paid tier and we'll send you\s+to Stripe to confirm payment\. Your card details stay between you\s+and Stripe — we never see them/,
     );
     // Step 2 — the app is a PUBLIC cross-platform download; Free then uses browser
-    // sign-in to provision its restricted device credential. Not OS-code-signed.
+    // sign-in and the app gets its own limited credential. Not signed with Apple or
+    // Microsoft yet, said in customer words (2026-09-15 plain-words pass).
     expect(body).toMatch(
-      /Download the desktop app for macOS, Windows or Linux, then choose\s+browser sign-in\. Driftstack provisions a restricted device\s+credential for the app; that's where Free customers launch and drive\s+iPhone Safari sessions\. The builds are not OS-code-signed yet, so\s+macOS Gatekeeper or Windows SmartScreen warns on first launch\./,
+      /Download the desktop app for macOS, Windows or Linux, then choose\s+browser sign-in\. The app signs in with its own limited credential,\s+and that's where Free customers launch and drive iPhone Safari\s+sessions\. Your computer may show a security warning on first launch\s+because the app isn't yet signed with Apple or Microsoft; this is expected\./,
     );
     expect(body).toContain('https://github.com/driftstackdev/driftstack-api/releases/latest');
-    // Step 3 — customer keys and SDK automation are paid-tier capabilities.
+    // Step 3 — API keys and running sessions from code are paid-plan capabilities.
     expect(body).toMatch(
-      /On an API-enabled paid tier, create a customer API key for SDK\s+automation\. Customer keys can be revoked or rotated any time;\s+Free desktop sign-in does not require one/,
+      /On a paid plan with API access, create an API key to run sessions\s+from your own code\. Keys can be revoked or rotated any time; the\s+Free plan's desktop sign-in doesn't need one/,
     );
-    expect(body).toMatch(/restricted device credential for the\s+app, not a customer API key/);
-    expect(body).toMatch(/customer API\s+keys, and SDK automation/);
+    expect(body).toMatch(
+      /the app gets its own limited sign-in credential, so\s+you don't need an API key/,
+    );
+    expect(body).toMatch(/use API keys and the SDK from your own code/);
     expect(body).not.toMatch(/API key[^.]*connect the desktop app/i);
   });
 

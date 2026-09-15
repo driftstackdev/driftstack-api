@@ -112,7 +112,7 @@ describe('direct-session operation OpenAPI error truth', () => {
       const driverFailure = object(liveResponses['502'], `${method} ${path} live 502`);
       const unavailable = object(liveResponses['503'], `${method} ${path} live 503`);
 
-      expect(driverFailure.description).toMatch(/browser driver failed/);
+      expect(driverFailure.description).toMatch(/browser failed/);
       expect(driverFailure.description).toMatch(/terminal/);
       expect(unavailable.description).toMatch(/unavailable in this deployment/);
       expect(unavailable.description).toMatch(/terminal/);

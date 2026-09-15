@@ -367,7 +367,7 @@ describe('T2 sweep — accent on a TEXT leaf wears text-accent-text; fills, glyp
 
   it('section labels, form headers, links and the active sidebar badge are text-accent-text', () => {
     expect(read('views/ProxiesView.tsx')).toContain(
-      'section-label text-accent-text">Network egress',
+      'section-label text-accent-text">Proxies &amp; VPNs',
     );
     expect(read('views/ProxiesView.tsx')).toMatch(
       /section-label text-accent-text">\s*\{mode === 'add' \? 'Add proxy' : 'Edit proxy'\}/,
@@ -376,7 +376,7 @@ describe('T2 sweep — accent on a TEXT leaf wears text-accent-text; fills, glyp
       'section-label text-accent-text">{hello}',
     );
     expect(read('visual-harness/gallery.tsx')).toContain(
-      'section-label text-accent-text">Network egress',
+      'section-label text-accent-text">Proxies &amp; VPNs',
     );
     expect(read('visual-harness/gallery.tsx')).toContain(
       'section-label text-accent-text">Good morning',
@@ -563,9 +563,12 @@ describe('review — hover states, opacity, and the simulator dark scope', () =>
     // marketing-scenes.test.tsx, where the window and the card can be compared.
     expect(g).not.toMatch(/text-white\/40/);
     expect(g).not.toContain('text-ink-secondary"> · ws ✓');
-    // and the real drawer still says the same
+    // and the real drawer says the same in the customer's words: the Link card
+    // reads "Connected ✓" (no host, no "ws" marker — owner directive 2026-09-15)
+    // in the pane's white tint
     const sw = readSource('views/SimulatorWindow.tsx');
-    expect(sw).toContain('{info && <span className="text-white/50"> · ws ✓</span>}');
+    expect(sw).toContain("{info ? 'Connected ✓' : 'Not connected'}");
+    expect(sw).not.toContain('· ws ✓');
     expect(sw).not.toMatch(/text-\[9\.5px\] uppercase tracking-\[0\.04em\] text-white\/40/);
   });
 

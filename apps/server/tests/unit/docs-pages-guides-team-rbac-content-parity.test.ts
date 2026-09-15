@@ -93,15 +93,16 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The link takes them to the dashboard's `\/team\/accept` page; the\s*\n?page calls `POST \/v1\/team\/invites\/accept` with the token from the\s*\n?URL\./,
+      /The link takes them to the dashboard's `\/team\/accept` page, which\s*\n?checks that the signed-in account's email matches the invitation\s*\n?and adds them to the team\. To accept programmatically instead, use\s*\n?`POST \/v1\/team\/invites\/accept` \(see the \[API reference\]\(\/api\/team\/\)\)\./,
     );
   });
 
-  it("CRITICAL Acting-as picker localStorage.ds_act_as_account + 3-feature framing pinned. The 'Lists the member\\'s own account (default) + each owner team' + 'Persists the selection to localStorage.ds_act_as_account' + 'Auto-injects X-Driftstack-Account: acc_<owner-uuid> on every subsequent dashboard fetch' wording matches V-331 picker + W757 dashboard /team.", () => {
+  it("CRITICAL Acting-as picker 3-feature framing pinned. The 'Lists the member\\'s own account (default) + each owner team' + 'Remembers your selection in this browser' + 'Auto-injects X-Driftstack-Account: acc_<owner-uuid> on every subsequent dashboard fetch' wording matches V-331 picker + W757 dashboard /team. The localStorage key name is an implementation detail and must not return to the customer page.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Lists the member's own account \(default\) \+ each owner team\./);
-    expect(p).toMatch(/Persists the selection to `localStorage\.ds_act_as_account`\./);
+    expect(p).toMatch(/Remembers your selection in this browser\./);
+    expect(p).not.toMatch(/localStorage\.ds_act_as_account/);
     expect(p).toMatch(
       /Auto-injects `X-Driftstack-Account: acc_<owner-uuid>` on every\s*\n?\s+subsequent dashboard fetch\./,
     );
@@ -130,19 +131,16 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       /# create a session OWNED by the team owner; counts against the\s*\n?# OWNER's concurrent cap\. The request consumes sessions:create\s*\n?# for the member first, then the same bucket for the OWNER using\s*\n?# the owner's current tier\/override\./,
     );
     expect(p).toMatch(
-      /Team-resource session and agent-session routes use dual rate-limit\s*\n?accounting after those role checks\. The member first spends from their\s*\n?own bucket\. A distinct selected owner then spends from the same bucket\s*\n?key and cost, using the owner's current tier and active override\./,
+      /Session and agent-session requests made on behalf of an owner count\s*\n?against two rate limits: yours first, then the owner's, based on the\s*\n?owner's plan\./,
     );
     expect(p).toMatch(
-      /Owner exhaustion returns a generic 429 with `Retry-After`; it does not\s*\n?reveal the owner's policy or refund the member's already-consumed token\./,
+      /If the owner's limit is exhausted you get a generic 429\s*\n?with `Retry-After`\. The response does not include the owner's limit\s*\n?details, and the request still counts against your own limit\./,
     );
     expect(p).toMatch(
-      /Each admin retains an independent actor budget, but all admins targeting\s*\n?the same owner share that owner's budget\./,
-    );
-    expect(p).toMatch(
-      /simultaneous\s*\n?session creates by two admins contend on one owner\s*\n?`sessions:create` bucket; adding admins never multiplies owner capacity\./,
+      /Each admin has their own rate limit, but all admins acting on the same\s*\n?owner share the owner's limit; adding admins never increases the\s*\n?owner's capacity\./,
     );
     expect(p).not.toMatch(
-      /Owner exhaustion[^.]*\b(?:reveals?|returns?|includes?|reports?)\b[^.]*\b(?:tier|capacity|remaining|override)\b/i,
+      /owner's limit is exhausted[^.]*\b(?:reveals?|includes?|reports?)\b[^.]*\b(?:tier|remaining|override)\b/i,
     );
   });
 
@@ -166,7 +164,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       /\*\*Live session state\*\* \(`GET \/v1\/sessions\/:id\/state`\): `admin` only\./,
     );
     expect(p).toMatch(
-      /It claims the driver and returns cookies\/local storage; `member` gets\s*\n?\s+`403` before any session or driver mutation\./,
+      /It returns the live session's cookies and local storage; `member` gets\s*\n?\s+`403` and the session is left untouched\./,
     );
     expect(p).toMatch(
       /\*\*Write endpoints\*\* \(POST \/ PATCH \/ DELETE \/ api-keys rotate\):\s*\n?\s+`admin` role only\. `member` gets `403`\./,
@@ -218,13 +216,11 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     expect(p).not.toMatch(/Every action a member takes/);
     expect(p).toMatch(/`account_id`: the owner\./);
     expect(p).toMatch(
-      /`actor_account_id`: the member when that endpoint propagates team\s*\n?\s+actor context\./,
+      /`actor_account_id`: the member, when that endpoint records who\s*\n?\s+acted\./,
     );
+    expect(p).toMatch(/`actor_key_id`: the member's API key id, when that is recorded\./);
     expect(p).toMatch(
-      /`actor_key_id`: the member's API key id when that context is\s*\n?\s+propagated\./,
-    );
-    expect(p).toMatch(
-      /Not every endpoint currently emits an audit entry or propagates team\s*\n?actor context\. Treat these actor fields as endpoint-specific\s*\n?provenance, not as a complete record of every team action\./,
+      /Not every endpoint currently writes an audit entry or records who\s*\n?acted\. Treat these actor fields as a per-endpoint detail, not as a\s*\n?complete record of every team action\./,
     );
     expect(p).toMatch(
       /So the owner sees, in their audit log, "Member alice@example\.com\s*\n?\(`acc_…`\) created session `ses_…` on this account at 2026-05-08\s*\n?14:02 UTC"\./,
@@ -239,13 +235,14 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     expect(p).toMatch(/for the export ceiling \+ cursor pagination beyond 10K rows\.\)/);
   });
 
-  it("CRITICAL remove-member-immediate-auth-cache-invalidation framing pinned. The 'The membership row is deleted; the member\\'s auth-cache is invalidated immediately so their X-Driftstack-Account header stops working on the next request. Their own account stays — only the team relationship is severed' wording is the canonical revocation-semantics contract.", () => {
+  it("CRITICAL remove-member-immediate framing pinned. The 'The member is removed immediately; their X-Driftstack-Account header stops working on the next request. Their own account stays — only the team relationship is severed' wording is the canonical revocation-semantics contract (the row/auth-cache internals were dropped from the customer page).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The membership row is deleted; the member's auth-cache is\s*\n?invalidated immediately so their `X-Driftstack-Account` header\s*\n?stops working on the next request\./,
+      /The member is removed immediately; their `X-Driftstack-Account`\s*\n?header stops working on the next request\./,
     );
-    expect(p).toMatch(/Their own account stays — only\s*\n?the team relationship is severed\./);
+    expect(p).toMatch(/Their own account stays —\s+only\s+the team relationship is severed\./);
+    expect(p).not.toMatch(/auth-cache|membership row is deleted/);
   });
 
   it("CRITICAL member-NOT-separately-notified framing pinned. The 'A team.member_removed audit entry lands on the owner\\'s log; the member is NOT separately notified by Driftstack (the owner can do that via their own channels)' wording is the load-bearing customer-comms boundary.", () => {
@@ -263,7 +260,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
       /A team can have any number of `admin`-role members, but every one\s*\n?of them is invited by the \*\*owner\*\* — `POST \/v1\/team\/invites`\s*\n?requires the `account_owner` scope and always creates invites for\s*\n?the caller's own team/,
     );
     expect(p).toMatch(
-      /The owner\s*\n?is always implicitly "admin" on their own team \(no separate\s*\n?membership row\)\./,
+      /The owner\s*\n?is always implicitly "admin" on their own team \(no separate\s*\n?membership record\)\./,
     );
     // Negative pin — the impossible any-admin-can-invite claim must not return.
     expect(p).not.toMatch(/can be invited\s*\n?by any existing admin/);
@@ -285,7 +282,7 @@ describe('W783 docs /guides/team-rbac content parity', () => {
 
     expect(p).toMatch(/1\. Owner \(or admin member\) rotates → new key, 24h grace on the old\./);
     expect(p).toMatch(/2\. Teammates have 24h to swap deployments to the new key\./);
-    expect(p).toMatch(/3\. After 24h the old key auto-expires server-side\./);
+    expect(p).toMatch(/3\. After 24h the old key expires automatically\./);
     expect(p).toMatch(
       /Teammates calling the rotation endpoint themselves require admin\s*\n?role \+ `X-Driftstack-Account` header pointing at the owner\./,
     );
@@ -334,7 +331,13 @@ describe('W783 docs /guides/team-rbac content parity', () => {
     expect(p, 'agent sessions are missing from the table').toMatch(
       /\| Agent sessions {4}\| every `\/v1\/agent-sessions` route/,
     );
-    expect(p, 'the was-narrower note is gone').toMatch(
+    expect(p, 'the safe-assumption guidance is gone').toMatch(
+      /If you are unsure about a route not listed here, the safe assumption is\s*\n?that it operates on your own account\./,
+    );
+    // The page's own changelog ("This table was previously narrower than the
+    // server...") gives a customer nothing to act on; it was removed and must
+    // not return.
+    expect(p, 'the docs-changelog note came back').not.toMatch(
       /This table was previously narrower than the server/,
     );
 

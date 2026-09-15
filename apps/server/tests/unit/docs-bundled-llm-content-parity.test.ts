@@ -26,9 +26,9 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
   it('explains the opt-in consent + BYOK-wins resolution chain (slice 151 added markdown link to /api/byok-anthropic/; regex tolerates both bare-BYOK and [BYOK](...) forms and the post-reflow whitespace shape)', () => {
     expect(body).toMatch(/Opt-in is explicit/);
     // Match either `prefers BYOK` or `prefers [BYOK](/api/byok-anthropic/)`.
-    expect(body).toMatch(/prefers \[?BYOK\]?/);
-    // Allow newline between "is" and "the" (post-link prose-reflow).
-    expect(body).toMatch(/bundled-LLM is\s+the no-BYOK fallback/);
+    expect(body).toMatch(/has a \[BYOK\]\(\/api\/byok-anthropic\/\) key/);
+    // Allow newline inside the sentence (post-link prose-reflow).
+    expect(body).toMatch(/it is used instead of the bundled LLM/);
   });
 
   it('documents all three customer endpoints', () => {
@@ -51,10 +51,10 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     // an included-service accounting value (a budget, not an itemized Stripe
     // line), so the amount, the per-turn unit and the model/token independence
     // are pinned rather than one exact phrasing of the sentence.
-    expect(body).toMatch(/flat \*\*\$0\.10\s*included-service accounting value per agent turn\*\*/);
-    expect(body).toMatch(/independent of model choice\s*and token count/);
+    expect(body).toMatch(/each agent turn counts a flat\s*\*\*\$0\.10\*\*/);
+    expect(body).toMatch(/whatever\s*the model or token count/);
     expect(body).toMatch(/Enterprise can\s*use a contracted custom budget/);
-    expect(body).toMatch(/bundled_flat_per_turn/);
+    expect(body).toMatch(/not Driftstack's actual provider cost/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
   });
 
@@ -84,7 +84,7 @@ describe('Arc 6 docs.bundled-llm content parity', () => {
     // 503 was moved OUT of the settings/status error table — it surfaces on the
     // agent-session turn route only. Pin the corrected prose, ban the old table row.
     expect(body).toMatch(
-      /The settings \+ status routes above do not return a `503`\. A `503`\s*\n?for an unwired bundled-LLM service is returned on the \*\*agent-session\s*\n?turn\*\* route, not on these reads\./,
+      /The settings \+ status routes above do not return a `503`\. When\s*\n?bundled-LLM is not available on the deployment, the `503` is returned\s*\n?on the \*\*agent-session turn\*\* route, not on these reads\./,
     );
     expect(body).not.toMatch(/\|\s*503\s*\| feature-unavailable/);
   });

@@ -70,8 +70,8 @@ describe('W341.B /webhooks event-checkbox parity', () => {
   });
 
   it('page pins the HMAC-SHA256 + 5-minute tolerance posture (signing baseline)', () => {
-    expect(page).toMatch(/HMAC-SHA256-signed/);
-    expect(page).toMatch(/5-minute timestamp tolerance/);
+    expect(page).toMatch(/signed \(HMAC-SHA256\)/);
+    expect(page).toMatch(/more than 5 minutes old/);
   });
 
   it('page cites verifyWebhookSignature SDK helper for verification', () => {
@@ -79,6 +79,6 @@ describe('W341.B /webhooks event-checkbox parity', () => {
   });
 
   it('page pins the 10-second delivery timeout (matches server-side default)', () => {
-    expect(page).toMatch(/2xx within 10s/);
+    expect(page).toMatch(/success status \(2xx\)\s+within 10 seconds/);
   });
 });

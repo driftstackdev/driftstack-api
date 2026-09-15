@@ -19,7 +19,9 @@ export type SessionStatus = z.infer<typeof SessionStatusSchema>;
 
 export const ArchetypeSchema = z
   .string()
-  .regex(/^[a-z0-9_]+$/, { message: 'archetype slug is lowercase alphanumeric + underscores' })
+  .regex(/^[a-z0-9_]+$/, {
+    message: 'device profile id is lowercase letters, digits and underscores',
+  })
   .min(3)
   .max(60);
 

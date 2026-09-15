@@ -38,8 +38,12 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
   it("CRITICAL V-353h MFA recovery-codes-shown-ONCE-at-enrollment framing pinned. The 'Recovery codes are issued at enrollment — store them somewhere safe; without your authenticator AND your recovery codes, account access' wording is the load-bearing 'no admin recovery path' security framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Recovery codes are issued at enrollment — store them somewhere safe;/);
-    expect(p).toMatch(/without your authenticator AND your recovery codes, account access/);
+    expect(p).toMatch(
+      /You'll get recovery codes when you set it up — keep them somewhere\s*\n\s+safe\./,
+    );
+    expect(p).toMatch(
+      /If you lose both your authenticator app and your recovery\s*\n\s+codes, you'll need to contact support to get back in\./,
+    );
   });
 
   it("CRITICAL V-353h enroll + verify + recovery-codes-list-10 framing pinned. The 'Save your recovery codes — these are shown ONCE' wording matches the W750 api-key + W753 webhook 'shown ONCE' security pattern.", () => {
@@ -59,7 +63,9 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
   it("CRITICAL MFA disable clears TOTP secret + invalidates recovery codes. The 'Disabling clears your TOTP secret + invalidates all recovery codes' wording is the load-bearing customer-comms before a destructive MFA-disable action.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Disabling clears your TOTP secret \+ invalidates all recovery codes\./);
+    expect(p).toMatch(
+      /Disabling removes two-factor from your account and cancels all\s*\n\s+recovery codes\./,
+    );
   });
 
   it('CRITICAL POST /v1/account/mfa/enroll + POST /v1/account/mfa/verify pinned. Drift to a different endpoint would break the V-353h enrollment flow.', () => {
@@ -101,10 +107,10 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
     const p = read(PAGE);
 
     expect(p).toMatch(/if \(mfaStart && mfaStart\.disabled\) return;/);
-    expect(p).toMatch(/mfaStart\.textContent = 'Generating secret…';/);
-    expect(p).toMatch(/mfaStart\.textContent = 'Secret generated — scan the QR below';/);
+    expect(p).toMatch(/mfaStart\.textContent = 'Setting up…';/);
+    expect(p).toMatch(/mfaStart\.textContent = 'Scan the QR code below';/);
     expect(p).toMatch(
-      /showMfaError\(securityErrorMessage\(err, 'Could not start MFA enrollment\. Try again\.'\)\);\s*\n\s+if \(mfaStart\) \{\s*\n\s+mfaStart\.disabled = false;\s*\n\s+mfaStart\.textContent = 'Set up two-factor authentication';/,
+      /showMfaError\(securityErrorMessage\(err, "Couldn't start two-factor setup\. Try again\."\)\);\s*\n\s+if \(mfaStart\) \{\s*\n\s+mfaStart\.disabled = false;\s*\n\s+mfaStart\.textContent = 'Set up two-factor authentication';/,
     );
   });
 
@@ -152,13 +158,17 @@ describe('W759-security dashboard /security page V-079 + V-353h + V-355 + V-216 
   it('CRITICAL trust panel describes platform-held account-bound encryption and management-event audit coverage without zero-knowledge/read-audit overclaims.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/context-bound wrapping under platform-held keys/);
     expect(p).toMatch(
-      /owning account and, for record-scoped stores, the exact record and value slot/,
+      /encrypted in storage, and each one can only be unlocked for the account that owns it/,
     );
-    expect(p).toMatch(/the platform unwraps its bound key for that authorized session/);
-    expect(p).toMatch(/credential-management events that were recorded/);
-    expect(p).toMatch(/routine runtime use is not logged as a credential-read event/i);
+    expect(p).toMatch(
+      /tied to the account that owns it and, for individual records, to that exact record/,
+    );
+    expect(p).toMatch(/only unlocked while an authorized session is using them/);
+    expect(p).toMatch(/Review changes to your credentials/);
+    expect(p).toMatch(
+      /Everyday use of a credential during a session is not logged as a separate event/i,
+    );
     expect(p).not.toMatch(/Profiles are client-encrypted/);
     expect(p).not.toMatch(/Every credential read lands/);
     expect(p).not.toMatch(/Always audited/);

@@ -58,7 +58,7 @@ describe('W772 docs /api/versioning content parity', () => {
       /- Breaking changes go through a deprecation cycle, then a new\s*\n?\s+major version\. `\/v2\/\*` only when justified; not on a calendar\./,
     );
     expect(p).toMatch(
-      /- The OpenAPI spec at `\/openapi\.json` is the contract\. Generated\s*\n?\s+from Zod schemas in `packages\/api-types\/`; there is no second\s*\n?\s+source of truth\./,
+      /- The OpenAPI spec at `\/openapi\.json` is the contract\. It is\s*\n?\s+generated from the same definitions the server enforces\./,
     );
   });
 
@@ -127,7 +127,7 @@ describe('W772 docs /api/versioning content parity', () => {
     expect(p).toMatch(
       /`\/v1\/\*` continues to work for the announced sunset window\s*\n?\s+\(typically 12\+ months\)/,
     );
-    expect(p).toMatch(/Both versions share the same auth \+ rate-limit infrastructure\./);
+    expect(p).toMatch(/Both versions share the same auth \+ rate limits\./);
     expect(p).toMatch(/no header-based\s*\n?\s+versioning today\./);
   });
 

@@ -46,22 +46,23 @@ describe('OAuth callback completion deadlines', () => {
     expect(CALLBACK).toContain("localStorage.setItem('ds_web_session_token', token)");
     expect(CALLBACK).toContain("localStorage.getItem('ds_web_session_token') !== token");
     expect(CALLBACK).toContain('safeNextPath(body.redirect_to, window.location.origin)');
-    expect(CALLBACK).toContain('OAuth sign-in outcome is unknown after the request timed out.');
-    expect(CALLBACK).toContain('exchanged this one-time callback code');
-    expect(CALLBACK).toContain('session whose credential did not reach this browser');
-    expect(CALLBACK).toContain('account-link confirmation email');
-    expect(CALLBACK).toContain('Do not reload or submit this callback URL again.');
+    expect(CALLBACK).toContain("The request took too long, so we're not sure what happened.");
+    expect(CALLBACK).toContain("Don't reload this page.");
+    expect(CALLBACK).toContain('Check your inbox for a confirmation email first');
+    expect(CALLBACK).toContain('if nothing arrives, return to sign-in and try again.');
     expect(CALLBACK).toContain('Return to sign-in if no email arrives');
     expect(CALLBACK).toContain('const MFA_TIMEOUT_MS = 15_000;');
     expect(CALLBACK).toContain("fetch(apiBaseUrl + '/v1/auth/mfa/challenge'");
-    expect(CALLBACK).toContain('MFA sign-in outcome is unknown after the request timed out.');
-    expect(CALLBACK).toContain('Do not submit this code again.');
+    expect(CALLBACK).toContain(
+      'The request took too long, so your code may already have been used.',
+    );
+    expect(CALLBACK).toContain("Don't enter it again — start a fresh sign-in.");
   });
 
   it('preflights persistent session storage before the one-time hand-off redeem', () => {
     expect(CALLBACK).toContain('function canPersistWebSession()');
     expect(CALLBACK).toMatch(
-      /if \(!canPersistWebSession\(\)\) \{[\s\S]*hand-off code was not redeemed[\s\S]*return;[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/redeem'/,
+      /if \(!canPersistWebSession\(\)\) \{[\s\S]*Allow it, then start sign-in again\.[\s\S]*return;[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/oauth-client\/redeem'/,
     );
   });
 
@@ -70,15 +71,20 @@ describe('OAuth callback completion deadlines', () => {
     expect(CONFIRM).toContain("'/v1/auth/oauth-client/confirm-merge'");
     expect(CONFIRM).toContain('body: JSON.stringify({ token: token })');
     expect(CONFIRM).toContain("credentials: 'include'");
-    expect(CONFIRM).toContain('Account-link outcome is unknown after the request timed out.');
-    expect(CONFIRM).toContain('consumed this one-time token');
-    expect(CONFIRM).toContain('Do not reload or submit this link again.');
+    expect(CONFIRM).toContain('The request took too long, so your account may already be linked.');
+    expect(CONFIRM).toContain(
+      "Don't use this link again — check Connected accounts under Privacy & security.",
+    );
     expect(CONFIRM).toContain('Check connected accounts');
-    expect(CONFIRM).toContain('sign in with your password and retry its IDP button from Login');
+    expect(CONFIRM).toContain(
+      "If Google or GitHub isn't listed there, sign in with your password and use its button on the sign-in page again.",
+    );
     expect(CONFIRM).toContain('let mergeResponseAccepted = false;');
     expect(CONFIRM).toMatch(/if \(r\.ok\) \{\s*mergeResponseAccepted = true;\s*return;\s*\}/);
     expect(CONFIRM).toMatch(/if \(mergeResponseAccepted\) \{/);
-    expect(CONFIRM).toContain('Your identity provider was linked, but this page could not finish');
+    expect(CONFIRM).toContain(
+      "Your account was linked, but this page couldn't open the dashboard.",
+    );
     expect(CONFIRM).not.toMatch(/r\.ok\s*\?\s*r\.json\(\)/);
   });
 });

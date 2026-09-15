@@ -48,7 +48,7 @@ describe('W266.D /docs/api-changelog ↔ cross-link + framing parity', () => {
     expect(missing).toEqual([]);
   });
 
-  it('DASHBOARD_ORIGIN-derived auth URLs are framed correctly', () => {
+  it('auth email-link fix names the real dashboard routes', () => {
     // V-079.C: real dashboard routes are /verify-email, /reset-password
     // (NOT the legacy /auth/<flow> paths).
     expect(page).toMatch(/<code>\/verify-email<\/code>/);
@@ -57,9 +57,12 @@ describe('W266.D /docs/api-changelog ↔ cross-link + framing parity', () => {
     expect(page).not.toMatch(/<code>\/auth\/verify-email<\/code>/);
   });
 
-  it('DASHBOARD_ORIGIN env var is named consistently', () => {
-    expect(page).toMatch(/DASHBOARD_ORIGIN/);
-    // Legacy PUBLIC_DASHBOARD_URL removal is documented.
-    expect(page).toMatch(/PUBLIC_DASHBOARD_URL/);
+  it('email-link entries describe the customer-visible fix without naming server config', () => {
+    expect(page).toMatch(
+      /Verification, magic-link and password-reset emails now always\s+link to your Driftstack dashboard/,
+    );
+    expect(page).toMatch(/could arrive with an unusable link/);
+    // Env-var names are how we run the service, not something a customer acts on.
+    expect(page).not.toMatch(/DASHBOARD_ORIGIN|PUBLIC_DASHBOARD_URL/);
   });
 });

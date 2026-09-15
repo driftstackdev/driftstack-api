@@ -50,9 +50,9 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </p>
       <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Usage</h1>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-        Per-resource counts for the current billing period. None of these
-        are billed individually — concurrent cap is the only meter. These
-        numbers help you spot abnormal traffic early.
+        Activity counts for the current billing period. None of these are
+        billed separately — your plan only limits how many sessions run at
+        once. Use these numbers to spot unusual activity early.
       </p>
     </header>
 
@@ -97,7 +97,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Navigates</p>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Page loads</p>
           <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <polyline points="9 18 15 12 9 6" />
@@ -123,7 +123,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
       </div>
       <div class="dashboard-card">
         <div class="flex items-center justify-between gap-2">
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Interacts</p>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Interactions</p>
           <span class="flex h-7 w-7 items-center justify-center rounded-md bg-tk-accent/10 ring-1 ring-tk-accent/30 text-tk-accent">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M14 2a4 4 0 0 0-4 4v6.5a3.5 3.5 0 1 0 7 0V6" />
@@ -259,7 +259,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           </dd>
         </div>
         <div class="flex justify-between border-b border-tk-border pb-3">
-          <dt class="text-sm text-tk-ink-3">DOM snapshots</dt>
+          <dt class="text-sm text-tk-ink-3">Page snapshots</dt>
           <dd class="font-mono text-sm text-tk-ink" data-stat="state_capture">
             {PLACEHOLDER_STAT}
           </dd>
@@ -280,17 +280,18 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           </svg>
         </div>
         <div>
-          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Rate limits</p>
+          <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Request limits</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">
-            Per-bucket caps for your account
+            Limits for your account
           </h2>
           <p class="mt-1 max-w-prose text-sm text-tk-ink-3">
-            Anti-abuse token buckets — not the pricing meter. Staff-granted
-            overrides show with their auto-revert time. Full semantics in the
+            These protect the service from abuse and don't affect your bill.
+            Any temporary increase granted by support shows with the date it
+            ends. See the
             <a
               href="https://docs.driftstack.io/reference/rate-limits/"
               class="text-tk-accent-text hover:underline">rate-limit reference</a
-            >.
+            > for details.
           </p>
         </div>
       </div>
@@ -298,16 +299,16 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
         <table class="w-full text-left text-sm">
           <thead>
             <tr class="border-b border-tk-border font-mono text-xs uppercase tracking-widest text-tk-ink-3">
-              <th scope="col" class="pb-2 pr-4">Bucket</th>
-              <th scope="col" class="pb-2 pr-4">Capacity</th>
-              <th scope="col" class="pb-2 pr-4">Refill / s</th>
-              <th scope="col" class="pb-2">Source</th>
+              <th scope="col" class="pb-2 pr-4">Limit</th>
+              <th scope="col" class="pb-2 pr-4">Maximum</th>
+              <th scope="col" class="pb-2 pr-4">Recovers per second</th>
+              <th scope="col" class="pb-2">Set by</th>
             </tr>
           </thead>
           <tbody data-rate-limit-rows>
             <tr class="border-b border-tk-border">
               <td colspan="4" class="py-3 text-tk-ink-3" data-rate-limit-placeholder>
-                Sign in to see your live per-bucket caps.
+                Sign in to see your limits.
               </td>
             </tr>
           </tbody>
@@ -316,9 +317,9 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
     </section>
 
     <p class="mt-8 text-xs text-tk-ink-3">
-      None of these counters drive billing. Concurrent caps are the only meter
-      per ADR-004. We surface counts so you can spot pipeline regressions —
-      e.g. a sudden 10× spike in navigates may indicate a runaway script.
+      None of these counts affect your bill — your plan only limits how many
+      sessions run at once. They're here to help you spot problems, like a
+      sudden 10× jump in page loads from a runaway script.
     </p>
   </div>
 
@@ -607,7 +608,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           const allZero = Object.values(totals).every((v) => !v || v === 0);
           if (allZero) {
             showBanner(
-              'Live usage loaded. No activity in the current period yet — counts will populate as you run sessions.',
+              'Live usage loaded. No activity in the current period yet — counts will fill in as you run sessions.',
             );
           }
         })
@@ -662,8 +663,9 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
               .map(function (b) {
                 const override = b.source === 'override';
                 const src = override
-                  ? 'override · reverts ' + escapeHtml(String(b.override_expires_at).slice(0, 10))
-                  : 'tier default';
+                  ? 'increased by support · ends ' +
+                    escapeHtml(String(b.override_expires_at).slice(0, 10))
+                  : 'plan default';
                 return (
                   '<tr class="border-b border-tk-border">' +
                   '<td class="py-2 pr-4 font-mono text-xs text-tk-ink">' +
@@ -687,7 +689,7 @@ const FLAT_PATH = `M 0 ${(SPARK_H / 2).toFixed(1)} L ${SPARK_W.toFixed(1)} ${(SP
           })
           .catch(function () {
             const ph = root.querySelector('[data-rate-limit-placeholder]');
-            if (ph) ph.textContent = "Couldn't load rate-limit config — try a reload.";
+            if (ph) ph.textContent = "Couldn't load your limits. Reload to try again.";
           });
       }
     })();

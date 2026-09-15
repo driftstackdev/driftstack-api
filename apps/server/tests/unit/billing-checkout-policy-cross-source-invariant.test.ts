@@ -51,10 +51,12 @@ describe('W877 Billing checkout policy cross-source invariant', () => {
 
   // ─── CreateCheckoutSessionRequest tier refine ─────────────────
 
-  it("CRITICAL CreateCheckoutSessionRequest tier field is z.enum(PURCHASABLE_TIERS) carrying the 'tier must be a self-serve paid tier (free and enterprise excluded)' message. The 2-tier exclusion is the gate for the self-serve checkout endpoint, and V-924 made it an enum so the gate is visible in the published OpenAPI document instead of only at runtime.", () => {
+  it("CRITICAL CreateCheckoutSessionRequest tier field is z.enum(PURCHASABLE_TIERS) carrying the 'Choose a paid plan. Free and Enterprise plans cannot be selected here.' message. The 2-tier exclusion is the gate for the self-serve checkout endpoint, and V-924 made it an enum so the gate is visible in the published OpenAPI document instead of only at runtime.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/billing.ts'));
     expect(p).toMatch(/tier: z\.enum\(PURCHASABLE_TIERS, \{/);
-    expect(p).toMatch(/'tier must be a self-serve paid tier \(free and enterprise excluded\)',/);
+    expect(p).toMatch(
+      /'Choose a paid plan\. Free and Enterprise plans cannot be selected here\.',/,
+    );
     // Per-occurrence negative: the predicate form published every tier,
     // including the two the endpoint refuses.
     expect(p, 'the runtime-predicate form must not return').not.toMatch(

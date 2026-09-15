@@ -10,9 +10,8 @@ A single Server-Sent Events stream for every notification scoped to
 the calling account. Use it to power a "what's happening on my
 account right now" panel without N poll-loops.
 
-The stream is a v0 surface (2026-05-20) and is read-only — it doesn't
-replace the durable audit log or the email channel. It's an
-additive, low-latency notification path.
+The stream is read-only — it doesn't replace the durable audit log or
+the email channel. It's an additive, low-latency notification path.
 
 ## Stream notifications
 
@@ -22,14 +21,14 @@ Auth: bearer token via `Authorization: Bearer <token>` header OR
 `?ds_token=<token>` query-string fallback. The browser `EventSource`
 API can't set custom headers, so the query-string fallback exists for
 that case (the same contract as the [transcript stream](/api/agent-sessions/));
-the header still wins when both are supplied. Server-side runtimes that
-can set headers (Tauri's invoke bridge, Node's `eventsource` package,
-etc.) should prefer the header.
+the header still wins when both are supplied. Clients that can set
+headers (Node's `eventsource` package, for example) should prefer the
+header.
 
 The token must carry the broad `read` scope; `account_owner` also
 satisfies the gate. Resource-granular scopes such as `read:sessions`,
 `read:webhooks`, or `read:audit` deliberately do not, because this one
-stream mixes cost telemetry, audit, incident, and session events. Treat both
+stream mixes cost alerts, audit, incident, and session events. Treat both
 the token and the resulting stream as sensitive account-wide data.
 
 ## Frame shape
@@ -48,20 +47,20 @@ data: {"kind":"session.errored","accountId":"acc_...","errorClass":"driver_error
 Subscribers can either:
 
 - Use one `EventSource.addEventListener('cost.threshold_alert', …)`
-  per kind (recommended — the native router does the dispatch), or
+  per kind (recommended — the browser routes each kind for you), or
 - Subscribe via `EventSource.onmessage` and switch on `payload.kind`
   from the parsed JSON.
 
 A `: heartbeat <ISO8601>\n\n` comment frame fires every ~25 seconds
-to keep load-balancers from closing idle connections. Ignore these.
+to keep an idle connection open. Ignore these.
 
 ## Event kinds (v0)
 
 ### `cost.threshold_alert`
 
-Fires when the account's operational cost-to-serve estimate crosses an
-operator threshold (soft or hard, in either direction). This is a unit-economics
-signal for product operations. It is not a customer spending cap, an invoice
+Fires when Driftstack's estimate of the cost of serving the account
+crosses a threshold Driftstack sets (soft or hard, in either direction).
+It is informational only: it is not a customer spending cap, an invoice
 event, or an overage trigger, and it does not email, rate-limit, or interrupt
 the account.
 
@@ -74,16 +73,14 @@ the account.
 | `previousState`      | `"under-soft" \| "between-soft-and-hard" \| "over-hard" \| null` | `null` on first-ever evaluation            |
 | `currentState`       | same enum                                                        |                                            |
 | `totalCents`         | `number`                                                         | operational estimate for the current cycle |
-| `thresholdSoftCents` | `number`                                                         | operator soft threshold                    |
-| `thresholdHardCents` | `number`                                                         | operator hard threshold                    |
+| `thresholdSoftCents` | `number`                                                         | soft threshold set by Driftstack           |
+| `thresholdHardCents` | `number`                                                         | hard threshold set by Driftstack           |
 | `at`                 | `string`                                                         | ISO8601 server publish time                |
 
 ### `incident.broadcast`
 
 Fires when a public incident is posted, updated, or resolved.
-(Live since 2026-07-07 — this kind was previously declared in the
-type union with no publisher; the status-page incident lifecycle
-now publishes it.) Incident frames are a platform-wide broadcast:
+Incident frames are a platform-wide broadcast:
 every account with an open stream receives the same incident,
 stamped with its own `accountId`. The frame carries the incident's
 current severity and title — for full detail (affected components,
@@ -117,8 +114,8 @@ Low-severity events stay in the audit log only — query
 
 ### `session.errored`
 
-Fires when a session's driver hits a terminal error before the
-customer-initiated destroy.
+Fires when a session stops because of an unrecoverable error before
+you destroy it.
 
 | field        | type                | notes                          |
 | ------------ | ------------------- | ------------------------------ |
@@ -130,10 +127,9 @@ customer-initiated destroy.
 
 ## Reconnect + persistence
 
-The bus is in-memory only — events with no live subscribers are
-dropped on the floor. `EventSource`'s native auto-reconnect (default
-3s backoff) is the v0.1 reconnect story; transient drops resume
-without any app-level glue.
+Events are not stored: if nothing is connected when an event happens,
+it is not delivered later. `EventSource`'s built-in auto-reconnect
+(default 3s backoff) handles transient drops without any extra code.
 
 There is no `Last-Event-ID` resume: a reconnect resumes the live stream
 without replaying missed frames. For the durable trail of any event covered
@@ -172,9 +168,5 @@ es.addEventListener('session.errored', (e) => {
 es.close();
 ```
 
-Server-side runtimes that can set headers should send
+Clients that can set headers should send
 `Authorization: Bearer <token>` instead of the query-string token.
-
-Full design notes live at
-`docs/internal/driftstack-telemetry-event-schema-for-gui-panel.md`
-in the source repo.

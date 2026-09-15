@@ -122,7 +122,9 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     // Load-bearing claim — opting out of Driftstack billing
     // receipts does NOT opt out of Stripe receipts. Pin so a
     // future receipt-system change can't soften the distinction.
-    expect(body).toMatch(/Per-invoice receipt emails\. Stripe receipts continue regardless/);
+    expect(body).toMatch(
+      /A receipt for each invoice\. Stripe\\'s own receipts are sent either way/,
+    );
   });
 
   it('generation-binds transient preference success dismissal', () => {
@@ -136,7 +138,9 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/fetchEmailPrefs\(\)/);
     expect(body).toMatch(/liveOptedIn === optedIn/);
     expect(body).toMatch(/input\.indeterminate = true/);
-    expect(body).toMatch(/outcome is unknown\. Reload to verify it/);
+    expect(body).toMatch(
+      /we couldn't check whether it saved\. Reload to check before changing this setting again/,
+    );
   });
 
   it('BYOK status consumes the metadata-only API contract and reconciles an ambiguous save by set_at version', () => {
@@ -148,7 +152,7 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).not.toMatch(/data-byok-prefix/);
     expect(body).toMatch(/const previousSetAt = byokMetadata\.setAt/);
     expect(body).toMatch(/nextMs > priorMs/);
-    expect(body).toMatch(/The save likely completed before the response timed out/);
+    expect(body).toMatch(/Your key was probably saved — the request just took too long to respond/);
   });
 
   it('does not parse unused accepted profile or BYOK save bodies', () => {
@@ -193,16 +197,18 @@ describe('W366.B customer-dashboard /settings page content parity', () => {
     expect(body).toMatch(/typeof body\.reason === 'string' \? body\.reason\.trim\(\) : ''/);
     expect(body).toMatch(/reason\.length > 0 && reason\.length <= BYOK_TEST_REASON_MAX_CHARS/);
     expect(body).toContain(
-      'The stored key could not be validated. Check or rotate it and try again.',
+      "Anthropic didn't accept the saved key. Check it, or create a new key, and try again.",
     );
     expect(body).not.toContain("body.detail || 'Test call failed.'");
   });
 
   it('reconciles an ambiguous BYOK clear against authoritative metadata', () => {
     expect(body).toMatch(/if \(refreshed\?\.hasKey === false\)/);
-    expect(body).toMatch(/clear likely completed before the response timed out/);
-    expect(body).toMatch(/key is still on file/);
-    expect(body).toMatch(/clear outcome is unknown after the timeout/);
-    expect(body).toMatch(/Reload to verify before retrying/);
+    expect(body).toMatch(
+      /Your key was probably deleted — the request just took too long to respond/,
+    );
+    expect(body).toMatch(/your key is still saved/);
+    expect(body).toMatch(/we couldn't check whether your key was deleted/);
+    expect(body).toMatch(/Reload to check before trying again/);
   });
 });

@@ -209,7 +209,7 @@ describe('#11 — the proxy surfaces carry no internal jargon in customer-facing
       'The server did not answer, so the tunnel was not tested. The last result stands — try again.',
     );
     expect(pst.ENDPOINT_MOVED_NO_VERDICT_NOTICE).toBe(
-      'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
+      'The server did not answer, so the VPN was not tested. The address has changed since the last check; no result yet — try again.',
     );
     expect(pst.NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no result yet — try again.');
   });

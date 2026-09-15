@@ -164,7 +164,7 @@ describe('a live measurement retires the relay verdict it contradicts', () => {
     expect((await loadProbeCache()).p3?.quicProbe, 'the corroborating verdict survives').toBe(true);
     const later = await quicChip('p3', AFTER_EXPIRY);
     expect(later.ok, 'so the chip is still green when the live verdict expires').toBe(true);
-    expect(later.hint).toMatch(/relays QUIC/i);
+    expect(later.hint).toMatch(/carries QUIC/i);
   });
 
   it('VACUITY CONTROL — a row with no relay verdict at all is untouched, so the arms above are about the CONTRADICTION and not about the write path clearing a field it does not like', async () => {

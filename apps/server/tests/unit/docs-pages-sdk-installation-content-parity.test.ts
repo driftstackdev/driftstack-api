@@ -36,12 +36,13 @@ describe('W778 docs /sdk/installation content parity', () => {
     );
   });
 
-  it("CRITICAL OpenAPI 3.1 typed-surface framing pinned. The 'The Driftstack SDKs share a typed surface generated from the same OpenAPI 3.1 contract' wording matches W775 SDK index Zod-source-of-truth.", () => {
+  it("CRITICAL same-surface-in-every-language framing pinned. The 'The Driftstack SDKs expose the same resources and methods in every language, with full type definitions' wording matches the SDK index promise; the OpenAPI-generation build mechanics were removed from the customer page and must not return.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The Driftstack SDKs share a typed surface generated from the same OpenAPI 3\.1 contract\./,
+      /The Driftstack SDKs expose the same resources and methods in every language, with full type definitions\. Pick the language that fits your stack\./,
     );
+    expect(p).not.toMatch(/generated from the same OpenAPI/);
   });
 
   it('CRITICAL TS 3-installer set pinned — npm/pnpm/yarn. Drift would let SDK adopters miss their package manager.', () => {
@@ -343,16 +344,17 @@ describe('W778 docs /sdk/installation content parity', () => {
     expect(notShipped.sort(), 'capability rows not marked ✅ across TS/Python/Go:').toEqual([]);
   });
 
-  it('CRITICAL search/login are presented as capability-gated, never as shipped availability. Every currently shipped driver reports non-real capability, so both routes return 503 before session lookup; a bare "Full CRUD + ... /search/login" claim here would market availability the deployment does not have.', () => {
+  it('CRITICAL search/login are presented as returning 503 where not enabled, never as shipped availability. Every currently shipped driver reports non-real capability, so both routes return 503 before session lookup; a bare "Full CRUD + ... /search/login" claim here would market availability the deployment does not have (2026-09-15 plain words: "capability-gated" / "direct-driver" are internal).', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login are capability-gated/,
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login return 503 where not enabled/,
     );
     expect(p).toMatch(
-      /`sessions\.search` and `sessions\.login` are typed in every SDK, but the routes\s*\n?themselves are capability-gated: they require a deployment advertising a real\s*\n?direct-driver search\/login capability and otherwise return `503` before the\s*\n?session is looked up or any browser work starts\./,
+      /`sessions\.search` and `sessions\.login` are typed in every SDK, but they\s*\n?return `503` on deployments where search and login are not enabled\./,
     );
     expect(p).toMatch(/\[Sessions\]\(\/api\/sessions\/\)/);
+    expect(p).not.toMatch(/capability-gated|direct-driver/);
   });
 
   it('CRITICAL Next-steps 3-link set pinned — /quickstart/ + /guides/profile-management/ + /guides/session-lifecycle/. Drift to dropping any link would force new customers to hunt for follow-on content.', () => {

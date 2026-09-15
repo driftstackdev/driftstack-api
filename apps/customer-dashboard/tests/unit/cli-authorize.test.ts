@@ -237,7 +237,7 @@ describe('cli-authorize page — local integration', () => {
 
     expect(visibleState(local.window)).toBe('error');
     expect(local.window.document.querySelector('[data-error-message]')?.textContent).toMatch(
-      /authorization was accepted.*could not finish.*existing poll.*do not retry/i,
+      /authorization succeeded.*couldn't hand back to the desktop app.*give it a moment.*don't retry this link/i,
     );
     const retry = local.window.document.querySelector('[data-retry]') as HTMLButtonElement;
     expect(retry.textContent).toBe('Return to desktop');
@@ -285,7 +285,7 @@ describe('cli-authorize page — local integration', () => {
 
     expect(visibleState(local.window)).toBe('error');
     expect(local.window.document.querySelector('[data-error-message]')?.textContent).toMatch(
-      /may already have completed.*existing poll.*Do not retry this link.*fresh browser sign-in/i,
+      /took too long.*may already have gone through.*give it a moment.*don't retry this link.*sign in with browser/i,
     );
     const retry = local.window.document.querySelector('[data-retry]') as HTMLButtonElement;
     expect(retry.textContent).toBe('Return to desktop');
@@ -651,7 +651,9 @@ describe('cli-authorize page — local integration', () => {
     expect(
       local.window.document.querySelector('[data-state="legal-accept"] [data-legal-status]')
         ?.textContent,
-    ).toMatch(/outcome is unknown.*Reload to check what remains before authorizing/);
+    ).toMatch(
+      /couldn't confirm your acceptance was recorded.*Reload to check what still needs accepting before authorizing/,
+    );
     expect(local.fetchCalls.filter((call) => call.url.endsWith('/v1/legal/accept'))).toHaveLength(
       1,
     );

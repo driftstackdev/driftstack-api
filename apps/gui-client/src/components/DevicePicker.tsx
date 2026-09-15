@@ -279,19 +279,19 @@ export function DevicePicker({
                 Viewport <b className="mono text-ink-primary">{heroDims}</b>
               </span>
               <span className="text-2xs text-ink-muted">
-                DPR <b className="mono text-ink-primary">3x</b>
+                Pixel ratio <b className="mono text-ink-primary">3x</b>
               </span>
               <span className="text-2xs text-ink-muted">
                 Engine <b className="text-ink-primary">{engineLabel(selected.engine)}</b>
               </span>
               <span className="text-2xs text-ink-muted">
-                Slug <b className="mono text-ink-primary">{selected.id}</b>
+                Device ID <b className="mono text-ink-primary">{selected.id}</b>
               </span>
             </div>
           ) : null}
           {selected?.selectable === true ? (
             <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-status-ready/15 px-2 py-0.5 text-2xs text-status-ready">
-              ✓ bit-exact fingerprint
+              ✓ Verified device
             </span>
           ) : null}
         </div>
@@ -443,7 +443,7 @@ export function DevicePicker({
                           internal form, which names vendor policy. Falls back to
                           the old "reference" label for our own internal baseline,
                           which is withheld for a different reason and has none. */}
-                      {d.selectable ? '✓ bit-exact' : (d.heldReason ?? 'reference')}
+                      {d.selectable ? '✓ Verified' : (d.heldReason ?? 'reference')}
                     </span>
                     <span
                       aria-hidden="true"
@@ -467,7 +467,7 @@ export function DevicePicker({
           like the commit action, so it's demoted to a plain status readout. */}
       <div className="flex items-center justify-between gap-3 border-t border-surface-divider px-3 py-2">
         <span className="text-2xs text-ink-muted">
-          Type to search · ↑↓ to move · all are bit-exact verified
+          Type to search · ↑↓ to move · available devices are verified
         </span>
         {selected?.selectable === true ? (
           <span className="text-2xs text-ink-secondary" data-testid="device-selected">

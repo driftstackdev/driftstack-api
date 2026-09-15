@@ -199,7 +199,7 @@ describe('OAuth client callback page', () => {
     expect(navigations()).toBe(0);
     expect(window.location.hash).toBe('');
     expect(bannerText(window)).toMatch(
-      /enable browser site storage.*hand-off code was not redeemed.*fresh sign-in/i,
+      /blocking site storage.*sign-in needs.*allow it, then start sign-in again/i,
     );
     expect(window.localStorage.getItem(`ds_oauth_flow.${FLOW_ID}`)).not.toBeNull();
   });
@@ -237,7 +237,7 @@ describe('OAuth client callback page', () => {
     expect(redeemCalls(fetchCalls)).toHaveLength(1);
     expect(window.location.hash).toBe('');
     expect(bannerText(window)).toMatch(
-      /outcome is unknown.*exchanged this one-time callback code.*session whose credential did not reach this browser.*account-link confirmation email.*do not reload or submit this callback URL again.*check your inbox first.*fresh provider authorization/i,
+      /took too long.*not sure what happened.*don't reload this page.*check your inbox for a confirmation email first.*if nothing arrives.*return to sign-in and try again/i,
     );
     expect(
       window.document.querySelector('[data-callback-unknown]')?.classList.contains('hidden'),
@@ -315,7 +315,7 @@ describe('OAuth client callback page', () => {
     expect(window.localStorage.getItem('ds_web_session_token')).toBeNull();
     expect(form.classList.contains('hidden')).toBe(true);
     expect(bannerText(window)).toMatch(
-      /outcome is unknown.*consumed this one-time challenge.*do not submit this code again.*fresh sign-in/i,
+      /took too long.*your code may already have been used.*don't enter it again.*start a fresh sign-in/i,
     );
   });
 
@@ -381,7 +381,7 @@ describe('OAuth client callback page', () => {
     expect(bannerText(window)).not.toMatch(/outdated/i);
   });
 
-  it('no fragment and no query → "Missing callback parameters." without any request', async () => {
+  it('no fragment and no query → "This page needs to be opened from a Google or GitHub sign-in." without any request', async () => {
     const { window, fetchCalls } = setUpDom(loadBuiltPage(), () => json({}), {
       url: PAGE_URL,
       flowRecord: null,
@@ -390,6 +390,8 @@ describe('OAuth client callback page', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(0);
-    expect(bannerText(window)).toBe('Missing callback parameters.');
+    expect(bannerText(window)).toBe(
+      'This page needs to be opened from a Google or GitHub sign-in. Return to sign-in and try again.',
+    );
   });
 });

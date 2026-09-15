@@ -15,8 +15,8 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 
 const ERRORS = [
   // 4xx
-  { uri: 'bad-request', http: 400, when: 'Generic invariant violation (e.g. capacity ≤ 0, malformed URL).', action: 'Read `detail`; the field at fault is named.' },
-  { uri: 'validation-failed', http: 400, when: 'Request body / params failed Zod schema validation.', action: 'Fix the field listed in the response detail.' },
+  { uri: 'bad-request', http: 400, when: 'The request broke a basic rule (e.g. capacity ≤ 0, malformed URL).', action: 'Read `detail`; the field at fault is named.' },
+  { uri: 'validation-failed', http: 400, when: 'Request body / params failed validation.', action: 'Fix the field listed in the response detail.' },
   { uri: 'unauthorized', http: 401, when: 'Authorization header missing or malformed.', action: 'Send `Authorization: Bearer ds_live_…` on every request.' },
   { uri: 'invalid-key', http: 401, when: 'API key is malformed (wrong prefix) or unknown.', action: 'Confirm the key in your secret manager matches the dashboard.' },
   { uri: 'revoked-key', http: 401, when: 'API key was revoked (manually or via rotation grace expiry).', action: 'Mint a new key from the dashboard.' },
@@ -28,16 +28,16 @@ const ERRORS = [
   { uri: 'mfa-step-up-required', http: 403, when: 'Endpoint requires a fresh MFA step-up confirmation. Extension `requires_mfa_step_up: true`.', action: 'POST a 6-digit code to /v1/auth/mfa/step-up, then retry the original request.' },
   { uri: 'legal-acceptance-required', http: 403, when: 'A new ToS / Privacy revision hasn\'t been accepted by the calling account.', action: 'POST to /v1/legal/accept with the current revision id.' },
   { uri: 'not-found', http: 404, when: 'Resource id does not exist OR you do not have access (both surface as 404; no enumeration).', action: 'Verify the id; cross-account lookups return 404 by design.' },
-  { uri: 'conflict', http: 409, when: 'State conflict (duplicate, sticky tombstone, idempotency-key replay with different body).', action: 'Read `detail` — often "mint a fresh resource instead".' },
+  { uri: 'conflict', http: 409, when: 'State conflict (duplicate, a disabled or deleted resource that cannot be brought back, idempotency-key replay with different body).', action: 'Read `detail` — often "mint a fresh resource instead".' },
   { uri: 'concurrency-limit', http: 429, when: 'Account has hit its tier-bound concurrent-session cap. Extensions `current_sessions` + `limit`.', action: 'Wait for a running session to finish, or upgrade the tier. See https://docs.driftstack.io/guides/concurrency/.' },
   { uri: 'tier-limit', http: 429, when: 'Tier cap reached on a non-session resource (e.g. profile count, API keys per account).', action: 'Upgrade tier or delete unused resources.' },
   { uri: 'storage-quota-exceeded', http: 409, when: 'A profile-backed session-launch was refused because your profiles’ total stored size reached your tier’s storage cap. Extensions `used_bytes` + `cap_bytes` + `tier`. Sessions without a profile are never affected; Enterprise is soft-only (never blocks).', action: 'Delete or trim a profile, or upgrade the tier, then launch again.' },
   { uri: 'profile-in-use', http: 409, when: 'A session-create carried a `profile_id` that already has a live session — two sessions on the same profile would overwrite each other’s saved cookies/logins. Extension `active_session_id` names the live session. Sessions without a profile are never affected.', action: 'End the named session (or wait for it to finish), then launch again.' },
-  { uri: 'proxy-validation-failed', http: 422, when: 'The proxy on a launch failed a LIVE launch-time connectivity test — the server connected THROUGH the proxy and ran a real egress round-trip, which failed, so the launch was blocked (no session, no worker). Extension `reason`: `unreachable` / `auth_failed` / `timeout` / `egress_blocked`.', action: 'Fix the proxy per the `reason` (host/port/online, credentials, or its upstream egress), then launch again.' },
+  { uri: 'proxy-validation-failed', http: 422, when: 'The proxy on a launch failed a live launch-time connectivity test — the server connected through the proxy and tried to reach the internet, which failed, so the launch was blocked (no session was created). Extension `reason`: `unreachable` / `auth_failed` / `timeout` / `egress_blocked`.', action: 'Fix the proxy per the `reason` (host/port/online, credentials, or its internet access), then launch again.' },
   { uri: 'rate-limited', http: 429, when: 'A rate-limit bucket is empty. Extension `retry_after_seconds`; same value as `Retry-After` header.', action: 'Honour Retry-After. See /docs/rate-limits.' },
   // Session lifecycle
   { uri: 'session-destroyed', http: 410, when: 'Tried to operate on a session that\'s already been destroyed.', action: 'Treat the session as gone; create a new one.' },
-  { uri: 'session-timeout', http: 504, when: 'A blocking session operation (e.g. wait-for-selector) ran past its timeout.', action: 'Increase the timeout if legitimate, or address the upstream slowness.' },
+  { uri: 'session-timeout', http: 504, when: 'A blocking session operation (e.g. wait-for-selector) ran past its timeout.', action: 'Increase the timeout if legitimate, or address slowness on the target site.' },
   // 5xx
   { uri: 'internal', http: 500, when: 'Driftstack hit an unexpected error processing the request.', action: 'Retry with exponential backoff. If persistent, email support with X-Request-Id.' },
   { uri: 'driver-error', http: 502, when: 'The active browser runtime returned a structured failure.', action: 'Do not automatically retry; inspect `detail` and include X-Request-Id when contacting support.' },
@@ -45,10 +45,10 @@ const ERRORS = [
   { uri: 'feature-unavailable', http: 503, when: 'A capability required by this operation is disabled or unavailable on the deployment.', action: 'Not retryable until the capability is available; contact the deployment operator with X-Request-Id.' },
   { uri: 'byok-anthropic-required', http: 502, when: 'The agent-session turn has no usable Anthropic credential.', action: 'PUT /v1/account/me/byok-anthropic-key to set a stored key, or supply x-byok-anthropic-api-key on each request header.' },
   // Bundled-LLM (v2-#6 — 402 Payment Required, distinct slugs so SDKs can branch)
-  { uri: 'bundled-llm-budget-exhausted', http: 402, when: 'Bundled-LLM monthly soft-cap reached on this account (default $20; configurable via PATCH /v1/account/me/bundled-llm-settings). Resets at calendar month start.', action: 'Raise the cap, wait until next month, or supply a BYOK Anthropic key (BYOK always wins per Q4=A).' },
-  { uri: 'bundled-llm-consent-required', http: 402, when: 'Deployment is wired for bundled-LLM but the customer has not yet ticked the consent flag. Distinct from byok-anthropic-required so dashboards can render a one-click "enable bundled-LLM" CTA.', action: 'PATCH /v1/account/me/bundled-llm-settings with bundled_llm_consent: true.' },
+  { uri: 'bundled-llm-budget-exhausted', http: 402, when: 'Bundled-LLM monthly soft-cap reached on this account (default $20; configurable via PATCH /v1/account/me/bundled-llm-settings). Resets at calendar month start.', action: 'Raise the cap, wait until next month, or supply a BYOK Anthropic key (BYOK is always used when present).' },
+  { uri: 'bundled-llm-consent-required', http: 402, when: 'The deployment offers bundled LLM but you have not yet opted in. Distinct from byok-anthropic-required so dashboards can show a one-click "enable bundled-LLM" button.', action: 'PATCH /v1/account/me/bundled-llm-settings with bundled_llm_consent: true.' },
   // Pair-mode (v2-#8 takeover/handback contention)
-  { uri: 'pair-mode-conflict', http: 409, when: 'Pair-mode takeover lost the SET-NX-EX race against another participant. Extension carries winner_client_id so the loser dashboard can render "user X is taking over".', action: 'Re-fetch the session; do not retry the takeover unless the winner releases the lock.' },
+  { uri: 'pair-mode-conflict', http: 409, when: 'Another participant took over the pair-mode session first. Extension `winner_client_id` names who now has control, so your dashboard can show "user X is taking over".', action: 'Re-fetch the session; do not retry the takeover unless the winner releases the lock.' },
   { uri: 'pair-mode-invalid-transition', http: 409, when: 'Pair-mode state machine refused the requested transition (e.g. a handback request before any takeover-grant). Extensions `from` + `transition`.', action: 'Re-fetch the pair-mode state; do not retry the transition without resolving the state mismatch.' },
   // Pre-auth
   { uri: 'email-already-registered', http: 409, when: 'Signup attempted for an email that already has an account.', action: 'Direct the user to /login or to the password-reset flow.' },
@@ -131,8 +131,7 @@ Content-Type: application/problem+json
     <h2>OAuth token endpoint</h2>
     <p>
       Errors from the OAuth token endpoint follow the standard problem
-      shape (the server maps OAuth 2.0 errors via
-      <code>UnauthorizedError</code> / <code>BadRequestError</code>):
+      shape:
     </p>
     <ul>
       <li><code>invalid_client</code> / <code>unauthorized_client</code> → <code>type</code> is <code>unauthorized</code>.</li>

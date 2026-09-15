@@ -21,15 +21,14 @@ describe('W775 docs /sdk index content parity', () => {
     expect(existsSync(PAGE)).toBe(true);
   });
 
-  it("CRITICAL 3-SDK + identical-resource-shapes framing pinned. The 'Driftstack ships first-party SDKs for TypeScript, Python, and Go. All SDKs expose identical resource shapes (sessions, profiles, api-keys, webhooks, usage, account, team) generated from the same Zod single source of truth in @driftstack/api-types' wording is the load-bearing cross-SDK contract.", () => {
+  it("CRITICAL 3-SDK + identical-resource-shapes framing pinned. The 'Driftstack ships first-party SDKs for TypeScript, Python, and Go. All SDKs expose identical resource shapes (sessions, profiles, api-keys, webhooks, usage, account, team), so what you learn in one SDK carries over to the others' wording is the load-bearing cross-SDK contract (2026-09-15 plain words: the Zod/api-types generation is how we build it).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Driftstack ships first-party SDKs for TypeScript, Python, and Go\./);
     expect(p).toMatch(
-      /All SDKs expose identical\s*\n\s+resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\) generated from/,
+      /All SDKs expose identical\s*\n\s+resource shapes \(sessions, profiles, api-keys, webhooks, usage, account, team\), so what\s*\n\s+you learn in one SDK carries over to the others\./,
     );
-    expect(p).toMatch(/the same Zod single source of truth in/);
-    expect(p).toMatch(/<code>@driftstack\/api-types<\/code>/);
+    expect(p).not.toMatch(/Zod single source of truth|<code>@driftstack\/api-types<\/code>/);
   });
 
   it('CRITICAL 3-language card set pinned with install commands. npm install @driftstack/sdk + pip install driftstack-sdk + go get github.com/driftstackdev/... Drift to a different package name would break SDK adopters.', () => {

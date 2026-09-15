@@ -32,7 +32,7 @@ describe('W306.B /webhooks signing-secret narrative parity', () => {
   });
 
   it('page claims 5-minute timestamp tolerance', () => {
-    expect(page).toMatch(/5[- ]minute\s+timestamp\s+tolerance/i);
+    expect(page).toMatch(/rejects deliveries more than 5 minutes old/i);
   });
 
   it('SDK default tolerance is 300 seconds (matches 5-minute claim)', () => {

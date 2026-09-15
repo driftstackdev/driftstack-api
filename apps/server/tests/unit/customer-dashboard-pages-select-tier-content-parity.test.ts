@@ -76,14 +76,14 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
   it("Free-plan note pinned: 'You're on the free plan' + '1 profile, 1 concurrent session, and sessions up to 20 minutes each — no card required, and it never expires' — pinned so the perpetual free-tier framing (1 profile / 1 concurrent / 20-min sessions / no card / no expiry) survives on the tier picker. The 20-min cap (6.g) is the enforced free-tier session-duration limit.", () => {
     expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and sessions up\s+to 20 minutes each/,
+      /Free includes 1 profile, 1 session at a time, and sessions up\s+to 20 minutes each/,
     );
   });
 
   it('Hero accurately distinguishes the shared engine/archetypes from enforced operational and optional-capability differences while preserving refund honesty', () => {
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(body).toMatch(
-      /Every tier runs the same verified browser engine and can use every\s*currently available archetype\. Operational limits and optional capabilities\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*and AI billing below\. Cancel or downgrade anytime — your plan stays active/,
+      /Every plan uses the same browser engine and every available device\s*profile\. The differences are in limits and extras — compare sessions at\s*once, profiles, storage, saved proxies, access and AI billing below\.\s*Cancel or downgrade anytime — your plan stays active/,
     );
     expect(body).not.toMatch(/Only concurrent caps and profile\s+counts change/);
     expect(body).toMatch(/We don't\s+provide automatic refunds for unused time/);
@@ -150,7 +150,9 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     expect(body).toMatch(
       /const cryptoWorkspaceSupported = selectedWorkspaceAccountId\.length === 0/,
     );
-    expect(body).toMatch(/if \(!cryptoWorkspaceSupported\) \{[\s\S]*self-workspace only/);
+    expect(body).toMatch(
+      /if \(!cryptoWorkspaceSupported\) \{[\s\S]*only buy a plan for your own account/,
+    );
     expect(body).toMatch(/authedFetch\('\/v1\/account\/me'/);
     expect(body).toMatch(/SELF_ACCOUNT_ID_RE\.test\(body\.id \|\| ''\)/);
   });
@@ -180,19 +182,17 @@ describe('W494.A apps/customer-dashboard/src/pages/select-tier.astro content par
     expect(body).toMatch(/<dt>Saved proxies<\/dt>/);
     expect(body).toMatch(/<dt>Access<\/dt>/);
     expect(body).toMatch(/<dt>AI agent<\/dt>/);
-    expect(body).toMatch(/BYOK or \$0\.10\/turn/);
-    expect(body).toMatch(/API access, VPN egress, and the AI agent require a\s+paid tier/);
+    expect(body).toMatch(/Your own key or \$0\.10\/turn/);
+    expect(body).toMatch(/API access, VPN routing and the AI agent need a\s+paid plan/);
     expect(body).not.toMatch(/drive them from the API or GUI/);
   });
 
   it('uses present-tense actionable configuration errors instead of roadmap or check-back promises', () => {
     expect(body).toMatch(
-      /Card checkout is unavailable on this server\. Use crypto checkout if it is offered below, or email billing@driftstack\.dev\./,
+      /Card checkout isn't available right now\. Pay with crypto if it's offered below, or email billing@driftstack\.dev\./,
     );
-    expect(body).toMatch(
-      /Crypto checkout is unavailable on this server\. Use card checkout, or email /,
-    );
-    expect(body).toMatch(/billing@driftstack\.dev with order_id/);
+    expect(body).toMatch(/Crypto checkout isn't available right now\. Pay by card, or email /);
+    expect(body).toMatch(/billing@driftstack\.dev with order ID/);
     expect(body).not.toMatch(/still in progress|Check back shortly|isn't fully live yet/i);
   });
 

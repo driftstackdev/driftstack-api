@@ -158,7 +158,7 @@ describe('W515.B apps/marketing-site/src/pages/docs/webhooks.astro content parit
   it('Endpoint requirements 3-rule framing pinned: 2xx-within-10s + idempotent-on-X-Driftstack-Event-Id (we may retry the same id if our delivery infra retried before getting your response) + ack-fast-process-async — pinned so the 3-rule receiver-contract survives', () => {
     expect(body).toMatch(/<li>Return 2xx within 10 seconds\.<\/li>/);
     expect(body).toMatch(
-      /Be <strong>idempotent<\/strong> — we may retry the same\s*<code>X-Driftstack-Event-Id<\/code> if our delivery infra\s*retried before getting your response\./,
+      /Be <strong>idempotent<\/strong> — we may retry the same\s*<code>X-Driftstack-Event-Id<\/code> if we retried before\s*getting your response\./,
     );
     expect(body).toMatch(
       /Acknowledge fast \+ process asynchronously\. A 200 response\s*means "I have the payload"; process it on your side after\./,

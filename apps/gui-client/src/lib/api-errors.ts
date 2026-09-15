@@ -60,7 +60,7 @@ const PROXY_REASON_COPY: Record<KnownReason, string> = {
   auth_failed: 'The proxy rejected the username and password. Re-enter them and try again.',
   timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
   egress_blocked:
-    'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+    'The proxy connected but could not reach the internet. Check with your proxy provider.',
 };
 
 /**

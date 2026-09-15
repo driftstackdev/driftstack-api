@@ -56,9 +56,11 @@ describe('W246.A /security page doc parity', () => {
     expect(serverSourceMatches(/class SocksProxyBackend implements SessionEgressService/)).toBe(
       true,
     );
-    expect(doc).toMatch(/public SOCKS5 proxy/);
+    // 2026-09-15 plain-language pass: same facts (public-address SOCKS5
+    // only; managed exit when none is attached), customer words.
+    expect(doc).toMatch(/SOCKS5 proxy at a public address/);
     expect(doc).toMatch(
-      /Without an\s+attached config, session traffic exits via Driftstack-managed\s+infrastructure/,
+      /Without a proxy\s+attached, session traffic exits through Driftstack's managed\s+exit/,
     );
     expect(doc).not.toMatch(/OpenVPN/);
     expect(doc).not.toMatch(/WireGuard/);
@@ -71,7 +73,7 @@ describe('W246.A /security page doc parity', () => {
   it('keeps the genuine shipped pillars (scrypt keys, HMAC webhooks, RBAC, EU-resident infra)', () => {
     expect(doc).toMatch(/scrypt/);
     expect(doc).toMatch(/HMAC-SHA256/);
-    expect(doc).toMatch(/Admin \/ member roles/);
+    expect(doc).toMatch(/Admin and member roles/); // 2026-09-15 plain words
     expect(doc).toMatch(/EU-default|EU-resident|EU \(Hetzner/);
   });
 
@@ -81,10 +83,14 @@ describe('W246.A /security page doc parity', () => {
   });
 
   it('aligns session access and recoverable-key wording with the implemented legal/crypto boundary', () => {
-    expect(doc).toMatch(/platform-held keys/);
-    expect(doc).toMatch(/processed through LiveKit/);
-    expect(doc).toMatch(/no administrative\s+path for Driftstack staff to join/);
-    expect(doc).toMatch(/not retained by the Capture endpoint/);
+    // 2026-09-15 plain-language pass: the account-bound encryption, the
+    // deliver-then-drop media boundary, the no-built-in-staff-join path
+    // and the captures-not-stored boundary survive in customer words
+    // (the LiveKit vendor name and "Capture endpoint" left the page).
+    expect(doc).toMatch(/tying that encryption to your\s+account/);
+    expect(doc).toMatch(/used to deliver the session to you,\s+and dropped when the session ends/);
+    expect(doc).toMatch(/no\s+built-in way to join a customer's live session/);
+    expect(doc).toMatch(/returned directly in\s+the API response and are not stored/);
     expect(doc).not.toMatch(/We don't see your traffic\. We can't read your keys\./);
     expect(doc).not.toMatch(/Nobody at Driftstack can watch your sessions/);
     expect(doc).not.toMatch(/none of it ever reaches our servers/);

@@ -219,7 +219,7 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
     fetchMock.mockResolvedValue({
       status: 'unavailable',
       file: null,
-      reason: 'session is not live on a node',
+      reason: 'This session is not running.',
     });
     const { container } = renderSim();
     openDrawer(container);
@@ -235,7 +235,7 @@ describe('SimulatorWindow — file-download Downloads section (A3 W2856)', () =>
       const txt =
         container.querySelector('[data-component="simulator-downloads"]')?.textContent ?? '';
       expect(txt).not.toMatch(/device update/i);
-      expect(txt).toMatch(/session is not live on a node/i);
+      expect(txt).toMatch(/This session is not running/);
     });
   });
 

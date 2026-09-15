@@ -269,7 +269,7 @@ describe('ProfilesView launch → stream', () => {
     // The user-facing error is shown — and the floating Simulator window is NEVER
     // opened for a channel-less session.
     await waitFor(() =>
-      expect(screen.getByText(/didn't get a video channel\. Try again/i)).toBeTruthy(),
+      expect(screen.getByText(/Couldn't start the live view\. Try again/i)).toBeTruthy(),
     );
     expect(vi.mocked(openSimulatorWindow).mock.calls.length).toBe(openCallsBefore);
   });
@@ -378,7 +378,7 @@ describe('ProfilesView launch → stream', () => {
 
   // Proxy-reroute privacy hazard (deep-audit HIGH): a profile EXPLICITLY bound to
   // a proxy that has since been DELETED must NOT silently reroute its egress to a
-  // different proxy. Launch refuses with a "configured proxy was deleted" message
+  // different proxy. Launch refuses with a "profile's proxy was deleted" message
   // (distinct from the "no proxies saved at all" message) and never creates a
   // session through the wrong exit.
   it('refuses to launch a profile whose explicitly-bound proxy was deleted (no silent reroute)', async () => {
@@ -399,7 +399,7 @@ describe('ProfilesView launch → stream', () => {
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Launch' }));
     // The deleted-proxy message renders…
-    await waitFor(() => expect(screen.getByText(/configured proxy was deleted/i)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/profile's proxy was deleted/i)).toBeTruthy());
     // …and it's NOT the generic "no saved proxies" copy (a proxy DOES exist; the
     // bound one was just deleted).
     expect(screen.queryByText(/No saved proxies/i)).toBeNull();

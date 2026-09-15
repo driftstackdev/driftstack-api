@@ -13,8 +13,10 @@ describe('legacy /roadmap route current-state parity', () => {
   it('is a current product-updates route', () => {
     expect(page).toContain('title="Product updates"');
     expect(page).toContain('title="What is available today."');
+    // 2026-09-15 customer-copy pass: "current capability references" became
+    // "what the product can do today" — same scope, plain words.
     expect(page).toContain(
-      'Released Driftstack product changes and current capability references.',
+      'Released Driftstack product changes and what the product can do today.',
     );
   });
 

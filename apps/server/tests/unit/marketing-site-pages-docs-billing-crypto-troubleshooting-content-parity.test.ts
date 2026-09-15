@@ -7,7 +7,7 @@
 //
 //   • V-708 doc-comment framing.
 //   • Order_id discovery 3-channel: Dashboard Billing → Crypto orders +
-//     GET /v1/billing/crypto-orders + every order mint sends a
+//     GET /v1/billing/crypto-orders + every new order sends a
 //     confirmation email with order_id in subject.
 //   • Pending-but-paid 3-step: block-explorer check (mempool.space /
 //     etherscan / tronscan) + required-confirmations (BTC 2/~20min /
@@ -51,7 +51,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
     );
   });
 
-  it('Order_id discovery 3-channel framing pinned: Dashboard Billing → Crypto orders (every order with current state) + GET /v1/billing/crypto-orders (same list newest first) + Email (every order mint sends confirmation email with order id in subject line) — pinned so the 3-channel order_id-discovery + every-mint-sends-email commitment survives', () => {
+  it('Order_id discovery 3-channel framing pinned: Dashboard Billing → Crypto orders (every order with current state) + GET /v1/billing/crypto-orders (same list newest first) + Email (every new order sends confirmation email with order id in subject line) — pinned so the 3-channel order_id-discovery + every-order-sends-email commitment survives', () => {
     expect(body).toMatch(
       /<strong>Dashboard<\/strong> — Billing → Crypto orders shows\s*every order on your account with its current state\./,
     );
@@ -59,13 +59,13 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<strong>API<\/strong> — <code>GET \/v1\/billing\/crypto-orders<\/code>\s*returns the same list, newest first\./,
     );
     expect(body).toMatch(
-      /<strong>Email<\/strong> — every order mint sends a\s*confirmation email with the order id in the subject line\./,
+      /<strong>Email<\/strong> — every new order sends a\s*confirmation email with the order id in the subject line\./,
     );
   });
 
   it("Pending-but-paid 3-step decision-tree pinned: block-explorer (mempool.space / etherscan / tronscan, not-yet-broadcast vs broadcast+0-confirmations) + required-confirmations (BTC 2 blocks ~20min / ETH 12 blocks ~3min / USDC+USDT-Tron near-instant) + 'Wait at least 30 minutes. Mempool congestion + RPC propagation lag can easily push a normally-fast network to 15+ minutes.' — pinned so the 3-step pending tree + 30-min-wait-threshold commitment survives", () => {
     expect(body).toMatch(
-      /<strong>Check the block explorer first\.<\/strong> Paste your\s*TX hash into the canonical explorer for the network you used\s*\(mempool\.space, etherscan, tronscan, etc\)\./,
+      /<strong>Check the block explorer first\.<\/strong> Paste your\s*TX hash into the block explorer for the network you used\s*\(mempool\.space, etherscan, tronscan, etc\)\./,
     );
     expect(body).toMatch(
       /If the explorer\s*shows <strong>not yet broadcast<\/strong>, the issue is on/,
@@ -74,7 +74,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<strong>Check the order's required confirmations\.<\/strong>\s*Bitcoin needs 2 blocks \(~20 min\); Ethereum needs 12 \(~3 min\);\s*USDC\/USDT on Tron is near-instant\./,
     );
     expect(body).toMatch(
-      /<strong>Wait at least 30 minutes\.<\/strong> Mempool congestion\s*\+ RPC propagation lag can easily push a normally-fast network\s*to 15\+ minutes\. If you're past 30 min with a confirmed TX,\s*skip to the support escalation below\./,
+      /<strong>Wait at least 30 minutes\.<\/strong> Network congestion\s*can easily push a normally-fast network to 15\+ minutes\. If you're past 30 min with a confirmed TX,\s*skip to the support escalation below\./,
     );
   });
 
@@ -86,7 +86,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<li>Network fees were deducted on your side and we received less than the displayed amount\.<\/li>/,
     );
     expect(body).toMatch(
-      /<li>You sent the wrong coin to the right address \(e\.g\. USDC instead of USDT\) and our deposit detector saw partial value\.<\/li>/,
+      /<li>You sent the wrong coin to the right address \(e\.g\. USDC instead of USDT\) and we received only partial value\.<\/li>/,
     );
     expect(body).toMatch(
       /Partial orders need a human\. Email\s*<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*with your <code>order_id<\/code> \+ the TX hash\. We'll generate\s*a top-up invoice for the difference — that's the resolution\s*path\. Crypto payments are non-refundable\s*\(<a href="\/legal\/refunds\/">policy<\/a>\), so we don't send the\s*partial back; we complete the order via top-up instead\./,
@@ -108,9 +108,9 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
     );
   });
 
-  it("Wrong-network 2-class framing pinned: 'USDC-ERC20 vs USDC-TRC20 is the classic landmine. The displayed deposit address only works on the network shown in the checkout UI.' + EVM↔EVM (e.g. ERC-20 → BSC): addresses look identical, funds land at same address on wrong chain, often recoverable if you control destination + EVM↔non-EVM (different address formats; transaction usually rejects; if not, stuck, recovery chain-dependent) + 'We do our best to help recover wrong-network sends but cannot guarantee it.' — pinned so the 2-class wrong-network + can-help-but-cannot-guarantee commitment survives", () => {
+  it("Wrong-network 2-class framing pinned: 'USDC-ERC20 vs USDC-TRC20 is the most common mistake. The displayed deposit address only works on the network shown in the checkout UI.' + EVM↔EVM (e.g. ERC-20 → BSC): addresses look identical, funds land at same address on wrong chain, often recoverable if you control destination + EVM↔non-EVM (different address formats; transaction usually rejects; if not, stuck, recovery chain-dependent) + 'We do our best to help recover wrong-network sends but cannot guarantee it.' — pinned so the 2-class wrong-network + can-help-but-cannot-guarantee commitment survives", () => {
     expect(body).toMatch(
-      /USDC-ERC20 vs USDC-TRC20 is the classic landmine\. The displayed\s*deposit address only works on the network shown in the checkout\s*UI\./,
+      /USDC-ERC20 vs USDC-TRC20 is the most common mistake\. The displayed\s*deposit address only works on the network shown in the checkout\s*UI\./,
     );
     expect(body).toMatch(
       /<strong>EVM ↔ EVM \(e\.g\. ERC-20 → BSC\)<\/strong>: addresses\s*look identical but funds land at the same address on the\s*wrong chain\. Often recoverable if you control the destination\s*— contact support with the TX hash\./,
@@ -148,9 +148,9 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
     expect(body).toMatch(/-o receipt\.pdf/);
   });
 
-  it("Support-escalation 5-bullet template + 1-biz-day SLA framing pinned: account email/account_id + order_id + TX hash (explorer link) + network sent on (Ethereum mainnet / Tron / BSC) + screenshot of wallet send-confirmation + 'Response SLA is 1 business day on the free trial + paid tiers; enterprise contracts get a per-contract SLA. Most payment escalations resolve same-day once we have the TX hash.' — pinned so the 5-bullet template + 1-biz-day SLA + same-day-with-TX-hash commitment survives", () => {
+  it("Support-escalation 5-bullet template + 1-biz-day SLA framing pinned: account email/account_id + order_id + TX hash (explorer link) + network sent on (Ethereum mainnet / Tron / BSC) + screenshot of wallet send-confirmation + 'Response SLA is 1 business day on the Free plan and paid tiers; enterprise contracts get a per-contract SLA. Most payment escalations resolve same-day once we have the TX hash.' — pinned so the 5-bullet template + 1-biz-day SLA + same-day-with-TX-hash commitment survives", () => {
     expect(body).toMatch(/<li>Your account email \(or account_id if you have it handy\)\.<\/li>/);
-    expect(body).toMatch(/<li>The <code>order_id<\/code> we minted at checkout\.<\/li>/);
+    expect(body).toMatch(/<li>The <code>order_id<\/code> shown at checkout\.<\/li>/);
     expect(body).toMatch(/<li>The TX hash \(any explorer link is fine\)\.<\/li>/);
     expect(body).toMatch(
       /<li>The network you sent on \(Ethereum mainnet, Tron, BSC, etc\.\)\.<\/li>/,
@@ -159,7 +159,7 @@ describe('W520.C apps/marketing-site/src/pages/docs/billing-crypto-troubleshooti
       /<li>A screenshot of your wallet's send confirmation if you\s*still have it\.<\/li>/,
     );
     expect(body).toMatch(
-      /Response SLA is 1 business day on the free trial \+ paid tiers;\s*enterprise contracts get a per-contract SLA\. Most payment\s*escalations resolve same-day once we have the TX hash\./,
+      /Response SLA is 1 business day on the Free plan and paid tiers;\s*enterprise contracts get a per-contract SLA\. Most payment\s*escalations resolve same-day once we have the TX hash\./,
     );
   });
 

@@ -27,12 +27,12 @@ const tierApiAccess = Object.fromEntries(
 
     <header class="mb-10 flex flex-wrap items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3">Bearer tokens · scoped + revocable</p>
+        <p class="text-sm text-tk-ink-3">Keys for your code · choose what each key can do · revoke any time</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">API keys</h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Pass as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>. Plaintext is
-          shown ONCE on creation — store it now; we can't recover it later. Revocation is
-          immediate.
+          Send it as <code class="font-mono">Authorization: Bearer &lt;key&gt;</code>. The full key is
+          shown only once, when you create it — save it right away; we can't show it again.
+          Revoking a key takes effect immediately.
         </p>
       </div>
       <div class="flex shrink-0 items-center gap-2">
@@ -52,7 +52,7 @@ const tierApiAccess = Object.fromEntries(
           data-api-write-only
           disabled
           aria-disabled="true"
-          title="Live API keys must load before creating another."
+          title="Your API keys need to load before you can create one."
         >New key</button>
       </div>
     </header>
@@ -85,7 +85,7 @@ const tierApiAccess = Object.fromEntries(
 npm i @driftstack/sdk</code></pre>
       <p class="mt-2 text-xs text-tk-ink-3">
         Replace <code class="font-mono">ds_live_&lt;your-key&gt;</code> with the key you copy on
-        creation — the plaintext is shown once and never stored.
+        creation — the full key is shown once and never stored.
       </p>
     </section>
 
@@ -95,10 +95,10 @@ npm i @driftstack/sdk</code></pre>
       role="status"
       aria-live="polite"
     >
-      <p class="section-label">Programmatic access</p>
+      <p class="section-label">API access</p>
       <p class="mt-2 text-sm text-tk-ink-2" data-api-access-notice-copy></p>
       <a href="/select-tier/" class="btn-secondary mt-4 inline-flex" data-api-access-upgrade>
-        Compare API-enabled tiers
+        Compare plans with API access
       </a>
     </section>
 
@@ -128,11 +128,11 @@ npm i @driftstack/sdk</code></pre>
             class="mt-1 w-full rounded-md border border-tk-border px-3 py-2 text-sm"
           />
           <p class="mt-1 text-xs text-tk-ink-3">
-            Naming a key by purpose / environment makes leak triage faster later.
+            Name keys by purpose or environment so you can tell them apart if one is ever leaked.
           </p>
         </div>
         <div>
-          <span class="block text-sm font-medium text-tk-ink-2">Scope</span>
+          <span class="block text-sm font-medium text-tk-ink-2">Permissions</span>
           <div class="mt-2 space-y-2 text-sm">
             <label class="flex items-start gap-2">
               <input
@@ -143,23 +143,22 @@ npm i @driftstack/sdk</code></pre>
                 class="mt-0.5"
               />
               <span>
-                <strong>account_owner</strong> — full access. Manage webhooks, billing, mint
-                other keys. Choose this for trusted account administration or your primary
-                automation.
+                <strong>account_owner</strong> — full access. Manage webhooks, billing and create
+                other keys. Choose this for trusted admin use or your main automation.
               </span>
             </label>
             <label class="flex items-start gap-2">
               <input type="radio" name="scope" value="write" class="mt-0.5" />
               <span>
-                <strong>write</strong> — create + drive sessions; cannot mint other keys, manage
-                webhooks, or change billing. Right scope for production runners.
+                <strong>write</strong> — create and control sessions; can't create other keys, manage
+                webhooks or change billing. Best for the code that runs your sessions in production.
               </span>
             </label>
             <label class="flex items-start gap-2">
               <input type="radio" name="scope" value="read" class="mt-0.5" />
               <span>
-                <strong>read</strong> — list + get only. Right scope for monitoring or
-                read-only integrations.
+                <strong>read</strong> — view only; can't change anything. Best for monitoring or
+                read-only tools.
               </span>
             </label>
             <label class="flex items-start gap-2">
@@ -171,8 +170,8 @@ npm i @driftstack/sdk</code></pre>
                 data-scope-granular-radio
               />
               <span>
-                <strong>granular (advanced)</strong> — pick exact per-resource permissions.
-                Tightest possible attack surface for one job. Pick this for keys
+                <strong>granular (advanced)</strong> — pick exact permissions for each resource.
+                The least access possible for one job. Pick this for keys
                 that should only touch a specific resource (e.g. monitoring that
                 reads sessions but can't see billing).
               </span>
@@ -187,10 +186,10 @@ npm i @driftstack/sdk</code></pre>
             class="mt-4 hidden rounded-md border border-tk-border bg-tk-bg p-4"
           >
             <p class="text-xs text-tk-ink-2">
-              Pick at least one. Granular scopes do not satisfy broad checks —
-              if you select <code class="font-mono">read:sessions</code> only,
-              the key cannot read profiles, webhooks, or billing data. Mix with
-              broad scopes if you want one key for many things.
+              Pick at least one. A granular key can only do exactly what you tick —
+              <code class="font-mono">read:sessions</code> alone can't read profiles,
+              webhooks or billing. If one key needs to do many things, choose a
+              broad permission above instead.
             </p>
             <div class="mt-3 grid gap-x-6 gap-y-3 sm:grid-cols-2">
               <fieldset>
@@ -277,7 +276,7 @@ npm i @driftstack/sdk</code></pre>
               </fieldset>
             </div>
             <p class="mt-3 text-xs text-tk-accent-text" data-granular-warning hidden>
-              Pick at least one granular scope.
+              Pick at least one permission.
             </p>
           </div>
         </div>
@@ -317,8 +316,8 @@ npm i @driftstack/sdk</code></pre>
         Key created — copy it now
       </h2>
       <p class="mt-2 text-sm text-tk-ready-text">
-        This is the only time the full key is shown. Store it in your secret manager before
-        dismissing.
+        This is the only time the full key is shown. Save it somewhere safe, such as a password
+        manager, before dismissing.
       </p>
       <pre
         data-created-plaintext
@@ -361,16 +360,16 @@ npm i @driftstack/sdk</code></pre>
         API key rotated
       </h2>
       <p class="mt-1 text-sm text-tk-accent-text">
-        Copy the new plaintext now — it won't be shown again. The previous key
-        keeps working for the grace window below; deploy the new key everywhere
-        before then or requests using the old key will start returning 401.
+        Copy the new key now — it won't be shown again. The old key keeps
+        working until the time shown below; update everything that uses it
+        before then, or those requests will be rejected.
       </p>
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
         Rotated from
       </p>
       <p data-rotate-from-id class="mt-1 font-mono text-xs text-tk-ink"></p>
       <p class="mt-3 text-xs font-mono uppercase tracking-widest text-tk-busy-text">
-        New plaintext
+        New key
       </p>
       <pre
         data-rotate-plaintext
@@ -381,7 +380,7 @@ npm i @driftstack/sdk</code></pre>
       <p data-rotate-grace-expires class="mt-1 text-sm text-tk-ink"></p>
       <div class="mt-4 flex flex-wrap gap-2">
         <button type="button" data-rotate-copy class="btn-primary text-sm">
-          Copy plaintext
+          Copy key
         </button>
         <button type="button" data-rotate-dismiss class="btn-secondary text-sm">
           I've saved it
@@ -402,9 +401,10 @@ npm i @driftstack/sdk</code></pre>
     >
       <span class="font-mono text-xs uppercase">!</span>
       <p>
-        API keys are scrypt-hashed at rest. Driftstack staff cannot read your keys — a database
-        breach surfaces hashes, not keys. If a key leaks, revoke + rotate; no admin recovery
-        path exists.
+        We store only a one-way hash of each key, so Driftstack staff can't read your keys, and
+        anyone who got hold of our database would see only those hashes, not your keys. If a key
+        leaks, rotate it from this page, or revoke it and create a new one. A lost key can't be
+        recovered — not even by Driftstack support.
       </p>
     </div>
 
@@ -425,9 +425,9 @@ npm i @driftstack/sdk</code></pre>
       </div>
       <h2 class="text-lg font-semibold tracking-tight text-tk-ink">No API keys yet</h2>
       <p class="mx-auto mt-2 max-w-prose text-sm text-tk-ink-3">
-        Create a key to start driving sessions from your code. Most customers create one key per
-        environment (dev / staging / prod) — scopes are key-level, so a leaked dev key can't
-        touch prod state.
+        Create a key to run sessions from your code. Most customers create one key per
+        environment (development, staging, production). Each key has its own permissions and can
+        be revoked on its own, so if one leaks you can revoke it without disturbing the rest.
       </p>
       <button
         type="button"
@@ -436,7 +436,7 @@ npm i @driftstack/sdk</code></pre>
         data-api-write-only
         disabled
         aria-disabled="true"
-        title="Live API keys must load before creating another."
+        title="Your API keys need to load before you can create one."
       >
         Create your first key
       </button>
@@ -460,10 +460,10 @@ npm i @driftstack/sdk</code></pre>
     </ul>
 
     <p class="mt-8 hidden text-xs text-tk-ink-3" data-api-access-only>
-      Scopes: <code class="font-mono">read</code> (list/get-only),
-      <code class="font-mono">write</code> (create sessions, navigate, interact),
-      <code class="font-mono">account_owner</code> (manage webhooks, billing, mint other keys).
-      Always create the narrowest-scoped key the job needs.
+      Permissions: <code class="font-mono">read</code> (view only),
+      <code class="font-mono">write</code> (create and control sessions),
+      <code class="font-mono">account_owner</code> (also manage webhooks, billing and other keys).
+      Give each key only the access it needs.
     </p>
   </div>
 
@@ -592,12 +592,12 @@ npm i @driftstack/sdk</code></pre>
         }
         if (apiAccessNoticeCopy) {
           apiAccessNoticeCopy.textContent = !apiAccessVerified
-            ? 'Your API-key list remains available, but plan access could not be verified. Creation and rotation stay disabled until plan access can be checked.'
+            ? "We couldn't confirm your plan just now. You can still see your keys, but creating or rotating keys is paused until we can. Reload to try again."
             : !apiAccessGranted
-              ? "The selected account's current plan keeps customer API-key creation, rotation, and SDK automation disabled. Existing keys remain visible to authorized owners and team admins so they can revoke them. Use the desktop app and browser sign-in for Free sessions, or choose an API-enabled tier."
+              ? "API keys aren't included in this account's plan. Existing keys are still listed so an owner or admin can revoke them. On the Free plan, use the desktop app and sign in from the browser — or upgrade to a plan that includes API access."
               : !writeAccessVerified
-                ? 'This paid account can use customer API keys and the SDK guidance below, but your write permission for the selected account could not be verified. The key list stays read-only.'
-                : 'This paid account can use customer API keys and the SDK guidance below, but your selected team role is read-only. Ask a team admin to create, rotate, or revoke keys.';
+                ? "We couldn't confirm your permission to change keys for the selected account, so the list is read-only for now. Check which account is selected, or reload to try again."
+                : 'Your team role is read-only for the selected account. Ask a team admin to create, rotate, or revoke keys.';
         }
         if (apiAccessUpgrade) {
           apiAccessUpgrade.classList.toggle(
@@ -607,10 +607,10 @@ npm i @driftstack/sdk</code></pre>
         }
         if (emptyCopy && apiAccessSettled && !showWriteControls) {
           emptyCopy.textContent = !apiAccessVerified
-            ? 'No API keys are available to list. Key mutations stay disabled until plan and account permissions can be verified.'
+            ? 'No API keys to show. Creating or changing keys is paused until we can confirm your plan and permissions. Reload to try again.'
             : !apiAccessGranted
-              ? 'No customer API keys are active. Free sessions use the desktop app with browser sign-in; API-enabled tiers can create keys for SDK automation.'
-              : 'No API keys are active on this paid account. The selected team scope is read-only; ask a team admin to create one.';
+              ? 'No API keys yet. On the Free plan, use the desktop app and sign in from the browser. Plans with API access can create keys here.'
+              : 'No API keys yet. Your team role is read-only, so ask a team admin to create one.';
         }
         if (!showWriteControls) {
           if (formWrap) formWrap.classList.add('hidden');
@@ -628,8 +628,8 @@ npm i @driftstack/sdk</code></pre>
           } else {
             button.setAttribute('aria-disabled', 'true');
             button.title = showWriteControls
-              ? 'Live API keys must load before creating another.'
-              : 'API-key creation requires an API-enabled tier and verified write access.';
+              ? 'Your API keys need to load before you can create one.'
+              : 'Creating keys needs a plan with API access and permission to change this account.';
           }
         });
         if (createSubmit) {
@@ -901,7 +901,7 @@ npm i @driftstack/sdk</code></pre>
           ' · last used ' +
           escapeHtml(fmtIso(k.last_used_at)) +
           (k.expires_at
-            ? ' · <span class="text-tk-accent-text">grace ends ' +
+            ? ' · <span class="text-tk-accent-text">expires ' +
               escapeHtml(fmtIso(k.expires_at)) +
               '</span>'
             : '') +
@@ -987,15 +987,15 @@ npm i @driftstack/sdk</code></pre>
             renderUnavailable(
               err && err.name === 'AbortError'
                 ? 'Loading API keys took too long. Reload to try again.'
-                : 'Could not load live API keys. Reload to try again.',
+                : "Couldn't load your API keys. Reload to try again.",
             );
             showBanner(
               err && err.name === 'AbortError'
                 ? "Loading API keys took too long. Check your connection and retry."
-                : "Couldn't load live API keys (" +
+                : "Couldn't load your API keys (" +
                   window.driftstackRequestErrorMessage(
                     err,
-                    "Couldn't load live API keys. Try again.",
+                    "Couldn't load your API keys. Try again.",
                   ) +
                   ').',
             );
@@ -1024,8 +1024,8 @@ npm i @driftstack/sdk</code></pre>
         button.setAttribute(
           'title',
           completed
-            ? 'Revoke the newly matched key before rotating this key again.'
-            : 'Reload and verify the key list before rotating again.',
+            ? 'Revoke the new key in your key list before rotating this key again.'
+            : 'Reload the page and check your key list before rotating again.',
         );
       }
 
@@ -1046,30 +1046,30 @@ npm i @driftstack/sdk</code></pre>
             createOutcomeReason = 'unverified';
           }
           return (
-            'Key creation timed out after the request was sent, so its outcome is unknown. ' +
+            "The request took too long, so we can't be sure it finished. " +
             (matchingKey
-              ? 'The refreshed list contains a new “' +
+              ? 'A new key named “' +
                 name +
-                '” key, so creation likely completed but its plaintext cannot be recovered; revoke it before creating another key.'
+                "” now appears in your list, so it was probably created — but its value can't be shown again. Revoke it before creating another key."
               : refreshed
-                ? 'The refreshed authoritative list has no new “' +
+                ? "Your list doesn't show a new “" +
                   name +
-                  '” key; retry only if the key is still required.'
-                : 'The key list could not be refreshed. Reload and verify it before retrying; another submission could create a second unrecoverable key.')
+                  "” key, so it likely wasn't created. Try again if you still need it."
+                : "We couldn't refresh your key list. Reload and check it before trying again — another attempt could create a key whose value you can't see.")
           );
         }
         if (matchingKey || !refreshed) lockRotateAction(sourceId, Boolean(matchingKey));
         return (
-          'Key rotation timed out after the request was sent, so its outcome is unknown. ' +
+          "The request took too long, so we can't be sure the rotation finished. " +
           (matchingKey
-            ? 'The refreshed list contains a new “' +
+            ? 'A new “' +
               name +
-              '” successor, so rotation likely completed but its plaintext cannot be recovered; revoke that new key before rotating again.'
+              "” key now appears in your list, so the rotation probably went through, but the new key's value can't be shown again. Revoke that new key before rotating again."
             : refreshed
-              ? 'The refreshed authoritative list has no new “' +
+              ? "Your list doesn't show a new “" +
                 name +
-                '” successor; retry only if rotation is still required.'
-              : 'The key list could not be refreshed. Reload and verify it before rotating again; another rotation could replace an unrecoverable key.')
+                '” key. Try again only if you still need to rotate.'
+              : "We couldn't refresh your key list. Reload and check it before rotating again, so you don't create another key whose value can't be shown.")
         );
       }
 
@@ -1079,10 +1079,10 @@ npm i @driftstack/sdk</code></pre>
         const refreshed = Boolean(await refresh());
         if (!refreshed) {
           return (
-            'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
-            'The key list could not be refreshed. Do not revoke “' +
+            "The request took too long and we couldn't refresh your key list. " +
+            "Don't revoke “" +
             name +
-            '” again on this page. Reload API Keys later to verify its status before retrying.'
+            '” again yet — reload this page later and check whether it now shows as revoked.'
           );
         }
         const stillActive = Array.from(ul.querySelectorAll('[data-revoke]')).some(
@@ -1090,18 +1090,18 @@ npm i @driftstack/sdk</code></pre>
         );
         if (stillActive) {
           return (
-            'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
-            'The refreshed list still shows “' +
+            "The request took too long, so we can't be sure it finished. " +
+            'Your list still shows “' +
             name +
-            '” as active, but completion may be delayed. Do not revoke it again on this page. ' +
-            'Wait, then reload API Keys; retry only if it still appears active.'
+            "” as active, but it may just be taking a moment. Don't revoke it again yet — " +
+            'wait, reload this page, and try again only if it still shows as active.'
           );
         }
         return (
-          'Key revocation timed out after the request was sent, so its outcome is unknown. ' +
-          'The refreshed list no longer shows “' +
+          "The request took too long, so we can't be sure it finished, " +
+          'but your list no longer shows “' +
           name +
-          '” as active. Revocation likely completed; do not revoke it again.'
+          "” as active. It was most likely revoked; don't revoke it again."
         );
       }
 
@@ -1122,7 +1122,7 @@ npm i @driftstack/sdk</code></pre>
               showBanner(
                 writeAccessVerified
                   ? 'Only a team admin can revoke keys for the selected account.'
-                  : 'API-key revocation stays disabled until account permissions can be verified.',
+                  : 'Revoking keys is paused until we can confirm your permissions for this account.',
               );
               return;
             }
@@ -1135,7 +1135,7 @@ npm i @driftstack/sdk</code></pre>
             const ok = await window.driftstackConfirm(
               'Revoke "' +
                 name +
-                '"? Apps using this key will start receiving 401 immediately. This cannot be undone.',
+                '"? Anything using this key will stop working immediately. This cannot be undone.',
               { confirmLabel: 'Revoke', destructive: true },
             );
             if (!ok) {
@@ -1237,7 +1237,7 @@ npm i @driftstack/sdk</code></pre>
               showCopyFeedback(rotateCopyFb, 'Copied.', true);
             })
             .catch(() => {
-              showBanner('Copy failed. Select the plaintext manually.');
+              showBanner('Copy failed. Select the key and copy it manually.');
             });
         });
       }
@@ -1255,7 +1255,7 @@ npm i @driftstack/sdk</code></pre>
               showBanner(
                 writeAccessVerified && !writeAccessGranted
                   ? 'Only a team admin can rotate keys for the selected account.'
-                  : 'API-key rotation requires an API-enabled tier and verified write access.',
+                  : 'Rotating keys needs a plan with API access and permission to change this account.',
               );
               return;
             }
@@ -1268,7 +1268,7 @@ npm i @driftstack/sdk</code></pre>
               mutationButtonsInFlight.delete(btn);
               endKeyMutation(id);
               showBanner(
-                'Rotation is locked because the previous outcome was confirmed or could not be verified. Reload and review the key list before rotating again.',
+                'Your last rotation attempt may have already gone through. Reload the page and check your key list before rotating this key again.',
               );
               return;
             }
@@ -1276,7 +1276,7 @@ npm i @driftstack/sdk</code></pre>
             const ok = await window.driftstackConfirm(
               'Rotate "' +
                 name +
-                '"? A new plaintext is shown ONCE; the old key keeps working for a 24h grace period so you can swap deployments without downtime.',
+                '"? The new key is shown only once. The old key keeps working for 24 hours so you can switch over without downtime.',
               { confirmLabel: 'Rotate', destructive: true },
             );
             if (!ok) {
@@ -1356,14 +1356,14 @@ npm i @driftstack/sdk</code></pre>
           showBanner(
             writeAccessVerified && !writeAccessGranted
               ? 'Only a team admin can create keys for the selected account.'
-              : 'API-key creation requires an API-enabled tier and verified write access.',
+              : 'Creating keys needs a plan with API access and permission to change this account.',
           );
           return;
         }
         if (!token || !keyDataAvailable) {
           showBanner(
             token
-              ? 'Reload live API keys before creating another.'
+              ? 'Reload the page so your API keys load, then try again.'
               : 'Sign in to create API keys.',
           );
           return;
@@ -1424,20 +1424,20 @@ npm i @driftstack/sdk</code></pre>
           showBanner(
             writeAccessVerified && !writeAccessGranted
               ? 'Only a team admin can create keys for the selected account.'
-              : 'API-key creation requires an API-enabled tier and verified write access.',
+              : 'Creating keys needs a plan with API access and permission to change this account.',
           );
           return;
         }
         if (!token || !keyDataAvailable) {
-          showBanner('Reload live API keys before creating another.');
+          showBanner('Reload the page so your API keys load, then try again.');
           return;
         }
         if (createInFlight) return;
         if (createOutcomeBlocked) {
           createError.textContent =
             createOutcomeReason === 'created'
-              ? 'This key was likely created, but its one-shot plaintext was lost with the timed-out response. Revoke the matching key before creating another.'
-              : 'Key creation is locked because the prior outcome could not be verified. Reload and review the key list before retrying.';
+              ? "This key was probably created, but the request timed out before its full value could be shown, and it can't be recovered. Revoke the new key in your key list before creating another."
+              : "We couldn't confirm whether your last attempt created a key. Reload the page and check your key list before trying again.";
           createError.classList.remove('hidden');
           return;
         }
@@ -1513,14 +1513,14 @@ npm i @driftstack/sdk</code></pre>
             createSubmit.textContent = createOutcomeBlocked
               ? createOutcomeReason === 'created'
                 ? 'Already created'
-                : 'Verify before retrying'
+                : 'Check before retrying'
               : 'Create key';
             if (createOutcomeBlocked) {
               createSubmit.setAttribute(
                 'title',
                 createOutcomeReason === 'created'
-                  ? 'Revoke the newly matched key before creating another.'
-                  : 'Reload and verify the key list before retrying.',
+                  ? 'Revoke the new key in your key list before creating another.'
+                  : 'Reload the page and check your key list before trying again.',
               );
             } else {
               createSubmit.removeAttribute('title');
@@ -1539,7 +1539,7 @@ npm i @driftstack/sdk</code></pre>
           .catch(() => {
             showCopyFeedback(
               revealCopyFb,
-              'Copy failed — select + copy manually.',
+              'Copy failed — select the key and copy it manually.',
               false,
             );
           });

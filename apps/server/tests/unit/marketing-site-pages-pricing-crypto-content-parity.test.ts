@@ -110,8 +110,9 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
     expect(body).toMatch(
       /Once a\s*crypto payment settles on-chain, it is committed for the\s*billing period it covers\./,
     );
+    // 2026-09-15 plain words — same card-fallback fact, no processor name.
     expect(body).toMatch(
-      /If you need a refund mechanism, our card-billing path \(Stripe\)\s*is the right channel/,
+      /If you think you might need a refund, pay by card instead\. Card\s*refunds follow the standard rules in the refund policy\./,
     );
   });
 
@@ -131,10 +132,10 @@ describe('W502.B apps/marketing-site/src/pages/pricing/crypto.astro content pari
   it('3-state error handling: Underpayment (partial → support 1-business-day topup) + Late payment (expired-order reconcile) + Wrong currency (best-effort recovery via tx hash) — pinned so the 3 failure-mode escalation paths stay documented (drift to dropping any would orphan customers in that error state)', () => {
     // S20b 2026-07-06 plain words — all 3 escalation paths intact.
     expect(body).toMatch(
-      /<strong>Underpayment<\/strong> — if the transfer is short of\s*the quoted amount, the order is marked <code>partial<\/code>/,
+      /<strong>Underpayment<\/strong> — if the transfer is short of\s*the quoted amount, the order is marked as partially paid/,
     );
     expect(body).toMatch(
-      /<strong>Late payment<\/strong> — transfers received after the\s*1-hour pay-window land on an order we treat as expired/,
+      /<strong>Late payment<\/strong> — transfers that arrive after the\s*1-hour window land on an order that has already gone stale/,
     );
     expect(body).toMatch(
       /<strong>Wrong currency<\/strong> — if you send a currency we\s*don't accept, the money will not come back on its own/,

@@ -75,7 +75,7 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
     expect(body).toMatch(/if \(removalButtonsInFlight\.has\(btn\)\) return;/);
     expect(body).toMatch(/const refreshed = await refresh\(false\);/);
     expect(body).toMatch(
-      /' is no longer present; removal likely completed, so do not submit it again\.'/,
+      /' is no longer in the list, so they were probably removed\. No need to try again\.'/,
     );
   });
 
@@ -99,7 +99,7 @@ describe('W495.C apps/customer-dashboard/src/pages/team.astro content parity', (
 
   it("7-day accept-link + same-email-required framing pinned: 'Invitees receive an email with a 7-day accept link. They must accept while signed in to the same email address. Once accepted, members can act on this account's resources by toggling the \"Acting as\" picker in the sidebar — reads work for both member and admin roles; writes require admin.' — pinned so the email-matching requirement + 7-day window + the act-as-picker mechanic + the role-gating asymmetry all survive (drift to dropping the same-email rule would let invitees be confused by accept-failures when signed in as a different account)", () => {
     expect(body).toMatch(
-      /Invitees receive an email with a 7-day accept link\. They must accept while signed in to the\s*same email address\. Once accepted, members can act on this account's resources by toggling\s*the "Acting as" picker in the sidebar — reads work for both <code>member<\/code> and\s*<code>admin<\/code> roles; writes require <code>admin<\/code>\./,
+      /Invitees get an email with a link that works for 7 days\. They need to accept it while signed\s*in with the same email address\. After that, they can work in this account by choosing it\s*under "Acting as" in the sidebar\. Members can view everything; only admins can make changes\./,
     );
   });
 

@@ -29,14 +29,16 @@ describe('W321.B /security extras baseline', () => {
 
   it('positions the implemented live-media / staff-access boundary (2026-07-17 e36e5b4e2 replaced the "no-customer-data-access" posture claim, which the Capture endpoint contradicted)', () => {
     expect(body).toMatch(/06 · Live-media handling/);
+    // 2026-09-15 plain-language pass: same boundary, customer words
+    // (LiveKit vendor name lives on the sub-processor register).
     expect(body).toMatch(
-      /Live-session media is encrypted in transport,\s+processed through LiveKit/,
+      /Live-session streams\s+are encrypted in transit, used to deliver the session to you,\s+and dropped when the session ends/,
     );
     expect(body).toMatch(
-      /no administrative\s+path for Driftstack staff to join a customer's live session/,
+      /Driftstack staff have no\s+built-in way to join a customer's live session/,
     );
-    expect(body).toMatch(/not retained by the Capture endpoint/);
-    expect(body).toMatch(/recordings stay on the customer's device and are not\s+uploaded/);
+    expect(body).toMatch(/returned directly in\s+the API response and are not stored/);
+    expect(body).toMatch(/desktop recordings stay\s+on your own computer and are not uploaded/);
     expect(body).not.toMatch(/no[- ]customer[- ]data[- ]access/i);
     expect(body).not.toMatch(/none of it ever reaches our servers/);
   });

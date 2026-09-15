@@ -268,7 +268,7 @@ describe('signup page — local integration', () => {
 
     expect(fetchCalls).toHaveLength(0);
     expect(bannerText(window)).toMatch(
-      /site storage is unavailable.*no account-creation request was sent.*entries are still here/i,
+      /blocking site storage.*signup needs.*nothing has been lost/i,
     );
     const password = window.document.querySelector(
       '[data-form="signup"] input[name="password"]',
@@ -293,7 +293,7 @@ describe('signup page — local integration', () => {
 
     expect(setup.fetchCalls).toHaveLength(1);
     expect(bannerText(activeWindow)).toMatch(
-      /account was created.*could not complete the verification handoff.*do not submit.*enter your email manually/i,
+      /account was created.*couldn't continue automatically.*don't sign up again.*enter your email on the verification page/i,
     );
     expect(activeWindow.sessionStorage.getItem('ds_signup_email')).toBeNull();
     submitSignup(activeWindow, 'newbie@example.com', 'a-very-long-password');
@@ -311,7 +311,7 @@ describe('signup page — local integration', () => {
 
     expect(fetchCalls).toHaveLength(1);
     expect(bannerText(window)).toMatch(
-      /account was created.*could not complete the verification handoff.*do not submit/i,
+      /account was created.*couldn't continue automatically.*don't sign up again/i,
     );
     expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
     submitSignup(window, 'newbie@example.com', 'a-very-long-password');
@@ -399,7 +399,7 @@ describe('signup page — local integration', () => {
     expect(submitBtn.getAttribute('aria-busy')).toBe('false');
     expect(submitBtn.textContent).toBe('Continue to verification');
     expect(bannerText(window)).toMatch(
-      /outcome is unknown.*may already have created your account.*verification email.*do not submit this signup again.*inbox and spam.*continue to email verification/i,
+      /took too long.*your account may already exist.*don't sign up again.*inbox and spam.*continue to verification/i,
     );
     expect(window.sessionStorage.getItem('ds_signup_email')).toBe('newbie@example.com');
     expect(
@@ -453,7 +453,7 @@ describe('signup page — local integration', () => {
     expect(body.redirect_to).toBe('https://app.driftstack.io/');
     expect(flowKeys(window)).toEqual([]);
     expect(navigations()).toBe(0);
-    expect(bannerText(window)).toBe('OAuth start returned no flow id.');
+    expect(bannerText(window)).toBe("Couldn't start sign-up with this provider. Try again.");
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('false');
   });
@@ -499,7 +499,7 @@ describe('signup page — local integration', () => {
     expect(navigations()).toBe(0);
     expect(flowKeys(window)).toEqual([]);
     expect(bannerText(window)).toMatch(
-      /provider sign-up needs a secure \(https\) page with web crypto.*nothing has been sent to the provider yet.*email and password/i,
+      /signing up with google or github only works on a secure \(https:\/\/\) connection.*open the dashboard over https.*email and password/i,
     );
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('false');
@@ -601,7 +601,7 @@ describe('signup page — local integration', () => {
     expect(navigations()).toBe(0);
     expect(bannerHidden(window)).toBe(false);
     expect(bannerText(window)).toMatch(
-      /enable browser site storage before signing up with a provider.*nothing has been sent to the provider yet/i,
+      /blocking site storage.*signup needs.*allow it, then try again/i,
     );
     // The refusal happens BEFORE the busy lease is taken, so the button was never
     // disabled or marked busy (aria-busy stays unset, never 'true').
@@ -638,7 +638,7 @@ describe('signup page — local integration', () => {
     expect(navigations()).toBe(0);
     expect(bannerHidden(window)).toBe(false);
     expect(bannerText(window)).toMatch(
-      /could not persist the sign-up flow.*enable site storage.*start a fresh sign-up/i,
+      /couldn't save the sign-up.*allow site storage.*then try again/i,
     );
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute('aria-busy')).toBe('false');

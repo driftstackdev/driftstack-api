@@ -64,7 +64,7 @@ describe('W386.C gui-client CryptoOrderSummaryCard content parity', () => {
   });
 
   it('describeExpiry 4 branches: elapsed / <1 min / <60 min / hours+rem', () => {
-    expect(body).toMatch(/if \(diff <= 0\) return 'pay window elapsed';/);
+    expect(body).toMatch(/if \(diff <= 0\) return 'payment window closed';/);
     expect(body).toMatch(/if \(minutes < 1\) return 'less than a minute remaining';/);
     expect(body).toMatch(/if \(minutes < 60\) return `\$\{minutes\.toString\(\)\}m remaining`;/);
     expect(body).toMatch(/return `\$\{hours\.toString\(\)\}h \$\{rem\.toString\(\)\}m remaining`;/);

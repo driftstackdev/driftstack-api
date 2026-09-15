@@ -151,7 +151,7 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
       <div className="flex h-full flex-col justify-center p-6">
         <EmptyState
           title="Connect to browse saved tasks"
-          description="Add your API key in Settings to browse and replay tasks saved from AI chats."
+          description="Add your API key in Settings to browse tasks saved from AI chats."
           action={
             <button type="button" className="btn-primary" onClick={onGoToSettings}>
               Open Settings
@@ -172,8 +172,8 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
             <span className="ml-2 mono text-ink-muted">{list.recipes.length}</span>
           </h2>
           <p className="mt-1 text-xs text-ink-muted">
-            Tasks you saved from a finished AI chat — each replays the steps without re-running the
-            planning, so you can repeat a job in one click.
+            Tasks you saved from a finished AI chat, with every step recorded so you can see exactly
+            what it did. Replaying a saved task isn't available yet.
           </p>
         </div>
         <button
@@ -201,7 +201,7 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
         <EmptyState
           icon={SEARCH_ICON}
           title="No saved tasks yet"
-          description="Saved tasks come from finished AI chats. Once you save a chat as a task, it shows up here ready to browse and replay."
+          description="Saved tasks come from finished AI chats. Once you save a chat as a task, it shows up here ready to browse."
           action={
             <button type="button" className="btn-primary" onClick={onGoToAI}>
               Open AI Browser Automation
@@ -262,7 +262,7 @@ export function RecipesView({ onGoToAI, onGoToSettings }: RecipesViewProps): JSX
             {selectedId === null ? (
               <div className="flex h-full items-center justify-center px-8 py-16 text-center">
                 <p className="max-w-xs text-sm text-ink-muted">
-                  Select a saved task to view its details and replayable steps.
+                  Select a saved task to view its details and recorded steps.
                 </p>
               </div>
             ) : (
@@ -375,7 +375,7 @@ function DetailPanel({ state }: { state: DetailState }): JSX.Element {
       </dl>
 
       <div className="flex flex-col gap-2">
-        <span className="section-label">Intent log</span>
+        <span className="section-label">Recorded steps</span>
         {r.intent_log.length === 0 ? (
           <p className="rounded border border-dashed border-surface-divider px-4 py-6 text-center text-sm text-ink-muted">
             This saved task has no recorded steps.
@@ -411,10 +411,52 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** Short uppercase tag for an intent's discriminant. */
+const INTERACT_LABEL: Record<'tap' | 'type' | 'scroll' | 'swipe' | 'press', string> = {
+  tap: 'Tap',
+  type: 'Type',
+  scroll: 'Scroll',
+  swipe: 'Swipe',
+  press: 'Press',
+};
+const CAPTURE_LABEL: Record<'screenshot' | 'dom_snapshot' | 'pdf', string> = {
+  screenshot: 'Screenshot',
+  dom_snapshot: 'Save page',
+  pdf: 'Save PDF',
+};
+/** Detail line under a capture step's tag. The tag says which kind of capture
+ *  it is; this says what the customer gets back, in plain words rather than
+ *  the wire token ('dom_snapshot'). */
+const CAPTURE_SUMMARY: Record<'screenshot' | 'dom_snapshot' | 'pdf', string> = {
+  screenshot: 'a picture of the screen',
+  dom_snapshot: 'the page’s contents, saved as text',
+  pdf: 'the page, saved as a PDF',
+};
+
+/** Milliseconds as a short seconds figure a reader can scan: 5000 → "5 s",
+ *  1200 → "1.2 s". */
+function seconds(ms: number): string {
+  return `${Number((ms / 1000).toFixed(2))} s`;
+}
+
+/** Short customer-facing tag for a step. The raw discriminants ('interact',
+ *  'behavioral_pause') are wire vocabulary, not copy, so each arm is spelled
+ *  out in plain words; the union is exhaustive, so a new kind fails to compile
+ *  here rather than leaking its identifier onto the screen. */
 function intentKind(intent: AgentIntent): string {
-  if (intent.kind === 'interact') return `interact · ${intent.action}`;
-  return intent.kind;
+  switch (intent.kind) {
+    case 'navigate':
+      return 'Go to';
+    case 'interact':
+      return INTERACT_LABEL[intent.action];
+    case 'wait':
+      return 'Wait';
+    case 'capture':
+      return CAPTURE_LABEL[intent.capture];
+    case 'scroll':
+      return 'Scroll';
+    case 'behavioral_pause':
+      return 'Pause';
+  }
 }
 
 /** Human-readable one-liner for an intent's payload. The AgentIntent union
@@ -431,18 +473,21 @@ function intentSummary(intent: AgentIntent): string {
       return `${intent.action}${target}${value}`.trim();
     }
     case 'wait': {
-      const target = intent.selector !== undefined ? ` ${intent.selector}` : '';
-      const timeout = intent.timeoutMs !== undefined ? ` (${intent.timeoutMs}ms)` : '';
-      return `until ${intent.condition}${target}${timeout}`;
+      const limit = intent.timeoutMs !== undefined ? ` (up to ${seconds(intent.timeoutMs)})` : '';
+      if (intent.condition === 'selector_visible') {
+        const target = intent.selector !== undefined ? intent.selector : 'the element';
+        return `until ${target} is visible${limit}`;
+      }
+      return `until the page finishes loading${limit}`;
     }
     case 'capture':
-      return intent.capture;
+      return CAPTURE_SUMMARY[intent.capture];
     case 'scroll':
       return intent.amount_px !== undefined
         ? `${intent.direction} ${intent.amount_px}px`
         : intent.direction;
     case 'behavioral_pause': {
-      if (intent.duration_ms !== undefined) return `pause ${intent.duration_ms}ms`;
+      if (intent.duration_ms !== undefined) return `pause for ${seconds(intent.duration_ms)}`;
       if (intent.reading_word_count !== undefined)
         return `read ~${intent.reading_word_count} words`;
       return 'pause';

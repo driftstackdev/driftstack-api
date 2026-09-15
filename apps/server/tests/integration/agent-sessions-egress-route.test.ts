@@ -130,7 +130,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     expect([400, 422]).toContain(res.statusCode);
   });
 
-  it('session not live on a node → 200 unavailable (an expected-inert state, never an HTTP error)', async () => {
+  it('session not running (no assigned node) → 200 unavailable (an expected-inert state, never an HTTP error)', async () => {
     fx = await buildTestApp({ enableAgentRuntime: true, enableFleetControlPlane: true });
     const id = await createSession(fx);
     const res = await fx.app.inject({
@@ -142,7 +142,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<EgressBody>();
     expect(body.status).toBe('unavailable');
-    expect(body.reason).toMatch(/not live on a node/);
+    expect(body.reason).toBe('This session is not running.');
   });
 
   it('CRITICAL by DEFAULT the route refuses and sends NOTHING — no device can answer setEgress', () => {
@@ -175,7 +175,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
       expect(res.statusCode).toBe(200);
       const body = res.json<EgressBody>();
       expect(body.status).toBe('unavailable');
-      expect(body.reason).toMatch(/do not support changing egress/);
+      expect(body.reason).toMatch(/Changing the proxy of a running session is not supported yet/);
       // The load-bearing half: nothing crossed the wire, so no 20 s timeout is
       // charged and no node sees a frame it cannot decode.
       expect(framesSent).toBe(0);
@@ -233,7 +233,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     expect(res.statusCode).toBe(200);
     const body = res.json<EgressBody>();
     expect(body.status).toBe('unavailable');
-    expect(body.reason).toMatch(/exit identity/);
+    expect(body.reason).toMatch(/has not (been tested|reported a working exit) yet/);
     // The load-bearing half: nothing was sent to the device. A reason string is
     // cheap; not having moved the session is the property.
     expect(framesSent).toBe(0);
@@ -312,7 +312,7 @@ describe('POST /v1/agent-sessions/:id/egress (wired)', () => {
     const { res } = await swapAgainstLiveNode('node-egress-unconfirmed', undefined, {});
     expect(res.status).toBe('ok');
     expect(res.apply_point).toBeNull();
-    expect(res.reason).toMatch(/did not confirm/);
+    expect(res.reason).toMatch(/not confirmed when it takes effect/);
     // Vacuity control: the confirmed case above returns a non-null apply_point, so
     // this arm measures the missing echo and not "apply_point is always null".
     expect(res.apply_point).not.toBe('next_navigation');

@@ -74,7 +74,9 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toMatch(/Your scripts and automated jobs run the sessions\./);
     // The quieter third card: both ladders share the engine + free tier.
     expect(body).toMatch(/Both\? Neither yet\? Start free\./);
-    expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
+    expect(body).toMatch(
+      /Both plan families give you the same real iPhones and share the same free tier\./,
+    );
   });
 
   it('one-sentence glossary above the ladders: concurrent (browser-tabs metaphor, matches homepage) + profile (saved iPhone identity)', () => {
@@ -138,10 +140,15 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('fixed browser subscription + concurrent-cap landing-band copy pinned', () => {
-    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
-    expect(body).toMatch(/No browser-usage overage bills/);
-    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
-    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
+    // 2026-09-15 plain-words pass: same facts (priced by sessions-at-once,
+    // hours/calls/visits unlimited inside it, no browser-usage extras, the
+    // bundled AI budget is separate) without billing-internals vocabulary.
+    expect(body).toMatch(/Browser plans are priced by how many sessions you can run at once\./);
+    expect(body).toMatch(/No extra bills for browser usage\./);
+    expect(body).toMatch(/hours, API calls and page visits inside it are unlimited/);
+    expect(body).toMatch(
+      /optional AI agent with Driftstack-supplied AI access \(the\s+"bundled" option\), that has its own monthly budget/,
+    );
     // Concurrent definition aligned with /faq + /index.
     expect(body).toMatch(
       /Concurrent sessions<\/strong> = how many\s+sessions you can run at the same time, like browser tabs you'd have\s+open at once/,
@@ -153,28 +160,37 @@ describe('W372.A marketing-site /pricing page content parity', () => {
     expect(body).toContain('console.anthropic.com');
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
     expect(body).toMatch(/Self-hosted\s*plans are BYOK-only/);
-    expect(body).toMatch(/\$0\.10 per agent turn/);
-    expect(body).toMatch(/included-service accounting value/);
-    expect(body).toMatch(/not separately itemized on\s+today's Stripe invoice/);
+    // 2026-09-15 plain words: $0.10 per agent turn against a budget the
+    // customer sets; the budget is included, not billed separately today.
+    expect(body).toMatch(
+      /each agent turn counts <strong\s*>\$0\.10<\/strong\s*> against a monthly budget you set/,
+    );
+    expect(body).toMatch(
+      /That budget is included in your plan\s+and is not billed separately today\./,
+    );
     expect(body).not.toMatch(
       /billed on one invoice|bundled per-token rate is announced at launch/i,
     );
   });
 
   it('free-tier perpetual claim pinned: never expires + upgrade to a paid tier (matches /faq; S20b: whitespace-tolerant — the sentence rewrapped)', () => {
-    expect(body).toMatch(/The free tier is perpetual/);
+    expect(body).toMatch(/The free tier never expires/);
     expect(body).toMatch(/subscribe\s+to a paid tier from your dashboard/);
   });
 
   it('Stripe-proration mid-month claim pinned ("Yes. Stripe prorates the change automatically"; S20b: "session-creation gate" reworded plain, same when-it-applies fact)', () => {
-    expect(body).toMatch(/Stripe prorates the change automatically\./);
-    expect(body).toMatch(/New limits apply\s+the next time you start a session/);
+    // 2026-09-15: processor name + "prorates" dropped; the customer-facing
+    // facts (upgrade now, pay the difference; downgrade at renewal) pinned.
+    expect(body).toMatch(
+      /Moving up takes effect right away and you pay only the\s+difference for the rest of the billing period\. Moving down takes\s+effect at your next renewal\./,
+    );
+    expect(body).toMatch(/New limits apply\s+the next time you\s+start a session/);
   });
 
   it('mini-FAQ teaser with 4 questions + /faq cross-link', () => {
     expect(body).toMatch(/<h3 class="font-medium text-tk-ink">Manual or API — which one\?<\/h3>/);
     expect(body).toMatch(
-      /<h3 class="font-medium text-tk-ink">Why concurrent caps and not hours\?<\/h3>/,
+      /<h3 class="font-medium text-tk-ink">Why limit sessions at once, and not hours\?<\/h3>/,
     );
     expect(body).toMatch(
       /<h3 class="font-medium text-tk-ink">Can I switch tiers mid-month\?<\/h3>/,
@@ -190,11 +206,11 @@ describe('W372.A marketing-site /pricing page content parity', () => {
   });
 
   it('free-tier no-metering framing pinned', () => {
-    expect(body).toMatch(/No usage metering at all/);
+    expect(body).toMatch(/No hourly charges and no usage counting/);
   });
 
   it('"720 browser-hours/month" surprise-overage example pinned (concurrent-caps rationale)', () => {
-    expect(body).toMatch(/720 browser-hours\/month\s+and a surprise overage bill/);
+    expect(body).toMatch(/720 hours a month\s+and a surprise bill/);
   });
 
   it('cross-link to /pricing/comparison per-tier side-by-side pinned', () => {
@@ -215,7 +231,7 @@ describe('W372.A marketing-site /pricing page content parity', () => {
       /How many sessions run at once is limited by your hardware, not\s*by the license\./,
     );
     expect(body).toMatch(/Source escrow means a neutral third party/);
-    expect(body).toMatch(/Hardware procurement detail at\{' '\}/);
+    expect(body).toMatch(/Hardware guidance at\{' '\}/);
     // v2: accent-colored TEXT uses the AA-safe text-tk-accent-text token.
     expect(body).toMatch(
       /<a\s*href="\/self-hosted\/"\s*class="text-tk-accent-text underline[^"]*"\s*>/,

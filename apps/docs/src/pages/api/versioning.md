@@ -19,9 +19,8 @@ independently of the API; this doc covers the API endpoint contract.
   break.
 - Breaking changes go through a deprecation cycle, then a new
   major version. `/v2/*` only when justified; not on a calendar.
-- The OpenAPI spec at `/openapi.json` is the contract. Generated
-  from Zod schemas in `packages/api-types/`; there is no second
-  source of truth.
+- The OpenAPI spec at `/openapi.json` is the contract. It is
+  generated from the same definitions the server enforces.
 
 ## What counts as additive vs breaking
 
@@ -128,8 +127,8 @@ When a breaking change is necessary, the sequence is:
 
 `/v2/*` ships when:
 
-- A breaking change can't be avoided (e.g. session lifecycle
-  redesign that needs different state-machine semantics).
+- A breaking change can't be avoided (e.g. a session lifecycle
+  redesign with different states and transitions).
 - Multiple breaking changes batch sensibly (don't spread breakage
   across many minor announcements when one batched cut is cleaner).
 - An entirely new architectural shape requires a distinct contract
@@ -148,10 +147,8 @@ When more than one major is active:
 
 - `/v1/*` continues to work for the announced sunset window
   (typically 12+ months).
-- Both versions share the same auth + rate-limit infrastructure.
-- Server-side handlers are duplicated where shape diverges; shared
-  service layer where the underlying behaviour is identical.
-- Test fixtures cover both; the OpenAPI spec exposes both.
+- Both versions share the same auth + rate limits.
+- The OpenAPI spec documents both.
 - Customers can pin a version via the URL prefix; no header-based
   versioning today.
 
@@ -178,9 +175,8 @@ When more than one major is active:
 - **`/v1/billing/*`** — Stripe-driven; subscription state shapes
   are stable across `/v1/*`'s lifetime. Mid-major changes here are
   extremely unlikely.
-- **`/v1/admin/*`** — internal-staff surface. Breaking changes
-  don't trigger external deprecation cycle; staff updates the
-  panel + the docs in lock-step.
+- **`/v1/admin/*`** — Driftstack staff only; not covered by this
+  policy.
 - **`/v1/account/*`** — customer self-serve account data
   (audit-log, email-preferences, rate-limits). Same external-facing
   breaking-change discipline as `/v1/sessions/*`.

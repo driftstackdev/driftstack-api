@@ -227,8 +227,10 @@ describe('V-276 RecordingsView empty state', () => {
     const heading = screen.getByRole('heading', { name: /no recordings yet/i });
     expect(heading).toBeInTheDocument();
 
-    // Body explains every-frame capture for replay + audit.
-    expect(screen.getByText(/recordings capture every frame/i)).toBeInTheDocument();
+    // Body explains what a recording is for (replay), in the customer's words.
+    expect(
+      screen.getByText(/recordings capture a live session so you can replay it/i),
+    ).toBeInTheDocument();
 
     // The "click Record" guidance text — `Record` appears in multiple
     // places (header + empty-state body); at least one must be present.
@@ -237,7 +239,7 @@ describe('V-276 RecordingsView empty state', () => {
     // The persistence footnote (gallery port 2026-06-12: copy corrected
     // to reality — the ndjson disk-persistence phase shipped) — appears
     // in both the page header + empty-state footnote.
-    expect(screen.getAllByText(/Recordings persist on this machine/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Recordings are saved on this computer/i).length).toBeGreaterThan(0);
   });
 });
 
@@ -252,7 +254,7 @@ describe('V-277 ProxiesView empty state', () => {
     // appears in header + empty-state body.
     expect(screen.getAllByText(/SOCKS5/i).length).toBeGreaterThan(0);
     expect(
-      screen.getByText(/protected locally and synced in encrypted form to your account/i),
+      screen.getByText(/protected on this device and synced in encrypted form to your account/i),
     ).toBeInTheDocument();
 
     // 5→10 consistency pass: migrated to the shared EmptyState with an

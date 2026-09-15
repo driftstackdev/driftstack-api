@@ -49,10 +49,10 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
     expect(p).toMatch(/\.regex\(\s*\/\^\[a-z0-9\]\(\?:\[a-z0-9-\]\*\[a-z0-9\]\)\?\$\//);
   });
 
-  it("CRITICAL AccountSlugSchema regex error message is 'Must be 3-32 chars, lowercase a-z + 0-9 + hyphen, with no leading/trailing hyphen.'. The customer-facing error string is what the dashboard renders on rejection.", () => {
+  it("CRITICAL AccountSlugSchema regex error message is 'Use 3 to 32 lowercase letters, numbers or hyphens. It cannot start or end with a hyphen.'. The customer-facing error string is what the dashboard renders on rejection.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/accounts.ts'));
     expect(p).toMatch(
-      /'Must be 3-32 chars, lowercase a-z \+ 0-9 \+ hyphen, with no leading\/trailing hyphen\.',/,
+      /'Use 3 to 32 lowercase letters, numbers or hyphens\. It cannot start or end with a hyphen\.',/,
     );
   });
 
@@ -89,7 +89,7 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
 
   it("CRITICAL apps/customer-dashboard/src/pages/settings.astro slug-input helper text pins the policy — 'Lowercase a-z, 0-9, and hyphen. 3-32 chars.' + the corrected 'unique handle ... saved and returned by the API' wording + 'Leave blank to keep using the account UUID'. The 3-sentence framing covers shape + use + opt-out.", () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/settings.astro'));
-    expect(p).toMatch(/Lowercase a-z, 0-9, and hyphen\. 3-32 chars\./);
+    expect(p).toMatch(/3–32 characters: lowercase letters, numbers and hyphens\./);
     // ⛔ This used to pin "stable handle on support tickets, billing references,
     // and audit entries". That sentence was never true: no audit serialization
     // references the slug, no billing or Stripe path sends it, and there is no
@@ -97,8 +97,10 @@ describe('W874 AccountSlug policy cross-source invariant', () => {
     // SAID, not whether it was true, and kept it in place. Now pins the corrected
     // wording, and `a-timezone-claim-needs-a-timezone-implementation` pairs the
     // surface claims against the code that would have to carry them.
-    expect(p).toMatch(/A unique handle for\s*your account, saved and returned by the API/);
-    expect(p).toMatch(/Leave blank to keep using the account UUID/);
+    expect(p).toMatch(
+      /A short\s*unique name for your account that you can use instead of the\s*account ID\. Leave blank to keep using the ID\./,
+    );
+    expect(p).toMatch(/Leave blank to keep using the ID\./);
   });
 
   it("CRITICAL apps/customer-dashboard/src/pages/settings.astro slug input has font-mono class. The mono font signals 'identifier' visually + makes confusable characters (l/1, O/0) easier to distinguish.", () => {

@@ -79,7 +79,7 @@ describe('(n) N7 — the Save tooltip names the wg0.conf line, not the API field
   it("CRITICAL a malformed peer key names '[Peer] PublicKey' — the line in the file — and never the wire name peer_public_key", () => {
     mount({ ...STORED, wireguard: { ...VALID, peer_public_key: 'bad' } });
     expect(saveTitle()).toContain('[Peer] PublicKey');
-    expect(saveTitle()).toMatch(/44-char base64 curve25519 key/);
+    expect(saveTitle()).toMatch(/valid WireGuard key \(44 characters, base64\)/);
     expect(saveTitle()).not.toMatch(/peer_public_key/);
   });
 
@@ -92,7 +92,7 @@ describe('(n) N7 — the Save tooltip names the wg0.conf line, not the API field
   it("CRITICAL CONTROL — Address and DNS differ from the server's field names only by case, so the server's OWN sentence is passed through verbatim rather than re-worded", () => {
     mount({ ...STORED, wireguard: { ...VALID, address: '10.7.0.2' } });
     expect(saveTitle()).toBe(
-      'address must be a comma-separated list of CIDRs (no newlines) — fix it first',
+      'address must be a comma-separated list of IP ranges, such as 10.7.0.2/32 — fix it first',
     );
   });
 

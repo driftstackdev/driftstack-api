@@ -765,8 +765,7 @@ const ENDPOINT_PLACEHOLDER = {
   message: 'Resolved',
 };
 const FLEET_DOWN = 'The Mac that runs your profiles could not bring this tunnel up.';
-const BUSY =
-  'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.';
+const BUSY = 'Our test service is busy right now. Try again in a minute.';
 /** A VPN entry the fleet measured `ageMs` ago: resolved pre-flight (same
  *  address the mock resolves to, so the carry-over applies) + fleet latency +
  *  an observed exit. */
@@ -888,7 +887,7 @@ describe('(h) — the profile card carries the VPN fleet outcome', () => {
       return el as HTMLElement;
     });
     expect(udp.textContent).toBe('⇢ UDP');
-    expect(udp.getAttribute('title')).toMatch(/not a probed grant/);
+    expect(udp.getAttribute('title')).toMatch(/UDP travels inside the VPN/);
     // …and nothing is left hiding behind a '+N' on that row.
     expect(document.querySelector('[data-component="caps-overflow"]')).toBeNull();
     expect(document.querySelector('[data-udp="true"]')).toBeNull();
@@ -923,7 +922,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
       expect(el).not.toBeNull();
       return el as HTMLElement;
     });
-    expect(pill.textContent).toBe('unresolved');
+    expect(pill.textContent).toBe('address unknown');
     expect(pill.getAttribute('title')).toBe('DNS lookup failed');
     expect(document.body.textContent).not.toMatch(/not measured/);
     expect(document.body.textContent).not.toMatch(/untested/);
@@ -939,7 +938,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
     // The exit line does not promise that Check VPN will bring a tunnel up.
     const exit = document.querySelector('[data-region="exit"]') as HTMLElement;
     expect(exit.textContent).toContain('no exit measured yet');
-    expect(exit.querySelector('[title]')?.getAttribute('title')).toMatch(/did not resolve/);
+    expect(exit.querySelector('[title]')?.getAttribute('title')).toMatch(/could not be found/);
     expect(exit.querySelector('[title*="bring the tunnel up"]')).toBeNull();
     // The write the tile reads.
     expect(storedProbe('vpn1')?.endpoint).toEqual({
@@ -962,7 +961,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
     expect(pill.getAttribute('data-health')).toBe('ok');
     expect(pill.getAttribute('data-latency-vantage')).toBe('fleet');
     expect(pill.getAttribute('title')).toBe(
-      'The tunnel came up and was measured, but no latency was reported.',
+      'The VPN connected and was measured, but no latency was reported.',
     );
     expect(document.body.textContent).not.toMatch(/not measured/);
     expect(document.querySelector('[data-region="caps"]')?.getAttribute('data-caps-mode')).toBe(
@@ -990,7 +989,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
     render(<ProfilesView onGoToSettings={vi.fn()} />);
     const pill = await waitFor(() => {
       const el = document.querySelector('[data-component="health-pill"]');
-      expect(el?.textContent).toBe('unresolved');
+      expect(el?.textContent).toBe('address unknown');
       return el as HTMLElement;
     });
     expect(pill.getAttribute('title')).toBe('DNS lookup failed');
@@ -1001,7 +1000,7 @@ describe('(o) — the card and the list say what the Proxies grid says for the s
       expect(el).not.toBeNull();
       return el as HTMLElement;
     });
-    expect(cell.textContent).toBe('unresolved');
+    expect(cell.textContent).toBe('address unknown');
     expect(cell.getAttribute('title')).toBe('DNS lookup failed');
     expect(document.body.textContent).not.toMatch(/no exit measured yet/);
     expect(document.body.textContent).not.toMatch(/no exit IP/);
@@ -1105,7 +1104,7 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
     const fleetCalls = vi.mocked(AccountProxies.testAccountProxy).mock.calls.length;
     await clickCheckVpn();
     // (o) — the TUNNEL-DOWN banner goes; what stays in the repair row is the
-    // unresolved endpoint's own (data-vpn-failure="false", pill 'unresolved'),
+    // unresolved endpoint's own (data-vpn-failure="false", pill 'address unknown'),
     // never the fleet's sentence.
     await waitFor(() =>
       expect(
@@ -1115,7 +1114,7 @@ describe('(h) findings 3/4/5 — the card reads the failure from the cache, clea
     expect(document.querySelector('[data-component="proxy-vpn-failure"]')).toBeNull();
     expect(screen.queryByText('VPN tunnel down')).toBeNull();
     expect(document.querySelector('[data-component="health-pill"]')?.textContent).toBe(
-      'unresolved',
+      'address unknown',
     );
     expect(storedProbe('vpn1')?.fleetFailureReason).toBeUndefined();
     expect(storedProbe('vpn1')?.exitSupersededAt).toBeUndefined();
@@ -1245,11 +1244,11 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     // two surfaces cannot drift apart behind one renamed constant.
     await waitFor(() =>
       expect(document.querySelector('[data-component="proxy-vpn-notice"]')?.textContent).toBe(
-        'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
+        'The server did not answer, so the VPN was not tested. The address has changed since the last check; no result yet — try again.',
       ),
     );
     expect(ENDPOINT_MOVED_NO_VERDICT_NOTICE).toBe(
-      'The server did not answer, so the tunnel was not tested. Endpoint moved; no result yet — try again.',
+      'The server did not answer, so the VPN was not tested. The address has changed since the last check; no result yet — try again.',
     );
     const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
     expect(notice?.className).toContain('text-ink-muted');
@@ -1301,7 +1300,7 @@ describe('(j) J2 — a card Test the server does not answer leaves the I5 notice
     expect(NO_VERDICT_YET_NOTICE).toBe('The server did not answer; no result yet — try again.');
     const notice = document.querySelector('[data-component="proxy-vpn-notice"]');
     expect(notice?.className).toContain('text-ink-muted');
-    expect(screen.queryByText(/Endpoint moved/)).toBeNull();
+    expect(screen.queryByText(/address has changed/)).toBeNull();
     expect(screen.queryByText(SERVER_DID_NOT_ANSWER_NOTICE)).toBeNull();
     expect(storedProbe('vpn1')?.endpoint).toEqual({
       resolved: true,
@@ -1918,7 +1917,7 @@ describe.each(VPN_SCHEME_CASES)(
         return el as HTMLElement;
       });
       expect(udp.textContent).toBe('⇢ UDP');
-      expect(udp.getAttribute('title')).toMatch(/UDP travels inside the VPN tunnel/);
+      expect(udp.getAttribute('title')).toMatch(/UDP travels inside the VPN\./);
       expect(document.querySelector('[data-udp="true"]')).toBeNull();
       expect(screen.queryByText('UDP ?')).toBeNull();
     });
@@ -1962,7 +1961,7 @@ describe('(V4) the launch refusal names the stored-config cause the server sent'
     // to the wrong place.
     expect(document.body.textContent).not.toContain('The proxy could not be verified');
     expect(document.body.textContent).not.toContain('did not answer');
-    expect(document.body.textContent).toContain('nothing was dialled');
+    expect(document.body.textContent).toContain('saved configuration could not be used');
   });
 
   it('a probe verdict (reason: unreachable) is UNCHANGED — it keeps the fixed copy, because a dial really did happen', () => {

@@ -126,9 +126,9 @@ describe('W770 docs /api/account content parity', () => {
   it("CRITICAL region 3-enum us/eu/apac + DPA Annex 3 cross-reference framing pinned. The 'Informational for v1; routing is governed by [DPA Annex 3]' wording matches W759 dashboard /settings V-298b region-empty-string-as-null encoding.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/stated infrastructure-region preference \(`us` \/ `eu` \/ `apac`\)\./);
+    expect(p).toMatch(/your stated region preference \(`us` \/ `eu` \/ `apac`\)\./);
     expect(p).toMatch(
-      /Informational for v1; routing is governed by \[DPA Annex 3\]\(https:\/\/driftstack\.io\/legal\/dpa\/#annex-3--sub-processors\)/,
+      /Informational only; where your data is processed is governed by \[DPA Annex 3\]\(https:\/\/driftstack\.io\/legal\/dpa\/#annex-3--sub-processors\)/,
     );
     expect(p).not.toContain('https://driftstack.io/legal/dpa#annex-3--sub-processors');
   });
@@ -136,7 +136,7 @@ describe('W770 docs /api/account content parity', () => {
   it('CRITICAL avatar URL/source framing distinguishes removable uploads from the linked-sign-in fallback.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/short-lived \(1h\) presigned R2 upload/);
+    expect(p).toMatch(/a short-lived \(1 hour\) link to your uploaded image/);
     expect(p).toMatch(/`user` for a removable customer upload/);
     expect(p).toMatch(/`idp` for the read-only linked-sign-in fallback/);
     expect(p).toMatch(/Use this field—not the URL host—to decide whether to offer Remove\./);
@@ -194,10 +194,10 @@ describe('W770 docs /api/account content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The image is stored on Cloudflare R2 in the\s*\n?public-readable bucket \(its storage network can replicate outside the\s*\n?EU\)\./,
+      /The image is stored with Cloudflare R2 in a\s*\n?publicly readable bucket \(its storage network can replicate outside the\s*\n?EU\)\./,
     );
-    expect(p, 'the presign must be described as a link, not access control').toMatch(
-      /a stable\s*\n?time-limited link rather than an access control/,
+    expect(p, 'the link must be described as a link, not access control').toMatch(
+      /a time-limited read link, which is not an\s*\n?access control/,
     );
     expect(p, 'the privacy claim must not return').not.toMatch(/stored privately on Cloudflare R2/);
     expect(p).not.toMatch(/EU-jurisdiction/);
@@ -209,7 +209,9 @@ describe('W770 docs /api/account content parity', () => {
     expect(p).toMatch(
       /clears the avatar pointer on your\s*\n?account, so the image stops being served from `\/v1\/account\/me`\./,
     );
-    expect(p).toMatch(/there is no sweeper collecting\s*\n?orphaned keys today/);
+    expect(p).toMatch(
+      /The\s*\n?image file itself is not deleted, so a previously shared link keeps\s*\n?working\. Do not treat the delete as an erasure of the image\./,
+    );
     expect(p, 'the phantom garbage collector must not return').not.toMatch(
       /a sweeper job collects orphaned keys/,
     );
@@ -225,7 +227,7 @@ describe('W770 docs /api/account content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /IP addresses are deliberately omitted; user-agents are reduced to\s*\n?OS \+ browser bucket per the anonymity\./,
+      /IP addresses are deliberately omitted; user-agents are reduced to\s*\n?OS \+ browser\./,
     );
   });
 
@@ -241,7 +243,7 @@ describe('W770 docs /api/account content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`source` is `tier_default` for unbounded tier-derived caps or\s*\n?`override` when staff has applied a per-account adjustment;\s*\n?`override_expires_at` is non-null in the override case\./,
+      /`source` is `tier_default` for your tier's normal caps or\s*\n?`override` when support has applied a per-account adjustment;\s*\n?`override_expires_at` is non-null in the override case\./,
     );
   });
 
@@ -249,7 +251,7 @@ describe('W770 docs /api/account content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Critical emails \(verification, password-reset, billing-failure\)\s*\n?are not opt-outable —\s*\n?they're absent from the `OptOutableEmailEvent` enum on purpose\./,
+      /Critical emails \(verification, password reset, billing failure\) are\s*\n?always sent and cannot be turned off\./,
     );
     expect(p).not.toMatch(/subscription-cancellation|support-ack/);
   });

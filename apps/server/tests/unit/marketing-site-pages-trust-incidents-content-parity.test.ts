@@ -73,13 +73,13 @@ describe('W503.C apps/marketing-site/src/pages/trust/incidents.astro content par
 
   it("Sub-processor incident framing pinned: 'When an upstream sub-processor (Hetzner / Neon / Upstash / Cloudflare / Postmark / Stripe / Sentry) has an incident affecting our customers, we summarise their post-mortem and link the upstream report.' — pinned so the 7-sub-processor scope (Hetzner/Neon/Upstash/Cloudflare/Postmark/Stripe/Sentry) + the summarise-and-link commitment survive (drift to dropping a sub-processor from the list would leave its incidents unhandled by the published policy)", () => {
     expect(body).toMatch(
-      /When an upstream sub-processor \(Hetzner \/ Neon \/ Upstash \/\s*Cloudflare \/ Postmark \/ Stripe \/ Sentry\) has an incident\s*affecting our customers, we summarise their post-mortem and\s*link the upstream report\./,
+      /When one of our sub-processors \(Hetzner \/ Neon \/ Upstash \/\s*Cloudflare \/ Postmark \/ Stripe \/ Sentry\) has an incident\s*affecting our customers, we summarise their post-mortem and\s*link to their report\./,
     );
   });
 
   it("Maintenance windows framing pinned: 'Pre-announced windows for migrations, schema changes, or certificate rotations. Notice at least 72 hours in advance' — pinned so the 72-hour-advance-notice commitment + the 3-state maintenance scope (migrations/schema-changes/cert-rotations) survive (drift to dropping the 72h window would let maintenance land without customer warning; drift to dropping cert-rotations would orphan TLS-renewal windows from the policy)", () => {
     expect(body).toMatch(
-      /Pre-announced windows for planned work — database upgrades\s+or restructuring \(migrations, schema changes\) and\s+security-certificate renewals \(certificate rotations\)\.\s+Notice at least 72 hours in advance/, // S20c 2026-07-06: same 3-state scope + 72h notice, plain words lead
+      /Pre-announced windows for planned work, such as database\s+upgrades or security-certificate renewals\.\s+Notice at least 72 hours in advance/, // 2026-09-15 plain-language pass: database work + certificate renewals + 72h notice survive; the engineering parentheticals are gone
     );
   });
 

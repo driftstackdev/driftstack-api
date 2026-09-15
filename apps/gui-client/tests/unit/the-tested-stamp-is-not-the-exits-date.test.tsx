@@ -151,8 +151,8 @@ describe('the exit address carries its own date, which the tested stamp is not',
     expect(el?.getAttribute('data-exit-age')).toBe('dated');
     expect(el?.textContent ?? '').toMatch(/^seen \d+ d ago$/);
     // And it names the confusion rather than leaving the reader to infer it.
-    expect(el?.getAttribute('title') ?? '').toMatch(/Tested time above/i);
-    expect(el?.getAttribute('title') ?? '').toMatch(/without re-reading the exit/i);
+    expect(el?.getAttribute('title') ?? '').toMatch(/Tested time/i);
+    expect(el?.getAttribute('title') ?? '').toMatch(/not re-read on every check/i);
     // VACUITY — the row's own "Tested" stamp really is recent, so the arm is
     // about the two dates DISAGREEING and not about an old card.
     const checked = within(sheet).getByText(new Date(NOW - 60_000).toLocaleString(), {

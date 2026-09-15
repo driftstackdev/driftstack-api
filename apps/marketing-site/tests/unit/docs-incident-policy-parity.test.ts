@@ -103,7 +103,9 @@ describe('W344.A /docs/incident-policy parity', () => {
     expect(schemaEvents.has('incident.created')).toBe(false);
     expect(schemaEvents.has('incident.updated')).toBe(false);
     expect(schemaEvents.has('incident.resolved')).toBe(false);
-    expect(body).toMatch(/incident\.created[\s\S]{0,200}admin-audit/);
+    expect(body).toMatch(
+      /incident\.created[\s\S]{0,200}internal event names, not webhook event types you can\s*subscribe to/,
+    );
   });
 
   it('cites SLA policy + status-subscriptions docs as the authoritative cross-links', () => {

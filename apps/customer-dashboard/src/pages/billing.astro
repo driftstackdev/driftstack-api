@@ -127,7 +127,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       <p class="mt-2 text-xs text-tk-ink-3">
         Upgrades take effect immediately and prorate your remaining period.
         Downgrades take effect at the end of the current period — you keep
-        your current cap until renewal.
+        your current limits until renewal.
       </p>
     </section>
 
@@ -146,8 +146,8 @@ const apiBaseUrl = resolveApiBaseUrl();
           <p class="font-mono text-xs uppercase tracking-widest text-tk-ink-3">Invoices</p>
           <h2 class="mt-2 text-xl font-semibold tracking-tight text-tk-ink">Recent invoices</h2>
           <p class="mt-3 text-sm text-tk-ink-3">
-            Invoice history and permanent receipt URLs are available in the
-            Stripe Customer Portal. Open it above after live billing loads.
+            Your invoices and receipts are in the Stripe customer portal —
+            open it with the Manage in Stripe portal button above.
           </p>
         </div>
       </div>
@@ -185,8 +185,8 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <!-- Tax + receipts hint -->
     <p class="mt-8 text-xs text-tk-ink-3">
-      All prices in USD. VAT/BTW added per region per applicable EU rules.
-      Stripe handles tax computation + invoicing per ADR-002.
+      All prices in USD. VAT is added where required by EU rules. Tax and
+      invoicing are handled by Stripe.
     </p>
   </div>
 
@@ -481,7 +481,7 @@ const apiBaseUrl = resolveApiBaseUrl();
               setText('sub-tier', 'No active subscription');
               setText(
                 'sub-summary',
-                'Upgrade to a paid tier to unlock concurrent caps + archetype access.',
+                'Upgrade to a paid plan for higher limits and more features.',
               );
               setStatusBadge('no subscription', 'no_subscription');
               if (planCta) {
@@ -502,12 +502,12 @@ const apiBaseUrl = resolveApiBaseUrl();
           // message and an actionable support path instead.
           if (err && err.status === 503) {
             showBanner(
-              'Billing is unavailable for this deployment. Your account access is unaffected. ' +
-                'Contact support@driftstack.dev for plan or invoice help.',
+              "Billing isn't available right now. Your account still works as normal. " +
+                'Email support@driftstack.dev for help with plans or invoices.',
             );
             renderBillingUnavailable(
               'Billing unavailable',
-              'There is no self-service billing portal for this deployment. Contact support for plan changes or invoices.',
+              "Self-service billing isn't available. Contact support for plan changes or invoices.",
               'unavailable',
             );
           } else {

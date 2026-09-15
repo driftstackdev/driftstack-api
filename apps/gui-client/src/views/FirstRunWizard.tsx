@@ -284,28 +284,28 @@ function WelcomeStep({ onNext }: { onNext: () => void }): JSX.Element {
     <section>
       <h1 className="text-2xl font-semibold text-ink-primary">Welcome to Driftstack</h1>
       <p className="mt-3 text-sm text-ink-secondary">
-        Real iPhone Safari sessions, on demand. Spin them up, drive them with the SDK or this
-        desktop control panel, save profile state across runs, capture recordings.
+        Real iPhone Safari sessions, on demand. Start them from this app or the SDK, keep logins
+        between runs, and record what happens.
       </p>
       <ul className="mt-4 space-y-2 text-sm text-ink-secondary">
         <li className="flex items-start gap-2">
           <span className="mt-0.5 text-accent">•</span>
           <span>
-            <strong className="text-ink-primary">Cloud sessions</strong> run on Driftstack's managed
-            iPhone fleet. No hardware, no setup — just a key and you're live.
+            <strong className="text-ink-primary">Cloud sessions</strong> run on real iPhones hosted
+            by Driftstack. No hardware, no setup — just a key and you're live.
           </span>
         </li>
         <li className="flex items-start gap-2">
           <span className="mt-0.5 text-accent">•</span>
           <span>
             <strong className="text-ink-primary">Self-hosted</strong> connects to a Driftstack
-            server you operate yourself. For advanced teams running their own Mac fleet.
+            server you operate yourself. For advanced teams that want to host Driftstack themselves.
           </span>
         </li>
       </ul>
       <p className="mt-4 text-sm text-ink-secondary">
-        Setup takes about a minute: pick deployment, paste your API key, optionally create a first
-        profile.
+        Setup takes about a minute: choose Cloud or Self-hosted, sign in, and optionally create a
+        first profile.
       </p>
       <div className="mt-6 flex justify-end">
         <button type="button" className="btn-primary-bright" onClick={onNext}>
@@ -336,7 +336,7 @@ function ModeStep({
       <h2 className="text-xl font-semibold text-ink-primary">Cloud or self-hosted?</h2>
       <p className="mt-2 text-sm text-ink-secondary">
         Almost everyone should choose <strong>Cloud</strong>. Self-hosted is for advanced teams
-        running their own Mac fleet — much higher cost and operational overhead.
+        running their own servers — much higher cost and effort.
       </p>
 
       <div className="mt-6 flex flex-col gap-3">
@@ -362,9 +362,8 @@ function ModeStep({
               </span>
             </div>
             <div className="mt-1 text-xs text-ink-secondary">
-              <strong>Free</strong> to start, or <strong>$79/mo</strong> Personal. Driftstack runs
-              the fleet, handles updates, and bills via Stripe. Connects to{' '}
-              <span className="mono">api.driftstack.dev</span>.
+              <strong>Free</strong> to start, or <strong>$79/mo</strong> Personal. Driftstack hosts
+              everything for you, including updates and billing.
             </div>
             <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
               <li>• No hardware to buy or maintain</li>
@@ -396,23 +395,21 @@ function ModeStep({
               </span>
             </div>
             <div className="mt-1 text-xs text-ink-secondary">
-              License from <strong>$1,000/mo</strong> on top of the Mac hardware you provide and
-              operate yourself.{' '}
+              License from <strong>$1,000/mo</strong>, on top of the Mac hardware you provide and
+              run yourself.{' '}
               <strong className="text-ink-primary">
-                This GUI is just a control panel — it does NOT run the server.
+                This app is only a control panel — it does not run the server.
               </strong>{' '}
-              Pick this only if you already run a Driftstack server somewhere (this machine or
-              elsewhere on your network); the URL below points the GUI at it.
+              Choose this only if you already run a Driftstack server; enter its address below.
             </div>
             <ul className="mt-2 space-y-0.5 text-[11px] text-ink-muted">
               <li>
-                • Local dev: clone driftstackdev/driftstack-api, then{' '}
-                <span className="mono">npm install && cd apps/server && npm run dev</span> (defaults
-                to <span className="mono">http://localhost:3000</span>).
+                • Enter your server's address below. If the server runs on this computer, the
+                address already filled in usually works.
               </li>
               <li>
-                • Production: bring your own Mac mini / Studio fleet + Postgres + Redis; operate
-                updates yourself.
+                • Production: you provide and run your own Mac hardware plus a PostgreSQL database
+                and Redis; you manage updates yourself.
               </li>
               <li>
                 • Pricing details: <span className="mono">driftstack.io/pricing</span>
@@ -518,7 +515,7 @@ export function ApiKeyStep({
       <p className="mt-2 text-sm text-ink-secondary">
         {mode === 'cloud'
           ? 'Open the dashboard in your browser to authorize this device. We never see your password.'
-          : 'Open your self-hosted dashboard to authorize this device. Falls back to API-key paste below if your dashboard isn’t reachable from this machine.'}
+          : 'Open your self-hosted dashboard to authorize this device. If you can’t reach it from here, paste an API key instead.'}
       </p>
 
       {path === 'browser' && (
@@ -533,8 +530,8 @@ export function ApiKeyStep({
                 Sign in with browser
               </button>
               <p className="text-2xs text-ink-muted">
-                Opens <span className="mono">{baseUrl}</span> in your browser. After you confirm, we
-                mint an API key bound to your account and store it in the OS keychain.
+                Opens <span className="mono">{baseUrl}</span> in your browser. After you confirm, an
+                API key is created for your account and saved securely on this computer.
               </p>
             </>
           )}
@@ -685,10 +682,9 @@ export function ApiKeyStep({
                     Find your API key at <span className="mono">app.driftstack.io/api-keys</span>.
                   </>
                 ) : (
-                  <>Mint a key against your self-hosted server.</>
+                  <>Create a key in your own server's dashboard.</>
                 )}{' '}
-                Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux
-                Secret Service).
+                Stored securely on this computer.
               </span>
             </label>
           </form>
@@ -720,7 +716,7 @@ export function ApiKeyStep({
             className="btn-primary"
             disabled={validating || apiKey.trim().length === 0}
           >
-            {validating ? 'Validating…' : 'Validate + continue'}
+            {validating ? 'Checking…' : 'Check key and continue'}
           </button>
         )}
       </div>
@@ -749,9 +745,9 @@ const ARCHETYPE_LABELS: Record<string, string> = {
 };
 const ARCHETYPE_DESCRIPTIONS: Record<string, string> = {
   iphone17_ios18_7_safari26_4:
-    'The default launch archetype — verified bit-for-bit against a real iPhone 17. Choose another verified device from the live catalog when its model or Safari version better matches your traffic.',
+    'The default device — verified against a real iPhone 17. Choose another device when its model or Safari version better matches your visitors.',
   iphone17_ios18_7_safari26_5:
-    'iPhone 17 on the Safari 26.5 point release — verified bit-for-bit against a real device. Pick this to match visitors on the latest Safari.',
+    'iPhone 17 with Safari 26.5 — verified against a real device. Pick this to match visitors on the latest Safari.',
 };
 const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY.filter((a) =>
   SELECTABLE_STATUSES.has(a.status),
@@ -759,8 +755,7 @@ const PROFILE_ARCHETYPE_OPTIONS = ARCHETYPE_REGISTRY.filter((a) =>
   value: a.id,
   label: ARCHETYPE_LABELS[a.id] ?? a.displayLabel,
   description:
-    ARCHETYPE_DESCRIPTIONS[a.id] ??
-    `${a.displayLabel} — verified bit-for-bit against a real device.`,
+    ARCHETYPE_DESCRIPTIONS[a.id] ?? `${a.displayLabel} — verified against a real device.`,
 }));
 
 type ProfileArchetype = (typeof PROFILE_ARCHETYPE_OPTIONS)[number]['value'];
@@ -831,7 +826,7 @@ export function ProfileStep({
 
   async function handleCreate(): Promise<void> {
     if (!client) {
-      setError('No client configured.');
+      setError("Your account isn't connected yet. Skip this step and sign in from Settings.");
       return;
     }
     const trimmed = name.trim();
@@ -865,9 +860,8 @@ export function ProfileStep({
     <section>
       <h2 className="text-xl font-semibold text-ink-primary">Create your first profile</h2>
       <p className="mt-2 text-sm text-ink-secondary">
-        Profiles are persistent identity slots — cookies, localStorage, and other browser state
-        carry across sessions tied to the same profile. You can skip this and create profiles later;
-        the customer dashboard + GUI both support it.
+        A profile keeps a device's logins and cookies between sessions. You can skip this and create
+        profiles later from Profiles or the web dashboard.
       </p>
 
       {/* Wrap the name field in a form so Enter submits (guarded identically to
@@ -898,7 +892,7 @@ export function ProfileStep({
       </form>
 
       <fieldset className="mt-4">
-        <legend className="section-label">Archetype</legend>
+        <legend className="section-label">Device</legend>
         <div className="mt-2 space-y-2">
           {PROFILE_ARCHETYPE_OPTIONS.map((opt) => (
             <label
@@ -936,7 +930,7 @@ export function ProfileStep({
           ))}
         </div>
         <p className="mt-2 text-2xs text-ink-muted">
-          Additional archetypes can be added later from the Profiles view.
+          You can pick a different device for each new profile you create in the Profiles view.
         </p>
       </fieldset>
 
@@ -1030,9 +1024,9 @@ function friendlyError(err: unknown, mode?: 'cloud' | 'self-hosted', baseUrl?: s
       const where = baseUrl
         ? `your own server's dashboard (${baseUrl})`
         : "your own server's dashboard";
-      return `Authentication failed (401). In self-hosted mode the API key must be created on ${where} — a key from app.driftstack.io won't authenticate against your own server.`;
+      return `This API key wasn't accepted. For a self-hosted server the key must be created in ${where} — a key from app.driftstack.io won't work here.`;
     }
-    return 'Authentication failed (401). Double-check the key, or create a new one at app.driftstack.io/api-keys.';
+    return "This API key wasn't accepted. Double-check it, or create a new one at app.driftstack.io/api-keys.";
   }
   return humanizeError(err, "Couldn't complete setup. Check the details and try again.");
 }

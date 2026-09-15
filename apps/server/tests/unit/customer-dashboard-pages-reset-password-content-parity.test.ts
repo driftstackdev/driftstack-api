@@ -40,7 +40,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
     );
   });
 
-  it("Missing-token bail: URLSearchParams + params.get('token') → if !token: form.add('hidden') + missing.remove('hidden') + early return — pinned so the form doesn't allow submission without a token (drift to leaving the form visible would let customers fill in a password and get a confusing server error instead of the clear 'No reset token in URL' explanation)", () => {
+  it("Missing-token bail: URLSearchParams + params.get('token') → if !token: form.add('hidden') + missing.remove('hidden') + early return — pinned so the form doesn't allow submission without a token (drift to leaving the form visible would let customers fill in a password and get a confusing server error instead of the clear 'This page needs to be opened from the link in your reset email' explanation)", () => {
     expect(body).toMatch(
       /const params = new URLSearchParams\(window\.location\.search\);\s*const token = params\.get\('token'\);/,
     );
@@ -54,7 +54,7 @@ describe('W492.A apps/customer-dashboard/src/pages/reset-password.astro content 
     // (bg-rose-400/10 over the auth-card surface), where accent-text measures
     // 4.42:1 — so it reads the ink underline tone instead (hover accent-text).
     expect(body).toMatch(
-      /No reset token in URL\. Open the page from the link in your reset email, or\s*<a\s*href="\/forgot-password\/"\s*class="font-medium text-tk-ink underline[^"]*"\s*>request a new one<\/a\s*>\./,
+      /This page needs to be opened from the link in your reset email\. If that link doesn't work,\s*<a\s*href="\/forgot-password\/"\s*class="font-medium text-tk-ink underline[^"]*"\s*>request a new one<\/a\s*>\./,
     );
   });
 

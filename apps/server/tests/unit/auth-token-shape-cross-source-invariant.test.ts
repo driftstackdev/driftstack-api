@@ -47,9 +47,11 @@ describe('W886 AuthTokenSchema cross-source invariant', () => {
     expect(p).toMatch(/\.regex\(\/\^\[A-Za-z0-9_-\]\+\$\/\)/);
   });
 
-  it("CRITICAL AuthTokenSchema describe text pins 'URL-safe single-use auth token; sha256-hashed at rest'. The describe is the OpenAPI-emitted documentation + server-side storage-contract pin (sha256-only).", () => {
+  it("CRITICAL AuthTokenSchema describe text pins 'Single-use token from the link in your verification, sign-in, or password-reset email.' The describe is the OpenAPI-emitted documentation; the sha256-at-rest storage contract is pinned in the comment above the schema.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/\.describe\('URL-safe single-use auth token; sha256-hashed at rest'\);/);
+    expect(p).toMatch(
+      /\.describe\(\s*'Single-use token from the link in your verification, sign-in, or password-reset email\.',?\s*\);/,
+    );
   });
 
   it("CRITICAL AuthTokenSchema inline comment pins the 3 source-flows — 'Opaque single-use token returned by signup-verify / magic-link request / password-reset request as a URL-safe string. Stored sha256-hashed.' The 3-flow inventory + URL-safe + sha256 framing are the policy documentation.", () => {
@@ -120,7 +122,7 @@ describe('W886 AuthTokenSchema cross-source invariant', () => {
   it("CRITICAL the 'sha256-hashed at rest' framing applies to AuthTokenSchema ONLY (NOT session-token z.string()). Session tokens are stored as scrypt-kdf rows on the web_sessions table — a different storage contract.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
     // The sha256-at-rest describe is on AuthTokenSchema only.
-    expect(p).toMatch(/AuthTokenSchema = z[\s\S]+?sha256-hashed at rest'/);
+    expect(p).toMatch(/Stored sha256-hashed\.\s*\n\s*export const AuthTokenSchema = z/);
     // Session-token inline shapes do NOT carry the sha256 framing — they're
     // declared minimally (z.string().min(32).max(256)).
     expect(p).toMatch(

@@ -50,20 +50,22 @@ describe('W776 docs /sdk/error-handling content parity', () => {
     expect(p).not.toMatch(/\(RFC 7807\)/);
   });
 
-  it("CRITICAL PROBLEM_TYPE_TO_ERROR cross-SDK source-of-truth framing pinned. The 'type names + URI mapping are kept in sync via a single source of truth (PROBLEM_TYPE_TO_ERROR per language, generated against the server\\'s OpenAPI 3.1 spec)' wording explains the cross-SDK consistency mechanism.", () => {
+  it("CRITICAL cross-SDK consistency framing pinned. The 'the same problem-type URIs map to matching errors in every SDK. The table below lists the class name in each language (a couple of names differ per language — see the naming note)' wording states the customer-facing promise (2026-09-15 plain words: the PROBLEM_TYPE_TO_ERROR constant + generation pipeline are how we build it).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The hierarchy is consistent across TypeScript \/ Python \/ Go — the\s*\n?type names \+ URI mapping are kept in sync via a single source of\s*\n?truth \(`PROBLEM_TYPE_TO_ERROR` per language, generated against the\s*\n?server's OpenAPI 3\.1 spec\)\./,
+      /The hierarchy is consistent across TypeScript \/ Python \/ Go — the\s*\n?same problem-type URIs map to matching errors in every SDK\. The\s*\n?table below lists the class name in each language \(a couple of\s*\n?names differ per language — see the naming note\)\./,
     );
+    expect(p).not.toMatch(/PROBLEM_TYPE_TO_ERROR/);
   });
 
-  it("CRITICAL dispatch-on-slug-not-status framing pinned. The 'Server problem-type URIs live under the stable https://errors.driftstack.dev/<slug> host and are pinned by PROBLEM_TYPES in @driftstack/api-types. Dispatch on the slug, not on HTTP status' wording is the load-bearing API-versioning-aware error-dispatch contract.", () => {
+  it("CRITICAL dispatch-on-slug-not-status framing pinned. The 'Server problem-type URIs live under the stable https://errors.driftstack.dev/<slug> host. Dispatch on the slug, not on HTTP status' wording is the load-bearing API-versioning-aware error-dispatch contract (2026-09-15 plain words: the PROBLEM_TYPES constant name is internal).", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Server problem-type URIs live under the stable\s*\n?`https:\/\/errors\.driftstack\.dev\/<slug>` host and are pinned by\s*\n?`PROBLEM_TYPES` in `@driftstack\/api-types`\. Dispatch on the slug,\s*\n?not on HTTP status\./,
+      /Server problem-type URIs live under the stable\s*\n?`https:\/\/errors\.driftstack\.dev\/<slug>` host\. Dispatch on the slug,\s*\n?not on HTTP status\./,
     );
+    expect(p).not.toMatch(/pinned by\s*\n?`PROBLEM_TYPES`/);
   });
 
   it('CRITICAL 15-row error-hierarchy table pinned. Drift to dropping any row would let SDK consumers fail to handle that error class. The 15-class catalog covers auth/forbidden/validation/not-found/conflict/rate-limit/concurrency/tier-limit/legal-acceptance/driver-not-integrated/session-timeout/session-destroyed/transport.', () => {

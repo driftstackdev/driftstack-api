@@ -66,11 +66,11 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).toMatch(/\*\*PATCH\*\* bump on backwards-compatible bug fixes/);
   });
 
-  it("CRITICAL server-not-SemVer-versioned framing pinned. The 'The control plane (apps/server) is NOT versioned — its API is versioned via the /v1/ URL prefix; breaking changes there bump to /v2/. SDKs follow whichever API version they target' wording matches W772 /api/versioning distinct-from-SDK-versioning contract.", () => {
+  it("CRITICAL server-not-SemVer-versioned framing pinned. The 'The Driftstack server itself is not versioned — its API is versioned via the /v1/ URL prefix; breaking changes there bump to /v2/. SDKs follow whichever API version they target' wording matches W772 /api/versioning distinct-from-SDK-versioning contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The control plane \(`apps\/server`\) is NOT versioned — its API is\s*\n?versioned via the `\/v1\/` URL prefix; breaking changes there bump to\s*\n?`\/v2\/`\. SDKs follow whichever API version they target\./,
+      /The Driftstack server itself is not versioned — its API is\s*\n?versioned via the `\/v1\/` URL prefix; breaking changes there bump to\s*\n?`\/v2\/`\. SDKs follow whichever API version they target\./,
     );
     expect(p).toMatch(/Today every\s*\n?SDK targets `\/v1\/`/);
   });
@@ -186,42 +186,33 @@ describe('W777 docs /sdk/versioning content parity', () => {
     expect(p).not.toMatch(/`driftstack~=0\.1\.5`/);
   });
 
-  it('CRITICAL production-pin-exact-versions framing pinned. The \'Production deployments SHOULD pin exact versions ("@driftstack/sdk": "0.1.5") and bump deliberately. Driftstack\\\'s own integration tests pin exact versions via lockfiles\' wording matches dependency-stability best-practice.', () => {
+  it('CRITICAL production-pin-exact-versions framing pinned. The \'Production deployments SHOULD pin exact versions ("@driftstack/sdk": "0.1.5") and bump deliberately\' wording matches dependency-stability best-practice.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Production deployments SHOULD pin exact versions\s*\n?\(`"@driftstack\/sdk": "0\.1\.5"`\) and bump deliberately\. Driftstack's\s*\n?own integration tests pin exact versions via lockfiles\./,
+      /Production deployments SHOULD pin exact versions\s*\n?\(`"@driftstack\/sdk": "0\.1\.5"`\) and bump deliberately\./,
     );
   });
 
-  it('CRITICAL 5-step release process pinned — push-to-main + CHANGELOG + version-bump-separate-commit + npm/twine/go-tag publish + GitHub release. The numbered sequence is the canonical operator playbook.', () => {
+  it('CRITICAL Releases section pinned — every SDK release ships a CHANGELOG entry and a GitHub release post with a migration guide when breaking. The internal publish playbook (push-to-main, npm/twine/go-tag commands, release-approval gate) was removed from the customer page and must not return.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/1\. Land changes on `main` per the standard push-to-main pattern\./);
-    expect(p).toMatch(/2\. CHANGELOG\.md entry added\/updated in the same commit as the change\./);
+    expect(p).toMatch(/^## Releases$/m);
     expect(p).toMatch(
-      /3\. Version bump in package metadata \(`package\.json` \/\s*\n?\s+`pyproject\.toml` \/ Go module tag\) is a SEPARATE commit, named\s*\n?\s+`<sdk> v<version>`\./,
+      /Each SDK release ships with a CHANGELOG entry and a GitHub release\s*\n?post that includes a migration guide when the release is breaking\./,
     );
-    expect(p).toMatch(/TS: `npm publish` from `packages\/sdk-typescript\/`\./);
-    expect(p).toMatch(/Python: `python -m build && python -m twine upload`/);
-    expect(p).toMatch(/Go: tag the commit with `packages\/sdk-go\/v<version>`/);
-    expect(p).toMatch(/Go module\s*\n?\s+sub-directory tagging/);
-    expect(p).toMatch(/5\. GitHub release post with the CHANGELOG-entry copy \+ migration/);
+    expect(p).not.toMatch(/push-to-main|npm publish|twine upload|sub-directory tagging/);
+    expect(p).not.toMatch(
+      /release approval|founder approval|customer base|publishes will run autonomously|Pre-launch/,
+    );
   });
 
-  it("F-5 (Issue 5) founder-approval framing — current-scale framing instead of launch-window. The 'Publish steps are gated on founder approval at the current scale. Once the customer base + release cadence justify it, MINOR + PATCH publishes will run autonomously while MAJOR publishes continue to require explicit founder approval.' wording is the canonical release-gating policy. (Refresh of the prior 'Pre-launch / Post-launch' framing stripped per Issue 5.)", () => {
-    const p = read(PAGE);
-
-    expect(p).toMatch(/Publish steps require Driftstack release approval\./);
-    expect(p).not.toMatch(/customer base|publishes will run autonomously|Pre-launch/);
-  });
-
-  it('CRITICAL cross-reference set pinned — CHANGELOG.md + D-021 decision + packages/api-types Zod schemas. The 3-link footer threads the load-bearing source-of-truth pointers.', () => {
+  it('CRITICAL cross-reference footer pinned — CHANGELOG.md only. The internal decision-log (D-021) and monorepo-path (packages/api-types Zod) pointers were removed from the customer page and must not return.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/Each SDK's `CHANGELOG\.md` for the running history\./);
-    expect(p).toMatch(/`docs\/decisions\.md` D-021 for the original SDK package decision/);
-    expect(p).toMatch(/`packages\/api-types\/` for the Zod schemas that drive/);
+    expect(p).not.toMatch(/docs\/decisions\.md|D-021/);
+    expect(p).not.toMatch(/`packages\/api-types\/` for the Zod schemas/);
   });
 
   it('CRITICAL out-of-scope 3-item set pinned — LTS branches + public deprecation timeline doc + telemetry on deprecated-call usage. Drift to claiming any of these would over-promise to customers.', () => {

@@ -1,12 +1,12 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Profile management
-description: Persistent profiles in Driftstack — create, list, reuse across sessions, and delete. How profiles relate to archetypes and tier limits.
+description: Persistent profiles in Driftstack — create, list, reuse across sessions, and delete. Which device each profile uses, and how many profiles your tier allows.
 ---
 
 # Profile management
 
-A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when a session binds to a profile.
+A **profile** is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the browser fingerprint are kept between sessions when a session uses a profile.
 
 If a session doesn't bind a profile, it starts ephemeral — fresh cookies, fresh storage, no continuity. That's the right choice for one-shot fetches. For workflows that need login state, multi-step flows, or returning-visitor signals, bind a profile — pass `profile_id` on `sessions.create()`, or call `profiles.launch()` (see "Bind a session to a profile" below).
 
@@ -27,11 +27,11 @@ Each tier has a profile cap, enforced at `POST /v1/profiles` creation time. Exce
 
 Pricing source of truth: [driftstack.io/pricing](https://driftstack.io/pricing/).
 
-Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps + archetype counts at the fleet level instead.
+Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype (device profile) counts across the whole deployment instead.
 
 ## Create a profile
 
-`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to your tier's device: the locked launch archetype (`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18.7 with Safari 26.4) on tiers entitled to every device, the newest iPhone 13 archetype on the free tier. Pin to an older archetype only if you have a behavioural-stability reason.
+`POST /v1/profiles` with at minimum a `name`. The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` (iPhone 17 on iOS 18.7 with Safari 26.4) on tiers that include every device, or the newest iPhone 13 archetype on the free tier. Choose an older archetype only if your workflow specifically depends on that device's behaviour.
 
 **TypeScript:**
 
@@ -98,7 +98,7 @@ const profile = await client.profiles.get('prof_01HV...');
 
 ## Bind a session to a profile
 
-`POST /v1/sessions` accepts an optional `profile_id` field as of 2026-05-20 (commit `fa8cb83a`). When supplied, the server inherits the profile's `archetype` as the default, stamps `{profile_id, profile_name}` into the session's `metadata`, and bumps the profile's `last_used_at` fire-and-forget:
+`POST /v1/sessions` accepts an optional `profile_id` field. When supplied, the session's `archetype` defaults to the profile's (so you can leave it out), `{profile_id, profile_name}` is recorded in the session's `metadata`, and the profile's `last_used_at` is updated:
 
 ```ts
 const session = await client.sessions.create({
@@ -122,9 +122,9 @@ const session = await client.profiles.launch('prof_01HV...', {
 });
 ```
 
-Returns the freshly-minted session (same shape as `sessions.create`). The dashboard `/profiles` page exposes a per-row **Launch** button that calls this endpoint and surfaces the returned `session.id`; from there the customer drives the session via the desktop GUI client's Live session view or the standard `navigate`/`interact`/`wait`/`capture`/`destroy` verbs from any SDK.
+Returns the freshly-minted session (same shape as `sessions.create`). The dashboard `/profiles` page exposes a per-row **Launch** button that calls this endpoint and surfaces the returned `session.id`; from there you drive the session via the desktop app's Live session view or the standard `navigate`/`interact`/`wait`/`capture`/`destroy` verbs from any SDK.
 
-`profiles.launch()` and `sessions.create()` intentionally have no per-session egress field. For customer-controlled egress, use `client.agentSessions.create({ proxy_id })` with one of your saved account proxies; the assigned browser runtime applies that saved proxy.
+`profiles.launch()` and `sessions.create()` intentionally have no per-session proxy field. To send a session's traffic through one of your saved proxies or VPNs, use `client.agentSessions.create({ proxy_id })`; the session uses that saved proxy.
 
 Profile-bound sessions inherit the profile's storage state on launch and write new state back on clean destroy. (There is no idle timeout on any tier — the only auto-destroy is the free tier's 20-minute duration cap.) Without a `profile_id`, sessions start ephemeral.
 
@@ -140,7 +140,7 @@ Idempotent — there's no `force` flag, and re-deleting an already-trashed profi
 
 ## Clone a profile
 
-`POST /v1/profiles/:id/clone`. Duplicates the profile metadata into a new row carrying the source's `archetype` + `description`. Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype.
+`POST /v1/profiles/:id/clone`. Creates a new profile with the same `archetype` and `description` as the source. Stored browser state is NOT copied — the new profile starts empty.
 
 ```ts
 // Auto-derived "(copy)" / "(copy 2)" / ... naming.
@@ -193,7 +193,7 @@ Tier-cap + name-conflict apply the same way as create. The audit-log entry on th
 
 Snapshots have no automatic lifecycle. Capture as many as you want; they sit until you delete them. Deleting the parent profile keeps the snapshot — the captured `parent_archetype`, `parent_name`, and `description` remain restorable. Because customer `DELETE` is a soft delete into the 30-day recycle bin, `parent_profile_id` stays populated while the parent sits in the bin and only becomes `null` at hard purge, so a non-null value is not proof the parent is still reachable.
 
-**A snapshot does NOT preserve browser state.** `state_blob` is a forward-compatibility slot that is always written empty in v1, and restore never reads it, so a restored profile starts with no cookies, no `localStorage`, no `IndexedDB` and a freshly minted encryption key. Do not treat a snapshot as a backup of a logged-in session, and do not delete a parent profile expecting its storage to survive in a snapshot — that data is not recoverable from one. What a snapshot restores is the profile's identity and metadata, not its contents. (Customer `DELETE` on a profile is a soft-delete into a 30-day recycle bin; `parent_profile_id` is nulled at hard purge.)
+**A snapshot does NOT preserve browser state.** Snapshots do not store browser state today, so a restored profile starts with no cookies, no `localStorage`, no `IndexedDB` and a fresh encryption key. Do not treat a snapshot as a backup of a logged-in session, and do not delete a parent profile expecting its storage to survive in a snapshot — that data is not recoverable from one. What a snapshot restores is the profile's identity and metadata, not its contents. (Customer `DELETE` on a profile is a soft-delete into a 30-day recycle bin; `parent_profile_id` is nulled at hard purge.)
 
 The same surface is available in the Python and Go SDKs as `client.profile_snapshots.*` and `client.ProfileSnapshots.*` respectively.
 
@@ -206,11 +206,11 @@ Profile names are free-form strings up to 120 characters. Conventions that work 
 
 Names ARE visible in the dashboard and any team-member access logs. Don't put PII or secrets in profile names; use `description` for human notes if you need them.
 
-## Archetypes
+## Archetypes (device profiles)
 
-An **archetype** is the device + OS + browser fingerprint a session impersonates. The server-authoritative default is returned by [`GET /v1/archetypes`](/api/archetypes/) and is used for new profiles that omit `archetype`; clients should read it at runtime instead of predicting or constructing a slug.
+A **device profile** (`archetype` in the API) is the device, OS and browser version a session presents. The default is returned by [`GET /v1/archetypes`](/api/archetypes/) and is used for new profiles that omit `archetype`; read it from the API at runtime instead of predicting or constructing a slug.
 
-Profiles pin to one archetype at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the locked default rolls forward. This stability is intentional — re-using a profile shouldn't surprise downstream behavioural-detection systems with a sudden iOS bump.
+Profiles pin to one archetype at creation time. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn't suddenly show up on a different iOS version.
 
 To migrate a profile to a newer archetype, create a fresh profile pinned to the new archetype and walk through any session-state migration manually.
 
@@ -222,7 +222,7 @@ When a session binds to a profile, on session destroy the profile's storage stat
 - WebStorage: `localStorage` and `sessionStorage` (per-origin partitions).
 - IndexedDB databases (per-origin partitions).
 - Service Worker registrations + Cache Storage entries (per-origin partitions).
-- The WebKit-fork's stealth state (canvas/font/audio noise seeds — re-used across sessions to keep the fingerprint stable).
+- The browser's fingerprint, reused so the profile looks the same each time.
 
 What does NOT persist:
 

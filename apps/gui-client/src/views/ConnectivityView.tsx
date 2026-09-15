@@ -8,7 +8,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSettings } from '../lib/SettingsContext';
-import { DriftstackError } from '../lib/client';
 import { disposeResponseBody } from '../lib/dispose-response-body';
 import { readBoundedDiagnosticJson } from '../lib/read-bounded-json';
 import { maskApiKey } from '../components/ApiKeyMaskedSpan';
@@ -18,14 +17,13 @@ interface CheckResult {
   ok: boolean;
   durationMs: number;
   detail: string;
-  errorKind?: string;
 }
 
+// Only the field the customer sees. /version also reports the commit hash,
+// the driver mode and the browser engine, but those describe how the server
+// runs, which is not customer copy (owner directive 2026-09-15).
 interface ServerVersion {
   version: string;
-  git_sha: string;
-  driver: 'mock' | 'webkit' | 'playwright';
-  playwright_browser?: 'webkit' | 'chromium' | 'firefox';
 }
 
 export function ConnectivityView({ embedded = false }: { embedded?: boolean } = {}): JSX.Element {
@@ -37,10 +35,10 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   // required to close the same-render gap before the Run button disables.
   const authorityGenerationRef = useRef(0);
   const checkInFlightRef = useRef(false);
-  // V-337 — surface the server's driver mode + version when we can
-  // reach the public /version endpoint. Helps the founder spot
-  // "you're talking to a mock server" mismatches without running
-  // /version manually.
+  // V-337 — surface the server's version when we can reach the public
+  // /version endpoint, so a customer can tell which build they are
+  // talking to without running /version manually. The driver mode the
+  // endpoint also reports is deliberately NOT shown (2026-09-15).
   const [serverInfo, setServerInfo] = useState<ServerVersion | null>(null);
 
   useEffect(() => {
@@ -93,23 +91,22 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
     setRunning(true);
     const start = performance.now();
     try {
-      const page = await client.sessions.list({ limit: 1 });
+      await client.sessions.list({ limit: 1 });
       const durationMs = Math.round(performance.now() - start);
       if (generation !== authorityGenerationRef.current) return;
       setResult({
         ok: true,
         durationMs,
-        detail: `API replied with ${page.data.length} session${page.data.length === 1 ? '' : 's'} on the first page.`,
+        detail: 'Connected — your API key works.',
       });
     } catch (err) {
       const durationMs = Math.round(performance.now() - start);
       if (generation !== authorityGenerationRef.current) return;
       const detail = humanizeError(
         err,
-        'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
+        'The connection check failed. Check the server URL and API key in Settings, then try again.',
       );
-      const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';
-      setResult({ ok: false, durationMs, detail, errorKind });
+      setResult({ ok: false, durationMs, detail });
     } finally {
       if (generation === authorityGenerationRef.current) {
         checkInFlightRef.current = false;
@@ -125,7 +122,7 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
   const probe = (
     <>
       <div className="flex flex-col gap-2 max-w-2xl">
-        <Row label="API base URL">
+        <Row label="Server address">
           <span className="mono text-ink-secondary">{settings.baseUrl}</span>
         </Row>
         <Row label="API key">
@@ -142,29 +139,15 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
             )}
           </span>
         </Row>
-        {/* V-337 — server-reported driver mode + version. */}
+        {/* V-337 — server-reported version. /version is parsed WITHOUT runtime
+            validation, so the field is typeof-guarded rather than trusted
+            (audit 2026-09-08). */}
         {serverInfo !== null && (
-          <>
-            <Row label="Server driver">
-              <span className="mono text-ink-secondary">
-                {serverInfo.driver}
-                {serverInfo.driver === 'playwright' && serverInfo.playwright_browser
-                  ? ` (${serverInfo.playwright_browser})`
-                  : ''}
-              </span>
-            </Row>
-            <Row label="Server version">
-              <span className="mono text-ink-secondary">
-                {typeof serverInfo.version === 'string' ? serverInfo.version : '—'}
-                {/* /version is parsed WITHOUT runtime validation, so a 200 with a
-                    missing/typeless git_sha must not `.slice` undefined and crash
-                    the whole Connectivity render (audit 2026-09-08). */}
-                {typeof serverInfo.git_sha === 'string' && serverInfo.git_sha !== 'unknown'
-                  ? ` · ${serverInfo.git_sha.slice(0, 7)}`
-                  : ''}
-              </span>
-            </Row>
-          </>
+          <Row label="Server version">
+            <span className="mono text-ink-secondary">
+              {typeof serverInfo.version === 'string' ? serverInfo.version : '—'}
+            </span>
+          </Row>
         )}
       </div>
 
@@ -213,12 +196,12 @@ export function ConnectivityView({ embedded = false }: { embedded?: boolean } = 
           <div className="min-w-0">
             <span className="section-label text-accent-text">Network</span>
             <h2 className="mt-0.5 text-2xl font-semibold tracking-tight text-ink-primary">
-              Connectivity test
+              Connection test
             </h2>
             <p className="mt-1 max-w-xl text-sm text-ink-secondary">
-              Authenticates against the configured server and times the round-trip. Use this when a
-              session call starts failing — it isolates whether the issue is the API key, the URL,
-              the server, or your network.
+              Checks that this app can reach your Driftstack server with your API key, and how long
+              it takes. Use it when something stops working to see whether the problem is your key,
+              the server address, the server, or your network.
             </p>
           </div>
         </div>
@@ -261,9 +244,6 @@ function ResultBlock({ result }: { result: CheckResult }): JSX.Element {
         <span className="status-pip bg-status-error" />
         <span className="section-label text-status-error">Failed</span>
         <span className="mono text-2xs text-ink-muted">{result.durationMs} ms</span>
-        {result.errorKind !== undefined && (
-          <span className="mono text-2xs text-ink-muted">· {result.errorKind}</span>
-        )}
       </div>
       <p className="mt-1 text-sm text-ink-primary">{result.detail}</p>
     </div>

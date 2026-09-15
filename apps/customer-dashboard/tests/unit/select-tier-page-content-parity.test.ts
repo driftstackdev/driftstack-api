@@ -90,7 +90,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
   it('free-tier note pinned (no trial-pack purchase card)', () => {
     expect(body).toMatch(/You're on the free plan/);
     expect(body).toMatch(
-      /Free includes 1 profile, 1 concurrent session, and sessions up\s+to 20 minutes each/,
+      /Free includes 1 profile, 1 session at a time, and sessions up\s+to 20 minutes each/,
     );
     // The retired trial-pack purchase surface must be gone.
     expect(body).not.toMatch(/data-action="buy-trial-pack"/);
@@ -135,7 +135,7 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     expect(body).toMatch(/if \(cryptoRequestInFlight\) return;/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toContain(
-      'Minting the payment address took too long. Check your connection and try again.',
+      'Creating the payment address took too long. Check your connection and try again.',
     );
   });
 
@@ -178,9 +178,11 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
       /const cryptoWorkspaceSupported = selectedWorkspaceAccountId\.length === 0/,
     );
     expect(body).toContain(
-      'Plan purchases are self-workspace only. Switch the workspace picker to Self before starting a payment.',
+      'You can only buy a plan for your own account. Switch "Acting as" back to Self first.',
     );
-    expect(body).toContain('Secure crypto checkout needs browser cross-tab locking support.');
+    expect(body).toContain(
+      "Crypto checkout isn't supported in this browser. Try an up-to-date version of Chrome, Firefox, Safari or Edge.",
+    );
     expect(body).toMatch(/authedFetch\('\/v1\/account\/me'/);
     expect(body).toMatch(/SELF_ACCOUNT_ID_RE\.test\(body\.id \|\| ''\)/);
   });
@@ -196,9 +198,9 @@ describe('W373.C customer-dashboard /select-tier page content parity', () => {
     ).toBeLessThan(body.indexOf('setCryptoCopyTarget(cacheEntry.paymentAddress)'));
   });
 
-  it('shared-engine framing accurately distinguishes operational and optional-capability differences', () => {
+  it('shared-engine framing accurately distinguishes limits and extras from the shared engine/device profiles', () => {
     expect(body).toMatch(
-      /Every tier runs the same verified browser engine and can use every\s*currently available archetype\. Operational limits and optional capabilities\s*differ — compare concurrency, profiles, storage, saved proxies, access,\s*and AI billing below/,
+      /Every plan uses the same browser engine and every available device\s*profile\. The differences are in limits and extras — compare sessions at\s*once, profiles, storage, saved proxies, access and AI billing below/,
     );
     expect(body).not.toMatch(/Only concurrent caps and profile\s+counts change/);
   });

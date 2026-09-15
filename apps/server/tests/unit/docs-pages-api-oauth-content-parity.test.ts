@@ -47,13 +47,13 @@ describe('docs/pages/api/oauth content parity', () => {
       /- \*\*Refresh tokens are NOT issued\.\*\* When a token expires, the\s*customer must re-authorize\./,
     );
     expect(body).toMatch(
-      /- \*\*Provider state is persistent\.\*\* Client secrets, pending consent\s*handles, authorization codes and access tokens are stored only as\s*SHA-256 digests\./,
+      /- \*\*Secrets are hashed\.\*\* Client secrets, pending consents,\s*authorization codes and access tokens are stored only as hashes\./,
     );
   });
 
   it("Admin-gated client-registration framing pinned: 'Client registration is currently admin-gated — talk to support@driftstack.dev' + 'The client_secret is shown once and never recoverable; the server stores only its SHA-256 hash. Lost secrets require rotation via support.' + account-scoped or multi-tenant intake. Drift to dropping the SHA-256 hash-at-rest would weaken the client-secret security model", () => {
     expect(body).toMatch(
-      /Client registration is currently \*\*admin-gated\*\* — talk to\s*\[support@driftstack\.dev\]/,
+      /Client registration is currently \*\*handled by support\*\* — email\s*\[support@driftstack\.dev\]/,
     );
     expect(body).toMatch(
       /The `client_secret` is shown \*\*once\*\* and never recoverable; the\s*server stores only its SHA-256 hash\./,
@@ -135,7 +135,7 @@ describe('docs/pages/api/oauth content parity', () => {
 
   it("Bearer-API-keys-AND-OAuth-tokens-share-header framing pinned: 'Bearer API keys (ds_live_…) and OAuth access tokens BOTH use the Authorization: Bearer <token> header on /v1/* requests. The server differentiates by token prefix; both surfaces respect the same scope + rate-limit + audit pipeline.' — pinned so the dual-token-shared-header + differentiate-by-prefix + same-pipeline contract all stay documented", () => {
     expect(body).toMatch(
-      /Bearer API keys \(`ds_live_…`\) and OAuth access tokens BOTH use the\s*> `Authorization: Bearer <token>` header on `\/v1\/\*` requests\. The\s*> server differentiates by token prefix; both surfaces respect the\s*> same scope \+ rate-limit \+ audit pipeline\./,
+      /Bearer API keys \(`ds_live_…`\) and OAuth access tokens BOTH use the\s*> `Authorization: Bearer <token>` header on `\/v1\/\*` requests\. The\s*> server differentiates by token prefix; both surfaces follow the\s*> same scope, rate-limit and audit rules\./,
     );
   });
 

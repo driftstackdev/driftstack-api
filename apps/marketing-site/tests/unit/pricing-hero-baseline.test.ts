@@ -24,7 +24,8 @@ describe('W330.B /pricing hero baseline', () => {
   const body = read(PAGE);
 
   it('headline reads "Two ladders. One free tier to start." — split into two spans by the hero-glow visual treatment; check each phrase independently.', () => {
-    expect(body).toMatch(/Two ladders\./);
+    // 2026-09-15 owner vocabulary: 'plan family', not 'ladder'.
+    expect(body).toMatch(/Two plan families\./);
     expect(body).toMatch(/One free tier to start\./);
   });
 
@@ -54,10 +55,13 @@ describe('W330.B /pricing hero baseline', () => {
     // honest. (Sibling guards pricing-page-content-parity.test.ts:141-145 and
     // apps/server/tests/unit/marketing-site-pages-pricing-content-parity.test.ts:87-91
     // were repinned in that same commit; this one was missed.)
-    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
-    expect(body).toMatch(/Run as many hours as you want within your concurrent cap\./);
-    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
-    expect(body).toMatch(/No browser-usage overage bills\./);
-    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
+    // 2026-09-15 plain-words pass — same substance, no billing internals.
+    expect(body).toMatch(/Browser plans are priced by how many sessions you can run at once\./);
+    expect(body).toMatch(/Use as many hours as you want within that limit\./);
+    expect(body).toMatch(/hours, API calls and page visits inside it are unlimited/);
+    expect(body).toMatch(/No extra bills for browser usage\./);
+    expect(body).toMatch(
+      /optional AI agent with Driftstack-supplied AI access \(the\s+"bundled" option\), that has its own monthly budget/,
+    );
   });
 });

@@ -39,7 +39,7 @@ There are three categories of scopes, in order of breadth:
 | `admin`                     | broad (legacy)  | Deprecated customer alias. Satisfies `account_owner` and customer `admin:*` scopes, but never the staff-only `driftstack_internal_admin` scope.                                                                                                                                                                                                 |
 | `account_owner`             | account-control | Mint/revoke API keys, manage subscription and `/v1/account/*`, invite/remove team members, and accept team invites. Customer dashboard scope.                                                                                                                                                                                                   |
 | `driftstack_internal_admin` | account-control | `/v1/admin/*` — list all accounts, suspend account, change tier, force-actions. Driftstack staff.                                                                                                                                                                                                                                               |
-| `gui_control`               | special         | Manual-control plane (`tap_at`, `type_focused`). Intended for the self-hosted GUI workflow (locked-decision L-001); it is never granted unless a mint request asks for it, but no tier or deployment check restricts who may ask.                                                                                                               |
+| `gui_control`               | special         | Manual control of a live session from the desktop app (`tap_at`, `type_focused`). Only added to a key when you ask for it while creating the key — a broad `read`, `write` or `admin` key does not include it. Nothing restricts who may ask for it: any account that can create API keys may request it.                                       |
 | `read:sessions`             | granular        | Read sessions endpoints only.                                                                                                                                                                                                                                                                                                                   |
 | `write:sessions`            | granular        | Create + drive + delete sessions. Does not include read — pair with `read:sessions` to list/get.                                                                                                                                                                                                                                                |
 | `read:profiles`             | granular        | Read profiles endpoints and their snapshots — `/v1/profiles`, `/v1/profiles/:id/snapshots`, `/v1/profile-snapshots` and `/v1/profile-snapshots/:id`. Snapshot reads return metadata (label, parent profile, capture time), never the stored browser state.                                                                                      |
@@ -63,7 +63,7 @@ There are three categories of scopes, in order of breadth:
 > through the legacy `admin` alias.)
 
 > **Note — agent-session endpoints require the broad `write` scope.**
-> Driver-session routes accept the granular `write:sessions`, but
+> Session routes (`/v1/sessions/*`) accept the granular `write:sessions`, but
 > agent-session endpoints (`/v1/agent-sessions/*` — create,
 > send-message, input-event, mode/takeover transitions) gate on the
 > broad `write` scope. There is no agent-sessions-specific granular
@@ -156,16 +156,3 @@ When you mint a key from the dashboard or via
 - **Dashboard / customer self-service:** `account_owner`. The
   default scope minted by the customer dashboard's "first key"
   flow.
-
-## Source of truth
-
-The full scope enum lives in
-`packages/api-types/src/common.ts:ApiKeyScopeSchema`. The
-`requireScope` predicate is mirrored at two server-side call
-sites (`apps/server/src/lib/errors-helpers.ts` +
-`apps/server/src/services/auth.ts`) and verified by the
-41-case unit test at
-`apps/server/tests/unit/scope-check.test.ts`.
-
-Any scope addition must update the schema, both predicate sites,
-and this documentation in the same change.

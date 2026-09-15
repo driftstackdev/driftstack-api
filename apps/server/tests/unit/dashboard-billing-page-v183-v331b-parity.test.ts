@@ -134,9 +134,9 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     const p = read(PAGE);
     expect(p).toMatch(/if \(err && err\.status === 503\) \{/);
     expect(p).toMatch(
-      /renderBillingUnavailable\(\s*'Billing unavailable',\s*'There is no self-service billing portal for this deployment\. Contact support for plan changes or invoices\.',\s*'unavailable',\s*\);/,
+      /renderBillingUnavailable\(\s*'Billing unavailable',\s*"Self-service billing isn't available\. Contact support for plan changes or invoices\.",\s*'unavailable',\s*\);/,
     );
-    expect(p).toContain('Contact support@driftstack.dev for plan or invoice help.');
+    expect(p).toContain('Email support@driftstack.dev for help with plans or invoices.');
     // The shared unavailable renderer clears account state, disables portal
     // authority, and hides both portal actions.
     expect(p).toMatch(/function renderBillingUnavailable\(tier, summary, badge\)/);
@@ -182,7 +182,7 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/'No active subscription'/);
-    expect(p).toMatch(/'Upgrade to a paid tier to unlock concurrent caps \+ archetype access\.',?/);
+    expect(p).toMatch(/'Upgrade to a paid plan for higher limits and more features\.',?/);
   });
 
   it("CRITICAL status-badge label pinned — replace(/_/g, ' '). 'past_due' → 'past due', 'no_subscription' → 'no subscription'. Drift to keeping underscores would look raw + uppercase-tracking-wide framing would look broken.", () => {
@@ -203,15 +203,15 @@ describe('W751 dashboard /billing page V-183 + V-331b parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /All prices in USD\. VAT\/BTW added per region per applicable EU rules\.\s*\n\s+Stripe handles tax computation \+ invoicing per ADR-002\./,
+      /All prices in USD\. VAT is added where required by EU rules\. Tax and\s*\n\s+invoicing are handled by Stripe\./,
     );
   });
 
   it('F-7 invoices-section placeholder framing — the prior "(Live invoice list endpoint TODO — accessible via Stripe Customer Portal in the meantime)" wording was a developer-comment leaking into customer copy. Reframed to describe the Stripe Customer Portal path as a feature rather than a workaround for a missing endpoint.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Invoice history and permanent receipt URLs are available in the/);
-    expect(p).toMatch(/Stripe Customer Portal\. Open it above after live billing loads\./);
+    expect(p).toMatch(/Your invoices and receipts are in the Stripe customer portal —/);
+    expect(p).toMatch(/open it with the Manage in Stripe portal button above\./);
     expect(p).not.toMatch(/Live invoice list endpoint TODO/);
     expect(p).not.toMatch(/the trial pack is/);
   });

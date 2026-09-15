@@ -73,27 +73,31 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
   // servers" by S30 2026-07-07 (founder decision: soften).
   it("Security card pinned: 'Architecture + posture →' + 6-pillar shipped commitment matching /security's rendered pillars (01–06). History: 2026-05-22 egress flipped roadmap→shipped (4→5); S26 2026-07-06 count corrected 5→6 to match /security.", () => {
     expect(body).toMatch(/Architecture \+ posture →/);
-    expect(body).toMatch(/Six pillars shipped today/);
-    expect(body).not.toMatch(/Five pillars shipped today/);
-    // All six pillars, plain words leading, precise terms in parens.
-    expect(body).toMatch(/everything between you and us\s+travelling encrypted \(TLS\)/);
+    // 2026-09-15 plain-language pass: "pillars" → "promises" (matches
+    // /security's "Six promises" headline); every claim survives in
+    // customer words; "control plane" is banned on customer surfaces.
+    expect(body).toMatch(/Six promises in place today/);
+    expect(body).not.toMatch(/Five pillars shipped today|Six pillars shipped today/);
+    expect(body).toMatch(/everything between you and us\s+is encrypted \(TLS\)/);
     expect(body).toMatch(
-      /profiles able to attach a public\s+SOCKS5 exit while profiles without one use managed egress/,
+      /each profile can use a SOCKS5 proxy you\s+choose, or our managed exit if you don't attach one/,
     );
     expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
     expect(body).toMatch(
-      /API keys stored only as\s+one-way scrypt hashes \(unreadable even to us\)/,
+      /API keys\s+are stored only as one-way hashes that nobody — including us —\s+can read back/,
     );
+    expect(body).toMatch(/every webhook is signed so you can confirm it\s+came from us/);
+    expect(body).toMatch(/your whole team can view but only admins can\s+change/);
     expect(body).toMatch(
-      /webhooks\s+cryptographically signed so you can prove each message\s+came from us \(HMAC\)/,
-    );
-    expect(body).toMatch(/team roles where your whole team can\s+look but only admins can change/);
-    expect(body).toMatch(
-      /live-session media that is\s+not retained by default — media is transport-encrypted, and the\s+product exposes no administrative staff join path/,
+      /the live view of a session is encrypted in\s+transit, not kept by default, and gives Driftstack staff no\s+way to join it/,
     );
     expect(body).not.toMatch(/keeps our staff from\s+ever seeing your session content/);
-    expect(body).toMatch(/API control\s+plane and primary database run on EU infrastructure/);
-    expect(body).toMatch(/LiveKit picks\s+a media region per session with EU preferred/);
+    expect(body).toMatch(/Our API and main database run in the EU/);
+    // Rendered copy only — the S30 source comment above the card may still say it.
+    expect(body).not.toMatch(/API control\s+plane/);
+    expect(body).toMatch(
+      /the\s+live view is routed through a region chosen per session, EU\s+preferred/,
+    );
     expect(body).not.toMatch(/All of it runs on EU\s+servers\./);
     expect(body).not.toMatch(/All of it runs on EU-resident\s+infrastructure\./);
   });
@@ -140,10 +144,11 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     expect(body).toMatch(/How do we get a security questionnaire answered\?/);
   });
 
-  it("Data-hosted answer pinned: 'EU by default. Compute (Hetzner Nuremberg), database (Neon Frankfurt); object storage (Cloudflare R2, EU + US replication).' — S30 2026-07-07 (founder decision: soften) supersedes the prior 'EU only ... R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24), so the absolutist 'EU only' + false 'EU jurisdiction' had to go; the 3-sub-processor location specificity survives", () => {
+  it("Data-hosted answer pinned: 'EU by default. Servers in Falkenstein, Germany (Hetzner); database in Frankfurt (Neon); file storage on Cloudflare R2, which keeps copies in both the EU and the US.' — S30 2026-07-07 (founder decision: soften) supersedes the prior 'EU only ... R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24), so the absolutist 'EU only' + false 'EU jurisdiction' had to go; the 3-sub-processor location specificity survives. 2026-09-15: 'Nuremberg' corrected to Falkenstein per the sub-processor register", () => {
     expect(body).toMatch(
-      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
+      /EU by default\. Servers in Falkenstein, Germany \(Hetzner\); database\s+in Frankfurt \(Neon\); file storage on Cloudflare R2, which keeps\s+copies in both the EU and the US\./,
     );
+    expect(body).not.toMatch(/Nuremberg/);
     // S30 negative pins — the absolutist claims must not silently return.
     expect(body).not.toMatch(/EU only\./);
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
@@ -151,7 +156,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
 
   it('Destination-URL answer distinguishes control-plane URL processing/event recording from browser egress', () => {
     expect(body).toMatch(
-      /Yes, when you send a navigate request or an agent plans one,\s+Driftstack's control plane processes the destination URL and\s+records the navigation event for your account\. The browser's\s+destination traffic then leaves through your configured public\s+SOCKS5 proxy, or through Driftstack-managed infrastructure when\s+the profile has no attached exit\./,
+      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy if\s+the profile has one, or through Driftstack's managed exit if\s+not\./,
     );
     expect(body).not.toMatch(/OpenVPN \/ WireGuard VPN/);
     expect(body).not.toMatch(/the\s+addresses you visit don't pass through us/);
@@ -161,7 +166,7 @@ describe('W503.B apps/marketing-site/src/pages/trust/index.astro content parity'
     // S20c 2026-07-06 plain-language pass: hard 'No.' + scrypt +
     // 24-hour grace facts survive, plain words lead.
     expect(body).toMatch(
-      /No\. Keys are stored only as one-way scrypt hashes — staff,\s+and even a database thief, see scrambled values, not keys\.\s+If a key leaks, rotate it in the dashboard; the old key\s+keeps working for 24 hours \(the grace window\) so nothing\s+breaks mid-switch\./,
+      /No\. Keys are stored only as one-way hashes \(scrypt\) — staff,\s+and even a database thief, see scrambled values, not keys\.\s+If a key leaks, rotate it in the dashboard; the old key\s+keeps working for 24 hours \(the grace window\) so nothing\s+breaks mid-switch\./,
     );
   });
 

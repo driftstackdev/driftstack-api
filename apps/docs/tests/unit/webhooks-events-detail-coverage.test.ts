@@ -50,14 +50,13 @@ describe('/webhooks/events live detail coverage', () => {
     expect(section).toMatch(/account suspended/);
     expect(section).toMatch(/"auto_destroyed": true/);
     expect(section).toMatch(/absent rather than `false`/);
-    // All three emitter method names, so the "Emitter: … destroy()" singular form
-    // cannot come back.
-    expect(section).toMatch(/`destroy\(\)`/);
-    expect(section).toMatch(/`autoDestroyExpired\(\)`/);
-    expect(section).toMatch(/`destroyAllForAccount\(\)`/);
-    expect(section).not.toMatch(
-      /^Emitter: `apps\/server\/src\/services\/sessions\.ts` `destroy\(\)`\.$/m,
-    );
+    // All three triggers as table rows, so the singular "Emitter: … destroy()"
+    // framing cannot come back. 2026-09-15 — the server method names left the
+    // customer page (how we run it); the rows name what the customer did or saw.
+    expect(section).toMatch(/\| You call `DELETE \/v1\/sessions\/:id`/);
+    expect(section).toMatch(/\| The free-tier session duration cap expires the session/);
+    expect(section).toMatch(/\| Your account is suspended and its live sessions are reclaimed/);
+    expect(section).not.toMatch(/destroy\(\)|autoDestroyExpired|destroyAllForAccount|^Emitters?:/m);
   });
 
   // V-749 — the documented session.failed example used to show
@@ -80,7 +79,8 @@ describe('/webhooks/events live detail coverage', () => {
     ]) {
       expect(section).toContain(name);
     }
-    expect(section).toMatch(/closed, classed set/);
+    expect(section).toMatch(/a fixed set — not a raw browser\s*\n?error/);
+    expect(section).not.toMatch(/driver error|driver detail/);
     expect(section).toMatch(/Branch on `error_name`/);
     // The fabricated values must not come back anywhere in the page.
     expect(body).not.toContain('DriverTimeoutError');

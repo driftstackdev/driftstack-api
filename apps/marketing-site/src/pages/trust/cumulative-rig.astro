@@ -45,41 +45,42 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
 ---
 
 <BaseLayout
-  title="Cumulative rig methodology"
+  title="Device fingerprint methodology"
   description="The signal-by-signal methodology behind Driftstack's iPhone fingerprint claim. How each measurable signal is produced, what a real iPhone returns, and what a typical Chromium-stealth tool returns."
 >
   <!-- Hero -->
-  <PageHero label="Trust center · Cumulative rig" title="Cumulative rig methodology.">
+  <PageHero label="Trust center · Device fingerprint" title="Device fingerprint methodology.">
     <Breadcrumbs
       slot="crumbs"
       class="mb-5"
-      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Cumulative rig' }]}
+      items={[{ name: 'Home', href: '/' }, { name: 'Trust center', href: '/trust/' }, { name: 'Device fingerprint' }]}
     />
     <p class="mt-6 max-w-prose text-lg text-tk-ink-2 leading-relaxed">
-      The cumulative rig is the full set of measurable signals a
-      detection system can read from a browser session. Driftstack's
+      A device fingerprint is the full set of measurable signals a
+      detection system can read from a browser session — we call the
+      complete set of checks the cumulative rig. Driftstack's
       product claim — indistinguishable from a real iPhone — is only
-      meaningful if every signal in the rig matches what the
+      meaningful if every one of those signals matches what the
       reference phone sends. This page documents what we measure,
       how, and against which reference.
     </p>
     <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-      The table below shows the rig run against
+      The table below shows the full set of checks run against
       <strong>{archetypeDisplay}</strong> as a worked example — one of
-      {DEVICE_SUPPORT.forkCaptureCount} profiles we hold a comprehensive fork
-      capture for. The five dimensions it checks — canvas, fonts, screen
-      geometry, inner height and configuration — are verified across
-      {DEVICE_SUPPORT.verifiedCount} profiles, either by direct fork
-      verification or by membership of a canvas cluster whose representative was
-      verified directly. {DEVICE_SUPPORT.selectableCount} profiles are
+      {DEVICE_SUPPORT.forkCaptureCount} device profiles we have run every
+      check on. The five areas it covers — canvas drawing, fonts, screen
+      size, viewport height and browser configuration — are verified across
+      {DEVICE_SUPPORT.verifiedCount} device profiles, either checked directly
+      or matched to a directly checked profile that renders the same way.
+      {DEVICE_SUPPORT.selectableCount} device profiles are
       selectable in the product, across {DEVICE_SUPPORT.deviceFamilies}, on iOS
       {DEVICE_SUPPORT.iosVersions}, Safari {DEVICE_SUPPORT.safariVersions}.
-      (An archetype is one specific iPhone model + iOS version +
+      (A device profile is one specific iPhone model + iOS version +
       Safari version combination — see
       <a href="/glossary/#archetype" class="text-tk-accent-text underline">the glossary</a>.)
       If any signal differs from what the real phone sends, we treat
-      it as a launch-blocking bug and fix the engine — not a
-      JavaScript wrapper over it.
+      it as a bug that blocks release and fix the underlying browser —
+      we never patch over it.
     </p>
   </PageHero>
 
@@ -95,7 +96,7 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
         image (the canvas hash), which graphics engine it reports (the
         WebGL renderer), how its audio system rounds numbers (the
         AudioContext fingerprint), how its fonts measure on screen
-        (the Core Text font-metric output), even the timing rhythm of
+        (its font metrics), even the timing rhythm of
         its JavaScript engine
         — those leak the underlying Chromium engine in the next layer
         of measurement.
@@ -104,9 +105,9 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
         Detection systems combine many signals into one score. A
         single mismatch — the browser introduces itself as an iPhone
         (its user-agent, "UA"), but its drawing output betrays
-        Chrome's engine (the canvas hash says Blink) —
+        Chrome's engine (the canvas hash says Chrome) —
         flags the session as inauthentic. Driftstack's claim isn't
-        "we got the user-agent right." It's "every signal in the rig,
+        "we got the user-agent right." It's "every signal we check,
         at the same time, returns the iPhone value."
       </p>
     </div>
@@ -124,11 +125,8 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
         Chromium-with-stealth-plugin tool returns. Cells marked
         <code class="font-mono text-tk-accent-text">unique-per-session</code>
         are the giveaway that matters most: a real iPhone returns the same
-        value as millions of other iPhones — that is what
-        population-stable means in the Driftstack column — so any
-        tool that returns
-        a hash unique to its own session has already given itself
-        away.
+        value as millions of other iPhones, so any tool that returns a
+        hash unique to its own session has already given itself away.
       </p>
 
       <div class="mt-10 overflow-x-auto">
@@ -150,67 +148,67 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
           </thead>
           <tbody class="divide-y divide-tk-border">
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">navigator.userAgent</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Browser identity string (navigator.userAgent)</td>
               <td class="px-4 py-3 text-tk-ink-3">spoofed string</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">iPhone Safari UA (unmodified)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">navigator.platform</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Operating system (navigator.platform)</td>
               <td class="px-4 py-3 text-tk-ink-3">spoofed</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">"iPhone"</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Canvas 2D hash</td>
-              <td class="px-4 py-3 text-tk-ink-3">unique-per-session (Skia)</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">population-stable (Core Graphics)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Canvas drawing fingerprint (Canvas 2D hash)</td>
+              <td class="px-4 py-3 text-tk-ink-3">unique-per-session</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">same as a real iPhone (Apple's own drawing code)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">WebGL renderer</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Graphics engine name (WebGL renderer)</td>
               <td class="px-4 py-3 text-tk-ink-3">"ANGLE / SwiftShader"</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">"Apple GPU"</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">WebGL hash</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Graphics fingerprint (WebGL hash)</td>
               <td class="px-4 py-3 text-tk-ink-3">unique-per-session</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">population-stable</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">stable, like a real iPhone</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">AudioContext fingerprint</td>
-              <td class="px-4 py-3 text-tk-ink-3">Blink audio backend</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">iOS audio backend</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Audio fingerprint (AudioContext)</td>
+              <td class="px-4 py-3 text-tk-ink-3">Chrome's audio engine</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">iOS audio engine</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Font metric outputs</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Font measurements (font metrics)</td>
               <td class="px-4 py-3 text-tk-ink-3">Linux / desktop fonts</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">iOS Core Text metrics</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">iOS text rendering</td>
             </tr>
             <tr>
               <td class="px-4 py-3 font-medium text-tk-ink">JavaScript engine timing</td>
-              <td class="px-4 py-3 text-tk-ink-3">V8 latency profile</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">JSCore latency profile</td>
+              <td class="px-4 py-3 text-tk-ink-3">Chrome's JavaScript engine (V8)</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">Safari's JavaScript engine (JavaScriptCore)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">TLS ClientHello fingerprint</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Encrypted-connection handshake (TLS ClientHello)</td>
               <td class="px-4 py-3 text-tk-ink-3">Chrome / Edge profile</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">iOS Safari profile</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Touch-event support flag</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Touch support (touch-event flag)</td>
               <td class="px-4 py-3 text-tk-ink-3">absent or spoofed</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">native</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">Screen dimensions + pixel density (DPR)</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Screen size and pixel density (DPR)</td>
               <td class="px-4 py-3 text-tk-ink-3">configurable</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">393x852 @ 3x (iPhone 16 Pro)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">CSS @media (hover) value</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Hover support (CSS @media hover)</td>
               <td class="px-4 py-3 text-tk-ink-3">"hover"</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">"none" (touch device)</td>
             </tr>
             <tr>
-              <td class="px-4 py-3 font-medium text-tk-ink">requestIdleCallback presence</td>
+              <td class="px-4 py-3 font-medium text-tk-ink">Idle-callback API presence (requestIdleCallback)</td>
               <td class="px-4 py-3 text-tk-ink-3">present (Chromium)</td>
               <td class="px-4 py-3 font-mono text-tk-accent-text">absent (Safari)</td>
             </tr>
@@ -220,17 +218,16 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
                 <span class="mt-0.5 block font-normal text-xs text-tk-ink-3">Hash uniqueness across sessions</span>
               </td>
               <td class="px-4 py-3 text-tk-ink-3">100% unique</td>
-              <td class="px-4 py-3 font-mono text-tk-accent-text">population-stable</td>
+              <td class="px-4 py-3 font-mono text-tk-accent-text">stable, like a real iPhone</td>
             </tr>
           </tbody>
         </table>
       </div>
 
       <p class="mt-6 max-w-prose text-sm text-tk-ink-3">
-        14 signals shown above. The internal rig measures 60+ signals
-        across every session built; the published subset is the ones
-        that most decide whether a detection system classifies a
-        session as real or fake.
+        14 signals shown above. Internally we check 60+ signals; the
+        ones published here are those that most decide whether a
+        detection system classifies a session as real or fake.
       </p>
     </div>
   </section>
@@ -241,21 +238,19 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
       <p class="section-label">Launch-blocker policy</p>
       <h2 class="mt-3 text-3xl font-semibold tracking-tight text-tk-ink">Any drift from the reference is a launch-blocking bug.</h2>
       <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-        Every Driftstack engine build runs the cumulative rig against
-        the reference iPhone. If any signal differs from what the
-        reference returns, the build does not ship. We don't paper
-        over individual signals with JavaScript patches ("shims")
-        layered on top — that's the
-        approach every stealth-plugin tool takes, and it's exactly
-        what the rig catches.
+        Before a release, the full signal table is run against the
+        reference iPhone, and any signal that differs from what the
+        reference returns is treated as a launch-blocking bug. We don't
+        paper over individual signals with JavaScript patches ("shims")
+        layered on top — that's the approach every stealth-plugin tool
+        takes, and it's exactly what these checks catch.
       </p>
       <p class="mt-4 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-        When Apple ships a new iOS or Safari version, our target (the
-        reference) moves and the engine has to catch up. Until it
-        fully matches the new version, we keep offering the previous
-        version's profiles — a phone Apple really shipped — as the
-        customer-facing archetype; the engine
-        targets the prior iOS, not a half-built blend of old and new.
+        When Apple ships a new iOS or Safari version, our reference
+        moves and we have to catch up. Until we fully match the new
+        version, we keep offering the previous version's device
+        profiles — a phone Apple really shipped — rather than a
+        half-finished blend of old and new.
       </p>
     </div>
   </section>
@@ -279,7 +274,7 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
             /comparison
           </h3>
           <p class="mt-3 text-sm text-tk-ink-2">
-            how Driftstack's fingerprint posture compares to other
+            how Driftstack's fingerprint results compare to other
             browser-API vendors.
           </p>
         </a>
@@ -288,8 +283,8 @@ const archetypeColumnLabel = `${archetypeDevice} · ${archetypeOs}`;
             /security
           </h3>
           <p class="mt-3 text-sm text-tk-ink-2">
-            TLS posture, scrypt-hashed keys, HMAC webhooks,
-            no-customer-data-access enforcement.
+            Encrypted transport, one-way hashed API keys, signed
+            webhooks, and how live-session media is handled.
           </p>
         </a>
       </div>

@@ -106,8 +106,9 @@ describe('W513.C apps/marketing-site/src/pages/docs/crypto-orders-ops-runbook.as
       /Check the <code>body_mismatches<\/code> counter on\s*<code>\/v1\/admin\/crypto-orders\/idempotency-metrics<\/code>\. A\s*non-zero number means at least one client is reusing keys\s*across distinct intents — usually a hardcoded constant where\s*a generated UUID belongs\./,
     );
     expect(body).toMatch(
-      /<code>event: 'crypto_checkout_idempotency_body_mismatch'<\/code>\)\s*carries the account id; grep for the offending integration\./,
+      /a generated UUID belongs\. Support can identify the affected\s*account from the recorded mismatch\./,
     );
+    expect(body).not.toMatch(/crypto_checkout_idempotency_body_mismatch|grep for/);
   });
 
   it('6-related-doc cluster: /docs/admin-api + /docs/admin-api-pagination + /docs/admin-csv-export + /docs/idempotency-keys + /docs/billing-crypto-integration-guide + /legal/refunds — pinned so the 6-related-doc navigation surface stays complete (drift to dropping /legal/refunds would orphan the non-refundable policy from the runbook)', () => {

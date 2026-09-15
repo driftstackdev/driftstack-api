@@ -17,14 +17,14 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
 
 <BaseLayout
   title="API reference"
-  description="Driftstack API reference: a curated route map and runnable examples backed by the same OpenAPI 3.1 spec the SDK codegen reads."
+  description="Driftstack API reference: a curated route map and runnable examples backed by the same OpenAPI 3.1 spec the SDKs are built against."
 >
   <!-- Hero -->
   <PageHero label="API reference" title="Core routes, exact shapes.">
     <p class="mt-5 max-w-prose text-lg leading-8 text-tk-ink-2">
       The complete Driftstack API is documented in a standard
       machine-readable format (an OpenAPI 3.1 spec), generated from the
-      same validation rules (Zod schemas) the server enforces at runtime.
+      same rules the server itself enforces.
       There is no second source of truth for public request and response
       shapes. This page is a curated map of common resources and runnable
       request patterns; the interactive reference carries the complete
@@ -35,8 +35,7 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
       <a href={OPENAPI_JSON_URL} class="btn-secondary">Download openapi.json</a>
     </div>
     <p class="mt-4 font-mono text-xs text-tk-ink-3">
-      Interactive reference uses Scalar — try requests against your API
-      key directly in the browser.
+      Try requests with your own API key directly in the browser.
     </p>
   </PageHero>
 
@@ -88,7 +87,9 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
         <p class="mt-4 text-sm leading-6 text-tk-ink-2">
           Read the public device, iOS, and Safari catalog without an API key.
           The <a href={ARCHETYPES_REFERENCE_URL} class="text-tk-accent-text underline">catalog and create-payload generator reference</a>
-          shows how to resolve capabilities to a current archetype id.
+          shows how to pick a device, iOS and Safari combination from the
+          catalog and get the <code>archetype</code> id to pass to
+          <code>POST /v1/sessions</code> or <code>POST /v1/profiles</code>.
         </p>
       </div>
 
@@ -173,10 +174,9 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
           <li>DELETE /v1/api-keys/:id</li>
         </ul>
         <p class="mt-4 text-sm leading-6 text-tk-ink-2">
-          Customer API keys, OAuth applications, and SDK automation require a
-          paid tier. Free is supported through the desktop app's
-          browser-authorized restricted device credential; it is not a customer
-          key to paste into API samples.
+          API keys, OAuth applications, and SDK automation require a paid
+          tier. The Free plan works through the desktop app's own sign-in and
+          does not come with an API key you can use in these examples.
         </p>
       </div>
 
@@ -322,17 +322,17 @@ const ARCHETYPES_REFERENCE_URL = 'https://docs.driftstack.io/api/archetypes/';
       environment values and imports it uses.
     </p>
     <p class="mt-3 max-w-prose text-sm text-tk-ink-2">
-      These API-key and SDK examples require a paid tier. On Free, sign in from
-      the desktop app instead; browser authorization stores its restricted
-      device credential automatically.
+      These API-key and SDK examples require a paid tier. On the Free plan,
+      sign in from the desktop app instead — no API key is needed there.
     </p>
 
     <!-- Create a session -->
     <div class="mt-10">
       <h3 class="text-xl font-semibold text-tk-ink">1. Create a session</h3>
       <p class="mt-2 max-w-prose text-sm text-tk-ink-2">
-        The minimal "hello world" — provision an iPhone 17 Safari
-        session, return its id. Default archetype if you don't pass one.
+        The minimal "hello world" — start an iPhone 17 Safari session
+        and return its id. A default device profile is used if you don't
+        pass one.
       </p>
       <div class="mt-5 grid gap-4 md:grid-cols-2">
         <pre
@@ -590,7 +590,7 @@ func main() {
           <tr class="border-b border-tk-border">
             <td class="py-2 pr-4">400</td>
             <td class="py-2 pr-4">errors.driftstack.dev/validation-failed</td>
-            <td class="py-2 pr-4 font-sans">Zod schema mismatch on request body.</td>
+            <td class="py-2 pr-4 font-sans">Request body failed validation.</td>
             <td class="py-2">ValidationError</td>
           </tr>
           <tr class="border-b border-tk-border">
@@ -638,13 +638,13 @@ func main() {
           <tr class="border-b border-tk-border">
             <td class="py-2 pr-4">500</td>
             <td class="py-2 pr-4">errors.driftstack.dev/internal</td>
-            <td class="py-2 pr-4 font-sans">Server-side fault. Logged + alerted.</td>
+            <td class="py-2 pr-4 font-sans">Unexpected error on our side.</td>
             <td class="py-2">InternalError <em class="font-sans not-italic text-tk-ink-3">(retryable)</em></td>
           </tr>
           <tr>
             <td class="py-2 pr-4">503</td>
             <td class="py-2 pr-4">errors.driftstack.dev/feature-unavailable</td>
-            <td class="py-2 pr-4 font-sans">Feature disabled at deploy time (e.g. avatar upload without R2 bucket).</td>
+            <td class="py-2 pr-4 font-sans">Feature not enabled on this deployment (for example, avatar upload without file storage configured).</td>
             <td class="py-2">FeatureUnavailableError <em class="font-sans not-italic text-tk-ink-3">(NOT retryable)</em></td>
           </tr>
         </tbody>
@@ -662,7 +662,7 @@ func main() {
     <ul class="mt-6 space-y-3 max-w-prose text-tk-ink-2">
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>
-        <span>Public request and response shapes are defined with Zod schemas. The OpenAPI 3.1 spec is generated from those schemas — there is no second source of truth.</span>
+        <span>Public request and response shapes are defined once, and the OpenAPI 3.1 spec is generated from those definitions — there is no second source of truth.</span>
       </li>
       <li class="flex gap-3">
         <span class="arrow-bullet">→</span>

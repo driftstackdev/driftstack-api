@@ -11,7 +11,7 @@
 //   • CRUD delegation: addProxy / listProxies / removeProxy /
 //     updateProxy / validateDraft / DraftValidation /
 //     ProxyConfig / ProxyDraft imports from ../lib/proxies.
-//   • Honest empty-state framing: credentials are protected locally and synced
+//   • Honest empty-state framing: credentials are protected on this device and synced
 //     in encrypted form to the account when used for a session.
 //   • ProxyForm: validateDraft on submit + 1-65535 port range +
 //     username/password optional with empty→null normalization.
@@ -118,7 +118,7 @@ describe('W484.C apps/gui-client/src/views/ProxiesView.tsx content parity', () =
 
   it('pins honest protected-local and encrypted account-sync empty-state copy plus the Add CTA', () => {
     expect(body).toMatch(
-      /Add a SOCKS5 endpoint to route session traffic through your own egress IP\. Proxy\s*credentials are protected locally and synced in encrypted form to your account when used\s*for a session\./,
+      /Add a SOCKS5 proxy or VPN to route session traffic through your own IP address\. Proxy\s*credentials are protected on this device and synced in encrypted form to your account when used\s*for a session\./,
     );
     expect(body).toMatch(/>\s*Add a proxy\s*<\/button>/);
   });

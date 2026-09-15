@@ -323,7 +323,10 @@ describe('OpenAPI spec validity invariant (packages/sdk-python/openapi.json)', (
         }
       | undefined;
     expect(fleetOperation?.servers).toEqual([
-      { url: 'wss://fleet.driftstack.dev', description: 'Fleet control-plane WebSocket edge' },
+      {
+        url: 'wss://fleet.driftstack.dev',
+        description: 'WebSocket edge for the machine event stream',
+      },
     ]);
     expect(fleetOperation?.security).toEqual([
       { FleetNodeBearer: [] },

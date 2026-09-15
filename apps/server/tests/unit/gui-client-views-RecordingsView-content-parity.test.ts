@@ -71,11 +71,10 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     );
   });
 
-  it("Persistence copy pinned to REALITY (the disk-persistence phase shipped — recordings-store.ts ndjson + loadIndex): header 'persist on this machine (app data); frames load on demand' + empty-state '...they persist on this machine and survive an app restart'. The original 'lands in a follow-up phase' copy became false and was corrected in the gallery port; the Console restyle folded the empty-state persistence note into the EmptyState description sentence (same 'survive an app restart' promise).", () => {
-    expect(body).toMatch(
-      /Recordings persist on this machine \(app data\); frames load on demand when you open\s*one\./,
-    );
-    expect(body).toMatch(/they persist on this machine and survive an app restart\./);
+  it("Persistence copy pinned to REALITY (the disk-persistence phase shipped — recordings-store.ts ndjson + loadIndex): header 'Recordings are saved on this computer and load when you open them.' + empty-state '...Recordings are saved on this computer.' The original 'lands in a follow-up phase' copy became false and was corrected in the gallery port; the Console restyle folded the empty-state persistence note into the EmptyState description sentence; the 2026-09-15 copy pass says it in the customer's words (no 'persist', 'app data' or 'frames load on demand').", () => {
+    expect(body).toMatch(/Recordings are saved on this computer and load when you open them\./);
+    expect(body).toMatch(/Recordings are saved on this computer\./);
+    expect(body).not.toMatch(/persist on this machine|app data|frames load on demand/);
     expect(body).not.toMatch(/Persistence to disk lands in a\s*follow-up\s*phase/);
   });
 
@@ -117,10 +116,10 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toContain('formatBytes(recordingTotalBytes(selected))');
   });
 
-  it("Thumb: first-frame poster (decorative alt='') vs hydrated 'frames on disk' / 'no frames' placeholder + duration chip; card double-click opens only when frames are loaded", () => {
+  it("Thumb: first-frame poster (decorative alt='') vs hydrated 'saved' / 'no frames' placeholder + duration chip; card double-click opens only when frames are loaded", () => {
     expect(body).toContain('const first = r.frames[0];');
     expect(body).toContain('<img src={first.dataUrl} alt=""');
-    expect(body).toContain("{r.hydrated ? 'frames on disk' : 'no frames'}");
+    expect(body).toContain("{r.hydrated ? 'saved' : 'no frames'}");
     expect(body).toContain('{formatDuration(recordingDurationMs(r))}');
     // Console restyle: the openable predicate was hoisted to a `playable`
     // const (frames in memory OR persisted on disk), and the card's
@@ -131,7 +130,7 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     expect(body).toContain('onDoubleClick={playable ? onOpen : undefined}');
   });
 
-  it("Empty subcomponent (Console restyle): loading branch → a gallery-shaped skeleton (Skeleton-based GallerySkeleton, replacing the old SkeletonRows) vs no-recordings branch via the shared <EmptyState> — FilmGlyph icon + 'No recordings yet' title + 'Recordings capture every frame of a live session for replay + audit. Open a live session, hit Record, and frames stream into memory while the session runs — they persist on this machine and survive an app restart.' description (capture helper + persistence reality, same intent as the old h3/p markup)", () => {
+  it("Empty subcomponent (Console restyle): loading branch → a gallery-shaped skeleton (Skeleton-based GallerySkeleton, replacing the old SkeletonRows) vs no-recordings branch via the shared <EmptyState> — FilmGlyph icon + 'No recordings yet' title + 'Recordings capture a live session so you can replay it later. Open a live session and press Record. Recordings are saved on this computer.' description (capture helper + persistence reality, same intent as the old h3/p markup, in the customer's words)", () => {
     expect(body).toMatch(/import \{ Skeleton \} from '\.\.\/components\/Skeleton';/);
     expect(body).toMatch(/import \{ EmptyState \} from '\.\.\/components\/EmptyState';/);
     expect(body).toMatch(
@@ -139,7 +138,7 @@ describe('W481.B apps/gui-client/src/views/RecordingsView.tsx content parity', (
     );
     expect(body).toMatch(/title="No recordings yet"/);
     expect(body).toMatch(
-      /Recordings capture every frame of a live session for replay \+ audit\. Open a live session,\s*hit Record, and frames stream into memory while the session runs — they persist on this\s*machine and survive an app restart\./,
+      /Recordings capture a live session so you can replay it later\. Open a live session and press Record\. Recordings are saved on this computer\./,
     );
   });
 

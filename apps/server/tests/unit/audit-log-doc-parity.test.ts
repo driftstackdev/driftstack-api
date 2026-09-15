@@ -56,6 +56,7 @@ describe('W218.A audit-log doc parity', () => {
 
   it('doc does not claim team members get 403 (read-allowed for both roles)', () => {
     expect(doc).not.toMatch(/Members.*get 403/i);
-    expect(doc).toMatch(/both .*member.* and .*admin.* team\s+roles are read-allowed/i);
+    expect(doc).toMatch(/both .*member.* and .*admin.* team\s+roles can read it/i);
+    expect(doc).not.toMatch(/effectiveAccountId/);
   });
 });

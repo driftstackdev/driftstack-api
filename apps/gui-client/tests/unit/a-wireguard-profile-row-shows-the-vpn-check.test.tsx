@@ -318,7 +318,7 @@ describe('(n) N18 — the Profiles LIST view carries the VPN check, verdict and 
     const row = rowFor('Amsterdam shopper');
     const q = within(row);
     const button = q.getByRole('button', { name: 'Test' });
-    expect(button.getAttribute('title')).toBe('Test proxy — reachability, latency, exit IP');
+    expect(button.getAttribute('title')).toBe('Test proxy — connection, response time, exit IP');
     expect(q.getByText('no exit IP')).toBeTruthy();
     expect(q.queryByText(VPN_NO_EXIT_YET)).toBeNull();
     expect(row.querySelector('[data-component="profile-row-vpn-failure"]')).toBeNull();

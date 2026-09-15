@@ -165,7 +165,7 @@ A few rules make this predictable:
   when the order settles (say a card subscription started after you
   minted the order), the paid order never downgrades you. The
   entitlement is still recorded — it acts as a **floor**: if the higher
-  rail later lapses, your account falls back to this crypto-paid tier
+  tier later lapses, your account falls back to this crypto-paid tier
   (not straight to free) until its 31-day term ends.
 - **Re-buying the tier you already hold extends it.** A same-tier
   purchase **stacks** onto your running term — the new 31 days begin

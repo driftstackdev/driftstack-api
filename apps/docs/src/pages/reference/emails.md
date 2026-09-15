@@ -10,8 +10,8 @@ Driftstack sends transactional email through
 [Postmark](https://postmarkapp.com), from
 `noreply@driftstack.dev`. This page lists every email the platform
 sends today, what triggers it, and whether you can opt out.
-Anything claiming to be from Driftstack but sent from other
-infrastructure isn't us — report it to
+Anything claiming to be from Driftstack but sent from a different
+address or service isn't us — report it to
 [security@driftstack.dev](mailto:security@driftstack.dev).
 
 ## Account + sign-in
@@ -82,7 +82,7 @@ email preferences. Every status email carries an unsubscribe link.
 | **Confirm your Driftstack status updates** | Submitting the subscribe form on the status page — clicking the link is the opt-in confirmation (double opt-in). |
 | **You're subscribed to Driftstack status** | Sent once after the confirmation click.                                                                          |
 | **Incident posted**                        | A public incident is filed.                                                                                      |
-| **Incident update**                        | An operator posts an update on an open incident. Throttled to at most one per subscriber per incident per hour.  |
+| **Incident update**                        | Driftstack posts an update on an open incident. Throttled to at most one per subscriber per incident per hour.   |
 | **Incident resolved**                      | The incident is resolved. One subscription covers posted + update + resolved.                                    |
 
 ## Managing your preferences
@@ -95,12 +95,12 @@ GET /v1/account/email-preferences   # read the current toggles
 PUT /v1/account/email-preferences   # { "event_type": "...", "opted_in": false }
 ```
 
-The opt-outable set is the `OptOutableEmailEventSchema` enum:
+You can opt out of these event types:
 `signup-welcome`, `session-success-first`, `session-failed-first`,
 `tier-changed`, `billing-receipt`, `billing-renewal-reminder`.
-Everything absent from that enum is operational by design and always
-sends. Both endpoints are gated on the `account_owner` scope — a
-bare `read`/`write` API key is not sufficient — and team members can
+Every other email is operational and always sends. Both endpoints are
+gated on the `account_owner` scope — a bare `read`/`write` API key is not
+sufficient — and team members can
 target the owner's preferences with `X-Driftstack-Account` (reads
 allow `member` + `admin`; writes require `admin`). Full endpoint
 semantics: [Email preferences](/api/email-preferences/).

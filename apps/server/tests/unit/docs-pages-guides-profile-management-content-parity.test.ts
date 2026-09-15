@@ -33,15 +33,15 @@ describe('W782 docs /guides/profile-management content parity', () => {
       /^---\nlayout: \.\.\/\.\.\/layouts\/DocLayout\.astro\ntitle: Profile management\n/,
     );
     expect(p).toMatch(
-      /description: Persistent profiles in Driftstack — create, list, reuse across sessions, and delete\. How profiles relate to archetypes and tier limits\./,
+      /description: Persistent profiles in Driftstack — create, list, reuse across sessions, and delete\. Which device each profile uses, and how many profiles your tier allows\./,
     );
   });
 
-  it("CRITICAL persistent-identity framing pinned. The 'A profile is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the WebKit-fork\\'s stealth state survive between session lifetimes when a session binds to a profile' wording matches W763 /api/profiles + W752 dashboard /profiles + W780 guides index TOC.", () => {
+  it("CRITICAL persistent-identity framing pinned. The 'A profile is a persistent identity Driftstack maintains across sessions. Cookies, local storage, IndexedDB, and the browser fingerprint are kept between sessions when a session uses a profile' wording matches W763 /api/profiles + W752 dashboard /profiles + W780 guides index TOC.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /A \*\*profile\*\* is a persistent identity Driftstack maintains across sessions\. Cookies, local storage, IndexedDB, and the WebKit-fork's stealth state survive between session lifetimes when a session binds to a profile\./,
+      /A \*\*profile\*\* is a persistent identity Driftstack maintains across sessions\. Cookies, local storage, IndexedDB, and the browser fingerprint are kept between sessions when a session uses a profile\./,
     );
   });
 
@@ -79,11 +79,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL self-hosted-tiers-fleet-cap framing pinned. The 'Self-hosted tiers don\\'t enforce per-account profile caps — they enforce concurrent-session caps + archetype counts at the fleet level instead' wording explains the multi-deployment difference.", () => {
+  it("CRITICAL self-hosted-tiers deployment-wide-cap framing pinned. The 'Self-hosted tiers don\\'t enforce per-account profile caps — they enforce concurrent-session caps and archetype (device profile) counts across the whole deployment instead' wording explains the multi-deployment difference.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps \+ archetype counts at the fleet level instead\./,
+      /Self-hosted tiers don't enforce per-account profile caps — they enforce concurrent-session caps and archetype \(device profile\) counts across the whole deployment instead\./,
     );
   });
 
@@ -91,10 +91,10 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The `archetype` field is optional and defaults to your tier's device: the locked launch archetype \(`iphone17_ios18_7_safari26_4` — current iPhone 17 on iOS 18\.7 with Safari 26\.4\) on tiers entitled to every device, the newest iPhone 13 archetype on the free tier\./,
+      /The `archetype` field is optional and defaults to your tier's device: `iphone17_ios18_7_safari26_4` \(iPhone 17 on iOS 18\.7 with Safari 26\.4\) on tiers that include every device, or the newest iPhone 13 archetype on the free tier\./,
     );
     expect(p).toMatch(
-      /Pin to an older archetype only if you have a behavioural-stability reason\./,
+      /Choose an older archetype only if your workflow specifically depends on that device's behaviour\./,
     );
   });
 
@@ -123,7 +123,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`POST \/v1\/sessions` accepts an optional `profile_id` field as of 2026-05-20 \(commit `fa8cb83a`\)\./,
+      /`POST \/v1\/sessions` accepts an optional `profile_id` field\. When supplied, the session's `archetype` defaults to the profile's \(so you can leave it out\), `\{profile_id, profile_name\}` is recorded in the session's `metadata`, and the profile's `last_used_at` is updated:/,
     );
     expect(p).toMatch(/profile_id: 'prof_01HV\.\.\.',/);
     expect(p).toMatch(
@@ -151,9 +151,9 @@ describe('W782 docs /guides/profile-management content parity', () => {
 
     expect(p).toContain('[`GET /v1/archetypes`](/api/archetypes/)');
     expect(p).toMatch(
-      /clients should read it at runtime instead of predicting or constructing a slug/,
+      /read it from the API at runtime instead of predicting or constructing a slug/,
     );
-    expect(p).toMatch(/intentionally have no per-session egress field/);
+    expect(p).toMatch(/intentionally have no per-session proxy field/);
     expect(p).toContain('client.agentSessions.create({ proxy_id })');
     expect(p).not.toMatch(
       /when iOS 18\.8 ships|does not support customer-configurable egress yet|execution backend has no driver-layer proxy plumbing|real device fleet/i,
@@ -171,11 +171,11 @@ describe('W782 docs /guides/profile-management content parity', () => {
     expect(p).not.toMatch(/Permanent — storage state is wiped/);
   });
 
-  it("CRITICAL clone-not-cloning-storage framing pinned. The 'Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype' wording matches W763 /api/profiles clone-fresh-state.", () => {
+  it("CRITICAL clone-not-cloning-storage framing pinned. The 'Creates a new profile with the same archetype and description as the source. Stored browser state is NOT copied — the new profile starts empty' wording matches W763 /api/profiles clone-fresh-state.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Underlying storage state is NOT cloned — the new profile starts with a fresh state slot under the same archetype\./,
+      /Creates a new profile with the same `archetype` and `description` as the source\. Stored browser state is NOT copied — the new profile starts empty\./,
     );
   });
 
@@ -239,7 +239,9 @@ describe('W782 docs /guides/profile-management content parity', () => {
     // The sibling API reference (api/profiles.md) was already corrected to "description";
     // this guide was the surface that got missed.
     expect(p).toMatch(/A snapshot does NOT preserve browser state/);
-    expect(p).toMatch(/always written empty in v1, and restore never reads it/);
+    expect(p).toMatch(
+      /Snapshots do not store browser state today, so a restored profile starts with no cookies/,
+    );
     expect(p).toMatch(/that data is not recoverable from one/);
     expect(p).not.toMatch(/and state stay restorable/);
   });
@@ -260,18 +262,18 @@ describe('W782 docs /guides/profile-management content parity', () => {
     );
   });
 
-  it("CRITICAL archetype-stable-for-lifetime framing pinned. The 'Profiles pin to one archetype at creation time. The pin is stable: a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the locked default rolls forward. This stability is intentional — re-using a profile shouldn\\'t surprise downstream behavioural-detection systems with a sudden iOS bump' wording matches W763 /api/profiles archetype-is-sticky-for-lifetime contract.", () => {
+  it("CRITICAL archetype-stable-for-lifetime framing pinned. The 'Profiles pin to one archetype at creation time. The pin is stable: a profile created against iphone16pro_ios18_7_safari26_4 keeps that fingerprint forever, even after the default moves to a newer iPhone. This stability is intentional — a returning profile shouldn\\'t suddenly show up on a different iOS version' wording matches W763 /api/profiles archetype-is-sticky-for-lifetime contract.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Profiles pin to one archetype at creation time\. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the locked default rolls forward\./,
+      /Profiles pin to one archetype at creation time\. The pin is stable: a profile created against `iphone16pro_ios18_7_safari26_4` keeps that fingerprint forever, even after the default moves to a newer iPhone\./,
     );
     expect(p).toMatch(
-      /This stability is intentional — re-using a profile shouldn't surprise downstream behavioural-detection systems with a sudden iOS bump\./,
+      /This stability is intentional — a returning profile shouldn't suddenly show up on a different iOS version\./,
     );
   });
 
-  it('CRITICAL 5-storage-persists catalog pinned. cookies + localStorage/sessionStorage + IndexedDB + Service Worker + Cache Storage + WebKit-fork stealth state. The 5-bullet list explains what crosses session boundaries.', () => {
+  it('CRITICAL 5-storage-persists catalog pinned. cookies + localStorage/sessionStorage + IndexedDB + Service Worker + Cache Storage + browser fingerprint. The 5-bullet list explains what crosses session boundaries.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
@@ -285,7 +287,7 @@ describe('W782 docs /guides/profile-management content parity', () => {
       /Service Worker registrations \+ Cache Storage entries \(per-origin partitions\)\./,
     );
     expect(p).toMatch(
-      /The WebKit-fork's stealth state \(canvas\/font\/audio noise seeds — re-used across sessions to keep the fingerprint stable\)\./,
+      /The browser's fingerprint, reused so the profile looks the same each time\./,
     );
   });
 

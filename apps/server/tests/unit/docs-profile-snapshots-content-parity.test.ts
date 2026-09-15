@@ -33,7 +33,7 @@ describe('docs api/profile-snapshots content parity', () => {
   it('snapshot-vs-profile immutability model pinned: profiles evolve, snapshots are frozen metadata — the load-bearing mental model that justifies the separate resource type. Drift to claiming snapshots mutate would mislead customers into expecting Snapshots to track upstream profile changes', () => {
     expect(body).toMatch(/\*\*Profiles\*\* evolve/);
     expect(body).toMatch(/\*\*Snapshots\*\* are frozen metadata/);
-    expect(body).toMatch(/Restoring a snapshot creates a \*\*new profile row\*\*/);
+    expect(body).toMatch(/Restoring a snapshot creates a \*\*new profile\*\*/);
     expect(body).toMatch(/source profile is\s+untouched/);
   });
 
@@ -48,7 +48,7 @@ describe('docs api/profile-snapshots content parity', () => {
 
   it("restore-counts-against-tier-cap framing pinned (the most-cited customer surprise — restore looks free but counts against PROFILES_PER_TIER): 429 tier-limit when over cap; drift to hiding this would create 'why won't my restore work?' support tickets", () => {
     expect(body).toMatch(/`429 tier-limit`/);
-    expect(body).toMatch(/Snapshot restore counts against\s+the same cap as profile-create/);
+    expect(body).toMatch(/Snapshot restore counts against the same cap as\s+profile-create/);
   });
 
   it('parent_name per-row pinned on across-account list — saves a per-row second fetch when listing snapshots from multiple profiles; drift to dropping would force N+1 fetches in customer dashboards (the field is parent_name, matching publicSnapshot — NOT the stale profile_name)', () => {

@@ -54,9 +54,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
   it('CRITICAL footer customer-facing RBAC framing pinned. The "reads work for both member and admin roles; writes require admin" wording on the page footer is the customer-visible version of the role gating contract.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /reads work for both <code>member<\/code> and\s*\n\s+<code>admin<\/code> roles; writes require <code>admin<\/code>\./,
-    );
+    expect(p).toMatch(/Members can view everything; only admins can make changes\./);
   });
 
   it('CRITICAL 2-role invite form set — Member + Admin. Drift to a different role set (e.g. owner / viewer) would diverge from the V-326e server-side enforcement.', () => {
@@ -70,7 +68,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Each member uses their own login \+ their\s*\n\s+own dashboard sessions; API keys remain account-scoped \(shared\) and admin-gated\./,
+      /Everyone signs in with their own login and\s*\n\s+has their own dashboard sessions\. API keys belong to the account and are shared; only\s*\n\s+admins can manage them\./,
     );
   });
 
@@ -78,7 +76,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Invitees receive an email with a 7-day accept link\. They must accept while signed in to the\s*\n\s+same email address\./,
+      /Invitees get an email with a link that works for 7 days\. They need to accept it while signed\s*\n\s+in with the same email address\./,
     );
   });
 
@@ -86,7 +84,7 @@ describe('W757 dashboard /team page V-298c + V-326e parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Once accepted, members can act on this account's resources by toggling\s*\n\s+the "Acting as" picker in the sidebar/,
+      /After that, they can work in this account by choosing it\s*\n\s+under "Acting as" in the sidebar/,
     );
   });
 

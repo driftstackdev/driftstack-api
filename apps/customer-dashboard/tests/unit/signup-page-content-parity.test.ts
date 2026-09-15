@@ -59,8 +59,8 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/signupInFlight = false/);
     expect(body).toMatch(/let signupOutcomeUnknown = false/);
     expect(body).toMatch(/if \(signupOutcomeUnknown\) return/);
-    expect(body).toContain('Account-creation outcome is unknown after the request timed out.');
-    expect(body).toContain('Do not submit this signup again on this page.');
+    expect(body).toContain('The request took too long, so your account may already exist.');
+    expect(body).toContain("Don't sign up again.");
     expect(body).toContain('Continue to email verification');
     expect(body).toMatch(/writeSignupState\('ds_signup_email', email\)/);
     expect(body).toMatch(/continueVerification\.setAttribute\('href', verificationUrl\(\)\)/);
@@ -70,13 +70,15 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     expect(body).toMatch(/function canPersistSignupState\(\)/);
     expect(body).toMatch(/if \(!canPersistSignupState\(\)\)/);
     expect(body).toContain(
-      'No account-creation request was sent, and your entries are still here.',
+      'Your browser is blocking site storage, which signup needs. Allow it in your browser settings, then try again — nothing has been lost.',
     );
     expect(body).toMatch(/let signupAccepted = false/);
     expect(body).toMatch(/signupAccepted = true;\s*return r\.json\(\)/);
     expect(body).toMatch(/if \(signupAccepted\) \{\s*showAcceptedSignupRecovery\(payload\.email\)/);
     expect(body).toMatch(/if \(!persistSignupState\(payload\.email, body\.debug_token\)\)/);
-    expect(body).toContain('Your account was created, but this page could not complete');
+    expect(body).toContain(
+      "Your account was created, but this page couldn't continue automatically",
+    );
   });
 
   it('OAuth start is group-serialized, visibly busy, and bounded', () => {
@@ -109,8 +111,12 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     const navigateAt = body.indexOf('window.location.href = authorizeUrl;');
     expect(persistAt).toBeGreaterThan(0);
     expect(navigateAt).toBeGreaterThan(persistAt);
-    expect(body).toMatch(/Enable browser site storage before signing up with a provider\./);
-    expect(body).toMatch(/This browser could not persist the sign-up flow\./);
+    expect(body).toMatch(
+      /Your browser is blocking site storage, which signup needs\. Allow it, then try again\./,
+    );
+    expect(body).toMatch(
+      /Your browser couldn't save the sign-up\. Allow site storage, then try again\./,
+    );
     // The legacy two-field body is gone: no fetch on this page serialises {provider, redirect_to} bare.
     expect(body).not.toMatch(/JSON\.stringify\(\{ provider, redirect_to: redirectTo \}\)/);
   });
@@ -202,11 +208,11 @@ describe('W368.B customer-dashboard /signup page content parity', () => {
     // No binding → no request (v1 fell back to its cookie flow here; v2 has none).
     expect(body).toMatch(/if \(!binding\) \{\s*throw Object\.assign\(/);
     expect(body).toContain(
-      'Provider sign-up needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet;',
+      'Signing up with Google or GitHub only works on a secure (https://) connection.',
     );
     // No flow_id → no navigation (v1 read that as "old server" and left anyway).
     expect(body).toMatch(
-      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\('OAuth start returned no flow id\.'\);\s*return;\s*\}/,
+      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\("Couldn't start sign-up with this provider\. Try again\."\);\s*return;\s*\}/,
     );
     // The retired vocabulary is gone from the page.
     expect(body).not.toMatch(/legacy|old server|old bundle/);

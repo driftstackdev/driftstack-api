@@ -14,7 +14,7 @@ import { resolveApiBaseUrl } from '../../../lib/api-base-url';
 const apiBaseUrl = resolveApiBaseUrl();
 ---
 
-<DashboardLayout title="Confirm IDP link" withSidebar={false}>
+<DashboardLayout title="Confirm account link" withSidebar={false}>
   <div
     class="mx-auto flex min-h-[calc(100vh-14rem)] w-full max-w-md flex-col justify-center px-6 py-16 animate-fade-up"
     data-page="oauth-confirm-merge"
@@ -24,7 +24,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       Linking your account…
     </h1>
     <p class="mt-3 text-sm text-tk-ink-2" data-field="intro">
-      Confirming the verify-merge token. One moment.
+      Confirming your link. One moment.
     </p>
 
     <div class="auth-card mt-8">
@@ -40,11 +40,11 @@ const apiBaseUrl = resolveApiBaseUrl();
       </div>
 
       <p class="mt-6 text-xs text-tk-ink-3">
-        Link expired or invalid? Sign in via password + retry the IDP
-        button from the <a
+        Link expired or not working? Sign in with your password, then use the Google or GitHub
+        button on the <a
           href="/login/"
-          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">login page</a
-        >.
+          class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sign-in page</a
+        > to try again.
       </p>
     </div>
   </div>
@@ -78,7 +78,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         );
       }
       if (!token || token.length === 0) {
-        showBanner("Missing 'token' query parameter. Click the link in the verify-merge email.");
+        showBanner('This page needs to be opened from the link in your confirmation email.');
         return;
       }
 
@@ -112,14 +112,14 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (mergeResponseAccepted) {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(
-              'Your identity provider was linked, but this page could not finish opening the dashboard. Do not reload or submit this one-time link again. Check connected accounts in Security before taking any other action.',
+              "Your account was linked, but this page couldn't open the dashboard. Don't use this link again — check Connected accounts under Privacy & security.",
             );
             return;
           }
           if (err && err.name === 'AbortError') {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(
-              'Account-link outcome is unknown after the request timed out. The server may already have consumed this one-time token and linked the identity provider. Do not reload or submit this link again. Check connected accounts in Security; if the provider is absent, sign in with your password and retry its IDP button from Login.',
+              "The request took too long, so your account may already be linked. Don't use this link again — check Connected accounts under Privacy & security. If Google or GitHub isn't listed there, sign in with your password and use its button on the sign-in page again.",
             );
             return;
           }

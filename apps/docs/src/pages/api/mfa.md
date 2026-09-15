@@ -150,8 +150,7 @@ issuing IP address. Exchange it for the real session at:
 }
 ```
 
-Or use a recovery code (hyphen optional; codes normalize to upper-
-case + no separators internally):
+Or use a recovery code (hyphen optional; case-insensitive):
 
 ```json
 {
@@ -174,7 +173,7 @@ Response (200):
 ```
 
 `via` is `"totp"` when matched against the 6-digit; `"recovery"` when
-a recovery code was consumed. Recovery-code success consumes the row
+a recovery code was consumed. Recovery-code success consumes the code
 permanently — it can't be used again.
 
 Failure modes:
@@ -254,11 +253,11 @@ The `mfa_satisfied_at` field on the calling session is updated to
 "now"; gated routes pass for the next 15 minutes. The original
 gated request can be retried.
 
-The generic step-up middleware has a machine-auth carve-out because an API key
-has no human session to refresh. MFA credential-management routes do not rely
-on that carve-out: they reject API-key bearers before step-up evaluation.
+Other step-up-gated routes let an API key through without a step-up check,
+because an API key has no session to refresh. MFA management routes are
+stricter: they reject API-key bearers outright.
 `POST /v1/auth/mfa/step-up` itself also returns 403 for an API key because
-there is no session row to refresh.
+there is no session to refresh.
 
 ## Disabling
 
@@ -324,16 +323,16 @@ Returns `404 Not Found` when the calling account isn't enrolled.
 | Digits              | 6                              |
 | Drift tolerance     | ±1 window (90s total)          |
 | Issuer              | `Driftstack`                   |
-| At-rest encryption  | AES-256-GCM (env-keyed)        |
+| At-rest encryption  | AES-256-GCM                    |
 | Recovery code shape | 10 chars, Crockford base32     |
 | Recovery code count | 10 per enrollment / regenerate |
-| Recovery code hash  | scrypt-kdf (same as API keys)  |
+| Recovery code hash  | scrypt (same as API keys)      |
 | Challenge token TTL | 5 minutes                      |
 | Step-up freshness   | 15 minutes                     |
 
 SHA-1 is the RFC 6238 default and what every authenticator app
 (Google Authenticator, 1Password, Authy, Bitwarden, etc.) supports.
-SHA-256/SHA-512 are out of scope for v1.
+SHA-256/SHA-512 are not supported.
 
 ## Audit trail
 

@@ -181,7 +181,8 @@ export function NotificationBell({
                 <p className="px-2 py-2 text-2xs text-ink-muted">Loading older history…</p>
               ) : history.kind === 'forbidden' ? (
                 <p className="px-2 py-2 text-2xs text-ink-muted">
-                  Older history needs the read:audit scope on your API key.
+                  Older history needs an API key with audit-log access. You can create one in the
+                  web dashboard.
                 </p>
               ) : history.kind === 'error' ? (
                 <p className="px-2 py-2 text-2xs text-ink-muted">

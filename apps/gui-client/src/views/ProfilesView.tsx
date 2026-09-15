@@ -79,6 +79,7 @@ import {
 } from '../components/ProfilesActionBar';
 import { proxyCapabilities } from '../components/ProxyCapabilities';
 import { ProfilePhoneCard } from '../components/ProfilePhoneCard';
+import { tierLabelFor } from '../components/TierBadge';
 import { DevicePicker, type PickerDevice } from '../components/DevicePicker';
 import { RelativeTime } from '../components/RelativeTime';
 import {
@@ -210,7 +211,7 @@ const PROFILES_VIEW_MODE_KEY = 'ds-profiles-view-mode';
 // silently (the inner `bound.kind === 'agent'` guard just did nothing). Surface
 // this instead, per the component's no-silent-no-op contract.
 export const DRIVER_NO_LIVE_VIEW_NOTICE =
-  'This legacy session has no live view — Stop it and relaunch.';
+  'This session can’t be viewed live. Stop it and launch the profile again.';
 
 type ProfilesViewMode = 'list' | 'grid';
 
@@ -383,7 +384,7 @@ function railTaxonomySyncMessage(plan: RailTaxonomySyncPlan): string {
       : account.length > 0
         ? account
         : `${profiles.toString()} of ${plan.profileTotal.toString()} profiles`;
-  return `Saved on this Mac, but couldn’t sync the ${plan.action} to your account (${detail}). Retry the remaining sync.`;
+  return `Saved on this computer, but couldn’t sync the ${plan.action} to your account (${detail}). Retry the remaining sync.`;
 }
 
 /** Friendly device label for the simulator toolbar, derived from the archetype
@@ -690,9 +691,12 @@ export function ProfilesView({
   const profileCount = accountMe?.profile_count ?? null;
   const atProfileCap = profileCap !== null && profileCount !== null && profileCount >= profileCap;
   // Shared cap-reached tooltip for the New / Duplicate / Import affordances.
-  const profileCapReason = `Profile cap reached (${(profileCap ?? 0).toString()} for ${
-    accountMe?.tier ?? 'this tier'
-  }). Delete a profile or upgrade to add more.`;
+  // Customer copy names the plan by its label ("Personal"), never the raw tier
+  // slug ("solo_manual") — tierLabelFor is the same mapping the Sidebar and the
+  // Settings account card use.
+  const planLabel =
+    accountMe?.tier != null ? `${tierLabelFor(accountMe.tier)} plan` : 'current plan';
+  const profileCapReason = `Profile limit reached (${(profileCap ?? 0).toString()} on your ${planLabel}). Delete a profile or upgrade to add more.`;
   // Consistency #9 — gate Launch at the CONCURRENT-SESSION cap (mirrors
   // SessionsView's New-session gate). Launching a profile creates an agent
   // session that consumes a concurrent slot; the server returns a 402 at the
@@ -711,9 +715,9 @@ export function ProfilesView({
       : null;
   const atConcurrentCap =
     concurrentCap !== null && concurrentActive !== null && concurrentActive >= concurrentCap;
-  const concurrentCapReason = `Concurrent session cap reached (${(concurrentCap ?? 0).toString()} for ${
-    accountMe?.tier ?? 'this tier'
-  }). Stop a running session or upgrade to launch more.`;
+  const concurrentCapReason = `Session limit reached — your ${planLabel} allows ${(concurrentCap ?? 0).toString()} session${
+    (concurrentCap ?? 0) === 1 ? '' : 's'
+  } at a time. Stop a running session or upgrade to launch more.`;
   // Teams (2026-06-16) — the server now lets a team ADMIN launch the owner's
   // profiles (agent-sessions create honors X-Driftstack-Account for admins;
   // the client already ships that header for the active workspace). So launch
@@ -1172,7 +1176,7 @@ export function ProfilesView({
         setState((s) => ({
           ...s,
           error:
-            'Couldn’t verify which account owns this organization. Refresh your account and try again.',
+            'Couldn’t confirm which account these folders and tags belong to. Check your API key under Settings and try again.',
         }));
         return false;
       }
@@ -1219,7 +1223,7 @@ export function ProfilesView({
         if (isCurrentOwner()) {
           setState((s) => ({
             ...s,
-            error: `Couldn’t save the ${action} on this Mac. Check app storage and try again.`,
+            error: `Couldn’t save the ${action} on this computer. Try again.`,
           }));
         }
         return false;
@@ -1657,8 +1661,8 @@ export function ProfilesView({
         return null;
       } catch {
         return savedLocally
-          ? 'Saved on this Mac, but couldn’t sync the note to your account. Check your connection and retry.'
-          : 'Couldn’t save the note on this Mac. Check app storage and try again.';
+          ? 'Saved on this computer, but couldn’t sync the note to your account. Check your connection and retry.'
+          : 'Couldn’t save the note on this computer. Try again.';
       }
     },
     [client, state.profiles, activeWorkspace],
@@ -1717,7 +1721,7 @@ export function ProfilesView({
     // + its encryption key are destroyed), so it must not fire on a stray click.
     const name = state.profiles.find((p) => p.id === id)?.name ?? 'this profile';
     const ok = await confirm(
-      `Delete "${name}"? This permanently removes the profile's identity — its cookies, storage, and fingerprint — from your account and can't be undone.`,
+      `Delete "${name}"? This permanently removes the profile — its logins, site data and device identity — from your account and can't be undone.`,
       { confirmLabel: 'Delete' },
     );
     if (!ok) return;
@@ -1785,28 +1789,28 @@ export function ProfilesView({
       verb: 'cache',
       confirmLabel: 'Clear cache',
       question: (name) =>
-        `Clear cached website data for "${name}"? This frees re-fetchable caches (images, scripts, service workers) to reclaim storage. Your logins, saved site data and open tabs are KEPT — they reload from the network on the next visit, just like clearing a browser cache.`,
+        `Clear cached website files for "${name}"? Images and scripts are removed to free up storage and reload on the next visit. Your logins, site data and open tabs are kept.`,
       done: 'Cleared cache',
     },
     cookies: {
       verb: 'cookies',
       confirmLabel: 'Clear cookies',
       question: (name) =>
-        `Clear cookies and site data for "${name}"? This SIGNS THE PROFILE OUT everywhere — cookies, localStorage and per-origin site data all go. Cached files and open tabs are kept, and the profile's fingerprint is unchanged.`,
+        `Clear cookies and site data for "${name}"? This signs the profile out of every site. Cached files and open tabs are kept, and the profile still looks like the same device to every site.`,
       done: 'Cleared cookies and site data',
     },
     history: {
       verb: 'history',
       confirmLabel: 'Clear history',
       question: (name) =>
-        `Clear browsing history for "${name}"? This forgets the remembered open tabs — the only record of visited pages held in the profile itself. It does NOT clear the server-side record of session activity, which your account keeps separately. Logins and cached files are kept.`,
+        `Clear browsing history for "${name}"? This forgets the profile's remembered open tabs, the only browsing history the profile keeps. Your account's session history is kept separately and is not cleared. Logins and cached files are kept.`,
       done: 'Cleared browsing history',
     },
     all: {
       verb: 'data',
       confirmLabel: 'Clear everything',
       question: (name) =>
-        `Clear ALL browsing data for "${name}"? Cookies, site data, cached files and remembered tabs all go, and the profile is signed out everywhere. The server-side record of session activity your account keeps is NOT affected. The profile itself and its fingerprint are kept, so it stays the same device to every site.`,
+        `Clear all browsing data for "${name}"? Cookies, site data, cached files and open tabs are removed, and the profile is signed out of every site. Your account's session history is kept separately and is not cleared. The profile itself is kept and still looks like the same device to every site.`,
       done: 'Cleared all browsing data',
     },
   };
@@ -1850,7 +1854,7 @@ export function ProfilesView({
       } else if (result.status === 'timeout') {
         setState((s) => ({
           ...s,
-          error: `Clearing ${copy.verb} for "${name}" timed out — the session node didn't respond. Try again shortly.`,
+          error: `Clearing ${copy.verb} for "${name}" timed out. Try again shortly.`,
         }));
       } else if (result.blocked === true) {
         // V-2168 — the server says the clear could NOT run (node offline,
@@ -3034,8 +3038,8 @@ export function ProfilesView({
             ? // The profile was bound to a specific proxy that has since been
               // deleted. Refuse to silently reroute through a different exit —
               // tell the operator so they can re-bind a proxy on purpose.
-              `This profile's configured proxy was deleted. Open Edit and choose a new default proxy before launching, so its egress isn't rerouted to a different IP/country.`
-            : 'No saved proxies. Open the Proxies tab, add a SOCKS5 server, then launch this profile. (Sessions require a proxy on this deployment.)',
+              `This profile's proxy was deleted. Open Edit and choose a new proxy before launching, so the session doesn't use a different IP address or country.`
+            : 'No saved proxies. Open the Proxies tab, add a proxy, then launch this profile. (Every session needs a proxy.)',
         }));
         return;
       }
@@ -3195,9 +3199,8 @@ export function ProfilesView({
       // the 404 self-heal in ensureServerProxy reads `status` — so this view does not
       // depend on the transport's error class (the launch suites double that module).
       const egressBlockCopy = (fallbackRemedy: string, serverDetail?: unknown): string =>
-        `Couldn’t set up the proxy “${proxy.label}” for this session, so it was NOT launched — ` +
-        `starting it would have sent traffic through Driftstack’s default IP instead of your ` +
-        `proxy. ` +
+        `Couldn’t set up the proxy “${proxy.label}”, so the session was not started — it would ` +
+        `have run without your proxy. ` +
         (typeof serverDetail === 'string' && serverDetail.length > 0
           ? `Driftstack said: ${serverDetail}`
           : fallbackRemedy);
@@ -3379,8 +3382,7 @@ export function ProfilesView({
         await clearProfileSession(profile.id).catch(() => undefined);
         setState((s) => ({
           ...s,
-          error:
-            "Couldn't start the live view — the session didn't get a video channel. Try again.",
+          error: "Couldn't start the live view. Try again.",
         }));
       }
       await refresh(false);
@@ -3437,7 +3439,7 @@ export function ProfilesView({
         const noun = ids.length === 1 ? 'profile' : 'profiles';
         setState((s) => ({
           ...s,
-          error: `Saved on this Mac, but couldn’t sync ${failed.toString()} of ${ids.length.toString()} ${noun} to your account. Check your connection and retry.`,
+          error: `Saved on this computer, but couldn’t sync ${failed.toString()} of ${ids.length.toString()} ${noun} to your account. Check your connection and retry.`,
           notice: null,
         }));
         return;
@@ -3449,7 +3451,7 @@ export function ProfilesView({
     } catch {
       setState((s) => ({
         ...s,
-        error: 'Couldn’t save profile organization on this Mac. Check app storage and try again.',
+        error: 'Couldn’t save profile organization on this computer. Try again.',
         notice: null,
       }));
     } finally {
@@ -3747,9 +3749,9 @@ export function ProfilesView({
         targets.length === 1 ? '' : 's'
       }? Each selected profile opens its own browser session.${
         trimmed
-          ? ` (Limited to your remaining concurrent-session headroom — ${(
+          ? ` (Only ${targets.length.toString()} can start right now — your ${planLabel} allows ${(
               concurrentCap ?? 0
-            ).toString()} at a time on ${accountMe?.tier ?? 'this tier'}.)`
+            ).toString()} session${(concurrentCap ?? 0) === 1 ? '' : 's'} at a time. Stop a running session or upgrade to launch more.)`
           : ''
       }`,
       { confirmLabel: 'Launch' },
@@ -3899,9 +3901,9 @@ export function ProfilesView({
             <path d="M7 11V7a5 5 0 0 1 10 0v4" />
           </svg>
           <p className="flex-1 text-xs text-ink-secondary">
-            <b className="text-ink-primary">Sealed &amp; private.</b> Profile state is sealed with
-            per-profile encryption under your account's own key hierarchy. Proxy credentials are
-            protected locally and synced encrypted to your account when used for a session.
+            <b className="text-ink-primary">Private by design.</b> Profile data is encrypted so only
+            your account can read it. Proxy credentials are stored securely on this computer and are
+            encrypted before they sync to your account when you use them in a session.
           </p>
           <button
             type="button"
@@ -4059,7 +4061,7 @@ export function ProfilesView({
             )}
             {activeWorkspace !== null && (
               <span className="ml-auto text-2xs text-ink-muted">
-                Viewing a team workspace — writes need the admin role.
+                Viewing a team workspace — only admins can make changes.
               </span>
             )}
           </div>
@@ -4148,8 +4150,6 @@ export function ProfilesView({
             ) : (
               <span className="text-ink-muted">proxy health untested</span>
             )}
-            <span className="text-surface-divider">·</span>
-            all systems nominal
           </p>
         </div>
         <div className="ml-auto flex flex-col items-end gap-2">
@@ -4499,9 +4499,7 @@ export function ProfilesView({
                 disabled={atProfileCap}
                 title={
                   atProfileCap
-                    ? `Profile cap reached (${(profileCap ?? 0).toString()} for ${
-                        accountMe?.tier ?? 'this tier'
-                      }). Upgrade to add more.`
+                    ? `Profile limit reached (${(profileCap ?? 0).toString()} on your ${planLabel}). Upgrade to add more.`
                     : proxies.length === 0
                       ? 'Add a proxy first — sessions run through one.'
                       : undefined
@@ -5425,7 +5423,7 @@ function CreateProfileModal({
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
     if (!client) {
-      setError('No client configured.');
+      setError('Connect your API key in Settings first.');
       return;
     }
     const trimmed = name.trim();
@@ -5601,7 +5599,7 @@ function CreateProfileModal({
                     placeholder="my-recurring-workflow"
                   />
                   <span className="text-xs text-ink-muted">
-                    Used to identify the profile in lists + when attaching sessions.
+                    Shown in lists and when a session uses this profile.
                   </span>
                 </label>
 
@@ -5630,9 +5628,8 @@ function CreateProfileModal({
                   <div>
                     <h4 className="text-sm font-medium text-ink-primary">Device &amp; identity</h4>
                     <p className="mt-0.5 text-2xs text-ink-muted">
-                      A bit-exact mobile fingerprint, not a spoofed user-agent — pick the device;
-                      everything stays coherent with it. Search or filter to find one of{' '}
-                      {PICKER_DEVICES.length} devices.
+                      Pick the device this profile will appear as to websites. Search or filter to
+                      find one of {PICKER_DEVICES.length} devices.
                       {entitlementNote !== null && (
                         <span className="text-ink-secondary"> {entitlementNote}</span>
                       )}
@@ -5659,8 +5656,9 @@ function CreateProfileModal({
                 <div className="flex flex-col gap-1 rounded border border-surface-divider bg-surface-base/40 p-3">
                   <h4 className="text-sm font-medium text-ink-primary">Locale &amp; timezone</h4>
                   <p className="text-xs text-ink-secondary">
-                    Auto-follows the proxy exit geo at session time — language, locale and timezone
-                    never contradict the IP. No overrides: coherence is the point.
+                    Language and timezone are set automatically from your proxy's location when a
+                    session starts, so they never conflict with the IP address. There is nothing to
+                    set here and no manual override.
                   </p>
                 </div>
               </>
@@ -5712,8 +5710,8 @@ function CreateProfileModal({
                       onSave={handleInlineCreateProxy}
                     />
                     <span className="mt-2 block text-2xs text-ink-muted">
-                      Protected locally in this app · synced encrypted to your account when used for
-                      a session.
+                      Protected on this device · synced encrypted to your account when a session
+                      starts.
                     </span>
                   </div>
                 )}
@@ -5728,9 +5726,9 @@ function CreateProfileModal({
               <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
                 <h4 className="text-sm font-medium text-ink-primary">Persistent browser state</h4>
                 <p className="text-xs text-ink-secondary">
-                  Cookies, localStorage and IndexedDB persist across this profile's sessions — log
-                  in once, stay logged in. State is sealed with per-profile encryption under your
-                  account's own key hierarchy; staff can't read it.
+                  Cookies and site data are kept between this profile's sessions — log in once, stay
+                  logged in. Everything is encrypted so only your account can read it; Driftstack
+                  staff can't.
                 </p>
                 <p className="text-2xs text-ink-muted">
                   Always on for profile-backed sessions — nothing to configure here yet.
@@ -5740,16 +5738,14 @@ function CreateProfileModal({
 
             {tab === 'behavior' && (
               <div className="flex flex-col gap-2 rounded border border-surface-divider bg-surface-base/40 p-3">
-                <h4 className="text-sm font-medium text-ink-primary">Human-cadence input</h4>
+                <h4 className="text-sm font-medium text-ink-primary">Human-like input</h4>
                 <p className="text-xs text-ink-secondary">
-                  Taps, scrolls and typing run through the behavioral simulation layer — native
-                  events with human timing, not synthetic JavaScript. On by default for every
+                  Taps, scrolls and typing use natural, human-like timing. On by default for every
                   session this profile launches.
                 </p>
                 <p className="text-2xs text-ink-muted">
-                  Per-session behavioral profiles are selectable via the API/SDK (behavioral_profile
-                  on session create); a per-profile default lands here when the backend grows that
-                  column.
+                  Nothing to configure here yet. Developers can choose a behavior setting per
+                  session through the API.
                 </p>
               </div>
             )}
@@ -5765,7 +5761,7 @@ function CreateProfileModal({
                     rows={2}
                     disabled={submitting}
                     className="rounded-sm border border-surface-divider bg-surface-base px-2 py-1 text-sm text-ink-primary"
-                    placeholder="What this identity slot is for"
+                    placeholder="What this profile is for"
                   />
                 </label>
                 <label className="flex flex-col gap-1">
@@ -5818,8 +5814,8 @@ function CreateProfileModal({
                 ✓
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-medium text-ink-primary">Identity coherence</p>
-                <p className="text-2xs text-ink-muted">bit-exact archetype · engine-deep</p>
+                <p className="text-xs font-medium text-ink-primary">Verified device</p>
+                <p className="text-2xs text-ink-muted">matches the real device exactly</p>
               </div>
             </div>
             {(() => {
@@ -5831,7 +5827,7 @@ function CreateProfileModal({
                     k="iOS / Safari"
                     v={a ? `${a.iosVersion} / ${a.safariVersion}` : '—'}
                   />
-                  <PreviewRow k="Locale" v="follows proxy exit" />
+                  <PreviewRow k="Locale" v="matches proxy location" />
                   <PreviewRow
                     k="Proxy"
                     v={
@@ -5842,14 +5838,13 @@ function CreateProfileModal({
                           : (proxies.find((p) => p.id === proxyChoice)?.label ?? '—')
                     }
                   />
-                  <PreviewRow k="Storage" v="🔒 sealed" />
+                  <PreviewRow k="Storage" v="🔒 encrypted" />
                   <PreviewRow k="Tags" v={tags.trim().length > 0 ? tags.trim() : '—'} />
                 </dl>
               );
             })()}
             <p className="rounded-sm border border-surface-divider bg-surface-base/60 p-2 text-2xs text-ink-muted">
-              <b className="text-ink-secondary">What a site sees:</b> a genuine iPhone — Apple's
-              engine with a bit-exact device identity, not a spoofed user-agent.
+              <b className="text-ink-secondary">What a site sees:</b> a real iPhone running Safari.
             </p>
 
             {error !== null && (
@@ -6258,7 +6253,7 @@ function EditProfileModal({
             className="rounded-sm border border-surface-divider bg-surface-base/40 px-2 py-1 text-sm text-ink-muted"
           />
           <span className="text-2xs text-ink-muted">
-            The device fingerprint is fixed when a profile is created and can’t be changed.
+            The device is chosen when a profile is created and can’t be changed.
           </span>
         </label>
         <label className="flex flex-col gap-1">
@@ -6355,7 +6350,7 @@ function EditProfileModal({
                 onSave={handleInlineCreateProxyEdit}
               />
               <span className="mt-2 block text-2xs text-ink-muted">
-                Saved to your proxies and bound to this profile on Save.
+                Saved to your proxies and linked to this profile when you save.
               </span>
             </div>
           )}
@@ -6366,7 +6361,7 @@ function EditProfileModal({
           <label className="mt-1 flex cursor-pointer items-start gap-2">
             <input
               type="checkbox"
-              aria-label="Stop the session if the exit IP changes"
+              aria-label="Stop the session if the proxy's IP address changes"
               data-field="stop-on-exit-ip-change"
               checked={stopOnExitIpChange}
               onChange={(e) => setStopOnExitIpChange(e.target.checked)}
@@ -6374,7 +6369,7 @@ function EditProfileModal({
               className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-accent"
             />
             <span className="text-sm text-ink-secondary">
-              Stop the session if the exit IP changes
+              Stop the session if the proxy's IP address changes
             </span>
           </label>
         </div>
@@ -6400,8 +6395,8 @@ function EditProfileModal({
           </summary>
           <div className="mt-2 flex flex-col gap-2">
             <p className="text-[11px] leading-snug text-ink-muted">
-              Leave blank (recommended): the device reports a location derived from your proxy's
-              exit IP, so it matches where the session appears to connect from. Set coordinates only
+              Leave blank (recommended): the device reports a location based on your proxy's IP
+              address, so it matches where the session appears to connect from. Set coordinates only
               if you know your proxy's real location — a location that doesn't match the proxy's
               country is an inconsistency sites can detect.
             </p>
@@ -7134,8 +7129,7 @@ export function proxyConfigRefusalMessage(err: unknown): string | null {
   const record = err as { status?: unknown; reason?: unknown; detail?: unknown };
   if (record.status !== 422 || record.reason !== 'config_unresolvable') return null;
   const head =
-    'The session was not started: this proxy’s stored configuration could not be used, so nothing ' +
-    'was dialled and no traffic left this Mac.';
+    'The session was not started because this proxy’s saved configuration could not be used.';
   const detail = typeof record.detail === 'string' ? record.detail.trim() : '';
   if (detail.length === 0 || detail.length > 400) {
     return `${head} Open the proxy, re-paste the configuration and save it, then launch again.`;
@@ -7331,7 +7325,8 @@ function TrashPanel({
         </div>
       ) : !dataAvailable ? (
         <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">
-          Recycle-bin status is unavailable. Retry before judging its contents.
+          The recycle bin hasn’t loaded yet. Go back to profiles and open it again to see its
+          contents.
         </p>
       ) : trashed.length === 0 ? (
         <p className="rounded-lg border border-dashed border-surface-divider py-10 text-center text-xs text-ink-muted">

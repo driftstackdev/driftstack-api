@@ -59,7 +59,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     );
   });
 
-  it("EventsTimeline subcomponent: events.length === 0 returns <p>'No events recorded yet.' inline + non-empty returns <ol> aria-label='Order events timeline' with CryptoOrderStatusBadge size='sm' + 'via {source}' + font-mono at timestamp; key uses ${e.at}-${i.toString()}", () => {
+  it("EventsTimeline subcomponent: events.length === 0 returns <p>'No events recorded yet.' inline + non-empty returns <ol> aria-label='Order events timeline' with CryptoOrderStatusBadge size='sm' + the plain-words eventSourceLabel(source) (the wire tag 'ipn' is not customer copy — 2026-09-15) + font-mono at timestamp; key uses ${e.at}-${i.toString()}", () => {
     expect(body).toMatch(
       /function EventsTimeline\(\{ events \}: \{ events: CryptoOrderEvent\[\] \}\): JSX\.Element \{\s*if \(events\.length === 0\) \{\s*return <p className="text-sm text-ink-secondary">No events recorded yet\.<\/p>;\s*\}/,
     );
@@ -67,7 +67,12 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
       /<ol aria-label="Order events timeline" className="flex flex-col gap-1 text-sm">\s*\{events\.map\(\(e, i\) => \(\s*<li\s*key=\{`\$\{e\.at\}-\$\{i\.toString\(\)\}`\}/,
     );
     expect(body).toMatch(/<CryptoOrderStatusBadge status=\{e\.status\} size="sm" \/>/);
-    expect(body).toMatch(/<span className="text-xs text-ink-secondary">via \{e\.source\}<\/span>/);
+    expect(body).toMatch(
+      /<span className="text-xs text-ink-secondary">\{eventSourceLabel\(e\.source\)\}<\/span>/,
+    );
+    expect(body).toMatch(
+      /function eventSourceLabel\(source: CryptoOrderEvent\['source'\]\): string \{\s*switch \(source\) \{\s*case 'create':\s*return 'order created';\s*case 'ipn':\s*return 'payment update received';\s*case 'cancel':\s*return 'order cancelled';\s*case 'expired':\s*return 'payment window expired';/,
+    );
   });
 
   it("State-machine early returns: orderId === null → 'Pick an order to view its details.' empty state + loading|idle → 'Loading order…' + error → <ErrorBanner message + onDismiss={() => void refetch()}> (Dismiss retries the order fetch rather than dead-ending on a stale error); CryptoOrderDetailViewProps: orderId 'The order id to display. Pass null for the empty state.' nullable", () => {
@@ -93,7 +98,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
     );
   });
 
-  it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; payment-seen non-terminal explanatory copy: 'Payment activity has been detected on-chain. Cancellation is no longer self-service — contact support to reconcile or refund.' (shown only for 'confirming'/'partial' — NOT 'cancelled', which is terminal with no payment received)", () => {
+  it("Cancel button: only inside cancellable branch + disabled when cancel.state.kind === 'submitting' + label 'Cancelling…' during submit else 'Cancel order' + on 'failed' state surfaces cancel.state.message inline below the button; payment-seen non-terminal explanatory copy: 'A payment has been detected for this order, so it can no longer be cancelled here. Contact support if you need to cancel it or request a refund.' (plain words — no 'on-chain' / 'self-service' / 'reconcile', 2026-09-15; shown only for 'confirming'/'partial' — NOT 'cancelled', which is terminal with no payment received)", () => {
     expect(body).toMatch(
       /\{cancellable && \(\s*<div className="flex flex-col gap-2">\s*<button\s*type="button"\s*onClick=\{\(\) => setConfirmOpen\(true\)\}\s*disabled=\{cancel\.state\.kind === 'submitting'\}/,
     );
@@ -104,7 +109,7 @@ describe('W479.C apps/gui-client/src/views/CryptoOrderDetailView.tsx content par
       /\{cancel\.state\.kind === 'failed' && \(\s*<p className="text-xs text-status-error">\{cancel\.state\.message\}<\/p>\s*\)\}/,
     );
     expect(body).toMatch(
-      /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*<p className="text-xs text-ink-secondary">\s*Payment activity has been detected on-chain\. Cancellation is no longer self-service —\s*contact support to reconcile or refund\.\s*<\/p>\s*\)\}/,
+      /\{\(order\.status === 'confirming' \|\| order\.status === 'partial'\) && \(\s*<p className="text-xs text-ink-secondary">\s*A payment has been detected for this order, so it can no longer be cancelled here\.\s*Contact\s*support if you need to cancel it or request a refund\.\s*<\/p>\s*\)\}/,
     );
   });
 

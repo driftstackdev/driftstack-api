@@ -46,9 +46,10 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
 
   it('V-668 "same data file the live billing system uses" framing pinned', () => {
     expect(body).toMatch(/V-668 — per-tier comparison page/);
-    expect(body).toMatch(
-      /Numbers come from the same data file the live billing\s+system uses — what you see here is what your invoice will say\./,
-    );
+    // 2026-09-15 plain words: the customer-facing promise stays (what you
+    // see is what you're billed); the data-file / billing-system mechanics
+    // moved out of the copy and live in the V-668 doc-comment above.
+    expect(body).toMatch(/These are the exact prices you'll be billed\./);
   });
 
   it('DIMENSIONS 3 heading groups + canonical row labels pinned', () => {
@@ -56,7 +57,7 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
     const headingMatches = body.match(/heading: '([^']+)'/g);
     expect(headingMatches).toEqual([
       "heading: 'Pricing'",
-      "heading: 'Quotas'",
+      "heading: 'Limits'",
       "heading: 'Features'",
     ]);
     // Pricing rows (S20b 2026-07-06 plain-language labels; the overage row
@@ -71,9 +72,9 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
     );
     // Quotas rows.
     expect(body).toMatch(/label: 'Saved profiles'/);
-    expect(body).toMatch(/label: 'Concurrent sessions'/);
+    expect(body).toMatch(/label: 'Concurrent sessions \(running at once\)'/);
     expect(body).toMatch(/label: 'Session hours'/);
-    expect(body).toMatch(/label: 'Device types \(archetypes\)'/);
+    expect(body).toMatch(/label: 'Device types'/);
     // Features rows.
     expect(body).toMatch(/label: 'AI agent'/);
     expect(body).toMatch(/label: 'Audience'/);
@@ -119,9 +120,9 @@ describe('W375.B marketing-site /pricing/comparison page content parity', () => 
   });
 
   it('★-highlight disclaimer pinned ("Not a sales push") + the S20b BYOK/archetype/SLA footnote gloss', () => {
-    expect(body).toMatch(
-      /★ = team's most popular tier in active evaluations\. Not a sales\s+push — just what prospective customers are picking right now\./,
-    );
+    // 2026-09-15 plain words: the inside-baseball disclaimer is gone; the
+    // snapshot qualifier ("right now") survives.
+    expect(body).toMatch(/★ = our most popular tier right now\./);
     expect(body).toMatch(/BYOK = bring your own key/);
     expect(body).toMatch(/SLA = the\s+reply time we commit to for support\./);
   });

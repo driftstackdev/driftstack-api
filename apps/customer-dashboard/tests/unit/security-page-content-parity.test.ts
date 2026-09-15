@@ -47,11 +47,11 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     // triggers — the prior "15 minutes" copy was the magic-link TTL
     // for a different flow, fixed alongside the /forgot-password drift).
     expect(body).toMatch(
-      /We email you a magic link to confirm\. The link expires after 60\s+minutes/,
+      /We'll email you a link to set a new password\. The link expires after\s+60 minutes/,
     );
-    // Existing sessions are NOT invalidated by password-reset
-    // request — load-bearing behavioural claim.
-    expect(body).toMatch(/old sessions stay signed in until they naturally expire/);
+    // Confirming the reset revokes every OTHER web session
+    // (auth-flows.ts confirmPasswordReset) — load-bearing behavioural claim.
+    expect(body).toMatch(/Once you set a new password, you'll be signed out\s+everywhere else/);
   });
 
   it('change-password requires the known account email and never re-prompts a typo-prone address', () => {
@@ -90,9 +90,9 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
   it('does not replay a password-reset request after an ambiguous timeout', () => {
     expect(body).toContain('let passwordResetOutcomeUnknown = false;');
     expect(body).toContain('if (passwordResetInFlight || passwordResetOutcomeUnknown) return;');
-    expect(body).toContain('Password-reset outcome is unknown after the request timed out.');
-    expect(body).toContain('Check your inbox and spam before doing anything');
-    expect(body).toContain('Reload Security to request another only if no message arrives.');
+    expect(body).toContain("The request took too long, so we're not sure the email went out.");
+    expect(body).toContain('Check your inbox and spam folder first');
+    expect(body).toContain('If nothing arrives, reload this page and try again.');
     expect(body).toMatch(
       /syncPasswordResetAvailability\(\s*passwordResetOutcomeUnknown \? 'Reload before requesting another reset email'/,
     );
@@ -115,12 +115,13 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
   });
 
   it('reconciles ambiguous single and bulk session revocation', () => {
-    expect(body).toContain('Session-revocation outcome is unknown after the request timed out.');
+    expect(body).toContain("The request took too long, so we're not sure it finished.");
     expect(body).toContain(
-      'Bulk session-revocation outcome is unknown after the request timed out.',
+      "If this sign-in is no longer listed, it was revoked. If it's still there, try again.",
     );
-    expect(body).toContain('If this sign-in is gone, revocation completed.');
-    expect(body).toContain('If only the current sign-in remains, every other session was revoked.');
+    expect(body).toContain(
+      'If only this sign-in is left, the others were signed out. If others are still listed, try again.',
+    );
     expect(body).toMatch(/const refreshed = await loadWebSessions\(\)/);
   });
 
@@ -132,24 +133,24 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toMatch(/return loadWebSessions\(\)/);
   });
 
-  it('V-353h TOTP enrollment: SHA-1 / 30s / 6-digit (RFC 6238 defaults) pinned', () => {
-    expect(body).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults/);
+  it('V-353h TOTP enrollment: works with any authenticator app on its standard (RFC 6238 default) settings', () => {
+    expect(body).toMatch(/Works with any authenticator app using its standard settings/);
   });
 
-  it('recovery-codes + "support intervention" lockout framing pinned', () => {
+  it('recovery-codes + contact-support lockout framing pinned', () => {
     expect(body).toMatch(
-      /without your authenticator AND your recovery codes, account access\s+requires support intervention/,
+      /If you lose both your authenticator app and your recovery\s+codes, you'll need to contact support to get back in/,
     );
   });
 
   it('reconciles ambiguous one-shot recovery-code responses and serializes regeneration', () => {
     expect(body).toContain("timeoutError.name = 'AbortError'");
     expect(body).toContain('let mfaRegenerateInFlight = false;');
-    expect(body).toContain('Enrollment outcome is unknown after the request timed out.');
     expect(body).toContain(
-      'Recovery-code regeneration outcome is unknown after the request timed out.',
+      "If two-factor now shows as enrolled, your recovery codes weren't shown",
     );
-    expect(body).toContain('replacement codes cannot be recovered');
+    expect(body).toContain("your old recovery codes no longer work and the new ones weren't shown");
+    expect(body).toContain('generate new ones now while you still have your authenticator app');
   });
 
   it('serializes MFA disable and reconciles ambiguous destructive outcomes', () => {
@@ -157,10 +158,11 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain('if (mfaDisableInFlight) return;');
     expect(body).toContain("mfaDisable.setAttribute('aria-busy', 'true')");
     expect(body).toContain("mfaDisable.textContent = 'Disabling…'");
-    expect(body).toContain('MFA-disable outcome was unknown after the request timed out.');
-    expect(body).toContain('disable likely completed, so do not submit it again');
-    expect(body).toContain('still shows enrolled; obtain a fresh code before retrying disable');
-    expect(body).toContain('Reload Security to verify before retrying disable');
+    expect(body).toContain(
+      'The request took too long, but two-factor now shows as off, so it was probably disabled. No need to try again.',
+    );
+    expect(body).toContain('two-factor still shows as on. Get a fresh code and try again.');
+    expect(body).toContain('Reload this page to check before trying again.');
   });
 
   it('serializes MFA step-up proof and preserves safe timeout recovery', () => {
@@ -169,9 +171,11 @@ describe('W366.B-security customer-dashboard /security page content parity', () 
     expect(body).toContain("mfaStepUpSubmit.setAttribute('aria-busy', 'true')");
     expect(body).toContain("mfaStepUpSubmit.textContent = 'Verifying…'");
     expect(body).toContain('if (mfaStepUpCancel) mfaStepUpCancel.disabled = true;');
-    expect(body).toContain('MFA proof outcome is unknown after the request timed out.');
-    expect(body).toContain('the session may already be MFA-fresh');
-    expect(body).toContain('a new current authenticator code or an unused recovery code');
+    expect(body).toContain("we're not sure your code was accepted");
+    expect(body).toContain('it may go through without asking for a code');
+    expect(body).toContain(
+      'enter a new code from your authenticator app or an unused recovery code',
+    );
   });
 
   it('generation-orders MFA status refreshes and cancels them on page exit', () => {

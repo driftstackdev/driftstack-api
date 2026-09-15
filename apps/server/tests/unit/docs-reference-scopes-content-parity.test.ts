@@ -91,8 +91,10 @@ describe('docs reference/scopes content parity', () => {
     expect(body).toMatch(/A key with `read` satisfies every `read:\*` granular scope/);
   });
 
-  it('gui_control L-001 locked-decision framing pinned: self-hosted GUI workflow only (drift to dropping the L-001 reference would orphan the locked-decision audit trail that justifies the special-case scope category)', () => {
+  it('gui_control special-scope row pinned in customer words (2026-09-15: the L-001 decision id and "Manual-control plane" were internal vocabulary and left the page; the row now says what the scope does and who may ask for it)', () => {
     expect(body).toMatch(/`gui_control`/);
-    expect(body).toMatch(/locked-decision L-001/);
+    expect(body).toMatch(/Manual control of a live session from the desktop app/);
+    expect(body).toMatch(/Nothing restricts who may ask for it/);
+    expect(body).not.toMatch(/L-001|control plane/);
   });
 });

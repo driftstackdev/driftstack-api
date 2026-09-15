@@ -69,14 +69,14 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     expect(p).toMatch(/for \(const key of Object\.keys\(sections\)\)/);
   });
 
-  it('CRITICAL code + state URL param validation pinned. Both required for the bind contract; missing either shows the missing-state UI with clear recovery framing ("Open it from the Driftstack desktop app\'s Sign in with browser button").', () => {
+  it('CRITICAL code + state URL param validation pinned. Both required for the bind contract; missing either shows the missing-state UI with clear recovery framing ("This page needs to be opened from the Driftstack desktop app. Use its Sign in with browser button to get here").', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/const code = params\.get\('code'\)/);
     expect(p).toMatch(/const state = params\.get\('state'\)/);
     expect(p).toMatch(/if \(!code \|\| !state\) \{\s*\n\s+show\('missing'\);/);
     expect(p).toMatch(
-      /This page expects an authorization code in the URL\. Open it from the Driftstack\s*\n\s+desktop app's "Sign in with browser" button/,
+      /This page needs to be opened from the Driftstack desktop app\. Use its\s*\n\s+"Sign in with browser" button to get here/,
     );
   });
 
@@ -134,10 +134,10 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     );
   });
 
-  it('CRITICAL on-success fallback hint visible — "The desktop app should reopen automatically. If it doesn\'t, switch back to it manually — it will pick up the credentials on the next poll." Drift to dropping would leave customers confused if the deep-link doesn\'t fire.', () => {
+  it('CRITICAL on-success fallback hint visible — "The desktop app should reopen automatically. If it doesn\'t, switch back to it — it will finish connecting on its own." Drift to dropping would leave customers confused if the deep-link doesn\'t fire.', () => {
     const p = read(PAGE);
     expect(p).toMatch(
-      /The desktop app should reopen automatically\. If it doesn't, switch back to it\s*\n\s+manually — it will pick up the credentials on the next poll/,
+      /The desktop app should reopen automatically\. If it doesn't, switch back to it — it\s*\n\s+will finish connecting on its own/,
     );
   });
 
@@ -147,16 +147,16 @@ describe('W738 dashboard /cli/authorize page V-266/V-267/V-328e parity', () => {
     expect(p).toMatch(/retryBtn\.textContent = 'Return to desktop'/);
   });
 
-  it('CRITICAL customer copy identifies the minted key as restricted', () => {
+  it('CRITICAL customer copy identifies the created key as limited', () => {
     const p = read(PAGE);
-    expect(p).toMatch(/Authorizing will mint a new restricted API key named "Desktop client"/);
+    expect(p).toMatch(/Authorizing creates a limited API key named "Desktop client"/);
   });
 
-  it('CRITICAL /api-keys revoke-anytime framing pinned. The wording — "remains active until you revoke it from API keys" — tells customers how to undo a mistaken authorization.', () => {
+  it('CRITICAL /api-keys revoke-anytime framing pinned. The wording — "stays connected until you revoke it under API keys" — tells customers how to undo a mistaken authorization.', () => {
     const p = read(PAGE);
     // S23 2026-07-06 — accent-toned TEXT re-pinned raw tk-accent → AA-safe tk-accent-text (cross-app WCAG sweep).
     expect(p).toMatch(
-      /It remains active until you revoke it from <a href="\/api-keys\/" class="text-tk-accent-text underline">API keys<\/a>/,
+      /It stays connected until\s*\n\s+you revoke it under <a href="\/api-keys\/" class="text-tk-accent-text underline">API keys<\/a>/,
     );
     expect(p).not.toMatch(/href="\/api-keys"/);
   });

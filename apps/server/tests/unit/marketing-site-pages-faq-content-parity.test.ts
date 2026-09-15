@@ -82,8 +82,9 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     expect(body).toMatch(
       /Every paid tier, including the Manual tiers, includes programmatic API\/SDK access with live keys/,
     );
+    // 2026-09-15 owner vocabulary: "plan family" / "API plans", not "ladder".
     expect(body).toMatch(
-      /The API ladder \(API Starter from \$149\/mo\) is the path built and sized for code-first workloads/,
+      /The API plans \(API Starter from \$149\/mo\) are built and sized for code-first workloads/,
     );
     expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
@@ -156,20 +157,31 @@ describe('W500.A apps/marketing-site /faq (src/data/faq.ts + faq.astro) content 
     expect(body).toContain(`q: "Where can I see what I've actually been billed?"`);
     expect(body).toMatch(/Stripe-issued invoices are payment truth for card subscriptions/);
     expect(body).toMatch(/crypto customers use their NowPayments order receipt/);
-    expect(body).toMatch(/operational cost-to-serve estimate for a UTC month, not your invoice/);
-    expect(body).toMatch(/only its compute estimate is populated/);
-    expect(body).toMatch(/storage, egress, email, and LLM are reserved zero fields/);
-    expect(body).toMatch(/operator unit-economics signal, not a customer spending cap/);
-    expect(body).toMatch(/does not send a customer billing email, add an invoice item, rate-limit/);
-    expect(body).toMatch(/recomputed on each request from lifecycle-derived session minutes/);
+    // 2026-09-15 plain words: same separation (cost-to-serve estimate is
+    // not the invoice; only the session-time part is populated; the
+    // threshold is internal and has no invoice effect; recomputed live).
+    expect(body).toMatch(
+      /an estimate of what it costs Driftstack to serve your account in a calendar month \(UTC\) — not your invoice/,
+    );
+    expect(body).toMatch(/only the session-time part of that estimate is filled in/);
+    expect(body).toMatch(/storage, network traffic, email, and AI show zero for now/);
+    expect(body).toMatch(/an internal signal for Driftstack, not a spending cap on your account/);
+    expect(body).toMatch(
+      /does not send you a billing email, add anything to your invoice, block a new session/,
+    );
+    expect(body).toMatch(
+      /recalculated every time you look at it, from how many minutes your sessions have run/,
+    );
   });
 
   it('AI billing states the shipped included-service budget and self-serve consent paths without launch promises', () => {
     expect(body).toContain("q: 'How is AI usage billed?'");
     expect(body).toContain("q: 'What is the bundled LLM?'");
     expect(body).toMatch(/BYOK has no Driftstack markup/);
-    expect(body).toMatch(/\$0\.10 included-service accounting value against the monthly budget/);
-    expect(body).toMatch(/budget is enforced but not separately itemized by Stripe today/);
+    expect(body).toMatch(/counts \$0\.10 against a monthly budget you control/);
+    expect(body).toMatch(
+      /the budget is enforced, but it is not a separate line on your invoice today/,
+    );
     expect(body).toMatch(/Enterprise can use a contracted custom budget/);
     expect(body).toMatch(/Settings → AI &amp; billing/);
     expect(body).toMatch(/PATCH \/v1\/account\/me\/bundled-llm-settings/);

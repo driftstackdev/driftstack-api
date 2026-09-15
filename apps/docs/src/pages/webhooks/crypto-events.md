@@ -6,7 +6,7 @@ description: Subscribe to crypto.order.paid and crypto.order.failed for push not
 
 # Crypto order events
 
-The crypto-orders surface emits two live, subscribable event types:
+Crypto orders emit two subscribable event types:
 `crypto.order.paid` when a payment settles, and `crypto.order.failed`
 when an order reaches the terminal failure state. This page is the
 payload contract for both, plus guidance on choosing between
@@ -75,10 +75,10 @@ produced it:
 
 - `ipn` — NowPayments reported a terminal non-paid payment status
   (`failed`, `expired`, or `refunded`).
-- `expired` — an operator retired this specific order after its pay
+- `expired` — Driftstack expired this specific order after its pay
   window lapsed with no settled payment.
-- `swept` — the stale-order sweep retired the order along with other
-  long-pending orders.
+- `swept` — the order was closed automatically after staying unpaid
+  for too long, along with other long-pending orders.
 
 A customer **cancellation does not fire this event** — a cancelled
 order moves to `cancelled`, which is a distinct terminal state with

@@ -120,7 +120,7 @@ export const AgentSessionSchema = z.object({
     .nullable()
     .optional()
     .describe(
-      'The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one.',
+      'The most recent failure recorded for this session, at launch or while running. Null when none has been reported.',
     ),
 });
 

@@ -31,7 +31,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       Signing you in…
     </h1>
     <p class="mt-3 text-sm text-tk-ink-2" data-field="intro">
-      Verifying your magic-link token. One moment.
+      Checking your sign-in link. One moment.
     </p>
 
     <div class="auth-card mt-8">
@@ -55,8 +55,8 @@ const apiBaseUrl = resolveApiBaseUrl();
         <div>
           <h2 class="text-base font-semibold text-tk-ink">Finish two-factor verification</h2>
           <p class="mt-2 text-sm text-tk-ink-2">
-            Your email link is verified. Enter the code from your authenticator app.
-            This challenge expires in <span data-mfa-expiry class="font-mono">5 minutes</span>.
+            Your sign-in link is confirmed. Enter the code from your authenticator app
+            within <span data-mfa-expiry class="font-mono">5 minutes</span>.
           </p>
         </div>
         <div data-mfa-code-row>
@@ -93,11 +93,11 @@ const apiBaseUrl = resolveApiBaseUrl();
 
       <form data-form="magic-link" class="hidden space-y-5" data-state="fallback">
         <p class="text-sm text-tk-ink-2">
-          We couldn't find a token in the URL. Paste the one from your magic-link email below
-          (everything after <code class="text-tk-accent-text">?token=</code>):
+          We couldn't find a code in this link. Paste the code from your sign-in email below
+          (the part after <code class="text-tk-accent-text">?token=</code>):
         </p>
         <div>
-          <label class="form-label" for="magic-link-token"> Magic-link token </label>
+          <label class="form-label" for="magic-link-token"> Sign-in code </label>
           <input
             id="magic-link-token"
             name="token"
@@ -105,7 +105,7 @@ const apiBaseUrl = resolveApiBaseUrl();
             required
             autocomplete="one-time-code"
             class="form-input font-mono tracking-wider"
-            placeholder="Paste your token"
+            placeholder="Paste your code"
           />
         </div>
         <button type="submit" class="btn-primary w-full">Sign in</button>
@@ -200,7 +200,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       function showFallbackForm(prefill) {
         if (intro)
           intro.textContent =
-            "Couldn't find a token in the URL. Paste it from your email to sign in.";
+            "Couldn't find a code in this link. Paste it from your email to sign in.";
         if (form) form.classList.remove('hidden');
         if (prefill && tokenInput) tokenInput.value = prefill;
       }
@@ -240,7 +240,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         mfaOutcomeUnknown = false;
         if (form) form.classList.add('hidden');
         banner.classList.add('hidden');
-        if (intro) intro.textContent = 'Your email link is verified. Finish with your second factor.';
+        if (intro) intro.textContent = 'Your sign-in link is confirmed. Enter your two-factor code to finish.';
         if (body.challenge_expires_at && mfaExpiry) {
           const minutes = Math.max(
             1,
@@ -267,7 +267,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (form) form.classList.add('hidden');
         if (mfaForm) mfaForm.classList.add('hidden');
         if (unknownRecovery) unknownRecovery.classList.remove('hidden');
-        if (intro) intro.textContent = 'MFA sign-in already accepted';
+        if (intro) intro.textContent = 'Code already accepted';
         showBanner(message);
       }
 
@@ -303,7 +303,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           }
           if (!canPersistWebSession()) {
             showBanner(
-              'Enable browser site storage before submitting this one-time MFA challenge. It has not been consumed, so you can retry after storage is available.',
+              'Your browser is blocking site storage, which sign-in needs. Allow it, then enter your code again.',
             );
             return;
           }
@@ -353,13 +353,13 @@ const apiBaseUrl = resolveApiBaseUrl();
             .catch((err) => {
               if (mfaAccepted) {
                 showMfaTerminal(
-                  'Two-factor verification was accepted, but this browser could not finish the session. Do not submit this code again; request a fresh sign-in link.',
+                  "Your code was accepted, but your browser couldn't finish signing you in. Don't enter that code again — request a fresh sign-in link.",
                 );
                 return;
               }
               if (err && err.name === 'AbortError') {
                 showMfaTerminal(
-                  'MFA sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time challenge and created a session whose credential did not reach this browser. Do not submit this code again; request a fresh sign-in link.',
+                  "The request took too long, so your code may already have been used. Don't enter it again — request a fresh sign-in link.",
                 );
                 return;
               }
@@ -387,7 +387,7 @@ const apiBaseUrl = resolveApiBaseUrl();
         if (!canPersistWebSession()) {
           if (intro) intro.textContent = 'Browser storage is unavailable';
           showBanner(
-            'Enable browser site storage before using this one-time sign-in link. It has not been consumed, so you can retry after storage is available.',
+            'Your browser is blocking site storage, which sign-in needs. Allow it, then open the link again — it still works.',
           );
           showFallbackForm(token);
           return Promise.resolve(false);
@@ -434,13 +434,13 @@ const apiBaseUrl = resolveApiBaseUrl();
           .catch((err) => {
             if (consumeAccepted) {
               showConsumeTerminal(
-                'This one-time sign-in link was accepted, but this browser could not finish the session. Do not use this link again; request a fresh sign-in link.',
+                "Your sign-in link was accepted, but your browser couldn't finish signing you in. Don't use this link again — request a fresh one.",
               );
               return;
             }
             if (err && err.name === 'AbortError') {
               showConsumeTerminal(
-                'Magic-link sign-in outcome is unknown after the request timed out. The server may already have consumed this one-time link and created a session whose credential did not reach this browser. Do not try this link again; request a fresh sign-in link.',
+                "The request took too long, so this link may already have been used. Don't try it again — request a fresh sign-in link.",
               );
               return;
             }

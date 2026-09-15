@@ -15,12 +15,12 @@ function read(p: string): string {
 }
 
 describe('W602 apps/docs/sdk close-out pages content parity', () => {
-  it('installation.md: OpenAPI 3.1 source + all three published pre-1.0 installs + reproducibility + resource catalogues pinned', () => {
+  it('installation.md: same-surface-in-every-language intro + all three published pre-1.0 installs + reproducibility + resource catalogues pinned', () => {
     const body = read(INSTALL);
     expect(body).toMatch(/^title: SDK installation$/m);
     expect(body).toMatch(/^# SDK installation$/m);
     expect(body).toMatch(
-      /The Driftstack SDKs share a typed surface generated from the same OpenAPI 3\.1 contract\./,
+      /The Driftstack SDKs expose the same resources and methods in every language, with full type definitions\./,
     );
     expect(body).toMatch(/^## TypeScript \/ Node\.js$/m);
     expect(body).toMatch(/\*\*Status:\*\* published on npm\./);
@@ -74,7 +74,7 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     // search/login are typed everywhere but capability-gated at the route, so
     // the row must not read as plain shipped availability.
     expect(body).toMatch(
-      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login are capability-gated\s+\|/,
+      /\| Sessions\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Full CRUD \+ navigate\/interact\/wait\/capture\/getState\/extract; search\/login return 503 where not enabled\s+\|/,
     );
     expect(body).toMatch(
       /\| API keys\s+\| ✅\s+\| ✅\s+\| ✅\s+\| Includes `rotate` with 24h grace\s+\|/,
@@ -95,9 +95,12 @@ describe('W602 apps/docs/sdk close-out pages content parity', () => {
     // Ban the superseded RFC 7807 reference — the corrected doc moved to RFC 9457.
     expect(body).not.toMatch(/\(RFC 7807\)/);
     expect(body).toMatch(/The hierarchy is consistent across TypeScript \/ Python \/ Go — the/);
-    expect(body).toMatch(/type names \+ URI mapping are kept in sync via a single source of/);
-    expect(body).toMatch(/truth \(`PROBLEM_TYPE_TO_ERROR` per language, generated against the/);
-    expect(body).toMatch(/server's OpenAPI 3\.1 spec\)\./);
+    // 2026-09-15 plain words — the promise (same URIs → matching errors) stays;
+    // the PROBLEM_TYPE_TO_ERROR constant + generation pipeline are how we build it.
+    expect(body).toMatch(/same problem-type URIs map to matching errors in every SDK\. The/);
+    expect(body).toMatch(/table below lists the class name in each language \(a couple of/);
+    expect(body).toMatch(/names differ per language — see the naming note\)\./);
+    expect(body).not.toMatch(/PROBLEM_TYPE_TO_ERROR/);
     expect(body).toMatch(/^## Hierarchy$/m);
     expect(body).toMatch(/`https:\/\/errors\.driftstack\.dev\/<slug>` host/);
     expect(body).toMatch(/Dispatch on the slug,/);

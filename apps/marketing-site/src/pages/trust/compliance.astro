@@ -110,9 +110,12 @@ import Breadcrumbs from '../../components/Breadcrumbs.astro';
       <h2 class="text-2xl font-semibold tracking-tight text-tk-ink">Audit-log retention</h2>
       <ul class="mt-4 max-w-prose list-inside list-disc space-y-2 text-tk-ink-2">
         <li>
-          Customer audit logs follow the account tier's published retention and
-          are available through the dashboard and
-          <code class="font-mono">GET /v1/account/audit-log</code>.
+          Your account's audit log is available in the dashboard and through
+          the API (<code class="font-mono">GET /v1/account/audit-log</code>).
+          Entries are kept for as long as your account exists, on every plan —
+          see the <a href="/docs/audit-log/" class="text-tk-accent-text underline"
+            >audit log documentation</a
+          >.
         </li>
         <li>Privileged admin-action records are retained internally for 365 days.</li>
         <li>Access logs stay in quick-access storage for 90 days, then in archive for one year.</li>

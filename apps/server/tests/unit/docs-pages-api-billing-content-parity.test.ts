@@ -38,20 +38,21 @@ describe('W765 docs /api/billing content parity', () => {
   it("CRITICAL thin-layer-over-Stripe framing pinned. The 'All Driftstack billing is a thin layer over Stripe. The Driftstack API mints checkout sessions + portal URLs; the customer interacts with the Stripe-hosted UI directly' wording is the load-bearing PCI-out-of-scope architecture framing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/All Driftstack billing is a thin layer over Stripe\./);
+    expect(p).toMatch(/Driftstack billing runs on Stripe\./);
     expect(p).toMatch(
-      /The Driftstack\s*\n?API mints checkout sessions \+ portal URLs; the customer interacts\s*\n?with the Stripe-hosted UI directly\./,
+      /The API gives you checkout and\s*\n?portal links; you pay for and manage your subscription in Stripe's\s*\n?hosted pages\./,
     );
   });
 
   it('CRITICAL Stripe-webhook-events-reflected framing pinned. The "Driftstack receives webhook events from Stripe (`invoice.paid`, `customer.subscription.updated`, etc.) and reflects them into the account\'s subscription row + audit-log + email notifications" wording explains the inbound webhook flow.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Driftstack receives webhook/);
     expect(p).toMatch(
-      /events from Stripe \(`invoice\.paid`, `customer\.subscription\.updated`,\s*\n?etc\.\) and reflects them into the account's `subscription` row \+/,
+      /When Stripe reports a change, Driftstack updates your\s*\n?subscription state, records it in your audit log, and sends you an\s*\n?email notification\./,
     );
-    expect(p).toMatch(/audit-log \+ email notifications\./);
+    expect(p, 'Stripe event names are internal plumbing').not.toMatch(
+      /`invoice\.paid`|`customer\.subscription\.updated`/,
+    );
   });
 
   it('CRITICAL GET /v1/billing response shape pinned — subscription only (trial_pack envelope removed 2026-05-27). Matches publicSubscription() in apps/server/src/routes/billing.ts and SubscriptionSchema in packages/api-types/src/billing.ts. The previous pin asserted fictional fields (`id`, `billing_period`, `current_period_start`) that the route never returns + omitted real fields (`stripe_subscription_id`, `canceled_at`, `created_at`, `updated_at`). Refreshed against the source-of-truth.', () => {
@@ -110,14 +111,18 @@ describe('W765 docs /api/billing content parity', () => {
   it("CRITICAL return-URL allowlist framing pinned. V-754 removed 'Customers self-hosting Driftstack configure the allowlist in their deployment env' — ALLOWED_RETURN_ORIGINS is a hardcoded 3-origin constant whose own comment refuses env-driving, because a typo in env config would silently re-open the redirect hole. The page now documents the hardcoded list AND the omit-the-fields path that actually works for a self-hoster.", () => {
     const p = read(PAGE);
 
-    // The real defense: hardcoded, not env-configurable.
-    expect(p).toMatch(/validated against a \*\*hardcoded\*\* allowlist/);
-    expect(p).toMatch(/deliberately not env-driven/);
-    // The working path a self-hoster needs, which the old text hid behind a
-    // non-existent env var: both fields are optional and the server substitutes
-    // its own configured return URLs, bypassing the check entirely.
+    // The real defense: an allowlist the customer cannot widen from config.
+    expect(p).toMatch(
+      /each URL's origin must be\s*\n?on the allowlist \(`https:\/\/app\.driftstack\.io`, plus local-development\s*\n?origins\); any other origin returns `400`/,
+    );
+    expect(p).toMatch(/Contact support to have an\s*\n?origin added\./);
+    // The working path everyone needs: both fields are optional and the
+    // customer lands back on the dashboard, bypassing the check entirely.
     expect(p).toMatch(/Both URL fields are optional/);
-    expect(p).toMatch(/STRIPE_SUCCESS_URL/);
+    expect(p).toMatch(/the customer is returned to the Driftstack\s*\n?dashboard after checkout/);
+    expect(p, 'internal env-var names must not appear').not.toMatch(
+      /STRIPE_SUCCESS_URL|DASHBOARD_ORIGIN/,
+    );
     // The false instruction must not return.
     expect(p).not.toMatch(/self-hosting Driftstack configure the allowlist/);
   });

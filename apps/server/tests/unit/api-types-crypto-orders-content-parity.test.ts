@@ -83,7 +83,7 @@ describe('W436.C packages/api-types/src/crypto-orders.ts content parity', () => 
   it('CreateCryptoCheckoutRequest: product is the shared PURCHASABLE_TIERS enum (V-924 — free and enterprise excluded, the same set as the Stripe sibling in billing.ts) + price_cents int positive max 1M + price_currency 3-letter uppercase ISO regex /^[A-Z]{3}$/', () => {
     expect(body).toMatch(/export const CreateCryptoCheckoutRequestSchema = z\.object\(\{/);
     expect(body, 'product is constrained to the purchasable-tier enum, not a bare string').toMatch(
-      /product: z\s*\.enum\(PURCHASABLE_TIERS, \{\s*message: 'product must be a self-serve paid tier \(free and enterprise excluded\)',\s*\}\)\s*\.describe\(/,
+      /product: z\s*\.enum\(PURCHASABLE_TIERS, \{\s*message: 'product must be a paid plan \(free and enterprise excluded\)',\s*\}\)\s*\.describe\(/,
     );
     // A refine would not reach the published spec: JSON Schema cannot express a
     // predicate, so the generated document would list all eight tiers.

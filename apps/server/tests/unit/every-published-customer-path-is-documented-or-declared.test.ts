@@ -49,6 +49,10 @@ const DOCS = resolve(REPO_ROOT, 'apps/docs/src/pages');
  * that documenting it was inconvenient.
  */
 const UNDOCUMENTED_BY_DESIGN: Record<string, string> = {
+  '/health':
+    'plain up/down check for load balancers and uptime monitors; it carries no customer ' +
+    'information, and the status page deliberately does not point visitors at it ' +
+    '(docs-pages-api-status-content-parity pins that).',
   '/v1/egress/echo': 'infrastructure diagnostic for the egress path',
   '/v1/fleet/events': 'fleet control-plane surface, not customer-facing',
   '/v1/sessions/:id/proxy':

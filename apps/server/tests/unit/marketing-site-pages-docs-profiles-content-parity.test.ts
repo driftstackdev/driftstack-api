@@ -66,10 +66,10 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
       /<strong>A\/B-tested rendering\.<\/strong> The site personalises\s*based on cookies; you want each run to see the same variant\./,
     );
     expect(body).toMatch(
-      /<strong>Archetype pinning\.<\/strong> You want to lock the\s*browser fingerprint \(UA \/ viewport \/ timezone \/ locale\) to a\s*specific Driftstack-managed archetype slug across runs\./,
+      /<strong>Device pinning\.<\/strong> You want every run to use\s*one specific Driftstack device profile \(the <code>archetype<\/code>\s*field: user agent, screen size, timezone, locale\) rather than the\s*account default, so the browser fingerprint stays the same across\s*runs\./,
     );
     expect(body).toMatch(
-      /If your automation doesn't care about identity continuity, skip\s*profiles and let sessions run with the account's default\s*archetype\./,
+      /If your automation doesn't care about identity continuity, skip\s*profiles and let sessions run with your account's default device\s*profile \(the <code>archetype<\/code> setting\)\./,
     );
   });
 
@@ -83,7 +83,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
       /The response is a flat profile object — no envelope\. Profile\s*ids are prefixed <code>prof_<\/code>\./,
     );
     expect(body).toMatch(
-      /The <code>archetype<\/code>\s*field is a lowercase slug \(1–120 chars\) identifying a\s*Driftstack-managed device profile;/,
+      /The <code>archetype<\/code>\s*field is a lowercase id \(1–120 chars\) identifying a\s*Driftstack-managed device profile;/,
     );
     expect(body).toMatch(
       /Browser state\s*\(cookies, localStorage, etc\.\) is created on first use and is\s*not part of the create request\./,
@@ -103,14 +103,14 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
     expect(body).toMatch(/<code>folder: null<\/code>\s*files the profile back under no folder/);
     expect(body).toMatch(/an exact-set replace \(<code>\[\]<\/code> clears them\)/);
     expect(body).toMatch(
-      /To change the\s*archetype, clone the profile via\s*<code>POST \/v1\/profiles\/:id\/clone<\/code> and discard the old\s*one \(the archetype is set at create time and pins the device\s*identity for the life of the profile\)\./,
+      /To change the\s*device profile \(the <code>archetype<\/code> field\), clone the\s*profile via <code>POST \/v1\/profiles\/:id\/clone<\/code> and discard\s*the old one \(the device profile is set at create time and stays\s*fixed for the life of the profile\)\./,
     );
   });
 
-  it("DELETE /v1/profiles/:id 204 + in-flight-sessions keep running + idempotent framing pinned: 'The profile + its persisted browser state are removed. In-flight sessions that started with this profile keep running but can't be pinned to it again. Idempotent: a second DELETE on the same id returns 204.' — pinned so the 204 + state-removed + in-flight-survives-but-can't-repin + idempotent commitment survives", () => {
+  it("DELETE /v1/profiles/:id 204 + in-flight-sessions keep running + idempotent framing pinned: 'The profile + its persisted browser state are removed. Sessions already running with this profile keep running but can't be pinned to it again. Idempotent: a second DELETE on the same id returns 204.' — pinned so the 204 + state-removed + in-flight-survives-but-can't-repin + idempotent commitment survives", () => {
     expect(body).toMatch(/→ 204 No Content/);
     expect(body).toMatch(
-      /The profile \+ its persisted browser state are removed\.\s*In-flight sessions that started with this profile keep running\s*but can't be pinned to it again\. Idempotent: a second DELETE\s*on the same id returns 204\./,
+      /The profile \+ its persisted browser state are removed\.\s*Sessions already running with this profile keep running\s*but can't be pinned to it again\. Idempotent: a second DELETE\s*on the same id returns 204\./,
     );
   });
 
@@ -129,9 +129,7 @@ describe('W516.C apps/marketing-site/src/pages/docs/profiles.astro content parit
   });
 
   it("Privacy 3-bullet framing pinned: 'Cookies + storage state are stored in encrypted form at rest in the driver layer.' + 'Profile metadata + snapshot rows are deleted on account deletion + per the documented retention policy.' + 'No identifying customer data is embedded in the profile record — the only customer-supplied fields are name and description.' — pinned so the 3-privacy-bullet + encrypted-at-rest + no-PII-in-profile-record commitment survives", () => {
-    expect(body).toMatch(
-      /<li>Cookies \+ storage state are stored in encrypted form at\s*rest in the driver layer\.<\/li>/,
-    );
+    expect(body).toMatch(/<li>Cookies \+ storage state are stored encrypted at rest\.<\/li>/);
     expect(body).toMatch(
       /<li>Profile metadata \+ snapshot rows are deleted on account\s*deletion \+ per the documented retention policy\.<\/li>/,
     );

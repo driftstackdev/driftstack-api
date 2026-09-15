@@ -57,18 +57,18 @@ describe('W518.C apps/marketing-site/src/pages/docs/api-changelog.astro content 
   });
 
   it("Spot-check 4 canonical changelog entry headers pinned (descriptive English form post R4 V-NNN scrub): 'Auth — derivation paths match dashboard routes' (V-079.C origin) + 'Dashboard — auto-verify on the verify-email page' (V-184a.B origin) + 'Server — runtime URLs centralized on DASHBOARD_ORIGIN' (V-057.E origin) + 'Auth — DASHBOARD_ORIGIN now drives email link URLs' (V-079.B origin) — pinned so the 4-canonical-change-record customer-facing audit-trail survives (drift to dropping any of these would orphan customers from the change-history reference for the DASHBOARD_ORIGIN single-source-of-truth feature family). Re-enabled by slice 304 after R4 commit b46b8d4124b 'V-NNN session-log scrub from customer-facing surfaces' replaced V-anchors with descriptive English titles — the V-NNN forms now exist only as internal tracking notes in code comments + this test docstring", () => {
-    expect(body).toMatch(/<strong>Auth — derivation paths match dashboard routes\.<\/strong>/);
+    expect(body).toMatch(/<strong>Auth — email links open the right dashboard pages\.<\/strong>/);
     expect(body).toMatch(/<strong>Dashboard — auto-verify on the verify-email page\.<\/strong>/);
-    expect(body).toMatch(
-      /<strong>Server — runtime URLs centralized on DASHBOARD_ORIGIN\.<\/strong>/,
-    );
-    expect(body).toMatch(/<strong>Auth — DASHBOARD_ORIGIN now drives email link URLs\.<\/strong>/);
+    expect(body).toMatch(/<strong>Auth — email links always point at your dashboard\.<\/strong>/);
+    // The server-config refactor entry was internal-only and is no longer listed;
+    // env-var names must not appear on the customer changelog.
+    expect(body).not.toMatch(/runtime URLs centralized|DASHBOARD_ORIGIN|PUBLIC_DASHBOARD_URL/);
   });
 
-  it("2026-03 initial-release crypto-orders framing pinned: 'POST /v1/billing/crypto-checkout mints orders; the IPN webhook from NowPayments at POST /webhooks/nowpayments/ipn drives the order state machine. Customer-facing list at GET /v1/billing/crypto-orders; admin surface at GET /v1/admin/crypto-orders.' — pinned so the foundational 2026-03 release anchor (origin of the crypto-orders surface) + 4-canonical-endpoint surface survives (drift to forgetting the origin month would orphan the history)", () => {
+  it("2026-03 initial-release crypto-orders framing pinned: 'POST /v1/billing/crypto-checkout creates orders; payment notifications from NowPayments move each order through its states. Customer-facing list at GET /v1/billing/crypto-orders; admin surface at GET /v1/admin/crypto-orders.' (2026-09-15: the inbound NowPayments webhook route is how we run it, not something a customer calls) — pinned so the foundational 2026-03 release anchor (origin of the crypto-orders surface) + 3-canonical-endpoint surface survives (drift to forgetting the origin month would orphan the history)", () => {
     expect(body).toMatch(/<strong>Crypto orders — initial release\.<\/strong>/);
     expect(body).toMatch(
-      /<code>POST \/v1\/billing\/crypto-checkout<\/code> mints orders;\s*the IPN webhook from NowPayments at\s*<code>POST \/webhooks\/nowpayments\/ipn<\/code> drives the order\s*state machine\./,
+      /<code>POST \/v1\/billing\/crypto-checkout<\/code> creates orders;\s*payment notifications from NowPayments move each order\s*through its states\./,
     );
   });
 

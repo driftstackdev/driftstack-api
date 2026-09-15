@@ -235,7 +235,7 @@ describe('verify-email page — local integration', () => {
       'link_tok_123',
     );
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /enable browser site storage.*one-time verification link.*has not been consumed.*retry/i,
+      /blocking site storage.*sign-in needs.*open the link again.*still works/i,
     );
   });
 
@@ -253,7 +253,7 @@ describe('verify-email page — local integration', () => {
     expect(attrHidden(window, '[data-form="verify"]')).toBe(true);
     expect(attrHidden(window, '[data-verify-unknown]')).toBe(false);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /email was verified.*session could not be saved.*do not submit this token again.*sign in/i,
+      /email is verified.*couldn't sign you in.*don't use this link again.*just sign in/i,
     );
   });
 
@@ -311,7 +311,7 @@ describe('verify-email page — local integration', () => {
     expect(form.getAttribute('aria-busy')).toBe('false');
     expect((form.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(true);
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /outcome is unknown.*verified your account.*consumed this one-time token.*credential did not reach this browser.*do not submit this token again.*continue to sign in.*still unverified.*resend/i,
+      /took too long.*email may already be verified.*don't use this link again.*try signing in.*still unverified.*request a new verification email/i,
     );
     expect(
       window.document.querySelector('[data-link="verify-timeout-login"]')?.getAttribute('href'),
@@ -404,7 +404,7 @@ describe('verify-email page — local integration', () => {
     expect(resendBtn.disabled).toBe(true);
     expect(resendBtn.getAttribute('aria-busy')).toBe('false');
     expect(window.document.querySelector('[data-banner]')?.textContent).toMatch(
-      /delivery is unknown.*may already have sent.*do not resend again.*inbox and spam.*newest one/i,
+      /took too long.*not sure the email went out.*inbox and spam folder before trying again.*use the newest.*reload this page if nothing arrives/i,
     );
     expect(window.document.querySelector('[data-field="resend-status"]')?.textContent).toMatch(
       /check inbox before retrying/i,

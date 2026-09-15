@@ -45,10 +45,10 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
 
   it("5-section evaluator-checklist taxonomy: 'Authentication & access' + 'Transport & egress' + 'Webhooks & integrations' + 'Data residency & retention' + 'Observability & incident response' — pinned so the 5-section CISO-checklist surface stays complete (drift to dropping 'Webhooks & integrations' would orphan the inbound-webhook-verification claim from the structured walk; drift to dropping 'Transport & egress' would lose the TLS + customer-egress claims)", () => {
     expect(body).toMatch(/Authentication &amp; access/);
-    expect(body).toMatch(/Transport &amp; egress/);
+    expect(body).toMatch(/Transport &amp; proxies/); // 2026-09-15: "egress" → plain "proxies"
     expect(body).toMatch(/Webhooks &amp; integrations/);
     expect(body).toMatch(/Data residency &amp; retention/);
-    expect(body).toMatch(/Observability &amp; incident response/);
+    expect(body).toMatch(/Monitoring &amp; incident response/); // 2026-09-15: "Observability" → plain "Monitoring"
   });
 
   it("scrypt-hashed API keys claim pinned: 'API keys are scrypt-hashed at rest' + 'N=2^15, r=8, p=1' params + 'apps/server/src/lib/api-keys.ts · hashApiKey() / verifyApiKey()' code-path pointer — pinned so the scrypt-cost-params + the explicit code-path mapping survive (drift to dropping N=2^15 would obscure the cost-factor; drift to dropping the code-path would force buyers to take the claim on faith)", () => {
@@ -71,7 +71,7 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // corruption slices 235-256 fixed: the sentence is grammatical
     // and the step-up-on-destructive-admin-paths claim is intact.
     expect(body).toMatch(
-      /Two-factor login uses authenticator-app codes \(TOTP\)\.\s+The seed that generates your codes is stored encrypted\s+\(AES-256-GCM at-rest encryption of TOTP secrets\)\.\s+Recovery codes are scrypt-hashed — one-way scrambled,\s+mirroring API key handling\. Dangerous admin actions\s+demand a fresh MFA check even if you're already signed\s+in \(a "step-up" gate on destructive admin paths\)\./,
+      /Two-factor login uses authenticator-app codes \(TOTP\)\.\s+The seed that generates your codes is stored encrypted\s+\(AES-256-GCM at-rest encryption of TOTP secrets\)\.\s+Recovery codes are scrypt-hashed — one-way scrambled,\s+mirroring API key handling\. Dangerous admin actions\s+demand a fresh MFA check even if you're already signed\s+in \(a "step-up" check before risky admin actions\)\./,
     );
     expect(body).not.toMatch(/V-353e/);
   });
@@ -86,30 +86,43 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
   });
 
   it("Transport claim pinned: 'TLS 1.3 on every customer-facing path' + 'Cloudflare edge enforces TLS 1.3 strict' + 'No plaintext HTTP on any path; the deploy pipeline's TLS check rejects the release otherwise.' — pinned so the TLS-1.3-strict commitment + the deploy-pipeline-rejects-non-TLS enforcement survive (drift to softening 'No plaintext HTTP' would let HTTP slip into prod; drift to dropping the deploy-pipeline check would lose the automated guarantee)", () => {
-    expect(body).toMatch(/TLS 1\.3 on every customer-facing path/);
-    // S20c 2026-07-06 plain-language pass: strict TLS 1.3 + the
-    // deploy-gate enforcement survive; plain words lead.
+    // 2026-09-15: "strict TLS 1.3" was wrong against the origin config
+    // (infra/nginx/*.conf: ssl_protocols TLSv1.2 TLSv1.3) and /security
+    // ("TLS 1.2 + 1.3"); the page now states the real floor in plain words.
+    expect(body).toMatch(/Every connection is encrypted \(TLS 1\.2 or newer\)/);
     expect(body).toMatch(
-      /Cloudflare, our edge network, enforces strict TLS 1\.3\s+encryption all the way to our own servers behind\s+<code class="font-mono">api\.driftstack\.dev<\/code> \+\s+<code class="font-mono">app\.driftstack\.io<\/code> \(the\s+origins\)\./,
+      /\(<code class="font-mono">api\.driftstack\.dev<\/code> and\s+<code class="font-mono">app\.driftstack\.io<\/code>\) is\s+encrypted with TLS 1\.2 or newer, through Cloudflare, our\s+edge network\./,
     );
     expect(body).toMatch(
-      /No unencrypted page \(plaintext HTTP\) exists on\s+any path — every release is automatically checked for\s+this before it ships; the deploy pipeline's TLS\s+check rejects the release otherwise\./,
+      /No unencrypted \(plain HTTP\) page exists on\s+any path, and every release is checked for this\s+automatically before it ships\./,
     );
+    expect(body).not.toMatch(/strict TLS 1\.3/);
   });
 
   it("Customer-configurable egress SHIPPED per profile (SOCKS5 with UDP/WebRTC/QUIC + OpenVPN + WireGuard). 2026-05-22 — was '(roadmap)'; flipped to '(per profile)' + emerald checkmark per planning 133 Phase 1 + SocksProxyBackend wired in bootstrap. EU-egress-fallback + no-payload-logging commitments preserved.", () => {
-    expect(body).toMatch(/Customer-configurable egress \(per profile\)/);
-    expect(body).toMatch(/a SOCKS5 proxy with full\s+UDP\/WebRTC\/QUIC tunnelling/); // S20c 2026-07-06
+    // 2026-09-15 plain-language pass: same shipped claim in customer words;
+    // "full UDP/WebRTC/QUIC tunnelling" overpromised against /security
+    // ("depends on the proxy's reported UDP capability") and is retired.
+    expect(body).toMatch(/Your own proxy or VPN, per profile/);
+    expect(body).toMatch(
+      /Whether UDP, WebRTC and QUIC\s+traffic travels through a SOCKS5 proxy depends on what\s+your proxy supports, and is shown after launch/,
+    );
+    expect(body).not.toMatch(/full\s+UDP\/WebRTC\/QUIC tunnelling/);
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
-    expect(body).toMatch(/a WireGuard file \(\.conf\)/); // S20c 2026-07-06
+    expect(body).toMatch(/a WireGuard\s+file \(\.conf\)/); // S20c 2026-07-06
+    // 2026-09-15: aligned with /security ("Driftstack's managed exit");
+    // sessions run on US hardware, so "own EU network" overstated the region.
     expect(body).toMatch(
-      /Without an attached config, session traffic exits via\s*Driftstack's own EU network egress/,
+      /Without\s+one attached, session traffic exits through Driftstack's\s+managed exit\./,
     );
-    // S20c 2026-07-06 plain-language pass: same no-payload-logging
-    // commitment, payloads spelled out plainly.
+    // No-page-content-storage commitment (aligned with /security: "We never
+    // store destination response bodies"). Destination URLs ARE processed and
+    // recorded per the /trust FAQ, so the old "does not log ... destination
+    // URLs" line contradicted the trust index and is retired.
     expect(body).toMatch(
-      /Driftstack does\s+not log session-traffic payloads \(the destination URLs\s+you visit, the page content that comes back\); the proxy\s+layer passes traffic through without storing it\./,
+      /Driftstack does not store the content of\s+the pages your sessions load\./,
     );
+    expect(body).not.toMatch(/does\s+not log session-traffic payloads/);
   });
 
   it("Outbound webhook claim pinned: 'Outbound webhooks are HMAC-SHA256 signed' + 'X-Driftstack-Signature with timestamp + body HMAC' + 'replay attacks rejected via timestamp tolerance window' + 'apps/server/src/lib/webhook-signing.ts' — pinned so the HMAC-SHA256 + timestamp-replay-protection + code-path-mapping all survive (drift to dropping 'replay attacks rejected' would let webhook-replay become an unspecified attack surface)", () => {
@@ -132,30 +145,41 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // read as typos. Deliberate copy decision (grammatical text),
     // not the anchor-stripped corruption slice 277 fixed. Both
     // per-provider HMAC algorithms + the raw-body guarantee survive.
+    // 2026-09-15 plain-language pass: both algorithms + the exact-bytes
+    // guarantee survive; "canonical-keyed" / "shared raw-body parser" were
+    // implementation words.
     expect(body).toMatch(
-      /Stripe: timestamp \+\s+sha256 HMAC\. NowPayments: HMAC-SHA512 over the\s+normalised \(canonical-keyed\) JSON\. A shared raw-body\s+parser ensures the exact bytes the signature was\s+computed over are the bytes the verifier sees/,
+      /Stripe: timestamp \+\s+HMAC-SHA256\. NowPayments: HMAC-SHA512 over the normalised\s+JSON\. The signature check runs over the exact bytes we\s+received, so a message altered in transit is rejected\./,
     );
     expect(body).not.toMatch(/V-080|V-487/);
   });
 
   it("EU control plane claim pinned: 'EU control plane' + 'Compute (Hetzner Nuremberg), database (Neon Frankfurt), object storage (Cloudflare R2, EU + US replication)' + session-execution fleet on MacStadium US — S30 2026-07-07 (founder decision: soften) supersedes the prior 'R2 EU jurisdiction' pin: R2 uses the DEFAULT jurisdiction (verified on the prod box, task #24); wording now matches /docs/data-residency's 'EU + US replication'. The 3-sub-processor location specificity survives. The data plane is NOT EU-only: the iPhone Safari driver fleet runs on MacStadium (US).", () => {
-    expect(body).toMatch(/EU control plane/);
+    // 2026-09-15 owner directive: "control plane" / "fleet" are banned on
+    // customer surfaces; the heading now says what is hosted in the EU, and
+    // "Nuremberg" is corrected to Falkenstein per the sub-processor register.
+    expect(body).toMatch(/Core services hosted in the EU/);
+    expect(body).not.toMatch(/control plane|fleet/i);
     expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
-      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s*object storage \(Cloudflare R2, EU \+ US replication\)\./,
+      /Servers in Falkenstein, Germany \(Hetzner\); database in\s*Frankfurt \(Neon\); file storage on Cloudflare R2, which\s*keeps copies in both the EU and the US\./,
     );
+    expect(body).not.toMatch(/Nuremberg/);
     // S30 negative pin — the false jurisdiction claim must not return.
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
-    // S20c 2026-07-06 plain-language pass: SCCs glossed inline.
+    // US execution + legal transfer basis survive in plain words.
     expect(body).toMatch(
-      /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \(the EU's Standard Contractual\s+Clauses for lawful data transfer abroad\) \+ the EU-US\s+Data Privacy Framework/,
+      /iPhone Safari\s+sessions run on US infrastructure \(MacStadium\) under the\s+EU's Standard Contractual Clauses \(SCCs\) and the EU-US\s+Data Privacy Framework/,
     );
   });
 
   it('pins direct API captures and operator-local desktop recordings', () => {
     expect(body).toMatch(/Direct captures and local recordings/);
+    // 2026-09-15 plain-language pass: same boundary (capture service keeps no
+    // copy; recordings never leave the customer's computer via the recording
+    // feature), customer words.
     expect(body).toMatch(
-      /Screenshots and captures are returned directly inside the API\s+response as inline bytes and are not retained by the capture\s+endpoint\. The desktop recorder stores streamed frames on the\s+operator's machine and does not upload them through the recording\s+workflow/,
+      /Screenshots and other captures you request through the API\s+are returned to you directly in the response, and the capture\s+service keeps no copy — you decide where to store them\.\s+Desktop recordings are saved only on your own computer; the\s+recording feature never uploads them\./,
     );
     expect(body).not.toMatch(/roadmap|V-540/i);
   });
@@ -182,12 +206,15 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
     // S20c 2026-07-06 plain-language pass: heading leads plain with
     // the term in parens; 4-scenario scope + dry-run default kept.
     expect(body).toMatch(/We rehearse failures on purpose \(chaos engineering\)/);
+    // 2026-09-15 plain-language pass: same four failure classes + simulation
+    // default; the repo path stays on the evidence line below the paragraph.
     expect(body).toMatch(
-      /Vendor \(sub-processor\) outages, the database switching\s+to its backup \(DB failover\), the Redis cache going down,\s+webhook-signature failures — all covered by scripted\s+drills in <code class="font-mono">scripts\/chaos\/<\/code>\./,
+      /Vendor outages, the database switching to its backup,\s+the cache going down, webhook-signature failures — each\s+is covered by a scripted drill\./,
     );
     expect(body).toMatch(
-      /Drills run as simulations by default \(dry-run\); actually\s+breaking things \(execute mode\) requires\s+explicit operator opt-in\./,
+      /Drills run as simulations\s+by default; actually breaking things requires a\s+deliberate, explicit decision by our team\./,
     );
+    expect(body).toMatch(/scripts\/chaos\//);
     // Drift-guard: the internal-docs reference MUST NOT bleed back
     // into the customer-facing trust page. The bare `scripts/chaos/`
     // meta-line stays (that path is public-repo-public).
@@ -200,9 +227,9 @@ describe('W504.B apps/marketing-site/src/pages/trust/security-overview.astro con
   // the old pin locked a stale count.
   it('cross-links the architecture deep-dive and current compliance/disclosure page', () => {
     expect(body).toMatch(
-      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*walks the six-pillar surface in detail\./,
+      /<a href="\/security\/" class="text-tk-accent-text underline">architecture deep-dive at \/security<\/a>\s*explains all six security promises in detail\./,
     );
-    expect(body).not.toMatch(/five-pillar/);
+    expect(body).not.toMatch(/five-pillar|six-pillar surface/);
     expect(body).toMatch(
       /For current compliance\s*status and vulnerability reporting, see\s*<a href="\/trust\/compliance\/" class="text-tk-accent-text underline"\s*>\/trust\/compliance<\/a\s*>\./,
     );

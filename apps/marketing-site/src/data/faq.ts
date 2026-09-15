@@ -26,20 +26,20 @@ export const FAQ_GROUPS: FaqGroup[] = [
     title: 'Pricing model',
     entries: [
       {
-        q: 'Why concurrent caps and not hours?',
+        q: 'Why limit sessions at once, and not hours?',
         a: 'Most cloud-browser platforms bill by the hour, which quietly punishes you for leaving a session open. An account manager running 3 persistent profiles 8 hours a day generates ~720 browser-hours a month — and a surprise overage bill. Driftstack only counts how many sessions you run at the same time. Within that cap, use them as much as you want: a session that sits open all day costs nothing extra. You upgrade when your team genuinely needs more sessions running side by side — not because a meter ran out, and never with the "did I use too many minutes this month" anxiety.',
       },
       {
         q: "What's the difference between Manual and API?",
-        a: 'Manual means a person drives the session — you click around in our desktop app the way you would on a real phone. It\'s built for solo operators, account managers, and agencies juggling many profiles. API means your code drives the session — you get the SDK (our ready-made code library), your scripts start sessions themselves, and you can automate at scale. Underneath, both get the same engine, the same fingerprints, the same faithfulness to the real device; what differs is how you drive it and the concurrent caps. Each Driftstack account holds one subscription. If you need both — say your team works in the desktop app AND your engineering team runs automation — run two accounts. Most customers find one path is enough; if you outgrow it, the second account is straightforward to provision. See <a href="/pricing/#manual" class="text-tk-accent-text underline">Manual pricing</a> or <a href="/pricing/#api" class="text-tk-accent-text underline">API pricing</a>.',
+        a: 'Manual means a person drives the session — you click around in our desktop app the way you would on a real phone. It\'s built for people working on their own, account managers, and agencies juggling many profiles. API means your code drives the session — you get the SDK (our ready-made code library), your scripts start sessions themselves, and you can automate at scale. Underneath, both get the same browser, the same fingerprints, the same match to a real iPhone; what differs is how you drive it and how many sessions can run at once. Each Driftstack account holds one subscription. If you need both — say your team works in the desktop app AND your engineering team runs automation — run two accounts. Most customers find one path is enough; if you outgrow it, setting up the second account is straightforward. See <a href="/pricing/#manual" class="text-tk-accent-text underline">Manual pricing</a> or <a href="/pricing/#api" class="text-tk-accent-text underline">API pricing</a>.',
       },
       {
         q: 'How does this compare to Chromium-cloud stealth services?',
-        a: "Chromium-cloud services take Chrome and dress it up with 'stealth' plugins — a faked identity string plus patched-over JavaScript functions that intercept the checks websites run (on canvas, WebGL, and the navigator object — e.g. replacing built-ins like Object.getOwnPropertyDescriptor). The disguise holds if a website only checks the painted-over surfaces; it fails the moment a detector looks underneath — at timing, at how errors are worded, at the graphics chip's raw output. Driftstack runs Apple's actual WebKit browser code, so there is no underneath: the fingerprint your session shows is the one a real iPhone shows, produced by the same code all the way down.",
+        a: "Chromium-cloud services take Chrome and dress it up with 'stealth' plugins — a faked identity string plus patched-over JavaScript functions that intercept the checks websites run (on graphics, fonts, and the browser's own built-in functions). The disguise holds if a website only checks the painted-over surfaces; it fails the moment a detector looks underneath — at timing, at how errors are worded, at the graphics chip's raw output. Driftstack runs Apple's actual WebKit browser code, so there is no underneath: the fingerprint your session shows is the one a real iPhone shows, produced by the same code all the way down.",
       },
       {
         q: 'How does concurrent metering work?',
-        a: "<strong>Concurrent</strong> means how many sessions you can run at the same time — think of it like the number of browser tabs you have open at once. That's the browser-capacity meter on paid tiers. Per-tier caps: Personal = 1 concurrent / Team = 3 / Agency = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — a 5-minute session and a 6-hour session count exactly the same. The cap only limits how many run side by side; there is no monthly browser-hour meter, per-hour charge, or browser-usage overage line item. Optional bundled LLM has a separate included-service monthly budget. The free tier likewise has no usage charges — one concurrent session is its capacity limit.",
+        a: "<strong>Concurrent</strong> means how many sessions you can run at the same time — think of it like the number of browser tabs you have open at once. That's the browser-capacity meter on paid tiers. Per-tier caps: Personal = 1 concurrent / Team = 3 / Agency = 8 / API Starter = 2 / API Builder = 8 / API Scale = 24 / Enterprise = custom. Within your cap, run as many session-hours as you want — a 5-minute session and a 6-hour session count exactly the same. The cap only limits how many run side by side; there is no monthly browser-hour meter, per-hour charge, or browser-usage overage line item. The optional bundled LLM has its own separate monthly budget. The free tier likewise has no usage charges — one concurrent session is its capacity limit.",
       },
       {
         q: 'What happens when I hit my concurrent cap?',
@@ -51,7 +51,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How does annual billing work?',
-        a: 'Annual contracts are billed up front for 12 months at 20% off the monthly equivalent. Switching from monthly to annual or vice versa is prorated automatically by Stripe at the changeover date. Annual contracts auto-renew unless cancelled at least 30 days before renewal.',
+        a: 'Annual contracts are billed up front for 12 months at 20% off the monthly equivalent. If you switch from monthly to annual or back, the difference is worked out automatically for the remaining days of your billing period (prorated). Annual contracts auto-renew unless cancelled at least 30 days before renewal.',
       },
     ],
   },
@@ -73,7 +73,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // but TIER_FEATURES gives every paid tier (including the
         // Manual ladder) apiAccess: true with live keys. The free
         // tier's manual-only claim is true and stays.
-        a: 'No — the free tier is manual-only and runs through our desktop app. Every paid tier, including the Manual tiers, includes programmatic API/SDK access with live keys; paid tiers also drop the per-session time cap. The API ladder (API Starter from $149/mo) is the path built and sized for code-first workloads, with concurrent caps that scale further (up to 24 sessions side by side on API Scale). The free tier lets you evaluate the real iPhone Safari fingerprint hands-on before committing to automation.',
+        a: 'No — the free tier is manual-only and runs through our desktop app. Every paid tier, including the Manual tiers, includes programmatic API/SDK access with live keys; paid tiers also drop the per-session time cap. The API plans (API Starter from $149/mo) are built and sized for code-first workloads, with higher limits on how many sessions run at once (up to 24 side by side on API Scale). The free tier lets you evaluate the real iPhone Safari fingerprint hands-on before committing to automation.',
       },
       {
         q: 'Is there any usage metering on the free tier?',
@@ -85,7 +85,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // access is included on every paid tier (TIER_FEATURES
         // apiAccess: true across the paid ladder), not only the API
         // ladder; the old "(on the API ladder)" qualifier was false.
-        a: 'Subscribe to any Manual or API tier through Stripe Checkout from your dashboard. Your existing profile and account carry over; the higher concurrent + profile limits and programmatic API access (included on every paid tier) apply immediately on activation.',
+        a: 'Subscribe to any Manual or API tier through Stripe Checkout from your dashboard. Your existing profile and account carry over; the higher session and profile limits and API access (included on every paid tier) apply immediately on activation.',
       },
     ],
   },
@@ -94,7 +94,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'Can I upgrade or downgrade mid-month?',
-        a: 'Yes. Stripe prorates the price change automatically at the changeover date. New concurrent + profile limits apply immediately on the next session-creation request and the next profile-creation request. Anything already running or saved is untouched at the changeover; only new sessions and profiles are checked against the new limits.',
+        a: 'Yes. The price difference is worked out automatically for the remaining days of your billing period. New session and profile limits apply the next time you start a session or create a profile. Anything already running or saved is untouched at the changeover; only new sessions and profiles are checked against the new limits.',
       },
       {
         q: 'What if I cancel?',
@@ -107,7 +107,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How does Enterprise pricing work?',
-        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on how many sessions you run at once, how many profiles, custom device types (archetypes), whether AI uses your Anthropic key or Driftstack-provided access, and any compliance paperwork (custom data-protection agreement terms and add-ons). Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with a description of your workload and team.',
+        a: 'Enterprise is custom — from $4,000/mo on annual contracts only. Actual pricing depends on how many sessions you run at once, how many profiles, custom device profiles, whether AI uses your Anthropic key or Driftstack-provided access, and any compliance paperwork (custom data-protection agreement terms and add-ons). Email <a href="mailto:sales@driftstack.dev" class="text-tk-accent-text underline">sales@driftstack.dev</a> with a description of your workload and team.',
       },
     ],
   },
@@ -132,15 +132,15 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: "Where can I see what I've actually been billed?",
-        a: 'Stripe\'s Customer Portal and Stripe-issued invoices are payment truth for card subscriptions; crypto customers use their NowPayments order receipt. The desktop app\'s Cost panel and GET <code class="font-mono">/v1/account/cost</code> show Driftstack\'s operational cost-to-serve estimate for a UTC month, not your invoice. Today only its compute estimate is populated; storage, egress, email, and LLM are reserved zero fields. See the <a href="/docs/cost-monitoring/" class="text-tk-accent-text underline">cost-monitoring docs</a>.',
+        a: 'Stripe\'s Customer Portal and Stripe-issued invoices are payment truth for card subscriptions; crypto customers use their NowPayments order receipt. The desktop app\'s Cost panel and GET <code class="font-mono">/v1/account/cost</code> show an estimate of what it costs Driftstack to serve your account in a calendar month (UTC) — not your invoice. Today only the session-time part of that estimate is filled in; storage, network traffic, email, and AI show zero for now. See the <a href="/docs/cost-monitoring/" class="text-tk-accent-text underline">cost-monitoring docs</a>.',
       },
       {
         q: 'What if the operational estimate crosses a threshold?',
-        a: 'The threshold is an operator unit-economics signal, not a customer spending cap. Crossing it can produce an operator log and an in-app account notification, but it does not send a customer billing email, add an invoice item, rate-limit a new session, or interrupt work already running. Browser capacity is still enforced only by your concurrent-session cap.',
+        a: 'The threshold is an internal signal for Driftstack, not a spending cap on your account. Crossing it can show an in-app notification, but it does not send you a billing email, add anything to your invoice, block a new session, or interrupt work already running. The only limit on your sessions is still how many can run at once on your plan.',
       },
       {
         q: 'Is the operational estimate live or cached?',
-        a: 'It is recomputed on each request from lifecycle-derived session minutes. It does not read Stripe invoices or a customer usage-billing ledger.',
+        a: 'It is recalculated every time you look at it, from how many minutes your sessions have run. It does not read your Stripe invoices or any billing record.',
       },
     ],
   },
@@ -149,7 +149,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
     entries: [
       {
         q: 'What is the bundled LLM?',
-        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model (LLM) — useful for describing tests in plain English, automatically spotting what changed between screenshots, or letting the AI explore a flow on its own. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use Driftstack-provided model access. Standard Builder and Scale turns post a $0.10 included-service accounting value against the monthly budget you control; it is not separately itemized on today\'s Stripe invoice. Enterprise can use a contracted custom budget.',
+        a: 'Driftstack\'s optional AI agent feature drives sessions with a large language model (LLM) — useful for describing tests in plain English, automatically spotting what changed between screenshots, or letting the AI explore a flow on its own. On Builder / Scale / Enterprise, you have two options: <strong>BYOK</strong> (bring your own API key — get one from your model provider, e.g. <a href="https://console.anthropic.com" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">console.anthropic.com</a>; the AI usage is then billed to you by your provider, not Driftstack), or use Driftstack-provided model access. On Builder and Scale, each AI turn counts $0.10 against a monthly budget you control; it is not a separate line on today\'s invoice. Enterprise can use a contracted custom budget.',
       },
       {
         q: 'How do agent sessions work?',
@@ -157,7 +157,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'How is AI usage billed?',
-        a: 'BYOK has no Driftstack markup — your Anthropic API key, your provider bill, your control. Set a stored key from the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per request with <span class="font-mono">x-byok-anthropic-api-key</span>. Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent. On API Builder and API Scale, bundled LLM turns post a $0.10 included-service accounting value against the monthly budget you control; this budget is enforced but not separately itemized by Stripe today. Enterprise can use a contracted custom budget. Enable bundled usage in the desktop app under <strong>Settings → AI &amp; billing</strong>, or with <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>.',
+        a: 'BYOK has no Driftstack markup — your Anthropic API key, your provider bill, your control. Set a stored key from the dashboard <span class="font-mono">/settings</span> page, <span class="font-mono">PUT /v1/account/me/byok-anthropic-key</span>, or per request with <span class="font-mono">x-byok-anthropic-api-key</span>. Team, Agency, and API Starter are BYOK-only; API Builder, API Scale, and Enterprise support bundled-LLM with consent. On API Builder and API Scale, each bundled LLM turn counts $0.10 against a monthly budget you control; the budget is enforced, but it is not a separate line on your invoice today. Enterprise can use a contracted custom budget. Enable bundled usage in the desktop app under <strong>Settings → AI &amp; billing</strong>, or with <span class="font-mono">PATCH /v1/account/me/bundled-llm-settings</span>.',
       },
       {
         q: 'Is BYOK secret-handling secure?',
@@ -176,13 +176,13 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // (EU + US replication), not the .eu-jurisdiction endpoint.
         // DB-resident data (accounts, profiles, audit logs, session
         // metadata) genuinely lives on EU Hetzner/Neon servers.
-        a: 'Customer data in our databases — your account, profiles, audit logs, session metadata — is hosted in the EU: compute and database are EU-resident. Uploaded files (your avatar, for example) use Cloudflare\'s R2 storage network, which can replicate outside the EU. Session execution may run in supported regions outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework — the legal mechanisms EU law provides for data that leaves the EU. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a> and in the <a href="/legal/dpa/" class="text-tk-accent-text underline">Data Processing Agreement</a>.',
+        a: 'Customer data in our databases — your account, profiles, audit logs, session metadata — is hosted in the EU: our servers and database are there. Uploaded files (your avatar, for example) use Cloudflare\'s R2 storage network, which can replicate outside the EU. Sessions may run outside the EU under standard contractual clauses (SCCs) and the EU-US Data Privacy Framework — the legal mechanisms EU law provides for data that leaves the EU. Our complete sub-processor list, with locations and contractual basis, is published at <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a> and in the <a href="/legal/dpa/" class="text-tk-accent-text underline">Data Processing Agreement</a>.',
       },
       {
         q: 'Can I pick which region my data is stored in?',
         // S30 2026-07-07 (founder decision: soften) — scoped "data" to
         // "account data": R2-held files carry no EU-residency guarantee.
-        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; it is informational and does not change routing. Every customer\'s account data sits on EU-jurisdiction infrastructure. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor page</a> lists the exact providers and locations, and the DPA\'s Article 28 process governs any material sub-processor change.',
+        a: 'You can state a region preference (US / EU / APAC) from <span class="font-mono">/settings → Region</span>; it is informational and does not change where your data is stored. Every customer\'s account data is stored on servers under EU jurisdiction. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor page</a> lists the exact providers and locations, and the DPA\'s Article 28 process governs any material sub-processor change.',
       },
       {
         q: 'What does my team see when I add them to my account?',
@@ -224,7 +224,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
         // classes ARE DB-resident (EU-true), but "Everything ... EU"
         // was blanket; added the file-storage scope (R2 default
         // jurisdiction replicates EU + US).
-        a: 'Sessions run in one EU region. Customer data in our databases — accounts, profiles, audit logs, session metadata — stays in the EU; uploaded files (avatars, for example) use Cloudflare\'s storage network, which can replicate outside the EU. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. From EU locations, your commands typically reach our API in under 30 milliseconds, and a full round trip — your click going in, the live picture coming back — takes under 100. US and Asia-Pacific customers see proportionally longer round trips, since the sessions stay in the EU.',
+        a: 'The sessions themselves — the iPhone Safari browsers — run on Mac hardware hosted in the US (MacStadium), under the EU\'s Standard Contractual Clauses (SCCs) and the EU-US Data Privacy Framework. Customer data in our databases — accounts, profiles, audit logs, session metadata — stays in the EU; uploaded files (avatars, for example) use Cloudflare\'s storage network, which can replicate outside the EU. The <a href="/trust/sub-processors/" class="text-tk-accent-text underline">sub-processor list</a> has the full breakdown with each provider\'s region. Our API runs in the EU, so from EU locations your commands typically reach it in under 30 milliseconds.',
       },
     ],
   },
@@ -257,7 +257,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What happens if Driftstack as a business goes away?',
-        a: 'Two protections. (1) <strong>Data portability:</strong> profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time, so customers can take their data with them on any timeline. (2) <strong>Self-hosted option:</strong> Enterprise + Self-hosted licensees receive source escrow — an independent third party holds a copy of our source code. If the cloud service is ever wound down, the escrow agreement releases the browser engine (the WebKit fork) and the management software (the control-plane code) so customers can keep running everything on their own hardware indefinitely. We carry no investors and no debt, so the most likely "Driftstack goes away" scenario is an orderly wind-down with months of notice, not a sudden shutoff. Self-hosted on day one is the answer for customers who can\'t accept any cloud-vendor risk.',
+        a: 'Two protections. (1) <strong>Data portability:</strong> profiles + audit logs + session metadata can be exported as CSV/JSON from the dashboard or via the API at any time, so customers can take their data with them on any timeline. (2) <strong>Self-hosted option:</strong> Enterprise + Self-hosted licensees receive source escrow — an independent third party holds a copy of our source code. If the cloud service is ever wound down, the escrow agreement releases the browser engine and the management software so customers can keep running everything on their own hardware indefinitely. We carry no investors and no debt, so the most likely "Driftstack goes away" scenario is an orderly wind-down with months of notice, not a sudden shutoff. Self-hosted on day one is the answer for customers who can\'t accept any cloud-vendor risk.',
       },
     ],
   },
@@ -275,7 +275,7 @@ export const FAQ_GROUPS: FaqGroup[] = [
       },
       {
         q: 'What if a session fails?',
-        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers), and any captures you took before the failure — screenshots, page snapshots, PDFs — are already in your hands, because capture results return to you the moment you take them. Sessions that fail on our side (a crash, no machine available) do not consume your concurrent slot — the slot frees immediately on failure detection.',
+        a: 'You can see everything a session did, start to finish, in the dashboard or from the SDK. A failed session returns a clear, machine-readable error (RFC 9457 problem-types, for developers), and any captures you took before the failure — screenshots, page snapshots, PDFs — are already in your hands, because capture results return to you the moment you take them. Sessions that fail on our side (a crash, no machine available) do not count against how many sessions you can run at once — the slot frees up as soon as the failure is detected.',
       },
       {
         q: "What's the uptime target?",

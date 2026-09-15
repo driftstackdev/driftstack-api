@@ -260,14 +260,14 @@ function buildRegistry(): OpenAPIRegistry {
     scheme: 'bearer',
     bearerFormat: 'short-lived Ed25519 JWT',
     description:
-      'Fleet-node JWT signed by the provisioned node key. The token lifetime is at most five minutes, its nonce is single-use, and the production fleet edge additionally enforces mutual TLS.',
+      'Short-lived JWT signed by the key provisioned to one server in the deployment. The token lifetime is at most five minutes, its nonce is single-use, and the production edge additionally enforces mutual TLS.',
   });
   r.registerComponent('securitySchemes', 'FleetNodeQueryToken', {
     type: 'apiKey',
     in: 'query',
     name: 'ds_token',
     description:
-      'URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use fleet-node JWT; the production fleet edge additionally enforces mutual TLS.',
+      'URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use machine JWT; the production edge additionally enforces mutual TLS.',
   });
 
   // Reusable schemas — promote to components.schemas so codegen
@@ -597,12 +597,12 @@ function buildRegistry(): OpenAPIRegistry {
     },
     502: {
       description:
-        'The browser driver failed during the operation. This session is terminal; create a fresh session.',
+        'The browser failed during the operation. This session is terminal; create a fresh session.',
       content: problemContent,
     },
     503: {
       description:
-        'The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.',
+        'This operation is unavailable in this deployment. The session is now terminal; create a fresh session.',
       content: problemContent,
     },
   };
@@ -633,7 +633,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+          'The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.',
         content: problemContent,
       },
       410: {
@@ -779,7 +779,7 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/sessions/{id}',
     operationId: 'getSession',
     summary:
-      'Get a session by id (includes harness-reported egress_capabilities) (requires `read:sessions`, broad `read`, or `account_owner`)',
+      'Get a session by id (includes the egress_capabilities the session reported) (requires `read:sessions`, broad `read`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: { params: z.object({ id: prefixedIdParam('ses', 'session') }) },
@@ -913,7 +913,7 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/sessions/{id}/search',
     operationId: 'searchSession',
     summary:
-      'Search a page (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)',
+      'Search a page (not available yet on any deployment) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -931,7 +931,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Requires an explicitly real direct-driver search capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side query handling. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
+          'Not available yet: no current deployment supports page search, so every call returns 503 before the session is looked up and before anything is typed into the page. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. Driftstack may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
         content: {
           'application/json': {
             schema: SearchResponseSchema,
@@ -954,7 +954,7 @@ function buildRegistry(): OpenAPIRegistry {
     path: '/v1/sessions/{id}/login',
     operationId: 'loginSession',
     summary:
-      'Credential login (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)',
+      'Credential login (not available yet on any deployment) (requires `write:sessions`, broad `write`, or `account_owner`)',
     tags: ['sessions'],
     security: auth,
     request: {
@@ -976,7 +976,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Requires an explicitly real direct-driver login capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side credential handling. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
+          'Not available yet: no current deployment supports credential login, so every call returns 503 before the session is looked up and before any credential is handled. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. Driftstack may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.',
         content: {
           'application/json': {
             schema: SessionLoginResponseSchema,
@@ -1117,7 +1117,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/api-keys/{id}/rotate',
     operationId: 'rotateApiKey',
-    summary: 'Rotate an API key (V-296). 24h grace; new plaintext shown once',
+    summary: 'Rotate an API key. 24h grace; new plaintext shown once',
     tags: ['api-keys'],
     security: auth,
     request: {
@@ -1676,7 +1676,7 @@ function buildRegistry(): OpenAPIRegistry {
     request: { params: z.object({ id: prefixedIdParam('wdl', 'delivery') }) },
     responses: {
       200: {
-        description: 'Delivery reset to pending; worker will retry.',
+        description: 'Delivery reset to pending; it will be retried automatically.',
         content: { 'application/json': { schema: WebhookDeliverySchema } },
       },
       404: { description: 'Delivery not found.', content: problemContent },
@@ -1728,7 +1728,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/webhook-deliveries/{deliveryId}/replay',
     operationId: 'replayWebhookDelivery',
-    summary: 'Replay a webhook delivery (V-307; customer self-service)',
+    summary: 'Replay a webhook delivery (customer self-service)',
     tags: ['webhooks'],
     security: auth,
     request: {
@@ -1737,7 +1737,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'Delivery reset to pending; the worker re-fires on its next poll cycle, up to 60s.',
+          'Delivery reset to pending; it is retried automatically on the next delivery pass, up to 60s later.',
         content: { 'application/json': { schema: WebhookDeliverySchema } },
       },
       404: {
@@ -1780,7 +1780,7 @@ function buildRegistry(): OpenAPIRegistry {
     tags: ['public'],
     responses: {
       200: {
-        description: 'Server version, git sha, start time, node version.',
+        description: 'Server version, git sha, start time, Node.js version.',
         content: { 'application/json': { schema: VersionResponseSchema } },
       },
     },
@@ -1854,7 +1854,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       204: { description: 'Schedule removed.' },
       404: {
-        description: 'No validation schedule exists for that archetype.',
+        description: 'No validation schedule exists for that device profile.',
         content: problemContent,
       },
       ...errors4xx,
@@ -1868,7 +1868,7 @@ function buildRegistry(): OpenAPIRegistry {
     security: auth,
     responses: {
       200: {
-        description: 'Run id of the dispatched recapture.',
+        description: 'Run id of the validation run that was started.',
         content: {
           'application/json': {
             schema: z.object({ run_id: z.string() }),
@@ -1947,7 +1947,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/account/me/avatar',
-    summary: 'Upload (or replace) the calling account avatar (V-352b) (requires `account_owner`)',
+    summary: 'Upload (or replace) the calling account avatar (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     request: {
@@ -1982,7 +1982,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'delete',
     path: '/v1/account/me/avatar',
-    summary: 'Clear the calling account avatar pointer (V-352b) (requires `account_owner`)',
+    summary: 'Clear the calling account avatar (requires `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -2013,7 +2013,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/account/me/oauth-links',
     summary:
-      'List OAuth-client identity links for the calling account (V-667.C) (requires broad `read` or `account_owner`)',
+      'List OAuth-client identity links for the calling account (requires broad `read` or `account_owner`)',
     tags: ['account'],
     security: auth,
     responses: {
@@ -2163,7 +2163,7 @@ function buildRegistry(): OpenAPIRegistry {
         .int()
         .min(0)
         .describe(
-          'NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, and that is counted for operators in Prometheus, but no per-account counter is persisted, so this field cannot report them. Do not reconcile it against errors you received.',
+          'NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, but no per-account counter of those refusals is stored, so this field cannot report them. Do not reconcile it against errors you received.',
         ),
       month_started_at: z.string(),
     })
@@ -2399,8 +2399,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       409: {
         // V-1488 — returnable by this handler and previously undeclared.
-        description:
-          'The proxy changed concurrently; the optimistic-concurrency update matched no row. Retry after re-reading.',
+        description: 'This proxy changed since you last loaded it. Refresh and try again.',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -2442,12 +2441,12 @@ function buildRegistry(): OpenAPIRegistry {
     single_host_vantage: z
       .boolean()
       .describe(
-        'True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it.',
+        'True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it.',
       ),
     web_port_vantage: z
       .boolean()
       .describe(
-        'True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via "proxy_host" it is still not a verdict.',
+        'True when the reading was taken on the standard HTTPS port at the proxy\'s IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via "proxy_host" it is still a reading, not a guarantee.',
       ),
   });
   // (o) 2026-09-11 — WHY an ok result carries no `os_fingerprint`. ONE definition
@@ -2615,9 +2614,9 @@ function buildRegistry(): OpenAPIRegistry {
       404: { description: 'Not found (or owned by another account).', content: problemContent },
       200: {
         description:
-          'Reachability result. vantage=cp (default): ok=true + latency_ms, or ok=false + reason. ' +
-          'vantage=fleet: the node-measured result with measured_from=fleet, or the control-plane ' +
-          'probe with measured_from=control_plane when no fleet node is free.',
+          'Reachability result. vantage=cp (default): measured by Driftstack — ok=true + latency_ms, or ok=false + reason. ' +
+          'vantage=fleet: measured from the machine that will run your profile, reported with measured_from=fleet; ' +
+          'when no such machine is free, Driftstack measures it instead and reports measured_from=control_plane.',
         content: { 'application/json': { schema: AccountProxyTestResultOpenApi } },
       },
       ...errors4xx,
@@ -2725,7 +2724,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
@@ -2786,7 +2785,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
@@ -2875,7 +2874,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
@@ -2902,12 +2901,12 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
-        description: 'Access token (1-hour TTL; no refresh tokens issued).',
+        description: 'Access token (valid for one hour; no refresh tokens are issued).',
         content: { 'application/json': { schema: OAuthTokenResponseOpenApi } },
       },
       400: {
@@ -2931,7 +2930,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
@@ -2963,7 +2962,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       429: {
         description:
-          'Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.',
+          'Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
@@ -3519,7 +3518,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/accounts/{id}/audit-note',
-    summary: 'Record a free-form support note on an account (admin; V-281)',
+    summary: 'Record a free-form support note on an account (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3556,7 +3555,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/accounts/{id}/refund-record',
-    summary: 'Record a refund issued out-of-band against the account (admin; V-281)',
+    summary: 'Record a refund issued out-of-band against the account (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3574,7 +3573,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       201: {
         description:
-          'Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.',
+          'Refund recorded for audit. Money movement happens manually in the Stripe dashboard.',
         content: { 'application/json': { schema: z.object({ ok: z.literal(true) }) } },
       },
       404: {
@@ -3689,7 +3688,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/admin/incidents',
-    summary: 'List incidents (admin; V-295)',
+    summary: 'List incidents (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3711,7 +3710,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/incidents',
-    summary: 'Create an incident (admin; V-295)',
+    summary: 'Create an incident (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3731,7 +3730,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'put',
     path: '/v1/admin/incidents/{id}',
-    summary: 'Idempotently create or replay an incident with a caller-owned id (admin; V-295)',
+    summary: 'Idempotently create or replay an incident with a caller-owned id (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3761,7 +3760,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/admin/incidents/{id}',
-    summary: 'Get a single incident with its update timeline (admin; V-295)',
+    summary: 'Get a single incident with its update timeline (admin)',
     tags: ['admin'],
     security: auth,
     request: { params: IncidentIdParamsOpenApi },
@@ -3777,7 +3776,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/incidents/{id}/updates',
-    summary: 'Append an update to an incident (admin; V-295)',
+    summary: 'Append an update to an incident (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -3799,7 +3798,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/admin/incidents/{id}/resolve',
-    summary: 'Mark an incident resolved (admin; V-295)',
+    summary: 'Mark an incident resolved (admin)',
     tags: ['admin'],
     security: auth,
     request: {
@@ -4582,15 +4581,13 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       404: {
         // V-1487 — returnable and previously undeclared.
-        description:
-          'MFA is not enrolled for this account. Documented in docs/api/mfa and thrown by regenerateRecoveryCodes; V-1487 — the spec had never declared it.',
+        description: 'MFA is not enrolled for this account.',
         content: problemContent,
         headers: requestIdHeader,
       },
       409: {
         // V-1487 — returnable and previously undeclared.
-        description:
-          'Recovery codes changed during regeneration (optimistic-concurrency loss). Retry after refreshing.',
+        description: 'Recovery codes changed during regeneration. Refresh and try again.',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5008,7 +5005,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description: 'No compatible egress backend is available on this deployment.',
+        description: 'Session proxy configuration is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -5044,7 +5041,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description: 'No compatible egress backend is available on this deployment.',
+        description: 'Session proxy configuration is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -5138,7 +5135,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+          'The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.',
         content: problemContent,
       },
       422: {
@@ -5147,7 +5144,7 @@ function buildRegistry(): OpenAPIRegistry {
         // cannot be decrypted or fails its probe, blocking the launch before any
         // dispatch.
         description:
-          'The egress proxy attached to this request could not be used: its stored configuration failed to decrypt, or it failed the reachability probe run before dispatch. No agent session was created and nothing was dispatched. Re-add the proxy and retry.',
+          'The proxy attached to this request could not be used: its saved configuration could not be read, or it failed the connection check that runs before launch. No agent session was created. Re-add the proxy and retry.',
         content: problemContent,
       },
       201: {
@@ -5273,7 +5270,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment. The transcript read is registered as a stub raising `FeatureUnavailableError`, carrying the activation message, so a client can tell an unactivated deployment from a missing route.',
+          'AI chat is not activated on this deployment. The response carries the activation message, so a client can tell an unactivated deployment from a missing route.',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5290,7 +5287,7 @@ function buildRegistry(): OpenAPIRegistry {
     })
     .openapi('AgentMessageUsage', {
       description:
-        'Usage evidence for model-backed turns. Optional fields are present only when the selected decomposer/provider reports them; bundled turns expose the posted flat operational cost.',
+        'Usage evidence for model-backed turns. Optional fields are present only when the model provider reports them; bundled turns expose the posted flat operational cost.',
     });
   const AgentMessageResponseOpenApi = z
     .discriminatedUnion('kind', [
@@ -5513,7 +5510,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+          'AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5526,7 +5523,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/agent-sessions/{id}/resume',
     summary:
-      'Resume an agent session the harness auto-paused on a detected bot-challenge (requires `write` or `account_owner`)',
+      'Resume an agent session that paused itself when a bot check appeared (requires `write` or `account_owner`)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -5540,7 +5537,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       202: {
         description:
-          'Resume requested. Best-effort dispatch to the node running the session (inert unless the fleet control plane is wired).',
+          'Resume requested. The resume is delivered to the running session on a best-effort basis; on a deployment without live sessions it does nothing.',
         content: { 'application/json': { schema: ResumeSessionResponseSchema } },
       },
       404: { description: 'Agent session not found.', content: problemContent },
@@ -5551,7 +5548,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+          'AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5588,7 +5585,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+          'AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5609,9 +5606,9 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/input-event',
-    summary: 'Forward an LK.6 InputEvent to the harness (manual/pair mode only)',
+    summary: 'Send an input event (mouse, key or touch) to a session (manual/pair mode only)',
     description:
-      "Body shape: { event: <discriminated-union>, client_id?: string }. The `event` object must be one of 12 variants discriminated by `type`: the mouse/key set mouseMove / mouseDown / mouseUp / keyDown / keyUp / wheel / ping, plus the touch set tap / touchStart / touchMove / touchEnd / swipe (device-CSS coordinates; the harness injects via W3C `pointerType:touch` and owns the touch dynamics). See packages/api-types/src/agent-input-event.ts:InputEventSchema for the canonical Zod definition. Modifier vocabulary (keyDown / keyUp `modifiers` array): use the canonical 4-name set 'cmd' | 'ctrl' | 'shift' | 'option' — these map 1:1 onto Quartz CGEventFlags on the macOS harness side. DOM-standard names (Shift / Control / Alt / Meta) round-trip through the schema unchanged but the harness decoder drops them. V-932 — `client_id` is optional in the schema only because manual-mode sessions do not need it; it is REQUIRED for every pair-mode session, on both legs. The first event fires the takeover-request transition and is rejected without it, and every later event must carry the SAME `client_id` that owns `human-driving` — the lock scopes contention to one tab. Omitting it in pair mode returns 400 validation-failed with a `client_id` field error; sending a different value once human-driving is held returns 409 pair-mode-conflict.",
+      "Body shape: { event: <discriminated-union>, client_id?: string }. The `event` object must be one of 12 variants discriminated by `type`: the mouse/key set mouseMove / mouseDown / mouseUp / keyDown / keyUp / wheel / ping, plus the touch set tap / touchStart / touchMove / touchEnd / swipe (device-CSS coordinates; the device delivers each touch as a real W3C `pointerType:touch` event and handles the touch dynamics itself). See packages/api-types/src/agent-input-event.ts:InputEventSchema for the canonical Zod definition. Modifier vocabulary (keyDown / keyUp `modifiers` array): use the canonical 4-name set 'cmd' | 'ctrl' | 'shift' | 'option' — these map 1:1 onto the macOS modifier flags (Quartz CGEventFlags) on the device. DOM-standard names (Shift / Control / Alt / Meta) pass schema validation unchanged but the device ignores them. `client_id` is optional in the schema only because manual-mode sessions do not need it; it is REQUIRED for every pair-mode session, on both legs. The first event sends the takeover-request (asking the AI to hand control to you) and is rejected without it, and every later event must carry the SAME `client_id` that owns `human-driving` — only one browser tab can drive at a time. Omitting it in pair mode returns 400 validation-failed with a `client_id` field error; sending a different value once human-driving is held returns 409 pair-mode-conflict.",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -5630,7 +5627,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated by 'kind'. 'pair-mode-takeover-fired' (Slice 5 — first input-event in pair-mode ai-driving fires the takeover-request transition) carries pair_mode_state. 'forwarded' (post-harness; today 503s) carries duration_ms.",
+          "Discriminated by 'kind'. 'pair-mode-takeover-fired' (the first input event while the AI is driving a pair-mode session sends the takeover-request) carries pair_mode_state. 'forwarded' (the event reached the session; not available yet — today this returns 503) carries duration_ms.",
         // V-1501b — this said `z.object({}).passthrough()`, so the description
         // above was the only place the union appeared. api-types has declared
         // the real shape since Slice 5 and both hand-written SDKs carry it;
@@ -5640,12 +5637,12 @@ function buildRegistry(): OpenAPIRegistry {
       404: { description: 'Agent session not found.', content: problemContent },
       409: {
         description:
-          'Session is in mode=ai (input-event requires manual/pair), OR pair_mode_state is mid-transition (takeover-pending / handback-pending / etc.), OR session is closed. Pair-mode takeover-trigger missing client_id surfaces as 400 via errors4xx.',
+          'Session is in mode=ai (input-event requires manual/pair), OR pair_mode_state is mid-transition (takeover-pending / handback-pending / etc.), OR session is closed. A pair-mode takeover request without client_id returns 400 instead.',
         content: problemContent,
       },
       503: {
         description:
-          'Input forwarding is unavailable when the selected deployment has no compatible fleet harness. Pair-mode takeover-trigger responses remain available.',
+          'No deployment forwards input events yet, so forwarding returns 503. Pair-mode takeover responses still work.',
         content: problemContent,
       },
       ...errors4xx,
@@ -5678,7 +5675,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       503: {
         description:
-          'AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.',
+          'AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -5710,7 +5707,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'The latest page state the session harness reported (the GUI loading bar / error overlay polls this). `page_state` is null when nothing has been reported yet, the cached entry is older than the freshness bound, the session is closed, or the fleet control plane is not wired.',
+          "The latest page state the session reported (the desktop app's loading bar and error overlay poll this). `page_state` is null when nothing has been reported yet, the last report is too old, the session is closed, or live session state is not available on this deployment.",
         content: {
           'application/json': {
             schema: z.object({
@@ -5762,7 +5759,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated body: status 'ok' → `entries` is the recent request log and `next_after` is the cursor to pass back next poll; 'unavailable' (session not running / control plane not wired) → `entries` is empty, `next_after` is null, and `reason` says why. Each request reports its negotiated protocol: 'h1' (HTTP/1.1), 'h2' (HTTP/2), or 'h3' (HTTP/3).",
+          "Discriminated body: status 'ok' → `entries` is the recent request log and `next_after` is the cursor to pass back next poll; 'unavailable' (the session is not running, or network logging is not available on this deployment) → `entries` is empty, `next_after` is null, and `reason` says why. Each request reports its negotiated protocol: 'h1' (HTTP/1.1), 'h2' (HTTP/2), or 'h3' (HTTP/3).",
         content: {
           'application/json': {
             schema: z.object({
@@ -5807,7 +5804,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated body: status 'ok' → `cookies` is the live jar pulled from the running session; 'unavailable' (not live on a node / control plane not wired / node offline), 'timeout' (node did not reply), or 'error' → `cookies` is null and `reason`, when set, says why. The jar shape round-trips 1:1 into POST /v1/agent-sessions/{id}/cookies/set.",
+          "Discriminated body: status 'ok' → `cookies` is the live jar pulled from the running session; 'unavailable' (the session is not running, cannot be reached right now, or the feature is not available on this deployment), 'timeout' (the session did not reply), or 'error' → `cookies` is null and `reason`, when set, says why. The jar shape round-trips 1:1 into POST /v1/agent-sessions/{id}/cookies/set.",
         content: {
           'application/json': {
             schema: z.object({
@@ -5868,7 +5865,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'post',
     path: '/v1/agent-sessions/{id}/egress',
-    summary: 'Move a running session onto a different egress (not available yet)',
+    summary: 'Move a running session onto a different proxy or VPN (not available yet)',
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -5891,7 +5888,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "NOT AVAILABLE YET: devices cannot change egress on a running session, so this currently answers status 'unavailable' for every call — create a new session with the proxy_id instead. The shapes below are stable and will not change when support lands. Discriminated body: status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the egress was NOT changed.",
+          "NOT AVAILABLE YET: a running session cannot change its proxy or VPN, so this currently answers status 'unavailable' for every call — create a new session with the proxy_id instead. The shapes below are stable and will not change when support lands. Discriminated body: status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the proxy was NOT changed.",
         content: {
           'application/json': {
             schema: z.object({
@@ -5983,7 +5980,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated body: status 'ok' → `handle` is the opaque { id, name, mime, size } reference used to drive a page's <input type=file> (no worker filesystem path is ever exposed); 'unavailable' / 'timeout' / 'error' → `handle` is null and `reason`, when set, says why (including the per-account concurrent and per-session lifetime upload caps).",
+          "Discriminated body: status 'ok' → `handle` is the opaque { id, name, mime, size } reference used to drive a page's <input type=file> (no server-side file path is ever exposed); 'unavailable' / 'timeout' / 'error' → `handle` is null and `reason`, when set, says why (including the per-account concurrent and per-session lifetime upload caps).",
         content: {
           'application/json': {
             schema: z.object({
@@ -6137,7 +6134,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/agent-sessions/{id}/livekit-token',
     summary:
-      'Mint a per-Mac LiveKit JWT for the agent session room (LK.3) (requires `write` or `account_owner`)',
+      "Mint a LiveKit join token for the agent session's live-view room (requires `write` or `account_owner`)",
     tags: ['agent-chat'],
     security: auth,
     request: {
@@ -6148,18 +6145,18 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       401: {
         description:
-          'No usable credential: neither an account bearer nor a valid per-session GUI control key. `validateGuiControlKey` refuses with a hard 401 before the account path is tried.',
+          'No usable credential: neither an account bearer nor a valid per-session desktop-app control key.',
         content: problemContent,
         headers: requestIdHeader,
       },
       429: {
-        description: "Account rate limit exceeded — the route carries `app.rateLimit('global')`.",
+        description: 'Account rate limit exceeded.',
         content: problemContent,
         headers: { ...rateLimitHeaders, ...requestIdHeader },
       },
       200: {
         description:
-          'LiveKit join info: ws_url + room + token (24h TTL) + participant_identity + expires_at.',
+          'LiveKit join info: ws_url + room + token (valid for 24 hours) + participant_identity + expires_at.',
         content: { 'application/json': { schema: LivekitInfoOpenApi } },
       },
       403: {
@@ -6169,7 +6166,7 @@ function buildRegistry(): OpenAPIRegistry {
       404: { description: 'Agent session not found.', content: problemContent },
       503: {
         description:
-          'No Mac in the fleet has registered LiveKit credentials yet, OR the stored secret is unreadable (re-run /v1/mac-nodes/register).',
+          'Live view is not available on this deployment: no machine has registered live-view credentials yet, or the stored credentials are unreadable.',
         content: problemContent,
       },
     },
@@ -6178,7 +6175,7 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/mac-nodes/register',
     summary:
-      'Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2) (requires `driftstack_internal_admin` (Driftstack staff))',
+      'Register live-view (LiveKit) credentials for one server in the deployment (requires `driftstack_internal_admin` (Driftstack staff))',
     tags: ['admin'],
     security: auth,
     request: {
@@ -6196,7 +6193,7 @@ function buildRegistry(): OpenAPIRegistry {
       ...errors4xx,
       404: {
         // V-1488 — returnable by this handler and previously undeclared.
-        description: 'No mac node matches the supplied id, so registration updated no row.',
+        description: 'No machine matches the supplied id, so nothing was registered.',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -6239,8 +6236,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description:
-          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        description: 'The recipe library is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -6291,8 +6287,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description:
-          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        description: 'The recipe library is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -6324,8 +6319,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description:
-          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        description: 'The recipe library is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -6353,8 +6347,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description:
-          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        description: 'The recipe library is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -6377,8 +6370,7 @@ function buildRegistry(): OpenAPIRegistry {
       },
       ...errors4xx,
       503: {
-        description:
-          'Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.',
+        description: 'The recipe library is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -6392,17 +6384,20 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'get',
     path: '/v1/fleet/events',
     summary:
-      'Fleet-node WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)',
+      'Operator WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)',
     tags: ['fleet'],
     servers: [
-      { url: 'wss://fleet.driftstack.dev', description: 'Fleet control-plane WebSocket edge' },
+      {
+        url: 'wss://fleet.driftstack.dev',
+        description: 'WebSocket edge for the machine event stream',
+      },
     ],
     security: fleetAuth,
     request: {
       headers: z.object({
         'x-driftstack-mac-node-id': z.string().min(1).max(128).optional().openapi({
           description:
-            'Node identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used.',
+            'Machine identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used.',
         }),
       }),
       query: z.object({
@@ -6415,16 +6410,15 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       101: {
         description:
-          'WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared node ID must match its signed iss/sub.',
+          'WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared machine id must match its signed iss/sub.',
       },
       401: {
         description:
-          'Fleet-node authentication failed before upgrade. Unknown node, revocation, expiry, bad signature, replayed nonce and node-ID mismatch share a uniform response.',
+          'Machine authentication failed before upgrade. Unknown machine, revocation, expiry, bad signature, replayed nonce and machine-id mismatch share a uniform response.',
         content: problemContent,
       },
       503: {
-        description:
-          'Fleet events stream is disabled because one or more control-plane dependencies are not wired on this deployment.',
+        description: 'The machine event stream is not available on this deployment.',
         content: problemContent,
       },
     },
@@ -7474,7 +7468,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/egress/echo',
-    summary: 'Echo the caller exit IP (+ best-effort CF-edge geo) — proxy-probe support',
+    summary: "Echo the caller's public IP address (+ best-effort location) — used by proxy tests",
     tags: ['egress'],
     // Documented 200 alone while sitting behind `ipRateLimit` at 12/IP
     // (`EGRESS_ECHO_IP_LIMIT`). This is the proxy-probe endpoint, so it is
@@ -7483,7 +7477,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          'The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from. When the CF edge resolves exit coordinates, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.',
+          'The public IP address this request arrived from, plus a best-effort location (country/region/city/timezone, each null when unknown). When coordinates are available, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.',
         content: {
           'application/json': {
             schema: z.object({
@@ -7509,12 +7503,13 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/archetypes',
-    summary: 'List customer-selectable browser archetypes and the current default',
+    summary:
+      'List the device profiles (iPhone model + iOS + Safari) you can select, and the current default',
     tags: ['archetypes'],
     responses: {
       200: {
         description:
-          'Canonical launch + available device/iOS/Safari combinations. Internal and non-selectable entries are excluded.',
+          'Every device/iOS/Safari combination you can select (launch and available entries) plus the current default. Internal and non-selectable entries are excluded.',
         content: { 'application/json': { schema: ListArchetypesResponseSchema } },
       },
     },
@@ -7550,7 +7545,7 @@ function buildRegistry(): OpenAPIRegistry {
       400: {
         // V-1488 — returnable by this handler and previously undeclared.
         description:
-          '`state` and `cursor` are not supported by the public status feed, and a malformed query fails validation. V-1488 — this operation declared 200 alone, so the document said it could not fail.',
+          '`state` and `cursor` are not supported by the public status feed, and a malformed query fails validation.',
         content: problemContent,
         headers: requestIdHeader,
       },
@@ -7564,7 +7559,7 @@ function buildRegistry(): OpenAPIRegistry {
   registerRoute(r, {
     method: 'get',
     path: '/v1/status/incidents/{id}',
-    summary: 'Public incident detail with update timeline (V-545.A)',
+    summary: 'Public incident detail with update timeline',
     tags: ['status'],
     request: {
       params: z.object({ id: prefixedIdParam('inc', 'incident') }),
@@ -8019,7 +8014,8 @@ function buildRegistry(): OpenAPIRegistry {
     method: 'post',
     path: '/v1/webhooks/{id}/rotate-secret',
     operationId: 'rotateWebhookSecret',
-    summary: 'Rotate the signing secret with a 24h grace (worker dual-signs during grace)',
+    summary:
+      'Rotate the signing secret with a 24-hour grace period (deliveries are signed with both the new and the old secret until it ends)',
     tags: ['webhooks'],
     security: auth,
     request: { params: z.object({ id: prefixedIdParam('whk', 'webhook') }) },
@@ -8172,7 +8168,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.',
+          'The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.',
         content: problemContent,
       },
       410: {
@@ -8426,7 +8422,7 @@ function buildRegistry(): OpenAPIRegistry {
     summary:
       'Transfer profile ownership to another Driftstack account by id (requires `write:profiles`, broad `write`, or `account_owner`)',
     description:
-      "Mints a new profile in the recipient's account carrying the source's name, archetype and " +
+      "Mints a new profile in the recipient's account carrying the source's name, device profile (`archetype`) and " +
       'description, and removes the source from the sender. ' +
       // Kept in ONE literal: the cross-SDK guard matches this phrase, and a
       // concatenation boundary inside it would hide the sentence from the check.
@@ -8452,7 +8448,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       409: {
         description:
-          'The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, a concurrent request already transferred or deleted it, or a live session still holds it.',
+          'The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, another request already transferred or deleted it, or a live session still holds it.',
         content: problemContent,
       },
       200: {
@@ -8514,7 +8510,7 @@ function buildRegistry(): OpenAPIRegistry {
     responses: {
       200: {
         description:
-          "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, storage/fleet not enabled, or no node connected — `reason` says which); 'timeout' → the node did not reply; 'error' → the node reported a failure (`reason` set) and the stored state is untouched.",
+          "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, the feature is not available on this deployment, or no device is connected right now — `reason` says which); 'timeout' → the device did not reply; 'error' → the device reported a failure (`reason` set) and the stored state is untouched.",
         content: {
           'application/json': {
             schema: z.union([
@@ -8814,7 +8810,9 @@ export function generateOpenApiSpec(): OpenAPIObject {
       description: [
         'Driftstack API for iPhone Safari automation. Versioned public contract under /v1.',
         '',
-        '## Team RBAC: X-Driftstack-Account header (V-326e)',
+        // V-326e — the OpenAPI side of the X-Driftstack-Account sequence (V-326c read-side,
+        // V-330 write-side honour); the heading itself stays free of ticket ids.
+        '## Team RBAC: X-Driftstack-Account header',
         '',
         "Members of a team can scope any /v1/* request to the OWNER's resources by passing",
         'the `X-Driftstack-Account: acc_<owner-uuid>` request header. The server validates that',

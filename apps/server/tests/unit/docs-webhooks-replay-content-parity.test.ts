@@ -59,10 +59,11 @@ describe('docs webhooks/replay content parity', () => {
   // `the-documented-replay-cadence-matches-the-poller`, which reads both sides.
   // What stays here is the text, plus a negative so the old number cannot come
   // back the next time someone tidies this sentence.
-  it('worker re-fire timing pinned: the next poll cycle, up to 60 seconds. Drift to a different cadence would mislead customers about how long to wait before checking delivery status', () => {
+  it('re-send timing pinned: within about a minute, up to 60 seconds (2026-09-15: the worker/poll-cycle internals left the customer page; the cadence stays). Drift to a different cadence would mislead customers about how long to wait before checking delivery status', () => {
     expect(body).toMatch(
-      /Resets the delivery to `pending` so the worker re-fires it on the next\s+poll cycle — up to 60 seconds/,
+      /Resets the delivery to `pending`; Driftstack re-sends it within about a\s+minute \(up to 60 seconds\)\./,
     );
+    expect(body).not.toMatch(/the worker re-fires|poll cycle/);
     expect(body).not.toMatch(/within ~30 seconds/);
     expect(body).not.toMatch(/Within ~30s the worker re-fires/);
   });

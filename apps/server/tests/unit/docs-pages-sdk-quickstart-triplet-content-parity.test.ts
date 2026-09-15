@@ -42,16 +42,17 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     );
   });
 
-  it("CRITICAL '5-minute' framing pinned in all 3. 'laser-focused 5-minute path to a working <lang> Driftstack session' is the cross-SDK header promise.", () => {
+  it("CRITICAL 'five-minute' framing pinned in all 3. 'A five-minute path to a working <lang> Driftstack session.' is the cross-SDK header promise, written as a complete sentence; the old bare em-dash 'laser-focused' fragment must not return.", () => {
     expect(read(TS_PAGE)).toMatch(
-      /laser-focused 5-minute path to a working TypeScript Driftstack\s*\n?session\./,
+      /A five-minute path to a working TypeScript Driftstack\s*\n?session\./,
     );
     expect(read(PY_PAGE)).toMatch(
-      /laser-focused 5-minute path to a working Python Driftstack\s*\n?session\./,
+      /A five-minute path to a working Python Driftstack\s*\n?session\./,
     );
-    expect(read(GO_PAGE)).toMatch(
-      /laser-focused 5-minute path to a working Go Driftstack\s*\n?session\./,
-    );
+    expect(read(GO_PAGE)).toMatch(/A five-minute path to a working Go Driftstack\s*\n?session\./);
+    for (const PAGE of [TS_PAGE, PY_PAGE, GO_PAGE]) {
+      expect(read(PAGE)).not.toMatch(/laser-focused/);
+    }
   });
 
   it("CRITICAL combined-quickstart cross-reference pinned in all 3. The 'For the multi-language overview see the [combined quickstart](/quickstart/)' link is the canonical cross-SDK nav.", () => {
@@ -82,14 +83,12 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     }
   });
 
-  it('CRITICAL TS Node-18+ prerequisite pinned. Node 22 LTS recommended + engines.node ">=18" + \'built / tested against the same toolchain Driftstack runs in production\'.', () => {
+  it('CRITICAL TS Node-18+ prerequisite pinned. Node 22 LTS recommended, stated plainly; the engines.node / production-toolchain mechanics were dropped from the customer page and must not return.', () => {
     const p = read(TS_PAGE);
 
-    expect(p).toMatch(/Node\.js 18\+ \(Node 22 LTS recommended; the SDK declares/);
-    expect(p).toMatch(/`engines\.node: ">=18"`/);
-    expect(p).toMatch(
-      /built \/ tested against the same\s*\n?\s+toolchain Driftstack runs in production/,
-    );
+    expect(p).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended\)\./);
+    expect(p).not.toMatch(/engines\.node/);
+    expect(p).not.toMatch(/toolchain Driftstack runs in production/);
   });
 
   it("CRITICAL Python 3.10+ prerequisite pinned. The 'SDK uses modern type hints + structural matches' framing matches W778 installation page.", () => {
@@ -131,12 +130,12 @@ describe('W779 docs /sdk quickstart triplet content parity', () => {
     expect(p).not.toMatch(/need to use dynamic `import\(\)`/);
   });
 
-  it('CRITICAL Python sync+async dual-client framing pinned. Driftstack (sync) + AsyncDriftstack (async) on the same wire shape.', () => {
+  it('CRITICAL Python sync+async dual-client framing pinned. Driftstack (sync) + AsyncDriftstack (async) with the same methods.', () => {
     const p = read(PY_PAGE);
 
     expect(p).toMatch(/The package ships both sync \(`Driftstack`\) and async/);
     expect(p).toMatch(
-      /\(`AsyncDriftstack`\) clients off the same wire shape\. Pick whichever\s*\n?matches your runtime\./,
+      /\(`AsyncDriftstack`\) clients with the same methods\. Pick whichever\s*\n?fits your application\./,
     );
   });
 

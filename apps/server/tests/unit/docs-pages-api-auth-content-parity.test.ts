@@ -193,7 +193,7 @@ describe('W764 docs /api/auth content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Returns `200`; no new session issued — the existing session row\s*\n?gets `mfa_satisfied_at = now\(\)`\./,
+      /Returns `200`; no new session is issued — the existing session's\s*\n?`mfa_satisfied_at` is set to now\./,
     );
   });
 
@@ -265,7 +265,7 @@ describe('W764 docs /api/auth content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /the server mints a provenance-bound device credential\s*\n?on the calling account and stores only its encrypted envelope under a hashed code\s*\n?identifier \(Redis, 2-minute post-bind TTL\)\./,
+      /the server creates a device credential on the calling\s*\n?account, stored encrypted; the desktop app must collect it within 2 minutes\./,
     );
   });
 

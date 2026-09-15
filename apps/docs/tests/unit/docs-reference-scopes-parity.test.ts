@@ -8,7 +8,7 @@
 // `read:billing`, `admin:billing`. It also cited the bogus
 // `api.driftstack.dev/errors/forbidden` URI.
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -59,16 +59,13 @@ describe('W258.C docs/reference/scopes ↔ ApiKeyScopeSchema parity', () => {
     expect(doc).not.toMatch(/`admin:sessions`/);
   });
 
-  it('Source-of-truth file paths exist on disk', () => {
-    // Pull `packages/...ts` and `apps/...ts` paths from the source-of-truth section.
+  it('cites no internal repository paths (2026-09-15: the source-of-truth section was how we run it, not what the customer gets)', () => {
+    // Any `packages/...ts` or `apps/...ts` path on the customer page is a leak.
     const paths = [
-      ...doc.matchAll(/`(packages\/[\w./-]+\.ts)`/g),
-      ...doc.matchAll(/`(apps\/server\/[\w./-]+\.ts)`/g),
+      ...doc.matchAll(/`(packages\/[\w./-]+\.ts)/g),
+      ...doc.matchAll(/`(apps\/[\w./-]+\.ts)/g),
     ].map((m) => m[1]!);
-    expect(paths.length).toBeGreaterThan(0);
-    const missing = paths
-      .map((p) => p.replace(/:.*$/, '')) // strip "filename:Symbol" suffixes
-      .filter((p) => !existsSync(resolve(REPO_ROOT, p)));
-    expect(missing).toEqual([]);
+    expect(paths).toEqual([]);
+    expect(doc).not.toMatch(/^## Source of truth$/m);
   });
 });

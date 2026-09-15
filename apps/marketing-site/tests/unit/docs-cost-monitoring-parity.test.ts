@@ -28,7 +28,7 @@ describe('W265.B operational cost estimate public/runtime parity', () => {
     expect(COST_SERVICE).toContain(
       'export const BILLING_CYCLE_PATTERN = /^\\d{4}-(?:0[1-9]|1[0-2])$/;',
     );
-    expect(PAGE).toMatch(/synthesised zero-breakdown for fresh accounts/);
+    expect(PAGE).toMatch(/all-zero breakdown for fresh accounts/);
     expect(PAGE).toMatch(/\(no 404\)/);
   });
 
@@ -59,9 +59,11 @@ describe('W265.B operational cost estimate public/runtime parity', () => {
     expect(PAGE).not.toMatch(/will move to nightly|metered overage charges|customer's bill/i);
   });
 
-  it('separates the bundled-LLM included-service budget from cost and Stripe invoices', () => {
-    expect(PAGE).toMatch(/10-cent-per-turn included-service budget value/);
-    expect(PAGE).toMatch(/not rolled into\s+this estimate or separately itemized by Stripe today/);
+  it('separates the bundled-LLM plan budget from cost and invoices (2026-09-15 plain words: no "included-service budget" / Stripe internals on the customer page)', () => {
+    expect(PAGE).toMatch(/10-cent-per-turn budget that is included in your plan/);
+    expect(PAGE).toMatch(
+      /not\s+rolled into this estimate and is not a separate item on your invoice\s+today/,
+    );
     expect(PAGE).toMatch(/<code class="font-mono">llmCents<\/code> currently returns zero/);
   });
 
@@ -69,7 +71,7 @@ describe('W265.B operational cost estimate public/runtime parity', () => {
     for (const state of ['under-soft', 'between-soft-and-hard', 'over-hard']) {
       expect(PAGE).toContain(state);
     }
-    expect(PAGE).toMatch(/operator-tuned unit-economics configuration/);
+    expect(PAGE).toMatch(/they are Driftstack's internal configuration/);
     expect(PAGE).toMatch(/does not email a customer billing warning/);
     expect(PAGE).toMatch(/add an invoice item, rate-limit a session, or silently stop work/);
   });

@@ -6,7 +6,7 @@ description: Installation and configuration for the Driftstack TypeScript, Pytho
 
 # SDK installation
 
-The Driftstack SDKs share a typed surface generated from the same OpenAPI 3.1 contract. Pick the language that fits your stack.
+The Driftstack SDKs expose the same resources and methods in every language, with full type definitions. Pick the language that fits your stack.
 
 ## TypeScript / Node.js
 
@@ -60,7 +60,7 @@ client.agentSessions.message(id, userMessage, opts?); // BYOK header opt-in
 client.agentSessions.close(id);
 client.agentSessions.takeover(id, clientId); // pair-mode
 client.agentSessions.handback(id);
-client.agentSessions.livekitToken(id); // LK.3 re-mint after 24h TTL
+client.agentSessions.livekitToken(id); // fresh live-video token after 24h
 
 client.recipes.create(body); // snapshot an agent-session intent_log
 client.recipes.list(query?);
@@ -141,7 +141,7 @@ client.cryptoOrders.get(orderId);
 client.cryptoOrders.cancel(orderId);
 client.cryptoOrders.receipt(orderId);
 
-client.archetypes.list(); // catalogue of available behavioural archetypes
+client.archetypes.list(); // list the device + iOS + Safari combinations you can choose from
 
 client.egress.attachToSession(sessionId, body);
 client.egress.getSessionProxy(sessionId);
@@ -223,10 +223,8 @@ asyncio.run(main())
 
 Inputs accept either a Pydantic model OR a plain `dict`. Outputs are typed Pydantic models.
 
-`sessions.search` and `sessions.login` are typed in every SDK, but the routes
-themselves are capability-gated: they require a deployment advertising a real
-direct-driver search/login capability and otherwise return `503` before the
-session is looked up or any browser work starts. See
+`sessions.search` and `sessions.login` are typed in every SDK, but they
+return `503` on deployments where search and login are not enabled. See
 [Sessions](/api/sessions/) for both response branches.
 
 ## Go
@@ -289,23 +287,23 @@ The HTTP API and the SDKs version independently. SDKs at any version stay compat
 
 ## What ships
 
-| Capability        | TS  | Python | Go  | Notes                                                                                          |
-| ----------------- | --- | ------ | --- | ---------------------------------------------------------------------------------------------- |
-| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract; search/login are capability-gated |
-| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                                        |
-| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete; no execute method                                                      |
-| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                                      |
-| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                                                    |
-| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                                               |
-| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret`                              |
-| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                                                      |
-| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                                                      |
-| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                                               |
-| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                                               |
-| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                                                            |
-| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)                                          |
-| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                                               |
-| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]                                      |
+| Capability        | TS  | Python | Go  | Notes                                                                                                  |
+| ----------------- | --- | ------ | --- | ------------------------------------------------------------------------------------------------------ |
+| Sessions          | ✅  | ✅     | ✅  | Full CRUD + navigate/interact/wait/capture/getState/extract; search/login return 503 where not enabled |
+| Agent sessions    | ✅  | ✅     | ✅  | create/get/message/close/takeover/handback/livekitToken                                                |
+| Recipes           | ✅  | ✅     | ✅  | create/list/get/delete; no execute method                                                              |
+| Profiles          | ✅  | ✅     | ✅  | Create, list, get, delete                                                                              |
+| Profile snapshots | ✅  | ✅     | ✅  | capture/list/restore/delete                                                                            |
+| API keys          | ✅  | ✅     | ✅  | Includes `rotate` with 24h grace                                                                       |
+| Webhooks          | ✅  | ✅     | ✅  | CRUD + delivery introspection + `replayDelivery` + `rotateSecret`                                      |
+| Team RBAC         | ✅  | ✅     | ✅  | Invite/accept/list/remove                                                                              |
+| Usage             | ✅  | ✅     | ✅  | Current-period read + 30-day daily series                                                              |
+| Audit log         | ✅  | ✅     | ✅  | Paginated read + GDPR-Article-20 CSV/JSON export                                                       |
+| MFA               | ✅  | ✅     | ✅  | TOTP enroll/verify/disable + recovery-code regen                                                       |
+| Billing           | ✅  | ✅     | ✅  | State read + Stripe checkout/portal                                                                    |
+| Email preferences | ✅  | ✅     | ✅  | List + set + opt-in/out (non-critical templates only)                                                  |
+| Legal             | ✅  | ✅     | ✅  | Catalog + required + accept (content-hash-bound)                                                       |
+| Account self      | ✅  | ✅     | ✅  | `me` returns tier + concurrent + profile counts + teams[]                                              |
 
 ## Next steps
 

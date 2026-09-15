@@ -8,22 +8,21 @@ description: Manage saved browser profiles — create, list, get, patch, clone, 
 
 A **profile** is a named, persistent browser identity Driftstack
 remembers between sessions. Cookies, `localStorage`, `IndexedDB`,
-service workers, and any state the underlying WebKit engine
-retains are kept under one logical handle so you can resume where
-you left off.
+service workers, and any other state the browser retains are kept
+under one logical handle so you can resume where you left off.
 
-The profile model is intentionally light at the metadata layer —
-profile rows hold a name, archetype, optional description, and
-last-used timestamp. The underlying browser state is managed by
-the driver layer and isn't directly exposed
-through this API.
+A profile's metadata is intentionally light — a name, archetype,
+optional description, and last-used timestamp. The browser state
+itself is managed by Driftstack and isn't directly exposed through
+this API.
 
 ## Tier caps
 
 Each tier limits the maximum number of profiles per account.
 Crossing the cap on `POST /v1/profiles` (or
-`POST /v1/profiles/:id/clone`) returns `429 Tier limit`. Values
-mirror `PROFILES_PER_TIER` in `@driftstack/api-types`:
+`POST /v1/profiles/:id/clone`) returns `429 Tier limit`. The caps are
+below (the public `@driftstack/api-types` package also exports them as
+`PROFILES_PER_TIER`):
 
 | Tier            | Profiles cap |
 | --------------- | -----------: |
@@ -41,7 +40,7 @@ The cap on enterprise tier is negotiated; the API returns
 
 ## Account folder and tag taxonomy
 
-The GUI's empty folders (including optional icons) and reusable tags
+The desktop app's folders (including optional icons) and reusable tags
 are stored as one account-level taxonomy at
 `GET /v1/account/me/organization` and
 `PUT /v1/account/me/organization`. The read requires
@@ -52,8 +51,7 @@ corresponding granular gate.
 These nested organization routes honor `X-Driftstack-Account`.
 When a team workspace is selected, both `member` and `admin` can
 read the owner's taxonomy, but only `admin` can replace it. The
-server resolves that effective owner before body validation and
-stores the taxonomy under the same owner as the profile collection.
+taxonomy is stored under the same owner as the profile collection.
 With no header, the calling account remains the owner.
 
 ## Resource shape
@@ -95,8 +93,8 @@ With no header, the calling account remains the owner.
   account across machines.
 - `note` — optional short inline note; `null` when unset. Synced
   server-side alongside `icon`.
-- `last_used_at` — touched by SessionsService when a session is
-  created against this profile. `null` until first use.
+- `last_used_at` — updated when a session is created against this
+  profile. `null` until first use.
 
 ## Create
 
@@ -115,8 +113,8 @@ profile (200, not 201 — the API surface uses 200 for both
 idempotent and one-shot resource creation).
 
 Use `GET /v1/archetypes` to generate the request from the live selectable
-catalog. Any id absent from the current response is rejected before the profile
-repository is read or written. Omitting the field selects the tier's default
+catalog. Any id absent from the current response is rejected before anything
+is written. Omitting the field selects the tier's default
 device (the catalog's `default_archetype_id` on tiers entitled to every device,
 the newest iPhone 13 archetype on the free tier).
 
@@ -178,8 +176,8 @@ old profile after migration.
 `label` is an optional override with the same 120-character maximum as direct
 session creation. The body is strict: any other key, including raw `proxy`, is
 rejected before profile lookup or session creation. Everything else flows from
-the profile (archetype + metadata inherited, `last_used_at` bumped
-server-side fire-and-forget). One-shot wrapper around `POST
+the profile (the profile's `archetype` and metadata are inherited, and
+`last_used_at` is updated automatically). One-shot wrapper around `POST
 /v1/sessions` — equivalent to:
 
 ```json
@@ -197,14 +195,13 @@ profile.
 Returns the freshly-minted session (same shape as `POST
 /v1/sessions`). The customer then drives the session via the
 normal `navigate` / `interact` / `wait` / `capture` /
-`destroy` verbs (or via the desktop GUI's Live session view, which
-mounts on the returned `session.id`).
+`destroy` verbs (or via the desktop app's Live session view).
 
 This endpoint and `POST /v1/sessions` intentionally have no per-session
-egress field. For customer-controlled egress, use
+proxy field. To route a session through your own proxy, use
 `POST /v1/agent-sessions` with a `proxy_id` referencing one of your saved
-`/v1/account/me/proxies` configurations. Agent sessions apply that saved proxy
-to the assigned browser runtime.
+`/v1/account/me/proxies` configurations. Agent sessions route through that
+saved proxy.
 
 Errors:
 
@@ -220,10 +217,8 @@ Errors:
   `active_session_id` names the live one). End it first, then launch.
 - `400` for an unknown body key, a label longer than 120 characters, or an
   explicit raw `proxy` field. Raw proxy data is never applied.
-- `400` for every body when deployment policy requires customer egress
-  (`SESSION_PROXY_REQUIRED=true`, or inferred backend presence), because this
-  direct surface has no typed consumed egress authority. Use a saved `proxy_id`
-  with `POST /v1/agent-sessions` instead.
+- `400` on deployments that require every session to use a customer proxy —
+  use a saved `proxy_id` with `POST /v1/agent-sessions` instead.
 - Any other error the underlying `POST /v1/sessions` can return, most commonly
   `429` when the concurrent-session cap is reached.
 
@@ -381,7 +376,7 @@ profile. The parent profile keeps evolving — its archetype, name,
 description, and underlying browser state mutate as you use it.
 The snapshot's recorded metadata (archetype, name, description) is
 frozen the moment you capture it. Browser state (cookies, logins)
-is NOT captured at v1 — see
+is NOT captured today — see
 [/api/profile-snapshots](/api/profile-snapshots/) for the full
 contract.
 
@@ -546,7 +541,7 @@ The response is bounded: the server reads the profile's most recent
 sessions and returns the most recent navigations from them. When
 `truncated` is `true`, older activity exists but is not returned. Requires
 `read:profiles`. Returns `404` for a profile the account does not own and
-`503` on a deployment without the agent session store.
+`503` on deployments where agent sessions are not enabled.
 
 ## Trim cached site data
 
@@ -583,9 +578,9 @@ default — this body selects which data a destructive operation destroys.
 Write scope (`write:profiles`), admin-only on a team workspace, same as
 the other mutating routes.
 
-The trim runs out-of-session on the fleet against the profile's
-last-saved encrypted state, so the response is a **discriminated
-`200` body** in every case:
+The trim runs against the profile's last saved state while no session
+is using it, so the response is a **discriminated `200` body** in
+every case:
 
 ```json
 // "ok" — trimmed; the smaller size is persisted immediately
@@ -594,19 +589,19 @@ last-saved encrypted state, so the response is a **discriminated
 // "unavailable" — nothing ran; reason says why
 { "status": "unavailable", "reason": "profile is currently in use — stop its running session before clearing its data" }
 
-// "timeout" — the node didn't reply
+// "timeout" — no reply in time
 { "status": "timeout" }
 
-// "error" — the node reported a failure; the stored state is untouched
-{ "status": "error", "reason": "<node-reported failure>" }
+// "error" — the trim reported a failure; the stored state is untouched
+{ "status": "error", "reason": "<failure reason>" }
 ```
 
 `unavailable` covers the expected-inert states: the profile is bound
 to a **still-running session** (stop it first — a live session would
 save its full un-trimmed state back over the trimmed result), the
 profile has **no saved state yet** (a fresh profile has nothing to
-trim), or the deployment's profile storage / fleet control plane
-isn't enabled. On `"ok"`, `size_bytes` (the new stored size) updates
+trim), or profile storage isn't enabled on this deployment. On
+`"ok"`, `size_bytes` (the new stored size) updates
 the storage meter and launch-quota checks immediately. Returns `404`
 if the profile isn't found or isn't owned by the effective account —
 your own, or the owner you are acting as via `X-Driftstack-Account`.
@@ -615,10 +610,11 @@ your own, or the owner you are acting as via `X-Driftstack-Account`.
 
 A session is bound to a profile at creation time
 (`POST /v1/sessions { profile_id }`). The session carries the
-profile's state forward; on destroy, any state mutations are
-persisted back to the profile row's underlying storage. Concurrent
-sessions on the SAME profile are serialised at the driver layer
-to avoid state-merge conflicts.
+profile's state forward; on destroy, any changes are saved back to
+the profile. A profile can only be used by one live session at a
+time: creating a second session with the same `profile_id` is refused
+with `409 profile-in-use` until the first session has ended, so saved
+cookies and logins are never overwritten by a competing session.
 
 See [Session lifecycle](/guides/session-lifecycle/) for the full
 flow.

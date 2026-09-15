@@ -24,15 +24,15 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('documents the bundled model-access rail as an included-service budget with BYOK precedence', () => {
+  it('documents the bundled model option as a fixed per-turn amount against a customer-controlled cap, with BYOK precedence', () => {
     expect(body).toMatch(
-      /without supplying their own\s*Anthropic API key\. Driftstack hosts the decomposer and posts an\s*included-service accounting value against a customer-controlled\s*monthly soft cap \(default \$20\)\./,
+      /without their own Anthropic\s*API key\. Each agent turn counts a fixed amount against a monthly cap\s*the customer controls \(default \$20\)\./,
     );
     expect(body).toMatch(
       /Opt-in is explicit \(`consent: true`\) and revocable; the soft cap is\s*customer-configurable up to a \$10,000\/month ceiling\./,
     );
     expect(body).toMatch(
-      /The agent\s*session route's resolution chain prefers \[BYOK\]\(\/api\/byok-anthropic\/\)\s*\(per-request header or stored\) over bundled-LLM — bundled-LLM is\s*the no-BYOK fallback\./,
+      /If the customer\s*has a \[BYOK\]\(\/api\/byok-anthropic\/\) key \(per-request header or stored\),\s*it is used instead of the bundled LLM\./,
     );
   });
 
@@ -42,21 +42,25 @@ describe('docs/api/bundled-llm content parity', () => {
     expect(body).toMatch(/`PATCH \/v1\/account\/me\/bundled-llm-settings`/);
   });
 
-  it('pins the desktop settings path and flat included-service turn value without inventing a Stripe item', () => {
+  it('pins the desktop settings path and flat per-turn value without inventing a Stripe item', () => {
     expect(body).toMatch(/desktop app under \*\*Settings → AI\s*& billing\*\*/);
-    expect(body).toMatch(/flat \*\*\$0\.10\s*included-service accounting value per agent turn\*\*/);
-    expect(body).toMatch(/independent of model choice\s*and token count/);
+    expect(body).toMatch(
+      /each agent turn counts a flat\s*\*\*\$0\.10\*\* against the customer-controlled monthly budget/,
+    );
+    expect(body).toMatch(/whatever\s*the model or token count/);
     expect(body).toMatch(/Enterprise can\s*use a contracted custom budget/);
-    expect(body).toMatch(/not a\s*separately itemized Stripe invoice charge today/);
-    expect(body).toMatch(/`cost_basis = 'bundled_flat_per_turn'`/);
-    expect(body).toMatch(/does\s*not expose Driftstack's upstream provider cost/);
+    expect(body).toMatch(/not a separately itemized charge on your Stripe invoice today/);
+    expect(body).toMatch(
+      /The amount recorded\s*per turn is this flat value, not Driftstack's actual provider cost\./,
+    );
+    expect(body).not.toMatch(/cost_basis|upstream provider cost/);
     expect(body).not.toMatch(/Cost-per-turn varies with the underlying model/);
     expect(body).not.toMatch(/costs are billed alongside the customer's tier/i);
   });
 
   it('status-panel prose keeps consent, cap, used spend, and remaining budget in one coherent sentence', () => {
     expect(body).toMatch(
-      /`BundledLlmStatusPanel` reads this on page-load to render consent,\s*cap, used spend, and remaining budget\./,
+      /The dashboard reads this on page\s*load to render consent, cap, used spend, and remaining budget\./,
     );
     expect(body).not.toMatch(/render consent\s*\n\s*\n- cap \+ used/);
   });
@@ -66,7 +70,7 @@ describe('docs/api/bundled-llm content parity', () => {
       /"consent": true,\s*"cap_cents": 2000,\s*"used_this_month_cents": 450,\s*"remaining_cents": 1550,\s*"refused_count_this_month": 0,\s*"month_started_at":/,
     );
     expect(body).toMatch(
-      /`used_this_month_cents` sums `usage_records\.cost_usd_cents` over\s*the rows where `record_type = 'agent_decomposer_bundled'` and\s*`recorded_at >= start_of_calendar_month` \(UTC\)\./,
+      /`used_this_month_cents` is the account's total bundled-LLM spend, in\s*cents, on agent-session turns since the start of the current UTC\s*calendar month \(`month_started_at`\)\./,
     );
   });
 
@@ -120,7 +124,7 @@ describe('docs/api/bundled-llm content parity', () => {
     // 503 belongs to the agent-session turn route, not these reads.
     expect(body).not.toMatch(/\|\s*503 \| /);
     expect(body).toMatch(
-      /The settings \+ status routes above do not return a `503`\. A `503`\s*for an unwired bundled-LLM service is returned on the \*\*agent-session\s*turn\*\* route, not on these reads\./,
+      /The settings \+ status routes above do not return a `503`\. When\s*bundled-LLM is not available on the deployment, the `503` is returned\s*on the \*\*agent-session turn\*\* route, not on these reads\./,
     );
   });
 

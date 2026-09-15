@@ -122,7 +122,9 @@ describe('SettingsView — version coercion + download fallback', () => {
     // `body.git_sha ?? 'unknown'` leaves version === 12345 (a number), and the
     // `.slice(0, 7)` in the chip throws during render — this findByText then
     // never resolves and the test fails.
-    expect(await screen.findByText('unknown')).toBeInTheDocument();
+    // 2026-09-15: the chip no longer prints the hash (a commit id is not customer
+    // copy); the guard is that a non-string git_sha still renders the chip.
+    expect(await screen.findByText(/✓ Reachable/)).toBeInTheDocument();
     expect(screen.getByText(/Reachable/)).toBeInTheDocument();
   });
 

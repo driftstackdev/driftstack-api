@@ -46,7 +46,7 @@ describe('docs /api/archetypes live-contract parity', () => {
 
   it('pins direct-write rejection and stored-profile compatibility', () => {
     expect(page).toMatch(
-      /Any other id returns\s*\n?`400 ValidationFailed` on the `archetype` field before a browser, profile row,\s*\n?or driver allocation is attempted\./,
+      /Any other id returns\s*\n?`400 ValidationFailed` on the `archetype` field before anything is created\./,
     );
     expect(page).not.toMatch(/\bplanned\b|reference-only/i);
     expect(page).toMatch(

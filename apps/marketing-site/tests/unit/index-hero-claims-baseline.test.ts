@@ -26,11 +26,11 @@ describe('W318.B / hero claims baseline', () => {
   });
 
   it('hero claims WebKit C\\+\\+ source-level fork (not patching)', () => {
-    expect(body).toMatch(/WebKit source code/);
+    expect(body).toMatch(/from Apple's\s*source/);
   });
 
-  it('cites reference iPhone 16 Pro / iOS 18.7 / Safari 26.4', () => {
-    expect(body).toMatch(/iPhone 16 Pro/);
+  it('cites the launch default iPhone 17 / iOS 18.7 / Safari 26.4', () => {
+    expect(body).toMatch(/iPhone 17/);
     expect(body).toMatch(/iOS 18\.7/);
     expect(body).toMatch(/Safari 26\.4|26\.4/);
   });

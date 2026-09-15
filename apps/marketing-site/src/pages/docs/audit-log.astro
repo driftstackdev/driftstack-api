@@ -92,8 +92,8 @@ Authorization: Bearer ds_live_…
         <code>actor_account_id</code> + <code>actor_key_id</code>
         fields identify which account / key performed it.</li>
       <li><strong><code>system</code></strong> — automated action by
-        Driftstack infrastructure (e.g. scheduled-job triggered
-        revocation, expired-card subscription downgrade).
+        Driftstack (e.g. a scheduled revocation, or a subscription
+        downgrade after a card expired).
         <code>actor_account_id</code>/<code>actor_key_id</code> are
         null.</li>
       <li><strong><code>staff</code></strong> — Driftstack staff
@@ -135,22 +135,20 @@ Authorization: Bearer ds_live_…`}</code></pre>
       <code>X-Driftstack-Account: acc_&lt;owner-uuid&gt;</code>
       header, the server returns the <strong>owner's</strong> audit
       log — both <code>member</code> and <code>admin</code> team
- roles are read-allowed on this surface (
-      <code>effectiveAccountId</code> behaviour). Without the
-      header, callers see their own account's entries.
+      roles can read it. Without the header, callers see their own
+      account's entries.
     </p>
     <p>
-      The same effective-account header gate applies to
+      The same <code>X-Driftstack-Account</code> header behaviour applies to
       <code>/v1/account/audit-log/export</code>.
     </p>
 
     <h2>Retention</h2>
     <p>
       Audit log entries are retained <strong>indefinitely</strong>,
-      on every tier — there is no tier-based retention window and no
-      scheduled prune job. An account's entries are removed only when
-      the account itself is deleted (a cascading delete tied to the
-      account record, not a time-based sweep).
+      on every tier — there is no tier-based retention window. An
+      account's entries are removed only when the account itself is
+      deleted.
     </p>
     <p>
       If you want your own offline copy for a SIEM or an internal

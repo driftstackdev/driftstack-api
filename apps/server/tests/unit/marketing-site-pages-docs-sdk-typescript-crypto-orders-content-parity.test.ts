@@ -106,7 +106,7 @@ describe('W510.A apps/marketing-site/src/pages/docs/sdk-typescript-crypto-orders
       /<code>crypto\.order\.paid<\/code> \/ <code>crypto\.order\.failed<\/code>\s*events are emitted server-side and are now subscribable/,
     );
     expect(body).toMatch(
-      /<code>verifyWebhookSignature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /The SDK's\s*<code>verifyWebhookSignature<\/code> verifies every event type,\s*including <code>crypto\.order\.\*<\/code>\./,
     );
   });
 

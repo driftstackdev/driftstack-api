@@ -55,7 +55,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).toContain("Couldn't load the recycle bin. Check your connection and try again.");
     expect(body).toContain('dataAvailable={trashDataAvailable}');
     expect(body).toContain('loadError={trashLoadError}');
-    expect(body).toContain('Retry before judging its contents.');
+    expect(body).toContain('The recycle bin hasn’t loaded yet.');
   });
 
   it('awaits local and account note persistence and reports partial sync honestly', () => {
@@ -65,8 +65,10 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(handler).toMatch(/async \(id: string, note: string\): Promise<string \| null>/);
     expect(handler).toMatch(/const nextMeta = await saveProfileMeta\(/);
     expect(handler).toMatch(/if \(client\) await client\.profiles\.update\(id,/);
-    expect(handler).toContain('Saved on this Mac, but couldn’t sync the note to your account.');
-    expect(handler).toContain('Couldn’t save the note on this Mac.');
+    expect(handler).toContain(
+      'Saved on this computer, but couldn’t sync the note to your account.',
+    );
+    expect(handler).toContain('Couldn’t save the note on this computer.');
     expect(handler).not.toMatch(
       /client\.profiles\s*\.update\(id,[\s\S]{0,120}?catch\(\(\) => undefined\)/,
     );
@@ -87,8 +89,8 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(helper).toContain('const next = await saveLocal(ids);');
     expect(helper).toContain('await Promise.allSettled(');
     expect(helper).toContain('await client.profiles.update(id, update);');
-    expect(helper).toContain('Saved on this Mac, but couldn’t sync');
-    expect(helper).toContain('Couldn’t save profile organization on this Mac.');
+    expect(helper).toContain('Saved on this computer, but couldn’t sync');
+    expect(helper).toContain('Couldn’t save profile organization on this computer.');
     expect(helper).toContain('bulkOrganizationMutationInFlightRef.current = false;');
     expect(helper.indexOf('if (failed > 0)')).toBeLessThan(helper.indexOf('clearDrafts();'));
     expect(helper.indexOf('if (failed > 0)')).toBeLessThan(
@@ -161,11 +163,14 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
   });
 
   it('states the shipped protected-local and encrypted owner-account proxy sync boundary honestly', () => {
+    // Owner directive 2026-09-15: plain words, same facts — credentials stay on
+    // this device and are encrypted before they sync, and only once a session
+    // actually uses them.
     expect(body).toMatch(
-      /Proxy credentials are\s*protected locally and synced encrypted to your account when used for a session\./,
+      /Proxy credentials are stored securely on this computer and are\s*encrypted before they sync to your account when you use them in a session\./,
     );
     expect(body).toMatch(
-      /Protected locally in this app · synced encrypted to your account when used for\s*a session\./,
+      /Protected on this device · synced encrypted to your account when a\s*session\s*starts\./,
     );
     expect(body).not.toMatch(/never uploaded to the control plane|credentials never go/i);
   });
@@ -272,16 +277,24 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/Sessions without a profile start ephemeral/);
   });
 
-  it("New profile button: disabled={state.loading || atProfileCap} + aria-disabled={state.loading || atProfileCap}; title tooltip 'Profile cap reached ({cap} for {tier}). Delete a profile or upgrade to add more.' when atProfileCap else undefined — pinned so both screen readers + hover surface the cap explanation", () => {
+  it("New profile button: disabled={state.loading || atProfileCap} + aria-disabled={state.loading || atProfileCap}; title tooltip 'Profile limit reached ({cap} on your {plan} plan). Delete a profile or upgrade to add more.' when atProfileCap else undefined — pinned so both screen readers + hover surface the cap explanation", () => {
     expect(body).toMatch(/disabled=\{state\.loading \|\| atProfileCap\}/);
     expect(body).toMatch(/aria-disabled=\{state\.loading \|\| atProfileCap\}/);
     // 2026-06-19 — the New-profile button's cap tooltip now flows through the
     // shared `profileCapReason` const (DRY across New/Import/Clone buttons). The
     // button references it; the const below pins the exact contract text.
     expect(body).toMatch(/title=\{atProfileCap \? profileCapReason : undefined\}/);
+    // Owner directive 2026-09-15: the plan is named by its label ("Personal"),
+    // never by the raw tier slug ("solo_manual") — the same tierLabelFor mapping
+    // the Sidebar and the Settings account card use.
+    expect(body).toContain("import { tierLabelFor } from '../components/TierBadge';");
     expect(body).toMatch(
-      /const profileCapReason = `Profile cap reached \(\$\{\(profileCap \?\? 0\)\.toString\(\)\} for \$\{[\s\S]*?accountMe\?\.tier \?\? 'this tier'[\s\S]*?\}\)\. Delete a profile or upgrade to add more\.`;/,
+      /const planLabel =\s*accountMe\?\.tier != null \? `\$\{tierLabelFor\(accountMe\.tier\)\} plan` : 'current plan';/,
     );
+    expect(body).toMatch(
+      /const profileCapReason = `Profile limit reached \(\$\{\(profileCap \?\? 0\)\.toString\(\)\} on your \$\{planLabel\}\)\. Delete a profile or upgrade to add more\.`;/,
+    );
+    expect(body).not.toMatch(/accountMe\?\.tier \?\? 'this tier'/);
   });
 
   it('friendlyError preserves the Tauri-WebKit diagnosticFetchError preflight, strips its raw native suffix, and delegates every non-network error to the shared humanizeError helper with an actionable fallback', () => {
@@ -435,9 +448,7 @@ describe('W485.A apps/gui-client/src/views/ProfilesView.tsx content parity', () 
     expect(body).not.toMatch(/onOpenSession/);
     // A livekit-less create closes the channel-less session, clears the binding,
     // and surfaces a retry-able error — never opens an in-app page.
-    expect(body).toMatch(
-      /Couldn't start the live view — the session didn't get a video channel\. Try again\./,
-    );
+    expect(body).toMatch(/Couldn't start the live view\. Try again\./);
     expect(body).toMatch(
       /await client\.agentSessions\.close\(created\.id\)\.catch\(\(\) => undefined\);/,
     );

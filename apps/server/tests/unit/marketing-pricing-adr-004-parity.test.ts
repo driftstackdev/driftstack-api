@@ -159,7 +159,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(/profiles: 500,/);
     expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(/concurrent: 24,/);
     expect(tierBlockIn(read(PRICING), 'api_scale')).toMatch(
-      /support: 'Slack Connect · 4h Severity-1 first-response SLA',/,
+      /support: 'Slack Connect · 4h SLA for first reply on critical \(Severity-1\) incidents',/,
     );
   });
 
@@ -172,7 +172,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     // S43 2026-07-07 — support string states the ToS §9.2 grant
     // exactly (1h Severity-1 first-response), not a bare "1h SLA".
     expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(
-      /support: 'Dedicated CSM · 1h Severity-1 first-response SLA',/,
+      /support:\s*'Dedicated account manager · 1h SLA for first reply on critical \(Severity-1\) incidents',/,
     );
     expect(tierBlockIn(read(PRICING), 'enterprise')).toMatch(
       /cta: \{ label: 'Contact sales', href: 'mailto:sales@driftstack\.dev' \}/,
@@ -264,7 +264,7 @@ describe('W729 marketing-site pricing.ts ADR-004 ladder parity', () => {
     expect(p).toMatch(/self_hosted_pro: 'Continuous'/);
     expect(p).toMatch(/self_hosted_enterprise: 'Continuous'/);
     expect(p).toMatch(
-      /self_hosted_enterprise: 'Compiled software \+ read-only source-code review access'/,
+      /self_hosted_enterprise: 'Ready-to-run software \+ read-only access to the source code'/,
     );
   });
 

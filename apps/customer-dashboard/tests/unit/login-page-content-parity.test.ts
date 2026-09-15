@@ -101,11 +101,11 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/mfaInFlight = false/);
     expect(body).toMatch(/function recoverFromUnknownMfaOutcome\(\)/);
     expect(body).toMatch(/mfaChallengeToken = null/);
-    expect(body).toMatch(/MFA sign-in outcome is unknown after the request timed out/);
+    expect(body).toMatch(/The request took too long, so your code may already have been used/);
     expect(body).toMatch(/let mfaAccepted = false/);
     expect(body).toMatch(/if \(r\.ok\) \{\s*mfaAccepted = true/);
     expect(body).toMatch(/if \(mfaAccepted\) \{\s*recoverFromUnknownMfaOutcome\(\)/);
-    expect(body).toMatch(/Two-factor verification was accepted/);
+    expect(body).toMatch(/Your code was accepted, but your browser couldn't finish signing you in/);
   });
 
   it('verification resend has a real single-flight lease and bounded network deadline', () => {
@@ -123,7 +123,7 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     expect(body).toMatch(/clearTimeout\(timeoutId\)/);
     expect(body).toMatch(/resendInFlight = false/);
     expect(body).toMatch(/resendOutcomeUnknown = true/);
-    expect(body).toMatch(/Delivery is unknown after the request timed out/);
+    expect(body).toMatch(/The request took too long, so we're not sure the email went out/);
     expect(body).toMatch(/resendAccepted = true/);
     expect(body).toContain('The resend body is unused and delivery may already be');
     expect(body).not.toMatch(/r\.ok \? r\.json\(\)/);
@@ -214,11 +214,11 @@ describe('W369.B customer-dashboard /login page content parity', () => {
     // No binding → no request (v1 fell back to its cookie flow here; v2 has none).
     expect(body).toMatch(/if \(!binding\) \{\s*throw Object\.assign\(/);
     expect(body).toContain(
-      'Provider sign-in needs a secure (HTTPS) page with Web Crypto. Nothing has been sent to the provider yet;',
+      'Signing in with Google or GitHub only works on a secure (https://) connection.',
     );
     // No flow_id → no navigation (v1 read that as "old server" and left anyway).
     expect(body).toMatch(
-      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\('OAuth start failed: no flow id in the response\.'\);\s*return;\s*\}/,
+      /if \(typeof body\.flow_id !== 'string' \|\| body\.flow_id\.length === 0\) \{\s*showBanner\("Couldn't start sign-in with this provider\. Try again\."\);\s*return;\s*\}/,
     );
     // The retired vocabulary is gone from the page.
     expect(body).not.toMatch(/legacy|old server|old bundle|credentials: 'include'/);

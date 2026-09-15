@@ -124,17 +124,15 @@ breaker library and want to integrate Driftstack errors.
 ## Why some 5xx aren't retryable
 
 `DriverError` (502) and `DriverNotIntegrated` (503) are
-**not** retryable because the underlying cause is structural
-(specific archetype unavailable, driver build issue) rather
-than transient. Retrying makes the same call against the same
-broken driver — no improvement. Surface the error to the user;
-the dashboard's incident page (`/trust/incidents`) will reflect
-any active driver outage.
+**not** retryable because the cause is not transient (for
+example, the requested device profile is unavailable). Retrying
+the same call will not help. Surface the error to the user; the
+[incidents page](https://driftstack.io/trust/incidents/) will show
+any active outage.
 
-`FeatureUnavailableError` (503) means an endpoint requires
-infrastructure not configured in this deployment (e.g. avatar
-uploads when R2 isn't wired). Retrying doesn't change the
-deployment config; surface the error.
+`FeatureUnavailableError` (503) means a feature is not enabled
+on this deployment (for example, avatar uploads). Retrying does
+not change that; surface the error.
 
 `MfaStepUpRequiredError` (403) means the customer needs to
 prove fresh MFA before the request will succeed. Retrying
@@ -158,17 +156,3 @@ prompt the customer first.
   `rate-limited`, the `Retry-After` header carries the wait time.
 - [SDK quickstarts](/sdk/typescript-quickstart/) — built-in retry
   configuration for each language.
-
-## Source of truth
-
-The full problem-type list lives in
-`packages/api-types/src/problem.ts` (`PROBLEM_TYPES`). SDK error
-classes are mirrored at:
-
-- `packages/sdk-typescript/src/errors.ts`
-- `packages/sdk-python/src/driftstack/errors.py`
-- `packages/sdk-go/errors.go`
-
-Any new problem-type must update `PROBLEM_TYPES`, all three SDK error
-tables, this reference, and the integration test covering its server-side
-route in the same change.

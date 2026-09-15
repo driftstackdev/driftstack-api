@@ -98,7 +98,7 @@ export function proxyCapabilities(
             label: 'QUIC',
             ok: false,
             inferred: false,
-            hint: 'No HTTP/3 — a live session used HTTP/2 over TCP through this exit.',
+            hint: 'No HTTP/3 — a live session fell back to HTTP/2 through this exit.',
           }
         : quicProbe === true
           ? {
@@ -106,7 +106,7 @@ export function proxyCapabilities(
               label: 'QUIC',
               ok: true,
               inferred: false,
-              hint: 'This proxy relays QUIC — HTTP/3 works through this exit.',
+              hint: 'This proxy carries QUIC — HTTP/3 works through this exit.',
             }
           : quicProbe === false
             ? {
@@ -114,7 +114,7 @@ export function proxyCapabilities(
                 label: 'QUIC',
                 ok: false,
                 inferred: false,
-                hint: 'This proxy does not relay QUIC — HTTP/3 falls back to HTTP/2.',
+                hint: 'This proxy does not carry QUIC — HTTP/3 falls back to HTTP/2.',
               }
             : {
                 key: 'quic',
@@ -125,7 +125,7 @@ export function proxyCapabilities(
                 inferred: udp,
                 hint: udp
                   ? 'UDP works, so HTTP/3 is likely — not yet tested. Run Test or a session to confirm.'
-                  : 'No UDP relay — HTTP/3 cannot work here; it downgrades to HTTP/2 over TCP.',
+                  : 'No UDP — HTTP/3 cannot work here; it falls back to HTTP/2.',
               };
   return [
     {
@@ -133,8 +133,8 @@ export function proxyCapabilities(
       label: 'WebRTC',
       ok: udp,
       hint: udp
-        ? 'UDP relay verified — WebRTC gathers host/srflx candidates and streams media through this exit.'
-        : 'No UDP relay — WebRTC falls back to TURN-over-TCP (slower, more detectable).',
+        ? 'UDP works — WebRTC calls and media stream through this exit.'
+        : 'No UDP — WebRTC falls back to a slower, more detectable path.',
     },
     quicChip,
     {
@@ -142,8 +142,8 @@ export function proxyCapabilities(
       label: 'HTTP/2',
       ok: live,
       hint: live
-        ? 'Reachable + authenticated — HTTP/2 over TLS works through this exit.'
-        : 'Exit unreachable or auth failed — no traffic flows.',
+        ? 'Connected and logged in — HTTP/2 works through this exit.'
+        : 'The proxy could not be reached or the login failed — no traffic can go through it.',
     },
   ];
 }

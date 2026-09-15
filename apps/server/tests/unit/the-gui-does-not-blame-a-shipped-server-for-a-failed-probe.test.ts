@@ -116,13 +116,13 @@ describe('V-857 the GUI does not blame a shipped server for a failed probe', () 
     // The pin therefore reads the constant's value for the wording and the view for its use.
     const copy = readFileSync(COPY, 'utf8');
     expect(copy, 'the honest null-exit wording').toContain(
-      'EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the probe did not complete`',
+      'EXIT_GEO_UNAVAILABLE = `${EXIT_GEO_UNAVAILABLE_SHORT} — the check did not complete`',
     );
-    expect(copy).toContain("EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable'");
+    expect(copy).toContain("EXIT_GEO_UNAVAILABLE_SHORT = 'exit location unknown'");
     expect(copy).not.toMatch(/release|ships? (in|with)|next version/i);
     const view = readFileSync(VIEW, 'utf8');
     expect(view, 'the view renders the shared constant').toContain('{EXIT_GEO_UNAVAILABLE}');
-    expect(view).not.toContain('exit geo unavailable — the probe did not complete');
+    expect(view).not.toContain('exit location unknown — the check did not complete');
   });
 
   // ⛔ (V4 follow-up 2026-09-12) — THE V2 SENTENCES HAD NO TEXT PIN ANYWHERE.
@@ -144,7 +144,7 @@ describe('V-857 the GUI does not blame a shipped server for a failed probe', () 
     // internal feature flag. Both halves, so the row's notice and the Test-all
     // tally cannot be reworded apart.
     expect(copy, 'the plan-refusal notice').toContain(
-      "'Endpoint resolves. Your plan does not include VPN proxies, so the tunnel could not be tested and a session cannot launch through it. Upgrade to use OpenVPN or WireGuard.'",
+      "'Address found. Your plan does not include VPN proxies, so this VPN could not be tested and sessions cannot use it. Upgrade to use OpenVPN or WireGuard.'",
     );
     expect(copy, 'the plan-refusal tally clause').toContain(
       "VPN_PLAN_EXCLUDED_TALLY_REASON = 'not included in your plan'",
@@ -155,13 +155,13 @@ describe('V-857 the GUI does not blame a shipped server for a failed probe', () 
     // (V4) the STALE-STORED-CONFIG notice: the result stands, and it says which
     // configuration it describes.
     expect(copy, 'the stale-stored-config notice').toContain(
-      "'Endpoint resolves. This Mac’s copy of the configuration could not be sent to your account, so the result below describes the configuration stored earlier — not the one saved here. Try the check again.'",
+      "'Address found. Your latest VPN settings could not be sent to your account, so this result is for the settings saved earlier. Try the check again.'",
     );
     // ⛔ and the internal flag the tier refusal's own detail names must never be
     // a sentence of ours — the reason the plan copy exists at all.
     const declarations = copy
       .split('\n')
-      .filter((l) => /^export const VPN_|^ {2}'Endpoint resolves\./.test(l));
+      .filter((l) => /^export const VPN_|^ {2}'Address found\./.test(l));
     expect(declarations.length, 'vacuity floor: the VPN copy block is present').toBeGreaterThan(3);
     for (const line of declarations) expect(line).not.toContain('vpnEgress');
   });

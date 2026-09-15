@@ -62,10 +62,12 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     const body = read(P('sessions.md'));
     expect(body).toMatch(/^title: Sessions$/m);
     expect(body).toMatch(/^# Sessions$/m);
-    expect(body).toMatch(/A \*\*session\*\* is one running iPhone Safari instance on the modified/);
-    expect(body).toMatch(/WebKit fork, occupying one of your account's concurrent slots/);
+    expect(body).toMatch(
+      /A \*\*session\*\* is one running iPhone Safari browser, occupying one of/,
+    );
+    expect(body).toMatch(/your account's concurrent slots from creation to destruction/);
     expect(body).toMatch(/^## Concurrency$/m);
-    expect(body).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS` constant in/);
+    expect(body).toMatch(/`TIER_CONCURRENT_SESSION_LIMITS` constant\)/);
     expect(body).toMatch(/`@driftstack\/api-types`/);
     expect(body).toMatch(/\| `free`\s+\|\s+1 \|/);
     expect(body).toMatch(/\| `api_scale`\s+\|\s+24 \|/);
@@ -99,7 +101,7 @@ describe('W605 apps/docs/api batch 1 (8 modules) content parity', () => {
     // S36 2026-07-07 (fable-truth-audit): "copy" → metadata record — v1
     // snapshots capture archetype/name/description only, never browser state.
     expect(body).toMatch(/point-in-time record of a saved profile's \*\*metadata\*\*/);
-    expect(body).toMatch(/\*\*What a snapshot does NOT capture at v1: browser state\.\*\*/);
+    expect(body).toMatch(/\*\*What a snapshot does NOT capture today: browser state\.\*\*/);
     expect(existsSync(P('profile-snapshots.md'))).toBe(true);
     // Internal V-anchor must NOT bleed into customer-facing docs copy.
     expect(body).not.toMatch(/V-511 reference\./);

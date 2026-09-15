@@ -14,7 +14,7 @@
 //     evaluations always ask): data residency, destination URL
 //     visibility, API-key staff-recoverability, DPA shape,
 //     incident-response SLA, security-questionnaire path.
-//   • Hetzner Nuremberg + Neon Frankfurt + R2 EU residency
+//   • Hetzner Falkenstein + Neon Frankfurt + R2 EU residency
 //     verbatim claim pinned.
 //   • Scrypt-hashed-at-rest + 24-hour rotation grace claim
 //     pinned (aligned with /security V-503 + /changelog).
@@ -96,10 +96,11 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     }
   });
 
-  it('residency claim pinned: Hetzner Nuremberg / Neon Frankfurt / Cloudflare R2 EU + US replication — S30 2026-07-07 (founder decision: soften): "EU only" → "EU by default" and the false "R2 EU jurisdiction" → "EU + US replication" (R2 uses the default jurisdiction; only DB-resident data is EU-guaranteed)', () => {
+  it('residency claim pinned: Hetzner Falkenstein / Neon Frankfurt / Cloudflare R2 with EU + US copies — S30 2026-07-07 (founder decision: soften): "EU only" → "EU by default" and the false "R2 EU jurisdiction" → "EU + US replication" (R2 uses the default jurisdiction; only DB-resident data is EU-guaranteed). 2026-09-15 plain-language pass: same three vendors + locations, "Nuremberg" corrected to Falkenstein per the sub-processor register', () => {
     expect(body).toMatch(
-      /EU by default\. Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\);\s+object storage \(Cloudflare R2, EU \+ US replication\)\./,
+      /EU by default\. Servers in Falkenstein, Germany \(Hetzner\); database\s+in Frankfurt \(Neon\); file storage on Cloudflare R2, which keeps\s+copies in both the EU and the US\./,
     );
+    expect(body).not.toMatch(/Nuremberg/);
     // S30 negative pins — the absolutist claims must not silently return.
     expect(body).not.toMatch(/EU only\./);
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
@@ -108,7 +109,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
   it('scrypt-hashed-at-rest + 24-hour rotation grace claim pinned (aligned with /security)', () => {
     // S20c 2026-07-06 plain-language pass: same scrypt + breach +
     // 24-hour-grace facts, plain words lead.
-    expect(body).toMatch(/Keys are stored only as one-way scrypt hashes/);
+    expect(body).toMatch(/Keys are stored only as one-way hashes \(scrypt\)/);
     expect(body).toMatch(/staff,\s+and even a database thief, see scrambled values, not keys/);
     expect(body).toMatch(
       /rotate it in the dashboard; the old key\s+keeps working for 24 hours \(the grace window\) so nothing\s+breaks mid-switch/,
@@ -140,9 +141,12 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
     // /v1/sessions/:id/proxy route is a 503 scaffold. This guard must
     // not forbid the page from naming a real capability.
     expect(body).toMatch(
-      /Yes, when you send a navigate request or an agent plans one,\s+Driftstack's control plane processes the destination URL and\s+records the navigation event for your account\. The browser's\s+destination traffic then leaves through your configured public\s+SOCKS5 proxy, or through Driftstack-managed infrastructure when\s+the profile has no attached exit\./,
+      /Yes\. When you or your agent open a URL, Driftstack processes\s+that URL and keeps a record of the visit for your account\. The\s+page traffic itself goes out through your own SOCKS5 proxy if\s+the profile has one, or through Driftstack's managed exit if\s+not\./,
     );
     expect(body).not.toMatch(/addresses you visit don't pass through us/);
+    // 2026-09-15 owner directive: "control plane" is banned on customer surfaces
+    // (the S30 source comment may still use it; rendered copy may not).
+    expect(body).not.toMatch(/Driftstack's control plane/);
   });
 
   it('DPA pre-signed-by-Driftstack + Article 28(2) SCC framing pinned', () => {
@@ -170,7 +174,7 @@ describe('W374.A marketing-site /trust (trust center landing) page content parit
       /Most plans come without a contractual uptime guarantee\s+\(an SLA\) —\s+we publish incidents at/,
     );
     expect(body).toMatch(
-      /The API Scale and Enterprise\s+tiers carry a contractual SLA \(99\.9% monthly availability \+\s+a Severity-1 first-response commitment/,
+      /The API Scale and Enterprise\s+plans include a contractual SLA: 99\.9% monthly availability\s+and a guaranteed first-response time for critical incidents/,
     );
     expect(body).not.toMatch(/Pre-launch we don't publish a contractual SLA/);
     expect(body).not.toMatch(

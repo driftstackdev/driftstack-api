@@ -96,7 +96,9 @@ describe('W347.A /docs/profiles parity', () => {
     expect(body).toMatch(
       /<code>name<\/code>, <code>description<\/code>, <code>folder<\/code>\s+and <code>tags<\/code> are patchable/,
     );
-    expect(body).toMatch(/the archetype is set at create time and pins the device\s+identity/);
+    expect(body).toMatch(
+      /the device profile is set at create time and stays\s+fixed for the life of the profile/,
+    );
   });
 
   it('restore endpoint disclaimer pins the immutable-source posture', () => {
@@ -104,9 +106,9 @@ describe('W347.A /docs/profiles parity', () => {
     expect(body).toMatch(/Each restore creates a fresh profile/);
   });
 
-  it('archetype slug length range matches the server validator (1–120 chars)', () => {
+  it('archetype id length range matches the server validator (1–120 chars)', () => {
     // Server validator is z.string().min(1).max(120) in
     // packages/api-types/src/profiles.ts — the doc's 1–120 is correct.
-    expect(body).toMatch(/lowercase slug \(1–120 chars\)/);
+    expect(body).toMatch(/lowercase id \(1–120 chars\)/);
   });
 });

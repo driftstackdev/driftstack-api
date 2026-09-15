@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Operational cost estimate
-description: Read Driftstack's estimated cost to serve your account for a UTC month. This is operational telemetry, not your invoice.
+description: Read Driftstack's estimated cost to serve your account for a UTC month. This is an internal estimate, not your invoice.
 ---
 
 # Operational cost estimate
@@ -16,17 +16,15 @@ the amount charged to you, a Stripe invoice, or a NowPayments receipt.
 
 The response keeps five stable component fields:
 
-- **Compute** — populated from lifecycle-derived session minutes and
-  Driftstack's internal fleet-cost rate. Session minutes remain
-  analytics/unit-economics input; `quotas.session_minute` is `null` on
-  every tier.
+- **Compute** — populated from session minutes and Driftstack's
+  internal per-minute cost rate. Session minutes are not billed;
+  `quotas.session_minute` is `null` on every tier.
 - **Storage**, **egress**, **email**, and **LLM** — reserved fields that
-  currently return zero because production has no per-account meters
-  feeding them.
+  currently return zero; they are not measured per account yet.
 
-Bundled LLM has a separate settings/status endpoint. Its 10-cent-per-turn
-value is an included-service monthly budget guardrail today; it is not
-included in this estimate or separately itemized by Stripe.
+Bundled LLM has a separate settings/status endpoint. Its 10 cents per
+turn counts against your bundled-LLM monthly budget; it is not included
+in this estimate or separately itemized on your Stripe invoice.
 
 ## Read the estimate
 
@@ -71,28 +69,28 @@ currently equals `computeCents`. Do not use it as an invoice total.
 Use [billing state](/api/billing/) and Stripe-issued invoices, or the
 relevant NowPayments receipt, for payment truth. Read the separate
 [bundled-LLM status](/api/bundled-llm/#get-current-status-settings--spend)
-for its included-service budget.
+for its monthly budget.
 
-### Operator threshold state
+### Threshold state
 
-`breakdown.thresholdState` compares the operational estimate with
-operator-tuned unit-economics thresholds:
+`breakdown.thresholdState` compares the estimate with thresholds
+Driftstack sets:
 
 | State                   | Meaning                                                   |
 | ----------------------- | --------------------------------------------------------- |
-| `under-soft`            | Estimate is below the operator warning threshold.         |
-| `between-soft-and-hard` | Estimate crossed the operator warning threshold.          |
-| `over-hard`             | Estimate crossed the higher operator attention threshold. |
+| `under-soft`            | Estimate is below Driftstack's warning threshold.         |
+| `between-soft-and-hard` | Estimate crossed Driftstack's warning threshold.          |
+| `over-hard`             | Estimate crossed Driftstack's higher attention threshold. |
 
 This state is not a customer spending cap. Crossing it does not add an
 invoice item, email a customer billing warning, rate-limit a new
-session, or stop work already running. The platform records an operator
-alert and can publish an in-app account notification. Numeric threshold
-values remain operator-only and are not included in this response.
+session, or stop work already running. Driftstack records an internal
+alert and can publish an in-app account notification. The numeric
+threshold values are not included in this response.
 
 ## Empty-state response
 
-For a fresh account with no lifecycle-derived session minutes in the
+For a fresh account with no session minutes in the
 selected month, the endpoint returns `200` with a zero breakdown rather
 than `404`:
 

@@ -113,16 +113,14 @@ describe('W767 docs /api/mfa content parity', () => {
   it("CRITICAL challenge body accepts code OR recovery_code framing pinned. The 'hyphen optional; codes normalize to uppercase + no separators internally' wording explains the canonical recovery-code parsing.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(
-      /Or use a recovery code \(hyphen optional; codes normalize to upper-\s*\n?case \+ no separators internally\):/,
-    );
+    expect(p).toMatch(/Or use a recovery code \(hyphen optional; case-insensitive\):/);
   });
 
   it('CRITICAL challenge via discriminator pinned — totp | recovery + recovery-code-consumed-permanently framing. Matches W764 /api/auth via discriminator + W755 /audit-log account.recovery_code_used.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`via` is `"totp"` when matched against the 6-digit; `"recovery"` when\s*\n?a recovery code was consumed\. Recovery-code success consumes the row\s*\n?permanently — it can't be used again\./,
+      /`via` is `"totp"` when matched against the 6-digit; `"recovery"` when\s*\n?a recovery code was consumed\. Recovery-code success consumes the code\s*\n?permanently — it can't be used again\./,
     );
   });
 
@@ -190,10 +188,10 @@ describe('W767 docs /api/mfa content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The generic step-up middleware has a machine-auth carve-out because an API key\s*\n?has no human session to refresh\. MFA credential-management routes do not rely\s*\n?on that carve-out: they reject API-key bearers before step-up evaluation\./,
+      /Other step-up-gated routes let an API key through without a step-up check,\s*\n?because an API key has no session to refresh\. MFA management routes are\s*\n?stricter: they reject API-key bearers outright\./,
     );
     expect(p).toMatch(
-      /`POST \/v1\/auth\/mfa\/step-up` itself also returns 403 for an API key because\s*\n?there is no session row to refresh\./,
+      /`POST \/v1\/auth\/mfa\/step-up` itself also returns 403 for an API key because\s*\n?there is no session to refresh\./,
     );
   });
 
@@ -250,10 +248,10 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(/\| Digits\s+\| 6\s+\|/);
     expect(p).toMatch(/\| Drift tolerance\s+\| ±1 window \(90s total\)\s+\|/);
     expect(p).toMatch(/\| Issuer\s+\| `Driftstack`\s+\|/);
-    expect(p).toMatch(/\| At-rest encryption\s+\| AES-256-GCM \(env-keyed\)\s+\|/);
+    expect(p).toMatch(/\| At-rest encryption\s+\| AES-256-GCM\s+\|/);
     expect(p).toMatch(/\| Recovery code shape\s+\| 10 chars, Crockford base32\s+\|/);
     expect(p).toMatch(/\| Recovery code count\s+\| 10 per enrollment \/ regenerate\s+\|/);
-    expect(p).toMatch(/\| Recovery code hash\s+\| scrypt-kdf \(same as API keys\)\s+\|/);
+    expect(p).toMatch(/\| Recovery code hash\s+\| scrypt \(same as API keys\)\s+\|/);
     expect(p).toMatch(/\| Challenge token TTL\s+\| 5 minutes\s+\|/);
     expect(p).toMatch(/\| Step-up freshness\s+\| 15 minutes\s+\|/);
   });
@@ -264,7 +262,7 @@ describe('W767 docs /api/mfa content parity', () => {
     expect(p).toMatch(
       /SHA-1 is the RFC 6238 default and what every authenticator app\s*\n?\(Google Authenticator, 1Password, Authy, Bitwarden, etc\.\) supports\./,
     );
-    expect(p).toMatch(/SHA-256\/SHA-512 are out of scope for v1\./);
+    expect(p).toMatch(/SHA-256\/SHA-512 are not supported\./);
   });
 
   it('CRITICAL 4-row audit-log table pinned — account.mfa_enrolled / account.mfa_disabled / account.recovery_code_used / account.login (with mfa_totp/mfa_recovery payload). Matches W755 /audit-log enum + V-398 expansion.', () => {

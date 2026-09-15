@@ -101,7 +101,7 @@ const apiBaseUrl = resolveApiBaseUrl();
       const params = new URLSearchParams(window.location.search);
       const token = params.get('token');
       if (!token || token.length === 0) {
-        showBanner("Missing 'token' query parameter. Click the link in your team-invite email.", false);
+        showBanner('This page needs to be opened from the link in your invite email.', false);
         return;
       }
 
@@ -162,7 +162,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (acceptResponseAccepted) {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(
-              'Your invite was accepted, but this page could not finish opening Team. Do not reload or submit this single-use link again. Open Team to check access; if access is absent, ask the team owner for a new invite.',
+              "You're on the team, but this page couldn't open it. Don't use this link again — open Team to check. If you don't have access, ask the team owner for a new invite.",
               false,
             );
             return;
@@ -170,7 +170,7 @@ const apiBaseUrl = resolveApiBaseUrl();
           if (err && err.name === 'AbortError') {
             if (unknownRecovery) unknownRecovery.classList.remove('hidden');
             showBanner(
-              'Invite-acceptance outcome is unknown after the request timed out. The server may already have joined you to the team and consumed this single-use invite. Do not reload or submit this link again. Open Team to check access; if access is absent, ask the team owner for a new invite.',
+              "The request took too long, so you may already be on the team. Don't use this link again — open Team to check. If you don't have access, ask the team owner for a new invite.",
               false,
             );
             return;

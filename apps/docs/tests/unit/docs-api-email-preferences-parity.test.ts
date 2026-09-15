@@ -60,11 +60,13 @@ describe('W260.C docs/api/email-preferences ↔ live OptOutableEmailEventSchema 
     expect(responseEvents.length).toBeGreaterThanOrEqual(requiredCount);
   });
 
-  it('Source-of-truth file paths exist on disk', () => {
+  it('the customer page cites no internal source paths and its full-list cross-link exists on disk', () => {
     const paths = [...doc.matchAll(/`((?:apps|packages)\/[\w./-]+\.ts)/g)].map((m) => m[1]!);
-    expect(paths.length).toBeGreaterThan(0);
-    const missing = paths.filter((p) => !existsSync(resolve(REPO_ROOT, p)));
-    expect(missing).toEqual([]);
+    expect(paths).toEqual([]);
+    expect(doc).toMatch(
+      /See \[Emails Driftstack sends\]\(\/reference\/emails\/\) for the full list;\s+anything not in the opt-outable table above always sends\./,
+    );
+    expect(existsSync(resolve(REPO_ROOT, 'apps/docs/src/pages/reference/emails.md'))).toBe(true);
   });
 
   it('operational (non-opt-outable) categories are absent from OptOutableEmailEventSchema', () => {

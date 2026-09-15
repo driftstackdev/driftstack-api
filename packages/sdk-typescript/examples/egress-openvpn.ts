@@ -1,22 +1,19 @@
 // ⚠️ THIS EXAMPLE CANNOT RUN SUCCESSFULLY TODAY. The per-session attach step below
-// hits POST /v1/sessions/:id/proxy, which throws FeatureUnavailableError (503) on
-// EVERY deployment — routes/session-proxy.ts discards the injected service and both
-// registration branches throw, so no configuration makes it succeed. Session
-// creation itself also refuses first when egress is required. The reusable proxy
-// CRUD steps (save / list / update / delete) DO work; the attach + read-back steps
-// are declared-but-unshipped. Kept as the intended shape for when the backend lands.
+// calls POST /v1/sessions/:id/proxy, which returns FeatureUnavailableError (503) on
+// EVERY deployment, so no configuration makes it succeed. Session creation itself
+// also refuses first when a proxy is required. The reusable proxy steps
+// (save / list / update / delete) DO work; the attach + read-back steps are
+// declared but not yet shipped. Kept as the intended shape for when the feature lands.
 //
-// Example: customer-configurable egress — OpenVPN variant (Phase 2
-// priority per planning 133 + ORCHESTRATOR-STATE 2026-05-16).
+// Example: routing a session through your own OpenVPN server.
 //
 // Demonstrates the OpenVPN attach flow:
-//   1. Read the customer's .ovpn file from disk.
-//   2. Save it to the reusable proxy library.
+//   1. Read your .ovpn file from disk.
+//   2. Save it to your reusable proxy library.
 //   3. Attach it to an existing session.
 //
-// Server-side validation (api-types OpenVpnProxyConfigSchema) rejects
-// blobs missing the `client` or `remote <host> <port>` directives with
-// a 400 — surfacing as ValidationError in the SDK.
+// The API rejects a file that is missing a `client` line, or a `remote` line
+// with the server address, with a 400 — surfacing as ValidationError in the SDK.
 //
 // Run with:
 //
@@ -65,16 +62,16 @@ const proxy = { type: 'openvpn' as const, openvpn };
 
 const label = 'openvpn-' + basename(ovpnPath, extname(ovpnPath));
 
-// The live account-proxies API stores the VPN endpoint as host:port, parsed
-// from the `remote <host> <port>` directive (defaults to 1194).
+// A saved proxy records the VPN server as host:port, read from the file's
+// `remote` line (the port defaults to 1194).
 const remoteMatch = /^[ \t]*remote[ \t]+(\S+)(?:[ \t]+(\d+))?/m.exec(configBlob);
 const ovpnHost = remoteMatch?.[1] ?? 'vpn.example.com';
 const ovpnPort = remoteMatch?.[2] ? Number(remoteMatch[2]) : 1194;
 
 async function main(): Promise<void> {
   try {
-    // 1. Save the OpenVPN config to the customer's reusable library (the live
-    //    account-proxies API). The .ovpn config_blob is write-only.
+    // 1. Save the OpenVPN config to your reusable proxy library. The .ovpn
+    //    config_blob is write-only: it is never returned by the API.
     const saved = await client.egress.createProxy({
       label,
       scheme: 'openvpn',
@@ -98,15 +95,15 @@ async function main(): Promise<void> {
   } catch (err) {
     if (err instanceof ValidationError) {
       console.error(
-        `OpenVPN config rejected by server validation: ${err.message}\n` +
-          'Check that the config has `client` + `remote <host> <port>` directives.',
+        `OpenVPN config rejected: ${err.message}\n` +
+          'Check that the file has a `client` line and a `remote` line with the server address.',
       );
       process.exit(3);
     }
     if (err instanceof FeatureUnavailableError) {
       console.error(
-        `OpenVPN egress is unavailable on this deployment: ${err.message}\n` +
-          'Use a deployment with OpenVPN support or choose another supported proxy scheme.',
+        `OpenVPN is not available on this deployment: ${err.message}\n` +
+          'Use a deployment with OpenVPN support or choose another supported proxy type.',
       );
       process.exit(2);
     }

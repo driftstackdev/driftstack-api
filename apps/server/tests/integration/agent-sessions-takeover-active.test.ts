@@ -540,7 +540,7 @@ describe('preconditions that are not about ownership or the lock', () => {
     });
     expect(res.statusCode, res.body).toBe(409);
     const body = res.json<{ detail: string; ai_control_unavailable?: boolean; phase?: string }>();
-    expect(body.detail).toMatch(/AI control is unavailable/i);
+    expect(body.detail).toMatch(/The AI cannot act on this session right now/);
     // ⭐ The extension fields are the contract, not decoration: the GUI branches
     // on `ai_control_unavailable` to show "you are driving" rather than an error
     // toast, and `phase` tells it the turn never started. A refusal that dropped

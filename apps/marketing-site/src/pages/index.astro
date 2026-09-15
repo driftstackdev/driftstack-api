@@ -20,6 +20,7 @@ import CtaBand from '../components/CtaBand.astro';
 import CodeWindow from '../components/CodeWindow.astro';
 import AppScreen from '../components/AppScreen.astro';
 import { API_TIERS } from '../data/pricing';
+import { DEVICE_SUPPORT } from '../data/capabilities';
 
 // 2026-09-11 — every GUI depiction on this page is a REAL capture of the
 // desktop app (src/assets/screens/*.png — Playwright shots of the visual
@@ -99,13 +100,13 @@ const PROXIES_ALT =
             class="mt-4 text-[1.6rem] font-semibold tracking-tight text-tk-ink sm:mt-5 sm:text-4xl md:text-5xl"
             style="letter-spacing: -0.02em; line-height: 1.12;"
           >
-            Command a fleet of real iPhones.
+            Your own real iPhones, in the cloud.
           </h1>
           <p class="mt-4 max-w-prose text-sm text-tk-ink-2 leading-relaxed sm:mt-5 sm:text-base md:text-lg">
-            Spin up real iPhones in the cloud — each with its own identity,
-            its own history, its own corner of the world. Drive them by hand,
-            by code, or by AI. To every website, they're just people on
-            phones.
+            Spin up as many real iPhones as you need — each with its own
+            identity, its own history, its own corner of the world. Drive
+            them by hand, by code, or by AI. To every website, they're just
+            people on phones.
           </p>
           <div class="mt-5 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4">
             <a href="/pricing/#free" class="btn-primary">Start free</a>
@@ -135,7 +136,7 @@ const PROXIES_ALT =
             🇳🇱 Amsterdam · 🇯🇵 Tokyo · 🇩🇪 Berlin · 🇬🇧 London · 🇫🇷 Paris — each on its own connection
           </p>
           <div class="mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 font-mono text-[10px] text-tk-ink-3">
-            <span><b class="text-tk-ready-text">8 iPhones</b> in your fleet</span>
+            <span><b class="text-tk-ready-text">8 iPhone profiles</b>, ready to launch</span>
             <span>each with <b class="text-tk-ink-2">its own identity</b></span>
             <span>each on <b class="text-tk-ready-text">its own connection</b></span>
           </div>
@@ -156,15 +157,15 @@ const PROXIES_ALT =
     <div class="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Stat
         plain="A real iPhone, not a lookalike"
-        technical="Built from Apple's WebKit source code — the engine inside every iPhone's Safari, the same one your iOS users run"
+        technical="Runs a build of Apple's own WebKit — the engine family behind Safari on every iPhone — not a Chromium browser dressed up as a phone"
       />
       <Stat
         plain="Looks human to every website"
-        technical="The hidden 'device photos' sites take to spot fakes (canvas + WebGL hashes) match millions of real iPhones — not a new unique value per session like every other API"
+        technical="The hidden checks websites run to spot fakes get the answers a real iPhone gives — measured against real devices, check by check"
       />
       <Stat
         plain="Drive it three ways"
-        technical="From code — TypeScript, Python, or Go — or point-and-click from the dashboard. Same engine either way"
+        technical="From code — TypeScript, Python, or Go — or point and click in the desktop app. Same browser either way"
       />
       <Stat
         plain="Any country you need"
@@ -270,7 +271,7 @@ const PROXIES_ALT =
   <Section
     label="Two ways to drive it"
     title="Point and click — or just say what you want."
-    lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch."
+    lead="The desktop app keeps every iPhone one click away — folders, tags, floating device windows. And when a task is repetitive, type it in plain English and the built-in AI agent drives while you watch (Team plans and up, and every API plan)."
   >
       {/* The desktop app with its floating device window lifted over it —
           a REAL capture of both (the app's own Profiles view behind, the
@@ -284,12 +285,12 @@ const PROXIES_ALT =
       </div>
 
       <p class="mt-10 max-w-prose text-sm text-tk-ink-2">
-        The desktop app is the cockpit: organize profiles in folders, launch
+        The desktop app is home base: organize profiles in folders, launch
         with one click, and pop any session out into its own floating device
-        window. Engineers get the same power from code (the SDK — our
-        ready-made programming library):
-        <strong class="text-tk-ink">once a task is scripted, repeat runs skip
-        the AI agent entirely — none of its cost, none of its wait</strong>.
+        window. Developers get the same from code with our SDK (a ready-made
+        code library) —
+        <strong class="text-tk-ink">and a task written as code runs without
+        the AI agent at all: no AI cost, no AI wait</strong>.
       </p>
   </Section>
 
@@ -310,38 +311,39 @@ const PROXIES_ALT =
       <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed sm:mt-8 md:text-lg">
         Most tools dress up a desktop browser to look like a phone — and
         websites have gotten very good at spotting the costume. Driftstack
-        doesn't wear one. It runs the same browser Apple ships on every
-        iPhone, so there's nothing fake to find — your session lands in the
-        iPhone bucket with millions of others.
+        doesn't wear one. It runs a build of Apple's own WebKit — the
+        engine family behind iPhone Safari — so the iPhone behaviour is
+        compiled in, not painted on. To a website, your session looks like
+        a real iPhone.
       </p>
       <div class="mt-10 grid gap-5 md:grid-cols-3">
         <div class="card p-6">
           <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Pixel-exact</p>
-          <h3 class="mt-3 text-lg font-semibold text-tk-ink">The same hashes, bit for bit</h3>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Checked against real iPhones</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            Canvas and WebGL hashes identical to real-device hashes. Not
-            approximate, not "within tolerance" — identical.
+            Websites quietly test how your browser draws images and 3D
+            graphics. Driftstack gives the answers a real iPhone gives —
+            measured against real devices, check by check, not approximated.
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Real families</p>
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Real models</p>
           <h3 class="mt-3 text-lg font-semibold text-tk-ink">The iPhones your users hold</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            iPhone
-            15 Pro, iPhone 16 Pro, and the current iPhone 17 lineup — on
-            iOS 18.7
-            / Safari 26.4, and Safari 26.5 as it rolls out.
+            Every iPhone from the 13 to the 17 Pro Max
+            ({DEVICE_SUPPORT.deviceFamilies}, {DEVICE_SUPPORT.selectableCount} device
+            profiles) on iOS 18, with Safari {DEVICE_SUPPORT.safariVersions}. The
+            default is the iPhone 17 on iOS 18.7 / Safari 26.4.
           </p>
         </div>
         <div class="card p-6">
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Engine-deep</p>
-          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Fixed in the engine, not a wrapper</h3>
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Nothing added</p>
+          <h3 class="mt-3 text-lg font-semibold text-tk-ink">Nothing bolted on top</h3>
           <p class="mt-2 text-sm leading-relaxed text-tk-ink-2">
-            If any measurable signal differs from the real phone, it's a
-            launch-blocking bug — and we fix it in the browser engine itself.
-            Other tools paper over their tells by injecting "stealth"
-            JavaScript into the page; detection systems know how to spot those
-            scripts. Driftstack injects nothing, so there's nothing to find.
+            Other tools hide their differences by adding "stealth" scripts to
+            the page — and websites know how to spot those. Driftstack injects
+            no stealth JavaScript: the iPhone behaviour is compiled into the
+            engine itself, where page scripts can't see it.
           </p>
         </div>
       </div>
@@ -350,7 +352,7 @@ const PROXIES_ALT =
            product-vs-competitor differentiator). -->
       <div class="mt-14 grid gap-10 md:grid-cols-2 md:items-start">
         <div>
-          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">What detection systems see</p>
+          <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-ink-3">What websites see</p>
           <h3
             class="mt-4 max-w-xl text-xl font-semibold tracking-tight text-tk-ink sm:text-2xl"
             style="letter-spacing: -0.02em;"
@@ -358,17 +360,17 @@ const PROXIES_ALT =
         Same signals as a physical iPhone. Not "close enough".
       </h3>
           <p class="mt-5 max-w-prose text-base text-tk-ink-2 leading-relaxed">
-            Detection systems read hundreds of small signals. A typical
+            Websites read hundreds of small signals. A typical
             stealth browser fakes its one-line introduction (the
             <a href="/glossary/#user-agent" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">user-agent</a>
-            string) but leaks its real engine in how it draws, renders 3D,
-            and processes sound — the
+            string) but gives away its real engine in how it draws, renders
+            3D, and processes sound — the
             <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">canvas</a>,
-            WebGL, and audio fingerprints. Driftstack runs Apple's WebKit, so
-            every signal returns the exact iPhone value — not approximate.
+            WebGL, and audio fingerprints. Driftstack's answers come from
+            Apple's WebKit, measured against real iPhones check by check.
           </p>
           <p class="mt-4 text-sm text-tk-ink-3">
-            A 7-signal preview. The
+            Seven of the signals, as a preview. The
             <a
               href="/trust/cumulative-rig/"
               class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2"
@@ -385,11 +387,10 @@ const PROXIES_ALT =
           </p>
           <p class="mt-6 max-w-prose text-base text-tk-ink-2 leading-relaxed">
             <strong class="text-tk-ink">Apple's engine. Not a Chromium copy.</strong>
-            Driftstack runs Apple's WebKit source code itself — the same
-            engine that ships on every iPhone. WebKit (the browser engine),
-            Core Text (Apple's text-drawing system), and the rest of the iOS
-            rendering pipeline produce your fingerprint the way Apple wrote
-            them, in the order Apple intended.
+            Driftstack runs its own build of Apple's WebKit, from Apple's
+            source — the engine family that ships on every iPhone — so text,
+            graphics and page layout are drawn the way an iPhone draws them,
+            checked against real devices.
           </p>
         </div>
         <div class="card overflow-hidden">
@@ -408,34 +409,34 @@ const PROXIES_ALT =
             <span class="text-center text-tk-ink-3">spoofed</span>
             <span class="text-center font-mono text-tk-accent-text">real</span>
 
-            <span class="text-tk-ink">Canvas hash</span>
-            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-tk-ink">Canvas fingerprint</span>
+            <span class="text-center text-tk-ink-3">gives away Chromium</span>
             <span class="text-center font-mono text-tk-accent-text">iPhone</span>
 
-            <span class="text-tk-ink">WebGL renderer</span>
-            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-tk-ink">WebGL (graphics chip)</span>
+            <span class="text-center text-tk-ink-3">gives away Chromium</span>
             <span class="text-center font-mono text-tk-accent-text">Apple GPU</span>
 
-            <span class="text-tk-ink">Audio fingerprint (AudioContext)</span>
-            <span class="text-center text-tk-ink-3">leaks Chromium</span>
+            <span class="text-tk-ink">Audio fingerprint</span>
+            <span class="text-center text-tk-ink-3">gives away Chromium</span>
             <span class="text-center font-mono text-tk-accent-text">iOS</span>
 
-            <span class="text-tk-ink">Core Text metrics</span>
-            <span class="text-center text-tk-ink-3">leaks system</span>
+            <span class="text-tk-ink">Text rendering</span>
+            <span class="text-center text-tk-ink-3">gives away the host</span>
             <span class="text-center font-mono text-tk-accent-text">iOS</span>
 
-            <span class="text-tk-ink">JavaScript engine timing</span>
+            <span class="text-tk-ink">JavaScript engine</span>
             <span class="text-center text-tk-ink-3">Chrome's V8</span>
-            <span class="text-center font-mono text-tk-accent-text">Apple's JSCore</span>
+            <span class="text-center font-mono text-tk-accent-text">Apple's JavaScriptCore</span>
 
             <span class="text-tk-ink">Fingerprint across sessions</span>
-            <span class="text-center text-tk-ink-3">100% unique</span>
-            <span class="text-center font-mono text-tk-accent-text">population-stable</span>
+            <span class="text-center text-tk-ink-3">unique to that browser</span>
+            <span class="text-center font-mono text-tk-accent-text">blends in with real iPhones</span>
           </div>
           <p class="border-t border-tk-border px-6 py-4 text-xs leading-relaxed text-tk-ink-3">
-            population-stable = the same value millions of real iPhones
-            share, unchanged from session to session. A brand-new unique
-            hash every session is itself a tell.
+            Blends in = the answers a real iPhone gives: the fixed ones stay
+            fixed, and the ones Safari deliberately varies are varied the same
+            way. A fingerprint that is unique to one browser is itself a tell.
           </p>
         </div>
       </div>
@@ -447,16 +448,16 @@ const PROXIES_ALT =
   <Section
     label="Human by design"
     title="It even moves like a person."
-    lead="Bots move in straight lines and constant time. Driftstack's input engine doesn't: every tap, swipe and keystroke is generated from patterns of real human movement — so automated sessions read like a person holding a phone, because that's what the motion says."
+    lead="Bots move in straight lines at a constant speed. Driftstack's sessions don't have to: taps, swipes and keystrokes can follow patterns taken from real human movement, so an automated session moves like a person holding a phone."
   >
     <div class="mt-10 grid gap-6 md:grid-cols-3">
       <Card title="Touch & scroll">
         <IconTile slot="icon">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 18c4-8 8-10 16-12"/><circle cx="4" cy="18" r="1.6"/><circle cx="20" cy="6" r="1.6"/></svg>
         </IconTile>
-        Curved touch paths, momentum flicks, natural variation in how long
-        each touch rests — no two taps land alike, and none land like a
-        script.
+        Momentum flicks, natural variation in how long each touch rests,
+        and — when you take control yourself — curved touch paths. None of
+        it moves like a script.
       </Card>
       <Card title="Typing cadence">
         <IconTile slot="icon">
@@ -507,7 +508,7 @@ try {
       </CodeWindow>
       <div>
         <p class="text-base leading-7 text-tk-ink-2">
-          Three lines to a real iPhone session. First-party SDKs in TypeScript,
+          A few lines to a real iPhone session. Official SDKs in TypeScript,
           Python, and Go — plus a plain HTTPS API any HTTP client can drive:
           Playwright tests, n8n workflows, Make.com scenarios, Zapier triggers,
           plain <code class="font-mono text-tk-accent-text">curl</code> from a
@@ -515,13 +516,13 @@ try {
         </p>
         <p class="mt-4 text-base leading-7 text-tk-ink-2">
           <strong class="text-tk-ink">Your own internet exit, per profile.</strong>
-          Full control over where traffic exits (your
+          Choose where each profile's traffic comes from (its
           <a href="/glossary/#egress" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">egress</a>)
-          — connect your own SOCKS5 proxy (UDP included), OpenVPN, or
-          WireGuard. And unlike anyone else, the traffic that normally slips
-          around a proxy and gives you away — real-time connections (WebRTC)
-          and the newer transport protocol (QUIC) — rides your tunnel too, so
-          nothing leaks around it.
+          — connect your own SOCKS5 proxy, OpenVPN, or WireGuard. A VPN
+          tunnel carries everything the profile does, including WebRTC and
+          HTTP/3 (QUIC); a UDP-capable SOCKS5 proxy carries them too. On a
+          TCP-only proxy, HTTP/3 is switched off rather than leaked, and the
+          Test button shows which you have before you launch.
         </p>
       </div>
     </div>
@@ -572,16 +573,15 @@ try {
   <!-- ═══ 9 · THE CONSOLE — live product surfaces only. ═══ -->
   <Section
     label="The console"
-    title="Your fleet, kept in order."
-    lead="Everything below is rendered the way you'd actually use it — because the product is the interface."
+    title="Your iPhones, kept in order."
+    lead="Everything below is the real desktop app, shown the way you'd use it."
   >
     <div class="mt-10 grid gap-10">
-      <FeatureRow title="The Identity Wardrobe" chip="live">
-        Profiles as wearable identities: a complete iPhone — hardware, iOS,
-        Safari, fonts, the way it draws (canvas), even the way it opens
-        secure connections (TLS) — with its own cookies, stored data, proxy
-        and its own way of moving. Reuse the same profile across sessions and
-        its browser identity stays consistent.
+      <FeatureRow title="Each profile is its own iPhone" chip="live">
+        A complete iPhone — its model, iOS version, Safari and fonts, right
+        down to how it draws pages and opens secure connections — with its
+        own cookies, saved data, proxy and way of moving. Reuse a profile and
+        every website sees the same phone.
         <AppScreen
           slot="media"
           src={profilesListScreen}
@@ -589,12 +589,14 @@ try {
           sizes="(min-width: 768px) 552px, calc(100vw - 48px)"
         />
       </FeatureRow>
-      <FeatureRow title="Exit anywhere. Leak nowhere." chip="live" reverse>
-        Attach your own exit to each profile — a SOCKS5 proxy, OpenVPN (an
-        .ovpn file), or WireGuard (a .conf file). Unlike anyone else, the
-        traffic that usually slips around a proxy (UDP, WebRTC, QUIC) rides
-        the tunnel too. The phone's language and clock follow the exit's
-        location, so nothing contradicts the address a website sees.
+      <FeatureRow title="Exit anywhere. Know what gets through." chip="live" reverse>
+        Bring your own proxy or VPN to each profile — a SOCKS5 proxy,
+        OpenVPN (.ovpn file), or WireGuard (.conf file). A VPN tunnel carries
+        everything the profile does, including WebRTC and HTTP/3; on a proxy
+        that can't carry HTTP/3, it is switched off rather than leaked, and
+        the Test button shows which you have before you launch. The phone's
+        clock and time zone follow its location, so nothing contradicts the
+        address a website sees.
         <AppScreen
           slot="media"
           src={proxiesScreen}
@@ -615,7 +617,7 @@ try {
        Cloudflare R2 in the default jurisdiction (EU + US replication), so
        the absolutist wording over-promised. ═══ */}
   <Section
-    label="Metering"
+    label="Billing & privacy"
     title="Simple to pay for. Hard to snoop on."
   >
     <div class="mt-10 grid gap-8 md:grid-cols-3">
@@ -624,36 +626,34 @@ try {
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
           <strong class="text-tk-ink">Concurrent</strong> means sessions
           running at the same time — think browser tabs. Pick a plan, get a
-          concurrent cap, run anything inside it. No per-call markup. No
-          per-element fees. Visit 200 pages on one session for the cost of
-          visiting one.
+          number of sessions you can run at once, and run anything inside
+          it. No per-call markup. No per-element fees. Visit 200 pages on one
+          session for the cost of visiting one.
         </p>
       </div>
       <div class="panel">
         <h3 class="text-lg font-semibold text-tk-ink">EU-hosted by default.</h3>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
           Your account data lives on EU servers. We don't log what your sessions visit or
-          do — only the operational metadata we need to bill: how long a
-          session ran, which iPhone model + iOS + Safari combination it used
-          (its <a href="/glossary/#archetype" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">archetype</a>),
-          and how much of your concurrent cap it used. Where data lives, and
-          every outside company that handles it for us, is on the
+          do — only what we need to bill you: how long a session ran, which
+          iPhone model, iOS and Safari version it used, and how many sessions
+          you had running at once. Where data lives, and every outside
+          company that handles it for us, is on the
           <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
         </p>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
-          Customer-configurable egress — attaching your own internet exit (a
-          SOCKS5 proxy, OpenVPN, or WireGuard) to each profile — is live. See the
-          <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>
-          for the current implementation state.
+          You can route each profile's traffic through your own SOCKS5
+          proxy, OpenVPN, or WireGuard connection today. Details are in the
+          <a href="/trust/security-overview/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">security overview</a>.
         </p>
       </div>
       <div class="panel">
         <h3 class="text-lg font-semibold text-tk-ink">Answered by the people who build it.</h3>
         <p class="mt-3 text-sm leading-7 text-tk-ink-2">
-          Design-partner customers get a Slack channel shared with the engineer
-          who writes the code. Bug → fix → deploy in the same week, not the
-          same quarter. No first-line ticket queue to fight through before
-          you reach someone who can actually fix it.
+          Early customers get a Slack channel shared with the engineers who
+          build Driftstack. Fixes ship in the same week, not the same
+          quarter — and there's no ticket queue between you and the person
+          who can fix it.
         </p>
       </div>
     </div>
@@ -667,34 +667,34 @@ try {
         Built by engineers, not a growth team.
       </h3>
       <p class="mt-4 max-w-prose text-base leading-7 text-tk-ink-2">
-        Driftstack is built by the people who write the WebKit patches — no
-        cold-outreach sales team (SDRs), no upsell ladder, no product direction
-        chosen by investors.
+        Driftstack is built by the engineers who work on the browser engine
+        itself — no outbound sales team, no upsell ladder, no product
+        direction chosen by investors.
         Customer feedback goes straight to the engineers shipping the product,
         and support replies come from the same team.
       </p>
       <div class="mt-8 grid gap-6 md:grid-cols-3">
         <Card title="Direct engineer access">
-          <p slot="icon" class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Design partner</p>
-          Design-partner customers get a Slack channel shared with the engineer
-          who writes the code. Bug → fix → deploy in the same week, not the
-          same quarter.
+          <p slot="icon" class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Direct line</p>
+          Early customers get a Slack channel shared with the engineers who
+          build Driftstack. Fixes ship in the same week, not the same
+          quarter.
         </Card>
         <Card title="One concurrent metric">
           <p slot="icon" class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Honest pricing</p>
           No per-call markup, no per-element fees, no opaque "credits" that
-          expire. The concurrent cap is the only number you ever have to
-          think about. Annual contracts save 20% — listed, not negotiated
-          case-by-case.
+          expire. How many sessions run at once is the only number you ever
+          have to think about. Annual contracts save 20% — listed, not
+          negotiated case-by-case.
         </Card>
         <Card title="Your account data stays in the EU">
           <p slot="icon" class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Sovereignty</p>
-          Account data — profiles, audit logs, session metadata — lives in
+          Account data — profiles, audit logs, session history — lives in
           one EU region; uploaded files use Cloudflare's storage network,
-          which can replicate outside the EU. We don't log
-          destination URLs, response bodies, or session content. Every
-          outside company that handles data for us (our sub-processors) is
-          listed on the
+          which can keep copies outside the EU. We don't log the pages you
+          visit or anything that happens inside a session. Every outside
+          company that handles data for us (our sub-processors) is listed on
+          the
           <a href="/trust/sub-processors/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">sub-processor page</a>.
         </Card>
       </div>
@@ -706,18 +706,17 @@ try {
   <Section
     label="Pricing"
     title="Drive it by hand, or drive it from code."
-    lead="Start free — one profile, 20-minute sessions, no card required. Then pick one of two plan ladders, depending on how you work: Manual if a person drives the sessions, API if your code does. Annual contracts save 20%."
+    lead="Start free — one profile, 20-minute sessions, no card required. Then pick the plan family that fits how you work: Manual if a person drives the sessions, API if your code does. Annual contracts save 20%."
   >
     <div class="mt-10 grid gap-6 md:grid-cols-2">
       <div class="card p-8">
         <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">Manual</p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">Desktop app</h3>
         <p class="mt-3 leading-7 text-tk-ink-2">
-          A desktop app you install on your computer that lets you keep 10 to
-          200 logged-in profiles open at once and switch between them like
-          browser tabs. Same
-          WebKit, same fingerprint, no code required. Built for account teams
-          and operators who keep multiple sign-ins alive across the workday.
+          A desktop app for your computer that keeps 10 to 200 logged-in
+          profiles saved and ready, so you can switch between them like
+          browser tabs. The same real iPhone browser, no code required. Built
+          for teams who keep several sign-ins alive through the workday.
         </p>
         <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{manualLineup}</span></li>
@@ -730,10 +729,10 @@ try {
         <p class="font-mono text-xs uppercase tracking-[0.2em] text-tk-accent-text">API</p>
         <h3 class="mt-3 text-2xl font-semibold text-tk-ink">Drive it from code</h3>
         <p class="mt-3 leading-7 text-tk-ink-2">
-          First-party SDKs in TypeScript, Python, and Go — plus a plain HTTPS
-          API any HTTP client can drive. Built for QA pipelines, data
-          collection, integration tests, and production automation that needs
-          the real iPhone fingerprint.
+          Official SDKs in TypeScript, Python, and Go — plus a plain HTTPS
+          API any HTTP client can drive. Built for test pipelines, data
+          collection, and production automation that has to look like a real
+          iPhone.
         </p>
         <ul class="mt-5 space-y-2.5 text-sm text-tk-ink-2">
           <li class="flex gap-2.5"><span class="arrow-bullet">→</span><span>{apiLineup}</span></li>
@@ -753,9 +752,9 @@ try {
     </div>
     <div class="mt-10 flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
       <p class="max-w-prose text-tk-ink-2 leading-7">
-        Two ladders. A free tier to start. Manual from {manualFrom}/mo if
-        you're driving by hand; API from {apiFrom}/mo if your code is running
-        sessions. A person clicking → Manual. Code calling → API.
+        Two plan families. A free tier to start. Manual from {manualFrom}/mo
+        if you're driving by hand; API from {apiFrom}/mo if your code is
+        running sessions. A person clicking → Manual. Code calling → API.
       </p>
       <a href="/pricing/" class="btn-primary shrink-0">See pricing</a>
     </div>
@@ -765,7 +764,7 @@ try {
   <Section
     label="Self-hosted"
     title="Run Driftstack on your own infrastructure."
-    lead="For privacy, full control, or sustained high-volume use. We help you pick the right hardware, install the coordination software that runs it all (the control plane), and operate the fleet. Three packages, annual contracts, hands-on onboarding."
+    lead="For privacy, full control, or sustained high-volume use. We help you pick the hardware, install the software, and keep it running. Three packages, annual contracts, hands-on onboarding."
   >
     <a href="/self-hosted/" class="btn-secondary mt-8 inline-flex">See self-hosted →</a>
   </Section>
@@ -773,7 +772,7 @@ try {
   <!-- ═══ 13 · FINAL CTA ═══ -->
   <CtaBand
     title="See it for yourself. Free."
-    lead="iPhone Safari sessions on real WebKit — Apple's own browser engine — one profile, 20-minute manual sessions, no card required. Plenty of room to point your workflow at it and decide on your own terms."
+    lead="iPhone Safari sessions on Apple's real WebKit — one profile, 20-minute sessions, no card required. Enough to try it on your own work and decide for yourself."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.io"

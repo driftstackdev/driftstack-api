@@ -38,6 +38,12 @@
 // overview for parameter-level depth. Every pinned claim below is
 // byte-identical; only the contact-CTA pin (CtaBand props) changed
 // shape.
+//
+// 2026-09-15 owner directive (customer-facing copy: what the customer
+// gets, never how we run it): the same facts are pinned in plain words.
+// Implementation names (nginx / UFW / fail2ban / Pino / Dependabot /
+// scrypt logN / sha256 cache keying / "control plane") left the page;
+// the parameter-level versions live on /trust/security-overview.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -56,18 +62,15 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   const body = read(LIB);
 
   it('Hero truthfully distinguishes one-way API-key hashes, platform-held encrypted envelopes, and the no-retention-by-default session boundary', () => {
-    expect(body).toMatch(/Keys protected at rest\. Live media not retained by default\./);
+    expect(body).toMatch(/Your keys stay protected\. Live sessions are not kept by default\./);
     expect(body).toMatch(
-      /stores customer API keys as one-way hashes and wraps\s+recoverable credentials with context-bound encryption under\s+platform-held keys/,
+      /stores your API keys as one-way hashes and encrypts any\s+credential that must stay usable, tying that encryption to your\s+account so a stored credential cannot be read under a different\s+account/,
     );
     expect(body).toMatch(
-      /owning account is part of the protected\s+context; record and value-slot identity are also bound where the\s+store has a stable record identity/,
+      /Live-session media — the video and any audio of a running\s+session — is processed only to run and stream your session and is\s+not kept by default/,
     );
     expect(body).toMatch(
-      /Live-session media is processed only to\s+run and stream the session and is not retained by default/,
-    );
-    expect(body).toMatch(
-      /Session\s+metadata and agent transcripts follow their documented retention\s+periods/,
+      /Session records and agent transcripts are kept\s+for their documented retention periods/,
     );
     expect(body).not.toMatch(/We don't see your traffic\. We can't read your keys\./);
     expect(body).not.toMatch(/never have a copy of anything/);
@@ -75,7 +78,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
 
   it('6-pillar architecture pins Transport, SOCKS5 egress, API keys, Webhooks, Team RBAC and honest live-media handling', () => {
     expect(body).toMatch(/01 · Transport/);
-    expect(body).toMatch(/02 · Egress/);
+    expect(body).toMatch(/02 · Proxies/); // 2026-09-15: "Egress" → plain "Proxies"
     expect(body).toMatch(/03 · API keys/);
     expect(body).toMatch(/04 · Webhooks/);
     expect(body).toMatch(/05 · Team roles \(RBAC\)/); // S20c 2026-07-06: plain words lead, RBAC kept
@@ -87,7 +90,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     // strict-origin-validation + 2-year HSTS facts; plain words lead,
     // the precise terms ride in parens.
     expect(body).toMatch(
-      /All traffic to us is HTTPS — encrypted the whole way\.\s+Cloudflare, our edge network, handles the encryption first\s+\(terminating TLS at the edge\) and strictly verifies it is\s+really talking to our own server at Hetzner \(full "strict"\s+origin validation\) before passing anything on\. The API\s+server speaks TLS 1\.2 \/ 1\.3 only and sets a 2-year HSTS\s+header with <code>includeSubDomains<\/code> \+ <code>preload<\/code>/,
+      /All traffic to us is HTTPS — encrypted the whole way\.\s+Cloudflare, our edge network, handles the encryption first\s+and verifies it is really talking to our own server before\s+passing anything on\. Our API server accepts only TLS 1\.2\s+and 1\.3 and tells browsers \(via a 2-year HSTS header with\s+<code>includeSubDomains<\/code> and <code>preload<\/code>\)\s+never to connect to us unencrypted\./,
     );
   });
 
@@ -96,14 +99,18 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     // no-recovery-path, and the 30s sha256-keyed cache all survive;
     // plain words lead ("scrambled one-way", "remembered for 30
     // seconds").
+    // 2026-09-15: the logN=15 / sha256-keyed parameters moved to
+    // /trust/security-overview (hash params N=2^15); this page keeps
+    // scrypt, the no-recovery-path and the 30-second window.
+    expect(body).toMatch(/Stored only as one-way scrypt hashes — never readable\./);
     expect(body).toMatch(
-      /API keys are scrambled one-way with scrypt \(logN=15\) — a\s+deliberately slow scrambling algorithm that makes guessing\s+impractical — before they ever touch the database\./,
+      /API keys are scrambled one-way with scrypt — a deliberately\s+slow algorithm that makes guessing impractical — before they\s+ever touch the database\./,
     );
     expect(body).toMatch(
-      /no path — admin, support, ops — to\s+recover it\. A database breach surfaces scrambled values\s+\(hashes\), not keys\./,
+      /nobody at Driftstack —\s+admin, support or operations — can recover it\. A database\s+breach would expose scrambled values, not keys\./,
     );
     expect(body).toMatch(
-      /To keep requests fast, a just-verified\s+key is remembered for 30 seconds in a protected in-memory\s+cache \(sha256-keyed\) — speed without weakening how keys are\s+stored\./,
+      /a key that was just checked is remembered in\s+protected short-term memory for 30 seconds — speed without\s+weakening how keys are stored\./,
     );
   });
 
@@ -119,16 +126,16 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   it('Live-media handling states the implemented processing, access, and retention boundaries without claiming broad content non-retention', () => {
     expect(body).toMatch(/Live-session media is not retained by default\./);
     expect(body).toMatch(
-      /Live-session media is encrypted in transport,\s+processed through LiveKit to deliver the stream, and dropped\s+when the session ends\./,
+      /Live-session streams\s+are encrypted in transit, used to deliver the session to you,\s+and dropped when the session ends\./,
     );
     expect(body).toMatch(
-      /product exposes no administrative\s+path for Driftstack staff to join a customer's live session\./,
+      /Driftstack staff have no\s+built-in way to join a customer's live session\./,
     );
     expect(body).toMatch(
-      /screenshots, DOM snapshots, and PDFs pass through\s+the API inline and are not retained by the Capture endpoint;\s+desktop recordings stay on the customer's device and are not\s+uploaded\./,
+      /Screenshots,\s+page snapshots and PDFs you request are returned directly in\s+the API response and are not stored; desktop recordings stay\s+on your own computer and are not uploaded\./,
     );
     expect(body).toMatch(
-      /For self-hosted deployments, even session metadata\s+stays inside your network; only license-validity heartbeats/,
+      /For self-hosted\s+deployments, even session records stay inside your network;\s+only periodic "is this license still valid\?" check-ins reach\s+our servers\./,
     );
     expect(body).not.toMatch(/Nobody at Driftstack can watch your sessions/);
     expect(body).not.toMatch(/Driftstack staff cannot read your sessions/);
@@ -156,18 +163,19 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   });
 
   it('V-503 defense-in-depth keeps six honest layers, including recorded audit events without universal-delivery claims', () => {
-    expect(body).toMatch(/Cloudflare TLS 1\.3 \+ WAF/);
-    expect(body).toMatch(/A locked-down server \(nginx \+ UFW \+ fail2ban\)/); // S20c 2026-07-06
-    expect(body).toMatch(/Auth gate \+ scope check \+ rate limit/);
+    expect(body).toMatch(/Encrypted connections, automated abuse blocked/);
+    expect(body).toMatch(/A locked-down server\s*<\/h3>/); // 2026-09-15: nginx/UFW/fail2ban names left the heading
+    expect(body).toMatch(/Three checks on every request/);
     expect(body).toMatch(/Encryption at rest \+ isolation/);
     expect(body).toMatch(/Recorded customer audit trail/);
     expect(body).toMatch(
-      /Successfully recorded account-security and management events\s+are append-only at the record level/,
+      /Account-security and management events — API key creation,\s+rotation and revocation, two-factor \(MFA\) enrollment, profile\s+changes, webhook secret rotations, logins and password\s+changes — are recorded and cannot be edited after the fact\./,
     );
-    expect(body).toMatch(/Routine credential use is not emitted as\s+a read event/);
+    expect(body).toMatch(/Everyday use of an API key is not recorded in the audit\s+trail\./);
     expect(body).not.toMatch(/Every customer-visible event lands/);
     expect(body).not.toMatch(/never edited, never deleted/);
-    expect(body).toMatch(/Sentry \+ structured logs/);
+    expect(body).toMatch(/Errors tracked, content never logged/);
+    expect(body).toMatch(/never the body of your\s+request or of our response/);
   });
 
   it("V-503 threat-model in-scope 5-state + out-of-scope 4-state pinned — pinned so the explicit threat-model boundary stays consistent (drift to claiming nation-state defense would create false-promise risk; drift to dropping the 'session hijacking' in-scope would weaken the cross-account isolation story that returns 404 not 403)", () => {
@@ -185,7 +193,7 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
     // S20c 2026-07-06 plain-language pass: the 404-not-403
     // anti-enumeration promise survives, stated plainly.
     expect(body).toMatch(
-      /every route restricts\s+lookups to your own account at the database layer; a\s+probe at another account's data gets a plain "not\s+found" \(cross-account lookups return 404, never 403 —\s+the response never even confirms the thing exists\)\./,
+      /every lookup is\s+restricted to your own account; a probe at another\s+account's data gets a plain "not found" \(cross-account\s+lookups return 404, never 403 — the response never even\s+confirms the thing exists\)\./,
     );
   });
 
@@ -204,22 +212,27 @@ describe('W501.B apps/marketing-site/src/pages/security.astro content parity', (
   // (server-deploy.yml), and the public /version git-SHA endpoint
   // (apps/server/src/lib/app.ts V-195).
   it("V-503 supply-chain framing pinned: 'Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17, Redis 7.' + Dependabot-only card (weekly, CI-gated, patch-only auto-merge) + honest deploy controls (lockfile installs, staging-first gated pipeline, auto-rollback health-check, public /version SHA) — pinned so the corrected S26 wording survives and the retracted SBOM/signed-image claims cannot silently return", () => {
+    // 2026-09-15 plain-language pass: the framework roll-call, the
+    // Dependabot name and the lockfile/CI/staging vocabulary left the
+    // page; the controls themselves (stable stack, scanned + tested
+    // updates, patch-only auto-merge, test copy + explicit approval,
+    // auto-rollback, public /version) are pinned in customer words.
     expect(body).toMatch(
-      /Node 22 LTS, TypeScript strict, Fastify, Drizzle, Postgres 17,\s*Redis 7\./,
-    );
-    expect(body).toMatch(/<h3 class="text-base font-medium text-tk-ink">Dependabot<\/h3>/);
-    expect(body).toMatch(
-      /Nothing merges unless the full automated test suite\s+passes \(CI\); only the smallest class of update \(bug-fix-only\s+patch releases\) may merge automatically/,
-    );
-    expect(body).toMatch(
-      /Every dependency version is pinned in a lockfile checked\s+into the repository, and CI installs exactly those pinned\s+versions\./,
+      /We run on a small, stable set of well-known components\s+\(Node\.js, TypeScript, Postgres, Redis\) that rarely changes\./,
     );
     expect(body).toMatch(
-      /staging first, then an explicit manual approval or\s+a deliberately cut release tag\./,
+      /<h3 class="text-base font-medium text-tk-ink">Automatic dependency updates<\/h3>/,
     );
-    expect(body).toMatch(/automatically rolls\s+back to the previous version if that check fails/);
     expect(body).toMatch(
-      /verify exactly which\s+source-code revision\s+production is running via our public\s+\/version endpoint/,
+      /Nothing\s+is accepted unless the full automated test suite passes; only\s+small bug-fix updates go in automatically, and anything\s+bigger waits for human review\./,
+    );
+    expect(body).toMatch(/Every software component is fixed to an exact version\./);
+    expect(body).toMatch(
+      /release reaches production only after running on a test copy\s+first and being explicitly approved\./,
+    );
+    expect(body).toMatch(/automatically rolled back if\s+that check fails/);
+    expect(body).toMatch(
+      /anyone can see exactly which version\s+is running at <code class="font-mono">api\.driftstack\.dev\/version<\/code>/,
     );
     // Retracted false claims must stay gone (allowing only the S26
     // explanatory comment, which avoids these exact phrasings).

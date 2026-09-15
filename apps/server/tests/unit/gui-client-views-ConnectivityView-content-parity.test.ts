@@ -66,19 +66,21 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     );
   });
 
-  it("V-337 framing pinned: 'surface the server's driver mode + version when we can reach the public /version endpoint. Helps the founder spot \"you're talking to a mock server\" mismatches without running /version manually.'", () => {
+  it("V-337 framing pinned: 'surface the server's version when we can reach the public /version endpoint, so a customer can tell which build they are talking to without running /version manually. The driver mode the endpoint also reports is deliberately NOT shown (2026-09-15).'", () => {
     expect(body).toMatch(
-      /\/\/ V-337 — surface the server's driver mode \+ version when we can[ \t]*(?:\r?\n[ \t]*)?\/\/ reach the public \/version endpoint\. Helps the founder spot[ \t]*(?:\r?\n[ \t]*)?\/\/ "you're talking to a mock server" mismatches without running[ \t]*(?:\r?\n[ \t]*)?\/\/ \/version manually\./,
+      /\/\/ V-337 — surface the server's version when we can reach the public[ \t]*(?:\r?\n[ \t]*)?\/\/ \/version endpoint, so a customer can tell which build they are[ \t]*(?:\r?\n[ \t]*)?\/\/ talking to without running \/version manually\. The driver mode the[ \t]*(?:\r?\n[ \t]*)?\/\/ endpoint also reports is deliberately NOT shown \(2026-09-15\)\./,
     );
   });
 
-  it("CheckResult 4-field (ok: boolean + durationMs: number + detail: string + errorKind? optional) + ServerVersion 4-field with driver 3-value union ('mock' | 'webkit' | 'playwright') + playwright_browser? 3-value union ('webkit' | 'chromium' | 'firefox') — pinned so the V-337 driver/browser surface tracks the server-side enum", () => {
+  it('CheckResult 3-field (ok: boolean + durationMs: number + detail: string — no errorKind: the raw SDK kind is wire vocabulary, not customer copy) + ServerVersion 1-field (version only — git_sha / driver / playwright_browser describe how the server runs and are never read; owner directive 2026-09-15)', () => {
     expect(body).toMatch(
-      /interface CheckResult \{[ \t]*(?:\r?\n[ \t]*)?ok: boolean;[ \t]*(?:\r?\n[ \t]*)?durationMs: number;[ \t]*(?:\r?\n[ \t]*)?detail: string;[ \t]*(?:\r?\n[ \t]*)?errorKind\?: string;[ \t]*(?:\r?\n[ \t]*)?\}/,
+      /interface CheckResult \{[ \t]*(?:\r?\n[ \t]*)?ok: boolean;[ \t]*(?:\r?\n[ \t]*)?durationMs: number;[ \t]*(?:\r?\n[ \t]*)?detail: string;[ \t]*(?:\r?\n[ \t]*)?\}/,
     );
     expect(body).toMatch(
-      /interface ServerVersion \{[ \t]*(?:\r?\n[ \t]*)?version: string;[ \t]*(?:\r?\n[ \t]*)?git_sha: string;[ \t]*(?:\r?\n[ \t]*)?driver: 'mock' \| 'webkit' \| 'playwright';[ \t]*(?:\r?\n[ \t]*)?playwright_browser\?: 'webkit' \| 'chromium' \| 'firefox';[ \t]*(?:\r?\n[ \t]*)?\}/,
+      /interface ServerVersion \{[ \t]*(?:\r?\n[ \t]*)?version: string;[ \t]*(?:\r?\n[ \t]*)?\}/,
     );
+    expect(body).not.toMatch(/errorKind/);
+    expect(body).not.toMatch(/playwright_browser/);
   });
 
   it('/version fetch effect is bounded, cache-fresh, and aborts on URL change/unmount', () => {
@@ -98,18 +100,15 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
   it('runCheck keeps timing/list delegation, fixed success copy, shared safe error copy, stable kind classification, and the running latch', () => {
     expect(body).toContain("import { humanizeError } from '../lib/humanize-error';");
     expect(body).toContain('const start = performance.now();');
-    expect(body).toContain('const page = await client.sessions.list({ limit: 1 });');
+    // 2026-09-15: the result is no longer named — the success line no longer
+    // prints the page size, so the call is awaited for its round-trip only.
+    expect(body).toContain('await client.sessions.list({ limit: 1 });');
     expect(body).toContain('const durationMs = Math.round(performance.now() - start);');
+    expect(body).toContain("detail: 'Connected — your API key works.',");
     expect(body).toContain(
-      "detail: `API replied with ${page.data.length} session${page.data.length === 1 ? '' : 's'} on the first page.`,",
+      "'The connection check failed. Check the server URL and API key in Settings, then try again.',",
     );
-    expect(body).toContain(
-      "'Connectivity check failed. Verify the API URL and key in Settings, then try again.',",
-    );
-    expect(body).toContain(
-      "const errorKind = err instanceof DriftstackError ? err.kind : 'unknown';",
-    );
-    expect(body).toContain('setResult({ ok: false, durationMs, detail, errorKind });');
+    expect(body).toContain('setResult({ ok: false, durationMs, detail });');
     expect(body).toMatch(/if \(!client \|\| checkInFlightRef\.current\) return;/);
     expect(body).toMatch(/const generation = authorityGenerationRef\.current;/);
     expect(body).toMatch(/if \(generation !== authorityGenerationRef\.current\) return;/);
@@ -140,19 +139,15 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
     expect(body).toMatch(/import \{ maskApiKey \} from '\.\.\/components\/ApiKeyMaskedSpan';/);
   });
 
-  it("V-337 server-info rows: driver row 'playwright (chromium)' when driver===playwright && playwright_browser; version row 'X.Y.Z · gitsha7' with git_sha/version typeof-GUARDED so a 200 whose git_sha is missing/typeless does NOT .slice(0,7) undefined and crash the render (audit 2026-09-08); both rows only render when serverInfo !== null", () => {
+  it("V-337 server-info row: ONLY a 'Server version' row, version typeof-GUARDED (a 200 whose version is missing/typeless renders '—', never crashes); no 'Server driver' row and no git_sha suffix — the driver mode and commit hash are how the server runs, not customer copy (owner directive 2026-09-15); the row only renders when serverInfo !== null", () => {
     expect(body).toMatch(
-      /\{serverInfo !== null && \([ \t]*(?:\r?\n[ \t]*)?<>[ \t]*(?:\r?\n[ \t]*)?<Row label="Server driver">/,
+      /\{serverInfo !== null && \([ \t]*(?:\r?\n[ \t]*)?<Row label="Server version">[ \t]*(?:\r?\n[ \t]*)?<span className="mono text-ink-secondary">[ \t]*(?:\r?\n[ \t]*)?\{typeof serverInfo\.version === 'string' \? serverInfo\.version : '—'\}/,
     );
-    expect(body).toMatch(
-      /\{serverInfo\.driver\}[ \t]*(?:\r?\n[ \t]*)?\{serverInfo\.driver === 'playwright' && serverInfo\.playwright_browser[ \t]*(?:\r?\n[ \t]*)?\? ` \(\$\{serverInfo\.playwright_browser\}\)`[ \t]*(?:\r?\n[ \t]*)?: ''\}/,
-    );
-    expect(body).toMatch(
-      /\{typeof serverInfo\.version === 'string' \? serverInfo\.version : '—'\}[\s\S]*?\{typeof serverInfo\.git_sha === 'string' && serverInfo\.git_sha !== 'unknown'[\s\S]*?serverInfo\.git_sha\.slice\(0, 7\)/,
-    );
+    expect(body).not.toMatch(/<Row label="Server driver">/);
+    expect(body).not.toMatch(/git_sha/);
   });
 
-  it("ResultBlock: ok branch → status-ready tints + 'OK' section-label + durationMs ms display; fail branch → status-error tints + 'Failed' + errorKind '· {kind}' suffix conditional on errorKind !== undefined; both render Row helper Component with section-label + grid-cols-[10rem_1fr] layout", () => {
+  it("ResultBlock: ok branch → status-ready tints + 'OK' section-label + durationMs ms display; fail branch → status-error tints + 'Failed' + the humanized detail ONLY (no raw error-kind chip — wire vocabulary is not customer copy); both render Row helper Component with section-label + grid-cols-[10rem_1fr] layout", () => {
     expect(body).toMatch(
       /function Row\(\{ label, children \}: \{ label: string; children: React\.ReactNode \}\): JSX\.Element \{[ \t]*(?:\r?\n[ \t]*)?return \([ \t]*(?:\r?\n[ \t]*)?<div className="grid grid-cols-\[10rem_1fr\] items-center gap-3 text-sm">[ \t]*(?:\r?\n[ \t]*)?<span className="section-label">\{label\}<\/span>/,
     );
@@ -160,8 +155,9 @@ describe('W481.C apps/gui-client/src/views/ConnectivityView.tsx content parity',
       /if \(result\.ok\) \{[ \t]*(?:\r?\n[ \t]*)?return \([ \t]*(?:\r?\n[ \t]*)?<div className="rounded-xl border border-status-ready\/30 bg-status-ready\/10 px-4 py-3">/,
     );
     expect(body).toMatch(
-      /\{result\.errorKind !== undefined && \([ \t]*(?:\r?\n[ \t]*)?<span className="mono text-2xs text-ink-muted">· \{result\.errorKind\}<\/span>[ \t]*(?:\r?\n[ \t]*)?\)\}/,
+      /<span className="section-label text-status-error">Failed<\/span>[ \t]*(?:\r?\n[ \t]*)?<span className="mono text-2xs text-ink-muted">\{result\.durationMs\} ms<\/span>[ \t]*(?:\r?\n[ \t]*)?<\/div>/,
     );
+    expect(body).not.toMatch(/result\.errorKind/);
   });
 
   it('file exists at canonical path', () => {

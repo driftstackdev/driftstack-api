@@ -12,8 +12,8 @@ This guide takes you from a fresh signup to your first iPhone Safari session fro
 > Driftstack tier, including the Manual tiers, can create a `ds_live_…`
 > customer API key. On Free, start in the desktop app instead: browser sign-in
 > automatically stores a restricted `ds_test_…` device credential, so there is
-> no customer API key to create or paste. That device credential is for the
-> supported desktop surface; it is not a general sandbox or SDK key.
+> no customer API key to create or paste. That credential only works inside
+> the desktop app; it is not an API, SDK, or sandbox key.
 
 You will need:
 
@@ -137,7 +137,7 @@ func main() {
 ## 4. What happened
 
 - `client.sessions.create()` reserved one of your account's concurrent session slots. Each tier has a concurrent cap (Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see [pricing](https://driftstack.io/pricing/)). Exceeding the cap returns 429.
-- `client.sessions.navigate()` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari.
+- `client.sessions.navigate()` opened the URL in your session's iPhone Safari browser.
 - `client.sessions.capture()` returned a `{ kind, data, encoding, byte_size, duration_ms }` object. For a screenshot, `data` is the PNG **base64-encoded** (`encoding: "base64"`), so decode it to bytes before saving — e.g. `fs.writeFileSync('shot.png', Buffer.from(shot.data, 'base64'))`. A `dom_snapshot` capture instead returns the raw HTML as UTF-8 text (`encoding: "utf8"`).
 - `client.sessions.destroy()` released the concurrent slot. Only free-tier sessions stop on their own (at the 20-minute cap) — on paid tiers a forgotten session holds its slot until you destroy it.
 
@@ -145,8 +145,8 @@ func main() {
 
 - **[Profile management](/guides/profile-management/)** — persistent profiles let a session resume cookies, storage, and trust signals across runs.
 - **[Session lifecycle](/guides/session-lifecycle/)** — full lifecycle reference (states, the free-tier 20-minute duration cap, recovery on reconnect).
-- **[Agent sessions](/api/agent-sessions/)** — natural-language decompose-and-execute on top of any driver session. Three operational modes: AI (default), manual (pass-through), pair (interactive takeover state machine). Live transcript stream via Server-Sent Events.
-- **[Bundled LLM](/api/bundled-llm/)** and **[BYOK Anthropic](/api/byok-anthropic/)** — the two LLM rails agent sessions can use. BYOK encrypts your Anthropic key at rest + decrypts in-memory only at execution; the bundled rail uses a deployment-managed budget for accounts that don't want to manage their own key.
+- **[Agent sessions](/api/agent-sessions/)** — let an AI agent drive a session from plain-language instructions. Three modes: AI (default), manual, and pair (a person can step in and take over). Live transcript stream via Server-Sent Events.
+- **[Bundled LLM](/api/bundled-llm/)** and **[BYOK Anthropic](/api/byok-anthropic/)** — the two ways to supply an AI model. Bring your own Anthropic key (stored encrypted, never shown again), or use the bundled model with a monthly budget you control.
 - **[Idempotency keys](/reference/idempotency/)** — `Idempotency-Key` is honoured on four endpoints: agent-session creation, agent-session messages, and the two billing checkouts. It is **not** honoured on `POST /v1/sessions` — the `sessions.create()` call above. Retrying that after a timeout mints a second session and takes another concurrent slot, so guard it yourself (reuse the session id you already got back, or check `client.sessions.list()` before retrying).
 - **[Webhook event catalog](/webhooks/events/)** — push notifications when sessions transition state, billing events fire, etc.
 - **[API versioning policy](/api/versioning/)** — what changes are additive, what triggers `/v2/*`, deprecation cycles.

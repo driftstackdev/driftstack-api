@@ -78,10 +78,10 @@ describe('W902 CryptoCheckout currency + price-cents cross-source invariant', ()
 
   // ─── product SKU describe ────────────────────────────────────
 
-  it("CRITICAL product field describe pins 'SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable).' The describe is what reaches SDK consumers through the OpenAPI document, so it has to name BOTH exclusions — V-924: the previous text named only the free tier while the route refuses enterprise as well, so a customer reading the spec could send it and get a 400 the description did not predict.", () => {
+  it("CRITICAL product field describe pins 'SKU; one of the paid plan ids (free and enterprise are not purchasable).' The describe is what reaches SDK consumers through the OpenAPI document, so it has to name BOTH exclusions — V-924: the previous text named only the free tier while the route refuses enterprise as well, so a customer reading the spec could send it and get a 400 the description did not predict.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/crypto-orders.ts'));
     expect(p).toMatch(
-      /\.describe\(\s*'SKU; one of the self-serve paid tier ids \(free and enterprise are not purchasable\)\.',?\s*\)/,
+      /\.describe\(\s*'SKU; one of the paid plan ids \(free and enterprise are not purchasable\)\.',?\s*\)/,
     );
     // Per-occurrence negative. Paraphrased above rather than quoted so this
     // assertion cannot be satisfied by the sentence that retracts it.

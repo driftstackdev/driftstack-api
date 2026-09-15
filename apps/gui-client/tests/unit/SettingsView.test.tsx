@@ -326,7 +326,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     expect(await screen.findByText("Couldn't save settings")).toBeInTheDocument();
-    expect(screen.getByText(/system credential store, then try again/i)).toBeInTheDocument();
+    expect(screen.getByText(/secure storage, then try again/i)).toBeInTheDocument();
     expect(screen.queryByText(/securityd|\/Users\/customer|token=private-key/i)).toBeNull();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/v1/account/me'))).toBe(
       false,
@@ -501,7 +501,7 @@ describe('SettingsView (V-288 jsdom + RTL foundation)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(validationSignal).toBeInstanceOf(AbortSignal));
-    expect(screen.getByText('Saved. Validating key…')).toBeInTheDocument();
+    expect(screen.getByText('Saved. Checking key…')).toBeInTheDocument();
     view.unmount();
     expect(validationSignal?.aborted).toBe(true);
   });

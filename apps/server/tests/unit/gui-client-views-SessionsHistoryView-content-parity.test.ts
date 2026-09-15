@@ -93,7 +93,7 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
   it('Render: history framing + retryable ErrorBanner + shared empty state', () => {
     expect(body).toMatch(/<h2[\s\S]*?Past sessions[\s\S]*?<\/h2>/);
     expect(body).toMatch(
-      /Ended sessions \(destroyed or errored\) with their lifetime and final status\. Active\s*sessions live under "Active" in the sidebar\./,
+      /Sessions that have ended, with how long they ran and how they finished\./,
     );
     expect(body).toMatch(
       /\{state\.error !== null && \(\s*<ErrorBanner\s*message=\{state\.error\}\s*onRetry=\{\(\) => void refresh\(\)\}\s*retrying=\{state\.loading\}\s*onDismiss=\{\(\) => setState\(\(s\) => \(\{ \.\.\.s, error: null \}\)\)\}/,
@@ -106,24 +106,22 @@ describe('W483.A apps/gui-client/src/views/SessionsHistoryView.tsx content parit
       /!hasSessions && !showSkeleton && state\.error === null && \(\s*<EmptyState/,
     );
     expect(body).toMatch(/title="No past sessions yet"/);
-    expect(body).toMatch(
-      /description="Sessions that have ended — destroyed or errored — show up here\."/,
-    );
+    expect(body).toMatch(/description="Sessions that have ended show up here\."/);
     expect(body).not.toMatch(
       /No terminated sessions yet\. They show up here once destroyed or errored\./,
     );
   });
 
-  it("Per-row: id mono + archetype + fmtDuration(created_at, endedIso) + shared <RelativeTime iso={endedIso} tooltipPrefix={destroyed_at ? 'Ended' : 'Last state (errored)'}> (null → '—'), where endedIso = destroyed_at ?? last_state_at (errored sessions lack a clean-teardown destroyed_at); errored rows also show a 'Reason not reported by the harness' italic line; status rendered via the shared <SessionStatusBadge> (replacing the ad-hoc status-error/20 span pill)", () => {
+  it("Per-row: id mono + formatDeviceName(archetype) (the device name, never the raw slug) + fmtDuration(created_at, endedIso) + shared <RelativeTime iso={endedIso} tooltipPrefix={destroyed_at ? 'Ended' : 'Stopped'}> (null → '—'), where endedIso = destroyed_at ?? last_state_at (errored sessions lack a clean-teardown destroyed_at); errored rows also show a 'No error details were recorded' italic line; status rendered via the shared <SessionStatusBadge> (replacing the ad-hoc status-error/20 span pill)", () => {
     // endedIso falls back to last_state_at so an errored (no destroyed_at)
     // row still shows *when* it ended rather than a bare em dash.
     expect(body).toMatch(/const endedIso = s\.destroyed_at \?\? s\.last_state_at;/);
     expect(body).toMatch(
-      /\{s\.archetype\} · \{fmtDuration\(s\.created_at, endedIso\)\} ·\{' '\}\s*\{endedIso \? \(\s*<RelativeTime\s*iso=\{endedIso\}\s*tooltipPrefix=\{s\.destroyed_at \? 'Ended' : 'Last state \(errored\)'\}\s*\/>\s*\) : \(\s*'—'\s*\)\}/,
+      /\{formatDeviceName\(s\.archetype\)\} · \{fmtDuration\(s\.created_at, endedIso\)\} ·\{' '\}\s*\{endedIso \? \(\s*<RelativeTime\s*iso=\{endedIso\}\s*tooltipPrefix=\{s\.destroyed_at \? 'Ended' : 'Stopped'\}\s*\/>\s*\) : \(\s*'—'\s*\)\}/,
     );
     // Errored sessions surface a plain-language "no reason" note.
     expect(body).toMatch(
-      /\{s\.status === 'errored' && \(\s*<p className="mt-0\.5 text-2xs text-ink-muted italic">\s*Reason not reported by the harness\s*<\/p>\s*\)\}/,
+      /\{s\.status === 'errored' && \(\s*<p className="mt-0\.5 text-2xs text-ink-muted italic">\s*No error details were recorded\s*<\/p>\s*\)\}/,
     );
     // The status pill is now the shared SessionStatusBadge component.
     expect(body).toMatch(

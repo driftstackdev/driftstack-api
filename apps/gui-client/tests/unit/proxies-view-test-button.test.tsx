@@ -185,11 +185,11 @@ describe('ProxiesView "Test" button result card', () => {
     render(<ProxiesView />);
     await clickTestAndSettle();
 
-    expect(await screen.findByText('auth fail')).toBeTruthy();
+    expect(await screen.findByText('login failed')).toBeTruthy();
     expect(screen.queryByText('unreachable')).toBeNull();
   });
 
-  it('unreachable → "unreachable" pill, no protocol chips, "no egress" note', async () => {
+  it('unreachable → "unreachable" pill, no protocol chips, "not verified" note', async () => {
     testProxy.mockResolvedValue({
       reachable: false,
       auth_ok: false,
@@ -204,9 +204,9 @@ describe('ProxiesView "Test" button result card', () => {
 
     expect(await screen.findByText('unreachable')).toBeTruthy();
     // No protocol-capability chips when the exit isn't even reachable — the
-    // slot reads "no egress" instead, and there is no WebRTC chip.
+    // slot reads "not verified" instead, and there is no WebRTC chip.
     expect(screen.queryByText('WebRTC')).toBeNull();
-    expect(screen.getByText('no egress')).toBeTruthy();
+    expect(screen.getByText('not verified')).toBeTruthy();
   });
 });
 

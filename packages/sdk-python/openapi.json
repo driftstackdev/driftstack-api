@@ -3,7 +3,7 @@
   "info": {
     "title": "Driftstack API",
     "version": "0.0.1",
-    "description": "Driftstack API for iPhone Safari automation. Versioned public contract under /v1.\n\n## Team RBAC: X-Driftstack-Account header (V-326e)\n\nMembers of a team can scope any /v1/* request to the OWNER's resources by passing\nthe `X-Driftstack-Account: acc_<owner-uuid>` request header. The server validates that\nthe calling account is on the team referenced by the header.\n\n- Read endpoints (GET): both `member` and `admin` roles allowed.\n- Write endpoints (POST / PATCH / DELETE / api-keys rotate): `admin` role only;\n  `member` role gets 403.\n\nEndpoints honoring the header: /v1/sessions (+ all session sub-paths), /v1/profiles,\n/v1/agent-sessions (+ all sub-paths; team admin role required for reads and writes),\n/v1/api-keys (+ /:id/rotate), /v1/webhooks (+ /:id/deliveries + replay),\n/v1/account/audit-log (+ export), /v1/account/email-preferences, /v1/usage,\n/v1/usage/series.\n\nEndpoints that do NOT honor the header: /v1/team/*, /v1/account/me (always\nreturns the caller's own profile + their team list), /v1/auth/*.\n\nSee `docs.driftstack.io/api/team` for full details.",
+    "description": "Driftstack API for iPhone Safari automation. Versioned public contract under /v1.\n\n## Team RBAC: X-Driftstack-Account header\n\nMembers of a team can scope any /v1/* request to the OWNER's resources by passing\nthe `X-Driftstack-Account: acc_<owner-uuid>` request header. The server validates that\nthe calling account is on the team referenced by the header.\n\n- Read endpoints (GET): both `member` and `admin` roles allowed.\n- Write endpoints (POST / PATCH / DELETE / api-keys rotate): `admin` role only;\n  `member` role gets 403.\n\nEndpoints honoring the header: /v1/sessions (+ all session sub-paths), /v1/profiles,\n/v1/agent-sessions (+ all sub-paths; team admin role required for reads and writes),\n/v1/api-keys (+ /:id/rotate), /v1/webhooks (+ /:id/deliveries + replay),\n/v1/account/audit-log (+ export), /v1/account/email-preferences, /v1/usage,\n/v1/usage/series.\n\nEndpoints that do NOT honor the header: /v1/team/*, /v1/account/me (always\nreturns the caller's own profile + their team list), /v1/auth/*.\n\nSee `docs.driftstack.io/api/team` for full details.",
     "license": {
       "name": "MIT"
     },
@@ -29,13 +29,13 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "short-lived Ed25519 JWT",
-        "description": "Fleet-node JWT signed by the provisioned node key. The token lifetime is at most five minutes, its nonce is single-use, and the production fleet edge additionally enforces mutual TLS."
+        "description": "Short-lived JWT signed by the key provisioned to one server in the deployment. The token lifetime is at most five minutes, its nonce is single-use, and the production edge additionally enforces mutual TLS."
       },
       "FleetNodeQueryToken": {
         "type": "apiKey",
         "in": "query",
         "name": "ds_token",
-        "description": "URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use fleet-node JWT; the production fleet edge additionally enforces mutual TLS."
+        "description": "URLSessionWebSocketTask-compatible alternative to Authorization: Bearer. Carries the same short-lived, single-use machine JWT; the production edge additionally enforces mutual TLS."
       }
     },
     "schemas": {
@@ -626,7 +626,7 @@
               "customer_actionable",
               "retryable"
             ],
-            "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+            "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
           }
         },
         "required": [
@@ -3471,11 +3471,11 @@
                   },
                   "single_host_vantage": {
                     "type": "boolean",
-                    "description": "True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it."
+                    "description": "True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it."
                   },
                   "web_port_vantage": {
                     "type": "boolean",
-                    "description": "True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via \"proxy_host\" it is still not a verdict."
+                    "description": "True when the reading was taken on the standard HTTPS port at the proxy's IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via \"proxy_host\" it is still a reading, not a guarantee."
                   }
                 },
                 "required": [
@@ -3642,11 +3642,11 @@
                   },
                   "single_host_vantage": {
                     "type": "boolean",
-                    "description": "True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it."
+                    "description": "True only when the proxy host you entered, the machine that opened the connection and the exit address are all one machine, so the reading describes the same path a website sees. Absent or false: do not draw a match/mismatch conclusion from it."
                   },
                   "web_port_vantage": {
                     "type": "boolean",
-                    "description": "True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via \"proxy_host\" it is still not a verdict."
+                    "description": "True when the reading was taken on the standard HTTPS port at the proxy's IP address, with no CDN in front — the same path a website connects on. It describes what a site sees on that path; with observed_via \"proxy_host\" it is still a reading, not a guarantee."
                   }
                 },
                 "required": [
@@ -3689,7 +3689,7 @@
           "refused_count_this_month": {
             "type": "integer",
             "minimum": 0,
-            "description": "NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, and that is counted for operators in Prometheus, but no per-account counter is persisted, so this field cannot report them. Do not reconcile it against errors you received."
+            "description": "NOT YET IMPLEMENTED — always 0. Refusals do occur: a turn past the monthly cap is rejected with a bundled-LLM budget-exhausted error, but no per-account counter of those refusals is stored, so this field cannot report them. Do not reconcile it against errors you received."
           },
           "month_started_at": {
             "type": "string"
@@ -3962,7 +3962,7 @@
           }
         },
         "required": ["decomposer_kind"],
-        "description": "Usage evidence for model-backed turns. Optional fields are present only when the selected decomposer/provider reports them; bundled turns expose the posted flat operational cost."
+        "description": "Usage evidence for model-backed turns. Optional fields are present only when the model provider reports them; bundled turns expose the posted flat operational cost."
       },
       "AgentMessageResponse": {
         "oneOf": [
@@ -4199,7 +4199,7 @@
                       "customer_actionable",
                       "retryable"
                     ],
-                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                    "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                   }
                 },
                 "required": [
@@ -4987,7 +4987,7 @@
                       "customer_actionable",
                       "retryable"
                     ],
-                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                    "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                   }
                 },
                 "required": [
@@ -5251,7 +5251,7 @@
                       "customer_actionable",
                       "retryable"
                     ],
-                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                    "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                   }
                 },
                 "required": [
@@ -5515,7 +5515,7 @@
                       "customer_actionable",
                       "retryable"
                     ],
-                    "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                    "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                   }
                 },
                 "required": [
@@ -6427,7 +6427,7 @@
             }
           },
           "409": {
-            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
+            "description": "The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7066,7 +7066,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7076,7 +7076,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7412,7 +7412,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7422,7 +7422,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7741,7 +7741,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7751,7 +7751,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7766,7 +7766,7 @@
     "/v1/sessions/{id}": {
       "get": {
         "operationId": "getSession",
-        "summary": "Get a session by id (includes harness-reported egress_capabilities) (requires `read:sessions`, broad `read`, or `account_owner`)",
+        "summary": "Get a session by id (includes the egress_capabilities the session reported) (requires `read:sessions`, broad `read`, or `account_owner`)",
         "tags": ["sessions"],
         "security": [
           {
@@ -8488,7 +8488,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8498,7 +8498,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8762,7 +8762,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8772,7 +8772,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9078,7 +9078,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9088,7 +9088,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9103,7 +9103,7 @@
     "/v1/sessions/{id}/search": {
       "post": {
         "operationId": "searchSession",
-        "summary": "Search a page (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)",
+        "summary": "Search a page (not available yet on any deployment) (requires `write:sessions`, broad `write`, or `account_owner`)",
         "tags": ["sessions"],
         "security": [
           {
@@ -9166,7 +9166,7 @@
         },
         "responses": {
           "200": {
-            "description": "Requires an explicitly real direct-driver search capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side query handling. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
+            "description": "Not available yet: no current deployment supports page search, so every call returns 503 before the session is looked up and before anything is typed into the page. query_truncated=false means the complete query was typed and the caller-requested submit behavior was honored; query_truncated=true is an exact safe zero-submit refusal with no results assessment. duration_ms is capped at 600 seconds. Driftstack may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9391,7 +9391,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9401,7 +9401,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9416,7 +9416,7 @@
     "/v1/sessions/{id}/login": {
       "post": {
         "operationId": "loginSession",
-        "summary": "Credential login (real direct-driver capability required) (requires `write:sessions`, broad `write`, or `account_owner`)",
+        "summary": "Credential login (not available yet on any deployment) (requires `write:sessions`, broad `write`, or `account_owner`)",
         "tags": ["sessions"],
         "security": [
           {
@@ -9491,7 +9491,7 @@
         },
         "responses": {
           "200": {
-            "description": "Requires an explicitly real direct-driver login capability. All currently shipped drivers report non-real capability, so unavailable deployments return 503 before session lookup, operation claim, any driver call, or browser-side credential handling. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. The control plane may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
+            "description": "Not available yet: no current deployment supports credential login, so every call returns 503 before the session is looked up and before any credential is handled. submitted=true means complete credentials were submitted and assessed; credentials_truncated=true is a safe zero-submit refusal. duration_ms is capped at 600 seconds. Driftstack may reserve a separate 15 seconds for teardown and result delivery; that time is not successful browser work.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9734,7 +9734,7 @@
             }
           },
           "502": {
-            "description": "The browser driver failed during the operation. This session is terminal; create a fresh session.",
+            "description": "The browser failed during the operation. This session is terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -9744,7 +9744,7 @@
             }
           },
           "503": {
-            "description": "The selected browser driver is unavailable in this deployment. This operation terminalized the session; fix the deployment and create a fresh session.",
+            "description": "This operation is unavailable in this deployment. The session is now terminal; create a fresh session.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10487,7 +10487,7 @@
     "/v1/api-keys/{id}/rotate": {
       "post": {
         "operationId": "rotateApiKey",
-        "summary": "Rotate an API key (V-296). 24h grace; new plaintext shown once",
+        "summary": "Rotate an API key. 24h grace; new plaintext shown once",
         "tags": ["api-keys"],
         "security": [
           {
@@ -14471,7 +14471,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Delivery reset to pending; worker will retry.",
+            "description": "Delivery reset to pending; it will be retried automatically.",
             "content": {
               "application/json": {
                 "schema": {
@@ -15241,7 +15241,7 @@
     "/v1/webhook-deliveries/{deliveryId}/replay": {
       "post": {
         "operationId": "replayWebhookDelivery",
-        "summary": "Replay a webhook delivery (V-307; customer self-service)",
+        "summary": "Replay a webhook delivery (customer self-service)",
         "tags": ["webhooks"],
         "security": [
           {
@@ -15263,7 +15263,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Delivery reset to pending; the worker re-fires on its next poll cycle, up to 60s.",
+            "description": "Delivery reset to pending; it is retried automatically on the next delivery pass, up to 60s later.",
             "content": {
               "application/json": {
                 "schema": {
@@ -15863,7 +15863,7 @@
         "tags": ["public"],
         "responses": {
           "200": {
-            "description": "Server version, git sha, start time, node version.",
+            "description": "Server version, git sha, start time, Node.js version.",
             "content": {
               "application/json": {
                 "schema": {
@@ -16417,7 +16417,7 @@
             }
           },
           "404": {
-            "description": "No validation schedule exists for that archetype.",
+            "description": "No validation schedule exists for that device profile.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -16525,7 +16525,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Run id of the dispatched recapture.",
+            "description": "Run id of the validation run that was started.",
             "content": {
               "application/json": {
                 "schema": {
@@ -17287,7 +17287,7 @@
     },
     "/v1/account/me/avatar": {
       "post": {
-        "summary": "Upload (or replace) the calling account avatar (V-352b) (requires `account_owner`)",
+        "summary": "Upload (or replace) the calling account avatar (requires `account_owner`)",
         "tags": ["account"],
         "security": [
           {
@@ -17502,7 +17502,7 @@
         }
       },
       "delete": {
-        "summary": "Clear the calling account avatar pointer (V-352b) (requires `account_owner`)",
+        "summary": "Clear the calling account avatar (requires `account_owner`)",
         "tags": ["account"],
         "security": [
           {
@@ -17669,7 +17669,7 @@
     },
     "/v1/account/me/oauth-links": {
       "get": {
-        "summary": "List OAuth-client identity links for the calling account (V-667.C) (requires broad `read` or `account_owner`)",
+        "summary": "List OAuth-client identity links for the calling account (requires broad `read` or `account_owner`)",
         "tags": ["account"],
         "security": [
           {
@@ -19613,7 +19613,7 @@
             }
           },
           "409": {
-            "description": "The proxy changed concurrently; the optimistic-concurrency update matched no row. Retry after re-reading.",
+            "description": "This proxy changed since you last loaded it. Refresh and try again.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -19909,7 +19909,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Reachability result. vantage=cp (default): ok=true + latency_ms, or ok=false + reason. vantage=fleet: the node-measured result with measured_from=fleet, or the control-plane probe with measured_from=control_plane when no fleet node is free.",
+            "description": "Reachability result. vantage=cp (default): measured by Driftstack — ok=true + latency_ms, or ok=false + reason. vantage=fleet: measured from the machine that will run your profile, reported with measured_from=fleet; when no such machine is free, Driftstack measures it instead and reports measured_from=control_plane.",
             "content": {
               "application/json": {
                 "schema": {
@@ -20283,7 +20283,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -20611,7 +20611,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -20787,7 +20787,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -20917,7 +20917,7 @@
         },
         "responses": {
           "200": {
-            "description": "Access token (1-hour TTL; no refresh tokens issued).",
+            "description": "Access token (valid for one hour; no refresh tokens are issued).",
             "content": {
               "application/json": {
                 "schema": {
@@ -20967,7 +20967,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -21143,7 +21143,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -21287,7 +21287,7 @@
             }
           },
           "429": {
-            "description": "Per-IP rate limit exceeded. These endpoints are gated by `ipRateLimit` rather than the account-keyed limiter, so the refusal is reachable without authenticating at all. V-1488b — the gate has always been there; the document never mentioned it.",
+            "description": "Per-IP rate limit exceeded. This limit is applied per IP address, so it can be reached without authenticating at all.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -24448,7 +24448,7 @@
     },
     "/v1/admin/accounts/{id}/audit-note": {
       "post": {
-        "summary": "Record a free-form support note on an account (admin; V-281)",
+        "summary": "Record a free-form support note on an account (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -24652,7 +24652,7 @@
     },
     "/v1/admin/accounts/{id}/refund-record": {
       "post": {
-        "summary": "Record a refund issued out-of-band against the account (admin; V-281)",
+        "summary": "Record a refund issued out-of-band against the account (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -24706,7 +24706,7 @@
         },
         "responses": {
           "201": {
-            "description": "Refund recorded for audit. Money movement happens via Stripe dashboard manually per V-280 launch-day runbook.",
+            "description": "Refund recorded for audit. Money movement happens manually in the Stripe dashboard.",
             "content": {
               "application/json": {
                 "schema": {
@@ -25254,7 +25254,7 @@
     },
     "/v1/admin/incidents": {
       "get": {
-        "summary": "List incidents (admin; V-295)",
+        "summary": "List incidents (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -25544,7 +25544,7 @@
         }
       },
       "post": {
-        "summary": "Create an incident (admin; V-295)",
+        "summary": "Create an incident (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -25842,7 +25842,7 @@
     },
     "/v1/admin/incidents/{id}": {
       "put": {
-        "summary": "Idempotently create or replay an incident with a caller-owned id (admin; V-295)",
+        "summary": "Idempotently create or replay an incident with a caller-owned id (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -26283,7 +26283,7 @@
         }
       },
       "get": {
-        "summary": "Get a single incident with its update timeline (admin; V-295)",
+        "summary": "Get a single incident with its update timeline (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -26556,7 +26556,7 @@
     },
     "/v1/admin/incidents/{id}/updates": {
       "post": {
-        "summary": "Append an update to an incident (admin; V-295)",
+        "summary": "Append an update to an incident (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -26778,7 +26778,7 @@
     },
     "/v1/admin/incidents/{id}/resolve": {
       "post": {
-        "summary": "Mark an incident resolved (admin; V-295)",
+        "summary": "Mark an incident resolved (admin)",
         "tags": ["admin"],
         "security": [
           {
@@ -32192,7 +32192,7 @@
             }
           },
           "404": {
-            "description": "MFA is not enrolled for this account. Documented in docs/api/mfa and thrown by regenerateRecoveryCodes; V-1487 — the spec had never declared it.",
+            "description": "MFA is not enrolled for this account.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -32210,7 +32210,7 @@
             }
           },
           "409": {
-            "description": "Recovery codes changed during regeneration (optimistic-concurrency loss). Retry after refreshing.",
+            "description": "Recovery codes changed during regeneration. Refresh and try again.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -32795,7 +32795,7 @@
                     "type": "string",
                     "minLength": 12,
                     "maxLength": 128,
-                    "description": "Account password — 12-128 chars; no composition rules per NIST 800-63B"
+                    "description": "Account password — 12 to 128 characters. No other rules."
                   },
                   "name": {
                     "type": "string",
@@ -33017,7 +33017,7 @@
                     "minLength": 32,
                     "maxLength": 256,
                     "pattern": "^[A-Za-z0-9_-]+$",
-                    "description": "URL-safe single-use auth token; sha256-hashed at rest"
+                    "description": "Single-use token from the link in your verification, sign-in, or password-reset email."
                   }
                 },
                 "required": ["token"]
@@ -33416,7 +33416,7 @@
                     "type": "string",
                     "minLength": 12,
                     "maxLength": 128,
-                    "description": "Account password — 12-128 chars; no composition rules per NIST 800-63B"
+                    "description": "Account password — 12 to 128 characters. No other rules."
                   }
                 },
                 "required": ["email", "password"]
@@ -35175,7 +35175,7 @@
             }
           },
           "503": {
-            "description": "No compatible egress backend is available on this deployment.",
+            "description": "Session proxy configuration is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35388,7 +35388,7 @@
             }
           },
           "503": {
-            "description": "No compatible egress backend is available on this deployment.",
+            "description": "Session proxy configuration is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35734,7 +35734,7 @@
                         "customer_actionable",
                         "retryable"
                       ],
-                      "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                      "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                     }
                   },
                   "required": [
@@ -35830,7 +35830,7 @@
             }
           },
           "409": {
-            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
+            "description": "The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35840,7 +35840,7 @@
             }
           },
           "422": {
-            "description": "The egress proxy attached to this request could not be used: its stored configuration failed to decrypt, or it failed the reachability probe run before dispatch. No agent session was created and nothing was dispatched. Re-add the proxy and retry.",
+            "description": "The proxy attached to this request could not be used: its saved configuration could not be read, or it failed the connection check that runs before launch. No agent session was created. Re-add the proxy and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -36184,7 +36184,7 @@
                               "customer_actionable",
                               "retryable"
                             ],
-                            "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                            "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                           }
                         },
                         "required": [
@@ -36617,7 +36617,7 @@
                         "customer_actionable",
                         "retryable"
                       ],
-                      "description": "The most recent harness launch or runtime failure recorded for this session. Null when the session has not reported one."
+                      "description": "The most recent failure recorded for this session, at launch or while running. Null when none has been reported."
                     }
                   },
                   "required": [
@@ -37170,7 +37170,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment. The transcript read is registered as a stub raising `FeatureUnavailableError`, carrying the activation message, so a client can tell an unactivated deployment from a missing route.",
+            "description": "AI chat is not activated on this deployment. The response carries the activation message, so a client can tell an unactivated deployment from a missing route.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -37706,7 +37706,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "description": "AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -37728,7 +37728,7 @@
     },
     "/v1/agent-sessions/{id}/resume": {
       "post": {
-        "summary": "Resume an agent session the harness auto-paused on a detected bot-challenge (requires `write` or `account_owner`)",
+        "summary": "Resume an agent session that paused itself when a bot check appeared (requires `write` or `account_owner`)",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -37766,7 +37766,7 @@
         },
         "responses": {
           "202": {
-            "description": "Resume requested. Best-effort dispatch to the node running the session (inert unless the fleet control plane is wired).",
+            "description": "Resume requested. The resume is delivered to the running session on a best-effort basis; on a deployment without live sessions it does nothing.",
             "content": {
               "application/json": {
                 "schema": {
@@ -37940,7 +37940,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "description": "AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -38156,7 +38156,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "description": "AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -38178,8 +38178,8 @@
     },
     "/v1/agent-sessions/{id}/input-event": {
       "post": {
-        "summary": "Forward an LK.6 InputEvent to the harness (manual/pair mode only)",
-        "description": "Body shape: { event: <discriminated-union>, client_id?: string }. The `event` object must be one of 12 variants discriminated by `type`: the mouse/key set mouseMove / mouseDown / mouseUp / keyDown / keyUp / wheel / ping, plus the touch set tap / touchStart / touchMove / touchEnd / swipe (device-CSS coordinates; the harness injects via W3C `pointerType:touch` and owns the touch dynamics). See packages/api-types/src/agent-input-event.ts:InputEventSchema for the canonical Zod definition. Modifier vocabulary (keyDown / keyUp `modifiers` array): use the canonical 4-name set 'cmd' | 'ctrl' | 'shift' | 'option' — these map 1:1 onto Quartz CGEventFlags on the macOS harness side. DOM-standard names (Shift / Control / Alt / Meta) round-trip through the schema unchanged but the harness decoder drops them. V-932 — `client_id` is optional in the schema only because manual-mode sessions do not need it; it is REQUIRED for every pair-mode session, on both legs. The first event fires the takeover-request transition and is rejected without it, and every later event must carry the SAME `client_id` that owns `human-driving` — the lock scopes contention to one tab. Omitting it in pair mode returns 400 validation-failed with a `client_id` field error; sending a different value once human-driving is held returns 409 pair-mode-conflict.",
+        "summary": "Send an input event (mouse, key or touch) to a session (manual/pair mode only)",
+        "description": "Body shape: { event: <discriminated-union>, client_id?: string }. The `event` object must be one of 12 variants discriminated by `type`: the mouse/key set mouseMove / mouseDown / mouseUp / keyDown / keyUp / wheel / ping, plus the touch set tap / touchStart / touchMove / touchEnd / swipe (device-CSS coordinates; the device delivers each touch as a real W3C `pointerType:touch` event and handles the touch dynamics itself). See packages/api-types/src/agent-input-event.ts:InputEventSchema for the canonical Zod definition. Modifier vocabulary (keyDown / keyUp `modifiers` array): use the canonical 4-name set 'cmd' | 'ctrl' | 'shift' | 'option' — these map 1:1 onto the macOS modifier flags (Quartz CGEventFlags) on the device. DOM-standard names (Shift / Control / Alt / Meta) pass schema validation unchanged but the device ignores them. `client_id` is optional in the schema only because manual-mode sessions do not need it; it is REQUIRED for every pair-mode session, on both legs. The first event sends the takeover-request (asking the AI to hand control to you) and is rejected without it, and every later event must carry the SAME `client_id` that owns `human-driving` — only one browser tab can drive at a time. Omitting it in pair mode returns 400 validation-failed with a `client_id` field error; sending a different value once human-driving is held returns 409 pair-mode-conflict.",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -38222,7 +38222,7 @@
         },
         "responses": {
           "200": {
-            "description": "Discriminated by 'kind'. 'pair-mode-takeover-fired' (Slice 5 — first input-event in pair-mode ai-driving fires the takeover-request transition) carries pair_mode_state. 'forwarded' (post-harness; today 503s) carries duration_ms.",
+            "description": "Discriminated by 'kind'. 'pair-mode-takeover-fired' (the first input event while the AI is driving a pair-mode session sends the takeover-request) carries pair_mode_state. 'forwarded' (the event reached the session; not available yet — today this returns 503) carries duration_ms.",
             "content": {
               "application/json": {
                 "schema": {
@@ -38336,7 +38336,7 @@
             }
           },
           "409": {
-            "description": "Session is in mode=ai (input-event requires manual/pair), OR pair_mode_state is mid-transition (takeover-pending / handback-pending / etc.), OR session is closed. Pair-mode takeover-trigger missing client_id surfaces as 400 via errors4xx.",
+            "description": "Session is in mode=ai (input-event requires manual/pair), OR pair_mode_state is mid-transition (takeover-pending / handback-pending / etc.), OR session is closed. A pair-mode takeover request without client_id returns 400 instead.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38419,7 +38419,7 @@
             }
           },
           "503": {
-            "description": "Input forwarding is unavailable when the selected deployment has no compatible fleet harness. Pair-mode takeover-trigger responses remain available.",
+            "description": "No deployment forwards input events yet, so forwarding returns 503. Pair-mode takeover responses still work.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38648,7 +38648,7 @@
             }
           },
           "503": {
-            "description": "AI chat is not activated on this deployment. When `agentSessionsRepo` is absent the route is registered as a stub that raises `FeatureUnavailableError`, carrying the activation message (BYOK or the bundled-LLM budget). V-1490 — 26 sibling stubs declared this and these four did not.",
+            "description": "AI chat is not activated on this deployment. The response carries the activation message (bring your own Anthropic key, or use the bundled AI budget).",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -38689,7 +38689,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The latest page state the session harness reported (the GUI loading bar / error overlay polls this). `page_state` is null when nothing has been reported yet, the cached entry is older than the freshness bound, the session is closed, or the fleet control plane is not wired.",
+            "description": "The latest page state the session reported (the desktop app's loading bar and error overlay poll this). `page_state` is null when nothing has been reported yet, the last report is too old, the session is closed, or live session state is not available on this deployment.",
             "content": {
               "application/json": {
                 "schema": {
@@ -38923,7 +38923,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Discriminated body: status 'ok' → `entries` is the recent request log and `next_after` is the cursor to pass back next poll; 'unavailable' (session not running / control plane not wired) → `entries` is empty, `next_after` is null, and `reason` says why. Each request reports its negotiated protocol: 'h1' (HTTP/1.1), 'h2' (HTTP/2), or 'h3' (HTTP/3).",
+            "description": "Discriminated body: status 'ok' → `entries` is the recent request log and `next_after` is the cursor to pass back next poll; 'unavailable' (the session is not running, or network logging is not available on this deployment) → `entries` is empty, `next_after` is null, and `reason` says why. Each request reports its negotiated protocol: 'h1' (HTTP/1.1), 'h2' (HTTP/2), or 'h3' (HTTP/3).",
             "content": {
               "application/json": {
                 "schema": {
@@ -39168,7 +39168,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Discriminated body: status 'ok' → `cookies` is the live jar pulled from the running session; 'unavailable' (not live on a node / control plane not wired / node offline), 'timeout' (node did not reply), or 'error' → `cookies` is null and `reason`, when set, says why. The jar shape round-trips 1:1 into POST /v1/agent-sessions/{id}/cookies/set.",
+            "description": "Discriminated body: status 'ok' → `cookies` is the live jar pulled from the running session; 'unavailable' (the session is not running, cannot be reached right now, or the feature is not available on this deployment), 'timeout' (the session did not reply), or 'error' → `cookies` is null and `reason`, when set, says why. The jar shape round-trips 1:1 into POST /v1/agent-sessions/{id}/cookies/set.",
             "content": {
               "application/json": {
                 "schema": {
@@ -39632,7 +39632,7 @@
     },
     "/v1/agent-sessions/{id}/egress": {
       "post": {
-        "summary": "Move a running session onto a different egress (not available yet)",
+        "summary": "Move a running session onto a different proxy or VPN (not available yet)",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -39672,7 +39672,7 @@
         },
         "responses": {
           "200": {
-            "description": "NOT AVAILABLE YET: devices cannot change egress on a running session, so this currently answers status 'unavailable' for every call — create a new session with the proxy_id instead. The shapes below are stable and will not change when support lands. Discriminated body: status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the egress was NOT changed.",
+            "description": "NOT AVAILABLE YET: a running session cannot change its proxy or VPN, so this currently answers status 'unavailable' for every call — create a new session with the proxy_id instead. The shapes below are stable and will not change when support lands. Discriminated body: status 'ok' means the device accepted the swap, and `apply_point` says WHEN it takes effect — 'immediate', 'next_navigation', or null when the device accepted but did not confirm the apply point (treat null as possibly-immediate). 'unavailable' / 'timeout' / 'error' all mean the proxy was NOT changed.",
             "content": {
               "application/json": {
                 "schema": {
@@ -40118,7 +40118,7 @@
         },
         "responses": {
           "200": {
-            "description": "Discriminated body: status 'ok' → `handle` is the opaque { id, name, mime, size } reference used to drive a page's <input type=file> (no worker filesystem path is ever exposed); 'unavailable' / 'timeout' / 'error' → `handle` is null and `reason`, when set, says why (including the per-account concurrent and per-session lifetime upload caps).",
+            "description": "Discriminated body: status 'ok' → `handle` is the opaque { id, name, mime, size } reference used to drive a page's <input type=file> (no server-side file path is ever exposed); 'unavailable' / 'timeout' / 'error' → `handle` is null and `reason`, when set, says why (including the per-account concurrent and per-session lifetime upload caps).",
             "content": {
               "application/json": {
                 "schema": {
@@ -40755,7 +40755,7 @@
     },
     "/v1/agent-sessions/{id}/livekit-token": {
       "post": {
-        "summary": "Mint a per-Mac LiveKit JWT for the agent session room (LK.3) (requires `write` or `account_owner`)",
+        "summary": "Mint a LiveKit join token for the agent session's live-view room (requires `write` or `account_owner`)",
         "tags": ["agent-chat"],
         "security": [
           {
@@ -40777,7 +40777,7 @@
         ],
         "responses": {
           "200": {
-            "description": "LiveKit join info: ws_url + room + token (24h TTL) + participant_identity + expires_at.",
+            "description": "LiveKit join info: ws_url + room + token (valid for 24 hours) + participant_identity + expires_at.",
             "content": {
               "application/json": {
                 "schema": {
@@ -40787,7 +40787,7 @@
             }
           },
           "401": {
-            "description": "No usable credential: neither an account bearer nor a valid per-session GUI control key. `validateGuiControlKey` refuses with a hard 401 before the account path is tried.",
+            "description": "No usable credential: neither an account bearer nor a valid per-session desktop-app control key.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -40825,7 +40825,7 @@
             }
           },
           "429": {
-            "description": "Account rate limit exceeded — the route carries `app.rateLimit('global')`.",
+            "description": "Account rate limit exceeded.",
             "headers": {
               "Retry-After": {
                 "description": "Seconds to wait before retrying. Present on rate-limit refusals; absent on concurrency-limit and tier-limit refusals, which share this status but have no meaningful retry time.",
@@ -40898,7 +40898,7 @@
             }
           },
           "503": {
-            "description": "No Mac in the fleet has registered LiveKit credentials yet, OR the stored secret is unreadable (re-run /v1/mac-nodes/register).",
+            "description": "Live view is not available on this deployment: no machine has registered live-view credentials yet, or the stored credentials are unreadable.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -40912,7 +40912,7 @@
     },
     "/v1/mac-nodes/register": {
       "post": {
-        "summary": "Register per-Mac LiveKit credentials on the fleet_nodes row (LK.2) (requires `driftstack_internal_admin` (Driftstack staff))",
+        "summary": "Register live-view (LiveKit) credentials for one server in the deployment (requires `driftstack_internal_admin` (Driftstack staff))",
         "tags": ["admin"],
         "security": [
           {
@@ -41001,7 +41001,7 @@
             }
           },
           "404": {
-            "description": "No mac node matches the supplied id, so registration updated no row.",
+            "description": "No machine matches the supplied id, so nothing was registered.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -41281,7 +41281,7 @@
             }
           },
           "503": {
-            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "description": "The recipe library is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41520,7 +41520,7 @@
             }
           },
           "503": {
-            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "description": "The recipe library is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -41758,7 +41758,7 @@
             }
           },
           "503": {
-            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "description": "The recipe library is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42095,7 +42095,7 @@
             }
           },
           "503": {
-            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "description": "The recipe library is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42272,7 +42272,7 @@
             }
           },
           "503": {
-            "description": "Recipe library not enabled on this deployment. Requires both recipesRepo + agentSessionsRepo wired in bootstrap.",
+            "description": "The recipe library is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42286,12 +42286,12 @@
     },
     "/v1/fleet/events": {
       "get": {
-        "summary": "Fleet-node WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)",
+        "summary": "Operator WebSocket event stream (operator-only; mTLS + signed Ed25519 JWT at handshake; customer API keys have no role here)",
         "tags": ["fleet"],
         "servers": [
           {
             "url": "wss://fleet.driftstack.dev",
-            "description": "Fleet control-plane WebSocket edge"
+            "description": "WebSocket edge for the machine event stream"
           }
         ],
         "security": [
@@ -42319,7 +42319,7 @@
               "type": "string",
               "minLength": 1,
               "maxLength": 128,
-              "description": "Node identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used."
+              "description": "Machine identifier. Must equal the signed JWT iss/sub. Required unless the equivalent node_id query parameter is used."
             },
             "required": false,
             "name": "x-driftstack-mac-node-id",
@@ -42328,10 +42328,10 @@
         ],
         "responses": {
           "101": {
-            "description": "WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared node ID must match its signed iss/sub."
+            "description": "WebSocket protocol upgrade. JWT authentication accepts Authorization: Bearer or the ds_token query alternative; the declared machine id must match its signed iss/sub."
           },
           "401": {
-            "description": "Fleet-node authentication failed before upgrade. Unknown node, revocation, expiry, bad signature, replayed nonce and node-ID mismatch share a uniform response.",
+            "description": "Machine authentication failed before upgrade. Unknown machine, revocation, expiry, bad signature, replayed nonce and machine-id mismatch share a uniform response.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42341,7 +42341,7 @@
             }
           },
           "503": {
-            "description": "Fleet events stream is disabled because one or more control-plane dependencies are not wired on this deployment.",
+            "description": "The machine event stream is not available on this deployment.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -42379,7 +42379,7 @@
                       "api_builder",
                       "api_scale"
                     ],
-                    "description": "SKU to quote; one of the self-serve paid tier ids."
+                    "description": "SKU to quote; one of the paid plan ids."
                   },
                   "price_currency": {
                     "type": "string",
@@ -42592,7 +42592,7 @@
                       "api_builder",
                       "api_scale"
                     ],
-                    "description": "SKU; one of the self-serve paid tier ids (free and enterprise are not purchasable)."
+                    "description": "SKU; one of the paid plan ids (free and enterprise are not purchasable)."
                   },
                   "price_cents": {
                     "type": "integer",
@@ -48009,7 +48009,7 @@
                     "minLength": 32,
                     "maxLength": 256,
                     "pattern": "^[A-Za-z0-9_-]+$",
-                    "description": "URL-safe single-use auth token; sha256-hashed at rest"
+                    "description": "Single-use token from the link in your verification, sign-in, or password-reset email."
                   }
                 },
                 "required": ["token"]
@@ -48414,13 +48414,13 @@
                     "minLength": 32,
                     "maxLength": 256,
                     "pattern": "^[A-Za-z0-9_-]+$",
-                    "description": "URL-safe single-use auth token; sha256-hashed at rest"
+                    "description": "Single-use token from the link in your verification, sign-in, or password-reset email."
                   },
                   "new_password": {
                     "type": "string",
                     "minLength": 12,
                     "maxLength": 128,
-                    "description": "Account password — 12-128 chars; no composition rules per NIST 800-63B"
+                    "description": "Account password — 12 to 128 characters. No other rules."
                   }
                 },
                 "required": ["token", "new_password"]
@@ -49841,11 +49841,11 @@
     },
     "/v1/egress/echo": {
       "get": {
-        "summary": "Echo the caller exit IP (+ best-effort CF-edge geo) — proxy-probe support",
+        "summary": "Echo the caller's public IP address (+ best-effort location) — used by proxy tests",
         "tags": ["egress"],
         "responses": {
           "200": {
-            "description": "The IP + best-effort geo (CF-edge country/region/city/timezone, each null when unknown) this request arrived from. When the CF edge resolves exit coordinates, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.",
+            "description": "The public IP address this request arrived from, plus a best-effort location (country/region/city/timezone, each null when unknown). When coordinates are available, lat/lon are included (omitted entirely — never 0,0 — when unknown or out of range); accuracy_hint names their granularity.",
             "content": {
               "application/json": {
                 "schema": {
@@ -49963,11 +49963,11 @@
     },
     "/v1/archetypes": {
       "get": {
-        "summary": "List customer-selectable browser archetypes and the current default",
+        "summary": "List the device profiles (iPhone model + iOS + Safari) you can select, and the current default",
         "tags": ["archetypes"],
         "responses": {
           "200": {
-            "description": "Canonical launch + available device/iOS/Safari combinations. Internal and non-selectable entries are excluded.",
+            "description": "Every device/iOS/Safari combination you can select (launch and available entries) plus the current default. Internal and non-selectable entries are excluded.",
             "content": {
               "application/json": {
                 "schema": {
@@ -50339,7 +50339,7 @@
             }
           },
           "400": {
-            "description": "`state` and `cursor` are not supported by the public status feed, and a malformed query fails validation. V-1488 — this operation declared 200 alone, so the document said it could not fail.",
+            "description": "`state` and `cursor` are not supported by the public status feed, and a malformed query fails validation.",
             "headers": {
               "X-Request-Id": {
                 "description": "Correlation id for this response, echoed from the inbound `x-request-id` when supplied. Quote it in support requests; sent on every response.",
@@ -50361,7 +50361,7 @@
     },
     "/v1/status/incidents/{id}": {
       "get": {
-        "summary": "Public incident detail with update timeline (V-545.A)",
+        "summary": "Public incident detail with update timeline",
         "tags": ["status"],
         "parameters": [
           {
@@ -53565,7 +53565,7 @@
     "/v1/webhooks/{id}/rotate-secret": {
       "post": {
         "operationId": "rotateWebhookSecret",
-        "summary": "Rotate the signing secret with a 24h grace (worker dual-signs during grace)",
+        "summary": "Rotate the signing secret with a 24-hour grace period (deliveries are signed with both the new and the old secret until it ends)",
         "tags": ["webhooks"],
         "security": [
           {
@@ -53611,7 +53611,7 @@
                     "grace_expires_at": {
                       "type": "string",
                       "format": "date-time",
-                      "description": "Until this timestamp, every outbound delivery is signed with both the new + old secret so the customer can roll their verifier across infra without dropped deliveries."
+                      "description": "Until this time, every delivery is signed with both the new and the old secret, so you can update your verifier without missing deliveries."
                     }
                   },
                   "required": [
@@ -55503,7 +55503,7 @@
             }
           },
           "409": {
-            "description": "The account is over its stored-profile byte cap for its tier, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a tier with a larger cap and retry.",
+            "description": "The account is over the profile storage limit for its plan, so nothing was launched. The problem body carries `used_bytes`, `cap_bytes` and `tier`; delete profiles or move to a plan with a larger limit and retry.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -56979,7 +56979,7 @@
       "post": {
         "operationId": "transferProfile",
         "summary": "Transfer profile ownership to another Driftstack account by id (requires `write:profiles`, broad `write`, or `account_owner`)",
-        "description": "Mints a new profile in the recipient's account carrying the source's name, archetype and description, and removes the source from the sender. The STORED BROWSER STATE does not move — cookies, localStorage and site data stay behind, and the recipient receives an empty profile. This is deliberate: each profile's data key is bound to its owning account and Driftstack cannot re-encrypt it, so the new row gets a freshly minted key of its own. Use `POST /v1/profiles/{id}/export` + `POST /v1/profiles/import` to move the bytes.",
+        "description": "Mints a new profile in the recipient's account carrying the source's name, device profile (`archetype`) and description, and removes the source from the sender. The STORED BROWSER STATE does not move — cookies, localStorage and site data stay behind, and the recipient receives an empty profile. This is deliberate: each profile's data key is bound to its owning account and Driftstack cannot re-encrypt it, so the new row gets a freshly minted key of its own. Use `POST /v1/profiles/{id}/export` + `POST /v1/profiles/import` to move the bytes.",
         "tags": ["profiles"],
         "security": [
           {
@@ -57152,7 +57152,7 @@
             }
           },
           "409": {
-            "description": "The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, a concurrent request already transferred or deleted it, or a live session still holds it.",
+            "description": "The transfer did not happen and the profile stayed where it was. Either the recipient account already has a profile with this name, another request already transferred or deleted it, or a live session still holds it.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -57281,7 +57281,7 @@
         },
         "responses": {
           "200": {
-            "description": "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, storage/fleet not enabled, or no node connected — `reason` says which); 'timeout' → the node did not reply; 'error' → the node reported a failure (`reason` set) and the stored state is untouched.",
+            "description": "Discriminated body: status 'ok' → the trim ran and the smaller size was persisted ({ size_bytes, bytes_reclaimed }); 'unavailable' → nothing ran (profile in use by a running session, no saved state to trim yet, the feature is not available on this deployment, or no device is connected right now — `reason` says which); 'timeout' → the device did not reply; 'error' → the device reported a failure (`reason` set) and the stored state is untouched.",
             "content": {
               "application/json": {
                 "schema": {

@@ -67,7 +67,7 @@ describe('AI-B4 sub-slice 8.20.m docs/api/recipes.md parity', () => {
   });
 
   it('explains the intent_log flatMap semantic (operator + user entries skipped)', () => {
-    expect(body).toMatch(/flatMap/);
+    expect(body).toMatch(/gathers the `intents` from every `plan-executed` agent turn/);
     expect(body).toMatch(/agent turns/);
     // The same flatMap pattern lives in the route source.
     expect(routeSource).toMatch(/source\.transcript\.flatMap/);

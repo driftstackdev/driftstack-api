@@ -114,12 +114,12 @@ const COCKPIT_ALT =
 
   <Section
     label="What &ldquo;the agent drives&rdquo; means"
-    title="It plans in a fixed vocabulary, and you can read every step."
+    title="It works from a short list of actions, and you can read every step."
   >
     <p class="mt-6 max-w-prose text-tk-ink-2">
       Describe the job in plain English and the agent turns it into a short list of
       actions, then runs them on the phone. The list is not free-form: the agent
-      picks from a closed set of verbs and cannot invent new ones, so what it is
+      can only choose from a fixed set of actions and cannot invent new ones, so what it is
       about to do is always something you can read before it happens &mdash; and
       afterwards, in the session history.
     </p>
@@ -135,37 +135,36 @@ const COCKPIT_ALT =
 
   <Section
     label="What the device looks like"
-    title="A real profile, matched axis by axis."
+    title="A real profile, matched detail by detail."
   >
     <p class="mt-6 max-w-prose text-tk-ink-2">
       A site does not ask what browser you are. It measures a dozen things and compares
-      them. Driftstack matches those axes to a real device profile rather than
+      them. Driftstack matches those measurements to a real device profile rather than
       randomising them, which is why the answers agree with each other &mdash; a
       randomised fingerprint is inconsistent in exactly the ways a detector looks for.
     </p>
     <FingerprintDemo />
     <p class="max-w-prose text-tk-ink-2">
-      The device row above is read from the live archetype registry when this page is
-      built, so it cannot quote a version the product stopped shipping.
+      The device profile shown above is Driftstack's default iPhone, with the iOS and
+      Safari versions it runs today.
     </p>
   </Section>
 
   <Section
-    label="Egress you can see"
+    label="Proxy health you can see"
     title="A proxy that stops working says so."
   >
     <p class="mt-6 max-w-prose text-tk-ink-2">
-      Every proxy is probed and the result is kept with the time it was taken. A failure
-      carries its reason, and a result that has aged past its window is shown as stale
-      rather than quietly presented as current &mdash; the difference between knowing
-      your egress works and assuming it.
+      Driftstack checks every proxy and shows you when it last checked. If a proxy fails,
+      you see why. If a check is old, it is marked as out of date rather than shown as
+      current &mdash; so you know your proxy works instead of assuming it.
     </p>
     <ProxyHealthDemo />
   </Section>
 
   <Section
     label="The cockpit"
-    title="One window for the whole fleet."
+    title="One window for all your phones."
     lead="The desktop app keeps every iPhone one click away. Here's the shape of it — each profile is a little phone card that tells you at a glance whether it's live, and where in the world it exits."
   >
     <div class="mt-10 grid gap-10 md:grid-cols-2 md:items-center">

@@ -1,35 +1,33 @@
 ---
 layout: ../../layouts/DocLayout.astro
 title: Agent sessions
-description: AI-driven + manual + pair-mode browser automation — decompose natural-language intent into structured intents, take over interactively, or drive raw intents directly.
+description: AI-driven + manual + pair-mode browser automation — turn plain-language messages into browser steps, take over interactively, or send input directly.
 ---
 
 # Agent sessions
 
-An **agent session** layers a chat-style decompose→execute loop on
-top of a regular driver-backed browser session. The customer sends
-natural-language messages (`"open https://example.com and capture a
-screenshot"`); the server's decomposer translates that into typed
-intents (`navigate`, `interact`, `wait`, `capture`, plus the
-behavioural `scroll` and `behavioral_pause`); the runtime executes
-them; results stream back in the response.
+An **agent session** lets an AI drive a browser session from
+plain-language messages. The customer sends a message (`"open
+https://example.com and capture a screenshot"`); Driftstack turns it
+into a list of typed **intents** (`navigate`, `interact`, `wait`,
+`capture`, plus the behavioural `scroll` and `behavioral_pause`), runs
+them, and returns the results in the response.
 
-Three operational modes:
+Three modes:
 
-- `ai` (default) — every customer message goes through the
-  decomposer + executor. Closed sessions return 409.
-- `manual` — `message` is a transcript-only pass-through. The
-  customer's gui-client drives the real actions via the
-  gui_control plane (a separate per-session HMAC channel).
-- `pair` — interactive takeover state machine. AI drives by
-  default; the customer can call `takeover` to seize control,
-  then `handback` to return control to AI. State transitions are
-  audit-logged.
+- `ai` (default) — every customer message is planned and executed by
+  the AI. Closed sessions return 409.
+- `manual` — `message` is a transcript-only pass-through. The desktop
+  app drives the real actions.
+- `pair` — interactive takeover. AI drives by default; the customer
+  can call `takeover` to take control, then `handback` to return
+  control to the AI (handback is not available yet — see below).
+  State transitions are audit-logged.
 
 > **Scope note.** Write operations on agent-session endpoints
 > (create, send-message, input-event, mode/takeover transitions)
 > gate on the broad `write` scope — there is no agent-sessions-specific
-> granular scope. Driver-session routes accept the
+> granular scope. Regular session routes accept the
 > granular `write:sessions`, but agent sessions do not have a
 > granular equivalent. If you mint a narrow CI key, include the
 > broad `write` scope to call these endpoints.
@@ -55,7 +53,7 @@ Three operational modes:
   "created_at": "<ISO-8601>",
   "updated_at": "<ISO-8601>",
   "livekit": {
-    "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+    "ws_url": "wss://<livekit-host>",
     "room": "agt_<uuid>",
     "token": "<HS256 JWT>",
     "participant_identity": "customer-<account-uuid>",
@@ -73,20 +71,20 @@ Three operational modes:
 }
 ```
 
-The `status` field reports `provisioning` while the session exists and its node
-has begun bringing it up — a VPN tunnel connecting, an egress resolving — but no
-browser is serving yet. Treat it as **running but not ready**: do not start work
+The `status` field reports `provisioning` while the session exists and is being
+set up — a VPN tunnel connecting, a proxy connecting — but no browser is
+serving yet. Treat it as **running but not ready**: do not start work
 against the session, and do not treat it as finished. It is already consuming
 one of your concurrent-session slots, so a `provisioning` session counts against
 your cap exactly as an `active` one does.
 
 `provisioning_detail` names the step it is on (a snake_case token such as
 `vpn_egress_bringing_up` or `vpn_egress_active`), and is `null` once the session
-is active or closed. It is absent entirely on servers older than 2026-09-10, so
+is active or closed. It may be absent entirely on older deployments, so
 read it defensively rather than assuming the key exists.
 
 The `error_event` field is **optional and nullable** — it carries the most
-recent harness launch or runtime failure recorded for the session, and is
+recent launch or runtime failure recorded for the session, and is
 absent or `null` when none has been reported. Branch on its two booleans
 rather than on the prose: `customer_actionable` says whether a human can do
 anything about the failure, and `retryable` says whether repeating the same
@@ -96,10 +94,8 @@ An `error_event` does not by itself close the session — read `status` for
 that.
 
 The `livekit` field is **optional** — auto-populated on the
-session-create response when the deployment has at least
-one Mac with registered LiveKit credentials, and absent otherwise
-(pre-LK deployment, OR no Mac has called
-`POST /v1/mac-nodes/register` yet). Clients that need a token in
+session-create response when live video is available on the
+deployment, and absent otherwise. Clients that need a token in
 the absent case use the explicit endpoint at
 [Live video (LiveKit)](#live-video-livekit) below.
 
@@ -110,12 +106,8 @@ the absent case use the explicit endpoint at
 > `GET /v1/sessions/:id` resource which emits prefixed `ses_/acc_/
 key_` IDs. Customer code comparing `agentSession.account_id`
 > against `accountMe.id` must strip the `acc_` prefix from the
-> latter first. (The session's own `id` field IS prefixed —
-> `agt_<uuid>` — because the agent-session row id is minted with
-> the prefix baked in. So is `driftstack_session_id`, which is
-> returned as `ses_<uuid>`: it is stored bare but emitted in the
-> canonical prefixed form, so input and output use the same
-> contract. Only `account_id` is bare here.)
+> latter first. (`id` and `driftstack_session_id` are prefixed —
+> `agt_<uuid>` and `ses_<uuid>`. Only `account_id` is bare here.)
 
 ## Create
 
@@ -138,7 +130,7 @@ Request body (all fields optional):
 
 Headers:
 
-- `Idempotency-Key: <string>` (optional, Stripe-pattern) — retries
+- `Idempotency-Key: <string>` (optional) — retries
   with the same key replay the original 201 instead of minting a
   duplicate row. This endpoint is one of the four that honour the
   header; see [Idempotency keys](/reference/idempotency/) for the full
@@ -148,8 +140,8 @@ Response `201 Created` returns the resource above.
 
 > **Tier availability.** AI-driven sessions (`mode: "ai"` — the
 > default when `mode` is omitted — and `mode: "pair"`) require a
-> tier with the AI-agent feature: Team, Agency, and every API-ladder
-> tier (API Starter and up). On Free and Personal the create is
+> tier with the AI-agent feature: Team, Agency, and every API plan
+> (API Starter and up). On Free and Personal the create is
 > refused with a 403 `forbidden` tier error. `mode: "manual"`
 > sessions are available on every tier. The same rule applies to
 > [`POST /{id}/mode`](#set-mode): flipping an existing session into
@@ -162,9 +154,9 @@ omitted it defaults to `claude-opus-5` (every earlier id stays
 accepted for back-compat) — the `model` selects which
 Claude model the AI agent runs, and applies in `ai` and `pair`
 mode. `token_budget` defaults to the deployment-configured value
-(typically 100,000 tokens). The optional `driftstack_session_id` ties the agent
-session to a pre-existing driver session; without it the runtime
-spawns one on the first executed intent.
+(typically 100,000 tokens). The optional `driftstack_session_id` attaches the
+agent session to an existing browser session; without it, one is started
+automatically on the first executed intent.
 
 The optional `profile_id` attaches one of your saved **profiles** (a
 persistent browser identity — cookies, localStorage, etc.) to the session,
@@ -180,15 +172,15 @@ sessions on the same profile from overwriting each other's saved cookies and
 logins. End the named session — or wait for it to finish — before launching
 another. Sessions without a `profile_id` are never affected.
 
-The optional `proxy_id` routes the session's egress through one of your saved
+The optional `proxy_id` routes the session's traffic through one of your saved
 **account proxies** (manage them at `/v1/account/me/proxies`); pass the bare
 proxy uuid. It must reference a proxy your account owns — an unknown or
-not-owned id returns `404`. Omit it for the default egress.
+not-owned id returns `404`. Omit it for the default connection.
 
 The optional `initial_url` sets the start URL the remote browser opens on
-launch, overriding the operator-default start URL. It must be an absolute
+launch, overriding the default start URL. It must be an absolute
 `http(s)` URL; `file:`, `javascript:`, and `data:` schemes are rejected
-(`400`). Omit it to use the operator default.
+(`400`). Omit it to use the default.
 
 The optional `geolocation` explicitly overrides the location reported by the
 session's `navigator.geolocation`. **By default you should not set this** — when
@@ -230,7 +222,7 @@ existence disclosure).
 
 `POST /v1/agent-sessions/{id}/message`
 
-Run one decompose→execute turn (or, in `manual` mode, log the
+Run one AI turn — plan and execute — (or, in `manual` mode, log the
 message and return without executing).
 
 Request body:
@@ -244,36 +236,33 @@ Headers:
 - `Idempotency-Key: <UUID>` (strongly recommended) — identifies this
   logical turn. If the heartbeat stream or final response is lost, retry the
   exact same session/message/approval request with the same key; the server
-  replays the durable terminal status and body without running the browser task
+  replays the recorded final status and body without running the browser task
   again. Changing the message, session, or approvals requires a new key. The
   BYOK header is deliberately outside receipt identity: reusing a key after
   changing that credential still replays the original terminal result and never
   executes a second browser turn. Use a new idempotency key for an intentionally
   new AI turn. A manual transcript turn never reads or hashes the irrelevant
   BYOK header. Reuse while the original outcome is still unknown returns `409`
-  and does not dispatch another turn.
+  and does not start another turn.
 - `x-byok-anthropic-api-key: sk-ant-...` (optional) — supply a
   per-request BYOK key that overrides any account-stored key for
   this turn. Useful for users who don't want to persist a key but
   do want each request authenticated against their own Anthropic
   account. Never logged.
 
-The server admits each request into exactly one control lane before it reads
-credentials, spend limits, or provider configuration. A `manual` request is
-transcript-only and never consults BYOK storage, bundled-LLM settings, model
-providers, or the browser executor. An `ai` request—and a `pair` request while
-AI is driving—retains that exact authority for the whole turn. Takeover,
-handback, mode changes, pause, and close invalidate the admitted turn even if
-the session later returns to the same visible mode.
+Each message runs in the mode the session was in when it arrived. A `manual`
+message is transcript-only and never touches BYOK, bundled-LLM, or the
+browser. An `ai` message (or a `pair` message while AI is driving) keeps that
+mode for the whole turn; a takeover, handback, mode change, pause, or close
+cancels the turn even if the session later returns to the same mode.
 
-If control changes while provider or browser work is settling, the request
-returns `409 conflict` with `ai_control_unavailable: true` and a `phase`. The
-server starts no later provider attempt, retry, browser intent, read-back, or
-transcript suffix under the successor controller. Work already completed is
-reported honestly: consumed model usage can include `tokens_consumed` and
-`usage`, and settled browser steps can appear as redacted `partial_results`.
-Do not replay those partial steps automatically; inspect the current session
-under its new controller first.
+If control changes while a turn is still running, the request returns
+`409 conflict` with `ai_control_unavailable: true` and a `phase`, and no
+further work is started. Work already completed is still reported:
+consumed model usage can include `tokens_consumed` and `usage`, and
+settled browser steps can appear as redacted `partial_results`.
+Do not replay those partial steps automatically; inspect the current
+session under its new controller first.
 
 Response (200) is a discriminated union by `kind`:
 
@@ -303,17 +292,15 @@ AI responses can include `usage`:
 ```
 
 Only `decomposer_kind` is always present. The token counts and `model`
-appear when the selected decomposer and provider report them, so a
-`deterministic` turn carries neither. Read them as evidence for the turn you
-made, not as an account total.
+appear when the model reports them, so a `deterministic` turn carries
+neither. Read them as evidence for the turn you made, not as an account
+total.
 
-On the bundled-LLM rail,
-`usage.cost_usd_cents` is the posted 10-cent included-service accounting value,
-not the upstream model's measured cost. The block describes the represented
-provider call; an optional read-back model call is recorded separately and is
-not currently aggregated into this response field, so use cost monitoring for
-the account total. Explicit or stored BYOK responses can instead report measured
-provider cost when available.
+When you use the bundled LLM, `usage.cost_usd_cents` is the flat 10 cents
+charged for the turn, not the model's measured cost. It is the whole charge
+for that turn, and a per-turn figure rather than a running total — use cost
+monitoring for the account total. Explicit or stored BYOK responses can
+instead report measured provider cost when available.
 
 A failed step (`"kind": "failure"`) carries a human-readable `reason`
 plus a structured `diagnosis` your automation can branch on without
@@ -335,27 +322,27 @@ means automatic replay of the same step is considered safe. `false` means
 never replay automatically: an invalid request must change, while an
 outcome-unknown action or pacing may already have taken effect and requires state
 inspection before any deliberate next action. It does not prove that the
-action succeeded or failed. This fail-closed rule applies to `navigate`,
-`interact`, `scroll`, and `behavioral_pause` when a coarse WebDriver or
-dispatch failure cannot prove that the browser action or pacing did not run. Read-only
-`capture` remains eligible for bounded automatic replay.
+action succeeded or failed. This rule applies to `navigate`,
+`interact`, `scroll`, and `behavioral_pause` whenever Driftstack cannot
+confirm whether the action ran.
+Read-only `capture` remains eligible for bounded automatic replay.
 
 ```json
-// "clarify" — decomposer needs more info
+// "clarify" — the AI needs more info
 {
   "kind": "clarify",
   "session": { ...AgentSession },
   "clarifying_question": "Which page should I capture — the home page or the pricing page?"
 }
 
-// "refuse" — decomposer judged the request out of scope / unsafe
+// "refuse" — the AI judged the request out of scope / unsafe
 {
   "kind": "refuse",
   "session": { ...AgentSession },
   "refuse_reason": "This site's terms of service explicitly forbid automated scraping."
 }
 
-// "logged-manual" — mode='manual' pass-through; no decompose, no execute
+// "logged-manual" — mode='manual' pass-through; nothing planned or executed
 {
   "kind": "logged-manual",
   "session": { ...AgentSession }
@@ -369,8 +356,8 @@ browser work has already settled, that terminal 409 retains the same consumed
 above. Treat it as outcome-known evidence for those listed steps, never as an
 invitation to replay them in a replacement session.
 
-When the caller is on the
-bundled-LLM rail and the account has reached its monthly bundled-LLM
+When the caller is using the
+bundled LLM and the account has reached its monthly bundled-LLM
 spend cap (`bundled_llm_monthly_cap_usd_cents`), the turn returns
 `402 Payment Required` (BundledLlmBudgetExhausted) with `spent_cents`
 and `cap_cents` extensions. (The separate per-session `token_budget`
@@ -388,18 +375,15 @@ Sets `status='closed'` with `closed_at` stamped. Idempotent.
 
 `POST /v1/agent-sessions/{id}/livekit-token`
 
-Mint a per-Mac LiveKit JWT for a WebRTC consumer (the customer
-dashboard, the desktop GUI client, or any other LiveKit-aware
-SDK) to subscribe to the room hosting this session's video
-stream. Each Mac in the fleet runs its own LiveKit server; the
-server-side mint path looks up the assigned Mac's credentials,
-signs a JWT scoped to the session id, and returns the join info.
+Get a LiveKit token for a WebRTC client (the dashboard, the desktop
+app, or any LiveKit-aware SDK) to subscribe to this session's video
+stream.
 
 Response (`200`):
 
 ```json
 {
-  "ws_url": "wss://mac-NNN.driftstack.dev:8443",
+  "ws_url": "wss://<livekit-host>",
   "room": "agt_<uuid>",
   "token": "<HS256 JWT>",
   "participant_identity": "customer-<account-uuid>",
@@ -407,41 +391,35 @@ Response (`200`):
 }
 ```
 
-Token TTL is **24 hours** (matches the `gui_control_key` TTL).
-The room name is always the agent session id; the participant
-identity is `customer-<account-uuid>` so the SFU deduplicates
-joins from the same account.
+Tokens are valid for **24 hours**. The room name is always the agent
+session id; the participant identity is `customer-<account-uuid>`, so
+joins from the same account are deduplicated.
 
 Customer-side grants on the minted token:
 
 - `canSubscribe: true` — receive the published video stream
-- `canPublish: false` — the Mac-side capture process is the
-  publisher; the customer is subscriber-only
-- `canPublishData: true` (implicit in the room join grant) —
-  used for the `gui-client` input-forwarding DataChannel
+- `canPublish: false` — Driftstack publishes the video; you are
+  subscriber-only
+- `canPublishData: true` — used to send input events to the session
 
-> **Auto-populated on session-create.** When the deployment has at
-> least one Mac with registered LiveKit credentials, `POST
-/v1/agent-sessions` returns the same `livekit` shape inline on
-> the 201 response. Clients can connect to the room immediately
-> after create without the explicit round-trip to this endpoint.
-> Pre-LK deployments (no Mac registered) ship the create response
-> without the `livekit` field; the explicit endpoint is the
-> fallback.
+> **Auto-populated on session-create.** When live video is available on
+> the deployment, `POST /v1/agent-sessions` returns the same `livekit` shape inline
+> on the 201 response, so clients can connect immediately after create
+> without the explicit round-trip to this endpoint. Deployments without
+> live video omit the field; the explicit endpoint is the fallback.
 
 Errors:
 
-| Status | Type                | When                                                                             |
-| -----: | ------------------- | -------------------------------------------------------------------------------- |
-|    404 | not-found           | session id unknown OR caller doesn't own it (anti-enumeration)                   |
-|    403 | forbidden           | session is not active (closed or paused) — only active sessions can mint a token |
-|    503 | feature-unavailable | no Mac has registered LiveKit credentials yet                                    |
-|    503 | feature-unavailable | stored Mac secret is unreadable (ops-actionable; rotate key)                     |
+| Status | Type                | When                                                                                                           |
+| -----: | ------------------- | -------------------------------------------------------------------------------------------------------------- |
+|    404 | not-found           | session id unknown OR caller doesn't own it (anti-enumeration)                                                 |
+|    403 | forbidden           | session is not active (closed or paused) — only active sessions can mint a token                               |
+|    503 | feature-unavailable | live video is not available on this deployment, or is temporarily unavailable — contact support if it persists |
 
 ### Streaming the turn (SSE)
 
 Send `Accept: text/event-stream` on the message request and the turn
-streams instead of blocking. The lane differs from the JSON one in ways
+streams instead of blocking. It differs from the JSON response in ways
 worth writing a client around:
 
 - **Heartbeats are SSE comments, not events.** The stream opens with
@@ -481,8 +459,8 @@ Treat this as a sensitive session-history stream. Free-text user and
 operator `body` fields are returned verbatim to authorized readers.
 For structured `interact:type` intents, password/OTP/PIN/card/API-key
 values marked `sensitive: true` (or inferred from a sensitive selector)
-are omitted from SSE; the encrypted server-side copy remains available
-only to the runtime for exact plan resume.
+are omitted from SSE; the encrypted server-side copy is used only by
+Driftstack to resume the plan exactly.
 
 Event types emitted:
 
@@ -491,13 +469,12 @@ Event types emitted:
   field is JSON with `{ index, entry }` where `entry` has the
   same shape as the elements of `AgentSession.transcript`:
   - `role` — one of `'user'` (customer-supplied message), `'agent'`
-    (decomposer output: plan-executed, clarify, or refuse), or
+    (the AI's output: plan-executed, clarify, or refuse), or
     `'operator'` (manual-mode pass-through — the customer's
-    own UI/script logging directly without invoking the
-    decomposer).
+    own UI/script logging directly without involving the AI).
   - `body` — always human-readable text, never JSON. For user and
     operator turns it is what was supplied. For agent turns it is a
-    prose rendering of the decomposer outcome: `refused: <reason>`,
+    prose rendering of the AI's outcome: `refused: <reason>`,
     `clarify: <question>`, a newline-joined plan summary for
     plan-executed turns (which may end `(plan halted on failure)`),
     or the answer text for a transcript question. Do **not**
@@ -505,12 +482,11 @@ Event types emitted:
     `intents?` below, not `body`.
   - `at` — ISO 8601 timestamp.
   - `intents?` — present only on `role: 'agent'` + plan-executed
-    turns; carries the structured intent list the runtime
-    executed (the [recipes route](/api/recipes/) flatMaps these
-    into `intent_log` snapshots — see the recipe docs for how a
-    snapshotted intent_log replays without re-running the
-    decomposer). Sensitive type intents retain their selector,
-    ordering, and `sensitive: true` marker but omit `value`.
+    turns; carries the structured intent list that was executed
+    (the [recipes route](/api/recipes/) gathers these into
+    `intent_log` snapshots — see the recipe docs).
+    Sensitive type intents retain their selector, ordering, and
+    `sensitive: true` marker but omit `value`.
 
 Resume semantics (RFC 6202 + EventSource spec):
 
@@ -548,7 +524,7 @@ an account-wide one: **at most 10 concurrent transcript streams per
 account**. The eleventh is refused with `429` and a `Retry-After` of
 30 seconds, so a dashboard that opens a stream per visible session
 will start shedding them once it crosses ten — across all sessions,
-not per session. Each subscriber also holds a long-lived TCP
+not per session. Each subscriber also holds a long-lived
 connection.
 
 ## Set mode
@@ -559,7 +535,7 @@ connection.
 { "mode": "manual" }
 ```
 
-The top-level operational-mode setter — distinct from the
+The top-level mode setter — distinct from the
 pair-mode takeover/handback flow below. Use this to switch a
 session between `manual` / `ai` / `pair`. Transitioning INTO
 `pair` initializes `pair_mode_state` to `{kind: "ai-driving"}`;
@@ -592,7 +568,7 @@ Errors:
 ```
 
 `client_id` is **required for every pair-mode session**, on both legs: the
-first event (which fires the takeover-request transition) rejects without it,
+first event (which requests takeover) rejects without it,
 and every subsequent event must carry the SAME `client_id` that owns
 `human-driving` — the lock exists to scope contention to one tab. It is
 optional in the schema only because manual-mode sessions do not need it.
@@ -600,8 +576,8 @@ Omitting it in pair mode returns `400 validation-failed` with a
 `client_id` field error, and sending a _different_ value once human-driving is
 held returns `409 pair-mode-conflict`. Reuse one stable id per tab or window.
 
-Forwards a raw LK.6 InputEvent to the harness for `mode: 'manual'`
-or `mode: 'pair'` sessions. The 12 valid variants:
+Sends an input event to a `mode: 'manual'` or `mode: 'pair'` session.
+The 12 valid variants:
 
 ```json
 { "type": "mouseMove", "x": 200, "y": 150 }
@@ -619,11 +595,11 @@ or `mode: 'pair'` sessions. The 12 valid variants:
 ```
 
 **Touch is the iPhone-native, preferred input** — the session is a real
-iPhone Safari surface, so the harness injects touch via genuine WebKit
-events (`pointerType: touch`; no mouse cursor). Coordinates are
-device-CSS pixels; `touchId` (0–9) drives concurrent fingers for
-multi-touch; `swipe` carries endpoints + `durationMs` (≤60000) and the
-harness interpolates the eased path. The `mouse*` variants remain for
+iPhone Safari surface, so touch is delivered as real touch events (no
+mouse cursor). Coordinates are device-CSS pixels; `touchId` (0–9) lets
+you use several fingers for multi-touch; `swipe` carries endpoints +
+`durationMs` (≤60000) and Driftstack smooths the path. The `mouse*`
+variants remain for
 desktop-style tooling. `button` is `0` (left), `1` (middle), or `2`
 (right). `modifiers` is an optional array of `cmd / ctrl / shift / option`
 strings.
@@ -632,29 +608,27 @@ Response (200): a discriminated union on `kind`. Only
 `pair-mode-takeover-fired` is reachable today — see the callout
 below `forwarded`.
 
-When the first input-event in a pair-mode `ai-driving` session fires
-the takeover-request transition instead of forwarding:
+When the first input-event in a pair-mode `ai-driving` session requests
+takeover instead of forwarding:
 
 ```json
 { "kind": "pair-mode-takeover-fired", "pair_mode_state": { "kind": "takeover-pending" } }
 ```
 
-For a straight forward-to-harness dispatch (manual mode, or pair
-mode after takeover-grant), the eventual response shape is:
+For a plain forwarded event (manual mode, or pair mode after takeover is
+granted), the eventual response shape is:
 
 ```json
 { "kind": "forwarded", "duration_ms": 3 }
 ```
 
-**HTTP manual-input dispatch is unavailable.** Manual-mode and
+**HTTP manual input is unavailable.** Manual-mode and
 pair-mode-after-takeover input-events return `503 feature-unavailable`;
-the HTTP route does not forward input to the harness. For live manual
-or pair-mode control, use the desktop Simulator or publish input through
-the LiveKit DataChannel documented in the
-[Live video guide](/guides/live-video/)
-(`room.localParticipant.publishData(...)`).
-`duration_ms` is server-side dispatch latency, not round-trip latency to the
-session harness.
+the HTTP route does not accept them. For live manual or pair-mode
+control, use the desktop app or send input over the LiveKit data channel
+documented in the [Live video guide](/guides/live-video/).
+`duration_ms` is server-side processing time, not round-trip time to the
+session.
 
 Throttle the client side: the route's rate-limit bucket
 (`agent_sessions:input_event`) is sized for ≤120Hz `mouseMove` /
@@ -672,9 +646,8 @@ Errors:
   error names `client_id`; check that before debugging coordinates).
 - `409 pair-mode-conflict` — a pair-mode `client_id` that differs from
   the one currently holding `human-driving`.
-- `503 feature-unavailable` — this deployment does not expose HTTP
-  manual-input dispatch. Use the desktop Simulator's live control channel for
-  hands-on input.
+- `503 feature-unavailable` — this deployment does not accept manual
+  input over HTTP. Use the desktop app for hands-on input.
 
 ## Pair-mode takeover + handback
 
@@ -689,10 +662,9 @@ sessions only — they return 409 on non-pair sessions.
 { "client_id": "<your-internal-client-id>" }
 ```
 
-State machine: `ai-driving → takeover-pending`, or
-`takeover-queued` if the runtime is mid-decompose (the queued
-takeover promotes to `takeover-pending` when the in-flight turn
-settles).
+Transition: `ai-driving → takeover-pending`, or `takeover-queued` if
+the AI is still working on a turn (it becomes `takeover-pending` when
+that turn finishes).
 
 Response (200):
 
@@ -710,8 +682,8 @@ A second concurrent takeover from a different client (while one is
 mid-flight) returns `409 PairModeConflictError` with a
 `winner_client_id` extension field naming the client that holds the
 in-flight takeover. (Distinct from `PairModeStateInvalidTransitionError`,
-which fires when the state machine refuses a transition — e.g. a
-`handback` from `ai-driving` — and carries `from` + `transition`.)
+which fires when a transition is not allowed from the current state — e.g.
+a `handback` from `ai-driving` — and carries `from` + `transition`.)
 
 ## Request handback
 
@@ -719,12 +691,11 @@ which fires when the state machine refuses a transition — e.g. a
 
 Body: `{}` (empty).
 
-State machine: `human-driving → handback-pending`, or
-`handback-queued` if mid-decompose.
+Transition: `human-driving → handback-pending`, or `handback-queued` if
+the AI is still working on a turn.
 
 **This transition is unreachable today.** `human-driving` is produced only by the
-`takeover-grant` transition, which nothing in the control plane emits yet (tracked in
-`docs/internal/cross-agent-control-plane-contract.md`), so this endpoint returns
+`takeover-grant` transition, which is not available yet, so this endpoint returns
 **409 `pair-mode-conflict`** on every call and the 200 shape below is not currently
 observable. A parked `takeover-pending` session returns to `ai-driving` after 30s without
 a client heartbeat.
@@ -738,14 +709,14 @@ Response (200):
 ## Heartbeat-timeout auto-handback
 
 If a `human-driving` session goes 30s without a client heartbeat,
-the harness auto-handbacks the session to `ai-driving`. The
+the session automatically returns to `ai-driving`. The
 transition emits an `agent_session.pair_mode.timeout` audit row.
 
 ## Resume a challenge-paused session
 
 `POST /v1/agent-sessions/{id}/resume`
 
-When the in-session harness detects a bot-challenge (DataDome /
+When the session detects a bot-challenge (DataDome /
 Arkose / PerimeterX / AWS-WAF / GeeTest / …) it auto-pauses the
 session and emits a [`session.challenge_detected`](/webhooks/events/)
 webhook. After you resolve the challenge (e.g. in the live view),
@@ -754,8 +725,8 @@ call this to resume the agent.
 Body: `{ "challenge_id"?: "<id-from-the-event>" }`
 
 `challenge_id` (optional) correlates to the
-`session.challenge_detected` you are responding to — when present, the
-harness validates it against the active challenge (a stale id leaves
+`session.challenge_detected` you are responding to — when present,
+Driftstack checks it against the active challenge (a stale id leaves
 the session paused); when absent, it is a manual override resume.
 
 Response `202`:
@@ -766,20 +737,19 @@ Response `202`:
 
 `404` if the session is not found or not owned by your account; `409`
 if the session is in a terminal state (resume requires an active
-session). Available when the fleet control plane is enabled on the
-deployment.
+session). Not available on every deployment.
 
 The seven endpoints below operate on the **live, running session**
-(they are what the desktop GUI's page overlay, Cookies drawer,
+(they are what the desktop app's page overlay, Cookies drawer,
 back/forward buttons, file picker, and download bar call). Reads
 accept any bearer with the `read` scope; writes gate on the broad
 `write` scope (see the scope note at the top of this page). Apart
 from the page-state poll, each returns a **discriminated `200` body**
 in every case — `status` is one of `ok`, `unavailable` (the session
-is not live on a node, the fleet control plane is not enabled, or
-the session's node is offline), `timeout` (the node did not reply),
-or `error` (the node reported a failure; `reason` says why) — so
-expected-inert states surface as data, not HTTP errors. A
+is not running, cannot be reached right now, or live control is not
+enabled on this deployment), `timeout` (the session did not reply in
+time), or `error` (the session reported a failure; `reason` says why)
+— so expected-inert states surface as data, not HTTP errors. A
 malformed body or query is a `400`; an unknown or cross-account
 session id is a `404`.
 
@@ -787,8 +757,8 @@ session id is a `404`.
 
 `GET /v1/agent-sessions/{id}/page-state`
 
-The latest page state the session's harness reported — polled by the
-GUI's loading bar and error overlay, and available to your own UIs
+The latest page state the session reported — polled by the desktop
+app's loading bar and error overlay, and available to your own UIs
 the same way.
 
 Response (200):
@@ -806,16 +776,16 @@ Response (200):
 }
 ```
 
-`state: "stalled"` means the harness detected a frozen-but-alive
-renderer (hung JS / compositor deadlock) — distinct from `errored`
+`state: "stalled"` means the page is frozen but the session is still
+alive (for example, hung JavaScript) — distinct from `errored`
 (a hard page error) and `loading` (a navigation in flight). `error`
 is `null` except on `errored` states. `input_focused` is `true` while
 an editable field on the page holds focus and `false` on blur (`null`
 until the session reports one) — a UI can use it to show or hide an
 on-screen keyboard. `page_state` is `null` when
 nothing has been reported yet, the last report is older than the
-freshness bound, the session is closed, or live fleet state is
-unavailable in the deployment.
+freshness bound, the session is closed, or live session state is
+unavailable on this deployment.
 
 ## Read the cookie jar
 
@@ -867,7 +837,7 @@ running session's cookie store. Response (200) is the discriminated
 `{ "status": …, "reason"?: … }` shape — `ok` means the write was
 applied; on any other status nothing was written.
 
-## Change the session's egress
+## Change the session's proxy
 
 `POST /v1/agent-sessions/{id}/egress`
 
@@ -875,7 +845,7 @@ applied; on any other status nothing was written.
 { "proxy_id": "prx_…", "apply_point": "next_navigation" }
 ```
 
-> **Not available yet.** Devices cannot change egress on a running
+> **Not available yet.** Devices cannot change the proxy on a running
 > session, so this endpoint currently answers
 > `{"status":"unavailable"}` for every call. Create a new session with
 > the `proxy_id` you want instead. This note goes away when device
@@ -900,7 +870,7 @@ Response (200) is the discriminated `{ "status": …, "reason"?: … }`
 shape, plus `apply_point` when the swap was accepted — `"immediate"`,
 `"next_navigation"`, or `null` when the device accepted it but did not
 confirm when it applies (treat `null` as possibly-immediate). On any
-status other than `ok`, the egress was **not** changed.
+status other than `ok`, the proxy was **not** changed.
 
 ## Step browser history
 
@@ -911,8 +881,8 @@ status other than `ok`, the egress was **not** changed.
 ```
 
 Steps the running session's back-forward list one entry in
-`direction` (`"back"` or `"forward"`) — what the GUI's back/forward
-buttons call. The session's **current** tab is stepped.
+`direction` (`"back"` or `"forward"`) — what the desktop app's
+back/forward buttons call. The session's **current** tab is stepped.
 
 > **`tabId` is not supported yet.** Devices step the current tab only,
 > so sending `tabId` is rejected with a `422` rather than silently
@@ -945,9 +915,8 @@ Response (200), discriminated:
 }
 ```
 
-`handle` is an **opaque reference** — the mapping to an on-device
-path stays inside the harness, so a worker filesystem path is never
-exposed. On any non-`ok` status, `handle` is `null`.
+`handle` is an **opaque reference** — file paths on the device are
+never exposed. On any non-`ok` status, `handle` is `null`.
 
 ## List downloads
 
@@ -992,7 +961,7 @@ with the cause in `reason`; on any non-`ok` status, `file` is
 ## Audit log
 
 Six actions land on the customer audit log across the agent-session
-lifecycle + state machine (see [Audit log](/api/audit-log/)):
+lifecycle + pair-mode transitions (see [Audit log](/api/audit-log/)):
 
 - `agent_session.created` (customer-initiated `POST /v1/agent-sessions`)
 - `agent_session.destroyed` (customer-initiated `DELETE /v1/agent-sessions/:id`)
@@ -1003,32 +972,31 @@ lifecycle + state machine (see [Audit log](/api/audit-log/)):
   heartbeat-timeout sweeps)
 
 Lifecycle payloads: `created` carries `{ agent_session_id, initial_mode }`;
-`destroyed` carries `{ agent_session_id, reason }` (reason is the
-closeWithReason discriminator — `'customer-closed'` on the customer
-DELETE route). Payload for the 3 pair-mode rows carries
-`{ from, to, client_id? }` for downstream reconstruction of the
-state-machine history. `agent_session.mode.changed` payload carries
-`{ from, to }` (operational-mode strings: `manual` / `ai` / `pair`).
+`destroyed` carries `{ agent_session_id, reason }` (`'customer-closed'`
+when closed via DELETE). Payload for the 3 pair-mode rows carries
+`{ from, to, client_id? }` so you can reconstruct the pair-mode
+history. `agent_session.mode.changed` payload carries
+`{ from, to }` (mode strings: `manual` / `ai` / `pair`).
 Filter via
 `GET /v1/account/audit-log?action=agent_session.pair_mode.takeover`.
 
 ## Errors
 
-| Status | Type                         | When                                                                                                                                                                                                                                                      |
-| -----: | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-|    400 | validation-failed            | body fails schema (missing `user_message`, etc.)                                                                                                                                                                                                          |
-|    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                              |
-|    404 | not-found                    | session id you cannot access (not your own, and not a team you hold admin on)                                                                                                                                                                             |
-|    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when a message's admitted control epoch changes; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
-|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                            |
-|    409 | pair-mode-invalid-transition | state-machine refused the transition (carries `from` + `transition`)                                                                                                                                                                                      |
-|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                                                                                                                                                                       |
-|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                           |
-|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                                                                                                                                                                   |
-|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                                                                                                                                                                        |
-|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                                                                                                                                                                            |
+| Status | Type                         | When                                                                                                                                                                                                                                                                     |
+| -----: | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|    400 | validation-failed            | body fails schema (missing `user_message`, etc.)                                                                                                                                                                                                                         |
+|    403 | forbidden                    | create with — or mode-flip into — `mode: ai`/`pair` on a tier without the AI-agent feature (Free / Personal)                                                                                                                                                             |
+|    404 | not-found                    | session id you cannot access (not your own, and not a team you hold admin on)                                                                                                                                                                                            |
+|    409 | conflict                     | mode mismatch, or `ai_control_unavailable: true` when control of the session changes while a message is running; the latter includes `phase` and can include consumed `tokens_consumed`, `usage`, and redacted `partial_results` that must not be replayed automatically |
+|    409 | profile-in-use               | create's `profile_id` already has a live session (carries `active_session_id`)                                                                                                                                                                                           |
+|    409 | pair-mode-invalid-transition | the transition is not allowed from the current state (carries `from` + `transition`)                                                                                                                                                                                     |
+|    409 | pair-mode-conflict           | concurrent takeover lost the lock race (carries `winner_client_id`)                                                                                                                                                                                                      |
+|    402 | bundled-llm-budget-exhausted | bundled-LLM monthly cap reached                                                                                                                                                                                                                                          |
+|    402 | bundled-llm-consent-required | deployment has bundled-LLM but customer hasn't opted in                                                                                                                                                                                                                  |
+|    502 | byok-anthropic-required      | no BYOK + no consent + no fallback                                                                                                                                                                                                                                       |
+|    503 | feature-unavailable          | no BYOK or bundled-LLM provider is available in the deployment                                                                                                                                                                                                           |
 
-The pair-mode state-machine transition errors are typed in all
+The pair-mode transition errors are typed in all
 three SDKs: `PairModeStateInvalidTransitionError`. Branch on
 the `from` + `transition` fields to recover (e.g. wait for the
-queued transition to settle before retrying).
+queued takeover to complete before retrying).

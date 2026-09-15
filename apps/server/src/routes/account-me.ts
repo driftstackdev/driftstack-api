@@ -225,6 +225,18 @@ type OsFingerprintFields =
   | { os_fingerprint_unavailable: 'vpn_tunnel' | 'not_observed' | 'observer_off' };
 
 /**
+ * The `reason` a customer sees beside an OS reading. The classifier's own sentence
+ * describes packet internals a first-time user cannot act on; it stays in the log
+ * line written beside the reading, and the customer is told in plain words where
+ * the reading came from.
+ */
+function customerOsFingerprintReason(os: FingerprintedOs): string {
+  return os === 'unknown'
+    ? 'The operating system could not be determined from this connection.'
+    : 'Based on how this proxy responds to a network connection.';
+}
+
+/**
  * (o) — the exact `reason` `ProxyConnectivityProbe.observeOs` returns when the
  * deployment configured NO raw-socket observer (`this.osObserver === undefined`,
  * `services/proxy-connectivity-probe.ts`). Matched, not inferred: the probe
@@ -297,8 +309,7 @@ export function classifyVpnProbeFailure(
   //    RUN, and must never be read as a tunnel that is down.
   if (has('node_busy')) {
     return {
-      reason:
-        'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.',
+      reason: 'Our test service is busy right now. Try again in a minute.',
       notRun: 'node_busy',
     };
   }
@@ -308,7 +319,7 @@ export function classifyVpnProbeFailure(
   // owns the failure rather than sending the customer to re-check their keys.
   if (has('egress_bin_missing') || has('tunnel_up_no_socks')) {
     return {
-      reason: `We could not start the VPN tool, so your ${name} configuration was never tested. This is a fault on our side — try again shortly.`,
+      reason: `We could not run the test, so your ${name} configuration was not checked. This is a problem on our side — try again shortly.`,
       notRun: 'node_error',
     };
   }
@@ -316,7 +327,7 @@ export function classifyVpnProbeFailure(
   // Not a verdict about the tunnel (it was up), and not a config problem.
   if (has('probe_failed') || has('timeout')) {
     return {
-      reason: `The ${name} tunnel came up, but the exit check did not finish. Try again shortly.`,
+      reason: `Your ${name} connection was established, but we could not finish checking where its traffic exits. Try again shortly.`,
       notRun: 'node_error',
     };
   }
@@ -327,7 +338,7 @@ export function classifyVpnProbeFailure(
   // customer their tunnel is fine would be the worst possible answer.
   if (has('egress_leak_detected')) {
     return {
-      reason: `The ${name} tunnel came up but traffic did not leave through it, so we stopped it. This configuration is not safe to browse through.`,
+      reason: `Your ${name} connection started, but your traffic did not go through it, so we stopped it. This configuration is not safe to browse with.`,
     };
   }
   // ⛔ No "check your address". The node waits out the tunnel's init window and
@@ -335,19 +346,19 @@ export function classifyVpnProbeFailure(
   // would send a customer to edit a line that is correct.
   if (has('endpoint_unreachable')) {
     return {
-      reason: `The ${name} endpoint did not answer within the tunnel's wait, so the tunnel did not come up. The endpoint is down, blocked, or not accepting this peer — we cannot tell which.`,
+      reason: `The ${name} server did not answer in time, so the connection did not start. The server may be down, blocked, or not accepting this configuration — we cannot tell which.`,
     };
   }
   if (has('handshake_failed')) {
     return {
-      reason: `The ${name} tunnel did not come up. Check the keys, the endpoint, and that the server accepts this peer.`,
+      reason: `The ${name} connection could not be established. Check the keys and the server address, and make sure the server accepts this configuration.`,
     };
   }
 
   // Residual — `bad_config*`, `bad_request`, a send failure, or a token from a
   // node newer than this build. Today's sentence, and NOT a verdict.
   return {
-    reason: 'The test could not be completed on the measuring Mac. Try again shortly.',
+    reason: 'The test could not be completed. Try again shortly.',
     notRun: 'node_error',
   };
 }
@@ -744,7 +755,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     const unsafe = classifyUnsafeHost(host);
     if (unsafe !== null) {
       throw new BadRequestError(
-        'Proxy host must not target a private, loopback, link-local, or metadata address.',
+        'The proxy host must be a public internet address. Private or local network addresses are not allowed.',
       );
     }
   }
@@ -761,7 +772,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     if (password === null || password.length === 0) return null;
     if (proxyMasterKey === null) {
       throw new FeatureUnavailableError(
-        'Proxy passwords are unavailable (encryption not configured).',
+        'Saving proxy passwords is not available on this installation.',
       );
     }
     return encryptAccountProxySecret(
@@ -781,7 +792,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     secret: string,
   ): string {
     if (proxyMasterKey === null) {
-      throw new FeatureUnavailableError('VPN proxies are unavailable (encryption not configured).');
+      throw new FeatureUnavailableError('VPN proxies are not available on this installation.');
     }
     return encryptAccountProxySecret(proxyMasterKey, { accountId, proxyId, slot }, secret);
   }
@@ -819,7 +830,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
   ): { wrappedSecret: string; config: Record<string, unknown> } | null {
     if (input.scheme === 'openvpn') {
       if (!input.openvpn) {
-        throw new BadRequestError('An `openvpn` config is required for scheme "openvpn".');
+        throw new BadRequestError('Add your OpenVPN configuration to save an OpenVPN proxy.');
       }
       const { config_blob: submittedBlob, username, password } = input.openvpn;
       // ⛔ (V-217) `script-security 2` is LOWERED to 1 here, not refused. Measured
@@ -848,7 +859,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         throw new BadRequestError(
           unsafeVpn === 'unsafe-directive'
             ? unsupportedOpenvpnDirectiveDetail(config_blob)
-            : 'OpenVPN config must not target a private, loopback, link-local, or metadata address.',
+            : 'The server address in your OpenVPN config (the `remote` line, or an `http-proxy` or `socks-proxy` line) must be a public internet address. Private or local network addresses are not allowed.',
         );
       }
       // Reject a config that references EXTERNAL cert/key files (`ca ca.crt`) with
@@ -867,14 +878,14 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     }
     if (input.scheme === 'wireguard') {
       if (!input.wireguard) {
-        throw new BadRequestError('A `wireguard` config is required for scheme "wireguard".');
+        throw new BadRequestError('Add your WireGuard configuration to save a WireGuard proxy.');
       }
       const { private_key, peer_public_key, preshared_key, endpoint, allowed_ips, address, dns } =
         input.wireguard;
       // SSRF: the real egress is the endpoint (+ dns), NOT the display host — guard them.
       if (classifyUnsafeVpnTargets({ endpoint, dns }) !== null) {
         throw new BadRequestError(
-          'WireGuard endpoint/DNS must not target a private, loopback, link-local, or metadata address.',
+          'The WireGuard endpoint and DNS addresses must be public internet addresses. Private or local network addresses are not allowed.',
         );
       }
       // `address` is written unconditionally: the schema requires it now, because the
@@ -903,7 +914,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
     // socks5/http: a stray VPN block is a client error (avoids a half-typed row).
     if (input.openvpn || input.wireguard) {
       throw new BadRequestError(
-        '`openvpn`/`wireguard` config is only valid for the matching scheme.',
+        'An OpenVPN configuration can only be used with the OpenVPN proxy type, and a WireGuard configuration with the WireGuard type.',
       );
     }
     return null;
@@ -1001,7 +1012,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
         'password' in body
       ) {
         throw new BadRequestError(
-          'A VPN password can only be changed by resubmitting the matching VPN configuration.',
+          'To change a VPN password, submit the full VPN configuration again.',
         );
       }
       if (parsed.data.host !== undefined) assertSafeProxyHost(parsed.data.host);
@@ -1057,7 +1068,9 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (row === null) {
         const current = await accountProxiesRepo.findById({ id, accountId: ctx.account.id });
         if (current === null) throw new NotFoundError('Proxy not found.');
-        throw new ConflictError('Proxy changed concurrently. Retry the update.');
+        throw new ConflictError(
+          'This proxy changed since you last loaded it. Refresh and try again.',
+        );
       }
       await emitProxyAudit(request, ctx.account.id, 'proxy.updated', row);
       return proxyToMetadata(row);
@@ -1112,7 +1125,8 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       if (classifyUnsafeHost(row.host) !== null) {
         return {
           ok: false as const,
-          reason: 'Proxy host is not allowed (private/reserved address).',
+          reason:
+            'This proxy host is not allowed. It must be a public internet address, not a private or local network address.',
         };
       }
       // T-1 — which machine measures the proxy. Validated with the zod enum at the
@@ -1175,11 +1189,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             );
             return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
           }
+          request.log.info(
+            { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
+            'proxy test: os fingerprint observed',
+          );
           return {
             os_fingerprint: {
               os: os.os,
               confidence: os.confidence,
-              reason: os.reason,
+              reason: customerOsFingerprintReason(os.os),
               observed_ip: os.observedIp,
               observed_via: os.via,
               single_host_vantage: os.singleHostVantage,
@@ -1221,11 +1239,15 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                   : ('not_observed' as const),
             };
           }
+          request.log.info(
+            { proxyId: row.id, os: os.os, confidence: os.confidence, reason: os.reason },
+            'proxy test: os fingerprint observed',
+          );
           return {
             os_fingerprint: {
               os: os.os,
               confidence: os.confidence,
-              reason: os.reason,
+              reason: customerOsFingerprintReason(os.os),
               observed_ip: os.observedIp,
               observed_via: os.via,
               // (V-219) Whether this reading describes the path a website gets.
@@ -1353,7 +1375,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               'The proxy rejected the username and password. Re-enter them and try again.',
             timeout: 'The proxy was too slow to respond. It may be overloaded — try again shortly.',
             egress_blocked:
-              'The proxy connected but could not reach the internet. Its upstream egress is blocked.',
+              'The proxy connected but could not reach the internet. Check with your proxy provider.',
           };
           return {
             ok: false as const,
@@ -1510,10 +1532,10 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                 ok: false,
                 reason:
                   exitSource === 'session'
-                    ? 'This VPN is in use by a live session; its exit is shown from that session. End the session to test the tunnel.'
+                    ? 'This VPN is being used by a running session, so the exit IP shown is from that session. End the session to check the VPN.'
                     : exitSource === 'probe'
-                      ? 'This VPN is in use by a live session; its exit is shown from the last check. End the session to test the tunnel.'
-                      : 'This VPN is in use by a live session. End the session to test the tunnel.',
+                      ? 'This VPN is being used by a running session, so the exit IP shown is from its last check. End the session to check the VPN.'
+                      : 'This VPN is being used by a running session. End the session to check the VPN.',
                 measured_from: 'control_plane' as const,
                 // ⛔ A refusal is NOT a failed tunnel. `not_run` is the
                 // machine-readable discriminator a client branches on, so a
@@ -1673,9 +1695,9 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               // session), and also under its own concurrency backpressure. A wait,
               // not a verdict on the proxy.
               if (typeof r.error === 'string' && /node_busy/i.test(r.error)) {
-                return 'The Mac that runs your profiles is busy with another tunnel or test. Try again in a minute.';
+                return 'Our test service is busy right now. Try again in a minute.';
               }
-              return 'The test could not be completed on the measuring Mac. Try again shortly.';
+              return 'The test could not be completed. Try again shortly.';
             }
             if (!r.reachable) {
               return 'The proxy did not answer. Check the host and port, and that it is online.';
@@ -1684,7 +1706,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               return 'The proxy rejected the username and password. Re-enter them and try again.';
             }
             if (!r.can_route) {
-              return 'The proxy connected but could not reach the internet. Its upstream egress is blocked.';
+              return 'The proxy connected but could not reach the internet. Check with your proxy provider.';
             }
             return undefined;
           })();
@@ -1956,7 +1978,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
             reason:
               fleet.miss === 'no_fleet'
                 ? 'VPN checks are not available on this deployment.'
-                : 'No checker was free to test this VPN tunnel. Try again in a minute.',
+                : 'Our test service is busy right now. Try again in a minute.',
             measured_from: 'control_plane' as const,
             not_run: 'no_node' as const,
             ...storedExitForReply(),

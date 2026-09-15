@@ -6,11 +6,11 @@ description: Discover the currently selectable Driftstack device, iOS, and Safar
 
 # Archetypes
 
-An archetype is the exact device, iOS, and Safari combination used to
-create a session or persistent profile. Do not hard-code a copied catalog:
-use this endpoint to populate selectors and validate configuration. The
-response is generated from the same canonical registry used by the server,
-desktop app, dashboard, and OpenAPI code generator.
+An archetype is a device profile: the exact iPhone model, iOS version, and
+Safari version that a session or persistent profile is created with. Do not
+hard-code a copied catalog: use this endpoint to populate selectors and
+validate configuration. It is the same list the desktop app and dashboard
+use.
 
 ## List available archetypes
 
@@ -48,8 +48,7 @@ Only customer-selectable entries are returned:
 - `launch` — selectable and used when a request omits `archetype`
 - `available` — selectable, but not the default
 
-Internal fingerprint-reference baselines and other non-selectable entries are
-never included. `default_archetype_id` is the launch default — what
+`default_archetype_id` is the launch default — what
 `POST /v1/sessions` or `POST /v1/profiles` gets when an archetype is omitted on
 a tier entitled to every device. A tier with a device entitlement (the free
 tier: iPhone 13 and iPhone 13 mini) gets its own default instead: the newest
@@ -57,8 +56,7 @@ archetype of its first entitled device.
 
 Direct session creation, profile creation, and profile import accept only an
 `id` present in the current response. Any other id returns
-`400 ValidationFailed` on the `archetype` field before a browser, profile row,
-or driver allocation is attempted.
+`400 ValidationFailed` on the `archetype` field before anything is created.
 
 ## Generate a create payload from the live catalog
 

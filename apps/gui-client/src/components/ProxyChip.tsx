@@ -70,7 +70,9 @@ export function ProxyChip({ proxy, defaulted = false }: ProxyChipProps): JSX.Ele
             ? 'border-accent bg-accent-subtle text-ink-primary'
             : 'border-surface-divider bg-surface-base text-ink-secondary hover:border-ink-muted hover:text-ink-primary')
         }
-        title={defaulted ? 'No explicit binding — using the first saved proxy.' : undefined}
+        title={
+          defaulted ? 'No proxy chosen for this profile — using your first saved proxy.' : undefined
+        }
       >
         <ProxyIcon />
         <span className="mono">

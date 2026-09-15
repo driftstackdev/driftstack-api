@@ -76,7 +76,7 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     expect(body).toMatch(/apiBuilderSustained: '1,800 req\/min'/);
     expect(body).toMatch(/name: 'sessions:create'/);
     expect(body).toMatch(
-      /POST \/v1\/sessions — burst-sensitive; throttled tighter than `global` to keep one customer from saturating the fleet\./,
+      /POST \/v1\/sessions — burst-sensitive; throttled tighter than `global` because starting a browser is expensive\./,
     );
     expect(body).toMatch(/soloBurst: '10 burst'/);
     expect(body).toMatch(/soloSustained: '2 req\/min'/);
@@ -153,8 +153,9 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
 
   it("2-problem-type-URI dispatch framing pinned: 'concurrency-limit' problem-type for concurrency-cap-429 vs 'rate-limited' problem-type for bucket-429 + 'Dispatch on the type URI, not the status code.' + TIER_CONCURRENT_SESSION_LIMITS anchor + /docs/concurrency cross-ref — pinned so the 2-distinct-problem-type + dispatch-on-type-not-status + TIER_CONCURRENT_SESSION_LIMITS source-of-truth commitment survives", () => {
     expect(body).toMatch(
-      /The caps\s*mirror <code>TIER_CONCURRENT_SESSION_LIMITS<\/code> exactly;\s*see <a href="https:\/\/docs\.driftstack\.io\/guides\/concurrency\/">\/docs\/concurrency<\/a> for the\s*authoritative table \+ backoff guidance\./,
+      /number of <em>concurrently running<\/em> sessions \(how many run\s*at once\)\. See\s*<a href="https:\/\/docs\.driftstack\.io\/guides\/concurrency\/">\/docs\/concurrency<\/a> for the\s*authoritative table \+ backoff guidance\./,
     );
+    expect(body).not.toMatch(/TIER_CONCURRENT_SESSION_LIMITS/);
     expect(body).toMatch(
       /<code>https:\/\/errors\.driftstack\.dev\/concurrency-limit<\/code>\s*problem-type — distinct from rate-limit 429s, which use the\s*<code>https:\/\/errors\.driftstack\.dev\/rate-limited<\/code> type\.\s*Dispatch on the <code>type<\/code> URI, not the status code\./,
     );
@@ -169,13 +170,11 @@ describe('W517.A apps/marketing-site/src/pages/docs/rate-limits.astro content pa
     );
   });
 
-  it("Self-hosted dev stack runbook cross-reference pinned: 'The self-hosted dev stack (see the self-hosted mac local runbook) runs the same rate-limit code path against a local Redis. Use it to exercise your 429 handling without consuming real production budget.' + GitHub URL to docs/runbooks/self-hosted-mac-local.md — pinned so the local-Redis + same-code-path + self-hosted-mac-local-runbook-anchor survives", () => {
+  it("Self-hosted cross-reference pinned: 'If you run Driftstack self-hosted, it returns the same 429 responses as the cloud service, so you can exercise your 429 handling there without using your production budget.' + link to /self-hosted/ — pinned so the same-429-behaviour + self-hosted anchor survives without pointing customers at an internal runbook", () => {
     expect(body).toMatch(
-      /<a href="https:\/\/github\.com\/driftstackdev\/driftstack-api\/blob\/main\/docs\/runbooks\/self-hosted-mac-local\.md">self-hosted mac local<\/a>/,
+      /If you run Driftstack self-hosted, it returns the same 429\s*responses as the cloud service, so you can exercise your 429\s*handling there without using your production budget\. See\s*<a href="\/self-hosted\/">Self-hosted<\/a> for details\./,
     );
-    expect(body).toMatch(
-      /runbook\) runs the same rate-limit code path against a local\s*Redis\. Use it to exercise your 429 handling without consuming\s*real production budget\./,
-    );
+    expect(body).not.toMatch(/self-hosted-mac-local|local\s*Redis/);
   });
 
   it("developers@driftstack.dev support framing pinned: 'Sustained 429s that you didn't expect, or a need to discuss a production-impacting limit: developers@driftstack.dev.' — pinned so the developer-channel routing for unexpected-429 + production-impacting-limit conversations survives", () => {

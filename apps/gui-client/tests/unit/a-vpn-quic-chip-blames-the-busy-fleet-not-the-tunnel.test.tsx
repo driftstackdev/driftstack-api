@@ -167,7 +167,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
       expect(quicChip().getAttribute('data-unmeasured')).toBe('no_fleet_mac');
     });
     const title = quicChip().getAttribute('title') ?? '';
-    expect(title).toMatch(/no checker was free/i);
+    expect(title).toMatch(/Driftstack was busy/i);
     expect(title).toMatch(/Driftstack’s network/i);
     // ⛔ it must NOT send the customer back to the button that just produced this.
     expect(title).not.toMatch(/run Check VPN/i);
@@ -184,9 +184,9 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
       expect(quicChip().getAttribute('data-ok')).toBe('false');
     });
     const title = quicChip().getAttribute('title') ?? '';
-    expect(title).toMatch(/does not relay through this tunnel/i);
+    expect(title).toMatch(/does not work through this tunnel/i);
     expect(title).toMatch(/HTTP\/3 falls back/i);
-    expect(title).not.toMatch(/no checker was free/i);
+    expect(title).not.toMatch(/Driftstack was busy/i);
   });
 
   it('ARM 2b — a deployment with NO fleet at all takes the same branch: same discriminator, same true sentence', async () => {
@@ -216,7 +216,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
     // The row shows the refusal as its own notice — that is the reply having landed.
     await screen.findByText(/live session is browsing through this VPN/i);
     expect(quicChip().getAttribute('data-unmeasured')).toBe('never_tested');
-    expect(quicChip().getAttribute('title') ?? '').not.toMatch(/no checker was free/i);
+    expect(quicChip().getAttribute('title') ?? '').not.toMatch(/Driftstack was busy/i);
   });
 
   it('ARM 3 — CRITICAL VACUITY CONTROL: a row no server test has ever landed on keeps the "run Check VPN" wording — the fleet was never asked, so it cannot be blamed', () => {
@@ -227,7 +227,7 @@ describe('(o) O5 — an unmeasured QUIC verdict names the cause the customer can
       expect(quicChip().getAttribute('data-unmeasured')).toBe('never_tested');
       const title = quicChip().getAttribute('title') ?? '';
       expect(title).toMatch(/run Check VPN/i);
-      expect(title).not.toMatch(/no checker was free/i);
+      expect(title).not.toMatch(/Driftstack was busy/i);
     });
   });
 });
@@ -268,7 +268,7 @@ describe('(o) O4/O3 — the grid never claims to be fingerprinting a tunnel', ()
     });
     const title = osChip().getAttribute('title') ?? '';
     expect(title).not.toMatch(/measuring/i);
-    expect(title).toMatch(/VPN tunnel/i);
+    expect(title).toMatch(/VPN connections/i);
     expect(title).toMatch(/No test can produce one here/i);
     // ⛔ and no dead-end instruction on a row whose button is not even called Test.
     expect(title).not.toMatch(/Run Test/i);
@@ -277,7 +277,7 @@ describe('(o) O4/O3 — the grid never claims to be fingerprinting a tunnel', ()
   it('ARM 6 — a VPN row that has NEVER been checked already carries the cause — the chip was blank under a dead-end hint before any reply existed', () => {
     render(<ProxiesView />);
     return waitFor(() => {
-      expect(osChip().getAttribute('title') ?? '').toMatch(/VPN tunnel/i);
+      expect(osChip().getAttribute('title') ?? '').toMatch(/VPN connections/i);
       expect(osChip().getAttribute('title') ?? '').not.toMatch(/Run Test/i);
     });
   });
@@ -292,7 +292,7 @@ describe('(o) O4/O3 — the grid never claims to be fingerprinting a tunnel', ()
     );
     render(<ProxiesView />);
     await waitFor(() => {
-      expect(osChip().getAttribute('title') ?? '').not.toMatch(/VPN tunnel/i);
+      expect(osChip().getAttribute('title') ?? '').not.toMatch(/VPN connections/i);
     });
     expect(osChip().getAttribute('title') ?? '').toMatch(/not measured/i);
   });

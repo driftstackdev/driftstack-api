@@ -7,10 +7,9 @@ description: Pay for Driftstack tiers with BTC, ETH, USDT, USDC, or other suppor
 # Crypto checkout
 
 Driftstack supports cryptocurrency payments through
-[NowPayments](https://nowpayments.io). The flow mints a one-time
-payment address per order; the customer sends crypto; NowPayments
-posts an IPN to Driftstack when the payment is confirmed on-chain;
-Driftstack activates the subscription tier.
+[NowPayments](https://nowpayments.io). Each order gets a one-time
+payment address; the customer sends crypto to it; once the payment is
+confirmed on-chain, Driftstack activates the subscription tier.
 
 A crypto payment is a one-time payment covering one month: it entitles
 the purchased tier for a fixed **31-day term** and then lapses unless a
@@ -21,12 +20,9 @@ live card subscription, another still-valid crypto entitlement, or the
 free tier). See the [Paying with crypto](/guides/paying-with-crypto/)
 guide for the customer-facing walkthrough.
 
-Crypto checkout is enabled for paid tiers ($79/mo and above).
-NowPayments enforces an empirical USD-equivalent floor (~$19.16)
-below which payments are rejected as `amount_too_low`, and Driftstack
-short-circuits any order under $20 (`NOWPAYMENTS_MIN_USD_CENTS = 2000`)
-before it reaches NowPayments. Every current tier ($79+) clears both
-thresholds.
+Crypto checkout is enabled for paid tiers ($79/mo and above). Every
+current tier ($79 and up) is above the payment provider's minimum order
+amount.
 
 ## Create a checkout order
 
@@ -80,13 +76,13 @@ Send exactly `pay_amount` `pay_currency` to `payment_address`. The
 customer-dashboard UI renders this address in a copy-friendly
 modal; SDK consumers should mirror that pattern. Underpayment
 puts the order in the `partial` state (not credited as paid);
-overpayment is treated as fully paid and the surplus stays on the
-NowPayments side (issue a refund manually via the NowPayments
-dashboard if needed).
+overpayment is treated as fully paid (the surplus is not returned
+automatically — crypto payments are non-refundable, see the
+[refund policy](https://driftstack.io/legal/refunds/)).
 
 ### Supported products
 
-| Product slug    | Price (USD) | Floor cleared |
+| Product slug    | Price (USD) | Above minimum |
 | --------------- | ----------- | ------------- |
 | `solo_manual`   | $79/mo      | yes           |
 | `team_manual`   | $249/mo     | yes           |
@@ -95,11 +91,10 @@ dashboard if needed).
 | `api_builder`   | $499/mo     | yes           |
 | `api_scale`     | $1,499/mo   | yes           |
 
-For a product priced below the NowPayments USD floor, the API returns
-an unavailable checkout response (`provider: "stub"` with null payment
-fields) and makes no upstream call. Every current tier clears the floor;
-the guard prevents a future mispriced product from creating an invalid
-checkout.
+For a product priced below the payment provider's minimum, the API
+returns an unavailable checkout response (`provider: "stub"` with null
+payment fields) and no order is placed. Every current tier is above the
+minimum.
 
 ## Order status lifecycle
 
@@ -184,9 +179,8 @@ returned `next_cursor` back as `?cursor=<...>` to fetch the next page
 (`null` means no more pages). `expires_at` is set only while an order is
 `pending`; it is `null` once the order resolves.
 
-`events` is an append-only state-transition log — the canonical
-record of how the order reached its current state, for support
-forensics.
+`events` is the full history of the order's status changes, in
+order — the record of how the order reached its current state.
 
 ## Webhook event: `crypto.order.paid`
 
@@ -217,9 +211,9 @@ your endpoint returns non-2xx, each carrying the same top-level `id` —
 dedup on that `id` (also surfaced as `X-Driftstack-Event-Id`).
 
 The companion `crypto.order.failed` event fires on the
-`pending|confirming|partial → failed` transition (driven by an IPN
-status or an admin sweep — a customer cancellation moves the order
-to `cancelled` and fires no event).
+`pending|confirming|partial → failed` transition (when the payment
+provider reports a failure or the order expires — a customer
+cancellation moves the order to `cancelled` and fires no event).
 
 ## Idempotency
 
@@ -235,28 +229,27 @@ Idempotency-Key: a1b2c3d4-5e6f-7890-1234-567890abcdef
 A duplicate key returns the original order verbatim with an
 `Idempotent-Replayed: 1` response header, for as long as the order
 row exists.
-A duplicate key with a different request body fires a structured
-`crypto_checkout_idempotency_body_mismatch` warn log; the
-contract still replays the original order, but operators can grep
-for accidental key reuse.
+A duplicate key with a different request body still replays the
+original order; the mismatch is recorded so support can spot
+accidental key reuse.
 
 ## Pricing notes
 
-- All amounts are in USD cents; NowPayments converts to crypto
-  using their rate engine at the moment of `payment_address` mint.
+- All amounts are in USD cents; NowPayments converts to crypto at
+  the exchange rate when the order is created.
 - The `pay_amount` returned to your customer locks the exchange
   rate for the duration of the payment window (~20 minutes per
   NowPayments default). Outside that window the customer may need
   to re-create the order.
-- Driftstack does not retain crypto; with NowPayments
-  auto-conversion enabled (recommended) we receive USDT/EUR and
-  the customer's crypto exposure is eliminated on receipt.
+- Driftstack does not keep your crypto. Once your payment is
+  received, the amount is settled; later changes in the coin's price
+  do not affect your order.
 
 ## Manual reconciliation
 
-If an order is stuck (e.g., NowPayments IPN failed to deliver,
-customer reports payment but Driftstack shows `pending`), contact
+If an order is stuck (the customer paid but Driftstack still shows
+`pending`), contact
 [billing@driftstack.dev](mailto:billing@driftstack.dev) with the
-`order_id` and the customer's transaction hash. Manual replay is
-audit-logged and reflects the same `crypto.order.paid` webhook
-event your endpoint would have received on the original IPN.
+`order_id` and the customer's transaction hash. A manual replay is
+audit-logged and sends the same `crypto.order.paid` webhook
+event your endpoint would have received originally.

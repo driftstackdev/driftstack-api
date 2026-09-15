@@ -85,9 +85,7 @@ Authorization: Bearer ds_live_…`}</code></pre>
 
     <h2>Cursor stability</h2>
     <p>
-      Cursors are <strong>opaque</strong> — they're base64-encoded
-      tuples of <code>(created_at, id)</code> from the row at the page
-      boundary. You should treat them as black boxes:
+      Cursors are <strong>opaque</strong>; treat them as black boxes:
     </p>
     <ul>
       <li>Don't parse or modify cursor strings — the encoding is not
@@ -103,9 +101,8 @@ Authorization: Bearer ds_live_…`}</code></pre>
     <p>
       Some endpoints accept additional filters in the query string
       (e.g. <code>GET /v1/account/audit-log?action=api_key.minted</code>).
-      Filters compose with pagination — the cursor encodes the
-      filter context, so paging through filtered results is
-      consistent. Switching filters mid-iteration requires a new
+      Filters compose with pagination, so paging through filtered
+      results is consistent. Switching filters mid-iteration requires a new
       cursor (omit <code>cursor</code> on the first filtered request).
     </p>
 
@@ -124,7 +121,7 @@ Authorization: Bearer ds_live_…`}</code></pre>
       List requests count against the <code>global</code> bucket —
       every authenticated request increments it. A full iteration
       through 10,000 profiles at <code>limit=100</code> is 100
-      requests, well within the bucket for any non-trial tier. If
+      requests, well within the bucket on any paid tier. If
       you hit a 429 (<code>type</code> URI
       <code>https://errors.driftstack.dev/rate-limited</code>), back
       off and retry; the <code>Retry-After</code> header and the

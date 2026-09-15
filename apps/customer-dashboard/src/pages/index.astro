@@ -123,7 +123,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
               class="font-medium text-tk-ink hover:text-tk-accent-text">Download the desktop app</a
             >
             <span class="mt-0.5 block text-xs text-tk-ink-3"
-              >Public download for macOS, Windows and Linux. Not OS-code-signed yet.</span
+              >Available for macOS, Windows and Linux. Your computer may show a security warning on first launch.</span
             >
           </span>
         </li>
@@ -151,7 +151,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             <a href="/team/" class="font-medium text-tk-ink hover:text-tk-accent-text"
               >Invite your team</a
             >
-            <span class="mt-0.5 block text-xs text-tk-ink-3">Roles + seats.</span>
+            <span class="mt-0.5 block text-xs text-tk-ink-3">Roles and seats.</span>
           </span>
         </li>
       </ol>
@@ -177,7 +177,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
           >
         </p>
         <div class="meter"><span data-stat-concurrent-meter class="meter-fill" style="width: 0%"></span></div>
-        <p class="stat-sub">running now · concurrent cap is the only meter</p>
+        <p class="stat-sub">running now · your plan limits how many run at once</p>
       </div>
       <div class="stat-card">
         <p class="stat-label">
@@ -237,37 +237,37 @@ const ARCHETYPE_LABELS = Object.fromEntries(
         <div>
           <h2 class="text-lg font-semibold text-tk-ink">Your data is protected</h2>
           <p class="text-sm text-tk-ink-2">
-            Saved profile state and recoverable credentials are encrypted at rest with context-bound wrapping under platform-held keys.
+            Saved profiles and stored credentials are encrypted in storage, and each one can only be unlocked for the account that owns it.
           </p>
         </div>
       </div>
       <div class="mt-5 grid gap-3 sm:grid-cols-3">
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Profile encryption</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">AES-256-GCM at rest</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Encrypted in storage</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Profile state is stored as ciphertext; when it is used, the platform unwraps its bound key for that authorized session.
+            Profiles are stored encrypted and are only decrypted while a session on your account is using them.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
-          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Envelope binding</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Context-bound encryption</p>
+          <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Account binding</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Locked to your account</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Authenticated encryption binds wrapped values to the owning account and, for record-scoped stores, the exact record and value slot.
+            Each encrypted value is tied to your account and, when it belongs to a saved record, to that exact record — so it can't be moved somewhere else and read.
           </p>
         </div>
         <div class="rounded-lg border border-tk-border bg-tk-surface p-4">
           <p class="font-mono text-[11px] uppercase tracking-wider text-tk-ink-3">Credential audit</p>
-          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Recorded management events</p>
+          <p class="mt-1.5 text-sm font-semibold text-tk-ink">Changes are logged</p>
           <p class="mt-1 text-xs leading-relaxed text-tk-ink-3">
-            Review credential-management events that were recorded in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Routine runtime use is not logged as a credential-read event.
+            See when a credential was added, changed or removed in your <a href="/audit-log/" class="text-tk-accent-text underline">audit log</a>. Everyday use of a credential, such as a session connecting through it, is not logged as its own entry.
           </p>
         </div>
       </div>
       <p class="mt-4 text-xs text-tk-ink-3">
-        Full model at
-        <a href="https://driftstack.io/trust/security-overview/" class="text-tk-accent-text underline">driftstack.io/trust</a>
-        · export and deletion are request-based today; start from
+        Read more at
+        <a href="https://driftstack.io/trust/security-overview/" class="text-tk-accent-text underline">driftstack.io/trust</a>.
+        Export and deletion aren't self-serve yet — start a request from
         <a href="/security/#danger-zone" class="text-tk-accent-text underline">Privacy &amp; security</a>.
       </p>
     </section>
@@ -297,7 +297,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             <p class="font-medium text-tk-ink">Download desktop app</p>
           </div>
           <p class="mt-2 text-xs text-tk-ink-3">
-            Public installer for macOS, Windows and Linux.
+            Available for macOS, Windows and Linux.
           </p>
         </a>
         <a
@@ -314,7 +314,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             </span>
             <p class="font-medium text-tk-ink">Invite your team</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">Share access with roles + seats.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">Share access with roles and seats.</p>
         </a>
         <a
           href="/api-keys/"
@@ -327,10 +327,10 @@ const ARCHETYPE_LABELS = Object.fromEntries(
                 <path d="M16 12h6M19 9v6" />
               </svg>
             </span>
-            <p class="font-medium text-tk-ink">Mint API key</p>
+            <p class="font-medium text-tk-ink">Create API key</p>
           </div>
           <p class="mt-2 text-xs text-tk-ink-3">
-            For SDK + CLI integrations. <span data-stat-api-keys>—</span> active.
+            For code that uses the API. <span data-stat-api-keys>—</span> active.
           </p>
         </a>
         <a
@@ -347,7 +347,7 @@ const ARCHETYPE_LABELS = Object.fromEntries(
             </span>
             <p class="font-medium text-tk-ink">API quickstart</p>
           </div>
-          <p class="mt-2 text-xs text-tk-ink-3">Paid-tier code walkthrough on docs.</p>
+          <p class="mt-2 text-xs text-tk-ink-3">Step-by-step guide to the API (paid plans).</p>
         </a>
       </div>
     </section>

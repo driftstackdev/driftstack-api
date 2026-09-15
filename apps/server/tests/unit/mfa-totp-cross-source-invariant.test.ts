@@ -103,9 +103,9 @@ describe('W870 V-353 MFA cross-source invariant', () => {
     expect(p).toMatch(/maxlength="6"/);
   });
 
-  it("CRITICAL apps/customer-dashboard/src/pages/security.astro pins the RFC 6238 TOTP defaults ('SHA-1 / 30s / 6-digit (RFC 6238 defaults; every authenticator app …)'). Drift would change authenticator-app interop.", () => {
+  it('CRITICAL apps/customer-dashboard/src/pages/security.astro tells customers the setup key works with any authenticator app on its standard settings (the RFC 6238 SHA-1 / 30s / 6-digit defaults, kept out of customer copy). Drift would change authenticator-app interop.', () => {
     const p = read(resolve(REPO_ROOT, 'apps/customer-dashboard/src/pages/security.astro'));
-    expect(p).toMatch(/SHA-1 \/ 30s \/ 6-digit \(RFC 6238 defaults; every authenticator app/);
+    expect(p).toMatch(/Works with any authenticator app using its standard settings\./);
   });
 
   // ─── 2-method cardinality ────────────────────────────────────

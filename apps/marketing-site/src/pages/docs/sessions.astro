@@ -13,10 +13,10 @@ import BaseLayout from '../../layouts/BaseLayout.astro';
 // sessions-doc-parity.test.ts drift guard.
 
 const LIFECYCLE = [
-  { state: 'creating', desc: 'Backend received the start request; provisioning a browser instance.' },
+  { state: 'creating', desc: 'Driftstack is starting the browser.' },
   { state: 'ready', desc: 'Browser ready; the session URL is reachable.' },
   { state: 'busy', desc: 'Session is actively running an automation step.' },
-  { state: 'destroyed', desc: 'Normal end-of-life; session has been torn down.' },
+  { state: 'destroyed', desc: 'Normal end-of-life; the session has ended.' },
   { state: 'errored', desc: 'Abnormal termination; the session cannot recover.' },
 ];
 ---
@@ -79,7 +79,7 @@ Content-Type: application/json
     <p>
       The response is a flat session object — no <code>{`{"session": …}`}</code>
       envelope. Session ids are prefixed <code>ses_</code>. The
-      create call returns only after the browser driver is ready, so
+      create call returns only after the browser is ready, so
       an intermediate <code>creating</code> state is not directly
       observable. Poll <code>GET /v1/sessions/:id</code> for later
       state changes. The <code>session.completed</code> and
@@ -191,13 +191,13 @@ Authorization: Bearer ds_live_…
       the complete list of subscribable events.
     </p>
 
-    <h2>Archetype slugs</h2>
+    <h2>Choosing a device (<code>archetype</code>)</h2>
     <p>
-      <code>archetype</code> identifies an exact device, iOS, and
-      Safari combination from the live <code>GET /v1/archetypes</code>
-      catalog. Profiles pin one returned id for reuse. For a one-shot
-      session, omit the field and the server uses the catalog's
-      <code>default_archetype_id</code>.
+      The <code>archetype</code> field identifies an exact device, iOS,
+      and Safari combination from the live <code>GET /v1/archetypes</code>
+      catalog. Saved profiles (<code>profile_id</code>) pin one returned
+      id for reuse. For a one-shot session, omit the field and the server
+      uses the catalog's <code>default_archetype_id</code>.
     </p>
 
     <h2>Support</h2>

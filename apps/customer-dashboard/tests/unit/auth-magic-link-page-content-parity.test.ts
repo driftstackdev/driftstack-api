@@ -88,7 +88,7 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/localStorage\.getItem\(probeKey\) !== '1'/);
     expect(body).toMatch(/localStorage\.getItem\(probeKey\) === null/);
     expect(body).toMatch(
-      /function submitToken\(token\) \{[\s\S]*if \(!canPersistWebSession\(\)\)[\s\S]*has not been consumed[\s\S]*return Promise\.resolve\(false\);[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume'/,
+      /function submitToken\(token\) \{[\s\S]*if \(!canPersistWebSession\(\)\)[\s\S]*open the link again — it still works[\s\S]*return Promise\.resolve\(false\);[\s\S]*fetch\(apiBaseUrl \+ '\/v1\/auth\/magic-link\/consume'/,
     );
   });
 
@@ -98,9 +98,8 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/window\.setTimeout\(\(\) => controller\.abort\(\), CONSUME_TIMEOUT_MS\)/);
     expect(body).toMatch(/signal: controller\.signal/);
     expect(body).toMatch(/window\.clearTimeout\(timeout\)/);
-    expect(body).toContain('Magic-link sign-in outcome is unknown after the request timed out.');
-    expect(body).toContain('consumed this one-time link');
-    expect(body).toContain('Do not try this link again; request a fresh sign-in link.');
+    expect(body).toContain('The request took too long, so this link may already have been used.');
+    expect(body).toContain("Don't try it again — request a fresh sign-in link.");
     expect(body).toContain('Request a fresh sign-in link');
   });
 
@@ -127,8 +126,8 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toContain('recovery_code: recoveryCode');
     expect(body).toContain('let mfaChallengeToken = null;');
     expect(body).not.toMatch(/localStorage\.setItem\([^,]+, mfaChallengeToken\)/);
-    expect(body).toContain('MFA sign-in outcome is unknown after the request timed out.');
-    expect(body).toContain('Do not submit this code again; request a fresh sign-in link.');
+    expect(body).toContain('The request took too long, so your code may already have been used.');
+    expect(body).toContain("Don't enter it again — request a fresh sign-in link.");
   });
 
   it('preflights the MFA exchange and locks both one-time credentials after accepted responses', () => {
@@ -140,9 +139,9 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/if \(response\.ok\) \{\s*mfaAccepted = true;/);
     expect(body).toMatch(/if \(mfaAccepted\) \{\s*showMfaTerminal\(/);
     expect(body).toContain(
-      'It has not been consumed, so you can retry after storage is available.',
+      'Your browser is blocking site storage, which sign-in needs. Allow it, then enter your code again.',
     );
-    expect(body).toContain('Do not use this link again; request a fresh sign-in link.');
+    expect(body).toContain("Don't use this link again — request a fresh one.");
   });
 
   it('authoritative error path: fallback form revealed + banner shown (retry by paste)', () => {
@@ -150,9 +149,9 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/data-state="fallback"/);
   });
 
-  it('fallback-form copy pinned: "Paste the one from your magic-link email" + ?token= hint', () => {
+  it('fallback-form copy pinned: "Paste the code from your sign-in email" + ?token= hint', () => {
     expect(body).toMatch(
-      /We couldn't find a token in the URL\. Paste the one from your magic-link email below\s+\(everything after <code[^>]*>\?token=<\/code>\)/,
+      /We couldn't find a code in this link\. Paste the code from your sign-in email below\s+\(the part after <code[^>]*>\?token=<\/code>\)/,
     );
   });
 
@@ -173,9 +172,9 @@ describe('W374.B customer-dashboard /auth/magic-link page content parity', () =>
     expect(body).toMatch(/intro\.textContent = 'Signing you in…'/);
   });
 
-  it('intro swap on no-token: "Couldn\'t find a token in the URL. Paste it from your email"', () => {
+  it('intro swap on no-token: "Couldn\'t find a code in this link. Paste it from your email"', () => {
     expect(body).toMatch(
-      /intro\.textContent =\s*"Couldn't find a token in the URL\. Paste it from your email to sign in\."/,
+      /intro\.textContent =\s*"Couldn't find a code in this link\. Paste it from your email to sign in\."/,
     );
   });
 });

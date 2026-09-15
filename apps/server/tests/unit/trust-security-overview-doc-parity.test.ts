@@ -72,9 +72,12 @@ describe('W238.A trust/security-overview doc parity', () => {
   it('states the direct-capture and desktop-local recording boundary', () => {
     expect(doc).not.toMatch(/Default 30 days for screenshots/);
     expect(doc).toMatch(/Direct captures and local recordings/);
-    expect(doc).toMatch(/returned directly inside the API\s+response as inline bytes/);
-    expect(doc).toMatch(/not retained by the capture\s+endpoint/);
-    expect(doc).toMatch(/desktop recorder stores streamed frames on the\s+operator's machine/);
+    // 2026-09-15 plain-language pass: same boundary, customer words.
+    expect(doc).toMatch(/returned to you directly in the response/);
+    expect(doc).toMatch(/the capture\s+service keeps no copy/);
+    expect(doc).toMatch(
+      /Desktop recordings are saved only on your own computer; the\s+recording feature never uploads them/,
+    );
     expect(doc).not.toMatch(/capture retention \(roadmap\)/i);
   });
 });

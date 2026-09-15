@@ -65,7 +65,7 @@ describe('V-1143 a customer doc may not cite a file that does not exist', () => 
     expect(
       [...cited.keys()],
       'no repo-path citations extracted — the pages or the pattern moved',
-    ).toContain('apps/server/src/routes/profile-snapshots.ts');
+    ).toContain('apps/gui-client/src/lib/livekit.ts');
   });
 
   it('CRITICAL every repo path a customer page prints resolves on disk. A customer following a pointer into a file that is not there cannot tell whether they misread it, whether it moved, or whether the feature exists at all — and the citation reads as precision either way.', () => {

@@ -23,33 +23,32 @@ describe('docs/pages/api/status content parity', () => {
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it("Public-unauthenticated framing pinned: 'The /v1/status/* surface backs the public Driftstack status site. It is intentionally unauthenticated — visitors don't have accounts — and IP-rate-limited at the edge. Cache-Control headers are set so a CDN (Cloudflare Pages in front of status.driftstack.io) can coalesce concurrent viewers onto one origin call.' — pinned so the public-unauthenticated + IP-rate-limited-at-edge + Cloudflare-Pages-CDN-coalesce contract all stay documented", () => {
+  it("Public-unauthenticated framing pinned: 'The /v1/status/* surface backs the public Driftstack status site. It is intentionally unauthenticated — visitors don't have accounts — and rate-limited per IP. Snapshot and incident responses are cacheable for 30 seconds.' — pinned so the public-unauthenticated + per-IP-rate-limit + 30-second-cacheable contract all stay documented in customer words", () => {
     expect(body).toMatch(
-      /The `\/v1\/status\/\*` surface backs the public Driftstack status site\. It\s*is intentionally \*\*unauthenticated\*\* — visitors don't have accounts —\s*and IP-rate-limited at the edge\./,
+      /The `\/v1\/status\/\*` surface backs the public Driftstack status site\. It\s*is intentionally \*\*unauthenticated\*\* — visitors don't have accounts —\s*and rate-limited per IP\./,
     );
     expect(body).toMatch(
-      /Cache-Control headers are set so a\s*CDN \(Cloudflare Pages in front of `status\.driftstack\.io`\) can coalesce\s*concurrent viewers onto one origin call\./,
+      /Snapshot and incident responses are cacheable\s*for 30 seconds \(see the `Cache-Control` headers below\)\./,
     );
   });
 
-  it("Distinct-from-health-probes framing pinned: 'Distinct from /health, /healthz, and /ready, which are infrastructure-facing liveness / readiness probes consumed by the orchestrator. /v1/status is what HUMANS see.' — pinned so the 3-infra-probe-roster + humans-vs-infra split contract stays documented (drift to merging the surfaces would expose infra liveness signals to public visitors)", () => {
-    expect(body).toMatch(
-      /Distinct from `\/health`, `\/healthz`, and `\/ready`, which are\s*infrastructure-facing liveness \/ readiness probes consumed by the\s*orchestrator\. `\/v1\/status` is what HUMANS see\./,
-    );
+  it('Internal liveness / readiness probes are not described on the customer status page — the public surface must not point visitors at infrastructure endpoints', () => {
+    expect(body).not.toMatch(/`\/healthz`|`\/ready`|orchestrator/);
+    expect(body).toMatch(/backs the public Driftstack status site/);
   });
 
   it("3-status-state machine pinned: operational (probe succeeded within timeout) + degraded (probe failed transient/timeout) + major_outage (service-wide outage affecting multiple components). + aggregation rules: 'any major_outage → overall major_outage; otherwise any degraded → overall degraded; otherwise operational.' — pinned so the 3-state machine + per-component aggregation contract all stay documented", () => {
-    expect(body).toMatch(/- `operational` — probe succeeded within timeout/);
-    expect(body).toMatch(/- `degraded` — probe failed \(transient error or timeout\)/);
+    expect(body).toMatch(/- `operational` — the health check succeeded within its timeout/);
+    expect(body).toMatch(/- `degraded` — the health check failed \(transient error or timeout\)/);
     expect(body).toMatch(/- `major_outage` — a service-wide outage affecting multiple components/);
     expect(body).toMatch(
       /Aggregation: any `major_outage` → overall `major_outage`; otherwise\s*any `degraded` → overall `degraded`; otherwise `operational`\./,
     );
   });
 
-  it("30s-CDN-cache framing pinned: 'Cache-Control: public, max-age=30 — the snapshot is recomputed on every request, but the CDN coalesces requests within the 30s window.' — pinned so the public-max-age=30 + CDN-coalesce-within-window contract stays documented (drift to a longer max-age would delay outage detection by customers)", () => {
+  it("30s cache framing pinned: 'Cache-Control: public, max-age=30 — the snapshot may be served from cache for up to 30 seconds.' — pinned so the public-max-age=30 contract stays documented (drift to a longer max-age would delay outage detection by customers)", () => {
     expect(body).toMatch(
-      /`Cache-Control: public, max-age=30` — the snapshot is recomputed\s*on every request, but the CDN coalesces requests within the 30s\s*window\./,
+      /`Cache-Control: public, max-age=30` — the snapshot may be served from\s*cache for up to 30 seconds\./,
     );
   });
 

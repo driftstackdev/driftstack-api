@@ -17,7 +17,7 @@ this page is the canonical reference.
 > **Offset / page-number pagination is not supported.** Cursor
 > pagination is stable under concurrent inserts (page 2 doesn't
 > shift just because page 1 grew); offset pagination isn't, and
-> we don't want to expose customers to that footgun.
+> we don't want to expose you to that problem.
 
 ## Request shape
 
@@ -43,10 +43,9 @@ prior response's `next_cursor` back.
 ```
 
 - `data` — the page's resources, ordered newest-first by default.
-- `has_more` — `true` when at least one more page follows. The
-  canonical envelope (`PaginatedListSchema`) carries this for
-  sessions, profiles, recipes, webhooks, agent-sessions, and
-  profile-snapshots.
+- `has_more` — `true` when at least one more page follows. This is
+  returned for sessions, profiles, recipes, webhooks, agent-sessions,
+  and profile-snapshots.
 - `next_cursor` — opaque token. Pass on the next request to fetch
   the following page. `null` when the page is the last. Some
   endpoints signal the end only via `next_cursor: null` — treat
@@ -125,16 +124,16 @@ func ListAllAuditEntries(ctx context.Context, c *driftstack.Client) ([]driftstac
   unchanged either way.
 
 - **Stability under writes:** because cursors encode position
-  relative to the underlying row identity (not an offset),
+  relative to a specific record (not an offset),
   concurrent inserts during a paginated read never shift the page
-  boundary. A row inserted between page-1 and page-2 simply ends
+  boundary. A record inserted between page-1 and page-2 simply ends
   up on page 1 (the newer side) on a future read; the current
   walk doesn't re-emit it.
 
-- **Stability under deletes:** if a row is deleted between
+- **Stability under deletes:** if a record is deleted between
   page-1 and page-2 reads, page-2 still resolves correctly (the
   cursor points at a position, not a specific id). The deleted
-  row is simply absent.
+  record is simply absent.
 
 ## Limit bounds
 
@@ -142,19 +141,16 @@ Per-endpoint `limit` ranges:
 
 - Default: `50` on most list endpoints (audit log, webhooks
   deliveries, admin accounts/sessions/api-keys, the crypto-order
-  reads). The incident feeds and the atlas-priority queue default to
-  `100`, and the crypto-orders CSV export to `1000`. Every endpoint
-  publishes its own default in the OpenAPI document — read it there
-  rather than assuming one number.
+  reads). The incident feeds default to `100`, and the crypto-orders
+  CSV export to `1000`. Every endpoint publishes its own default in the
+  OpenAPI document — read it there rather than assuming one number.
 - Maximum: `100` on most endpoints; a few admin list endpoints allow
-  `200` (status subscribers, admin crypto orders) and two allow
-  `1000` (the atlas-priority queue and the crypto-orders CSV export)
-  where ops tooling reasonably batches.
+  `200` (status subscribers, admin crypto orders) and the crypto-orders
+  CSV export allows `1000`.
 - Out-of-range values surface as `400` problem+json. The problem `type`
-  varies by endpoint — `.../validation-failed` where the query schema is
-  parsed directly, `.../bad-request` where it is safe-parsed and re-raised
-  (the audit-log endpoint used in the examples above is the latter), so
-  branch on the `400` status rather than on one type.
+  varies by endpoint — some return `.../validation-failed`, others
+  `.../bad-request` (the audit-log endpoint used in the examples above is
+  the latter), so branch on the `400` status rather than on one type.
 - The per-endpoint bound is in the **`issues`** extension, not in `detail`.
   `detail` is a fixed human sentence ("One or more fields failed
   validation."); `issues` carries the field-level detail, including the
@@ -175,11 +171,3 @@ Per-endpoint `limit` ranges:
   loop must check `next_cursor` for null and break — the
   drive-to-completion examples above do this; copy them rather
   than rolling your own.
-
-## Source of truth
-
-Cursor encoding lives in the per-resource repo (e.g.
-`apps/server/src/db/account-audit-repo.ts`). The repo is the only
-place that produces or consumes the cursor format; route handlers
-treat it as a pass-through string. SDKs forward `cursor` /
-`next_cursor` unchanged.

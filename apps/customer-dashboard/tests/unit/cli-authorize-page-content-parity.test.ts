@@ -94,14 +94,16 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/window\.clearTimeout\(timeout\);\s*authorizeInFlight = false;/);
     expect(body).toContain('let authorizeOutcomeUnknown = false;');
     expect(body).toContain(
-      'The authorization response timed out, so it may already have completed.',
+      'The request took too long, but the authorization may already have gone through.',
     );
-    expect(body).toContain('Do not retry this link');
+    expect(body).toContain("Don't retry this link");
     expect(body).toMatch(/if \(authorizeOutcomeUnknown\) \{\s*returnToDesktop\(0\);\s*return;/);
     expect(body).toContain('let authorizeResponseAccepted = false;');
     expect(body).toMatch(/if \(r\.ok\) \{\s*authorizeResponseAccepted = true;\s*return;\s*\}/);
     expect(body).toMatch(/if \(authorizeResponseAccepted\) \{/);
-    expect(body).toContain('Authorization was accepted, but this page could not finish');
+    expect(body).toContain(
+      "Authorization succeeded, but this page couldn't hand back to the desktop app",
+    );
     expect(body).not.toMatch(/if \(r\.ok\) return r\.json\(\)/);
   });
 
@@ -127,7 +129,9 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).toMatch(/function reconcileCliLegalAcceptance\(attempted\)/);
     expect(body).toContain('Accept remaining and authorize');
     expect(body).toContain('Only the remaining documents will be sent.');
-    expect(body).toContain('Acceptance outcome is unknown. Reload to check what remains');
+    expect(body).toContain(
+      "We couldn't confirm your acceptance was recorded. Reload to check what still needs accepting",
+    );
     expect(body).toMatch(/if \(legalReloadOnly\) \{\s*window\.location\.reload\(\);\s*return;/);
   });
 
@@ -148,10 +152,10 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     expect(body).not.toMatch(/codePreview|code\.slice\(0, 6\)/);
   });
 
-  it('restricted Desktop client key + explicit revoke framing pinned', () => {
-    expect(body).toMatch(/Authorizing will mint a new restricted API key named "Desktop client"/);
+  it('limited Desktop client key + explicit revoke framing pinned', () => {
+    expect(body).toMatch(/Authorizing creates a limited API key named "Desktop client"/);
     expect(body).toMatch(
-      /restricted device key bound to your\s+account\. It remains active until you revoke it from <a href="\/api-keys\/"/,
+      /desktop app wants to connect to your account\. It stays connected until\s+you revoke it under <a href="\/api-keys\/"/,
     );
   });
 
@@ -171,7 +175,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
 
   it("'Sign in with browser' GUI affordance pinned in missing-state copy", () => {
     expect(body).toMatch(
-      /Open it from the Driftstack\s+desktop app's "Sign in with browser" button/,
+      /This page needs to be opened from the Driftstack desktop app\. Use its\s+"Sign in with browser" button to get here/,
     );
   });
 
@@ -196,7 +200,7 @@ describe('W372.C customer-dashboard /cli/authorize page content parity', () => {
     // effort; the polling fallback in browser-sign-in.ts is the
     // actual delivery mechanism.
     expect(body).toMatch(
-      /The desktop app should reopen automatically\. If it doesn't, switch back to it\s+manually — it will pick up the credentials on the next poll\./,
+      /The desktop app should reopen automatically\. If it doesn't, switch back to it — it\s+will finish connecting on its own\./,
     );
   });
 });

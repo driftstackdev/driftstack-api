@@ -72,10 +72,10 @@ Accept: text/csv</code></pre>
         (e.g. <code>USD</code>, <code>EUR</code>).</li>
       <li><code>status</code> — terminal or in-flight status.</li>
       <li><code>payment_id</code> — NowPayments invoice ID, empty
-        if no IPN has hit.</li>
+        until a payment notification has arrived.</li>
       <li><code>customer_note</code> — customer-supplied note,
         empty if unset.</li>
-      <li><code>internal_note</code> — admin-only ops note, empty
+      <li><code>internal_note</code> — admin-only internal note, empty
         if unset.</li>
       <li><code>created_at</code> — ISO-8601 UTC timestamp.</li>
       <li><code>updated_at</code> — ISO-8601 UTC timestamp of the
@@ -119,8 +119,7 @@ Accept: text/csv</code></pre>
       The admin GUI (<code>Crypto orders (admin)</code> view) has a
       <strong>Download CSV</strong> button that calls this endpoint
       with whatever <code>status</code> and <code>search</code>
-      filters are currently active. The button mints a blob URL
-      client-side so the download honours the Bearer auth header.
+      filters are currently active.
     </p>
 
     <h2>Related</h2>

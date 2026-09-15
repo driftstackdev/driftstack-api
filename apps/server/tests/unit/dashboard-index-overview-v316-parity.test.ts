@@ -199,13 +199,18 @@ describe('W748 dashboard index/overview V-316 live-data parity', () => {
   it('CRITICAL overview trust panel describes recoverable-key and audit boundaries without zero-knowledge claims.', () => {
     const i = read(INDEX);
 
-    expect(i).toMatch(/context-bound wrapping under platform-held keys/);
+    // 2026-09-15 plain-words pass: same boundaries, customer words — encrypted in
+    // storage + bound to the owning account/record, decrypted only while a session
+    // on the account uses it, and only management changes land in the audit log.
+    expect(i).toMatch(/can only be unlocked for the account that owns it/);
     expect(i).toMatch(
-      /owning account and, for record-scoped stores, the exact record and value slot/,
+      /tied to your account and, when it belongs to a saved record, to that exact record/,
     );
-    expect(i).toMatch(/the platform unwraps its bound key for that authorized session/);
-    expect(i).toMatch(/credential-management events that were recorded/);
-    expect(i).toMatch(/routine runtime use is not logged as a credential-read event/i);
+    expect(i).toMatch(/only decrypted while a session on your account is using them/);
+    expect(i).toMatch(/See when a credential was added, changed or removed/);
+    expect(i).toMatch(
+      /Everyday use of a credential, such as a session connecting through it, is not logged as its own entry/,
+    );
     expect(i).not.toMatch(/Profiles are client-encrypted/);
     expect(i).not.toMatch(/Every credential read lands/);
     expect(i).not.toMatch(/Always audited/);

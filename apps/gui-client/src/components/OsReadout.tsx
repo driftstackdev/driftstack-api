@@ -58,7 +58,7 @@ export function OsReadout({
         data-state={vpn ? 'not-available' : 'not-measured'}
         title={
           vpn
-            ? 'A VPN tunnel does not expose a proxy stack to read.'
+            ? 'The OS reading is not available for VPN connections.'
             : 'Not measured yet — run Test on this profile’s proxy (Proxies screen).'
         }
         className="mt-1 text-[10px] leading-snug text-white/50"

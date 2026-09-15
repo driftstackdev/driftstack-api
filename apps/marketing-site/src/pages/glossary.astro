@@ -73,7 +73,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'archetype',
     term: 'Archetype',
-    def: 'A specific iPhone model + iOS version + Safari version combination — say, an iPhone 17 on iOS 18.7 with Safari 26.4. Every Driftstack profile is built on an archetype, so each measurable detail agrees with a phone Apple really shipped.',
+    def: "The API's name for a device profile: a specific iPhone model + iOS version + Safari version combination — say, an iPhone 17 on iOS 18.7 with Safari 26.4. Every Driftstack profile is built on one, so each measurable detail agrees with a phone Apple really shipped.",
   },
   {
     id: 'anti-detect',
@@ -88,7 +88,7 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'emulator',
     term: 'Emulator',
-    def: "Software pretending to be other hardware. Driftstack sessions are not emulated iPhones — they run Apple's real browser engine on Apple-silicon hardware, the same chip family as the iPhone, which is why the measurements come out right.",
+    def: "Software pretending to be other hardware. Driftstack sessions are not emulated iPhones — they run Apple's real browser engine, which is why the measurements come out right.",
   },
   {
     id: 'sdk',
@@ -103,12 +103,12 @@ const GLOSSARY: GlossaryEntry[] = [
   {
     id: 'self-hosted',
     term: 'Self-hosted',
-    def: 'Running the Driftstack stack on Mac hardware you own. Session content stays inside your network; we supply the software, orchestration, and hands-on onboarding. The packages are on <a href="/self-hosted/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/self-hosted</a>.',
+    def: 'Running the Driftstack software on Mac hardware you own. Session content stays inside your network; we supply the software, the setup, and hands-on onboarding. The packages are on <a href="/self-hosted/" class="text-tk-accent-text underline underline-offset-4 hover:text-tk-accent-2">/self-hosted</a>.',
   },
   {
     id: 'warm-up',
     term: 'Warm-up',
-    def: 'A short period of ordinary browsing before the main task, used to establish realistic page history and site state. In Driftstack this is regular session activity driven through the GUI, API, or SDK.',
+    def: 'A short period of ordinary browsing before the main task, used to establish realistic page history and site state. In Driftstack this is regular session activity, whether you drive it from the desktop app, the API, or an SDK.',
   },
 ];
 ---

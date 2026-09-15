@@ -35,13 +35,12 @@ const SAMPLE_PROFILE = `{
     <h1>Profiles</h1>
 
     <p class="lead">
-      A profile is a reusable, named handle to a stable browser
-      identity (archetype + persisted browser state). The
-      control-plane stores only the metadata you see in the
-      <code>/v1/profiles</code> responses; per-profile cookies,
-      localStorage, and IndexedDB live in the WebKit driver layer.
-      Snapshot them with <code>POST /v1/profiles/:id/snapshots</code>
-      and restore later via
+      A profile is a reusable, named browser identity (device profile
+      + saved browser state). The <code>/v1/profiles</code> responses
+      show the profile's metadata; cookies, localStorage, and IndexedDB
+      are stored separately and managed by Driftstack. Save a copy of a
+      profile's settings with <code>POST /v1/profiles/:id/snapshots</code>
+      and restore it into a new profile later via
       <code>POST /v1/profile-snapshots/:id/restore</code>.
     </p>
 
@@ -52,14 +51,16 @@ const SAMPLE_PROFILE = `{
         without re-authenticating.</li>
       <li><strong>A/B-tested rendering.</strong> The site personalises
         based on cookies; you want each run to see the same variant.</li>
-      <li><strong>Archetype pinning.</strong> You want to lock the
-        browser fingerprint (UA / viewport / timezone / locale) to a
-        specific Driftstack-managed archetype slug across runs.</li>
+      <li><strong>Device pinning.</strong> You want every run to use
+        one specific Driftstack device profile (the <code>archetype</code>
+        field: user agent, screen size, timezone, locale) rather than the
+        account default, so the browser fingerprint stays the same across
+        runs.</li>
     </ul>
     <p>
       If your automation doesn't care about identity continuity, skip
-      profiles and let sessions run with the account's default
-      archetype.
+      profiles and let sessions run with your account's default device
+      profile (the <code>archetype</code> setting).
     </p>
 
     <h2>POST /v1/profiles — mint</h2>
@@ -82,9 +83,9 @@ ${SAMPLE_PROFILE}`}</code></pre>
     <p>
       The response is a flat profile object — no envelope. Profile
       ids are prefixed <code>prof_</code>. The <code>archetype</code>
-      field is a lowercase slug (1–120 chars) identifying a
-      Driftstack-managed device profile; the server applies the
-      account's locked archetype if you omit it. Browser state
+      field is a lowercase id (1–120 chars) identifying a
+      Driftstack-managed device profile; the default device profile is
+      used if you omit it. Browser state
       (cookies, localStorage, etc.) is created on first use and is
       not part of the create request.
     </p>
@@ -139,10 +140,10 @@ ${SAMPLE_PROFILE}`}</code></pre>
       and <code>tags</code> are patchable — <code>folder: null</code>
       files the profile back under no folder, and <code>tags</code> is
       an exact-set replace (<code>[]</code> clears them). To change the
-      archetype, clone the profile via
-      <code>POST /v1/profiles/:id/clone</code> and discard the old
-      one (the archetype is set at create time and pins the device
-      identity for the life of the profile).
+      device profile (the <code>archetype</code> field), clone the
+      profile via <code>POST /v1/profiles/:id/clone</code> and discard
+      the old one (the device profile is set at create time and stays
+      fixed for the life of the profile).
     </p>
 
     <h2>DELETE /v1/profiles/:id</h2>
@@ -152,17 +153,18 @@ Authorization: Bearer ds_live_…
 → 204 No Content`}</code></pre>
     <p>
       The profile + its persisted browser state are removed.
-      In-flight sessions that started with this profile keep running
+      Sessions already running with this profile keep running
       but can't be pinned to it again. Idempotent: a second DELETE
       on the same id returns 204.
     </p>
 
     <h2>Snapshots</h2>
     <p>
-      Profile snapshots are immutable point-in-time copies of the
-      profile + its browser state. Customers can restore a snapshot
-      into a fresh profile if the current state is broken (e.g. the
-      site logged the profile out):
+      Profile snapshots are frozen copies of a profile's settings
+      (name, device profile, description). Restoring one creates a new
+      profile with those settings. Snapshots do not save browser data
+      such as cookies or logins, so the restored profile starts signed
+      out:
     </p>
     <pre><code>{`# Capture
 POST /v1/profiles/prof_…/snapshots
@@ -204,8 +206,7 @@ Content-Type: application/json
 
     <h2>Privacy + retention</h2>
     <ul>
-      <li>Cookies + storage state are stored in encrypted form at
-        rest in the driver layer.</li>
+      <li>Cookies + storage state are stored encrypted at rest.</li>
       <li>Profile metadata + snapshot rows are deleted on account
         deletion + per the documented retention policy.</li>
       <li>No identifying customer data is embedded in the profile
@@ -215,8 +216,7 @@ Content-Type: application/json
 
     <h2>Limits</h2>
     <p>
-      Profile cap by tier (per
-      <code>PROFILES_PER_TIER</code>):
+      Profile cap by tier:
     </p>
     <table>
       <thead><tr><th>Tier</th><th>Profile cap</th></tr></thead>

@@ -74,13 +74,13 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it('CRITICAL one-time secret + encrypted-at-rest delivery-worker boundary framing pinned', () => {
+  it('CRITICAL one-time secret + encrypted-at-rest framing pinned (2026-09-15: the AES-256-GCM envelope and delivery-worker boundary are how we run it and left the customer page; the promise — shown once, stored encrypted, later reads return only the prefix, rotate if lost — stays)', () => {
     const p = read(EP);
 
-    expect(p).toMatch(/\*\*Save the secret now\.\*\* It's shown ONCE; Driftstack stores a/);
     expect(p).toMatch(
-      /versioned\s*\n?> AES-256-GCM envelope and decrypts it only in the delivery worker while\s*\n?> signing\. Subsequent reads return the prefix, never the plaintext secret\./,
+      /> \*\*Save the secret now\.\*\* It is shown ONCE\. Driftstack stores it encrypted,\s*\n?> and later reads return only the `secret_prefix`, never the full secret\. If\s*\n?> you lose it, rotate the secret to get a new one\./,
     );
+    expect(p).not.toMatch(/AES-256-GCM|delivery worker/);
   });
 
   it('CRITICAL POST /v1/webhooks 3-error set pinned — 400 ValidationFailed (https/empty/>10 entries/test.ping) + 403 Forbidden (account_owner scope) + 409 Conflict (max 10 active endpoints). 2026-06-24: the endpoint cap is a ConflictError (HTTP 409), NOT a 429 TierLimit — services/webhooks.ts:376-381 throws ConflictError when active >= MAX_ENDPOINTS_PER_ACCOUNT (=10, line 302).', () => {
@@ -121,7 +121,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /customer-facing reference for webhook events emitted by the\s*Driftstack control plane and the synthetic connectivity test event/,
+      /customer-facing reference for webhook events emitted by\s*Driftstack, plus the test event/,
     );
     expect(p).not.toMatch(/\[DECLARED\]|\[PLANNED\]|roadmap/i);
   });
@@ -162,10 +162,16 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(
       /`X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —\s*\n?\s+HMAC-SHA256\(`<t>\.<raw body>`\) keyed by the endpoint signing\s*\n?\s+secret, where `<t>` is the `t=<unix-seconds>` value from this\s*\n?\s+same header \(NOT a body field\)\./,
     );
-    expect(p).toMatch(/Verification reference:/);
-    expect(p).toMatch(/`packages\/sdk-typescript\/src\/webhook-signature\.ts`/);
-    expect(p).toMatch(/`packages\/sdk-go\/webhook_signature\.go`/);
-    expect(p).toMatch(/`packages\/sdk-python\/src\/driftstack\/webhook_signature\.py`/);
+    // 2026-09-15 — the three SDK source paths left the customer page; the
+    // header bullet points at the Verification section, which names each SDK
+    // helper by its import name instead.
+    expect(p).toMatch(
+      /same header \(NOT a body field\)\. See \[Verification\]\(#verification\)\s*below\./,
+    );
+    expect(p).not.toMatch(/packages\/sdk-(?:typescript|go|python)\//);
+    expect(p).toMatch(/from `@driftstack\/sdk`/);
+    expect(p).toMatch(/`driftstack\.VerifyWebhookSignature`/);
+    expect(p).toMatch(/`from driftstack import verify_webhook_signature`/);
   });
 
   it('CRITICAL X-Driftstack-Event-Id + X-Driftstack-Event-Type headers pinned (the canonical set webhook-worker sends alongside x-driftstack-signature). Drift to dropping would lose log-correlation + handler-routing utility.', () => {
@@ -184,11 +190,11 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     expect(p).toMatch(/Final failures land in DLQ/);
   });
 
-  it("CRITICAL idempotency-via-uuid framing pinned. The 'every delivery includes the same <uuid> id. Customers should dedup on this id — the same event may be re-delivered after a manual replay (admin tooling) or DLQ requeue' wording is the load-bearing customer-handler-design guidance.", () => {
+  it("CRITICAL idempotency-via-uuid framing pinned. The 'every delivery includes the same <uuid> id. Customers should dedup on this id — the same event may be re-delivered after a replay or DLQ requeue' wording is the load-bearing customer-handler-design guidance (2026-09-15: '(admin tooling)' left the page — replay is customer self-service).", () => {
     const p = read(EV);
 
     expect(p).toMatch(
-      /Idempotency: every delivery includes the same `<uuid>` id\. Customers\s*\n?should dedup on this id — the same event may be re-delivered after a\s*\n?manual replay \(admin tooling\) or DLQ requeue\./,
+      /Idempotency: every delivery includes the same `<uuid>` id\. Customers\s*\n?should dedup on this id — the same event may be re-delivered after a\s*\n?replay or DLQ requeue\./,
     );
   });
 
@@ -197,9 +203,7 @@ describe('W787 docs webhooks/ triplet content parity', () => {
 
     expect(p).toMatch(/Fires REGARDLESS of subscription so customers can verify/);
     expect(p).toMatch(/their handler signature-checks correctly without subscribing to it\./);
-    expect(p).toMatch(
-      /Customers cannot subscribe to `test\.ping` \(the create \/ update Zod\s*\n?schemas reject it\)/,
-    );
+    expect(p).toMatch(/Customers cannot subscribe to `test\.ping` \(the API rejects it\)/);
   });
 
   // ─── webhooks/replay.md ───────────────────────────────────────
@@ -225,12 +229,12 @@ describe('W787 docs webhooks/ triplet content parity', () => {
     );
   });
 
-  it("CRITICAL POST /v1/webhook-deliveries/:deliveryId/replay endpoint pinned. The 'Resets the delivery to pending so the worker re-fires it on the next cycle (within ~30 seconds)' wording — corrected 2026-08-15 to the poller's real 60s cadence — matches W753 dashboard /webhooks replay action.", () => {
+  it("CRITICAL POST /v1/webhook-deliveries/:deliveryId/replay endpoint pinned. The 'Resets the delivery to pending; Driftstack re-sends it within about a minute (up to 60 seconds)' wording — corrected 2026-08-15 to the poller's real 60s cadence, reworded 2026-09-15 without the worker/poll-cycle internals — matches W753 dashboard /webhooks replay action.", () => {
     const p = read(RPL);
 
     expect(p).toMatch(/`POST \/v1\/webhook-deliveries\/:deliveryId\/replay`/);
     expect(p).toMatch(
-      /Resets the delivery to `pending` so the worker re-fires it on the next\s*\n?poll cycle — up to 60 seconds/,
+      /Resets the delivery to `pending`; Driftstack re-sends it within about a\s*\n?minute \(up to 60 seconds\)\./,
     );
   });
 

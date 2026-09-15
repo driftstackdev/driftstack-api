@@ -167,7 +167,9 @@ describe('NotificationBell — durable history (V-2145)', () => {
     const loadHistory = (): Promise<HistoryOutcome> => Promise.resolve({ kind: 'forbidden' });
     render(<NotificationBell events={[]} loadHistory={loadHistory} />);
     fireEvent.click(screen.getByTestId('notification-bell'));
-    await waitFor(() => expect(screen.getByText(/needs the read:audit scope/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/needs an API key with audit-log access/)).toBeInTheDocument(),
+    );
   });
 
   it('a failed fetch degrades to a quiet line and leaves the live feed alone', async () => {

@@ -49,7 +49,7 @@ describe('docs api/versioning content parity', () => {
 
   it('OpenAPI-spec-is-the-contract anchor pinned (drift to dual-source would reopen the spec-vs-route drift surface slices 120/123/124 closed)', () => {
     expect(body).toMatch(
-      /The OpenAPI spec at `\/openapi\.json` is the contract\. Generated\s+from Zod schemas in `packages\/api-types\/`; there is no second\s+source of truth\./,
+      /The OpenAPI spec at `\/openapi\.json` is the contract\. It is\s+generated from the same definitions the server enforces\./,
     );
   });
 

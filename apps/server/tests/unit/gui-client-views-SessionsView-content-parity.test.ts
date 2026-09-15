@@ -128,12 +128,14 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(exclusiveActionBody).toMatch(/return \(\) => \{\s*mountedRef\.current = false;\s*\};/);
   });
 
-  it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Concurrent session cap reached ({cap} for {tier}). Destroy a session or upgrade to spawn more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation) — 2026-06-24 GUI restyle: the tooltip string was hoisted into a `capTitle` const (shared verbatim by the hero button + the empty-state's create button so the cap surface is identical wherever New session appears); pin BOTH the const's exact gating/copy AND that the button still wires disabled + aria-disabled + title={capTitle}", () => {
-    // The cap tooltip + its cap/tier interpolation, hoisted into a shared const
+  it("New session button: disabled + aria-disabled both gated on busyId === '__create__' || atConcurrentCap; title tooltip for cap surface: 'Session limit reached ({cap} at a time on your {plan} plan). Stop a session or upgrade to run more.' fallback when atConcurrentCap, undefined otherwise (so screen readers + hover both surface the explanation) — 2026-06-24 GUI restyle: the tooltip string was hoisted into a `capTitle` const (shared verbatim by the hero button + the empty-state's create button so the cap surface is identical wherever New session appears); 2026-09-15 copy pass: the plan is named via tierLabelFor (never the raw tier id) and 'destroy'/'spawn'/'concurrent cap' are gone; pin BOTH the const's exact gating/copy AND that the button still wires disabled + aria-disabled + title={capTitle}", () => {
+    // The cap tooltip + its cap/plan interpolation, hoisted into a shared const
     // so the hero + empty-state create buttons surface an identical explanation.
+    expect(body).toMatch(/import \{ tierLabelFor \} from '\.\.\/components\/TierBadge';/);
     expect(body).toMatch(
-      /const capTitle = atConcurrentCap\s*\? `Concurrent session cap reached \(\$\{\(concurrentCap \?\? 0\)\.toString\(\)\} for \$\{\s*accountMe\?\.tier \?\? 'this tier'\s*\}\)\. Destroy a session or upgrade to spawn more\.`\s*: undefined;/,
+      /const tier = accountMe\?\.tier;\s*const capTitle = atConcurrentCap\s*\? `Session limit reached \(\$\{\(concurrentCap \?\? 0\)\.toString\(\)\} at a time on your \$\{\s*typeof tier === 'string' \? tierLabelFor\(tier\) : 'current'\s*\} plan\)\. Stop a session or upgrade to run more\.`\s*: undefined;/,
     );
+    expect(body).not.toMatch(/Concurrent session cap reached|upgrade to spawn/);
     // The hero's New session button still gates disabled + aria-disabled on the
     // busy/cap predicate and surfaces the cap tooltip via the shared const.
     expect(body).toMatch(
@@ -149,7 +151,7 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     expect(body).toMatch(/or press <span className="mono">⌘ ,<\/span>/);
   });
 
-  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari instance. Click New session above to spin one up — sessions show up here with a live status while they run.' + 'Each one uses a concurrent slot until you destroy it or it idle-times-out.' — pinned so customer understands what they're spawning + how it interacts with the cap; 2026-06-24 GUI restyle: the shared <EmptyState title/description> became a bespoke <SessionsEmptyState> raised card whose heading lives in an <h3>No active sessions yet</h3> (title prop gone) + whose create button carries the same cap-gating so the no-sessions screen still surfaces a (gated) New session affordance — same copy + intent", () => {
+  it("EmptyList no-sessions branch framing pinned: 'A session is one running iPhone Safari browser. Click New session to start one. Sessions appear here with a live status while they run, and each one counts toward your session limit until you stop it or it times out after inactivity.' — pinned so customer understands what they're starting + how it interacts with the limit (2026-09-15 copy pass: no 'instance' / 'spin up' / 'concurrent slot' / 'destroy' / 'idle-times-out'); 2026-06-24 GUI restyle: the shared <EmptyState title/description> became a bespoke <SessionsEmptyState> raised card whose heading lives in an <h3>No active sessions yet</h3> (title prop gone) + whose create button carries the same cap-gating so the no-sessions screen still surfaces a (gated) New session affordance — same copy + intent", () => {
     // The heading copy now lives in the SessionsEmptyState card's <h3>.
     expect(body).toMatch(/<h3 className="[^"]*">\s*No active sessions yet\s*<\/h3>/);
     // The empty state is rendered for the no-sessions branch and its create
@@ -164,11 +166,9 @@ describe('W483.C apps/gui-client/src/views/SessionsView.tsx content parity', () 
     // + indentation. Tolerating whitespace pins the exact copy without pinning
     // the source line-wrapping.
     expect(body).toMatch(
-      /A\s+session\s+is\s+one\s+running\s+iPhone\s+Safari\s+instance\.\s+Click\s+New\s+session\s+above\s+to\s+spin\s+one\s+up\s+—\s+sessions\s+show\s+up\s+here\s+with\s+a\s+live\s+status\s+while\s+they\s+run\./,
+      /A\s+session\s+is\s+one\s+running\s+iPhone\s+Safari\s+browser\.\s+Click\s+New\s+session\s+to\s+start\s+one\.\s+Sessions\s+appear\s+here\s+with\s+a\s+live\s+status\s+while\s+they\s+run,\s+and\s+each\s+one\s+counts\s+toward\s+your\s+session\s+limit\s+until\s+you\s+stop\s+it\s+or\s+it\s+times\s+out\s+after\s+inactivity\./,
     );
-    expect(body).toMatch(
-      /Each\s+one\s+uses\s+a\s+concurrent\s+slot\s+until\s+you\s+destroy\s+it\s+or\s+it\s+idle-times-out\./,
-    );
+    expect(body).not.toMatch(/concurrent\s+slot|idle-times-out|spin\s+one\s+up/);
   });
 
   it("StatusPill 4-tone: ready → status-ready / busy → status-busy / errored → status-error / else status-idle fallback (creating/destroyed map to idle dot) — pinned so the live-status colour vocabulary stays consistent across the cards; SessionCard has a single Stop button (disabled while that card is busy with a 'Stopping…' label) driven by the SessionCard `busy` prop — the in-app 'View' affordance was removed with the legacy live-session viewer (2026-06-26): live viewing is the floating Simulator window launched from Profiles, and the card no longer takes an onView prop", () => {

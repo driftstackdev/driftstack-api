@@ -46,9 +46,7 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
   });
 
   it('5-state LIFECYCLE array pinned: creating (Backend received the start request; provisioning a browser instance) + ready (Browser ready; the session URL is reachable) + busy (Session is actively running an automation step) + destroyed (Normal end-of-life; session has been torn down) + errored (Abnormal termination; the session cannot recover) — pinned so the 5-state enum + happy-path-transition (creating → ready → busy → destroyed) + errored-is-terminal commitments survive', () => {
-    expect(body).toMatch(
-      /\{ state: 'creating', desc: 'Backend received the start request; provisioning a browser instance\.' \}/,
-    );
+    expect(body).toMatch(/\{ state: 'creating', desc: 'Driftstack is starting the browser\.' \}/);
     expect(body).toMatch(
       /\{ state: 'ready', desc: 'Browser ready; the session URL is reachable\.' \}/,
     );
@@ -56,7 +54,7 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
       /\{ state: 'busy', desc: 'Session is actively running an automation step\.' \}/,
     );
     expect(body).toMatch(
-      /\{ state: 'destroyed', desc: 'Normal end-of-life; session has been torn down\.' \}/,
+      /\{ state: 'destroyed', desc: 'Normal end-of-life; the session has ended\.' \}/,
     );
     expect(body).toMatch(
       /\{ state: 'errored', desc: 'Abnormal termination; the session cannot recover\.' \}/,
@@ -98,7 +96,7 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
 
   it('pins synchronous ready creation, later polling, and terminal-only webhook semantics', () => {
     expect(body).toMatch(
-      /create call returns only after the browser driver is ready, so\s*an intermediate <code>creating<\/code> state is not directly\s*observable\. Poll <code>GET \/v1\/sessions\/:id<\/code> for later\s*state changes\./,
+      /create call returns only after the browser is ready, so\s*an intermediate <code>creating<\/code> state is not directly\s*observable\. Poll <code>GET \/v1\/sessions\/:id<\/code> for later\s*state changes\./,
     );
     expect(body).toMatch(
       /The <code>session\.completed<\/code> and\s*<code>session\.failed<\/code> webhooks signal clean or errored\s*end-of-life, not readiness\./,
@@ -152,10 +150,10 @@ describe('W516.B apps/marketing-site/src/pages/docs/sessions.astro content parit
 
   it('Archetype framing pins live catalog selection, reusable profile IDs, and the server-authoritative default_archetype_id fallback', () => {
     expect(body).toMatch(
-      /<code>archetype<\/code> identifies an exact device, iOS, and\s*Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
+      /The <code>archetype<\/code> field identifies an exact device, iOS,\s*and Safari combination from the live <code>GET \/v1\/archetypes<\/code>\s*catalog\./,
     );
     expect(body).toMatch(
-      /Profiles pin one returned id for reuse\. For a one-shot\s*session, omit the field and the server uses the catalog's\s*<code>default_archetype_id<\/code>\./,
+      /Saved profiles \(<code>profile_id<\/code>\) pin one returned\s*id for reuse\. For a one-shot session, omit the field and the server\s*uses the catalog's <code>default_archetype_id<\/code>\./,
     );
   });
 

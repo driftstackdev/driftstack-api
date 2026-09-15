@@ -147,7 +147,7 @@ describe('ApiKeyStep — paste fallback path', () => {
 
     // Now the paste form is showing.
     expect(screen.getByPlaceholderText('ds_live_…')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /validate \+ continue/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /check key and continue/i })).toBeInTheDocument();
     // Toggle-back link is present.
     expect(
       screen.getByRole('button', { name: /use browser sign-in instead/i }),
@@ -163,7 +163,7 @@ describe('ApiKeyStep — paste fallback path', () => {
 
     await user.click(screen.getByRole('button', { name: /have an api key\? paste it instead/i }));
 
-    const btn = screen.getByRole('button', { name: /validate \+ continue/i });
+    const btn = screen.getByRole('button', { name: /check key and continue/i });
     expect(btn).not.toBeDisabled();
     await user.click(btn);
 
@@ -178,7 +178,7 @@ describe('ApiKeyStep — paste fallback path', () => {
 
     await user.click(screen.getByRole('button', { name: /have an api key\? paste it instead/i }));
 
-    const btn = screen.getByRole('button', { name: /validate \+ continue/i });
+    const btn = screen.getByRole('button', { name: /check key and continue/i });
     expect(btn).toBeDisabled();
   });
 

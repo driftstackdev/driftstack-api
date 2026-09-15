@@ -62,8 +62,10 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(body).toMatch(/data-stat-plan>—<\/span>/);
     // API-keys count lives in the quick-action card now.
     expect(body).toMatch(/<span data-stat-api-keys>—<\/span> active\./);
-    // ADR-004 honesty: session hours carry NO cap (concurrent is the only meter).
-    expect(body).toMatch(/concurrent cap is the only meter/);
+    // ADR-004 honesty: session hours carry NO cap (concurrent is the only meter),
+    // said in customer words (2026-09-15 plain-words pass).
+    expect(body).toMatch(/running now · your plan limits how many run at once/);
+    expect(body).not.toMatch(/concurrent cap is the only meter/);
   });
 
   it("Active sessions filter: status !== 'destroyed' && status !== 'errored' + slice(0, 5) — pinned so the dashboard shows only currently-running sessions (drift to including destroyed/errored would clutter the home view with terminal-state rows) and the 5-row limit prevents the section from dominating the page for high-volume accounts", () => {
@@ -120,17 +122,22 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(existsSync(LIB)).toBe(true);
   });
 
-  it('Data-protection trust surface pins context-bound wrapping and recorded-event audit truth', () => {
+  it('Data-protection trust surface pins account-bound encryption and recorded-event audit truth in customer words', () => {
     expect(body).toMatch(/Your data is protected/);
-    expect(body).toMatch(/AES-256-GCM at rest/);
-    expect(body).toMatch(/Context-bound encryption/);
-    expect(body).toMatch(/platform-held keys/);
+    // 2026-09-15 plain-words pass: the same three facts (encrypted in storage,
+    // bound to the owning account/record, only management changes are logged)
+    // without cipher names or key-wrapping mechanics.
+    expect(body).toMatch(/Encrypted in storage/);
+    expect(body).toMatch(/Locked to your account/);
+    expect(body).toMatch(/can only be unlocked for the account that owns it/);
     expect(body).toMatch(
-      /owning account and, for record-scoped stores, the exact record and value slot/,
+      /tied to your account and, when it belongs to a saved record, to that exact record/,
     );
-    expect(body).toMatch(/Recorded management events/);
-    expect(body).toMatch(/credential-management events that were recorded/);
-    expect(body).toMatch(/routine runtime use is not logged as a credential-read event/i);
+    expect(body).toMatch(/Changes are logged/);
+    expect(body).toMatch(/See when a credential was added, changed or removed/);
+    expect(body).toMatch(
+      /Everyday use of a credential, such as a session connecting through it, is not logged as its own entry/,
+    );
     expect(body).toMatch(/href="\/audit-log\/"/);
     expect(body).toMatch(/driftstack\.io\/trust\/security-overview\//);
     expect(body).not.toMatch(/Profiles are client-encrypted/);
@@ -138,7 +145,12 @@ describe('W494.B apps/customer-dashboard/src/pages/index.astro content parity', 
     expect(body).not.toMatch(/Always audited/);
     expect(body).not.toMatch(/Management changes audited/);
     expect(body).not.toMatch(/Account \+ record bound/);
-    expect(body).toMatch(/export and deletion are request-based today/);
+    // Cipher names / key-wrapping vocabulary stay out of the visible copy (the
+    // JSX comment above the section may still describe the mechanism).
+    expect(body).not.toMatch(
+      /AES-256-GCM|Envelope binding|Context-bound encryption|stored as ciphertext/,
+    );
+    expect(body).toMatch(/Export and deletion aren't self-serve yet/);
     expect(body).toMatch(/href="\/security\/#danger-zone"/);
     expect(body).not.toMatch(/export or delete anytime from/);
   });

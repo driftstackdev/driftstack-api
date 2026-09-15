@@ -121,7 +121,7 @@ describe('profiles route — create archetype wiring (app.inject)', () => {
       status: 400,
       issues: {
         fieldErrors: {
-          archetype: ['archetype must be a selectable id returned by GET /v1/archetypes'],
+          archetype: ['Use a device profile id from the list returned by GET /v1/archetypes.'],
         },
       },
     });

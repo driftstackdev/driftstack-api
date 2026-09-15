@@ -6,7 +6,7 @@
 //
 //   • 5 canonical section headings in order: Authentication &
 //     access / Transport & egress / Webhooks & integrations /
-//     Data residency & retention / Observability & incident
+//     Data residency & retention / Monitoring & incident
 //     response.
 //   • API-key scrypt-hashed-at-rest claim with exact params
 //     (N=2^15, r=8, p=1) + code-path reference.
@@ -48,10 +48,10 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
   it('5 canonical section headings present in order', () => {
     const expected = [
       'Authentication &amp; access',
-      'Transport &amp; egress',
+      'Transport &amp; proxies', // 2026-09-15: "egress" → plain "proxies"
       'Webhooks &amp; integrations',
       'Data residency &amp; retention',
-      'Observability &amp; incident response',
+      'Monitoring &amp; incident response',
     ];
     let lastIdx = -1;
     for (const h of expected) {
@@ -82,7 +82,9 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     expect(body).toMatch(/AES-256-GCM at-rest encryption of TOTP secrets/);
     expect(body).toMatch(/Recovery\s+codes are scrypt-hashed/);
     expect(body, 'the step-up claim must survive any rewording').toMatch(/step-up/i);
-    expect(body, 'and must still say what it gates').toMatch(/destructive admin paths/);
+    // 2026-09-15 plain words: "gate on destructive admin paths" →
+    // "check before risky admin actions" — same property, same scope.
+    expect(body, 'and must still say what it gates').toMatch(/risky admin actions/);
     expect(body).toMatch(
       /apps\/server\/src\/lib\/mfa-totp\.ts · apps\/server\/src\/services\/mfa\.ts/,
     );
@@ -101,23 +103,30 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
 
   // Same re-anchoring: the algorithm per provider and the raw-body guarantee are
   // the claims; the V-numbers and sentence shape were editorial and are gone.
-  it('inbound webhook signing: Stripe timestamp+sha256 HMAC, NowPayments HMAC-SHA512 over canonical JSON, shared raw-body parser', () => {
-    expect(body, 'Stripe algorithm').toMatch(/Stripe: timestamp \+\s*sha256 HMAC/);
+  it('inbound webhook signing: Stripe timestamp+HMAC-SHA256, NowPayments HMAC-SHA512 over normalised JSON, verified over the exact received bytes', () => {
+    expect(body, 'Stripe algorithm').toMatch(/Stripe: timestamp \+\s*HMAC-SHA256/);
     expect(body, 'NowPayments algorithm').toMatch(/NowPayments: HMAC-SHA512/);
-    expect(body, 'and that it is over the canonical-keyed JSON').toMatch(/canonical-keyed\) JSON/);
-    // The raw-body guarantee is the load-bearing one: it is why a re-encoding
-    // proxy cannot silently invalidate verification.
-    expect(body, 'shared raw-body parser claim').toMatch(/shared raw-body\s+parser/i);
-    expect(body, 'and what it guarantees').toMatch(
-      /bytes the signature was\s+computed over are the bytes the verifier sees/,
+    expect(body, 'and that it is over the normalised JSON').toMatch(
+      /HMAC-SHA512 over the normalised\s+JSON/,
     );
+    // The exact-bytes guarantee is the load-bearing one: it is why a re-encoding
+    // proxy cannot silently invalidate verification. 2026-09-15 plain-language
+    // pass: "shared raw-body parser" / "canonical-keyed" were implementation
+    // words; the guarantee itself is pinned.
+    expect(body, 'exact-bytes claim').toMatch(/runs over the exact bytes we\s+received/);
+    expect(body, 'and what it guarantees').toMatch(/a message altered in transit is rejected/);
   });
 
   it('customer-configurable egress SHIPPED (✓ emerald) per planning 133 Phase 1. 2026-05-22 — flipped from amber ○ "(roadmap)" to emerald ✓ "(per profile)" after the SocksProxyBackend impl + bootstrap wire landed.', () => {
     expect(body).toMatch(
-      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*<div>\s*<p class="font-medium text-tk-ink">Customer-configurable egress \(per profile\)<\/p>/,
+      /<span class="mt-1 inline-block h-5 w-5 flex-none rounded-full bg-emerald-100[^>]*>✓<\/span>\s*<div>\s*<p class="font-medium text-tk-ink">Your own proxy or VPN, per profile<\/p>/,
     );
-    expect(body).toMatch(/a SOCKS5 proxy with full\s+UDP\/WebRTC\/QUIC tunnelling/); // S20c 2026-07-06: plain gloss added around the tunnelling list
+    // 2026-09-15: the old "full UDP/WebRTC/QUIC tunnelling" overpromised
+    // against /security ("depends on the proxy's reported UDP capability").
+    expect(body).toMatch(
+      /Whether UDP, WebRTC and QUIC\s+traffic travels through a SOCKS5 proxy depends on what\s+your proxy supports/,
+    );
+    expect(body).not.toMatch(/full\s+UDP\/WebRTC\/QUIC tunnelling/);
     expect(body).toMatch(/an OpenVPN\s+file \(\.ovpn\)/); // S20c 2026-07-06
   });
 
@@ -125,17 +134,20 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     // Header is "EU control plane" (not "EU-only data plane"): the
     // EU sub-processors carry the control plane, while the iPhone
     // Safari session-execution fleet runs on MacStadium (US).
-    expect(body).toMatch(/<p class="font-medium text-tk-ink">EU control plane<\/p>/);
+    // 2026-09-15 owner directive: "control plane" / "fleet" banned on
+    // customer surfaces; heading now says what is hosted in the EU.
+    expect(body).toMatch(/<p class="font-medium text-tk-ink">Core services hosted in the EU<\/p>/);
+    expect(body).not.toMatch(/control plane|fleet/i);
     expect(body).not.toMatch(/EU-only data plane/);
     expect(body).toMatch(
-      /Compute \(Hetzner Nuremberg\), database \(Neon Frankfurt\),\s+object storage \(Cloudflare R2, EU \+ US replication\)/,
+      /Servers in Falkenstein, Germany \(Hetzner\); database in\s+Frankfurt \(Neon\); file storage on Cloudflare R2, which\s+keeps copies in both the EU and the US/,
     );
     // S30 negative pin — the false jurisdiction claim must not return.
     expect(body).not.toMatch(/Cloudflare R2 EU jurisdiction/);
     // S20c 2026-07-06 plain-language pass: SCCs glossed inline (the
     // EU's Standard Contractual Clauses), DPF spelled out.
     expect(body).toMatch(
-      /iPhone Safari session-execution fleet runs on MacStadium\s+hardware \(US\) under SCCs \(the EU's Standard Contractual\s+Clauses for lawful data transfer abroad\) \+ the EU-US\s+Data Privacy Framework/,
+      /iPhone Safari\s+sessions run on US infrastructure \(MacStadium\) under the\s+EU's Standard Contractual Clauses \(SCCs\) and the EU-US\s+Data Privacy Framework/,
     );
   });
 
@@ -164,20 +176,24 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
   // The internal scenarios doc is no longer cited on a customer-facing page,
   // which is correct — it is an internal path. What must stay is the claim that
   // drills exist, what they cover, and that they do not break things by default.
-  it('chaos-engineering rehearsal harness: the four drilled failure modes, scripts/chaos/, dry-run by default', () => {
+  it('chaos-engineering rehearsals: the four drilled failure modes, scripts/chaos/ evidence line, simulations by default', () => {
     expect(body, 'the practice is claimed').toMatch(/chaos engineering/i);
+    // 2026-09-15 plain-language pass: same four failure classes, customer words
+    // ("DB failover" / "Redis" / "dry-run" / "execute mode" were internal terms).
     for (const mode of [
-      /sub-processor\) outages/i,
-      /DB failover/,
-      /Redis cache going down/i,
+      /Vendor outages/,
+      /database switching to its backup/,
+      /the cache going down/,
       /webhook-signature failures/,
     ]) {
       expect(body, `drilled failure mode ${mode} must stay claimed`).toMatch(mode);
     }
     expect(body, 'and the drills must be locatable').toMatch(/scripts\/chaos\//);
-    // Dry-run-by-default is a safety claim, not decoration: it is what makes
+    // Simulation-by-default is a safety claim, not decoration: it is what makes
     // running a drill against production a deliberate act.
-    expect(body, 'drills are simulations unless explicitly opted in').toMatch(/dry-run/);
+    expect(body, 'drills are simulations unless explicitly decided otherwise').toMatch(
+      /Drills run as simulations\s+by default/,
+    );
   });
 
   it('cross-link to /security architecture deep-dive pinned', () => {
@@ -203,15 +219,18 @@ describe('W375.A marketing-site /trust/security-overview page content parity', (
     );
   });
 
-  it('TLS-1.3-strict deploy-gate claim pinned (no plaintext HTTP)', () => {
-    expect(body).toMatch(/TLS 1\.3 on every customer-facing path/);
-    // S20c 2026-07-06 plain-language pass: same strict-TLS-1.3 +
-    // deploy-gate facts, plain words lead.
+  it('TLS 1.2+ everywhere + no-plain-HTTP release check claim pinned', () => {
+    // 2026-09-15: "strict TLS 1.3" was wrong against the origin config
+    // (infra/nginx/*.conf: ssl_protocols TLSv1.2 TLSv1.3) and /security
+    // ("TLS 1.2 + 1.3"); the heading now states the real floor.
+    expect(body).toMatch(/Every connection is encrypted \(TLS 1\.2 or newer\)/);
     expect(body).toMatch(
-      /Cloudflare, our edge network, enforces strict TLS 1\.3\s+encryption all the way to our own servers behind\s+<code[^>]*>api\.driftstack\.dev<\/code>/,
+      /encrypted with TLS 1\.2 or newer, through Cloudflare, our\s+edge network/,
     );
+    expect(body).toMatch(/<code[^>]*>api\.driftstack\.dev<\/code>/);
     expect(body).toMatch(
-      /No unencrypted page \(plaintext HTTP\) exists on\s+any path — every release is automatically checked for\s+this before it ships; the deploy pipeline's TLS\s+check rejects the release otherwise/,
+      /No unencrypted \(plain HTTP\) page exists on\s+any path, and every release is checked for this\s+automatically before it ships/,
     );
+    expect(body).not.toMatch(/strict TLS 1\.3/);
   });
 });

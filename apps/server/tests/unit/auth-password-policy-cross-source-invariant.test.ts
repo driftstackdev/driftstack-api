@@ -41,9 +41,11 @@ describe('W868 AuthPassword cross-source invariant', () => {
     expect(p).toMatch(/\.max\(128\)/);
   });
 
-  it("CRITICAL NIST 800-63B framing pinned in AuthPasswordSchema describe text. The 'no composition rules per NIST 800-63B' framing is the policy provenance — drift to introducing uppercase/digit/special composition rules would re-introduce NIST-deprecated patterns.", () => {
+  it("CRITICAL 'no other rules' pinned in AuthPasswordSchema describe text, with the NIST 800-63B provenance in the comment above it. The framing is the policy provenance — drift to introducing uppercase/digit/special composition rules would re-introduce NIST-deprecated patterns.", () => {
     const p = read(resolve(REPO_ROOT, 'packages/api-types/src/auth.ts'));
-    expect(p).toMatch(/12-128 chars; no composition rules per NIST 800-63B/);
+    expect(p).toMatch(/12 to 128 characters\. No other rules\./);
+    // The NIST provenance stays in the maintainer comment, not the customer describe.
+    expect(p).toMatch(/NIST 800-63B-3 explicitly recommends against forcing/);
   });
 
   it("CRITICAL the api-types comment block above AuthPasswordSchema documents 'Password rules: minimum 12, maximum 128. We do NOT impose composition rules'. The inline doc threads the design rationale to future maintainers.", () => {

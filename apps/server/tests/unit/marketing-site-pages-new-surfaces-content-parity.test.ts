@@ -201,10 +201,10 @@ describe('W599.B /use-cases/web-scraping (data teams)', () => {
     expect(body).toMatch(/no\s*app-steering redirects/);
   });
 
-  it('population-matched framing reuses homepage §6 phrases: iPhone bucket with millions + population-stable vs 100% unique (S20b 2026-07-06 plain words, same facts)', () => {
-    expect(body).toMatch(/lands in the iPhone bucket\s*with millions of others/);
+  it('population-matched framing reuses homepage §6 phrases: one of millions of real iPhones + stable across sessions vs 100% unique (2026-09-15 plain words: "population-stable" / "stealth Chromium mints" gone, same facts; the stale "iPhone bucket" pin re-pointed at the live lead sentence)', () => {
+    expect(body).toMatch(/looks like one of millions of real iPhones/);
     expect(body).toMatch(
-      /session after session \(population-stable\); stealth Chromium mints a new one every session — 100% unique, itself a giveaway/,
+      /session after session; disguised desktop browsers produce a brand-new value every session — 100% unique, which is itself a giveaway/,
     );
   });
 
@@ -343,7 +343,9 @@ describe('W599.B /glossary (quiet reference page)', () => {
 
   it('warm-up is defined as current ordinary session activity without a future-feature promise', () => {
     expect(body).toMatch(
-      /id: 'warm-up',[\s\S]{0,500}?regular session activity driven through the GUI, API, or SDK/,
+      // 2026-09-15 customer-copy pass: "GUI" became "the desktop app", the
+      // site's own name for it.
+      /id: 'warm-up',[\s\S]{0,500}?regular session activity, whether you drive it from the desktop app, the API, or an SDK/,
     );
     expect(body).not.toMatch(/chip: 'roadmap'|HonestyChip/);
   });

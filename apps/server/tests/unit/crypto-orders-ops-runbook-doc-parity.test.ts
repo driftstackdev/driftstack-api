@@ -56,9 +56,10 @@ describe('W242.C crypto-orders-ops-runbook doc parity', () => {
     expect(doc).not.toMatch(/body_mismatch_count/);
   });
 
-  it('structured log event name matches the live emitter', () => {
+  it('doc points support at the recorded mismatch without naming the internal log event', () => {
     expect(billing).toContain(`'crypto_checkout_idempotency_body_mismatch'`);
-    expect(doc).toContain('crypto_checkout_idempotency_body_mismatch');
+    expect(doc).toMatch(/Support can identify the affected\s+account from the recorded mismatch/);
+    expect(doc).not.toContain('crypto_checkout_idempotency_body_mismatch');
   });
 
   it('payment_id filter is exposed on the admin list query', () => {

@@ -198,7 +198,7 @@ const { AgentSessionControlError, setSessionMode } =
 const { RecordingsProvider } = await import('../../src/lib/recordings');
 
 const TUNNEL_UP_SENTENCE =
-  'VPN tunnel is up (exit 203.0.113.7, Europe/Amsterdam) — the browser has not attached yet';
+  'VPN tunnel is up (exit 203.0.113.7, Europe/Amsterdam) — the browser is not open yet';
 
 function report(extra: Partial<AgentSessionCapabilityReport>): AgentSessionCapabilityReport {
   return { manual_input_available: true, streaming_state: null, egress_state: null, ...extra };
@@ -281,7 +281,7 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
     // Live stream → the generic state is over; nothing to say.
     expect(vpnTunnelUpNotice(vpn, { streamLive: true, everLive: false, ended: false })).toBeNull();
     // A stream that WAS live and dropped is "reconnecting", and an ended session is
-    // attaching nothing — "the browser has not attached yet" would be false in both.
+    // attaching nothing — "the browser is not open yet" would be false in both.
     expect(vpnTunnelUpNotice(vpn, { streamLive: false, everLive: true, ended: false })).toBeNull();
     expect(vpnTunnelUpNotice(vpn, { streamLive: false, everLive: false, ended: true })).toBeNull();
     // (c) — the harness's own provisioning_detail wins, and needs no report at all:
@@ -365,7 +365,7 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
         step: 'vpn_egress_active',
         vpn: true,
       }),
-    ).toBe('VPN tunnel connected — browser not attached');
+    ).toBe('VPN tunnel connected — browser not open');
     expect(
       vpnTunnelUpCaption({
         ip: '203.0.113.7',
@@ -413,7 +413,7 @@ describe('vpnTunnelUpNotice — the pure predicate', () => {
     ).toBe(TUNNEL_UP_SENTENCE);
     expect(
       vpnTunnelUpCaption({ ip: '203.0.113.7', timezone: null, source: 'report', vpn: true }),
-    ).toBe('VPN tunnel is up (exit 203.0.113.7) — the browser has not attached yet');
+    ).toBe('VPN tunnel is up (exit 203.0.113.7) — the browser is not open yet');
   });
 });
 
@@ -614,9 +614,7 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     expect(vpnTunnelChipText(detail('vpn_egress_bringing_up', '203.0.113.7'))).toBe(
       'Starting the VPN tunnel…',
     );
-    expect(vpnTunnelChipText(detail('vpn_egress_active'))).toBe(
-      'VPN tunnel up · browser not attached',
-    );
+    expect(vpnTunnelChipText(detail('vpn_egress_active'))).toBe('VPN tunnel up · browser not open');
     expect(vpnTunnelChipText(detail('vpn_egress_active', '203.0.113.7'))).toBe(
       'VPN tunnel up · exit 203.0.113.7',
     );
@@ -646,19 +644,19 @@ describe('(h) the pure step helpers — "tunnel up" is never said while the tunn
     // an availability claim (the old branch said attach "isn’t available for
     // VPN sessions yet", which the client cannot know).
     expect(vpnAddressPlaceholder(detail('vpn_egress_active'))).toBe(
-      'VPN tunnel is up — the address bar unlocks once the browser attaches',
+      'VPN tunnel is up — the address bar unlocks once the browser opens',
     );
     expect(vpnAddressPlaceholder(detail('browser_spawning'))).toBe(
-      'VPN tunnel is up — the address bar unlocks once the browser attaches',
+      'VPN tunnel is up — the address bar unlocks once the browser opens',
     );
     expect(
       vpnAddressPlaceholder({ ip: '203.0.113.7', timezone: null, source: 'report', vpn: true }),
-    ).toBe('VPN tunnel is up — the address bar unlocks once the browser attaches');
+    ).toBe('VPN tunnel is up — the address bar unlocks once the browser opens');
   });
 
-  it('the vpn_egress_active caption is a state — tunnel up, browser not attached — with no prediction of a timeout and no claim about availability, neither of which the client can see', () => {
+  it('the vpn_egress_active caption is a state — tunnel up, browser not open — with no prediction of a timeout and no claim about availability, neither of which the client can see', () => {
     expect(vpnTunnelUpCaption(detail('vpn_egress_active', '203.0.113.7'))).toBe(
-      'VPN tunnel connected (exit 203.0.113.7) — browser not attached',
+      'VPN tunnel connected (exit 203.0.113.7) — browser not open',
     );
     expect(vpnTunnelUpCaption(detail('vpn_egress_active'))).not.toMatch(/will time out$/);
     // (m) M6 — "isn’t available for VPN sessions yet" was an availability claim
@@ -710,22 +708,22 @@ describe('(h) SimulatorWindow — the address bars during bring-up and the brows
     expect(cue?.textContent).not.toMatch(/exit/);
   });
 
-  it('CRITICAL at vpn_egress_active with no browser step, nothing promises the browser and nothing claims it is unavailable: chip, placeholder and notice say the tunnel is up and the browser is not attached; the notice is not a green success box', () => {
+  it('CRITICAL at vpn_egress_active with no browser step, nothing promises the browser and nothing claims it is unavailable: chip, placeholder and notice say the tunnel is up and the browser is not open; the notice is not a green success box', () => {
     manualControlState = STEP('vpn_egress_active');
     const { container } = renderSim();
     fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
     const chip = q(container, '[data-component="simulator-address-vpn-tunnel-up"]');
-    expect(chip?.textContent).toContain('browser not attached');
+    expect(chip?.textContent).toContain('browser not open');
     expect(addressText(container)).not.toMatch(/starting the browser/i);
     // (m) M6 — no availability claim either way, on any of the three surfaces.
     expect(addressText(container)).not.toMatch(/available/i);
     const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
     expect(input.getAttribute('placeholder')).toBe(
-      'VPN tunnel is up — the address bar unlocks once the browser attaches',
+      'VPN tunnel is up — the address bar unlocks once the browser opens',
     );
     expect(input.getAttribute('placeholder')).not.toMatch(/available/i);
     const notice = q(container, '[data-component="simulator-vpn-tunnel-up-notice"]');
-    expect(notice?.textContent).toBe('VPN tunnel connected — browser not attached');
+    expect(notice?.textContent).toBe('VPN tunnel connected — browser not open');
     expect(notice?.getAttribute('data-tone')).toBe('neutral');
   });
 
@@ -780,7 +778,7 @@ describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spel
     const active = vpnTunnelUpNotice(vpnRep, { ...quiet, provisioningDetail: 'vpn_egress_active' });
     expect(active?.step).toBe('vpn_egress_active');
     expect(vpnTunnelIsUp(active!)).toBe(true);
-    expect(vpnTunnelUpCaption(active!)).toBe('VPN tunnel connected — browser not attached');
+    expect(vpnTunnelUpCaption(active!)).toBe('VPN tunnel connected — browser not open');
   });
 
   it('CRITICAL each of the seven phases renders its own caption and no two share one, and none of them claims the tunnel is up', () => {
@@ -793,7 +791,7 @@ describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spel
       const caption = vpnTunnelUpCaption(detail(phase));
       expect(caption, phase).not.toBe('connecting…');
       expect(caption, phase).toMatch(/…$/);
-      expect(caption, phase).not.toMatch(/tunnel (is )?up|connected|not attached/i);
+      expect(caption, phase).not.toMatch(/tunnel (is )?up|connected|not open/i);
       expect(existing, phase).not.toContain(caption);
       // An exit is never named before `up`: none is observed yet.
       expect(vpnTunnelUpCaption(detail(phase, '203.0.113.7')), phase).toBe(caption);
@@ -809,13 +807,23 @@ describe('(W1) the pure helpers — A3’s bare phases, accepted exactly as spel
       BRINGUP_PHASES.length,
     );
     // The words, pinned: the provider phases say what the far end is doing, the
-    // config phase names the handshake, the four "ours" phases say what we set up.
-    expect(vpnTunnelUpCaption(detail('resolving'))).toBe('Finding the proxy endpoint…');
-    expect(vpnTunnelUpCaption(detail('connecting'))).toBe('Connecting to the proxy endpoint…');
-    expect(vpnTunnelUpCaption(detail('handshaking'))).toBe('Completing the VPN handshake…');
-    expect(vpnTunnelUpCaption(detail('assigning_address'))).toBe('Assigning the tunnel address…');
-    expect(vpnTunnelUpCaption(detail('configuring_routes'))).toBe('Setting up the tunnel routes…');
-    expect(vpnTunnelUpCaption(detail('starting_proxy'))).toBe('Starting the tunnel proxy…');
+    // config phase secures the connection, the four "ours" phases say what we set
+    // up — all in the customer's words (owner directive 2026-09-15: no handshake /
+    // routes / tunnel proxy / endpoint mechanics in a caption nobody can act on).
+    expect(vpnTunnelUpCaption(detail('resolving'))).toBe('Finding the VPN server…');
+    expect(vpnTunnelUpCaption(detail('connecting'))).toBe('Connecting to the VPN server…');
+    expect(vpnTunnelUpCaption(detail('handshaking'))).toBe('Securing the VPN connection…');
+    expect(vpnTunnelUpCaption(detail('assigning_address'))).toBe('Setting up the VPN address…');
+    expect(vpnTunnelUpCaption(detail('configuring_routes'))).toBe('Setting up the VPN connection…');
+    expect(vpnTunnelUpCaption(detail('starting_proxy'))).toBe('Finishing the VPN setup…');
+    for (const phase of BRINGUP_PHASES) {
+      expect(vpnTunnelUpCaption(detail(phase)), phase).not.toMatch(
+        /handshake|routes|tunnel proxy|endpoint/i,
+      );
+      expect(vpnTunnelChipText(detail(phase)), phase).not.toMatch(
+        /handshak|routes|the proxy|endpoint/i,
+      );
+    }
     expect(vpnTunnelUpCaption(detail('verifying'))).toBe('Verifying the tunnel…');
   });
 
@@ -869,13 +877,13 @@ describe('(W1) SimulatorWindow — the address bars during A3’s bring-up phase
     const { container } = renderSim();
     fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
     const chip = q(container, CHIP);
-    expect(chip?.textContent).toContain('Starting the VPN tunnel · handshaking…');
-    expect(chip?.getAttribute('title')).toBe('Completing the VPN handshake…');
+    expect(chip?.textContent).toContain('Starting the VPN tunnel · securing the connection…');
+    expect(chip?.getAttribute('title')).toBe('Securing the VPN connection…');
     expect(addressText(container)).not.toMatch(/tunnel up|tunnel is up/i);
     const input = q(container, '[aria-label="Address bar"]') as HTMLInputElement;
     expect(input.getAttribute('placeholder')).toMatch(/^Starting the VPN tunnel…/);
     const notice = q(container, NOTICE);
-    expect(notice?.textContent).toBe('Completing the VPN handshake…');
+    expect(notice?.textContent).toBe('Securing the VPN connection…');
     expect(notice?.getAttribute('data-tone')).toBe('neutral');
     expect(q(container, CONNECTING)).toBeNull();
   });
@@ -1107,7 +1115,7 @@ describe('(W2) SimulatorWindow — both terminal reads hand the panel {reason, s
     // first draft did (it is not rendered under the Session pane); the Session
     // pane is then opened for the mode radios the mutation needs.
     fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
-    expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+    expect(q(container, NOTICE)?.textContent).toBe('Securing the VPN connection…');
     expect(panelCbs.sessionEnded).toBeNull();
     fireEvent.click(q(container, '[data-component="sim-rail-session"]') as Element);
     ended = true;
@@ -1157,7 +1165,7 @@ describe('(W2) SimulatorWindow — both terminal reads hand the panel {reason, s
       );
       const { container } = renderSim();
       fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
-      expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+      expect(q(container, NOTICE)?.textContent).toBe('Securing the VPN connection…');
       ended = true;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(5100);
@@ -1322,7 +1330,7 @@ describe('(h) SimulatorWindow — Tauri-only: the in-place session swap and the 
     );
     const { container } = renderSim();
     fireEvent.click(q(container, '[data-component="sim-rail-controls"]') as Element);
-    expect(q(container, NOTICE)?.textContent).toBe('Completing the VPN handshake…');
+    expect(q(container, NOTICE)?.textContent).toBe('Securing the VPN connection…');
     expect(panelCbs.sessionEnded).toBeNull();
     const onSession = await vi.waitFor(() => {
       const cb = tauriListeners.get('ds-session');

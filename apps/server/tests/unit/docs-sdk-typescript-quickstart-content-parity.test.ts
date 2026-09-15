@@ -32,7 +32,10 @@ describe('docs sdk/typescript-quickstart content parity', () => {
   it('Node.js version contract pinned: Node 18+ minimum + Node 22 LTS recommended (drift to dropping the version floor would surprise customers who try the SDK on older Node versions and hit runtime failures)', () => {
     expect(body).toMatch(/Node\.js 18\+/);
     expect(body).toMatch(/Node 22 LTS recommended/);
-    expect(body).toMatch(/`engines\.node: ">=18"`/);
+    expect(body).toMatch(/- Node\.js 18\+ \(Node 22 LTS recommended\)\./);
+    // The engines.node / production-toolchain mechanics were dropped from the
+    // customer page and must not return.
+    expect(body).not.toMatch(/engines\.node/);
   });
 
   it('dual-publish (ESM + CommonJS via conditional exports) pinned (2026-06-24). The previous pin asserted "ESM-only ... CommonJS consumers ... dynamic import()" but @driftstack/sdk is dual-published (package.json main ./dist/index.cjs + exports["."].require) so both import and require work — the prior claim misled CJS consumers. Drift back to an ESM-only claim would re-introduce the falsehood.', () => {

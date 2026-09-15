@@ -6,8 +6,8 @@ description: Stripe-pattern Idempotency-Key header — safely retry POST request
 
 # Idempotency keys
 
-The non-idempotent POST requests that wire idempotency accept an optional
-`Idempotency-Key` header. When set, the server or payment provider binds the
+The POST requests listed below accept an optional `Idempotency-Key`
+header. When set, the server or payment provider binds the
 first operation to the account-scoped key and prevents a retry from performing
 that operation twice. Depending on the endpoint, a completed request replays
 the same response and a changed or still-running request fails closed. This is
@@ -17,20 +17,20 @@ that exists to make network retries safe.
 
 ## Why this exists
 
-Network requests fail. Sometimes a `502` from the edge means the
+Network requests fail. Sometimes a `502` from the network means the
 request never reached the server; sometimes it means the server
 processed the request but the response was lost. Without an idempotency
 key, retrying the request after the latter case would mint a duplicate
 resource or repeat browser work (a second session, a second checkout, a second
-form submission). With one, the retry returns the original terminal outcome or
-an explicit non-dispatching conflict and no duplicate is created.
+form submission). With one, the retry returns the original outcome or an explicit
+conflict that runs nothing, and no duplicate is created.
 
 ## Which endpoints honour it
 
-The header is honoured on these explicitly wired endpoints:
+The header is honoured on these endpoints:
 
 - `POST /v1/agent-sessions` — agent (chat-style) session creation
-- `POST /v1/agent-sessions/{id}/message` — one decompose→execute browser turn
+- `POST /v1/agent-sessions/{id}/message` — one browser turn
 - `POST /v1/billing/checkout-session` — Stripe subscription checkout
 - `POST /v1/billing/crypto-checkout` — crypto checkout (NOWPayments invoice)
 
@@ -41,10 +41,9 @@ dedupe effect; guard those calls separately if they need at-most-once behavior.
 
 ### One case where sending a key can fail a request that omitting it would not
 
-`POST /v1/agent-sessions/{id}/message` stores its receipt encrypted, so the
-receipt store only exists on a deployment with `MFA_ENCRYPTION_KEY`
-configured. Where it is not, that endpoint answers a valid
-`Idempotency-Key` with `503 feature-unavailable` — _"Agent-turn idempotency
+`POST /v1/agent-sessions/{id}/message` stores its receipt encrypted, which
+is not available on every deployment. Where it is not, that endpoint
+answers a valid `Idempotency-Key` with `503 feature-unavailable` — _"Agent-turn idempotency
 storage is unavailable. Do not retry this browser task without the same
 key; contact support."_ — while the same request WITHOUT the header runs
 the turn normally.
@@ -68,9 +67,7 @@ An **empty or whitespace-only** header is treated as **absent**, not
 rejected: the request is processed normally, without idempotency
 protection and without an error. Send a real key or omit the header —
 an empty one silently gives you neither deduplication nor a `400` to
-tell you so. (This paragraph previously said an empty key returns `400`;
-it does not, and on a payment call the difference is the one that
-matters.) Recommended format:
+tell you so. Recommended format:
 
 ```
 Idempotency-Key: <UUID-v4 or other globally-unique identifier>
@@ -81,15 +78,14 @@ operation (not per retry of the same operation). A client retrying
 the same `POST /v1/agent-sessions` after a timeout should send the same
 key on the retry; the next create gets a fresh key. For an agent message,
 the key must stay attached to the exact same session, message, and ordered
-approval list. The explicit BYOK credential and admitted AI/manual control
-lane are deliberately outside receipt identity: they are execution inputs
-read only after the receipt and control-authority fences.
+approval list. Your BYOK key and the session's AI/manual mode are not part
+of the key's identity — changing them does not change how a replay is
+matched.
 
 Constraints:
 
-- Empty string is treated as **absent** (so a stray
-  `Idempotency-Key:` header from an overeager proxy doesn't collapse
-  every request to the same phantom-keyed row).
+- Empty string is treated as **absent** (so a stray empty header from a
+  proxy doesn't make every request look like the same operation).
 - Scope is **per-account**, not global. Two different customers
   using the same idempotency-key string see independent results.
 
@@ -100,76 +96,67 @@ duplicate key replays the original response. Agent message turns use a stronger
 durable receipt because browser work deliberately continues after an SSE viewer
 disconnects:
 
-1. Validate session ownership and the request, then atomically reserve
-   `(account_id, idempotency_key)` before decomposition or dispatch.
-2. **Completed exact match** → replay the stored terminal status and JSON body.
-3. **Different session, message, or approval list** → return `409` without
-   dispatch.
-4. **Still running or terminal outcome unknown** → return `409` with
-   `idempotency_status: "in_progress"`; inspect the durable transcript rather
-   than minting a new key and repeating the task.
-5. **New key** → run once and application-encrypt the terminal response before
-   marking the receipt completed.
+1. Session ownership and the request are validated, then the key is reserved
+   before any work starts.
+2. **Completed exact match** → the stored status and body are replayed.
+3. **Different session, message, or approval list** → `409` with
+   `idempotency_status: "mismatch"`; nothing runs.
+4. **Still running or outcome unknown** → `409` with
+   `idempotency_status: "in_progress"`; check the transcript rather than
+   sending a new key and repeating the task.
+5. **New key** → the turn runs once and its result is stored encrypted.
 
 A completed replay returns the same status code and body as the original —
 including generated IDs or a terminal RFC 7807 problem.
 The client can treat the replay as if the original response had been
 received successfully.
 
-That completed terminal remains authoritative if the session later closes,
-its control lane changes between AI and manual, or the explicit BYOK
-credential rotates. Reusing the same key after any of those changes replays
-the original terminal result and never starts another provider request or
-browser operation. A manual transcript turn never reads or hashes an
-irrelevant BYOK header. Use a new `Idempotency-Key` only for an intentionally
-new AI turn with new browser work.
+That completed result remains authoritative if the session later closes,
+its mode changes between AI and manual, or your BYOK key rotates. Reusing
+the same key after any of those changes replays the original result and never
+starts another provider request or browser operation. A manual-mode turn
+never reads the BYOK header. Use a new `Idempotency-Key` only for an
+intentionally new AI turn with new browser work.
 
 ### What happens if I send the same key with a different body?
 
 Do not do this. What happens depends on the surface:
 
 - **Agent message turns** reject a changed request with `409` and
-  `idempotency_status: "mismatch"`, without dispatching browser work.
+  `idempotency_status: "mismatch"`, without doing any browser work.
 - **Crypto checkout** does **not** reject. It replays the original order
   verbatim with `Idempotent-Replayed: 1` and records the key reuse for support.
   So a changed body returns you the **first** order — not the one you just
   asked for. Check that header, or the returned `order_id`, before treating a
   checkout response as the order you requested.
-- **The legacy agent-session create path** likewise replays the existing
-  session.
+- **Agent-session create** likewise replays the existing session.
 
 Stripe also validates parameters on a reused checkout key. In every case, mint
 a new key for a new logical operation.
 
 ### What happens during a concurrent retry?
 
-Database uniqueness/provider idempotency chooses one create operation. For an
-agent turn, the first request owns the durable reservation; an overlapping
-retry receives `409 in_progress` and never enters the browser runtime. Retry the
-same key after the original completes to retrieve its terminal result.
+Only one of the concurrent requests performs the operation. For an agent
+turn, the first request wins; an overlapping retry receives `409 in_progress`
+and does no browser work. Retry the same key after the original completes to
+retrieve its result.
 
 ## Lifetime
 
 Lifetime is endpoint-specific:
 
-- **Crypto checkout** keys are enforced by a permanent unique
-  index on the orders table (`INSERT … ON CONFLICT DO NOTHING`,
-  then select-and-replay), so a same-key retry replays the
-  original order no matter how much later it arrives. A 24-hour
-  in-memory cache exists purely as a same-process fast-path; the
-  database is the cross-instance source of truth.
-- **Agent-session** keys live in a partial unique index on the
-  session row and replay for as long as the row exists.
-- **Agent-message** receipts live in their own durable table and are deleted
-  only if the owning account/session row is deleted.
+- **Crypto checkout** keys never expire: a same-key retry replays the
+  original order no matter how much later it arrives.
+- **Agent-session** keys replay for as long as the session exists.
+- **Agent-message** keys replay for as long as the session and account exist.
 - **Stripe checkout-session** keys are forwarded to Stripe and follow Stripe's
-  provider-side retention rather than Driftstack's resource-row lifetime.
+  own retention rules.
 
 Practical upshot: never reuse an idempotency key for a NEW logical
 request — mint a fresh UUID per logical operation. An exact retry with a reused
 key returns the original cached response instead of creating a new
-resource. For agent turns, keep the key until a terminal response is received;
-after an `in_progress` conflict, inspect the transcript before deciding whether
+resource. For agent turns, keep the key until a final response is received;
+after an `in_progress` conflict, check the transcript before deciding whether
 a different task and fresh key are appropriate.
 
 ## Examples
@@ -241,22 +228,11 @@ curl -X POST https://api.driftstack.dev/v1/agent-sessions \
 
 - **Minting a new key after an agent-message timeout.** The server may still be
   finishing the original browser work. Reuse the original key. A completed
-  receipt replays; an `in_progress` receipt refuses to dispatch again.
+  turn replays; an `in_progress` turn refuses to run again.
 
-## Implementation notes
+## Notes
 
-- **Storage.** Create receipts generally live alongside the protected resource.
-  Agent-message terminal bodies instead use a dedicated receipt table and are
-  application-encrypted because they can contain customer/model transcript data.
-- **TTL enforcement.** There is no scheduled key-expiry job and no
-  effective TTL. Crypto-order keys are backed by a permanent unique
-  index on the order row — the 24-hour in-memory cache is only a
-  same-process fast-path, and after a restart (or on another
-  instance) the database still replays the key. Resource-backed
-  keys (e.g. `agent_sessions.idempotency_key`) live in the
-  partial-unique index for the lifetime of the row. Agent-message receipts
-  follow their owning session row. Stripe checkout is provider-managed.
-- **Replay observability.** Where an operation writes an audit-log entry, it is
-  written for the first request but NOT the replays. This intentionally mirrors
-  Stripe — the original is the operationally-significant action; the replays
-  are transport noise.
+- Driftstack does not expire keys on a timer. How long each endpoint keeps a
+  key is described under Lifetime above.
+- Where an operation writes an audit-log entry, it is written for the first
+  request but NOT the replays.

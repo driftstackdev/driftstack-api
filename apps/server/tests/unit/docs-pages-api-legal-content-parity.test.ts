@@ -50,7 +50,7 @@ describe('W773 docs /api/legal content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The actual document text\s*\n?lives at `\/legal\/\*` on the marketing site \(publicly readable\s*\n?without auth\) and on `docs\/legal\/\*\.md` in the repo \(canonical\s*\n?source-of-truth\)\./,
+      /The document text itself is\s*\n?published at `\/legal\/\*` on the marketing site \(publicly readable\s*\n?without auth\)\./,
     );
   });
 
@@ -165,11 +165,12 @@ describe('W773 docs /api/legal content parity', () => {
     );
   });
 
-  it('CRITICAL 3-location framing pinned — Public marketing /legal/* + Canonical repo docs/legal/*.md + API catalog metadata-only. The 3-layer model explains where each source is canonical.', () => {
+  it('CRITICAL 2-location framing pinned — Public marketing /legal/* (full text) + API catalog metadata-only. The internal repo location is not a customer surface and must not be named.', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(/\*\*Public \(marketing site\)\*\*: `\/legal\/terms`, `\/legal\/privacy`,/);
-    expect(p).toMatch(/\*\*Canonical \(repo\)\*\*: `docs\/legal\/\*\.md`\./);
+    expect(p).toMatch(/The full document text, as published\./);
+    expect(p).not.toMatch(/Canonical \(repo\)|docs\/legal\/\*\.md/);
     expect(p).toMatch(
       /\*\*API catalog\*\*: this endpoint set surfaces metadata; never\s*\n?\s+the document body\. Read the public URLs for the body\./,
     );
@@ -192,14 +193,13 @@ describe('W773 docs /api/legal content parity', () => {
     expect(p).not.toMatch(/Required scope: `write` or `account_owner`\./);
   });
 
-  it('CRITICAL Source-of-truth pointers pinned — routes/legal.ts + services/legal.ts + db/legal-repo.ts + services/legal-catalog.ts. Drift would lose the canonical impl pointers.', () => {
+  it('CRITICAL the customer page carries no internal source pointers; the public legal URLs are the only place it sends a reader for the text.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Routes: `apps\/server\/src\/routes\/legal\.ts`\./);
-    expect(p).toMatch(/Service:\s*\n?`apps\/server\/src\/services\/legal\.ts`\./);
-    expect(p).toMatch(/Repo:\s*\n?`apps\/server\/src\/db\/legal-repo\.ts`\./);
+    expect(p).not.toMatch(/## Source of truth/);
+    expect(p).not.toMatch(/apps\/server\/src/);
     expect(p).toMatch(
-      /Catalog\s*\n?configuration: `apps\/server\/src\/services\/legal-catalog\.ts`\./,
+      /The document text itself is\s*\n?published at `\/legal\/\*` on the marketing site \(publicly readable\s*\n?without auth\)\./,
     );
   });
 

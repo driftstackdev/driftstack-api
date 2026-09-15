@@ -60,14 +60,14 @@ const DOT: Record<Row['state'], string> = {
     <div
       class="flex items-center justify-between border-b border-tk-border px-4 py-3 text-[11px] uppercase tracking-wider text-tk-ink-3"
     >
-      <span>Egress health</span><span class="text-tk-ink-2">4 proxies</span>
+      <span>Connection health</span><span class="text-tk-ink-2">4 proxies</span>
     </div>
     <div class="overflow-x-auto">
       <table class="w-full min-w-[34rem] border-collapse text-left">
         <thead>
           <tr class="text-[11px] uppercase tracking-wider text-tk-ink-3">
             <th class="px-4 py-2 font-medium">Proxy</th>
-            <th class="px-4 py-2 font-medium">Exit</th>
+            <th class="px-4 py-2 font-medium">Country</th>
             <th class="px-4 py-2 font-medium">Result</th>
             <th class="px-4 py-2 font-medium">Last test</th>
           </tr>
@@ -96,8 +96,8 @@ const DOT: Record<Row['state'], string> = {
     </div>
   </div>
   <figcaption class="mt-3 text-center text-[12px] text-tk-ink-3">
-    A failing proxy says <span class="font-mono">why</span>, and a result that has aged past its
-    window says so rather than pretending to be current. Latencies shown are an example.
+    A failing proxy tells you <span class="font-mono">why</span>, and an old result says how old
+    it is instead of pretending to be current. Response times shown are an example.
   </figcaption>
 </figure>
 

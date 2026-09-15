@@ -47,11 +47,12 @@ const apiBaseUrl = resolveApiBaseUrl();
 
     <header class="mb-10 flex items-start justify-between gap-6">
       <div>
-        <p class="text-sm text-tk-ink-3">Account-scoped team</p>
+        <p class="text-sm text-tk-ink-3">People with access to this account</p>
         <h1 class="mt-1 text-3xl font-semibold tracking-tight text-tk-ink">Team</h1>
         <p class="mt-2 max-w-prose text-sm text-tk-ink-3">
-          Members with access to this Driftstack account. Each member uses their own login + their
-          own dashboard sessions; API keys remain account-scoped (shared) and admin-gated.
+          People who can use this Driftstack account. Everyone signs in with their own login and
+          has their own dashboard sessions. API keys belong to the account and are shared; only
+          admins can manage them.
         </p>
       </div>
       <button type="button" data-show-invite class="btn-primary shrink-0">Invite member</button>
@@ -164,11 +165,11 @@ const apiBaseUrl = resolveApiBaseUrl();
     </ul>
 
     <p class="mt-8 text-xs text-tk-ink-3">
-      Invitees receive an email with a 7-day accept link. They must accept while signed in to the
-      same email address. Once accepted, members can act on this account's resources by toggling
-      the "Acting as" picker in the sidebar — reads work for both <code>member</code> and
-      <code>admin</code> roles; writes require <code>admin</code>. See
-      <a href="https://docs.driftstack.io/api/team/" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs.driftstack.io/api/team</a> for the role gating reference.
+      Invitees get an email with a link that works for 7 days. They need to accept it while signed
+      in with the same email address. After that, they can work in this account by choosing it
+      under "Acting as" in the sidebar. Members can view everything; only admins can make changes.
+      See
+      <a href="https://docs.driftstack.io/api/team/" class="text-tk-accent-text underline" target="_blank" rel="noopener noreferrer">docs.driftstack.io/api/team</a> for details.
     </p>
     </div>
   </div>
@@ -469,19 +470,19 @@ const apiBaseUrl = resolveApiBaseUrl();
                     : false;
                   if (refreshed && !stillPresent) {
                     showBanner(
-                      'Member-removal outcome is unknown because the request timed out. The team list was refreshed and ' +
+                      'The request took too long, but ' +
                         email +
-                        ' is no longer present; removal likely completed, so do not submit it again.',
+                        ' is no longer in the list, so they were probably removed. No need to try again.',
                     );
                   } else if (refreshed) {
                     showBanner(
-                      'Member-removal outcome is unknown because the request timed out. The team list was refreshed and ' +
+                      'The request took too long and ' +
                         email +
-                        ' is still present; retry removal if their access must be revoked.',
+                        ' is still listed. Try removing them again.',
                     );
                   } else {
                     showBanner(
-                      'Member-removal outcome is unknown because the request timed out, and the team list could not be refreshed. Verify membership before retrying.',
+                      "The request took too long and we couldn't refresh the list. Reload to check before trying again.",
                     );
                   }
                 } else {
@@ -530,13 +531,13 @@ const apiBaseUrl = resolveApiBaseUrl();
         inviteSubmit.textContent = blocked
           ? inviteRetryBlockReason === 'pending'
             ? 'Already pending'
-            : 'Verify before retrying'
+            : 'Check before retrying'
           : 'Send invite';
         if (blocked) {
           inviteSubmit.title =
             inviteRetryBlockReason === 'pending'
-              ? 'This email already has a pending invite. Do not replace its emailed link.'
-              : 'Reload and verify pending invites before retrying this email.';
+              ? 'This email already has a pending invite. Sending another would replace the link they already received.'
+              : 'Reload and check pending invites before trying this email again.';
         } else {
           inviteSubmit.removeAttribute('title');
         }
@@ -573,8 +574,8 @@ const apiBaseUrl = resolveApiBaseUrl();
             if (inviteError) {
               inviteError.textContent =
                 inviteRetryBlockReason === 'pending'
-                  ? 'This email already has a pending invite. Do not resend it: that would replace the first emailed link.'
-                  : 'Reload and verify pending invites before retrying this email.';
+                  ? "This email already has a pending invite. Don't send it again — that would replace the link they already received."
+                  : 'Reload and check pending invites before trying this email again.';
               inviteError.classList.remove('hidden');
             }
             updateInviteSubmitState();
@@ -628,23 +629,23 @@ const apiBaseUrl = resolveApiBaseUrl();
                     inviteRetryBlockedEmail = normalizedEmail;
                     inviteRetryBlockReason = 'pending';
                     showBanner(
-                      'The request timed out, but ' +
+                      'The request took too long, but ' +
                         email +
-                        ' now appears in pending invites. The invite was not sent again, so the emailed link remains valid.',
+                        " now shows in pending invites, so the invite was sent. We didn't send it again, so the link they received still works.",
                     );
                     hideInvite();
                     return;
                   }
                   if (refreshed) {
                     inviteError.textContent =
-                      'The request timed out, but ' +
+                      'The request took too long and ' +
                       email +
-                      ' is not in the refreshed pending-invite list. You can retry if the invite is still needed.';
+                      " isn't in the pending invites list, so the invite probably wasn't sent. Try again if you still need it.";
                   } else {
                     inviteRetryBlockedEmail = normalizedEmail;
                     inviteRetryBlockReason = 'unverified';
                     inviteError.textContent =
-                      "The request timed out and we couldn't refresh pending invites. Reload and verify the list before retrying this email; resending could replace the first emailed link.";
+                      "The request took too long and we couldn't refresh the list. Reload and check pending invites before trying again, so you don't replace a link that was already sent.";
                   }
                 } else {
                   inviteError.textContent = window.driftstackRequestErrorMessage(

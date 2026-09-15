@@ -35,8 +35,10 @@ describe('docs/api/team content parity', () => {
 
   it('4-concept framing pinned: Owner-account (pays subscription, shows up as owner_account_id) + Member-account (separate accounts row, own login + email, joined via team_members, cascade-delete) + Invite (double-opt-in record in team_invites, token-hashed at rest sha256, 7-day expiry) + Role (member RO / admin full RW). Drift to dropping the sha256-hash-at-rest or 7-day expiry would weaken the invite-security model', () => {
     expect(body).toMatch(/Owner account\.\*\* The account that pays the subscription\./);
-    expect(body).toMatch(/Token-hashed at\s*rest \(sha256\), 7-day expiry\./);
-    expect(body).toMatch(/Cascade-delete on\s*either side removes the membership\./);
+    expect(body).toMatch(
+      /created by the owner and accepted\s*by the invitee\. Expires after 7 days\./,
+    );
+    expect(body).toMatch(/Deleting either account removes the\s*membership\./);
     expect(body).toMatch(
       /\*\*Role\.\*\* `member` \(read-only on owner resources\) or `admin` \(full\s*read \+ write\)\./,
     );
@@ -68,7 +70,7 @@ describe('docs/api/team content parity', () => {
       /- `\/v1\/agent-sessions` \(GET collection \/ POST create \/ `:id`\s*reads and controls\) — an \*\*admin\*\* member can list and operate/,
     );
     expect(body).toMatch(/`member` role gets `403` on this whole surface/);
-    expect(body).toMatch(/ships\s+the owner's per-profile\s+DEK/);
+    expect(body).toMatch(/counts against the owner's cap and uses the owner's profile\s+data/);
   });
 
   it("3-NOT-honored endpoint roster pinned: /v1/team/* (managing own team) + /v1/account/me (always own profile) + /v1/auth/* (per-caller authentication). + 'Endpoints that do not honor the header (operate on the caller's own account regardless)' framing — pinned so the 3-NOT-honored exception list + caller's-own-account semantics contract all stay documented", () => {

@@ -235,7 +235,7 @@ describe('SimulatorWindow — control actions', () => {
     fireEvent.click(container.querySelector('[aria-label="End session"]') as Element);
     fireEvent.click(container.querySelector('[aria-label="Confirm — end session"]') as Element);
     expect(
-      await screen.findByText('Ending — closing the window (the session will stop on the box).'),
+      await screen.findByText('Ending — closing the window. The session will stop shortly.'),
     ).not.toBeNull();
 
     await waitFor(() => expect(dsSessionCb).not.toBeNull());

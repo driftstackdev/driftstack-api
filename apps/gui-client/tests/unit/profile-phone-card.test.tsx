@@ -318,7 +318,7 @@ const UNDETERMINED_OS = {
 const VPN_UNAVAILABLE_OS = {
   os: 'unknown',
   confidence: 'none',
-  reason: 'a VPN tunnel has no SOCKS5 stack to fingerprint',
+  reason: 'the OS check is not available for VPN connections',
   unavailable: 'vpn_tunnel',
 } as const;
 
@@ -515,7 +515,7 @@ describe('ProfilePhoneCard', () => {
     const exitA = byRegion(a, 'exit') as HTMLElement;
     expect(exitA.textContent).toBe('untested');
     expect(within(exitA).getByText('untested').getAttribute('title')).toBe(
-      'Test proxy from this Mac — reachability, latency, exit IP',
+      'Test proxy from this Mac — connection, response time, exit IP',
     );
     expect(screen.queryByText('no exit IP')).toBeNull();
     expect(screen.queryByText('run Test')).toBeNull();
@@ -922,7 +922,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     expect(el.textContent).toBe('untested');
     expect(el.getAttribute('data-health')).toBe('untested');
     expect(el.getAttribute('title')).toBe(
-      'Test proxy from this Mac — reachability, latency, exit IP',
+      'Test proxy from this Mac — connection, response time, exit IP',
     );
     cleanup();
     expect(
@@ -1105,7 +1105,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
   it('(polish) arm 6c — a VPN whose endpoint RESOLVED and whose tunnel was never brought up → "endpoint ok" · unmeasured · muted, the Proxies grid\'s word + title (+ the notice); never on a SOCKS5 row, an unresolved one, or over the arms above it', () => {
     // healthPill arm 6c (`p.vpn === true && p.endpoint?.resolved === true`):
     // deleting it drops the row to arm 7 → 'not measured', a word the grid never
-    // shows for this cache entry (ProxiesView's EndpointHealthPill: 'endpoint ok').
+    // shows for this cache entry (ProxiesView's EndpointHealthPill: 'address ok').
     const ok = {
       vpn: true,
       capabilities: null,
@@ -1118,7 +1118,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     const { container } = render(<ProfilePhoneCard {...props(ok)} />);
     const el = pill(container);
     expect(el.textContent).toBe(ENDPOINT_OK_PILL);
-    expect(el.textContent).toBe('endpoint ok');
+    expect(el.textContent).toBe('address ok');
     expect(ENDPOINT_OK_PILL.length).toBeLessThanOrEqual(15);
     expect(el.getAttribute('data-health')).toBe('unmeasured');
     expect(classes(el)).toContain('text-ink-secondary');
@@ -1142,7 +1142,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     expect(healthPill(props({ ...ok, vpnFailure: VPN_DOWN })).text).toBe('VPN tunnel down');
     expect(
       healthPill(props({ ...ok, endpoint: { resolved: false, message: 'no such host' } })).text,
-    ).toBe('unresolved');
+    ).toBe('address unknown');
     // VACUITY CONTROLS — a SOCKS5 row with a resolved pre-flight, and a VPN
     // row with no pre-flight at all, both stay arm 7.
     expect(healthPill(props({ ...ok, vpn: false, probed: true })).text).toBe('not measured');
@@ -1151,7 +1151,7 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     // (p) D1 — the words are the grid's EndpointHealthPill: both surfaces read
     // the SAME constants from lib/proxy-check-copy (the grid once carried the
     // literals; a retyped sentence there would drift unseen).
-    expect(ENDPOINT_OK_PILL).toBe('endpoint ok');
+    expect(ENDPOINT_OK_PILL).toBe('address ok');
     expect(source('views/ProxiesView.tsx')).toContain('{ENDPOINT_OK_PILL}');
     expect(source('views/ProxiesView.tsx')).toContain('title={ENDPOINT_OK_TITLE}');
     expect(source('views/ProxiesView.tsx')).not.toContain(ENDPOINT_OK_TITLE);
@@ -1172,18 +1172,18 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
     const { container } = render(<ProfilePhoneCard {...props(unresolved)} />);
     const el = pill(container);
     expect(el.textContent).toBe(ENDPOINT_UNRESOLVED);
-    expect(el.textContent).toBe('unresolved');
+    expect(el.textContent).toBe('address unknown');
     expect(el.getAttribute('data-health')).toBe('broken');
     expect(classes(el)).toContain('text-[#fca5a5]');
     expect(el.getAttribute('title')).toBe('DNS lookup of wg.example.com failed: no such host.');
     expect(container.textContent).not.toMatch(/not measured/);
     expect(container.textContent).not.toMatch(/untested/);
     cleanup();
-    expect(healthPill(props({ ...unresolved, testing: true })).text).toBe('unresolved');
-    expect(healthPill(props({ ...unresolved, probed: false })).text).toBe('unresolved');
-    expect(healthPill(props({ ...unresolved, latencyMs: 12 })).text).toBe('unresolved');
+    expect(healthPill(props({ ...unresolved, testing: true })).text).toBe('address unknown');
+    expect(healthPill(props({ ...unresolved, probed: false })).text).toBe('address unknown');
+    expect(healthPill(props({ ...unresolved, latencyMs: 12 })).text).toBe('address unknown');
     // An HTTP row (not vpn) with the same pre-flight reads the same word.
-    expect(healthPill(props({ ...unresolved, vpn: false })).text).toBe('unresolved');
+    expect(healthPill(props({ ...unresolved, vpn: false })).text).toBe('address unknown');
     // An empty resolver message still yields a title (the exit sentence).
     expect(
       healthPill(props({ ...unresolved, endpoint: { resolved: false, message: '' } })).title,
@@ -1194,10 +1194,10 @@ describe('B1 — the health pill: ONE element, seven arms, strict precedence (he
       'Not reachable',
     );
     // VACUITY CONTROLS — a RESOLVED pre-flight is not this arm (polish: it is
-    // arm 6c, 'endpoint ok'); neither is an absent one.
+    // arm 6c, 'address ok'); neither is an absent one.
     expect(
       healthPill(props({ ...unresolved, endpoint: { resolved: true, message: 'Resolved' } })).text,
-    ).toBe('endpoint ok');
+    ).toBe('address ok');
     expect(healthPill(props({ ...unresolved, endpoint: null })).text).toBe('not measured');
     expect(healthPill(props({ ...unresolved, endpoint: undefined })).text).toBe('not measured');
   });
@@ -1242,8 +1242,8 @@ describe('B2 — pill vocabulary pin: every reachable string ≤ 15 chars and ve
         latencyMs: null,
         endpoint: { resolved: false, message: 'x' },
       },
-      text: 'unresolved',
-      source: 'views/ProxiesView.tsx',
+      text: 'address unknown',
+      source: 'lib/proxy-check-copy.ts',
     },
     {
       p: {
@@ -1262,8 +1262,8 @@ describe('B2 — pill vocabulary pin: every reachable string ≤ 15 chars and ve
         latencyMs: null,
         endpoint: { resolved: true, message: 'Resolved' },
       },
-      text: 'endpoint ok',
-      source: 'views/ProxiesView.tsx',
+      text: 'address ok',
+      source: 'lib/proxy-check-copy.ts',
     },
   ];
   for (const arm of arms) {
@@ -1646,7 +1646,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
         /a website may reach a different one\. Not a conclusion either way\./,
       );
       // …and it is never worded as either verdict, at any width.
-      expect(chip?.title, label).not.toMatch(/can be detected|matches the iOS device it fronts/);
+      expect(chip?.title, label).not.toMatch(/can be detected|matches the iOS device behind it/);
     }
     // ⛔ VACUITY CONTROL — the IDENTICAL readings WITH the vantage still assert,
     // in both tones. Without this the loop above would pass just as happily if
@@ -1730,8 +1730,10 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // hint riding a '+N' here — the owner's "+1 on an OpenVPN" (2026-09-14) —
     // and it is a chip now with its own glyph. Nothing is hidden on this row.
     expect(vpn.chips.map((c) => c.text)).toEqual(['⇢ UDP', 'QUIC ✓', '— OS']);
-    expect(vpn.chips[0]?.title).toMatch(/UDP travels inside the VPN tunnel/);
-    expect(vpn.chips[2]?.title).toMatch(/^OS not measured: a VPN tunnel/);
+    expect(vpn.chips[0]?.title).toMatch(/UDP travels inside the VPN\./);
+    expect(vpn.chips[2]?.title).toMatch(
+      /^OS not measured: the OS check is not available for VPN connections/,
+    );
     expect(vpn.hiddenHints).toEqual([]);
     // A MEASUREMENT is never in the pill at any real column width — including
     // the '?' verdict, which is a COMPLETED classification and not a placeholder.
@@ -1881,7 +1883,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(g.textContent).toBe('? iOS/macOS');
     expect(g.getAttribute('data-os-tone')).toBe('unknown');
     expect(classes(g)).not.toContain('text-status-ready');
-    expect(g.getAttribute('title')).not.toMatch(/matches the iOS device it fronts/);
+    expect(g.getAttribute('title')).not.toMatch(/matches the iOS device behind it/);
     cleanup();
   });
 
@@ -1970,7 +1972,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       [
         'reported unavailable',
         { osFingerprint: VPN_UNAVAILABLE_OS },
-        /^OS not measured: a VPN tunnel/,
+        /^OS not measured: the OS check is not available for VPN connections/,
       ],
     ] as const) {
       const v = visibleChips(props({ ...over, quicMeasured: 'h3' }), 144);
@@ -2191,7 +2193,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     // Both facts a never-checked tunnel has, on the row, with no pill: the
     // tunnel-UDP chip and the OS row (2026-09-14).
     expect(bare.chips.map((c) => c.text)).toEqual(['⇢ UDP', '— OS']);
-    expect(bare.chips[0]?.title).toMatch(/UDP travels inside the VPN tunnel/);
+    expect(bare.chips[0]?.title).toMatch(/UDP travels inside the VPN\./);
     expect(bare.hiddenHints).toEqual([]);
   });
 
@@ -2219,7 +2221,9 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
       const os = byComponent(caps, 'proxy-os-fingerprint') as HTMLElement;
       expect(os).not.toBeNull();
       expect(os.textContent).toBe('— OS');
-      expect(os.getAttribute('title')).toMatch(/^OS not measured: a VPN tunnel/);
+      expect(os.getAttribute('title')).toMatch(
+        /^OS not measured: the OS check is not available for VPN connections/,
+      );
       expect(Array.from(caps.children).map((c) => c.textContent)).toEqual([
         'Check',
         'QUIC ✓',
@@ -2303,7 +2307,7 @@ describe('B3 — the caps row: ≤ 3 measured chips + "+N", cut by the static wi
     expect(quic.getAttribute('data-quic-inferred')).toBe('false');
     // Nothing is behind a pill on this row any more.
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
-    expect(tunnelUdp?.getAttribute('title')).toMatch(/UDP travels inside the VPN tunnel/);
+    expect(tunnelUdp?.getAttribute('title')).toMatch(/UDP travels inside the VPN\./);
     cleanup();
     // No relay measurement → no QUIC chip either (eligibility = a measurement).
     const { container: none } = render(
@@ -2484,7 +2488,7 @@ describe('B5 — failure states: the repair row is two buttons and nothing else;
 
   it('(o) an UNRESOLVED endpoint is a repair row (Re-check + Change, data-vpn-failure="false"), never the first-measurement "Check VPN"; the exit line says why with no "run Check VPN" promise', () => {
     // capsMode's `endpointUnresolved(p)` clause: deleting it drops the row to
-    // mode C — a 'Check VPN' button under a red 'unresolved' pill → reds. The
+    // mode C — a 'Check VPN' button under a red 'address unknown' pill → reds. The
     // exit derivation's unresolved branch: deleting it restores the
     // VPN_NO_EXIT_YET_TITLE ("Run Check VPN to bring the tunnel up") → reds.
     const unresolved = {
@@ -2596,10 +2600,10 @@ describe('B6 — the exit line', () => {
     // G8 — the copy pins: the grid's full sentences derive from the SHORT halves.
     expect(VPN_NO_EXIT_YET).toBe('no exit measured yet — run Check VPN');
     expect(VPN_NO_EXIT_YET).toBe(`${VPN_NO_EXIT_YET_SHORT} — run ${CHECK_VPN_ACTION}`);
-    expect(EXIT_GEO_UNAVAILABLE).toBe('exit geo unavailable — the probe did not complete');
-    expect(EXIT_GEO_UNAVAILABLE).toBe(`${EXIT_GEO_UNAVAILABLE_SHORT} — the probe did not complete`);
+    expect(EXIT_GEO_UNAVAILABLE).toBe('exit location unknown — the check did not complete');
+    expect(EXIT_GEO_UNAVAILABLE).toBe(`${EXIT_GEO_UNAVAILABLE_SHORT} — the check did not complete`);
     expect(EXIT_GEO_UNAVAILABLE_TITLE).toBe(
-      'The proxy connected and authenticated, but no traffic completed a round trip through it.',
+      'The proxy accepted the connection and login, but no traffic made it through. Try the test again.',
     );
     // The grid renders the full sentence from the SAME constants (it imports
     // them from lib/proxy-check-copy — the grid follow-up landed): pin the use,
@@ -2632,7 +2636,7 @@ describe('B7 — mode C, the first measurement is one click on the card (list pa
     expect(btn.getAttribute('data-action')).toBe('retest-proxy');
     expect((byRegion(container, 'caps') as HTMLElement).contains(btn)).toBe(true);
     expect(btn.getAttribute('title')).toBe(
-      'Test proxy from this Mac — reachability, latency, exit IP',
+      'Test proxy from this Mac — connection, response time, exit IP',
     );
     // No UDP/QUIC chip before a measurement, and the OS row states its absence
     // on the row itself rather than inside a '+1' (2026-09-12).
@@ -2685,10 +2689,12 @@ describe('B7 — mode C, the first measurement is one click on the card (list pa
     const caps = byRegion(container, 'caps') as HTMLElement;
     // Three facts on the row and nothing behind a pill (2026-09-14).
     expect(caps.textContent).toMatch(/^Check VPN⇢ UDP— OS$/);
-    expect(byComponent(caps, 'proxy-os-fingerprint')?.getAttribute('title')).toMatch(/VPN tunnel/);
+    expect(byComponent(caps, 'proxy-os-fingerprint')?.getAttribute('title')).toMatch(
+      /VPN connections/,
+    );
     expect(byComponent(caps, 'caps-overflow')).toBeNull();
     expect(caps.querySelector('[data-udp="tunnel"]')?.getAttribute('title')).toMatch(
-      /UDP travels inside the VPN tunnel/,
+      /UDP travels inside the VPN\./,
     );
     cleanup();
   });
@@ -2867,7 +2873,7 @@ describe('B9 — dock + menu', () => {
       'Details — every fact about amsterdam shopper, in full',
       'Ask the AI assistant about amsterdam shopper',
       "Stop session — end amsterdam shopper's running session",
-      'Test proxy from this Mac — reachability, latency, exit IP',
+      'Test proxy from this Mac — connection, response time, exit IP',
       'Edit amsterdam shopper',
       'Edit note for amsterdam shopper',
       'Duplicate amsterdam shopper',
@@ -3095,11 +3101,35 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
       'The test Mac could not bring the tunnel up.',
     );
     expect(vpnFailureClause('Tunnel refused by the server')).toBe('Tunnel refused by the server');
+    // Today's server sentences (account-me.ts classifyVpnProbeFailure): the
+    // generic first clause restates the pill, so the row shows what follows it…
+    expect(
+      vpnFailureClause(
+        'The WireGuard connection could not be established. Check the keys and the server address, and make sure the server accepts this configuration.',
+      ),
+    ).toBe(
+      'Check the keys and the server address, and make sure the server accepts this configuration.',
+    );
+    expect(
+      vpnFailureClause(
+        'Your OpenVPN connection started, but your traffic did not go through it, so we stopped it. This configuration is not safe to browse with.',
+      ),
+    ).toBe(
+      'your traffic did not go through it, so we stopped it. This configuration is not safe to browse with.',
+    );
+    // …and a sentence whose first clause IS the cause shows whole.
+    const didNotAnswer =
+      'The OpenVPN server did not answer in time, so the connection did not start. The server may be down, blocked, or not accepting this configuration — we cannot tell which.';
+    expect(vpnFailureClause(didNotAnswer)).toBe(didNotAnswer);
+    expect(
+      vpnFailureClause('The Mac that runs your profiles could not bring this tunnel up.'),
+    ).toBe('The Mac that runs your profiles could not bring this tunnel up.');
     expect(vpnNoticeClause(VPN_NOT_STORED_CHECK_NOTICE)).toBe('not stored yet — launch once');
     expect(vpnNoticeClause(VPN_NO_API_KEY_CHECK_NOTICE)).toBe('needs an API key — Settings');
     expect(vpnNoticeClause(VPN_NOT_STORED_CHECK_NOTICE).length).toBeLessThanOrEqual(30);
     expect(vpnNoticeClause(VPN_NO_API_KEY_CHECK_NOTICE).length).toBeLessThanOrEqual(30);
     expect(vpnNoticeClause('Endpoint resolves. Something else.')).toBe('Something else.');
+    expect(vpnNoticeClause('Address found. Something else.')).toBe('Something else.');
     expect(vpnNoticeClause(VPN_NOTICE)).toBe(VPN_NOTICE);
     const failure = 'The test Mac could not bring the tunnel up: handshake timed out after 20 s.';
     const { container, rerender } = render(
@@ -3134,8 +3164,8 @@ describe('P1 — the when row: compact relative forms, the left fact has priorit
     expect(notice.getAttribute('title')?.startsWith(VPN_NOT_STORED_CHECK_NOTICE)).toBe(true);
     expect(classes(notice)).toContain('text-ink-muted');
     expect(classes(notice)).not.toContain('text-status-busy');
-    // …and beside it the pill is the grid's 'endpoint ok', not a contradiction.
-    expect(pill(container).textContent).toBe('endpoint ok');
+    // …and beside it the pill is the grid's 'address ok', not a contradiction.
+    expect(pill(container).textContent).toBe('address ok');
     cleanup();
   });
 });

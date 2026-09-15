@@ -33,7 +33,7 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
   it('frontmatter declares the layout + title + description', () => {
     expect(body).toMatch(/layout: \.\.\/\.\.\/layouts\/DocLayout\.astro/);
     expect(body).toMatch(/title: Agent sessions/);
-    expect(body).toMatch(/description: .+decompose.+/);
+    expect(body).toMatch(/description: .+plain-language messages.+/);
   });
 
   it('documents every operational mode (ai / manual / pair)', () => {
@@ -126,21 +126,21 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
   });
 
   it('documents fail-closed control changes and non-replayable settled partial work', () => {
-    expect(body).toMatch(/exactly one control lane/);
+    expect(body).toMatch(/Each message runs in the mode the session was in when it arrived/);
     expect(body).toMatch(/ai_control_unavailable: true/);
     expect(body).toMatch(/partial_results/);
     expect(body).toMatch(/Do not replay those partial steps automatically/);
     expect(body).toMatch(/manual transcript turn never reads or hashes the irrelevant/);
     expect(body).toMatch(/BYOK header is deliberately outside receipt identity/);
     expect(body).toMatch(/still replays the original terminal result/);
-    expect(body).toMatch(/message's admitted control epoch changes/);
+    expect(body).toMatch(/when control of the session changes while a message is running/);
     expect(body).toMatch(/close or pause wins after model or\s*browser work has already settled/);
     expect(body).toMatch(/resume a paused session, but\s*replace a closed one/);
     expect(body).toMatch(/never as an\s*invitation to replay them in a replacement session/);
-    expect(body).toMatch(/posted 10-cent included-service accounting value/);
-    expect(body).toMatch(/not the upstream model's measured cost/);
-    expect(body).toMatch(/optional read-back model call is recorded separately/);
-    expect(body).toMatch(/not currently aggregated into this response field/);
+    expect(body).toMatch(/the flat 10 cents\s*charged for the turn/);
+    expect(body).toMatch(/not the model's measured cost/);
+    expect(body).toMatch(/a per-turn figure rather than a running total/);
+    expect(body).toMatch(/use cost\s*monitoring for the account total/);
   });
 
   it('documents the heartbeat-timeout auto-handback (30s)', () => {
@@ -232,10 +232,10 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
   });
 
   // LK arc — Live video (LiveKit) surface documented.
-  it('documents the LK.3 token-mint endpoint + 24h TTL + per-Mac signing flow', () => {
+  it('documents the LK.3 token-mint endpoint + 24h validity in customer words', () => {
     expect(body).toMatch(/POST \/v1\/agent-sessions\/\{id\}\/livekit-token/);
-    expect(body).toMatch(/24 hours/);
-    expect(body).toMatch(/per-Mac/);
+    expect(body).toMatch(/Tokens are valid for \*\*24 hours\*\*/);
+    expect(body).toMatch(/to subscribe to this session's video\s*stream/);
   });
 
   it('documents the 5 LiveKit join fields (ws_url + room + token + participant_identity + expires_at)', () => {
@@ -251,9 +251,10 @@ describe('Arc 4 Wave 2.B sub-slice 8.20.d docs/api/agent-sessions.md parity', ()
     expect(body).toMatch(/`livekit` shape inline/);
   });
 
-  it('documents the LK 503 error paths (no Mac yet / secret unreadable)', () => {
-    expect(body).toMatch(/no Mac has registered LiveKit credentials/i);
-    expect(body).toMatch(/stored Mac secret is unreadable/i);
+  it('documents the LK 503 error path in customer words (live video unavailable; contact support if it persists)', () => {
+    expect(body).toMatch(
+      /\|\s*503 \| feature-unavailable \| live video is not available on this deployment, or is temporarily unavailable — contact support if it persists/,
+    );
   });
 
   it('documents the canSubscribe=true / canPublish=false subscriber grant set', () => {

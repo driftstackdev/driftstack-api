@@ -79,17 +79,17 @@ describe('LiveKit 24h-TTL cross-source invariant', () => {
     expect(agentRouteSrc).toMatch(/gui_control_key\. Q2=C verdict locked 24h/);
   });
 
-  it("docs/guides/live-video.md references 24-hour TTL in both 'For pre-existing sessions, or to re-mint after the 24-hour token TTL expires' AND 'Tokens are 24-hour HS256 JWTs signed with a per-Mac secret.' — pinned so the customer-facing TTL claim stays in sync with the route constant", () => {
+  it("docs/guides/live-video.md references the 24-hour lifetime in both 'For pre-existing sessions, or to get a fresh token after the 24-hour token lifetime expires' AND 'Tokens are valid for 24 hours' — pinned so the customer-facing lifetime claim stays in sync with the route constant (2026-09-15 plain words: the HS256/per-Mac-secret signing scheme is how we run it)", () => {
     expect(liveVideoDocs).toMatch(
-      /For pre-existing sessions, or to re-mint after the 24-hour token\s*TTL expires:/,
+      /For pre-existing sessions, or to get a fresh token after the\s*24-hour token lifetime expires:/,
     );
-    expect(liveVideoDocs).toMatch(/Tokens are 24-hour HS256 JWTs signed with a per-Mac secret\./);
+    expect(liveVideoDocs).toMatch(
+      /Tokens are valid for 24 hours and are only checked when you\s*connect, so an open connection keeps working past the expiry\./,
+    );
   });
 
   it("docs/api/agent-sessions.md pins 'Token TTL is 24 hours (matches the gui_control_key TTL).' — pinned so the customer-facing cross-reference between LiveKit token TTL + gui_control_key TTL stays in sync (drift on either side would orphan the docs claim)", () => {
-    expect(agentSessionsDocs).toMatch(
-      /Token TTL is \*\*24 hours\*\* \(matches the `gui_control_key` TTL\)\./,
-    );
+    expect(agentSessionsDocs).toMatch(/Tokens are valid for \*\*24 hours\*\*\./);
   });
 
   it("routes/agent-sessions-livekit-token JSDoc explicitly cross-references the gui_control_key TTL match: '24h matches gui_control_key + the agent-session lifecycle' + 'LiveKit's max is 6h, but the SFU re-checks at handshake only, so post-handshake long-lived connections survive the token expiry' — pinned so the gui_control_key-symmetry + LiveKit-6h-cap-only-at-handshake rationale all stay documented", () => {

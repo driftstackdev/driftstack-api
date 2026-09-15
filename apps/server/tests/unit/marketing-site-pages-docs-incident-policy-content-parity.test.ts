@@ -78,7 +78,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
       /<a href="mailto:support@driftstack\.dev">support@driftstack\.dev<\/a>\s*and Slack channel monitoring\. We acknowledge within 30 min\s*during EU business hours\./,
     );
     expect(body).toMatch(
-      /<strong>Internal alerting:<\/strong> Sentry \+ cost-monitoring\s*thresholds page on-call\./,
+      /<strong>Internal alerting:<\/strong> our error and cost\s*monitoring pages the on-call engineer\./,
     );
   });
 
@@ -97,15 +97,16 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
 
   it('incident events are explicitly internal rather than advertised as deferred subscriptions', () => {
     expect(body).toMatch(
-      /<code>incident\.created<\/code> \/\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*are admin-audit \/ internal SSE event types, not customer webhook\s*subscription values\. Email subscription is the customer-facing\s*notification path\./,
+      /<code>incident\.created<\/code> \/\s*<code>incident\.updated<\/code> \/ <code>incident\.resolved<\/code>\s*are internal event names, not webhook event types you can\s*subscribe to\. Email subscription is the customer-facing\s*notification path\./,
     );
     expect(body).not.toMatch(/not yet\s+in <code>SubscribableWebhookEventTypeSchema/);
   });
 
   it("/docs/sla-policy authoritative-reference framing pinned: 'Tier-by-tier SLA targets, the windowing methodology, the credit bands, and the dispute process all live in /docs/sla-policy — that is the authoritative reference. Tier identifiers used there match the AccountTier enum exactly.' — pinned so the /docs/sla-policy authoritative cross-ref + AccountTier-enum-match commitment survives (drift to dropping the AccountTier-enum-match anchor would re-create tier-name-divergence risk)", () => {
     expect(body).toMatch(
-      /Tier-by-tier SLA targets, the windowing methodology, the\s*credit bands, and the dispute process all live in\s*<a href="\/docs\/sla-policy\/">\/docs\/sla-policy<\/a> — that is the\s*authoritative reference\. Tier identifiers used there match\s*the <code>AccountTier<\/code> enum exactly\./,
+      /Tier-by-tier SLA targets, the windowing methodology, the\s*credit bands, and the dispute process all live in\s*<a href="\/docs\/sla-policy\/">\/docs\/sla-policy<\/a> — that is the\s*authoritative reference\./,
     );
+    expect(body).not.toMatch(/AccountTier/);
   });
 
   it("/v1/status/sla response shape pinned: data: envelope + 9-field camelCase (target + uptimePct + totalProbes + okCount + failCount + lastProbeAt + lastFailureAt + windowStart + windowEnd) + 'No auth — status surface is public. Window is a fixed rolling 30 days. Field names are camelCase (the SLA report serialises its internal model directly).' — pinned so the data-envelope + 9-field camelCase shape + public-no-auth + 30d-rolling-window + serialises-internal-model commitments survive (drift to flipping to snake_case would create marketing↔server divergence)", () => {
@@ -121,7 +122,7 @@ describe('W514.C apps/marketing-site/src/pages/docs/incident-policy.astro conten
     expect(body).toMatch(/"windowStart":/);
     expect(body).toMatch(/"windowEnd":/);
     expect(body).toMatch(
-      /No auth — status surface is public\. Window is a fixed rolling\s*30 days\. Field names are camelCase \(the SLA report serialises\s*its internal model directly\)\./,
+      /No auth — status surface is public\. Window is a fixed rolling\s*30 days\. Field names are camelCase\./,
     );
   });
 

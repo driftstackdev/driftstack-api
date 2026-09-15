@@ -62,8 +62,8 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
   });
 
   it('does not misclassify a superseded profile save as stale or lost state', () => {
-    expect(doc).toMatch(/`superseded` is benign/);
-    expect(doc).toMatch(/newer saved profile won the conditional write/);
+    expect(doc).toMatch(/`superseded` is harmless/);
+    expect(doc).toMatch(/a newer save of the same profile landed first/);
   });
 
   it('does not advertise the fictional session.created / session.destroyed / session.error events as live bus events', () => {
@@ -107,7 +107,9 @@ describe('W259.D docs/guides/session-lifecycle ↔ live session surface parity',
   // guide and the marketing page were the surfaces that drifted.
   it('V-754 egress_capability_changed is described as per-report, not as a transition', () => {
     expect(doc).toMatch(/It fires on \*\*every\*\* report, not only when the state/);
-    expect(doc).toMatch(/there is no change detection on the path/);
+    expect(doc).toMatch(
+      /there is no change detection, so identical consecutive reports each emit an event/,
+    );
     // warnings mixes streaming faults into an egress-named event; customers alarming on
     // egress need to know that.
     expect(doc).toMatch(/streaming_blank/);

@@ -26,7 +26,7 @@ describe('W261.D /trust/incidents ↔ sub-processors + incident-policy parity', 
 
   it('sub-processor names referenced in the page are present in the live SUB_PROCESSORS list', () => {
     // Pull the names cited in the "Sub-processor incidents" card.
-    const m = page.match(/upstream sub-processor \(([^)]+)\)/);
+    const m = page.match(/one of our sub-processors \(([^)]+)\)/);
     expect(m).not.toBeNull();
     const cited = m![1]!
       .split(/\s*\/\s*/)

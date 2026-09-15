@@ -328,7 +328,7 @@ export function SettingsView(): JSX.Element {
     if (!client) return;
     if (
       !(await confirm(
-        'Clear your saved Anthropic key? Automations will fall back to platform billing (or stop if none is set). You can paste the key again anytime.',
+        'Clear your saved Anthropic key? AI chats will use bundled billing instead (or stop if that is off). You can paste the key again anytime.',
         { confirmLabel: 'Clear key', tone: 'danger' },
       ))
     )
@@ -449,9 +449,10 @@ export function SettingsView(): JSX.Element {
       if (connectionTestTokenRef.current !== token) return;
       // /version is parsed WITHOUT runtime validation, so a 200 carrying a
       // missing/typeless git_sha must coerce to a STRING here — the sibling
-      // ConnectivityView guards the same field the same way. Without it a
-      // numeric git_sha reaches the `.slice(0, 7)` in the "✓ Reachable" chip
-      // below and crashes the whole Settings render. (audit)
+      // ConnectivityView guards the same field the same way. The "✓ Reachable"
+      // chip no longer shows the hash (a commit id is not customer copy,
+      // 2026-09-15), but the state stays a string so nothing downstream can
+      // ever `.slice` a number. (audit)
       setTestState({
         kind: 'ok',
         version: typeof body.git_sha === 'string' ? body.git_sha : 'unknown',
@@ -581,7 +582,7 @@ export function SettingsView(): JSX.Element {
         title: "Couldn't save settings",
         body: humanizeError(
           err,
-          'Check that Driftstack can access your system credential store, then try again.',
+          "Check that Driftstack is allowed to use your computer's secure storage, then try again.",
         ),
         tone: 'error',
       });
@@ -628,7 +629,7 @@ export function SettingsView(): JSX.Element {
           kind: 'fail',
           message: isCloudBaseUrl(url)
             ? 'Saved, but the key was not accepted. Double-check it, or create a new one at app.driftstack.io/api-keys.'
-            : `Saved, but the key was not accepted by ${url}. In self-hosted mode the key must be created on that server's own dashboard — a key from app.driftstack.io won't authenticate here.`,
+            : `Saved, but the key was not accepted by ${url}. For a self-hosted server the key must be created in that server's own dashboard — a key from app.driftstack.io won't work here.`,
         });
       } else {
         setKeyCheck({
@@ -642,7 +643,7 @@ export function SettingsView(): JSX.Element {
         kind: 'fail',
         message:
           diagnosticFetchError(err, url) ??
-          `Saved, but ${url} is unreachable — the key couldn't be validated.`,
+          `Saved, but ${url} is unreachable — the key couldn't be checked.`,
       });
     } finally {
       window.clearTimeout(timer);
@@ -759,10 +760,10 @@ export function SettingsView(): JSX.Element {
               <span className="text-2xs text-ink-muted">Saved.</span>
             )}
             {keyCheck.kind === 'checking' && (
-              <span className="text-2xs text-ink-muted">Saved. Validating key…</span>
+              <span className="text-2xs text-ink-muted">Saved. Checking key…</span>
             )}
             {keyCheck.kind === 'ok' && (
-              <span className="text-2xs text-status-ready">Saved. Key authenticated ✓</span>
+              <span className="text-2xs text-status-ready">Saved. Key works ✓</span>
             )}
           </div>
         </div>
@@ -783,14 +784,14 @@ export function SettingsView(): JSX.Element {
           <p className="mt-3 text-sm text-ink-secondary">
             {draftMode === 'cloud' ? (
               <>
-                Sign in with your browser to mint a fresh API key bound to your account, or paste an
+                Sign in with your browser to create an API key for your account, or paste an
                 existing key from <span className="mono">app.driftstack.io/api-keys</span> below.
               </>
             ) : (
               <>
-                Paste a key created on your own server's dashboard. A key from{' '}
-                <span className="mono">app.driftstack.io</span> won't authenticate against a
-                self-hosted server — keys are bound to the deployment that minted them.
+                Paste a key created in your own server's dashboard. A key from{' '}
+                <span className="mono">app.driftstack.io</span> won't work with a self-hosted server
+                — each key only works with the server that created it.
               </>
             )}
           </p>
@@ -889,7 +890,7 @@ export function SettingsView(): JSX.Element {
                 <span className="section-label">Connected</span>
               </span>
               <p className="mt-2 text-sm text-ink-secondary">
-                Pointing at <span className="mono">{settings.baseUrl}</span> with key{' '}
+                Connected to <span className="mono">{settings.baseUrl}</span> with key{' '}
                 {/* Use the shared, prefix-aware maskApiKey (strips the known
                     ds_live_ prefix + shows only 4+4 of the body) so on-screen
                     exposure matches the project's masking standard — the inline
@@ -921,7 +922,7 @@ export function SettingsView(): JSX.Element {
               void (async () => {
                 if (
                   await confirm(
-                    'Sign out of this device? This forgets the API key locally; the key is NOT revoked on the server. Revoke it from the dashboard if you want to fully invalidate it.',
+                    'Sign out on this computer? Your API key is removed from this app only. It stays valid until you revoke it in the web dashboard.',
                     { confirmLabel: 'Sign out', tone: 'danger' },
                   )
                 ) {
@@ -954,7 +955,7 @@ export function SettingsView(): JSX.Element {
         <SectionHeader
           icon={<IconKey />}
           title="API & connection"
-          description="Your key and the server the GUI talks to."
+          description="Your API key and the server this app connects to."
         />
         <div className="mt-4 flex flex-col gap-5">
           <Field label="API key">
@@ -981,8 +982,7 @@ export function SettingsView(): JSX.Element {
               </button>
             </div>
             <span className="mt-1.5 block text-2xs text-ink-muted">
-              Stored in your OS keychain (macOS Keychain / Windows Credential Manager / Linux Secret
-              Service); never sent anywhere except your configured API server.
+              Stored securely on this computer and only ever sent to the server you choose below.
             </span>
           </Field>
 
@@ -998,9 +998,7 @@ export function SettingsView(): JSX.Element {
                 }`}
               >
                 <div className="font-semibold">Cloud</div>
-                <div className="mt-0.5 text-2xs text-ink-muted">
-                  api.driftstack.dev · managed fleet
-                </div>
+                <div className="mt-0.5 text-2xs text-ink-muted">Run by Driftstack</div>
               </button>
               <button
                 type="button"
@@ -1052,9 +1050,7 @@ export function SettingsView(): JSX.Element {
                 </button>
               )}
               {testState.kind === 'ok' && (
-                <span className="text-2xs text-status-ready">
-                  ✓ Reachable · <span className="mono">{testState.version.slice(0, 7)}</span>
-                </span>
+                <span className="text-2xs text-status-ready">✓ Reachable</span>
               )}
               {testState.kind === 'fail' && (
                 <span className="whitespace-pre-line text-2xs text-status-error">
@@ -1064,10 +1060,8 @@ export function SettingsView(): JSX.Element {
             </div>
             {draftMode === 'self-hosted' && (
               <span className="mt-2 block text-2xs text-ink-muted">
-                The GUI is a control panel — it does NOT run the API server. Self-hosted means you
-                run apps/server yourself (clone driftstackdev/driftstack-api +{' '}
-                <span className="mono">npm install && cd apps/server && npm run dev</span>). The URL
-                above tells the GUI where to find it.
+                This app is only a control panel — it does not run the server. Choose Self-hosted
+                only if you already run a Driftstack server, and enter its address above.
               </span>
             )}
           </Field>
@@ -1078,7 +1072,7 @@ export function SettingsView(): JSX.Element {
         <SectionHeader
           icon={<IconActivity />}
           title="Connection test"
-          description="Check the GUI can reach your configured API server."
+          description="Check that this app can reach your Driftstack server."
         />
         <div className="mt-4">
           <ConnectivityView embedded />
@@ -1153,7 +1147,7 @@ export function SettingsView(): JSX.Element {
         <SectionHeader
           icon={<IconShield />}
           title="Updates"
-          description="Signed builds, verified against Driftstack's key before anything is installed."
+          description="Every update is checked for authenticity before it is installed."
         />
         <div className="mt-4 flex flex-col gap-4">
           <Field label="Automatic updates">
@@ -1275,7 +1269,7 @@ export function SettingsView(): JSX.Element {
                 className="mt-0.5 disabled:opacity-50"
               />
               <span className="text-sm text-ink-secondary">
-                Let this deployment bill Claude usage to my account, up to a monthly limit.
+                Bill AI usage to my account, up to a monthly limit.
               </span>
             </label>
             <div className="mt-3 flex items-center gap-2">
@@ -1334,8 +1328,8 @@ export function SettingsView(): JSX.Element {
 
           <Field label="Bring your own Anthropic key">
             <span className="mb-2 block text-2xs text-ink-muted">
-              BYOK always wins over bundled usage — set a key here and every AI chat message runs on
-              it instead, billed directly by Anthropic to you.
+              If you add your own Anthropic key, every AI chat uses it instead of bundled usage, and
+              Anthropic bills you directly.
             </span>
             {byok?.has_key === true ? (
               <div className="flex flex-col gap-2">

@@ -82,7 +82,7 @@ export const AccountSlugSchema = z
   .max(32)
   .regex(
     /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/,
-    'Must be 3-32 chars, lowercase a-z + 0-9 + hyphen, with no leading/trailing hyphen.',
+    'Use 3 to 32 lowercase letters, numbers or hyphens. It cannot start or end with a hyphen.',
   )
   .refine((s) => !s.includes('--'), {
     message: 'Slug cannot contain consecutive hyphens.',

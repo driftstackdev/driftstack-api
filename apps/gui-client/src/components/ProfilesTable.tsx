@@ -462,7 +462,9 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
                 // (n) N18 — a tunnel's check is not a SOCKS5 reachability probe,
                 // and it has ONE name on every surface (proxy-check-copy).
                 title={
-                  r.vpn === true ? CHECK_VPN_TITLE : 'Test proxy — reachability, latency, exit IP'
+                  r.vpn === true
+                    ? CHECK_VPN_TITLE
+                    : 'Test proxy — connection, response time, exit IP'
                 }
               >
                 {r.testing ? '…' : r.vpn === true ? CHECK_VPN_ACTION : 'Test'}
@@ -533,7 +535,7 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               // profiles-list finding the gate still reported); secondary is 6.71
               // dark / 5.51 light there.
               className="inline-block cursor-help rounded bg-surface-divider/60 px-1.5 py-0.5 text-[10px] font-bold text-ink-secondary"
-              title={`UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`}
+              title={`UDP travels inside the VPN. WebRTC and QUIC use it; run ${CHECK_VPN_ACTION} to measure QUIC through this VPN.`}
             >
               UDP via tunnel
             </span>
@@ -548,8 +550,8 @@ function Row({ r, p }: { r: ProfileTableRow; p: ProfilesTableProps }): JSX.Eleme
               }`}
               title={
                 r.udp === 'ok'
-                  ? `UDP relay verified — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
-                  : 'No UDP relay — WebRTC/QUIC fall back to TCP'
+                  ? `UDP works — WebRTC ✓; ${QUIC_CLAUSE[r.quic ?? 'unknown']}`
+                  : 'UDP not supported — WebRTC and QUIC fall back to slower connections'
               }
             >
               {r.udp === 'ok' ? '✓' : '⤵'}

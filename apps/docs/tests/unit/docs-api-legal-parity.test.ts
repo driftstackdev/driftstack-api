@@ -46,12 +46,16 @@ describe('W257.B docs/api/legal ↔ /v1/legal/* parity', () => {
     expect(doc).toMatch(/"id":\s*"lacc_/);
   });
 
-  it('Source of truth file paths exist on disk', () => {
-    // Pull every `apps/server/...` path from the doc and assert it exists.
+  it('the customer page cites no internal source paths and points at the public legal URLs', () => {
+    // No `apps/server/...` path may appear on the customer-facing page.
     const paths = [...doc.matchAll(/`(apps\/server\/[\w./-]+\.ts)`/g)].map((m) => m[1]!);
-    expect(paths.length).toBeGreaterThan(0);
-    const missing = paths.filter((p) => !existsSync(resolve(REPO_ROOT, p)));
-    expect(missing).toEqual([]);
+    expect(paths).toEqual([]);
+    expect(doc).toMatch(
+      /The document text itself is\s+published at `\/legal\/\*` on the marketing site \(publicly readable\s+without auth\)\./,
+    );
+    expect(existsSync(resolve(REPO_ROOT, 'apps/marketing-site/src/pages/legal/terms.md'))).toBe(
+      true,
+    );
   });
 
   it('content-hash mismatch returns 409 with current_version + current_content_hash', () => {

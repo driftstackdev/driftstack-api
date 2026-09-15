@@ -93,7 +93,7 @@ describe('ConnectivityView API-key row masking (audit)', () => {
     expect(checking).toHaveAttribute('aria-busy', 'true');
 
     pending.resolve({ data: [] });
-    expect(await screen.findByText('API replied with 0 sessions on the first page.')).toBeTruthy();
+    expect(await screen.findByText('Connected — your API key works.')).toBeTruthy();
   });
 
   it('drops a late authenticated result after URL/key/client authority changes', async () => {
@@ -123,10 +123,10 @@ describe('ConnectivityView API-key row masking (audit)', () => {
 
     oldPending.resolve({ data: ['stale'] });
     await Promise.resolve();
-    expect(screen.queryByText('API replied with 1 session on the first page.')).toBeNull();
+    expect(screen.queryByText('Connected — your API key works.')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Run check' }));
-    expect(await screen.findByText('API replied with 0 sessions on the first page.')).toBeTruthy();
+    expect(await screen.findByText('Connected — your API key works.')).toBeTruthy();
     expect(newList).toHaveBeenCalledTimes(1);
   });
 
@@ -146,16 +146,18 @@ describe('ConnectivityView API-key row masking (audit)', () => {
     useSettingsMock.mockImplementation(() => current);
 
     const { rerender, unmount } = render(<ConnectivityView embedded />);
-    expect(await screen.findByText('mock')).toBeTruthy();
-    expect(screen.getByText('1.0.0 · abcdef0')).toBeTruthy();
+    expect(await screen.findByText('1.0.0')).toBeTruthy();
+    // The driver mode and commit hash /version also reports are how the server
+    // runs, not customer copy — never rendered (owner directive 2026-09-15).
+    expect(screen.queryByText('mock')).toBeNull();
+    expect(screen.queryByText(/abcdef0/)).toBeNull();
 
     current = {
       ...baseSettings(null),
       settings: { ...baseSettings(null).settings, baseUrl: 'https://staging.driftstack.dev' },
     };
     rerender(<ConnectivityView embedded />);
-    await waitFor(() => expect(screen.queryByText('mock')).toBeNull());
-    expect(screen.queryByText('1.0.0 · abcdef0')).toBeNull();
+    await waitFor(() => expect(screen.queryByText('1.0.0')).toBeNull());
     unmount();
   });
 
@@ -200,13 +202,13 @@ describe('ConnectivityView API-key row masking (audit)', () => {
 
     expect(
       await screen.findByText(
-        'Connectivity check failed. Verify the API URL and key in Settings, then try again.',
+        'The connection check failed. Check the server URL and API key in Settings, then try again.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/private-api\.internal|\/Users\/customer|token=secret/i)).toBeNull();
   });
 
-  it('preserves the typed API kind but never reflects remote problem prose', async () => {
+  it('renders the plain message and never reflects the raw error kind or remote problem prose', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() => Promise.reject(new Error('background version probe unavailable'))),
@@ -236,7 +238,8 @@ describe('ConnectivityView API-key row masking (audit)', () => {
         'Your sign-in or API key was not accepted. Check Settings and try again.',
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText('· invalid_key')).toBeInTheDocument();
+    // The raw SDK error kind is wire vocabulary, not customer copy.
+    expect(screen.queryByText(/invalid_key/)).toBeNull();
     expect(screen.queryByText(/Create a new key in the dashboard/)).toBeNull();
   });
 

@@ -21,7 +21,7 @@
 //     code path — the STATUS_LABEL and STATUS_TONE maps in the
 //     same file have always carried it.
 //   • STATUS_LABEL: pending→'Awaiting payment', confirming→
-//     'Confirming on-chain', paid→'Paid', failed→'Failed',
+//     'Confirming payment', paid→'Paid', failed→'Failed',
 //     partial→'Partial — contact support'.
 //   • STATUS_TONE: pending→neutral, confirming→busy, paid→
 //     success, failed→error, partial→warning.
@@ -74,9 +74,9 @@ describe('W476.C apps/gui-client/src/components/CryptoOrderStatusBadge.tsx conte
     );
   });
 
-  it("STATUS_LABEL pinned: pending→'Awaiting payment', confirming→'Confirming on-chain', paid→'Paid', failed→'Failed', partial→'Partial — contact support' (em-dash + 'contact support' framing — pinned so customers with partial-pay orders know they need to reach out)", () => {
+  it("STATUS_LABEL pinned: pending→'Awaiting payment', confirming→'Confirming payment', paid→'Paid', failed→'Failed', partial→'Partial — contact support' (em-dash + 'contact support' framing — pinned so customers with partial-pay orders know they need to reach out)", () => {
     expect(body).toMatch(
-      /const STATUS_LABEL: Record<string, string> = \{\s*pending: 'Awaiting payment',\s*confirming: 'Confirming on-chain',\s*paid: 'Paid',\s*failed: 'Failed',\s*partial: 'Partial — contact support',\s*cancelled: 'Cancelled',\s*\};/,
+      /const STATUS_LABEL: Record<string, string> = \{\s*pending: 'Awaiting payment',\s*confirming: 'Confirming payment',\s*paid: 'Paid',\s*failed: 'Failed',\s*partial: 'Partial — contact support',\s*cancelled: 'Cancelled',\s*\};/,
     );
   });
 

@@ -37,7 +37,7 @@ function read(p: string): string {
 describe('W373.A marketing-site /api-reference page content parity', () => {
   const body = read(PAGE);
 
-  it('pins the live Scalar and archetype-generator references', () => {
+  it('pins the live interactive-reference and archetype-generator references', () => {
     expect(body).toMatch(/const API_DOCS_URL = 'https:\/\/api\.driftstack\.dev\/docs'/);
     expect(body).toMatch(
       /const OPENAPI_JSON_URL = 'https:\/\/api\.driftstack\.dev\/openapi\.json'/,
@@ -45,7 +45,9 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
     expect(body).toMatch(
       /const ARCHETYPES_REFERENCE_URL = 'https:\/\/docs\.driftstack\.io\/api\/archetypes\/'/,
     );
-    expect(body).toMatch(/Interactive reference uses Scalar/);
+    expect(body).toMatch(/Try requests with your own API key directly in the browser\./);
+    // The rendered subline must not name the third-party docs tool.
+    expect(body).not.toMatch(/Interactive reference uses Scalar/);
   });
 
   it('documents the live Scalar reference without deferred implementation copy', () => {
@@ -187,11 +189,15 @@ describe('W373.A marketing-site /api-reference page content parity', () => {
   });
 
   it('states the paid customer-key boundary without misrepresenting the Free desktop credential', () => {
+    expect(body).toMatch(/API keys, OAuth applications, and SDK automation require a paid\s+tier/);
     expect(body).toMatch(
-      /Customer API keys, OAuth applications, and SDK automation require a\s+paid tier/,
+      /The Free plan works through the desktop app's own sign-in and\s+does not come with an API key you can use in these examples/,
     );
-    expect(body).toMatch(/browser-authorized restricted device credential/);
     expect(body).toMatch(/These API-key and SDK examples require a paid tier/);
+    expect(body).toMatch(
+      /On the Free plan,\s+sign in from the desktop app instead — no API key is needed there/,
+    );
+    expect(body).not.toMatch(/restricted device credential/);
     expect(body).not.toMatch(/Free (?:API|SDK) access/);
   });
 

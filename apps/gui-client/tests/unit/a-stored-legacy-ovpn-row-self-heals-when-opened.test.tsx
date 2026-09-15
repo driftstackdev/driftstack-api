@@ -213,7 +213,7 @@ describe('(o) O6 — a stored WireGuard row the control plane refuses says so, o
     expect(hint()).not.toBeNull();
     // The server schema's own sentence, via wireguardRefusal — not a paraphrase.
     expect(text).toMatch(/address/i);
-    expect(text).toMatch(/CIDR/i);
+    expect(text).toMatch(/IP ranges/i);
   });
 
   it('ARM 9 — it names an action that CAN clear it, and never one that cannot', () => {

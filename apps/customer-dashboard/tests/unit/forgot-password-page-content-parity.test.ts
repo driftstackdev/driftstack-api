@@ -110,9 +110,9 @@ describe('W370.B customer-dashboard /forgot-password page content parity', () =>
     expect(body).toMatch(/resetLinkRequestInFlight = false/);
     expect(body).toMatch(/let resetLinkOutcomeUnknown = false/);
     expect(body).toMatch(/if \(resetLinkOutcomeUnknown\) return/);
-    expect(body).toContain('Reset-link delivery is unknown after the request timed out.');
-    expect(body).toContain('Do not request another link on this page.');
-    expect(body).toContain('use the newest one');
+    expect(body).toContain('The request took too long, so the email may already be on its way.');
+    expect(body).toContain('Check your inbox and spam folder before requesting another link.');
+    expect(body).toContain('If more than one arrives, use the newest.');
   });
 
   it('latches accepted status before optional JSON and never exposes a replay path', () => {

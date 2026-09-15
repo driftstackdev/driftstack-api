@@ -51,21 +51,28 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(
       /Driftstack ships iPhone Safari sessions on demand, built on\s+real <a href="\/glossary\/#webkit"[^>]*>WebKit<\/a>\s+— the same engine every physical iPhone runs — with nothing\s+quietly modified while the browser is running \("patched at\s+runtime"\), so there's nothing for detection systems to spot\./,
     );
+    // 2026-09-15 customer-copy pass: the "(EU-resident control plane)"
+    // parenthetical restated the sentence in an internal term and is gone.
     expect(body).toMatch(
-      /Our servers and your account data live in the EU \(EU-resident\s+control plane\), and the scope stays deliberately narrow: one\s+product, two ways to use it, no land-grab\./,
+      /Our servers and your account data live in the EU, and the scope\s+stays deliberately narrow: one product, two ways to use it, no\s+land-grab\./,
     );
+    expect(body, 'the internal term must not return on this page').not.toMatch(/control plane/);
     expect(body).not.toMatch(/Driftstack ships real iPhone Safari sessions/);
     // S30 negative pin — the blanket form must not silently return.
     expect(body).not.toMatch(/your data live in the EU \(EU-resident\s+infrastructure\)/);
   });
 
   it("WebKit source-code framing pinned (R6 plain-English rewrite + 2026-05-16 unique-per-session contrast): 'we run Apple's WebKit source code, the same engine that ships on every real iPhone' kept; the contrast paragraph now names the 100% unique canvas/WebGL hashes competitors leak as the literal opposite of a real iPhone returning the same hash as millions of others", () => {
-    // S20c 2026-07-06 plain-language pass: plain words lead
-    // ("patching the browser's behaviour on the fly"), the precise
-    // terms (rewriting JavaScript at runtime, canvas + WebGL hashes)
-    // kept with inline glosses; canvas links to the glossary.
+    // 2026-09-15 customer-copy pass: the nested parentheticals
+    // (rewriting JavaScript at runtime, hashes, invisible test image) are
+    // gone; the hidden-test-image check is explained in one plain clause,
+    // the canvas glossary link survives, and the same-value-as-millions
+    // contrast + the WebKit-source-code claim are unchanged.
     expect(body).toMatch(
-      /Most stealth browsers fake an iPhone by patching the\s+browser's behaviour on the fly \(rewriting JavaScript at\s+runtime\)\. Detection systems are built to catch exactly that —\s+the fingerprint values those tools return, like the\s+<a href="\/glossary\/#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL hashes \(values derived from how the browser draws\s+an invisible test image\), come out 100% unique per session:\s+the literal opposite of a real iPhone, which returns\s+the same hash as millions of other iPhones\. Driftstack takes\s+a different approach: we run Apple's WebKit source code, the\s+same engine that ships on every real iPhone\./,
+      /Most stealth browsers fake an iPhone by changing the\s+browser's behaviour on the fly\. Detection systems are built\s+to catch exactly that\. One common check asks the browser to\s+draw a hidden test image and compares the result \(the\s+<a href="\/glossary\/#canvas-hash"[^>]*>canvas<\/a>\s+and WebGL fingerprints\): the values those tools return come\s+out different every session — the opposite of a real iPhone,\s+which returns the same value as millions of other iPhones\.\s+Driftstack takes a different approach: we run Apple's WebKit\s+source code, the same engine that ships on every real iPhone\./,
+    );
+    expect(body).toMatch(
+      /Nothing is changed on the fly, so there's nothing for\s+detection to find\./,
     );
   });
 
@@ -77,9 +84,14 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // S30 negative pin — the blanket object-storage-in-EU claim must
     // not silently return.
     expect(body).not.toMatch(/Compute, database, and object storage all run in the EU/);
+    // 2026-09-15 customer-copy pass: names what transfers (running
+    // sessions, the optional AI agent, the live video stream) without
+    // "the Mac fleet"; the SCC gloss moved inline; the disclosure itself
+    // (US transfer under SCCs + DPF, nothing undisclosed) is unchanged.
     expect(body).toMatch(
-      /Session execution and a few processors[\s\S]{0,140}transfer to the US\s*under Standard Contractual Clauses \+ the EU-US Data Privacy\s*Framework — no undisclosed flows\./,
+      /Running sessions, the optional AI agent, and the live video\s*stream transfer data to the US under Standard Contractual\s*Clauses \(the EU's standard legal contract for sending data\s*abroad\) and the EU-US Data Privacy Framework\. Nothing is\s*transferred that isn't disclosed\./,
     );
+    expect(body, 'how sessions are run is not customer copy').not.toMatch(/Mac fleet/);
     // Drift sentinel — the absolute "single-region / no transatlantic
     // flows" claim contradicted the real sub-processor list. MUST NOT
     // come back.
@@ -106,8 +118,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     expect(body).toMatch(
       /We don't log response bodies or session content, we don't\s+train models on your traffic, and we don't sell datasets\./,
     );
+    // 2026-09-15 customer-copy pass: same recorded categories (pages
+    // visited, session id, timing, duration, outcome), said without
+    // "control plane" / "navigations it coordinates".
     expect(body).toMatch(
-      /The control plane does record the navigations it coordinates\s+— the destination you ask it for, alongside session id,\s+timing, duration and outcome — because routing and billing\s+the work requires it\./,
+      /We do record the pages you ask a session to visit, along\s+with the session id, timing, duration and outcome — running\s+and billing the service requires it\./,
     );
     // Per-occurrence negatives. A denial and a closure claim are the two shapes
     // that made this false; both must stay gone, and the page must keep pointing
@@ -123,16 +138,17 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   });
 
   it("'Honest scope' posture pins shipped behavioural input and recipes without certification promises", () => {
-    // S20c 2026-07-06 plain-language pass: plain words lead (touch/
-    // scroll/typing from real human recordings; save/view/list/delete
-    // a recipe), precise terms (behavioural input engine, per-profile
-    // persona, recipe execution) kept in parens. Same v1.0/v1.1 facts.
+    // 2026-09-15 customer-copy pass: the internal names (behavioural
+    // input engine, per-profile persona) and the v1.0 version talk are
+    // gone; the shipped facts (recorded human input, per-profile habits,
+    // save/replay/view/delete recipes) are unchanged.
     expect(body).toMatch(
-      /We say no to things we can't ship well\. Touch, scroll, and\s+typing that come from real human recordings and move like a\s+real hand — each profile keeping its own habits \(the\s+behavioural input engine, with a per-profile persona\) — ship\s+at v1\.0\./,
+      /We say no to things we can't ship well\. Touch, scroll, and\s+typing are built from real human recordings and move like a\s+real hand, and each profile keeps its own habits\./,
     );
     expect(body).toMatch(
-      /recipe library\s+is live at v1\.0: save a finished agent-session as a\s+replayable step-by-step recipe, then view, list, or delete\s+your saved recipes\./,
+      /You can also\s+save a finished agent session as a step-by-step recipe you can\s+replay, then view or delete your saved recipes\./,
     );
+    expect(body).not.toMatch(/behavioural input engine|per-profile persona/);
     expect(body).not.toMatch(/Running a saved recipe[\s\S]{0,80}v1\.1/);
     expect(body).not.toMatch(/SOC 2|ISO 27001/i);
     // Drift sentinel — the pre-slice-143 "recipe libraries are Phase 3"
@@ -158,7 +174,10 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
     // S20c 2026-07-06 plain-language pass: card titles lead with the
     // plain promise; the precise anchors (Article 28(2), source
     // escrow, staging rehearsal) stay in the title or body.
-    expect(body).toMatch(/Per-merge security audit, on a cadence/);
+    // 2026-09-15 customer-copy pass: the audit card title says what the
+    // customer gets, not the engineering process ("per-merge", "cadence").
+    expect(body).toMatch(/Ongoing security audits, with findings published/);
+    expect(body).not.toMatch(/Per-merge security audit/);
     expect(body).toMatch(/Disaster recovery, rehearsed before it's needed/);
     expect(body).toMatch(/30 days' warning before we change vendors — Article 28\(2\)/);
     expect(body).toMatch(/If we ever shut down, you keep the software \(source escrow\)/);
@@ -172,15 +191,17 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   });
 
   it('11-scenario DR framing pins the complete roster and ongoing staging-before-production rehearsal contract', () => {
-    // S20c 2026-07-06 plain-language pass: every scenario keeps its
-    // precise name with a plain gloss in parens; the count + coverage
-    // commitment is unchanged.
+    // 2026-09-15 customer-copy pass: every scenario is named in plain
+    // words with no vendor or component names (Postgres, Redis, R2,
+    // Cloudflare Pages, Hetzner); the count + the rehearse-on-a-test-copy
+    // commitment are unchanged.
     expect(body).toMatch(
-      /Eleven disaster-recovery \(DR\) scenarios documented with\s+concrete recovery commands — host loss \(a dead server\),\s+Postgres corruption \(the database\), Redis loss \(the cache\),\s+R2 object loss \(stored files\),\s+signing-key rotation under attack \(replacing a compromised\s+key mid-incident\), bad deploys, cert renewal failures\s+\(expired security certificates\), Cloudflare Pages\s+regressions \(our website host breaking\), and a\s+multi-day Hetzner regional outage \(our hosting provider\s+losing a region for days\)\./,
+      /Eleven disaster scenarios are written up with step-by-step\s+recovery instructions — a dead server, a corrupted database,\s+loss of the cache or of stored files, a compromised signing\s+key, a bad release, an expired security certificate, our\s+website host breaking, and a multi-day outage at our hosting\s+provider\./,
     );
     expect(body).toMatch(
-      /Every\s+scenario is rehearseable on staging — our test copy of the\s+platform — before the same recovery procedure is ever used\s+against production\./,
+      /Every one can be rehearsed on a test copy of the\s+platform before the same recovery steps are ever used in\s+production\./,
     );
+    expect(body).not.toMatch(/Postgres|Redis|Hetzner|Cloudflare Pages/);
   });
 
   it("Sub-processor change-log framing pinned: 'Every change to our sub-processor list (additions, removals, region migrations) is published 30 days before it takes effect at /trust/sub-processors. Customers get a right-of-objection window to terminate the affected portion of service if a new sub-processor doesn't meet their requirements.' — pinned so the 30-day-pre-notice + the right-of-objection commitment survive (drift to dropping the 30-day would lose the Article 28(2)-aligned advance notice; drift to dropping right-of-objection would weaken the data-processor contractual story)", () => {
@@ -200,11 +221,11 @@ describe('W499.C apps/marketing-site/src/pages/about.astro content parity', () =
   });
 
   it("Source-escrow framing pinned: 'Enterprise customers and Self-hosted licensees get access to the WebKit fork + control-plane source under a written escrow agreement. If Driftstack sunsets the cloud service, escrow releases the source so customers can continue running on their own hardware indefinitely.' — pinned so the if-we-disappear customer-continuation promise survives (drift to dropping would orphan customers from the 'what if Driftstack goes away?' answer that's a deal-breaker for compliance-conscious buyers)", () => {
-    // S20c 2026-07-06 plain-language pass: source-code escrow said
-    // plainly (neutral third party holds a copy); the precise terms
-    // (WebKit fork, control-plane source) kept in the sentence.
+    // 2026-09-15 customer-copy pass: what is escrowed is still the
+    // MODIFIED engine source plus the server software, said without
+    // "fork" / "control-plane".
     expect(body).toMatch(
-      /Enterprise customers and Self-hosted licensees get\s+access to our source code — the modified WebKit engine\s+\(the WebKit fork\) \+ the control-plane source —\s+under a written escrow agreement: a neutral third party\s+holds a copy\./,
+      /Enterprise customers and Self-hosted licensees get\s+access to our source code — our modified version of the\s+WebKit browser engine, plus the Driftstack server software —\s+under a written escrow agreement: a neutral third party\s+holds a copy\./,
     );
     expect(body).toMatch(
       /If Driftstack\s*sunsets the cloud service, escrow releases the source\s*so customers can continue running on their own\s*hardware indefinitely\./,

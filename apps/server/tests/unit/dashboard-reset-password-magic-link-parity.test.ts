@@ -64,14 +64,12 @@ describe('W736 reset-password + magic-link dashboard pages parity', () => {
     expect(r).toMatch(/JSON\.stringify\(\{ token: token, new_password: password \}\)/);
   });
 
-  it('CRITICAL reset-password missing-token UX path pinned. When `?token=` is absent, show a clear "No reset token in URL" message + link to /forgot-password (NOT a generic error). Drift to a generic error would leave customers stuck.', () => {
+  it('CRITICAL reset-password missing-token UX path pinned. When `?token=` is absent, show a clear "This page needs to be opened from the link in your reset email" message + link to /forgot-password (NOT a generic error). Drift to a generic error would leave customers stuck.', () => {
     const r = read(RESET);
 
     expect(r).toMatch(/data-missing/);
-    expect(r).toMatch(/No reset token in URL\./);
-    expect(r).toMatch(
-      /Open the page from the link in your reset email, or\s*\n\s+<a\s*\n\s+href="\/forgot-password\/"/,
-    );
+    expect(r).toMatch(/This page needs to be opened from the link in your reset email\./);
+    expect(r).toMatch(/If that link doesn't work,\s*\n\s+<a\s*\n\s+href="\/forgot-password\/"/);
     expect(r).not.toMatch(/href="\/forgot-password"/);
 
     // Implementation: hide form + show missing-block when no token.

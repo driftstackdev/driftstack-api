@@ -81,17 +81,13 @@ do {{
 
     <h2>Cursor lifetime</h2>
     <p>
-      Cursors are not signed and do not expire on a timer; the
-      server treats them as the literal
-      <code>(created_at, order_id)</code> pair to seek past. A
-      cursor remains useful as long as the row it anchors to is
-      still in the scan window (default 1000 rows on filtered
-      queries, 51 rows on the unfiltered first page — the
-      <code>limit + 1</code> overflow probe).
+      Cursors do not expire on a timer. A cursor stays valid as long
+      as the row it points at is still within the most recent rows
+      the server scans.
     </p>
     <p>
-      If you walk slowly enough that the anchor row falls out of
-      the window, the server returns an empty page with
+      If you walk slowly enough that the row falls out of that
+      range, the server returns an empty page with
       <code>next_cursor: null</code>. The caller should treat that
       as "end of walk" and restart from the front if a full scan is
       still needed.
@@ -101,10 +97,8 @@ do {{
     <ul>
       <li>A cursor longer than 512 characters returns
       <code>400 Bad Request</code>.</li>
-      <li>A malformed cursor (not valid base64url JSON of
-      <code>&#123;ts, id&#125;</code>) returns an empty page with
-      <code>next_cursor: null</code>; the server prefers a benign
-      empty result over surfacing decode internals.</li>
+      <li>A malformed cursor returns an empty page with
+      <code>next_cursor: null</code>.</li>
     </ul>
 
     <h2>Current endpoint matrix</h2>

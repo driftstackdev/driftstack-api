@@ -124,7 +124,7 @@ describe('First-run wizard — reaches the First-profile step after key validati
       screen.getByRole('button', { name: /have an api key\? paste it instead/i }),
     );
     await userEvent.type(screen.getByLabelText(/api key/i), 'ds_live_test_key');
-    await userEvent.click(screen.getByRole('button', { name: /validate \+ continue/i }));
+    await userEvent.click(screen.getByRole('button', { name: /check key and continue/i }));
 
     // The First-profile step must render — NOT the app shell. Before the fix the
     // wizard unmounted the instant the key saved and this heading never showed.
@@ -149,7 +149,7 @@ describe('First-run wizard — reaches the First-profile step after key validati
     await userEvent.type(screen.getByLabelText(/api key/i), 'ds_live_retryable_key');
 
     failSecretSave = true;
-    await userEvent.click(screen.getByRole('button', { name: /validate \+ continue/i }));
+    await userEvent.click(screen.getByRole('button', { name: /check key and continue/i }));
 
     expect(
       await screen.findByText("Couldn't complete setup. Check the details and try again."),
@@ -161,7 +161,7 @@ describe('First-run wizard — reaches the First-profile step after key validati
     expect(invokeStore.has('api_key:api.driftstack.dev')).toBe(false);
 
     failSecretSave = false;
-    await userEvent.click(screen.getByRole('button', { name: /validate \+ continue/i }));
+    await userEvent.click(screen.getByRole('button', { name: /check key and continue/i }));
     await waitFor(() => expect(screen.getByText(/create your first profile/i)).toBeInTheDocument());
     expect(invokeStore.get('api_key:api.driftstack.dev')).toBe('ds_live_retryable_key');
   });

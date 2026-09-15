@@ -78,7 +78,7 @@ export const PROBE_ORIGIN_TITLE = 'Measured from your computer.';
 export const SERVER_LATENCY_TITLE = 'Measured from Driftstack, not your computer.';
 /** The menu row's and the first-measurement button's description of a SOCKS5
  *  test (one string, two surfaces on the same card). */
-const TEST_PROXY_TITLE = 'Test proxy from this Mac — reachability, latency, exit IP';
+const TEST_PROXY_TITLE = 'Test proxy from this Mac — connection, response time, exit IP';
 const SAVED_TABS_REOPEN_TITLE = "This profile's saved tabs reopen when you launch it";
 /** Polish / (p) D1 — the repair row's re-run word (`RETEST_ACTION`) and the
  *  health pill's 'endpoint ok' word + title (`ENDPOINT_OK_PILL` /
@@ -809,18 +809,18 @@ const OVERFLOW_PILL_CLASS =
  *  a guess from udp_associate. */
 function udpTitle(vpn: boolean, caps: ProxyCapability[] | null, quicCap?: ProxyCapability): string {
   if (vpn) {
-    return `UDP travels inside the VPN tunnel — not a probed grant. WebRTC and QUIC use the tunnel’s own UDP; run ${CHECK_VPN_ACTION} to measure QUIC through it.`;
+    return `UDP travels inside the VPN. WebRTC and QUIC use it; run ${CHECK_VPN_ACTION} to measure QUIC through this VPN.`;
   }
   if (caps === null) return 'Run Test to check UDP (WebRTC + QUIC) support on this exit.';
   const udpOk = caps.find((c) => c.key === 'webrtc')?.ok ?? false;
-  if (!udpOk) return 'No UDP relay — WebRTC falls back to TURN-over-TCP and QUIC to HTTP/2.';
+  if (!udpOk) return 'No UDP — WebRTC uses a slower fallback and QUIC falls back to HTTP/2.';
   const quicClause =
     quicCap?.inferred === true
       ? 'QUIC likely (not yet measured)'
       : quicCap?.ok === true
         ? 'QUIC ✓'
         : 'QUIC ✗ (HTTP/2 on last measure)';
-  return `UDP relay verified — WebRTC ✓; ${quicClause} through this exit.`;
+  return `UDP works — WebRTC ✓; ${quicClause} through this exit.`;
 }
 
 /** A VPN row's QUIC verdict comes from the fleet relay probe or a live session,
@@ -1436,19 +1436,40 @@ export function thumbRecipe(hue: number): ThumbRecipe {
 }
 
 /**
- * Polish — the clause of a VPN failure the "when" row SHOWS. The fleet's
- * sentence opens with a generic preamble ('The test Mac could not bring the
- * tunnel up: …') that repeats the pill above it, so at every column width the
- * visible part carried no information and the cause was hidden. The row now
- * shows what follows the first ': ' (or the sentence minus that preamble); the
- * whole sentence stays in the title.
+ * The generic first clause of a VPN failure sentence — the part that only
+ * restates the red pill above the row. One pattern per sentence the server
+ * sends (apps/server/src/routes/account-me.ts `classifyVpnProbeFailure`): the
+ * handshake sentence opens with "could not be established" and then says what
+ * to check; the fail-closed sentence opens with "started, but" and then says
+ * what went wrong. The two older forms are still in stored cache entries
+ * written by earlier builds. A sentence with no recognised preamble (the
+ * "did not answer in time" one, the list's own) shows whole — its first
+ * clause IS the cause.
+ */
+const VPN_FAILURE_PREAMBLES: readonly RegExp[] = [
+  /^The (?:OpenVPN|WireGuard|VPN) connection could not be established\b[\s:.—-]*/i,
+  /^Your (?:OpenVPN|WireGuard|VPN) connection started, but\s+/i,
+  /^The test Mac could not bring the tunnel up\b[\s:.—-]*/i,
+  /^The Mac that runs your profiles could not bring this tunnel up\b[\s:.—-]*/i,
+];
+
+/**
+ * Polish — the clause of a VPN failure the "when" row SHOWS. The server's
+ * sentence opens with a generic preamble that repeats the pill above it, so at
+ * every column width the visible part carried no information and the cause was
+ * hidden. The row now shows what follows the first ': ' (or the sentence minus
+ * a known preamble — `VPN_FAILURE_PREAMBLES`); the whole sentence stays in the
+ * title.
  */
 export function vpnFailureClause(sentence: string): string {
   const colon = sentence.indexOf(': ');
+  const preamble = VPN_FAILURE_PREAMBLES.find((re) => re.test(sentence));
   const clause =
     colon > 0
       ? sentence.slice(colon + 2)
-      : sentence.replace(/^The test Mac could not bring the tunnel up\b[\s:.—-]*/i, '');
+      : preamble !== undefined
+        ? sentence.replace(preamble, '')
+        : sentence;
   const trimmed = clause.trim();
   return /[A-Za-z0-9]/.test(trimmed) ? trimmed : sentence;
 }
@@ -1462,7 +1483,7 @@ export function vpnFailureClause(sentence: string): string {
 export function vpnNoticeClause(notice: string): string {
   if (notice === VPN_NOT_STORED_CHECK_NOTICE) return 'not stored yet — launch once';
   if (notice === VPN_NO_API_KEY_CHECK_NOTICE) return 'needs an API key — Settings';
-  const rest = notice.replace(/^Endpoint resolves\.\s*/, '').trim();
+  const rest = notice.replace(/^(?:Endpoint resolves|Address found)\.\s*/, '').trim();
   return rest === '' ? notice : rest;
 }
 
@@ -1985,18 +2006,15 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
       // as saying the address is current.
       return {
         text: 'seen at an unknown time',
-        title:
-          'This row predates the exit timestamp, so we cannot say when the address was ' +
-          'measured. Press Test for one we can date.',
+        title: 'We cannot say when this exit address was measured. Press Test to measure it again.',
         age: 'undated',
       };
     }
     return {
       text: `seen ${formatRelativeNarrow(new Date(at).toISOString(), nowMs)}`,
       title:
-        `Measured ${new Date(at).toLocaleString()}. The Tested time above is the reachability ` +
-        'check, which runs again — on demand and on the background sweep — WITHOUT re-reading ' +
-        'the exit, so the two dates are not the same fact.',
+        `Measured ${new Date(at).toLocaleString()}. The Tested time is when the connection was ` +
+        'last checked; the exit address is not re-read on every check, so the two dates can differ.',
       age: 'dated',
     };
   })();
@@ -2392,8 +2410,8 @@ export function ProfilePhoneCard(p: ProfilePhoneCardProps): JSX.Element {
                           data-server-measured-at={serverMeasuredLabel.iso}
                           className="text-[9.5px] text-ink-muted"
                           title={
-                            'The server-measured latency on this card was measured then. Checking ' +
-                            'reachability keeps that number, so the date above can be newer than it.'
+                            'When the server latency on this card was last measured. Running a check ' +
+                            'keeps that number, so the Checked date above can be newer.'
                           }
                         >
                           {serverMeasuredLabel.text}

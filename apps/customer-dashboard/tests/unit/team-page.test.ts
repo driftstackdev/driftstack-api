@@ -290,7 +290,7 @@ describe('team page — local integration', () => {
     expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
     expect(text(window, '[data-invites-list]')).toContain('carol@example.com');
     expect(text(window, '[data-banner]')).toMatch(
-      /appears in pending invites.*not sent again.*emailed link remains valid/i,
+      /now shows in pending invites.*didn't send it again.*link they received still works/i,
     );
     expect(
       window.document.querySelector('[data-invite-form-wrap]')?.classList.contains('hidden'),
@@ -337,10 +337,10 @@ describe('team page — local integration', () => {
 
     const submit = form.querySelector('button[type="submit"]') as HTMLButtonElement;
     expect(text(window, '[data-invite-error]')).toMatch(
-      /couldn't refresh pending invites.*reload and verify.*replace the first emailed link/i,
+      /couldn't refresh the list.*check pending invites before trying again.*replace a link that was already sent/i,
     );
     expect(submit.disabled).toBe(true);
-    expect(submit.textContent).toBe('Verify before retrying');
+    expect(submit.textContent).toBe('Check before retrying');
     form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
     expect(fetchCalls.filter((c) => c.init?.method === 'POST')).toHaveLength(1);
@@ -447,7 +447,7 @@ describe('team page — local integration', () => {
     expect(fetchCalls.filter((call) => call.init?.method === 'DELETE')).toHaveLength(1);
     expect(window.document.querySelector('[data-remove="mem_a"]')).toBeNull();
     expect(text(window, '[data-banner]')).toMatch(
-      /member-removal outcome is unknown.*team list was refreshed.*alice@example.com is no longer present.*removal likely completed.*do not submit it again/i,
+      /took too long.*alice@example.com is no longer in the list.*probably removed.*No need to try again/i,
     );
   });
 

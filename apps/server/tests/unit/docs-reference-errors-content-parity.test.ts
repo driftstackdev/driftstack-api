@@ -62,9 +62,10 @@ describe('docs reference/errors content parity', () => {
     expect(body).toContain('request := &driftstack.CreateSessionRequest{}');
     expect(body).toContain('client.Sessions.Create(ctx, request)');
     expect(body).not.toMatch(/archetype:\s*['"]…['"]|archetype=['"]…['"]|\bopts\b|V-NNN/);
-    expect(body).toMatch(
-      /Any new problem-type must update `PROBLEM_TYPES`, all three SDK error\s+tables, this reference, and the integration test covering its server-side\s+route in the same change\./,
-    );
+    // 2026-09-15 — the contributor change rule + source paths left the customer
+    // page; it ends on the cross-references instead.
+    expect(body).not.toMatch(/^## Source of truth$/m);
+    expect(body).toMatch(/^## Cross-references$/m);
   });
 
   it("BYOK + Feature-unavailable rows pinned: byok-anthropic-required (502) + feature-unavailable (503). These are the activation-gate signals consumed by 7 features (slice 131 framing); drift to dropping would orphan SDK consumers from handling the 'feature not wired' case", () => {

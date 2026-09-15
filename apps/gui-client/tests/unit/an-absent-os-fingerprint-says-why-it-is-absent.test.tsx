@@ -156,8 +156,8 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     expect(v.tone).toBe('unknown');
     // '—' (nothing was measured), never '?' (measured and undetermined).
     expect(v.glyph).toBe('—');
-    expect(v.hint).toMatch(/VPN tunnel/i);
-    expect(v.hint).toMatch(/does not expose a proxy stack/i);
+    expect(v.hint).toMatch(/VPN connections/i);
+    expect(v.hint).toMatch(/not available for VPN connections/i);
     expect(v.hint).toMatch(/No test can produce one/i);
     // ⛔ the whole point of the item: no dead-end instruction.
     expect(v.hint).not.toMatch(/Run Test/i);
@@ -166,7 +166,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
   it('ARM 2 — an observer that is switched off says so, and does NOT tell the customer to run Test', () => {
     const v = osFingerprintVerdict(unavailableOsFingerprint('observer_off'));
     expect(v.glyph).toBe('—');
-    expect(v.hint).toMatch(/switched off on this deployment/i);
+    expect(v.hint).toMatch(/the OS check is turned off/i);
     expect(v.hint).not.toMatch(/Run Test/i);
   });
 
@@ -187,7 +187,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     expect(res.os_fingerprint?.unavailable).toBe('vpn_tunnel');
 
     render(<ProxyOsChip fingerprint={res.os_fingerprint} size="xs" />);
-    expect(chip().getAttribute('title')).toMatch(/VPN tunnel/i);
+    expect(chip().getAttribute('title')).toMatch(/VPN connections/i);
     // Never green, never red — an unmeasurable row is neutral.
     expect(chip().getAttribute('data-os-tone')).toBe('unknown');
   });
@@ -200,7 +200,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     // which is exactly the hop a fresh app start makes.
     const reloaded = (await loadProbeCache()).p_off?.osFingerprint;
     expect(reloaded?.unavailable).toBe('observer_off');
-    expect(osFingerprintVerdict(reloaded).hint).toMatch(/switched off on this deployment/i);
+    expect(osFingerprintVerdict(reloaded).hint).toMatch(/the OS check is turned off/i);
   });
 
   it('ARM 6 — CONTROL: a cause from a NEWER server is dropped, never rendered as a cause this build cannot state truthfully', async () => {
@@ -227,7 +227,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
     expect(v.tone).toBe('match');
     expect(v.glyph).toBe('✓');
     expect(v.hint).not.toMatch(/not measured/i);
-    expect(v.hint).not.toMatch(/VPN tunnel/i);
+    expect(v.hint).not.toMatch(/VPN connections/i);
   });
 
   it('CONTROL — a server that sends BOTH a reading and a cause is believed about the READING: a cause explains an absence, and there is none', async () => {
@@ -242,7 +242,7 @@ describe('(o) O3 — the chip says WHY there is no fingerprint', () => {
 describe('(o) O4 — "measuring" is rendered from a running probe and from nothing else', () => {
   it('ARM 7 — CONTROL: while a probe THIS client started is in flight, the chip does say it', () => {
     render(<ProxyOsChip fingerprint={OS_FINGERPRINT_MEASURING} size="xs" />);
-    expect(chip().getAttribute('title')).toMatch(/Measuring this proxy’s stack/i);
+    expect(chip().getAttribute('title')).toMatch(/Checking this proxy’s operating system/i);
     expect(osFingerprintVerdict(OS_FINGERPRINT_MEASURING).glyph).toBe('…');
   });
 
@@ -307,7 +307,7 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
 
   it('ARM 10 — CONTROL: while the card’s own Test is in flight, the OS chip says it is measuring', () => {
     render(<ProfilePhoneCard {...cardProps({ testing: true })} />);
-    expect(chip().getAttribute('title')).toMatch(/Measuring this proxy’s stack/i);
+    expect(chip().getAttribute('title')).toMatch(/Checking this proxy’s operating system/i);
   });
 
   // Phase B (2026-09-11) — the card's caps row is a fixed line of MEASUREMENTS:
@@ -367,7 +367,7 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
     );
     const title = osHint();
     expect(title).not.toMatch(/measuring/i);
-    expect(title).toMatch(/VPN tunnel/i);
+    expect(title).toMatch(/VPN connections/i);
     expect(title).toMatch(/No test can produce one here/i);
     expect(title).not.toMatch(/Run Test/i);
   });
@@ -377,14 +377,14 @@ describe('(o) O4 — the profile card only claims to be measuring while its own 
     expect(document.querySelector('[data-component="proxy-os-fingerprint"]')?.textContent).toBe(
       '— OS',
     );
-    expect(osHint()).toMatch(/VPN tunnel/i);
+    expect(osHint()).toMatch(/VPN connections/i);
     expect(osHint()).not.toMatch(/Run Test/i);
   });
 
   it('ARM 15 — CONTROL: the scheme-derived cause is a FALLBACK — a reading the server did send still wins on a VPN card', () => {
     render(<ProfilePhoneCard {...cardProps({ vpn: true, osFingerprint: REAL })} />);
     expect(chip().getAttribute('data-os-tone')).toBe('match');
-    expect(chip().getAttribute('title') ?? '').not.toMatch(/VPN tunnel/i);
+    expect(chip().getAttribute('title') ?? '').not.toMatch(/VPN connections/i);
   });
 });
 

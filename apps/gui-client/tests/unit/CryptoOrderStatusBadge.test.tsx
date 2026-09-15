@@ -12,7 +12,7 @@ import {
 describe('V-534.U cryptoOrderStatusLabelFor', () => {
   it('maps every known status to a human-readable label', () => {
     expect(cryptoOrderStatusLabelFor('pending')).toBe('Awaiting payment');
-    expect(cryptoOrderStatusLabelFor('confirming')).toBe('Confirming on-chain');
+    expect(cryptoOrderStatusLabelFor('confirming')).toBe('Confirming payment');
     expect(cryptoOrderStatusLabelFor('paid')).toBe('Paid');
     expect(cryptoOrderStatusLabelFor('failed')).toBe('Failed');
     expect(cryptoOrderStatusLabelFor('partial')).toContain('Partial');

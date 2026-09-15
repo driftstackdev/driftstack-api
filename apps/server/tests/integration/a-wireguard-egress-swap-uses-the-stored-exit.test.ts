@@ -227,7 +227,7 @@ describe('POST /v1/agent-sessions/:id/egress onto a WireGuard proxy (mid-session
     const { frames } = registerConfirmingNode(nodeId);
     const body = await swap(sessionId, proxyId);
     expect(body.status).toBe('unavailable');
-    expect(body.reason).toMatch(/exit identity/);
+    expect(body.reason).toMatch(/has not been tested yet/);
     expect(body.reason).toMatch(/\/test first/);
     expect(frames).toHaveLength(0);
   });

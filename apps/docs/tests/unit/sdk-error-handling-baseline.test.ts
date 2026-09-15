@@ -1,5 +1,5 @@
 // W330.A — drift guard for /sdk/error-handling page. Pins:
-//   • mention of RFC 9457 (problem+json; obsoletes 7807) and PROBLEM_TYPES export
+//   • mention of RFC 9457 (problem+json; obsoletes 7807) and the cross-SDK problem-type mapping
 //   • dispatch-on-slug guidance (not HTTP status)
 //   • DriftstackError base class across TS/Python/Go
 //   • rate-limited + transport are flagged retryable
@@ -43,9 +43,9 @@ describe('W330.A /sdk/error-handling baseline', () => {
     expect(body).toMatch(/application\/problem\+json/i);
   });
 
-  it('points at PROBLEM_TYPES in @driftstack/api-types', () => {
-    expect(body).toContain('PROBLEM_TYPES');
-    expect(body).toContain('@driftstack/api-types');
+  it('promises that the same problem-type URIs map to matching errors in every SDK', () => {
+    expect(body).toMatch(/the\s+same problem-type URIs map to matching errors in every SDK\./);
+    expect(body).toMatch(/see the naming note/);
   });
 
   it('promises dispatch-on-slug (not HTTP status)', () => {

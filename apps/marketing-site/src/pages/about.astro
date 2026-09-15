@@ -14,7 +14,7 @@ import CtaBand from '../components/CtaBand.astro';
 
 <BaseLayout
   title="About"
-  description="Driftstack builds pixel-identical iPhone Safari sessions on demand. EU-resident control plane, no behavioural data collection, customer-configurable egress (SOCKS5 · WireGuard · OpenVPN)."
+  description="Driftstack builds pixel-identical iPhone Safari sessions on demand. Servers and account data in the EU, no behavioural data collection, and your own proxy or VPN per profile (SOCKS5 · WireGuard · OpenVPN)."
 >
   <!-- Hero — Band A: the plain sentence leads, the positioning line
        rides underneath as mono small print. -->
@@ -28,9 +28,9 @@ import CtaBand from '../components/CtaBand.astro';
       — the same engine every physical iPhone runs — with nothing
       quietly modified while the browser is running ("patched at
       runtime"), so there's nothing for detection systems to spot.
-      Our servers and your account data live in the EU (EU-resident
-      control plane), and the scope stays deliberately narrow: one
-      product, two ways to use it, no land-grab.
+      Our servers and your account data live in the EU, and the scope
+      stays deliberately narrow: one product, two ways to use it, no
+      land-grab.
     </p>
   </PageHero>
 
@@ -44,20 +44,19 @@ import CtaBand from '../components/CtaBand.astro';
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-tk-ink">iPhone Safari fidelity, on demand.</h2>
           <p class="mt-3 text-tk-ink-2 leading-relaxed">
-            Most stealth browsers fake an iPhone by patching the
-            browser's behaviour on the fly (rewriting JavaScript at
-            runtime). Detection systems are built to catch exactly that —
-            the fingerprint values those tools return, like the
+            Most stealth browsers fake an iPhone by changing the
+            browser's behaviour on the fly. Detection systems are built
+            to catch exactly that. One common check asks the browser to
+            draw a hidden test image and compares the result (the
             <a href="/glossary/#canvas-hash" class="text-tk-accent-text underline">canvas</a>
-            and WebGL hashes (values derived from how the browser draws
-            an invisible test image), come out 100% unique per session:
-            the literal opposite of a real iPhone, which returns
-            the same hash as millions of other iPhones. Driftstack takes
-            a different approach: we run Apple's WebKit source code, the
-            same engine that ships on every real iPhone. Nothing is
-            rewritten at runtime, so there's nothing for detection to
-            find. The fingerprint your code reads is the fingerprint a
-            real iPhone would send.
+            and WebGL fingerprints): the values those tools return come
+            out different every session — the opposite of a real iPhone,
+            which returns the same value as millions of other iPhones.
+            Driftstack takes a different approach: we run Apple's WebKit
+            source code, the same engine that ships on every real iPhone.
+            Nothing is changed on the fly, so there's nothing for
+            detection to find. The fingerprint a website reads is the
+            fingerprint a real iPhone would send.
           </p>
         </div>
         <div class="card p-8">
@@ -66,22 +65,19 @@ import CtaBand from '../components/CtaBand.astro';
           </p>
           <h2 class="mt-3 text-2xl font-semibold text-tk-ink">Stealth browsing matures.</h2>
           <p class="mt-3 text-tk-ink-2 leading-relaxed">
-            For the last decade, the field has been an arms race of
-            patching browsers on the fly (runtime patching) that always
-            favoured the detector. We think the next decade looks
-            different: real browser engines, real device profiles,
-            transparent metering (billing you can see and check), and
-            customer-configurable
-            egress (SOCKS5 · WireGuard · OpenVPN): session traffic
-            leaves for the web through an exit you control — your own
-            proxy or VPN (<a href="/glossary/#egress" class="text-tk-accent-text underline">what's egress?</a>).
+            For the last decade, stealth browsing has been an arms race
+            of patching browsers on the fly — one the detectors always
+            won. We think the next decade looks different: real browser
+            engines, real device profiles, billing you can see and check,
+            and traffic that leaves through your own proxy or VPN
+            (SOCKS5 · WireGuard · OpenVPN).
             See
             <a
               href="/trust/security-overview/"
               class="text-tk-accent-text underline underline-offset-4"
               >/trust/security-overview</a
             >
-            for the security posture. Driftstack starts with iPhone Safari,
+            for the security details. Driftstack starts with iPhone Safari,
             because that's the device that matters
             most for commerce, ticketing, and account workflows.
           </p>
@@ -100,7 +96,7 @@ import CtaBand from '../components/CtaBand.astro';
             <circle cx="12" cy="10" r="3" />
           </svg>
         </IconTile>
-        <h3 class="font-semibold text-tk-ink">Run from the EU (EU-resident control plane)</h3>
+        <h3 class="font-semibold text-tk-ink">Servers and database in the EU</h3>
         {/* S30 2026-07-07 (founder decision: soften) — object storage
             dropped from the EU-resident list: file objects (avatars,
             uploads) live on Cloudflare R2 in the default jurisdiction
@@ -110,12 +106,11 @@ import CtaBand from '../components/CtaBand.astro';
           Compute and database run in the EU. Uploaded files (avatars,
           for example) sit on Cloudflare's R2 storage, which can
           replicate outside the EU.
-          Session execution and a few processors (the Mac fleet, the
-          optional AI agent, the live-view stream) transfer to the US
-          under Standard Contractual Clauses + the EU-US Data Privacy
-          Framework — no undisclosed flows. Standard Contractual
-          Clauses are the EU's standard legal contract for sending
-          data abroad, and nothing is transferred that isn't disclosed.
+          Running sessions, the optional AI agent, and the live video
+          stream transfer data to the US under Standard Contractual
+          Clauses (the EU's standard legal contract for sending data
+          abroad) and the EU-US Data Privacy Framework. Nothing is
+          transferred that isn't disclosed.
           The per-vendor breakdown — who runs where, doing what, on
           which legal basis — lives on
           <a href="/trust/sub-processors/" class="text-tk-accent-text underline">/trust/sub-processors</a>.
@@ -132,10 +127,9 @@ import CtaBand from '../components/CtaBand.astro';
         <p class="mt-3 text-sm text-tk-ink-2">
           We don't log response bodies or session content, we don't
           train models on your traffic, and we don't sell datasets.
-          The control plane does record the navigations it coordinates
-          — the destination you ask it for, alongside session id,
-          timing, duration and outcome — because routing and billing
-          the work requires it. Our <a
+          We do record the pages you ask a session to visit, along
+          with the session id, timing, duration and outcome — running
+          and billing the service requires it. Our <a
             class="underline decoration-tk-line underline-offset-4 hover:text-tk-ink"
             href="/legal/privacy/">privacy policy</a> lists every
           category in full, and the <a
@@ -153,13 +147,12 @@ import CtaBand from '../components/CtaBand.astro';
         <h3 class="font-semibold text-tk-ink">Honest scope</h3>
         <p class="mt-3 text-sm text-tk-ink-2">
           We say no to things we can't ship well. Touch, scroll, and
-          typing that come from real human recordings and move like a
-          real hand — each profile keeping its own habits (the
-          behavioural input engine, with a per-profile persona) — ship
-          at v1.0. The recipe library is live at v1.0: save a finished agent-session as a
-          replayable step-by-step recipe, then view, list, or delete
-          your saved recipes. We document only the capabilities available
-          in the current product and API.
+          typing are built from real human recordings and move like a
+          real hand, and each profile keeps its own habits. You can also
+          save a finished agent session as a step-by-step recipe you can
+          replay, then view or delete your saved recipes. We document
+          only the capabilities available in the current product and
+          API.
         </p>
       </div>
     </div>
@@ -174,7 +167,7 @@ import CtaBand from '../components/CtaBand.astro';
   <Section
     label="Operating commitments"
     title="What we promise to do."
-    lead="Promises matter most once you're paying for production access and can't unwind a commitment. So we publish the operating commitments every customer can hold us to, with public links to verify each one."
+    lead="Promises matter most once you're paying for the service and can't easily unwind a commitment. So we publish the operating commitments every customer can hold us to, with public links to verify each one."
     class="bg-tk-surface"
   >
     <div class="mt-10 grid gap-6 md:grid-cols-2">
@@ -185,24 +178,20 @@ import CtaBand from '../components/CtaBand.astro';
           </svg>
         </IconTile>
         <h3 class="font-semibold text-tk-ink">
-          Per-merge security audit, on a cadence
+          Ongoing security audits, with findings published
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Every meaningful slice of code merged is re-audited
-          against the same six questions before it ships: can an
-          API key reach more than it was granted (scope-reach)?
-          Could a secret end up stored or logged in readable form
-          (plaintext leakage)? Can a repeated request accidentally
-          run twice (idempotency)? Can log entries be forged
-          (audit-log injection)? Can one account see another's
-          data (account-scope leakage)? Can a dashboard login be
-          stolen (web-session-token security)? Findings
-          with closure status published at
+          Before it ships, every meaningful code change is checked
+          against the same six questions: can an API key reach more
+          than it was granted? Could a secret end up stored or logged
+          in readable form? Can a repeated request accidentally run
+          twice? Can log entries be forged? Can one account see
+          another's data? Can a dashboard login be stolen? Findings
+          and their status are published at
           <a href="/security/" class="text-tk-accent-text underline">
             /security
-          </a>. A deeper full audit ("pre-flight") runs before each
-          new customer's first paid month — their first production
-          billing cycle.
+          </a>. A deeper full audit runs before each new customer's
+          first paid month.
         </p>
       </div>
       <div class="card bg-tk-raised p-6">
@@ -215,19 +204,14 @@ import CtaBand from '../components/CtaBand.astro';
           Disaster recovery, rehearsed before it's needed
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
-          Eleven disaster-recovery (DR) scenarios documented with
-          concrete recovery commands — host loss (a dead server),
-          Postgres corruption (the database), Redis loss (the cache),
-          R2 object loss (stored files),
-          signing-key rotation under attack (replacing a compromised
-          key mid-incident), bad deploys, cert renewal failures
-          (expired security certificates), Cloudflare Pages
-          regressions (our website host breaking), and a
-          multi-day Hetzner regional outage (our hosting provider
-          losing a region for days). Every
-          scenario is rehearseable on staging — our test copy of the
-          platform — before the same recovery procedure is ever used
-          against production. How incidents get published:
+          Eleven disaster scenarios are written up with step-by-step
+          recovery instructions — a dead server, a corrupted database,
+          loss of the cache or of stored files, a compromised signing
+          key, a bad release, an expired security certificate, our
+          website host breaking, and a multi-day outage at our hosting
+          provider. Every one can be rehearsed on a test copy of the
+          platform before the same recovery steps are ever used in
+          production. How incidents get published:
           <a href="/trust/incidents/" class="text-tk-accent-text underline">
             /trust/incidents
           </a>.
@@ -267,8 +251,8 @@ import CtaBand from '../components/CtaBand.astro';
         </h3>
         <p class="mt-2 text-sm text-tk-ink-2">
           Enterprise customers and Self-hosted licensees get
-          access to our source code — the modified WebKit engine
-          (the WebKit fork) + the control-plane source —
+          access to our source code — our modified version of the
+          WebKit browser engine, plus the Driftstack server software —
           under a written escrow agreement: a neutral third party
           holds a copy. If Driftstack
           sunsets the cloud service, escrow releases the source
@@ -277,7 +261,7 @@ import CtaBand from '../components/CtaBand.astro';
           <a href="/faq/#acceptable-use" class="text-tk-accent-text underline">
             FAQ "what if Driftstack goes away?"
           </a>
-          entry has the full mechanics.
+          entry has the full details.
         </p>
       </div>
     </div>

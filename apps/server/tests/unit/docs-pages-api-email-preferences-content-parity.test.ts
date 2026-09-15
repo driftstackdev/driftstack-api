@@ -83,14 +83,14 @@ describe('W771 docs /api/email-preferences content parity', () => {
     expect(p).toMatch(
       /`status-incident-created` \/ `status-incident-resolved` — only\s*\n?\s+to customers explicitly subscribed via `\/status` \(separate\s*\n?\s+opt-in surface, not part of email preferences\)\./,
     );
-    expect(p).toMatch(/Security notices under GDPR Art\. 34/);
+    expect(p).toMatch(/Security notices required under GDPR Art\. 34\./);
   });
 
-  it("CRITICAL OptOutableEmailEventSchema canonical-source framing pinned. The 'The OptOutableEmailEventSchema enum is the canonical opt-outable set — categories absent from that enum are operational by design' wording matches W759 dashboard /settings V-204 schema-mirror comment.", () => {
+  it("CRITICAL everything-else-always-sends framing pinned in customer words. The 'anything not in the opt-outable table above always sends' sentence carries the same contract the OptOutableEmailEventSchema enum enforces (W759 dashboard /settings V-204 schema-mirror comment) without naming the schema.", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /The\s*\n?`OptOutableEmailEventSchema` enum is the canonical opt-outable\s*\n?set — categories absent from that enum are operational by design\./,
+      /See \[Emails Driftstack sends\]\(\/reference\/emails\/\) for the full list;\s*\n?anything not in the opt-outable table above always sends\./,
     );
   });
 
@@ -124,16 +124,16 @@ describe('W771 docs /api/email-preferences content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /`400 bad-request` — `event_type` is not in the opt-outable enum\s*\n?\s+\(e\.g\. customer tried to opt out of `signup-verification`, which\s*\n?\s+is operational\)\./,
+      /`400 bad-request` — `event_type` is not one of the opt-outable\s*\n?\s+categories \(e\.g\. customer tried to opt out of `signup-verification`,\s*\n?\s+which is operational\)\./,
     );
   });
 
   it("CRITICAL GET=account_owner AND PUT=account_owner scope framing pinned. S36 2026-07-07 (fable-truth-audit): BOTH service methods gate on 'account_owner' (email-preferences.ts list() :51 + set() :90 throwIfMissingScope(ctx, 'account_owner')), and hasScope does NOT let a broad `write` key satisfy account_owner (only the legacy admin alias) — the old 'write or account_owner' PUT claim would 403 a write-scoped key. Drift would let SDK consumers send wrong-scoped requests.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Required scope: `account_owner` \(the service gates this read on/);
+    expect(p).toMatch(/Required scope: `account_owner` \(a bare `read` key is not sufficient\)\./);
     expect(p).toMatch(
-      /Required scope: `account_owner` \(the service gates this write on\s*\n?`account_owner` — a broad `write` key is not sufficient\)\./,
+      /Required scope: `account_owner` \(a broad `write` key is not sufficient\)\./,
     );
     // Drift sentinels — neither overstated claim may come back.
     expect(p).not.toMatch(/Required scope: `read` or `account_owner`\./);
@@ -156,15 +156,14 @@ describe('W771 docs /api/email-preferences content parity', () => {
     );
   });
 
-  it('CRITICAL Source-of-truth pointers pinned — apps/server/src/routes/email-preferences.ts + OptOutableEmailEventSchema + email-preferences service + repo. Drift would lose the canonical impl pointers.', () => {
+  it('CRITICAL the customer page carries no internal source pointers; the complete email catalogue is reached through the public /reference/emails/ page instead.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Routes: `apps\/server\/src\/routes\/email-preferences\.ts`\./);
+    expect(p).not.toMatch(/## Source of truth/);
+    expect(p).not.toMatch(/apps\/server\/src|packages\/api-types\/src|OptOutableEmailEventSchema/);
     expect(p).toMatch(
-      /Schema:\s*\n?`packages\/api-types\/src\/accounts\.ts:OptOutableEmailEventSchema`\./,
+      /See \[Emails Driftstack sends\]\(\/reference\/emails\/\) for the full list;\s*\n?anything not in the opt-outable table above always sends\./,
     );
-    expect(p).toMatch(/Service: `apps\/server\/src\/services\/email-preferences\.ts`\./);
-    expect(p).toMatch(/Repo:\s*\n?`apps\/server\/src\/db\/email-preferences-repo\.ts`\./);
   });
 
   it('CRITICAL 2-endpoint canonical set — GET /v1/account/email-preferences + PUT /v1/account/email-preferences.', () => {

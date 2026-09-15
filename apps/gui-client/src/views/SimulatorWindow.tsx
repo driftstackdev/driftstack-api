@@ -533,18 +533,25 @@ export function shouldRefitForAspectChange(
 }
 
 /** Finding #4 — the cookies/downloads LIST polls render a 200 `status:'unavailable'`
- *  result's `reason` verbatim. The server emits three INTERNAL diagnostic phrases for
- *  that state (agent-sessions.ts) that read as raw debug strings, not customer copy.
- *  Map ONLY those three to a single friendly line; pass everything else through
- *  unchanged so genuinely-actionable reasons (RELAY_BUSY "too many concurrent
- *  requests…", harness outcome messages) and the calm session fallback
- *  still surface. Pure + exported for unit tests. */
+ *  result's `reason` verbatim. The server names three states there (agent-sessions.ts:
+ *  not running / cannot be reached / feature not available); each is mapped to the
+ *  short lowercase line the pane notes are written in, keyed on the server's CURRENT
+ *  sentence AND on the older internal diagnostic an out-of-date server still sends
+ *  (those read as raw debug strings, never customer copy). Everything else passes
+ *  through unchanged so genuinely-actionable reasons (RELAY_BUSY "too many concurrent
+ *  requests…", harness outcome messages) and the calm session fallback still
+ *  surface. Pure + exported for unit tests. */
 export function friendlyUnavailableNote(reason: string | null | undefined): string {
   switch (reason) {
+    case 'This session is not running.':
     case 'session is not live on a node':
+      return "this session isn't running right now";
+    case 'This session cannot be reached right now. Try again shortly.':
     case 'session node is not connected':
+      return "this session can't be reached right now — retrying";
+    case 'This feature is not available on this deployment.':
     case 'fleet control plane not enabled':
-      return "the session isn't live on a device right now";
+      return "this feature isn't available here";
     case 'not available yet':
       return 'unavailable for this session';
     default:
@@ -627,20 +634,22 @@ export type VpnBringupPhase =
   | 'verifying';
 /** How each pre-`up` phase is phrased: the full caption (the address bar's
  *  title and the notice under it) and the short chip suffix. `resolving` /
- *  `connecting` are the provider's side and say what the tunnel is doing at the
- *  far end; `handshaking` is the config's side and names the handshake; the
- *  four "ours" phases say what we are setting up. In the voice of the existing
- *  four ("Starting the VPN tunnel…", "Resolving the exit…"). */
+ *  `connecting` are the provider's side and say what the far end is doing;
+ *  `handshaking` is the config's side; the four "ours" phases say what we are
+ *  setting up. In the voice of the existing four ("Starting the VPN tunnel…",
+ *  "Resolving the exit…") and in the customer's words: each phase keeps its own
+ *  caption so progress visibly advances, but none narrates the mechanics
+ *  (handshake / routes / tunnel proxy / endpoint) the customer cannot act on. */
 const VPN_BRINGUP_PHASES: Readonly<Record<VpnBringupPhase, { caption: string; chip: string }>> = {
-  resolving: { caption: 'Finding the proxy endpoint…', chip: 'finding the endpoint…' },
-  connecting: {
-    caption: 'Connecting to the proxy endpoint…',
-    chip: 'connecting to the endpoint…',
+  resolving: { caption: 'Finding the VPN server…', chip: 'finding the server…' },
+  connecting: { caption: 'Connecting to the VPN server…', chip: 'connecting to the server…' },
+  handshaking: { caption: 'Securing the VPN connection…', chip: 'securing the connection…' },
+  assigning_address: { caption: 'Setting up the VPN address…', chip: 'setting up the address…' },
+  configuring_routes: {
+    caption: 'Setting up the VPN connection…',
+    chip: 'setting up the connection…',
   },
-  handshaking: { caption: 'Completing the VPN handshake…', chip: 'handshaking…' },
-  assigning_address: { caption: 'Assigning the tunnel address…', chip: 'assigning the address…' },
-  configuring_routes: { caption: 'Setting up the tunnel routes…', chip: 'setting up routes…' },
-  starting_proxy: { caption: 'Starting the tunnel proxy…', chip: 'starting the proxy…' },
+  starting_proxy: { caption: 'Finishing the VPN setup…', chip: 'finishing setup…' },
   verifying: { caption: 'Verifying the tunnel…', chip: 'verifying the tunnel…' },
 };
 /** The pre-`up` phase a step is, or null (every other step, `up` included). */
@@ -790,10 +799,10 @@ export function vpnTunnelUpCaption(t: VpnTunnelUp): string {
     // W1 — A3's `up` (success) phase reads the same line: it IS today's
     // tunnel-up state, and what follows it is the harness's to announce.
     return where !== null
-      ? `VPN tunnel connected (${where}) — browser not attached`
-      : 'VPN tunnel connected — browser not attached';
+      ? `VPN tunnel connected (${where}) — browser not open`
+      : 'VPN tunnel connected — browser not open';
   }
-  return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser has not attached yet`;
+  return `VPN tunnel is up (${where ?? 'exit pending'}) — the browser is not open yet`;
 }
 
 /**
@@ -825,7 +834,7 @@ export function vpnTunnelChipText(t: VpnTunnelUp): string {
       : `Starting the VPN tunnel · ${VPN_BRINGUP_PHASES[phase].chip}`;
   }
   if (t.ip !== null) return `VPN tunnel up · exit ${t.ip}`;
-  if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser not attached';
+  if (t.step === 'vpn_egress_active') return 'VPN tunnel up · browser not open';
   if (t.step === 'egress_geo_resolving') return 'VPN tunnel up · resolving the exit…';
   return 'VPN tunnel up · starting the browser…';
 }
@@ -840,7 +849,7 @@ export function vpnAddressPlaceholder(t: VpnTunnelUp): string {
   if (!t.vpn) return 'connecting… — the address bar unlocks once the device is live';
   if (!vpnTunnelIsUp(t))
     return 'Starting the VPN tunnel… — the address bar unlocks once the device is live';
-  return 'VPN tunnel is up — the address bar unlocks once the browser attaches';
+  return 'VPN tunnel is up — the address bar unlocks once the browser opens';
 }
 
 /** (h) — the "stream was live" latch is PER SESSION. An in-place relaunch
@@ -7050,11 +7059,11 @@ export function SimulatorWindow(): JSX.Element {
           // the jar can't refresh) which keeps its actionable note even over a stale jar.
           const note =
             status === 401 || status === 403
-              ? 'Session control credential expired — reopen the session to refresh.'
+              ? "This session's access has expired — reopen the session to refresh."
               : status === 404
                 ? 'cookies will appear once a page loads in the session'
                 : status === 503
-                  ? "cookies aren't enabled on this deployment"
+                  ? "cookies aren't available here"
                   : "couldn't load cookies — retrying";
           // The note now renders alongside a loaded jar (see the pane), so the
           // suppression that made the expired-credential carve-out unreachable is
@@ -7143,11 +7152,11 @@ export function SimulatorWindow(): JSX.Element {
           const status = err instanceof AgentSessionControlError ? err.status : 0;
           const credsExpired = status === 401 || status === 403;
           const note = credsExpired
-            ? 'Session control credential expired — reopen the session to refresh.'
+            ? "This session's access has expired — reopen the session to refresh."
             : status === 404
               ? 'network activity will appear once the page starts loading'
               : status === 503
-                ? "the network view isn't enabled on this deployment"
+                ? "the network view isn't available here"
                 : "couldn't load network activity — retrying";
           // ⛔ THE OLD CARVE-OUT HERE WAS 100% DEAD and is removed. It read
           // `hasNetworkRef.current && !credsExpired ? null : note`, meant to keep the
@@ -7198,7 +7207,7 @@ export function SimulatorWindow(): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const onUploadFile = (file: File): void => {
     if (file.size > 64 * 1024 * 1024) {
-      setUploadNote(`${file.name} is too large (max 64 MiB).`);
+      setUploadNote(`${file.name} is too large (max 64 MB).`);
       return;
     }
     // Own the upload at SELECTION time, before FileReader's async boundary. Capturing
@@ -7354,11 +7363,11 @@ export function SimulatorWindow(): JSX.Element {
           // EXCEPT 401/403 (creds expired → can't refresh) keeps its actionable note.
           const note =
             status === 401 || status === 403
-              ? 'Session control credential expired — reopen the session to refresh.'
+              ? "This session's access has expired — reopen the session to refresh."
               : status === 404
                 ? 'Session is no longer live.'
                 : status === 503
-                  ? "downloads aren't enabled on this deployment"
+                  ? "downloads aren't available here"
                   : "couldn't reach the device for downloads — retrying";
           const credsExpired = status === 401 || status === 403;
           setDownloadsNote(hasDownloadsRef.current && !credsExpired ? null : note);
@@ -8283,7 +8292,7 @@ export function SimulatorWindow(): JSX.Element {
         // reaper, which closes it on the box. So End-session does the right thing
         // even without control auth, instead of a dead "control request failed"
         // (founder 2026-06-23 "still cant end session"). Best-effort notice first.
-        showNotice('Ending — closing the window (the session will stop on the box).');
+        showNotice('Ending — closing the window. The session will stop shortly.');
         window.setTimeout(() => {
           if (sessionIdRef.current !== request.sessionId) return;
           void withCurrentWindow((w) =>
@@ -9587,14 +9596,10 @@ export function SimulatorWindow(): JSX.Element {
                         <div
                           role="status"
                           data-component="transport-fallback-badge"
-                          title="The video is going through a TCP/TURN relay because direct UDP is blocked (firewall / NAT / ISP). Real-time video over TCP head-of-line-blocks, which feels very slow. Fix: open the box UDP port range to your network, or use a closer (EU) box."
+                          title="Your network is blocking the fastest video route, so the video may feel slow. Try a different network or contact support."
                           className="pointer-events-auto whitespace-nowrap rounded-full bg-status-error px-3 py-1 text-[10px] font-semibold text-white shadow"
                         >
-                          ⚠ Slow link — video{' '}
-                          {conn.relayed === true
-                            ? 'relayed'
-                            : `over ${conn.transport?.toUpperCase()}`}{' '}
-                          (UDP blocked)
+                          ⚠ Slow connection — video is taking a slower route
                         </div>
                       ) : null
                     }
@@ -9611,8 +9616,8 @@ export function SimulatorWindow(): JSX.Element {
                     </span>
                     <span className="max-w-xs text-sm">
                       {streamingHealth === 'blank'
-                        ? 'The device is connected, but its capture is blank.'
-                        : 'The device could not start its video capture.'}
+                        ? 'The device is connected, but no video is showing.'
+                        : 'The device could not start its video.'}
                     </span>
                   </div>
                 )}
@@ -9694,7 +9699,7 @@ export function SimulatorWindow(): JSX.Element {
                     >
                       <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
                       {freezeRecoveryExhausted && sessionEnded === null ? (
-                        <span>Video frozen — recovery didn&apos;t take.</span>
+                        <span>Video frozen — automatic recovery failed.</span>
                       ) : (
                         <span>{recovering ? 'Video frozen — recovering' : 'Video frozen'}</span>
                       )}
@@ -10011,7 +10016,7 @@ export function SimulatorWindow(): JSX.Element {
                       title={
                         endArmed
                           ? 'Click again to end the session (no undo)'
-                          : 'End the session — stops the worker and tears down the browser'
+                          : 'End the session — stops the device and closes the browser (no undo)'
                       }
                       disabled={controlBusy}
                       aria-busy={controlAction?.kind === 'end'}
@@ -10070,7 +10075,7 @@ export function SimulatorWindow(): JSX.Element {
                                   : '…'}
                               </span>
                               <span className="text-white/30"> · </span>
-                              <span>{info ? wsHost(info.ws_url) : 'not connected'}</span>
+                              <span>{info ? 'connected' : 'not connected'}</span>
                               <span className="text-white/30"> · </span>
                               {conn.transport !== null ? (
                                 <span
@@ -10080,11 +10085,12 @@ export function SimulatorWindow(): JSX.Element {
                                       : 'text-status-error'
                                   }
                                 >
-                                  {conn.transport}
-                                  {conn.relayed ? ' relay⚠' : ''}
+                                  {conn.transport === 'udp' && conn.relayed !== true
+                                    ? 'direct'
+                                    : 'slow route ⚠'}
                                 </span>
                               ) : (
-                                <span className="text-white/50">link…</span>
+                                <span className="text-white/50">connecting…</span>
                               )}
                             </div>
                             <div className="truncate">
@@ -10423,8 +10429,11 @@ export function SimulatorWindow(): JSX.Element {
                                             : 'text-status-error'
                                         }
                                       >
-                                        {conn.transport}
-                                        {conn.relayed ? ' · relay ⚠' : ' · direct'}
+                                        {conn.relayed
+                                          ? 'Relayed ⚠ slow'
+                                          : conn.transport === 'udp'
+                                            ? 'Direct'
+                                            : 'Direct ⚠ slow'}
                                       </span>
                                     ) : (
                                       <span className="text-white/50">measuring…</span>
@@ -10441,17 +10450,17 @@ export function SimulatorWindow(): JSX.Element {
                                     conn.freezeCount !== null) && (
                                     <div className="mt-1 flex flex-wrap gap-x-2 text-white/70">
                                       {conn.decodeFps !== null && (
-                                        <span>decode {conn.decodeFps} fps</span>
+                                        <span>video {conn.decodeFps} fps</span>
                                       )}
                                       {conn.packetLossPct !== null && (
                                         <span
                                           className={conn.packetLossPct > 1 ? 'text-amber-300' : ''}
                                         >
-                                          loss {conn.packetLossPct}%
+                                          packet loss {conn.packetLossPct}%
                                         </span>
                                       )}
                                       {conn.jitterMs !== null && (
-                                        <span>jitter {conn.jitterMs}ms</span>
+                                        <span>jitter {conn.jitterMs} ms</span>
                                       )}
                                       {conn.freezeCount !== null && (
                                         <span
@@ -10475,7 +10484,7 @@ export function SimulatorWindow(): JSX.Element {
                                               : ''
                                           }
                                         >
-                                          frames {conn.framesDecodedRecent} dec
+                                          frames {conn.framesDecodedRecent} decoded
                                           {conn.framesRenderedRecent !== null
                                             ? ` / ${String(conn.framesRenderedRecent)} shown`
                                             : ''}
@@ -10508,15 +10517,14 @@ export function SimulatorWindow(): JSX.Element {
                                     Link
                                   </div>
                                   <div className="mt-0.5 truncate">
-                                    {info ? wsHost(info.ws_url) : 'not connected'}
-                                    {info && <span className="text-white/50"> · ws ✓</span>}
+                                    {info ? 'Connected ✓' : 'Not connected'}
                                   </div>
                                 </div>
                                 {(proxyLabel !== '' ||
                                   reportHasEgressReadout(sessionCapabilityReport)) && (
                                   <div className="rounded-[10px] border border-white/[0.10] bg-black/20 px-2.5 py-2">
                                     <div className="text-[9.5px] uppercase tracking-[0.04em] text-white/50">
-                                      Egress
+                                      Proxy
                                     </div>
                                     {/* MED #2 — ONLY the cosmetic "🌍 {proxyLabel}" line is gated on
                                         the launch-time proxy query param; the live readouts below read
@@ -10561,10 +10569,8 @@ export function SimulatorWindow(): JSX.Element {
                                   <div className="font-sans text-[9.5px] uppercase tracking-[0.04em] text-white/50">
                                     Identity
                                   </div>
-                                  <div className="mt-0.5 truncate">
-                                    engine-deep · bit-exact device
-                                  </div>
-                                  <div className="truncate">input human-cadence native</div>
+                                  <div className="mt-0.5 truncate">Verified iPhone device</div>
+                                  <div className="truncate">Native touch input</div>
                                   <div className="truncate text-white/50">
                                     build{' '}
                                     {typeof __BUILD_STAMP__ !== 'undefined'
@@ -10703,7 +10709,7 @@ export function SimulatorWindow(): JSX.Element {
                                   : 'Drop a file or click to upload'}
                           </span>
                           <span className="text-[10px] text-white/50">
-                            → feeds the page&apos;s file picker · max 64 MiB
+                            Available to the page&apos;s file picker · max 64 MB
                           </span>
                         </button>
 

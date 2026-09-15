@@ -16,7 +16,7 @@ and the EU-US Data Privacy Framework (DPF).
 
 ## The short answer
 
-- The control plane — API servers and databases — runs in the EU
+- The API servers and databases run in the EU
   (Hetzner in Germany for compute, Neon in Frankfurt for Postgres,
   Upstash in Frankfurt for the cache). Customer data in our
   databases — your account, profiles, audit logs, session
@@ -25,7 +25,7 @@ and the EU-US Data Privacy Framework (DPF).
   Cloudflare's R2 storage network in its default jurisdiction,
   which replicates across EU + US regions. There is **no EU-only
   storage guarantee** for file objects.
-- **Session execution** — the iPhone Safari fleet — runs on
+- **Session execution** — your iPhone Safari sessions run on
   MacStadium hardware in the US, under SCCs + the EU-US DPF.
 - The complete sub-processor list, with each provider's region and
   contractual transfer basis, is published at
@@ -39,7 +39,7 @@ and the EU-US Data Privacy Framework (DPF).
 | Account row (email, tier, slug, region preference)      | Postgres (Neon, Frankfurt)                    | MFA secrets are stored encrypted.                                                          |
 | API keys                                                | Postgres (Neon, Frankfurt)                    | Stored as hashes; the plaintext key is never stored.                                       |
 | Session metadata + event timeline                       | Postgres (Neon, Frankfurt)                    | Lifecycle rows and events.                                                                 |
-| Profile metadata (name, archetype, description)         | Postgres (Neon, Frankfurt)                    |                                                                                            |
+| Profile metadata (name, device, description)            | Postgres (Neon, Frankfurt)                    |                                                                                            |
 | Audit log                                               | Postgres (Neon, Frankfurt)                    | Append-only.                                                                               |
 | Webhook endpoints + delivery log                        | Postgres (Neon, Frankfurt)                    |                                                                                            |
 | File objects (avatars, uploads, stored profile state)   | Cloudflare R2                                 | Default jurisdiction; replicates across EU + US. Access is via short-lived presigned URLs. |
@@ -48,7 +48,7 @@ and the EU-US Data Privacy Framework (DPF).
 | Transactional email                                     | Postmark, EU sending region                   | Recipient address + template payload; SCCs + DPF cover the provider.                       |
 | Card billing                                            | Stripe (Stripe Payments Europe Ltd, Ireland)  | We never see card numbers; Stripe may onward-transfer under SCCs + DPF.                    |
 | Crypto payment processing                               | NowPayments (Estonia, EEA)                    | We hold the payment id + status; on-chain data stays on-chain.                             |
-| Session execution fleet                                 | MacStadium (US)                               | SCCs + EU-US DPF.                                                                          |
+| Session execution (browsers)                            | MacStadium (US)                               | SCCs + EU-US DPF.                                                                          |
 | Optional AI agent (bundled or BYOK)                     | Anthropic (US)                                | Only when the AI feature is actually used in a session; SCCs + DPF.                        |
 | Optional live video                                     | LiveKit (US; EU-preferred regional endpoints) | Only when a live view is explicitly started; SCCs + DPF.                                   |
 
@@ -67,10 +67,10 @@ EU-resident, full stop.
   for, and talk to us about your requirements before relying on
   anything stronger.
 - **Session execution** — profile state is loaded onto the
-  execution host for the life of a session, and session traffic
-  between the API, the fleet, and your target site traverses
-  MacStadium infrastructure in the US. Contractual basis: SCCs +
-  EU-US DPF.
+  machine running your session for the life of that session, and
+  session traffic between the API, your session's browser, and your
+  target site passes through MacStadium infrastructure in the US.
+  Contractual basis: SCCs + EU-US DPF.
 - **Optional features** — the AI agent (Anthropic, US) and live
   video (LiveKit, US endpoints) engage their providers only when
   you actually use them.

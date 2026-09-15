@@ -65,7 +65,7 @@ import CtaBand from '../../components/CtaBand.astro';
       />
       <Stat
         plain="Ready when CI is"
-        technical="Sessions created per test run and destroyed after — no fleet to keep warm"
+        technical="Sessions are created for each test run and removed after — no devices to keep running between runs"
       />
     </div>
   </Section>
@@ -99,7 +99,7 @@ try {
       </CodeWindow>
       <div class="space-y-4 text-base leading-7 text-tk-ink-2">
         <p>
-          Create a session on the archetype you ship for, drive the flow with
+          Create a session on the device profile you ship for, drive the flow with
           structured actions (<code class="font-mono text-tk-accent-text">navigate</code>,
           <code class="font-mono text-tk-accent-text">interact</code>,
           <code class="font-mono text-tk-accent-text">capture</code>,
@@ -109,10 +109,10 @@ try {
           test needs logged-in state that survives between runs.
         </p>
         <p>
-          Sessions are metered on one number:
+          Sessions are billed on one number:
           <strong class="text-tk-ink">concurrent</strong> — how many run at
-          the same time, like browser tabs. Parallelize your suite up to your
-          cap; hours and calls inside it are unmetered.
+          the same time, like browser tabs. Run your suite in parallel up to
+          that limit; hours and calls inside it are never billed.
         </p>
       </div>
     </div>
@@ -124,8 +124,8 @@ try {
       for code-first workloads. */}
   <Section
     label="Which plan"
-    title="Code calling → the API ladder."
-    lead="The API ladder is built for code-first workloads — SDK keys, session creation from CI, concurrent caps sized for parallel suites. (Every paid tier includes API access; the API ladder's caps are sized for it.)"
+    title="Code calling → the API plan family."
+    lead="The API plan family is built for code-first workloads — SDK keys, sessions started from CI, and session limits sized for parallel test suites. (Every paid plan includes API access; the API plans' limits are sized for it.)"
   >
     <div class="mt-8 flex flex-wrap items-center gap-4">
       <a href="/pricing/#api" class="btn-secondary">See API pricing →</a>
@@ -139,7 +139,7 @@ try {
 
   <CtaBand
     title="Green in CI. Green on the phone."
-    lead="Verify the rendering by hand on the free tier, then point your pipeline at the API ladder when you're convinced."
+    lead="Verify the rendering by hand on the free tier, then point your pipeline at the API plans when you're convinced."
     primaryHref="/pricing/#free"
     primaryLabel="Start free"
     secondaryHref="https://docs.driftstack.io"

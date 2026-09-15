@@ -91,8 +91,9 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /After the override expires, subsequent reads return the\s*\n?tier-default row again\. The override doesn't disappear from the\s*\n?admin's audit trail — only from the calling account's effective\s*\n?config\./,
+      /After the override expires, subsequent reads return the\s*\n?tier-default row again\./,
     );
+    expect(p).not.toMatch(/admin's audit trail/);
   });
 
   it("CRITICAL bucket-reference table + single-bucket framing pinned. S36 2026-07-07 (fable-truth-audit): the old 'consumes from BOTH buckets' wording was FALSE — POST /v1/sessions registers exactly one rate-limit preHandler, app.rateLimit('sessions:create') (routes/sessions.ts), and the middleware consumes only the single named bucket; `global` is never drained by session-create. Doc now states the each-call-drains-exactly-one-bucket reality.", () => {
@@ -102,7 +103,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
       /\| `global`\s+\| Every authenticated `\/v1\/\*` without a dedicated bucket \| Coarse anti-abuse cap/,
     );
     expect(p).toMatch(
-      /\| `sessions:create`\s+\| `POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch` \| Lower cap because session creation is the most expensive op/,
+      /\| `sessions:create`\s+\| `POST \/v1\/sessions` and `POST \/v1\/profiles\/:id\/launch` \| Lower cap because session creation starts a browser/,
     );
     expect(p).toMatch(
       /Each call drains exactly one bucket\. A `POST \/v1\/sessions` consumes\s*\n?only from `sessions:create` — it never touches `global` — and\s*\n?hitting that bucket's cap returns 429\./,
@@ -119,7 +120,7 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
       /`expires_at` — when the override automatically reverts to tier\s*\n?\s+default/,
     );
     expect(p).toMatch(
-      /`reason` — admin-side audit string \(not exposed on the customer\s*\n?\s+endpoint\)/,
+      /`reason` — an internal note \(not exposed on the customer\s*\n?\s+endpoint\)/,
     );
   });
 
@@ -127,10 +128,13 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Customers needing legitimate high-throughput workloads \(Enterprise,\s*\n?agencies running scraping jobs across many domains\) request\s*\n?overrides via `support@driftstack\.dev` with workload shape \+\s*\n?expected steady-state RPS\./,
+      /Customers needing legitimate high-throughput workloads \(Enterprise,\s*\n?agencies running scraping jobs across many domains\) request\s*\n?overrides via `support@driftstack\.dev` with workload shape \+\s*\n?expected steady-state requests per second\./,
     );
     expect(p).toMatch(
-      /Admins evaluate, set the override via\s*\n?`\/v1\/admin\/rate-limit-overrides`, and notify the customer\./,
+      /Support reviews the\s*\n?request, applies the override, and lets you know\./,
+    );
+    expect(p, 'the internal admin route must not appear on the customer page').not.toMatch(
+      /\/v1\/admin\//,
     );
   });
 
@@ -193,15 +197,14 @@ describe('W788 docs /api/account-rate-limits content parity', () => {
     expect(p).not.toMatch(/capped at 30s/);
   });
 
-  it('CRITICAL Source-of-truth pointers pinned — routes/account-rate-limits.ts + TIER_RATE_LIMIT_DEFAULTS + rate-limit-overrides-repo + admin-rate-limit-overrides route. Drift would lose canonical impl pointers.', () => {
+  it('CRITICAL the customer page carries no internal source pointers; the per-tier defaults are reached through the public rate-limits reference instead.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Routes: `apps\/server\/src\/routes\/account-rate-limits\.ts`\./);
+    expect(p).not.toMatch(/## Source of truth/);
+    expect(p).not.toMatch(/apps\/server\/src|packages\/api-types\/src|TIER_RATE_LIMIT_DEFAULTS/);
     expect(p).toMatch(
-      /Schema:\s*\n?`packages\/api-types\/src\/common\.ts:TIER_RATE_LIMIT_DEFAULTS`\./,
+      /The defaults the endpoint returns when no override is active are in\s*\n?the full table at \[\/reference\/rate-limits\]\(\/reference\/rate-limits\/\)\./,
     );
-    expect(p).toMatch(/Override repo: `apps\/server\/src\/db\/rate-limit-overrides-repo\.ts`\./);
-    expect(p).toMatch(/Admin route: `apps\/server\/src\/routes\/admin-rate-limit-overrides\.ts`\./);
   });
 
   it('CRITICAL broad-read floor pinned. Account limits and staff override metadata cannot be read by zero-scope, write-only, or resource-granular keys.', () => {

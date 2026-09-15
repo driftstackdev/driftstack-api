@@ -248,7 +248,7 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
       byComponent(sheet, 'proxy-os-fingerprint')?.getAttribute('title')?.length,
     ).toBeGreaterThan(10);
     expect(byComponent(sheet, 'capability-hints')?.textContent).toMatch(
-      /UDP travels inside the VPN tunnel/,
+      /UDP travels inside the VPN\./,
     );
     cleanup();
   });
@@ -304,8 +304,8 @@ describe('THE enumerating test — every pre-Phase-B fact is in the sheet, by it
     );
     fireEvent.click(glyph());
     const exit = byComponent(sheetOf(failed) as HTMLElement, 'exit-row') as HTMLElement;
-    expect(exit.textContent).toContain('exit geo unavailable');
-    expect(exit.textContent).toContain('no traffic completed a round trip');
+    expect(exit.textContent).toContain('exit location unknown');
+    expect(exit.textContent).toContain('no traffic made it through');
     cleanup();
   });
 });

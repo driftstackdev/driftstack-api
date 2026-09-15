@@ -347,7 +347,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
       await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies for Demo' }));
       // The confirmation must say what is actually lost BEFORE it happens.
-      expect(await screen.findByText(/SIGNS THE PROFILE OUT everywhere/)).toBeTruthy();
+      expect(await screen.findByText(/signs the profile out of every site/)).toBeTruthy();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear cookies' }));
       await waitFor(() =>
         expect(profilesTrim).toHaveBeenCalledWith('prof_1', { scope: 'cookies' }),
@@ -378,9 +378,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
       await openClearGroup();
       fireEvent.click(await screen.findByRole('button', { name: 'Clear history for Demo' }));
-      const body = await screen.findByText(
-        /only record of visited pages held in the profile itself/,
-      );
+      const body = await screen.findByText(/the only browsing history the profile keeps/);
       // ⛔ Two retracted claims, both of which shipped. First "nothing else
       // stores a history" (false — agent_sessions.transcript holds full URLs
       // keyed by profile). Then "page URLs … for up to 90 days" (also false —
@@ -390,7 +388,7 @@ describe('ProfilesView profile-lifecycle actions', () => {
       expect(body.textContent).not.toMatch(/90 days/i);
       // ⭐ The durable shape: the claim is bounded to what the BUTTON does and
       // names no store and no window, so it cannot rot as retention changes.
-      expect(body.textContent).toMatch(/does NOT clear the server-side record/i);
+      expect(body.textContent).toMatch(/session history is kept separately and is not cleared/i);
     });
 
     it('every clear scope is reachable from the card menu, one disclosure deep', async () => {

@@ -111,7 +111,7 @@ describe('W513.B apps/marketing-site/src/pages/docs/sdk-python-crypto-orders.ast
       /poll\s*<code>client\.crypto_orders\.get\(order_id\)<\/code> until\s*<code>status<\/code> transitions to <code>paid<\/code> or\s*<code>failed<\/code>/,
     );
     expect(body).toMatch(
-      /The Python SDK ships\s*<code>verify_webhook_signature<\/code> for every live event type,\s*including the now-live crypto\.order\.\* events alongside the\s*session \+ quota \+ api-key \+ egress-capability event domains\./,
+      /The Python SDK's\s*<code>verify_webhook_signature<\/code> verifies every event type,\s*including <code>crypto\.order\.\*<\/code>\./,
     );
   });
 

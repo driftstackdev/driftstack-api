@@ -1945,11 +1945,13 @@ export function isSelectableArchetypeId(id: string): boolean {
  */
 export const SelectableArchetypeIdSchema = z
   .string()
-  .regex(/^[a-z0-9_]+$/, { message: 'archetype slug is lowercase alphanumeric + underscores' })
+  .regex(/^[a-z0-9_]+$/, {
+    message: 'Device profile id must use only lowercase letters, numbers and underscores',
+  })
   .min(3)
   .max(60)
   .refine(isSelectableArchetypeId, {
-    message: 'archetype must be a selectable id returned by GET /v1/archetypes',
+    message: 'Use a device profile id from the list returned by GET /v1/archetypes.',
   });
 
 // `gui_control` is the scope that gates the manual-control plane

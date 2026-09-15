@@ -2,7 +2,7 @@
 // V-534.AF presentational summary card + V-534.BF V-666.AV
 // expires_at countdown row. Drift here either drops the
 // nowFn ?? Date.now test seam (countdown row becomes non-
-// deterministic in unit tests so the 'pay window elapsed' /
+// deterministic in unit tests so the 'payment window closed' /
 // 'minutes remaining' branches can't be exercised) or breaks
 // the showExpiry triple-guard (status === 'pending' && typeof
 // expires_at === 'string' && length > 0 — without all three a
@@ -16,7 +16,7 @@
 //   • CryptoOrderSummaryCardProps 3-field: order +
 //     footer?: React.ReactNode + nowFn? testing-seam Default
 //     Date.now.
-//   • describeExpiry pure: diff <= 0 → 'pay window elapsed' +
+//   • describeExpiry pure: diff <= 0 → 'payment window closed' +
 //     minutes < 1 → 'less than a minute remaining' + minutes < 60
 //     → `${minutes}m remaining` + otherwise `${hours}h ${rem}m
 //     remaining`.
@@ -61,9 +61,9 @@ describe('W476.A apps/gui-client/src/components/CryptoOrderSummaryCard.tsx conte
     );
   });
 
-  it("describeExpiry pure: diff <= 0 → 'pay window elapsed' early-return + minutes < 1 → 'less than a minute remaining' + minutes < 60 → `${minutes}m remaining` + otherwise hours+rem decomposition `${hours}h ${rem}m remaining`; all toString() casts present (explicit number-to-string)", () => {
+  it("describeExpiry pure: diff <= 0 → 'payment window closed' early-return + minutes < 1 → 'less than a minute remaining' + minutes < 60 → `${minutes}m remaining` + otherwise hours+rem decomposition `${hours}h ${rem}m remaining`; all toString() casts present (explicit number-to-string)", () => {
     expect(body).toMatch(
-      /function describeExpiry\(expiresAtIso: string, nowMs: number\): string \{\s*const expiresMs = new Date\(expiresAtIso\)\.getTime\(\);\s*const diff = expiresMs - nowMs;\s*if \(diff <= 0\) return 'pay window elapsed';\s*const minutes = Math\.floor\(diff \/ \(60 \* 1000\)\);\s*if \(minutes < 1\) return 'less than a minute remaining';\s*if \(minutes < 60\) return `\$\{minutes\.toString\(\)\}m remaining`;\s*const hours = Math\.floor\(minutes \/ 60\);\s*const rem = minutes % 60;\s*return `\$\{hours\.toString\(\)\}h \$\{rem\.toString\(\)\}m remaining`;\s*\}/,
+      /function describeExpiry\(expiresAtIso: string, nowMs: number\): string \{\s*const expiresMs = new Date\(expiresAtIso\)\.getTime\(\);\s*const diff = expiresMs - nowMs;\s*if \(diff <= 0\) return 'payment window closed';\s*const minutes = Math\.floor\(diff \/ \(60 \* 1000\)\);\s*if \(minutes < 1\) return 'less than a minute remaining';\s*if \(minutes < 60\) return `\$\{minutes\.toString\(\)\}m remaining`;\s*const hours = Math\.floor\(minutes \/ 60\);\s*const rem = minutes % 60;\s*return `\$\{hours\.toString\(\)\}h \$\{rem\.toString\(\)\}m remaining`;\s*\}/,
     );
   });
 

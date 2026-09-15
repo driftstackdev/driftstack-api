@@ -36,7 +36,7 @@ describe('V-184a.B verify-email page — URL-token auto-submit', () => {
   it('does not auto-replay a one-shot token after an ambiguous timeout', () => {
     expect(PAGE).toContain('let verifyOutcomeUnknown = false;');
     expect(PAGE).toContain('verifyInFlight || verifyOutcomeUnknown');
-    expect(PAGE).toContain('Do not submit this token again.');
+    expect(PAGE).toContain("Don't use this link again");
     expect(PAGE).toContain('data-link="verify-timeout-login"');
   });
 });

@@ -115,10 +115,10 @@ describe('session search public response truth', () => {
       object(object(live.paths, 'paths')['/v1/sessions/{id}/search'], 'search path').post,
       'search POST',
     );
-    expect(operation.summary).toMatch(/real direct-driver capability required/);
+    expect(operation.summary).toMatch(/not available yet on any deployment/);
     const response = object(object(operation.responses, 'responses')['200'], '200 response');
-    expect(response.description).toMatch(/currently shipped drivers report non-real capability/);
-    expect(response.description).toMatch(/return 503 before session lookup, operation claim/);
+    expect(response.description).toMatch(/no current deployment supports page search/);
+    expect(response.description).toMatch(/returns 503 before the session is looked up/);
     expect(response.description).toMatch(/query_truncated=false/);
     expect(response.description).toMatch(/exact safe zero-submit refusal/);
     expect(response.description).toMatch(/duration_ms is capped at 600 seconds/);

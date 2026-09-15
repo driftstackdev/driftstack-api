@@ -49,7 +49,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     // what's frozen is archetype/name/description, never browser state.
     expect(p).toMatch(/\*\*Snapshots\*\* are frozen metadata: capture an evolving profile into a/);
     // The metadata-only truth banner must stay present.
-    expect(p).toMatch(/\*\*What a snapshot does NOT capture at v1: browser state\.\*\*/);
+    expect(p).toMatch(/\*\*What a snapshot does NOT capture today: browser state\.\*\*/);
     expect(p).toMatch(
       /Cookies, `localStorage`, IndexedDB, and logins are not copied into\s*\n?the snapshot, and restoring one does not bring them back\./,
     );
@@ -59,7 +59,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Restoring a snapshot creates a \*\*new profile row\*\* carrying the\s*\n?snapshot's frozen archetype \+ description — the source profile is\s*\n?untouched, and the new profile starts with fresh \(empty\) browser\s*\n?state\./,
+      /Restoring a snapshot creates a \*\*new profile\*\* carrying the\s*\n?snapshot's frozen archetype \+ description — the source profile is\s*\n?untouched, and the new profile starts with fresh \(empty\) browser\s*\n?state\./,
     );
     // Negative pin — the retired frozen-STATE fiction must not come back.
     expect(p).not.toMatch(/populated from\s*\n?the snapshot's frozen state/);
@@ -177,7 +177,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
       /`409 conflict` — a profile with the requested `name` already\s*\n?\s+exists\./,
     );
     expect(p).toMatch(
-      /`429 tier-limit` — the new profile would push the account over\s*\n?\s+its `PROFILES_PER_TIER` cap\. Snapshot restore counts against\s*\n?\s+the same cap as profile-create\./,
+      /`429 tier-limit` — the new profile would push the account over\s*\n?\s+its profile cap\. Snapshot restore counts against the same cap as\s*\n?\s+profile-create\./,
     );
   });
 
@@ -205,7 +205,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
   it("CRITICAL snapshots-NOT-counted-against-tier framing pinned. The 'Snapshots themselves are NOT counted against PROFILES_PER_TIER. You can hold many snapshots per profile, and many snapshots per account, without affecting your profile-cap budget' wording is the load-bearing customer-comms.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Snapshots themselves are NOT counted against `PROFILES_PER_TIER`\./);
+    expect(p).toMatch(/Snapshots themselves are NOT counted against your profile cap\./);
     expect(p).toMatch(
       /You can hold many snapshots per profile, and many snapshots per\s*\n?account, without affecting your profile-cap budget\./,
     );
@@ -215,7 +215,7 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Restoring a snapshot DOES count: the new profile created from the\s*\n?restore is subject to the same `PROFILES_PER_TIER` cap as a\s*\n?manually-created profile\./,
+      /Restoring a snapshot DOES count: the new profile created from the\s*\n?restore is subject to the same profile cap as a manually-created\s*\n?profile\./,
     );
   });
 
@@ -223,24 +223,24 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /If your tier is at-cap, the restore\s*\n?returns `429 tier-limit` and the customer must either delete a\s*\n?profile first or upgrade tier\./,
+      /If your tier is at-cap, the restore returns `429 tier-limit`\s*\n?and the customer must either delete a profile first or upgrade tier\./,
     );
   });
 
   it("CRITICAL no-per-account-snapshot-quota framing pinned. The 'There is no per-account snapshot quota at v1' wording explains the unbounded-snapshot model.", () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
+    expect(p).toMatch(/There is no per-account snapshot quota\s*\n?today\./);
   });
 
-  it("CRITICAL storage-characteristics framing pinned: plain metadata rows + no browser-state payload stored at v1 + frozen parent_archetype/parent_name + no per-account quota. S36 2026-07-07 (fable-truth-audit): the old 'stored in the underlying driver-managed storage layer' claim was FALSE — snapshots are DB rows with an always-empty stateBlob jsonb column (db/schema.ts state_blob; services/profile-snapshots.ts capture() writes {}); nothing lives in a driver-managed layer. (Also keeps the earlier stale-size_bytes guard.)", () => {
+  it("CRITICAL storage-characteristics framing pinned: metadata only + no browser state stored + frozen parent_archetype/parent_name + no per-account quota. S36 2026-07-07 (fable-truth-audit): the old 'stored in the underlying driver-managed storage layer' claim was FALSE — snapshots are DB rows with an always-empty stateBlob jsonb column (db/schema.ts state_blob; services/profile-snapshots.ts capture() writes {}); nothing lives in a driver-managed layer. (Also keeps the earlier stale-size_bytes guard.)", () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /Snapshots are plain metadata rows stored separately from live profiles —\s*\n?at v1 no browser-state payload is stored anywhere/,
+      /Snapshots are metadata only, stored separately from live profiles —\s*\n?no browser state is stored \(the state field is always empty\)/,
     );
-    expect(p).toMatch(/freezes the\s*\n?source profile's archetype \+ name/);
-    expect(p).toMatch(/There is no per-account snapshot quota at v1\./);
+    expect(p).toMatch(/freezes the source profile's archetype \+ name/);
+    expect(p).toMatch(/There is no per-account snapshot quota\s*\n?today\./);
     // Guards against the stale claims returning.
     expect(p).not.toMatch(/`size_bytes`/);
     expect(p).not.toMatch(/driver-managed storage layer/);
@@ -260,13 +260,12 @@ describe('W774 docs /api/profile-snapshots content parity', () => {
   // snapshot module at all; the ProfileSnapshot schemas are declared in `profiles.ts`.
   // This pin froze the wrong path, so the page could not be corrected without a red —
   // the shape where a guard holds a false claim in place rather than catching one.
-  it('CRITICAL Source-of-truth pointers pinned — the two server modules plus the api-types module that actually declares the ProfileSnapshot schemas. A pointer a reader cannot open is worse than no pointer: it reads as precision.', () => {
+  it('CRITICAL the customer page carries no internal source pointers. A pointer a reader cannot open is worse than no pointer: it reads as precision — and the V-1143 non-existent api-types snapshot module must not come back either.', () => {
     const p = read(PAGE);
 
-    expect(p).toMatch(/Routes: `apps\/server\/src\/routes\/profile-snapshots\.ts`\./);
-    expect(p).toMatch(/`apps\/server\/src\/services\/profile-/);
-    expect(p).toMatch(/snapshots\.ts`/);
-    expect(p).toMatch(/`packages\/api-types\/src\/profiles\.ts`/);
+    expect(p).not.toMatch(/## Source of truth/);
+    expect(p).not.toMatch(/apps\/server\/src|packages\/api-types\/src/);
+    expect(p).toMatch(/## SDK access/);
 
     // V-1143 negative — the module named here until now never existed. Quoted so the
     // dead path cannot come back; the retraction above paraphrases it.

@@ -144,7 +144,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         id: 'sessions-at',
         tone: 'error',
         title: 'At your session limit',
-        detail: `${sa} / ${sc} concurrent sessions in use — stop one to launch another.`,
+        detail: `${sa} / ${sc} sessions running at once — stop one to launch another.`,
         target: 'sessions',
         cta: 'Stop a session',
       });
@@ -153,7 +153,7 @@ export function computeCapAlerts(account: CapAccount | null): CapAlert[] {
         id: 'sessions-near',
         tone: 'warn',
         title: 'Near your session limit',
-        detail: `${sa} / ${sc} concurrent sessions in use.`,
+        detail: `${sa} / ${sc} sessions running at once.`,
         target: 'sessions',
         cta: 'View sessions',
       });
@@ -585,7 +585,7 @@ export function CommandCenterView({
             value={ratio(profileCount, profileCap)}
             title={
               activeWorkspace !== null
-                ? 'Profile cap is per your account, not per workspace.'
+                ? 'Profile limit is per your account, not per workspace.'
                 : undefined
             }
           />
@@ -605,7 +605,7 @@ export function CommandCenterView({
             // means there IS something live; nothing live reads neutral.
             accent={liveNow !== null && liveNow > 0}
             onClick={liveNowAction}
-            title="Sessions counting against your concurrency cap — includes starting up and errored sessions, not just running ones."
+            title="Sessions counting toward your session limit — includes sessions that are starting up or failed, not just running ones."
           />
           <Kpi
             icon={<IconGlobe />}
@@ -785,8 +785,8 @@ function SessionHealthStrip({
         tone="ready"
         onClick={running > 0 ? onViewLive : undefined}
       />
-      <HealthTile label="Creating" value={h.creating} tone="busy" />
-      <HealthTile label="Errored" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
+      <HealthTile label="Starting" value={h.creating} tone="busy" />
+      <HealthTile label="Failed" value={h.errored} tone={h.errored > 0 ? 'error' : 'muted'} />
       <HealthTile label="Total" value={total} tone="muted" />
     </div>
   );

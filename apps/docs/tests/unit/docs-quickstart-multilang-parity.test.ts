@@ -96,6 +96,6 @@ describe('W260.D docs/quickstart (multi-lang) ↔ live surface parity', () => {
     expect(doc).toMatch(/This code quickstart requires a paid tier with API access/);
     expect(doc).toMatch(/including the Manual tiers/);
     expect(doc).toMatch(/automatically stores a restricted `ds_test_…` device credential/);
-    expect(doc).toMatch(/not a general sandbox or SDK key/);
+    expect(doc).toMatch(/not an API, SDK, or sandbox key/);
   });
 });

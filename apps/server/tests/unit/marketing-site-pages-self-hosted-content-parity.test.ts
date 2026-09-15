@@ -14,16 +14,17 @@
 //   • Support tier 3-state formatter: email_48h / email_slack_12h /
 //     dedicated_csm_1h.
 //   • Custom-archetype-dev 3-state: none / limited (1/yr) / unlimited.
-//   • Architecture: 'Two boxes. One secure channel.' + session
-//     content stays inside customer network framing.
+//   • Architecture: 'Your hardware, our software, one secure
+//     connection.' + session content stays inside customer network
+//     framing (2026-09-15: plain words, no 'control plane').
 //   • 3-card When self-hosted makes sense: Privacy / Volume /
 //     Sovereignty.
 //   • 4-step process: Contact sales → Procure hardware → Onboard →
 //     Run.
-//   • Available now through a guided sales-led engagement, with no
-//     GA/early-access/future-launch deferral.
-//   • 'Concurrent capacity is bounded by your hardware, not by
-//     license.'
+//   • Available now through a guided setup with the sales team, with
+//     no GA/early-access/future-launch deferral.
+//   • 'How many sessions can run at once depends on your hardware,
+//     not your license.'
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,7 +50,10 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
 
   it('HARDWARE_BY_SKU 3-tier map: each SKU recommends an Apple-Silicon class (Mac Mini M4 / Mac Studio M4 Max / Mac Studio Ultra | Mac Pro multi-node). Reframed 2026-05-XX to "Any Apple Silicon Mac (... recommended)" so customers know the sized-for guidance is a recommendation, not a hard requirement.', () => {
     expect(body).toMatch(
-      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)',\s*self_hosted_pro: 'Apple Silicon Mac sized for sustained concurrency \(Mac Studio M4 Max recommended\)',\s*self_hosted_enterprise: 'Multi-node Apple Silicon fleet \(Mac Studio Ultra \/ Mac Pro recommended\)',\s*\};/,
+      // 2026-09-15 plain words: "sized for sustained concurrency" /
+      // "Multi-node ... fleet" → what the buyer needs (a larger Mac for
+      // many sessions at once / several Macs); same recommended models.
+      /const HARDWARE_BY_SKU: Record<string, string> = \{\s*self_hosted_solo: 'Any Apple Silicon Mac \(Mac Mini M4 16 GB recommended\)',\s*self_hosted_pro: 'A larger Apple Silicon Mac for running many sessions at once \(Mac Studio M4 Max recommended\)',\s*self_hosted_enterprise: 'Several Apple Silicon Macs \(Mac Studio Ultra \/ Mac Pro recommended\)',\s*\};/,
     );
   });
 
@@ -68,8 +72,10 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
   });
 
   it('pins current guided sales-led availability and rejects deferred-launch copy', () => {
+    // 2026-09-15 plain words: same guided, sales-team-led setup with the
+    // same four steps (fit check / plan / install / first live test).
     expect(body).toMatch(
-      /Self-hosted is available through a guided sales-led engagement\.\s*We qualify the workload, plan the hardware and network, onboard\s*the deployment, and run a joint smoke test with your team\./,
+      /Self-hosted is set up together with our sales team, step by step\.\s*We check that the work is a good fit, plan the hardware and\s*network, install and set up your deployment, and run a first\s*live test with your team\./,
     );
     expect(body).toMatch(/Available now through Contact Sales · scoped and supported directly/);
     expect(body).not.toMatch(
@@ -77,13 +83,13 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     );
   });
 
-  it("Architecture framing pinned: 'Two boxes. One secure channel. Your hardware, our orchestration.' + 'Self-hosted is one piece of Driftstack software running on Mac hardware you own. The control plane orchestrates sessions, exposes the SDK + GUI, and never holds your session content.' — pinned so the two-box architecture metaphor + the 'we orchestrate, you hold session content' division of responsibility survive (drift to dropping 'never holds your session content' would weaken the privacy promise)", () => {
-    expect(body).toMatch(/Two boxes\. One secure channel\. Your hardware, our orchestration\./);
-    // S20c 2026-07-06 plain-language pass: control plane glossed as
-    // "Driftstack's coordination service"; the never-holds-content
-    // promise survives verbatim-in-intent.
+  it("Architecture framing pinned: 'Your hardware, our software, one secure connection.' + 'Self-hosted is one piece of Driftstack software running on Mac hardware you own. Driftstack's coordination service starts and manages sessions, gives you the SDK + desktop app, and never holds what happens inside your sessions.' — pinned so the two-sided architecture + the 'we coordinate, you hold session content' division of responsibility survive (drift to dropping 'never holds' would weaken the privacy promise)", () => {
+    // 2026-09-15 owner directive: "control plane" / "orchestration" are
+    // banned on customer surfaces; the two-sided architecture and the
+    // never-holds-content promise survive in plain words.
+    expect(body).toMatch(/Your hardware, our software, one secure connection\./);
     expect(body).toMatch(
-      /Driftstack's coordination service \(the\s+"control plane"\) starts and manages sessions and gives you the\s+developer kit \(SDK\) and the desktop app \(GUI\) — and it never\s+holds what happens inside your sessions\./,
+      /Driftstack's coordination service starts and\s+manages sessions and gives you the developer kit \(SDK\) and the\s+desktop app — and it never holds what happens inside your\s+sessions\./,
     );
   });
 
@@ -91,15 +97,15 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     // S20c 2026-07-06 plain-language pass: metadata said plainly,
     // term kept in parens; 4-state scope + never-the-session survive.
     expect(body).toMatch(
-      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network\. Driftstack's control plane sees your license and\s+basic session details — when a session started, which profile\s+ran \(session metadata\) — never the session itself\./,
+      /Session content \(URLs, form data, captures, recordings\) stays inside\s+your network\. Driftstack sees only your license and basic session\s+details — when a session started, which profile ran — never the\s+session itself\./,
     );
   });
 
-  it("3-card 'When self-hosted makes sense': Privacy (sessions never leave perimeter) + Volume (sustained 10+ concurrent break-even) + Sovereignty (own R2-compatible storage, no DPA addendum) — pinned so the 3 motivators stay explicit (drift to dropping any would orphan customers needing that specific self-host driver: privacy-conscious / volume-driven / sovereignty-required)", () => {
-    expect(body).toMatch(/Sessions never leave your perimeter/);
-    expect(body).toMatch(/Sustained high-concurrency operations/);
-    expect(body).toMatch(/Full control over recordings \+ state/);
-    expect(body).toMatch(/sustained 10\+ concurrent across the month/);
+  it("3-card 'When self-hosted makes sense': Privacy (sessions never leave your network) + Volume (10 or more sessions at once, sustained through a month, break-even) + Sovereignty (own S3-compatible storage, no extra DPA) — pinned so the 3 motivators stay explicit (drift to dropping any would orphan customers needing that specific self-host driver: privacy-conscious / volume-driven / sovereignty-required)", () => {
+    expect(body).toMatch(/Sessions never leave your network/);
+    expect(body).toMatch(/Running many sessions at once, consistently/);
+    expect(body).toMatch(/Full control over recordings and saved files/);
+    expect(body).toMatch(/10 or more,\s+sustained through a whole month/);
   });
 
   it("4-step process: Contact sales (01) → Procure hardware (02) → Onboard (03) → Run (04) — pinned so the customer-facing onboarding sequence stays consistent (drift to dropping 'Procure hardware' would hide the customer-purchased model; drift to dropping 'Onboard joint smoke test' would lose the hands-on commitment that justifies the higher SKU price)", () => {
@@ -111,19 +117,23 @@ describe('W500.B apps/marketing-site/src/pages/self-hosted.astro content parity'
     // S20c 2026-07-06 plain-language pass: config field glossed as a
     // settings value; same one-change migration promise.
     expect(body).toMatch(
-      /Same SDK as cloud Driftstack — change one settings value \(a\s+config field\) and your\s+existing code talks to your own installation instead of our\s+cloud\./,
+      /Same SDK as cloud Driftstack — change one setting and your\s+existing code talks to your own installation instead of our\s+cloud\./,
     );
   });
 
-  it("'Concurrent capacity is bounded by your hardware, not by license.' — pinned so the no-license-cap-on-self-hosted commitment survives (drift to dropping would let customers think self-hosted has the same concurrent caps as cloud SKUs; this is THE core unit-economics flip for high-volume customers)", () => {
-    expect(body).toMatch(/Concurrent capacity is bounded by your hardware, not by license\./);
+  it("'How many sessions can run at once depends on your hardware, not your license.' — pinned so the no-license-cap-on-self-hosted commitment survives (drift to dropping would let customers think self-hosted has the same concurrent caps as cloud SKUs; this is THE core unit-economics flip for high-volume customers)", () => {
+    expect(body).toMatch(
+      /How many sessions can run at once depends on your hardware, not your license\./,
+    );
   });
 
-  it("Architecture ASCII diagram framing pinned: 'YOUR INFRA' + 'DRIFTSTACK ORCHESTRATION' columns + 'WebKit sessions exit via your network' + 'Your network egress' (DC / VPN / BYO SOCKS5 + OpenVPN + WG). 2026-05-22 — diagram flipped 'roadmap: BYO' → shipped BYO per planning 133 Phase 1.", () => {
-    expect(body).toMatch(/YOUR INFRA\s+DRIFTSTACK ORCHESTRATION/);
-    expect(body).toMatch(/WebKit sessions exit via your network/);
-    expect(body).toMatch(/BYO SOCKS5 \+/);
-    expect(body).toMatch(/OpenVPN \+ WG/);
+  it("Architecture ASCII diagram framing pinned: 'YOUR MACS' + 'DRIFTSTACK SERVICE' columns + 'Sessions reach the web through your network' + 'Your network exit' (direct / VPN / your own SOCKS5 / OpenVPN / WireGuard). 2026-05-22 — diagram flipped 'roadmap: BYO' → shipped BYO per planning 133 Phase 1; 2026-09-15 — banned words (fleet / control plane / multi-node / orchestration / egress) and the DC/BYO/WG abbreviations left the diagram.", () => {
+    expect(body).toMatch(/YOUR MACS\s+DRIFTSTACK SERVICE/);
+    expect(body).toMatch(/Sessions reach the web through your network/);
+    expect(body).toMatch(/SOCKS5 \//);
+    expect(body).toMatch(/OpenVPN \//);
+    expect(body).toMatch(/WireGuard\)/);
+    expect(body).not.toMatch(/Mac fleet|Control plane|multi-node|ORCHESTRATION/);
   });
 
   it('CTA pair pins the tagged sales mailto and canonical pricing anchor through CtaBand props', () => {

@@ -167,9 +167,9 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     expect('not_run' in body, 'a failed bring-up is a verdict — not_run must be ABSENT').toBe(
       false,
     );
-    expect(body.reason).toMatch(/WireGuard tunnel did not come up/);
+    expect(body.reason).toMatch(/WireGuard connection could not be established/);
     // The old sentence must be gone, not merely joined.
-    expect(body.reason).not.toMatch(/could not be completed on the measuring Mac/);
+    expect(body.reason).not.toMatch(/could not be completed/);
     // The stored exit is CONTRADICTED now: the tunnel behind it was found down.
     expect(await supersededAt(proxyId), 'exit_superseded_at must be stamped').not.toBeNull();
   });
@@ -179,7 +179,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
 
     expect(body.ok).toBe(false);
     expect('not_run' in body).toBe(false);
-    expect(body.reason).toMatch(/did not answer within the tunnel's wait/);
+    expect(body.reason).toMatch(/did not answer in time/);
     // ⛔ From the node a WRONG endpoint and a DOWN endpoint are indistinguishable,
     // so the copy must never send the customer to edit a line that may be correct.
     expect(String(body.reason)).not.toMatch(/check your address/i);
@@ -191,7 +191,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
 
     expect(body.ok).toBe(false);
     expect('not_run' in body).toBe(false);
-    expect(body.reason).toMatch(/did not leave through it/);
+    expect(body.reason).toMatch(/did not go through it/);
     expect(await supersededAt(proxyId)).not.toBeNull();
   });
 
@@ -200,7 +200,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
 
     expect(body.ok).toBe(false);
     expect(body.not_run).toBe('node_busy');
-    expect(body.reason).toMatch(/busy with another tunnel or test/);
+    expect(body.reason).toMatch(/test service is busy right now/);
     expect(await supersededAt(proxyId), 'a busy Mac contradicts no exit').toBeNull();
   });
 
@@ -209,7 +209,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
 
     expect(body.ok).toBe(false);
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/could not be completed on the measuring Mac/);
+    expect(body.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // ⛔ Guessing "tunnel down" from a word this build cannot read would publish a
     // red verdict nothing measured — and supersede an exit on a guess.
     expect(await supersededAt(proxyId)).toBeNull();
@@ -219,8 +219,8 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     const { body, proxyId } = await runFleetTest('mac-wg-006', 'egress_bin_missing');
 
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/We could not start the VPN tool/);
-    expect(body.reason).toMatch(/fault on our side/);
+    expect(body.reason).toMatch(/We could not run the test/);
+    expect(body.reason).toMatch(/problem on our side/);
     // Never blame the customer's config for a binary missing on OUR Mac.
     expect(String(body.reason)).not.toMatch(/check the keys/i);
     expect(await supersededAt(proxyId)).toBeNull();
@@ -230,7 +230,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     const { body, proxyId } = await runFleetTest('mac-wg-007', 'tunnel_up_no_socks');
 
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/We could not start the VPN tool/);
+    expect(body.reason).toMatch(/We could not run the test/);
     expect(await supersededAt(proxyId)).toBeNull();
   });
 
@@ -270,13 +270,13 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
       expect(body.not_run, 'the late answer must not be reported as "no Mac was free"').not.toBe(
         'no_node',
       );
-      expect(String(body.reason)).not.toMatch(/No checker was free/);
+      expect(String(body.reason)).not.toMatch(/test service is busy/);
       // …and it is the verdict, with the node named as its source.
       expect(body.ok).toBe(false);
       expect(body.measured_from).toBe('fleet');
       expect(body.node_id).toBe('mac-wg-009');
       expect('not_run' in body).toBe(false);
-      expect(body.reason).toMatch(/WireGuard tunnel did not come up/);
+      expect(body.reason).toMatch(/WireGuard connection could not be established/);
     } finally {
       vi.useRealTimers();
     }
@@ -287,7 +287,7 @@ describe('a WireGuard tunnel the fleet Mac could not bring up is a VERDICT, not 
     const { body, proxyId } = await runFleetTest('mac-wg-008', 'bad_config:private_key');
 
     expect(body.not_run).toBe('node_error');
-    expect(body.reason).toMatch(/could not be completed on the measuring Mac/);
+    expect(body.reason).toMatch(/The test could not be completed\. Try again shortly/);
     // The wire field name is jargon — it must never reach the customer.
     expect(String(body.reason)).not.toMatch(/private_key/);
     expect(await supersededAt(proxyId)).toBeNull();

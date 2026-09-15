@@ -6,9 +6,9 @@ description: Create + drive iPhone Safari sessions — navigate, interact, wait,
 
 # Sessions
 
-A **session** is one running iPhone Safari instance on the modified
-WebKit fork, occupying one of your account's concurrent slots from
-creation to destruction. Use it to navigate URLs, interact with the
+A **session** is one running iPhone Safari browser, occupying one of
+your account's concurrent slots from creation to destruction. Use it
+to navigate URLs, interact with the
 page, capture screenshots / DOM state, and tear it down cleanly.
 
 For the higher-level lifecycle + state diagram, see
@@ -17,9 +17,9 @@ endpoint reference.
 
 ## Concurrency
 
-Each tier caps simultaneously-active sessions. Values match the
-shared `TIER_CONCURRENT_SESSION_LIMITS` constant in
-`@driftstack/api-types`:
+Each tier caps simultaneously-active sessions. The caps are below (the
+public `@driftstack/api-types` package also exports them as the
+`TIER_CONCURRENT_SESSION_LIMITS` constant):
 
 | Tier            | Concurrent sessions |
 | --------------- | ------------------: |
@@ -63,21 +63,20 @@ cap.
 `status` is one of `creating`, `ready`, `busy`, `destroyed`,
 `errored`. The SDK's `sessions.create()` call returns only after the
 new session reaches `ready`, but concurrent resource reads and lists can
-observe its durable `creating` reservation while the driver starts.
+show it as `creating` while the browser starts.
 
-Every direct driver operation atomically claims `ready` → `busy`; a
-session already `creating` or `busy` returns `409 Conflict` without a
-second driver dispatch. Success settles `busy` → `ready`. A driver failure
-elects `busy` → terminal `errored`, while an explicit destroy can instead
-win `busy` → terminal `destroyed`; an operation that loses that race returns
-`410 Gone` and publishes no stale success or failure event. An outcome-unknown
-`busy` owner is not automatically reclaimed after a server crash—destroy the
-session and create a fresh one rather than retrying work into an uncertain page.
+Each operation moves the session from `ready` to `busy`; a session that
+is already `creating` or `busy` returns `409 Conflict`. When the
+operation succeeds the session returns to `ready`. If the operation
+fails the session becomes `errored`; if you destroy the session while an
+operation is running it becomes `destroyed`, and the interrupted
+operation returns `410 Gone` and sends no success or failure event. Both
+`errored` and `destroyed` are final — the session cannot be reused. A
+session left in `busy` after a server fault is not reset automatically:
+destroy it and create a fresh one instead of retrying the operation.
 
-`purpose` selects the WebKit driver harness configuration .
-`production_customer` is the default; the other values
-(`cumulative_rig_validation`, `test_domain_probe`) are reserved
-for Driftstack-internal ops.
+`purpose` is `production_customer` for every customer session (the
+default); other values are reserved for Driftstack internal use.
 
 `label` is a free-form short string (max 120 chars) for the
 customer's own identification — surfaced in dashboards + the
@@ -85,19 +84,17 @@ audit log. `metadata` is an arbitrary JSON object for the
 customer's own bookkeeping.
 
 `last_state_at` is the most recent successful `getState` capture timestamp.
-Its persistence is status-neutral and cannot release another operation's
-`busy` ownership. `updated_at`
-reflects any server-side state mutation (status changes,
-metadata writes).
+Recording it never changes `status`. `updated_at` reflects any change to
+the record (status changes, metadata writes).
 
 `egress_capabilities` and `egress_capability_report` are both
-`null` until a session routes through a SOCKS5 proxy and the
-harness completes its egress handshake (and stay `null` for
-non-proxied sessions). When populated, `egress_capabilities` is
-the typed view — `{ udp_associate, quic_route, warnings[] }` —
-and `egress_capability_report` is the opaque raw harness payload.
-Prefer `egress_capabilities` for typed access; treat both as
-nullable on every read.
+`null` until a session routes through a SOCKS5 proxy and reports
+its proxy capabilities (and stay `null` for non-proxied sessions).
+When populated, `egress_capabilities` is the typed view —
+`{ udp_associate, quic_route, warnings[] }` — and
+`egress_capability_report` is the raw report. Prefer
+`egress_capabilities` for typed access; treat both as nullable on
+every read.
 
 ## Create
 
@@ -115,23 +112,20 @@ nullable on every read.
 ```
 
 All fields optional. `archetype` defaults to your tier's device when
-omitted: the locked iPhone 17 / iOS 18.7 / Safari 26.4 archetype
-(`LOCKED_ARCHETYPE_ID` = `iphone17_ios18_7_safari26_4`) on tiers entitled to
-every device, the newest iPhone 13 archetype on the free tier. A device
-outside your tier's entitlement is refused with 403. `purpose` defaults to
-`production_customer`.
+omitted: iPhone 17 / iOS 18.7 / Safari 26.4 (`iphone17_ios18_7_safari26_4`)
+on tiers that include every device, or the newest iPhone 13 on the free
+tier. A device outside your tier's entitlement is refused with 403.
+`purpose` defaults to `production_customer`.
 
 When supplied directly, `archetype` must be an `id` returned by the current
 [`GET /v1/archetypes`](/api/archetypes/) catalog. Any id absent from that
-response returns `400 ValidationFailed` on the `archetype` field before the
-server creates a session row or asks the driver to allocate a browser. Fetch
-the catalog at runtime or use its `default_archetype_id`; do not synthesize an
-id from device/version strings.
+response returns `400 ValidationFailed` on the `archetype` field before a
+session is created. Fetch the catalog at runtime or use its
+`default_archetype_id`; do not synthesize an id from device/version strings.
 
-When `profile_id` is supplied (2026-05-20, commit `fa8cb83a`) the
-server inherits the profile's `archetype` as the default, stamps
-`{profile_id, profile_name}` into the session's `metadata`, and
-bumps the profile's `last_used_at` fire-and-forget. Cross-account
+When `profile_id` is supplied the session uses the profile's device by
+default, records `{profile_id, profile_name}` in the session's
+`metadata`, and updates the profile's `last_used_at`. Cross-account
 `profile_id` returns `404` (anti-enumeration — indistinguishable
 from a missing one). See also `POST /v1/profiles/:id/launch` for
 the one-round-trip launch helper.
@@ -149,32 +143,28 @@ profile from overwriting each other's saved cookies and logins.
 End the named session (or wait for it to finish), then launch
 again. Sessions without a `profile_id` are never affected.
 
-`behavioral_profile` (2026-06-05) selects the per-session behavioural
-persona the harness drives touch / scroll / typing cadence with — one
-of `casual`, `regular`, or `power_user`. Defaults to `regular` when
+`behavioral_profile` selects how the session taps, scrolls and types —
+`casual`, `regular`, or `power_user`. Defaults to `regular` when
 omitted; set once for the session's lifetime.
 
 Returns the created session (201).
 
 The direct create endpoint does not accept a raw `proxy` field. Supplying one
 returns `400` before a profile is looked up or a browser/session is created; it
-is never silently stripped or treated as an egress safeguard. For
-customer-controlled egress, create an agent session through
-`POST /v1/agent-sessions` with the `proxy_id` of an owned saved
-`/v1/account/me/proxies` configuration.
+is never silently ignored. To route a session through your own proxy, create
+an agent session through `POST /v1/agent-sessions` with the `proxy_id` of an
+owned saved `/v1/account/me/proxies` configuration.
 
-If deployment policy requires customer egress (`SESSION_PROXY_REQUIRED=true`,
-or the inferred backend-present posture), this direct endpoint and
-`POST /v1/profiles/:id/launch` fail closed for every body because neither has a
-typed, consumed egress authority. Setting the flag to `false` preserves
-proxy-free direct creation; it does not make a raw proxy object supported.
+On deployments that require every session to use a customer proxy, this
+endpoint and `POST /v1/profiles/:id/launch` return `400` for every request;
+use an agent session with `proxy_id` instead.
 
 Errors:
 
 - `400 ValidationFailed` — a directly supplied `archetype` is not present in
   the current selectable catalog.
-- `400 Bad Request` — an explicit raw `proxy` field was rejected, or required
-  egress policy has disabled this direct create surface.
+- `400 Bad Request` — an explicit raw `proxy` field was rejected, or the
+  deployment requires every session to use a customer proxy.
 - `429 ConcurrencyLimit` — concurrent-session cap hit.
 - `404 NotFound` — `profile_id` refers to a profile that doesn't
   exist OR belongs to a different account.
@@ -220,9 +210,9 @@ on success — `url` is the originally requested URL, `final_url`
 reflects any HTTP redirects.
 
 `502 DriverError` for navigation-time failures (DNS, TLS, network). The
-failure winner becomes terminal `errored`, tears down its runtime, and
-returns the typed driver error from this call; subsequent operations return
-`410 Gone`, so create a fresh session instead of retrying this one.
+session becomes `errored` and its browser is shut down;
+subsequent operations return `410 Gone`, so create a fresh session
+instead of retrying this one.
 
 ## Interact
 
@@ -269,16 +259,16 @@ optional top-level `timeout_ms` (100ms – 120s):
 }
 ```
 
-Supported `condition.kind` values per the WaitCondition
-discriminated union in `packages/api-types/src/sessions.ts`:
+Supported `condition.kind` values:
 
 - `selector` — wait for `selector` to appear in the DOM.
 - `selector_hidden` — wait for `selector` to disappear from the
   DOM (or to be `display:none` / `visibility:hidden` / detached).
 - `url_matches` — wait for the navigation URL to match the regex
   `pattern` (anchored at `^` is recommended).
-- `time` — sleep for `ms` milliseconds (max 60,000). The
-  `time` form counts toward your minute-meter.
+- `time` — sleep for `ms` milliseconds (max 60,000). The session
+  stays `busy` while it sleeps, and the sleep still counts as session
+  time — including toward the free tier's 20-minute per-session limit.
 
 ## Get state
 
@@ -287,10 +277,10 @@ discriminated union in `packages/api-types/src/sessions.ts`:
 timestamp (subject to a payload-size cap). Useful for checkpoint-like
 reads without a full screenshot.
 
-Despite its `GET` method, this is a live driver operation: it claims the
-session while capturing and discloses browser secrets. With
-`X-Driftstack-Account`, only a team `admin` may call it; a team `member`
-receives `403` before the driver or session row is touched. Members may still
+Despite its `GET` method, this call runs against the live browser (the
+session is `busy` while it captures) and returns browser secrets such as
+cookies. With `X-Driftstack-Account`, only a team `admin` may call it; a
+team `member` receives `403`. Members may still
 use the sessions list and `GET /v1/sessions/:id` for persisted metadata. A
 self-account caller with `read:sessions` is unchanged.
 
@@ -396,8 +386,8 @@ keyed by each extraction's `name`:
 }
 ```
 
-Finds the search field, types `query` realistically (the behavioural
-send-keys path), and submits. `search_selector` is optional — omit it and
+Finds the search field, types `query` with realistic timing, and submits.
+`search_selector` is optional — omit it and
 the field is detected heuristically. `submit` defaults to `true` (set it
 `false` to type without submitting). When `wait_for_results_selector` is
 given, the call waits for that selector after submit and reports whether it
@@ -417,8 +407,8 @@ caller-requested submit behavior and may include the results assessment:
 }
 ```
 
-If behavioural typing reaches its safety bound, search refuses safely before
-Return, settle, or the results wait. The refusal cannot carry
+If typing the query hits the time cap, search stops safely before pressing
+Return or waiting for results. The refusal cannot carry
 `results_visible`:
 
 ```json
@@ -429,13 +419,11 @@ Return, settle, or the results wait. The refusal cannot carry
 }
 ```
 
-`duration_ms` is capped at 600,000ms of browser work. The control plane may
-reserve a separate 15,000ms for teardown and result delivery; that time does not
-extend successful search work. This endpoint requires an explicitly real
-direct-driver search capability. Every currently shipped driver reports
-non-real capability, so unavailable deployments return `503` before session
-lookup, operation claim, any driver call, or browser-side query handling. There
-is no public `fill_form` session route or SDK method.
+`duration_ms` is capped at 600,000ms of browser work. Allow up to 15 seconds
+more than that for the response to arrive; this extra time is not available
+for search work itself. **This endpoint is not available on any deployment
+today** and returns `503` before doing anything with your request. There is
+no public `fill_form` session route or SDK method.
 
 ## Login
 
@@ -450,7 +438,7 @@ is no public `fill_form` session route or SDK method.
 ```
 
 Heuristic credential login: types `username` then `password` realistically
-and submits. The `password` is sent to the harness but **never logged**.
+and submits. The `password` is **never logged**.
 `username_selector` / `password_selector` / `submit_selector` are optional —
 omit them and the fields are detected heuristically (submit falls back to
 Return on the password field). Give `success_selector` for a robust signal on
@@ -477,8 +465,8 @@ and assessed only in the `submitted: true` branch:
 }
 ```
 
-If behavioural typing reaches its safety bound, login refuses safely before
-submission. It does not type the password after a truncated username and does
+If typing hits the time cap, login stops safely before submission.
+It does not type the password after a truncated username and does
 not expose a URL on this branch:
 
 ```json
@@ -491,13 +479,11 @@ not expose a URL on this branch:
 ```
 
 `duration_ms` is capped at 600,000ms across both fields, submission, and
-assessment. The control plane may reserve a separate 15,000ms for teardown and
-result delivery; that time does not extend successful login work. This endpoint
-requires an explicitly real direct-driver login capability. Every currently
-shipped driver reports non-real capability, so unavailable deployments return
-the documented `503` before session lookup, operation claim, any driver call,
-or browser-side credential handling. Do not send customer credentials until a
-deployment advertises the real capability.
+assessment. Allow up to 15 seconds more than that for the response to
+arrive; this extra time is not available for login work itself. **This
+endpoint is not available on any deployment today** and returns `503`
+before doing anything with your request or credentials. Do not send
+credentials until it is.
 
 ## Destroy
 
@@ -505,8 +491,8 @@ deployment advertises the real capability.
 
 Cleanly tears down the session. Returns `204 No Content`. Idempotent
 on already-destroyed sessions. Frees the concurrent slot. Any
-`session.completed` webhook subscriptions fire after the row
-flips to `destroyed`.
+`session.completed` webhook subscriptions fire after the session's
+status becomes `destroyed`.
 
 ## Auth + scoping
 
@@ -516,18 +502,17 @@ Write endpoints (POST navigate / interact / wait / capture / extract / search / 
 require the `write:sessions` scope (a broad `write` key also satisfies
 it). Team RBAC: `X-Driftstack-Account` is honored — a `member` can list
 and read the owner's persisted session metadata, while live state and
-writes require the `admin` role. A member's state or write request returns
-403 before the driver is contacted.
+writes require the `admin` role. A member's state or write request returns 403.
 
 ## Errors common to every endpoint
 
-| Status | Type                    | When                                                          |
-| ------ | ----------------------- | ------------------------------------------------------------- |
-| 401    | `unauthorized`          | Missing / invalid bearer                                      |
-| 403    | `forbidden`             | Scope missing or team role is insufficient                    |
-| 404    | `not-found`             | Session not found / not owned                                 |
-| 409    | `conflict`              | Session is `creating` or another operation owns `busy`        |
-| 410    | `session-destroyed`     | Session is `destroyed`/`errored`, or destroy won; recreate    |
-| 504    | `session-timeout`       | An operation exceeded its time budget mid-call                |
-| 502    | `driver-error`          | Driver-level failure (network, crash)                         |
-| 503    | `driver-not-integrated` | The selected browser driver is unavailable in this deployment |
+| Status | Type                    | When                                                                    |
+| ------ | ----------------------- | ----------------------------------------------------------------------- |
+| 401    | `unauthorized`          | Missing / invalid bearer                                                |
+| 403    | `forbidden`             | Scope missing or team role is insufficient                              |
+| 404    | `not-found`             | Session not found / not owned                                           |
+| 409    | `conflict`              | Session is `creating` or another operation owns `busy`                  |
+| 410    | `session-destroyed`     | Session is `destroyed`/`errored`, or a destroy interrupted it; recreate |
+| 504    | `session-timeout`       | An operation exceeded its time budget mid-call                          |
+| 502    | `driver-error`          | The browser failed (network error, crash)                               |
+| 503    | `driver-not-integrated` | The browser is unavailable on this deployment                           |

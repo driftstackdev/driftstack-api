@@ -118,10 +118,12 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(
       /Each tier has a concurrent cap \(Free: 1, API Starter: 2, API Builder: 8, API Scale: 24 — see \[pricing\]\(https:\/\/driftstack\.io\/pricing\/\)\)\. Exceeding the cap returns 429\./,
     );
+    // 2026-09-15 plain words — say what the call did, not how the browser is built.
     expect(p).toMatch(
-      /`client\.sessions\.navigate\(\)` drove the iPhone Safari runtime to the URL on Driftstack's WebKit build\. The runtime is built from Apple's WebKit source directly — not a Chromium-stealth shim pretending to be Safari\./,
+      /`client\.sessions\.navigate\(\)` opened the URL in your session's iPhone Safari browser\./,
     );
     expect(p).not.toMatch(/The runtime is real Safari on real iOS/);
+    expect(p).not.toMatch(/WebKit build|Chromium-stealth shim/);
     expect(p).toMatch(
       /`client\.sessions\.capture\(\)` returned a `\{ kind, data, encoding, byte_size, duration_ms \}` object\./,
     );
@@ -142,6 +144,19 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/\*\*\[Session lifecycle\]\(\/guides\/session-lifecycle\/\)\*\*/);
     expect(p).toMatch(/\*\*\[Webhook event catalog\]\(\/webhooks\/events\/\)\*\*/);
     expect(p).toMatch(/\*\*\[API versioning policy\]\(\/api\/versioning\/\)\*\*/);
+    // 2026-09-15 plain words — the agent-session + LLM bullets say what the
+    // customer gets (an AI agent driving from plain-language instructions; two
+    // ways to supply a model) rather than the internal rail/decompose vocabulary.
+    expect(p).toMatch(
+      /\*\*\[Agent sessions\]\(\/api\/agent-sessions\/\)\*\* — let an AI agent drive a session from plain-language instructions\. Three modes: AI \(default\), manual, and pair \(a person can step in and take over\)\./,
+    );
+    expect(p).toMatch(
+      /the two ways to supply an AI model\. Bring your own Anthropic key \(stored encrypted, never shown again\), or use the bundled model with a monthly budget you control\./,
+    );
+    expect(p).not.toMatch(/LLM rails|decompose-and-execute|deployment-managed/);
+    expect(p).toMatch(
+      /That credential only works inside\s*\n?> the desktop app; it is not an API, SDK, or sandbox key\./,
+    );
   });
 
   it('CRITICAL quickstart support footer pinned. Matches W779 quickstart triplet shared contact framing.', () => {
@@ -175,7 +190,7 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(p).toMatch(/app automatically stores its restricted device credential/);
     expect(p).toMatch(/Free users do not create or paste a customer API key/);
     expect(p).toMatch(
-      /paid cloud customer\s*\n?key or a key minted by your self-hosted control plane remains available as an\s*\n?explicit fallback/,
+      /paid cloud customer\s*\n?key or a key created on your self-hosted Driftstack server remains available\s*\n?as a fallback/,
     );
   });
 
@@ -209,18 +224,18 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /\*\*Device credential or fallback API key\*\* — stored in macOS Keychain through\s*`keyring-rs`\. It never lands in `settings\.json` on disk\./,
+      /\*\*Device credential or fallback API key\*\* — stored in the macOS Keychain\.\s*It never lands in `settings\.json` on disk\./,
     );
     expect(p).toMatch(
-      /\*\*Base URL\*\* — stored in the Tauri settings store \(`settings\.json`\)\. Plaintext is fine here; the URL alone confers no access\./,
+      /\*\*Base URL\*\* — stored in the app's `settings\.json` file\. Plaintext is fine here; the URL alone confers no access\./,
     );
   });
 
-  it('CRITICAL same-binary-cross-deployment framing pinned. The \'The same GUI binary works against any control plane — there is no "self-hosted edition" of the desktop app. The deployment-mode toggle is the only switch\' wording is the load-bearing distribution-model contract.', () => {
+  it('CRITICAL same-app-cross-deployment framing pinned. The \'The same desktop app works with cloud or self-hosted — there is no separate "self-hosted edition". The deployment-mode toggle is the only switch\' wording is the load-bearing distribution-model contract (2026-09-15: "GUI binary" / "control plane" left the customer page).', () => {
     const p = read(LIC);
 
     expect(p).toMatch(
-      /The same GUI binary works against any control plane — there is no "self-hosted edition" of the desktop app\. The deployment-mode toggle is the only switch\./,
+      /The same desktop app works with cloud or self-hosted — there is no separate "self-hosted edition"\. The deployment-mode toggle is the only switch\./,
     );
   });
 
@@ -268,15 +283,15 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     expect(updater).toMatch(/await deps\.relaunch\(\)/);
   });
 
-  it("CRITICAL 4-troubleshooting bullet set pinned — Authentication failed + Couldn't reach + Wizard re-fires + privacy-safe permission denial.", () => {
+  it("CRITICAL 4-troubleshooting bullet set pinned — Authentication failed + Couldn't reach the server + setup wizard on every launch + privacy-safe permission denial.", () => {
     const p = read(LIC);
 
     expect(p).toMatch(/\*\*"Authentication failed"\*\* — retry cloud browser sign-in first/);
     expect(p).toMatch(/a cloud key never works against your own server/);
     expect(p).toMatch(/Settings re-validates credentials and shows the same guidance/);
-    expect(p).toMatch(/\*\*"Couldn't reach control plane"\*\* — for cloud, check/);
+    expect(p).toMatch(/\*\*"Couldn't reach the server"\*\* — for cloud, check/);
     expect(p).toMatch(
-      /\*\*Wizard re-fires on every launch\*\* — macOS Keychain may be unavailable to the app/,
+      /\*\*The setup wizard appears on every launch\*\* — the app could not reach the macOS Keychain to store its credential/,
     );
     expect(p).toMatch(/\*\*"You do not have permission" on activation\*\*/);
     expect(p).toMatch(/check the account status and selected team/);
@@ -296,16 +311,17 @@ describe('W785 docs quickstart + license-activation content parity', () => {
     );
   });
 
-  it('CRITICAL self-hosted activation 3-step framing pinned. (1) Stand up control plane + (2) Create API key + (3) Wizard choose Self-hosted + paste URL. Matches the SH-runbook + W762 /api/api-keys + V-NNN cross-references.', () => {
+  it('CRITICAL self-hosted activation 3-step framing pinned. (1) Set up the Driftstack server + (2) Create API key on your own server + (3) Wizard choose Self-hosted + paste the URL of your server. Matches the SH-runbook + W762 /api/api-keys + V-NNN cross-references (2026-09-15: "control plane" left the customer page).', () => {
     const p = read(LIC);
 
-    expect(p).toMatch(/1\. Stand up the control plane on your own hardware with the/);
+    expect(p).toMatch(/1\. Set up the Driftstack server on your own hardware with the/);
     expect(p).toMatch(
-      /2\. Create an API key against your local control plane \(same `\/v1\/api-keys` flow — requires the `account_owner` scope\)\./,
+      /2\. Create an API key on your own server \(same `\/v1\/api-keys` flow — requires the `account_owner` scope\)\./,
     );
     expect(p).toMatch(
-      /3\. In the GUI client wizard, choose \*\*Self-hosted\*\*, paste the URL of your control plane/,
+      /3\. In the GUI client wizard, choose \*\*Self-hosted\*\*, paste the URL of your server/,
     );
+    expect(p).not.toMatch(/control plane/);
   });
 
   it('CRITICAL license-activation Next-steps 3-link set pinned — profile-management + session-lifecycle + quickstart.', () => {

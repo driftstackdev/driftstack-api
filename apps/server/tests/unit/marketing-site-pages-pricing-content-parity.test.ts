@@ -66,27 +66,31 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
   });
 
   it("Free-tier hero card pinned: 'A perpetual free tier to evaluate the platform' + data-bound profiles/concurrent + '20-minute' session cap + 'never expires' — pinned so the perpetual / 1-profile / 1-concurrent / 20-min-cap / no-expiry framing survives. (2026-05-28: free has API access within the 1-session/20-min limits; the old 'no API access' claim was dropped per the accept-+-reconcile-copy decision — paid API tiers remain the path to production-scale concurrency.)", () => {
-    expect(body).toMatch(/A perpetual free tier to evaluate the platform/);
+    // 2026-09-15 plain words: 'perpetual' → 'never expires', said once.
+    expect(body).toMatch(/A free tier that never expires — no card required\./);
     expect(body).toMatch(/\{freeTier\.profiles\} profile/);
     expect(body).toMatch(/\{freeTier\.concurrent\}/);
     // S20b 2026-07-06: "concurrent session ... manual-only via the desktop
     // GUI client" → "session at a time ... driven by hand in our desktop
     // app" — same 20-minute cap, plain words.
     expect(body).toMatch(/session at a time \(up to 20 minutes each\)/);
-    expect(body).toMatch(/it never expires/);
+    expect(body).toMatch(/free tier that never expires/);
   });
 
   it("Free-tier mechanics framing pinned: 'No usage metering at all' + 'Upgrade to a paid tier when you need the API' — pinned so the no-metering / upgrade-for-API framing survives (drift here would blur the free↔paid boundary)", () => {
-    expect(body).toMatch(/No usage metering at all/);
+    expect(body).toMatch(/No hourly charges and no usage counting/);
     expect(body).toMatch(/Upgrade to a paid tier when you need the\s+API/);
   });
 
   it('Positioning band pins fixed browser subscription, concurrent capacity and no browser-usage overages', () => {
-    expect(body).toMatch(/Browser subscriptions are priced by concurrent capacity\./);
-    expect(body).toMatch(/Run as many hours as you want within your concurrent cap\./);
-    expect(body).toMatch(/No browser-usage overage bills\./);
-    expect(body).toMatch(/session hours, API calls, and page navigations are unmetered within/);
-    expect(body).toMatch(/bundled LLM uses a separate included-service monthly budget/);
+    // 2026-09-15 plain-words pass — same four facts, no billing internals.
+    expect(body).toMatch(/Browser plans are priced by how many sessions you can run at once\./);
+    expect(body).toMatch(/Use as many hours as you want within that limit\./);
+    expect(body).toMatch(/No extra bills for browser usage\./);
+    expect(body).toMatch(/hours, API calls and page visits inside it are unlimited/);
+    expect(body).toMatch(
+      /optional AI agent with Driftstack-supplied AI access \(the\s+"bundled" option\), that has its own monthly budget/,
+    );
   });
 
   it("V-502 decision-tree section 8 tier cards: Free $0 + Personal $79 + Team $249 + Agency $699 + API Starter $149 + API Builder $499 + API Scale $1,499 + Enterprise from $4,000 — pinned so the 8-tier 'which is right for me' decision-tree stays complete (drift to dropping any tier would orphan that-tier prospects; drift to changing a price would create marketing↔Stripe-invoice divergence)", () => {
@@ -114,7 +118,9 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
     expect(body).toMatch(/You drive iPhones by hand in the desktop app\./);
     expect(body).toMatch(/Code → API\./);
     expect(body).toMatch(/Your scripts and automated jobs run the sessions\./);
-    expect(body).toMatch(/Both ladders run the same engine and share the same free tier\./);
+    expect(body).toMatch(
+      /Both plan families give you the same real iPhones and share the same free tier\./,
+    );
   });
 
   it("concurrent/profile glossary pinned above the ladders: 'concurrent means sessions running at the same time — think browser tabs' + 'profile is a saved iPhone identity that keeps its logins and history' — pinned so both ladder column headers stay defined in plain words before the tables use them (the browser-tabs metaphor matches the homepage metering band; drift here would re-jargonize the ladders' two load-bearing terms)", () => {
@@ -166,30 +172,33 @@ describe('W502.A apps/marketing-site/src/pages/pricing.astro content parity', ()
   it("Self-hosted ladder header pinned: 'Self-hosted — for full control' + 'Run the entire stack on your own hardware. No concurrent-session caps from us — your hardware is the cap. Driftstack licenses the software; you add machines whenever you need more capacity.' (S20b plain words) — pinned so the no-license-cap + hardware-is-the-cap unit-economics flip survives (drift to dropping 'No concurrent-session caps from us' would lose THE core self-hosted economic narrative)", () => {
     expect(body).toMatch(/Self-hosted — for full control/);
     expect(body).toMatch(
-      /Run the entire stack on your own hardware\. No concurrent-session caps from\s*us — your hardware is the cap\. Driftstack licenses the software; you\s*add machines whenever you need more capacity\./,
+      // 2026-09-15 plain words — same no-license-cap + hardware-is-the-limit facts.
+      /Run Driftstack entirely on your own hardware\. No session limits from\s*us — your hardware sets the limit\. You license the software from\s*Driftstack and add machines whenever you need more capacity\./,
     );
   });
 
   it('BYOK / Bundled LLM section pins the live included-service budget, Enterprise custom-budget boundary, enablement, and self-hosted BYOK-only posture', () => {
     expect(body).toMatch(/BYOK or bundled — your call\./);
     expect(body).toMatch(/Bundled LLM \(API Builder, API Scale, Enterprise\)/);
-    expect(body).toMatch(/\$0\.10 per agent turn/);
-    expect(body).toMatch(/included-service accounting value/);
-    expect(body).toMatch(/against the monthly budget you control/);
-    expect(body).toMatch(/not separately itemized on\s*today's Stripe invoice/);
-    expect(body).toMatch(/Enterprise can use a contracted custom budget/);
-    expect(body).toMatch(/Settings → AI &amp; billing/);
-    expect(body).toMatch(/bundled-LLM settings API/);
-    expect(body).not.toMatch(/announced at launch|per-token rate|billed on one invoice/i);
-    // S20b 2026-07-06: same architectural reason, plain words.
+    // 2026-09-15 plain words: same $0.10-per-agent-turn budget, included in
+    // the plan and not billed separately today; enablement via the desktop
+    // app or the API; self-hosted stays BYOK-only.
     expect(body).toMatch(
-      /Self-hosted\s+plans are BYOK-only\s+because we don't route AI calls into hardware you\s+own\./,
+      /each agent turn counts <strong\s*>\$0\.10<\/strong\s*> against a monthly budget you set/,
     );
+    expect(body).toMatch(
+      /That budget is included in your plan\s*and is not billed separately today\./,
+    );
+    expect(body).toMatch(/Enterprise can arrange a custom budget/);
+    expect(body).toMatch(/Settings → AI &amp; billing/);
+    expect(body).toMatch(/, or through the API\./);
+    expect(body).not.toMatch(/announced at launch|per-token rate|billed on one invoice/i);
+    expect(body).toMatch(/Self-hosted plans are BYOK-only\./);
   });
 
   it("Mini FAQ teaser 4 questions: 'Manual or API — which one?' + 'Why concurrent caps and not hours?' + 'Can I switch tiers mid-month?' + 'Does the free tier expire?' + 'See full FAQ' → /faq — pinned so the 4-question pricing-FAQ teaser stays complete (drift to dropping the concurrent-caps explainer would lose the why-not-hourly answer; drift to dropping the free-tier answer would orphan free-tier prospects)", () => {
     expect(body).toMatch(/Manual or API — which one\?/);
-    expect(body).toMatch(/Why concurrent caps and not hours\?/);
+    expect(body).toMatch(/Why limit sessions at once, and not hours\?/);
     expect(body).toMatch(/Can I switch tiers mid-month\?/);
     expect(body).toMatch(/Does the free tier expire\?/);
     expect(body).toMatch(/<a href="\/faq\/" class="btn-secondary">See full FAQ<\/a>/);

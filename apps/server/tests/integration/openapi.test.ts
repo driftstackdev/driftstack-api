@@ -636,7 +636,7 @@ describe('OpenAPI spec generation', () => {
     // operator-only + mTLS/JWT framing so customer API-key holders know
     // it is a separate node-authenticated control-plane surface.
     expect(json).toMatch(
-      /Fleet-node WebSocket event stream \(operator-only; mTLS \+ signed Ed25519 JWT/,
+      /Operator WebSocket event stream \(operator-only; mTLS \+ signed Ed25519 JWT/,
     );
     // The fleet-events summary line no longer cites the internal
     // `docs/network-architecture.md` repo path — that doc lives at

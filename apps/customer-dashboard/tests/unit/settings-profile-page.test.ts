@@ -184,7 +184,7 @@ describe('settings page — profile hydration and timeout reconciliation', () =>
 
     expect(fetchCalls.filter((call) => call.init?.method === 'PATCH')).toHaveLength(1);
     expect(window.document.querySelector('[data-field="profile-status"]')?.textContent).toContain(
-      'live profile matches',
+      'your profile shows your changes',
     );
     expect(
       window.document.querySelector('[data-field="profile-error"]')?.classList.contains('hidden'),
@@ -262,7 +262,7 @@ describe('settings page — profile hydration and timeout reconciliation', () =>
       (window.document.querySelector('[data-field="profile-name"]') as HTMLInputElement).value,
     ).toBe(desired.name);
     expect(window.document.querySelector('[data-field="profile-error"]')?.textContent).toContain(
-      'live profile differs',
+      "doesn't show your changes yet",
     );
   });
 });

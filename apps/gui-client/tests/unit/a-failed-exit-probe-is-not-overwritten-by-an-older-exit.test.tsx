@@ -296,7 +296,7 @@ describe('#14 — the grid keeps "exit geo unavailable" through the next cache e
     fireEvent.click(screen.getByRole('button', { name: /^re-test$/i }));
     await waitFor(() => expect(probeProxyExit).toHaveBeenCalledTimes(1));
     expect(
-      await screen.findByText('exit geo unavailable — the probe did not complete'),
+      await screen.findByText('exit location unknown — the check did not complete'),
     ).toBeInTheDocument();
     expect(screen.queryByText('203.0.113.7')).toBeNull();
     await waitFor(async () =>
@@ -307,7 +307,7 @@ describe('#14 — the grid keeps "exit geo unavailable" through the next cache e
       await cache.saveProbeResult('socks1', OK, Date.now());
     });
     expect(
-      screen.getByText('exit geo unavailable — the probe did not complete'),
+      screen.getByText('exit location unknown — the check did not complete'),
     ).toBeInTheDocument();
     expect(screen.queryByText('203.0.113.7')).toBeNull();
     expect(screen.queryByText('run Test for exit IP')).toBeNull();
@@ -476,13 +476,13 @@ describe('#16 — the profile card gates the VPN banner and notice on `vpn`, as 
 // reds on the sentence and the NEVER-PROBED control below stays green, which is
 // what makes the arm a statement about the third state rather than about the
 // cell.
-const EXIT_GEO_UNAVAILABLE = 'exit geo unavailable — the probe did not complete';
+const EXIT_GEO_UNAVAILABLE = 'exit location unknown — the check did not complete';
 // Phase B (2026-09-11): the card's exit line is ONE fixed 18px row, so it shows
 // the SHORT clause and carries the full sentence as its title; the grid still
 // shows the full sentence. Both derive from lib/proxy-check-copy.
-const EXIT_GEO_UNAVAILABLE_SHORT = 'exit geo unavailable';
+const EXIT_GEO_UNAVAILABLE_SHORT = 'exit location unknown';
 const EXIT_GEO_UNAVAILABLE_TITLE =
-  'The proxy connected and authenticated, but no traffic completed a round trip through it.';
+  'The proxy accepted the connection and login, but no traffic made it through. Try the test again.';
 
 describe('(m) M3 — the card’s Test whose exit probe fails reads the honest unavailable state', () => {
   async function clickCardTest(): Promise<void> {

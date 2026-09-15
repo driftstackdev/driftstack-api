@@ -57,7 +57,7 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     </div>
   </section>
   <main class="mx-auto max-w-3xl px-6 py-12 prose prose-slate dark:prose-invert prose-headings:font-semibold">
-    <p class="lead text-lg text-tk-ink-2"><strong class="text-tk-ink">Bitcoin, Ether, USDC, USDT</strong> — every self-serve paid tier accepts crypto via NowPayments.</p>
+    <p class="lead text-lg text-tk-ink-2"><strong class="text-tk-ink">Bitcoin, Ether, USDC, USDT</strong> — every tier you can buy from your dashboard accepts crypto.</p>
 
     <p>
       Payment settles on the blockchain itself: once your transfer has the
@@ -127,15 +127,15 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
     <h2>If something goes wrong</h2>
     <ul>
       <li><strong>Underpayment</strong> — if the transfer is short of
-        the quoted amount, the order is marked <code>partial</code> and
-        support follows up within one business day to confirm a top-up.
+        the quoted amount, the order is marked as partially paid and
+        support contacts you within one business day to arrange the top-up.
         Because crypto payments are non-refundable, a short payment is
         fixed by topping up the difference — we can't send your crypto
         back.</li>
-      <li><strong>Late payment</strong> — transfers received after the
-        1-hour pay-window land on an order we treat as expired. Nothing
-        is lost: support manually reconciles these, so expect a
-        one-business-day delay.</li>
+      <li><strong>Late payment</strong> — transfers that arrive after the
+        1-hour window land on an order that has already gone stale. Nothing
+        is lost — support will match your payment to your order and apply
+        it, but expect a one-business-day delay.</li>
       <li><strong>Wrong currency</strong> — if you send a currency we
         don't accept, the money will not come back on its own. Email
         <a href="mailto:support@driftstack.dev">support@driftstack.dev</a> with the
@@ -149,14 +149,13 @@ const ACCEPTED_CURRENCIES = ['BTC', 'ETH', 'USDC (ERC-20)', 'USDT (ERC-20)', 'US
       crypto payment settles on-chain, it is committed for the
       billing period it covers. You can cancel your subscription at
       any time — cancellation stops the next billing period's
-      payment request — but the current period is not pro-rated or
-      refunded. This is standard practice for business software
+      payment request — but the current period is not refunded, in
+      full or in part. This is standard practice for business software
       subscriptions; the reasoning is in <a href="/legal/refunds/">/legal/refunds</a>.
     </p>
     <p>
-      If you need a refund mechanism, our card-billing path (Stripe)
-      is the right channel; card refunds follow the standard rules
-      in the refund policy.
+      If you think you might need a refund, pay by card instead. Card
+      refunds follow the standard rules in the refund policy.
     </p>
 
     <h2>Tax + accounting</h2>

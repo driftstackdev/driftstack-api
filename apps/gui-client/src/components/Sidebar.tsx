@@ -218,13 +218,13 @@ export function Sidebar({
           only showed captured console output + errors. The floating DevLogPanel
           still exposes it for dev triage. 2026-06-19. */}
         {!isCloudBaseUrl(settings.baseUrl) && (
-          <SidebarSection label="Cluster">
+          <SidebarSection label="Self-hosted">
             <SidebarItem
               icon={<IconServer />}
               active={current === 'fleet'}
               onClick={() => onNavigate('fleet')}
             >
-              Mac mini fleet
+              Your servers
             </SidebarItem>
           </SidebarSection>
         )}
@@ -422,7 +422,13 @@ function TierDot({ tier }: { tier: string | null }): JSX.Element {
         : tier === 'starter'
           ? 'bg-status-busy'
           : 'bg-status-idle';
-  return <span className={`status-pip h-2 w-2 ${cls}`} title={tier ?? 'unknown tier'} />;
+  // The tooltip carries the plan's customer label, never the raw tier id.
+  return (
+    <span
+      className={`status-pip h-2 w-2 ${cls}`}
+      title={tier === null ? 'Plan unknown' : `${tierLabelFor(tier)} plan`}
+    />
+  );
 }
 
 // ─── icons (Lucide-shape, 14px stroke, no dependency) ─────────────

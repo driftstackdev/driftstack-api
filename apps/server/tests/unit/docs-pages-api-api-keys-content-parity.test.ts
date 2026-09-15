@@ -105,9 +105,9 @@ describe('W762 docs /api/api-keys content parity', () => {
     const p = read(PAGE);
 
     expect(p).toMatch(
-      /After `grace_period_ends_at`, requests using the old key receive `401\s*\n?Unauthorized` because the existing `expires_at`-driven auth gate/,
+      /After `grace_period_ends_at`, requests using the old key receive `401\s*\n?Unauthorized` — it expires automatically, so you don't need to revoke it\s*\n?separately\./,
     );
-    expect(p).toMatch(/No separate revocation endpoint is needed\./);
+    expect(p).not.toMatch(/auth gate/);
   });
 
   it("CRITICAL DELETE idempotent + 204 + cannot-reactivate framing pinned. The 'Idempotent. Revoking an already-revoked key returns the same 204 No Content response. Revoked keys cannot be reactivated; mint a fresh key instead.' wording matches W750 dashboard revoke 204-handling.", () => {
@@ -189,7 +189,7 @@ describe('W762 docs /api/api-keys content parity', () => {
       /Mutations \(create\/destroy sessions, profiles, etc\.\)\. Does NOT include read — pair it with `read`\./,
     );
     expect(p).toMatch(
-      /Issue\s*\n?`account_owner` only to keys used by the dashboard or operator\s*\n?tooling — application keys do not need it\./,
+      /Issue\s*\n?`account_owner` only to keys used by the dashboard or your own\s*\n?admin tooling — application keys do not need it\./,
     );
     // Negative pin — the fictional default must not come back.
     expect(p).not.toMatch(/is the default for new keys/);
@@ -257,11 +257,13 @@ describe('W762 docs /api/api-keys content parity', () => {
   it('V-914 CRITICAL the revoke section states when revocation takes effect. It said nothing until now, while auth-cache.ts claimed customers had been documented a 30s worst case (V-886) — a commitment no page carried. The behaviour is a per-key version gate checked on every cache read, so the honest answer is the next request, and a customer who has just leaked a key needs it.', () => {
     const page = read(PAGE);
     expect(page).toMatch(/\*\*When it takes effect\.\*\*/);
-    expect(page).toMatch(/stops authenticating on the next\s*\n?request that presents it/);
+    expect(page).toMatch(/stops working on the next request\s*\n?that uses it — there is no delay/);
     expect(
       page,
       'and the in-flight caveat, so "next request" is not read as "all requests"',
-    ).toMatch(/Requests already in flight when you\s*\n?revoke may finish/);
-    expect(page, 'plus the fail-closed note').toMatch(/never delayed by a cache failure/);
+    ).toMatch(/Requests already in flight when you revoke\s*\n?may finish/);
+    expect(page, 'plus the refusal for later requests').toMatch(
+      /anything arriving afterwards is refused/,
+    );
   });
 });

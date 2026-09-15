@@ -150,13 +150,11 @@ describe('session login public response truth', () => {
       object(paths['/v1/sessions/{id}/login'], 'login path').post,
       'login POST',
     );
-    expect(operation.summary).toMatch(/real direct-driver capability required/);
+    expect(operation.summary).toMatch(/not available yet on any deployment/);
     const response = object(object(operation.responses, 'responses')['200'], '200 response');
-    expect(response.description).toMatch(
-      /Requires an explicitly real direct-driver login capability/,
-    );
-    expect(response.description).toMatch(/currently shipped drivers report non-real capability/);
-    expect(response.description).toMatch(/return 503 before session lookup, operation claim/);
+    expect(response.description).toMatch(/no current deployment supports credential login/);
+    expect(response.description).toMatch(/every call returns 503/);
+    expect(response.description).toMatch(/returns 503 before the session is looked up/);
     expect(response.description).toMatch(/submitted=true/);
     expect(response.description).toMatch(/safe zero-submit refusal/);
     expect(response.description).toMatch(/duration_ms is capped at 600 seconds/);

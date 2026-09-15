@@ -6,8 +6,8 @@ description: Reference for every webhook event type the Driftstack API emits —
 
 # Webhook events — catalog + payload shapes
 
-This is the customer-facing reference for webhook events emitted by the
-Driftstack control plane and the synthetic connectivity test event.
+This is the customer-facing reference for webhook events emitted by
+Driftstack, plus the test event.
 
 ## Quick index
 
@@ -17,10 +17,10 @@ Driftstack control plane and the synthetic connectivity test event.
 | `session.failed`                    | Session terminates in `errored` state                  |
 | `api_key.revoked`                   | API key is revoked by a customer or administrator      |
 | `test.ping`                         | Synthetic test event from `POST /v1/webhooks/:id/test` |
-| `session.egress_capability_changed` | A session reports a changed SOCKS5 egress capability   |
+| `session.egress_capability_changed` | A SOCKS5 proxy session reports what its proxy can do   |
 | `crypto.order.paid`                 | A NowPayments-backed order transitions to `paid`       |
 | `crypto.order.failed`               | A crypto order moves to terminal `failed`              |
-| `session.challenge_detected`        | The session harness detects a supported bot challenge  |
+| `session.challenge_detected`        | The session detects a supported bot challenge          |
 | `session.profile_save_failed`       | Profile save-back fails to replace the stored profile  |
 
 ## Common envelope
@@ -45,10 +45,8 @@ Headers:
 - `X-Driftstack-Signature: t=<unix-seconds>,v1=<hex>` —
   HMAC-SHA256(`<t>.<raw body>`) keyed by the endpoint signing
   secret, where `<t>` is the `t=<unix-seconds>` value from this
-  same header (NOT a body field). Verification reference:
-  `packages/sdk-typescript/src/webhook-signature.ts` (TS),
-  `packages/sdk-go/webhook_signature.go` (Go),
-  `packages/sdk-python/src/driftstack/webhook_signature.py` (Py).
+  same header (NOT a body field). See [Verification](#verification)
+  below.
 - `X-Driftstack-Event-Id: <uuid>` — duplicate of the top-level
   `id`, surfaces in HTTP logs without parsing the body.
 - `X-Driftstack-Event-Type: <event-type>` — the delivered event
@@ -57,11 +55,11 @@ Headers:
 
 Retry policy: 6 attempts (the initial delivery plus 5 retries) with
 exponential backoff at 1m, 5m, 15m, 30m, 60m. Final failures land in DLQ
-and can be re-sent from [Replay](/webhooks/replay/).
+(the dead-letter queue) and can be re-sent from [Replay](/webhooks/replay/).
 
 Idempotency: every delivery includes the same `<uuid>` id. Customers
 should dedup on this id — the same event may be re-delivered after a
-manual replay (admin tooling) or DLQ requeue.
+replay or DLQ requeue.
 
 Ordering: deliveries are **not** ordered, and your handler must not
 assume they are. A failed delivery is rescheduled onto the backoff
@@ -114,14 +112,10 @@ indistinguishable from a clean completion you requested:
 `auto_destroyed` is absent rather than `false` on a customer-initiated
 destroy, so test for presence/truthiness, not equality with `false`.
 
-Emitters: `apps/server/src/services/sessions.ts` — `destroy()` (customer
-call), `autoDestroyExpired()` (duration cap), `destroyAllForAccount()`
-(account suspension).
-
 ### `session.failed`
 
-Fires when a session transitions to `errored` (driver failure,
-unrecoverable error during navigate / interact / capture / etc.).
+Fires when a session transitions to `errored` (the browser failed, or an
+operation such as navigate / interact / capture hit an unrecoverable error).
 The session's `destroyed_at` is set; subsequent ops on the session
 return 410.
 
@@ -135,11 +129,9 @@ return 410.
 }
 ```
 
-**`error_name` and `error_message` are a closed, classed set — not the
-underlying driver error.** The server maps every failure onto one of four
-classes and sends fixed copy for it, deliberately, so that internal driver
-detail never reaches a customer endpoint. The complete set of values you
-can receive:
+**`error_name` and `error_message` are a fixed set — not a raw browser
+error.** Every failure is mapped onto one of four classes with fixed text.
+The complete set of values you can receive:
 
 | `error_name`               | `error_message`                     |
 | -------------------------- | ----------------------------------- |
@@ -154,16 +146,12 @@ class. `operation` is one of `navigate`, `interact`, `gui_input`, `wait`,
 `state_capture`, `capture`, `extract`, `search`, `login`, or `unknown`.
 `session_id` and `duration_ms` are omitted when they cannot be resolved.
 
-Emitter: `runWithFailureCapture()` in `services/sessions.ts`, projected
-through `projectSessionFailedData()` in `lib/session-event-metadata.ts`.
-
 ### `api_key.revoked`
 
 Fires whenever an API key is revoked, regardless of who initiated
-the revocation (account_owner via `DELETE /v1/api-keys/:id` OR
-driftstack_internal_admin via `POST /v1/admin/api-keys/:id/revoke`).
-The revoking party is **not** carried in this event — refer to the
-audit log for full provenance.
+the revocation (you, via `DELETE /v1/api-keys/:id`, or Driftstack
+staff). The revoking party is **not** carried in this event — refer
+to the audit log for full provenance.
 
 ```json
 {
@@ -173,15 +161,13 @@ audit log for full provenance.
 }
 ```
 
-Emitter: `apps/server/src/services/api-keys.ts` `revoke()`.
-
 ### `test.ping`
 
 Synthetic test event emitted by `POST /v1/webhooks/:id/test`
 . Fires REGARDLESS of subscription so customers can verify
 their handler signature-checks correctly without subscribing to it.
-Customers cannot subscribe to `test.ping` (the create / update Zod
-schemas reject it); the test endpoint dispatches once per call.
+Customers cannot subscribe to `test.ping` (the API rejects it); the
+test endpoint dispatches once per call.
 
 Payload:
 
@@ -205,16 +191,14 @@ audit-logged as `webhook_delivery.replayed` with
 
 ### `session.egress_capability_changed`
 
-Fires when the WebKit-fork harness emits an
-`egress.capability_report` event for a SOCKS5 session and the
-control plane ingests it. Carries the same shape as the
+Fires when a session using a SOCKS5 proxy reports its proxy
+capabilities. Carries the same shape as the
 `egress_capabilities` field on `GET /v1/sessions/{id}` —
 subscribers can branch on `udp_associate`, `dns_remote_resolve`,
 `quic_route`, or `warnings` without a follow-up GET.
 
 Subscribable — add it to your webhook endpoint's `events` array
-to wire proxy-health visibility into your own observability
-surface.
+to get proxy-health alerts in your own tooling.
 
 ```json
 {
@@ -238,8 +222,7 @@ surface.
 ### `crypto.order.failed`
 
 Fires when a NowPayments-backed crypto checkout order
-transitions to a terminal state. Wired end-to-end 2026-05-22
-(migration 0064 + bootstrap WebhooksService emitter sink).
+transitions to a terminal state.
 
 `crypto.order.paid`:
 
@@ -277,10 +260,10 @@ transitions to a terminal state. Wired end-to-end 2026-05-22
 `reason` is one of: `ipn` (a NowPayments IPN reported a terminal
 non-paid status — a failed, refunded, or timed-out payment all surface
 here), `expired` (the payment window — 60 minutes at checkout — elapsed
-before payment landed and an operator expired the order), or `swept` (admin / cron cleanup of a stuck pending order past
-the staleness threshold). These are the three values
-`CryptoOrdersService` emits; the underlying NowPayments sub-status
-(timeout / refunded / cancelled) is collapsed into `ipn`.
+before payment landed and the order was expired), or `swept` (a stuck
+pending order was closed after staying unpaid for too long). The
+NowPayments sub-status (timeout / refunded / cancelled) is reported as
+`ipn`.
 
 See [Crypto checkout API](/api/billing-crypto/) for the full
 order lifecycle + status state machine. The webhook event mirrors
@@ -289,14 +272,11 @@ orders`.
 
 ### `session.challenge_detected`
 
-Fires when the in-session harness ChallengeDetector flags a
-bot-check (DataDome / Arkose / PerimeterX / AWS-WAF / GeeTest / … —
-14 types) on the page the session is navigating. The harness
-auto-pauses the session (no further action intents run) and surfaces
-the challenge; resolve it (e.g. in the live view) and the session
-resumes. Subscribable so you can route challenge alerts into your own
-ops/notification surface. The relay resolves the owning account and
-enqueues the webhook when the session harness reports the challenge.
+Fires when the session detects a bot-check (DataDome / Arkose /
+PerimeterX / AWS-WAF / GeeTest / … — 14 types) on the page it is
+navigating. The session pauses automatically; resolve the challenge
+(e.g. in the live view) and it resumes. Subscribe to route challenge
+alerts into your own tooling.
 
 ```json
 {
@@ -315,21 +295,20 @@ enqueues the webhook when the session harness reports the challenge.
 
 ### `session.profile_save_failed`
 
-Fires when a profile-backed session's save-back does not replace the
-stored profile at teardown. The browsing session itself **succeeded**.
-For failure reasons, the updated store (cookies / logins / browser
-state from this run) could not be persisted, so the **next restore of
-this profile will be stale**; the harness's internal upload retry is
-already exhausted and there is no later retry path. `reason` is one of `serialize_failed`, `seal_failed`,
-`too_large` (the sealed store exceeded the 256 MiB cap),
-`upload_failed`, or `degenerate_dump` (the dump was empty/malformed
-and would have clobbered a known-good prior store — the prior is
-preserved, so this one is reassuring rather than data loss), or
-`superseded` (a newer profile write won and the stale conditional save
-was safely refused; the next restore uses the newer state, so this is
-benign and not data loss). An unrecognized harness reason is folded into
-`upload_failed` rather than dropping the event. Customers relying on
-persisted profile state can subscribe and alert on it.
+Fires when a session that runs a saved profile ends but its updated
+browser state (cookies, logins, and other state from this run) could
+not be saved back to the profile. The browsing session itself
+**succeeded**, but the **next restore of this profile will be stale**;
+Driftstack does not retry the save later. `reason` is one of
+`serialize_failed`, `seal_failed`, `too_large` (the encrypted state
+exceeded the 256 MiB cap), `upload_failed`, `degenerate_dump` (the
+saved state was empty or malformed and would have replaced a known-good
+earlier copy — the earlier copy is kept, so this one is reassuring
+rather than data loss), or `superseded` (a newer profile write won and
+this older save was safely refused; the next restore uses the newer state,
+so this is benign and not data loss). Any other failure is reported as
+`upload_failed`. If you rely on saved profile state, subscribe and alert
+on it.
 
 ```json
 {
@@ -364,10 +343,9 @@ before the old one stops working.
 Every SDK ships a verification helper:
 
 - TS: `verifyWebhookSignature({ secret, header, body, toleranceSec })`
-  in `packages/sdk-typescript/src/webhook-signature.ts`.
-- Go: `VerifyWebhookSignature` in `packages/sdk-go/webhook_signature.go`.
-- Python: `verify_webhook_signature` in
-  `packages/sdk-python/src/driftstack/webhook_signature.py`.
+  from `@driftstack/sdk`.
+- Go: `driftstack.VerifyWebhookSignature`.
+- Python: `from driftstack import verify_webhook_signature`.
 
 All three follow the same Stripe-adjacent pattern: parse `t=` and
 `v1=` from the header, recompute HMAC-SHA256(`<t>.<body>`), constant-
@@ -419,26 +397,25 @@ function verifyWebhook(secret, header, rawBody, toleranceSec = 300) {
 
 A delivery is considered "successful" only if your endpoint returns
 HTTP 2xx within the 10s timeout. Any other outcome (5xx, timeout,
-connection refused, DNS failure) marks the attempt failed; the
-delivery scheduler picks it up at the next retry slot.
+connection refused, DNS failure) marks the attempt failed; Driftstack
+retries it at the next retry slot.
 
 After 6 failed attempts (the initial delivery plus 5 retries) the
-delivery lands in DLQ. DLQ deliveries
-are visible in the admin panel
-(`admin.driftstack.io/webhook-dlq`) — staff can manually requeue
-them after investigating the failure.
+delivery lands in DLQ. You can replay DLQ deliveries yourself from
+[Replay](/webhooks/replay/), or ask support to requeue them.
 
 The endpoint **is** auto-disabled after 50 consecutive failed
-deliveries. When `consecutive_failures` crosses 50 the worker sets
-`disabled_at` and stops delivering to it. A disabled endpoint is a
-sticky tombstone — it is **not** automatically re-enabled by a later
-success; you mint a new endpoint to resume delivery. Monitor the
+deliveries. When `consecutive_failures` crosses 50 Driftstack sets
+`disabled_at` and stops delivering to it. A disabled endpoint stays
+disabled — it is **not** automatically re-enabled by a later
+success; create a new endpoint to resume delivery. Monitor the
 `consecutive_failures` field on `GET /v1/webhooks` to catch a
 drifting endpoint before it trips the auto-disable threshold.
 
 ## Subscription model
 
-Two related but distinct enums in `packages/api-types/src/webhooks.ts`:
+Two related but distinct sets of event types, exported from the
+`@driftstack/api-types` package:
 
 - **`WebhookEventType`** — every event the server CAN emit.
   Includes `test.ping`.
@@ -449,8 +426,8 @@ Two related but distinct enums in `packages/api-types/src/webhooks.ts`:
 The distinction matters because `test.ping` only fires from the
 explicit `POST /v1/webhooks/:id/test` endpoint regardless of
 subscription — subscribing to it would be meaningless. The
-update-subscription validator rejects `test.ping` with a 400
-`validation-failed` problem detail.
+API rejects `test.ping` in the `events` array with a 400
+`validation-failed` problem.
 
 ### Subscribing to a subset
 
@@ -506,12 +483,6 @@ checks correctly before relying on it for production events.
 
 ## Related
 
-- Webhook resource: `apps/server/src/routes/webhooks.ts`
-- Webhook delivery service:
-  `apps/server/src/services/webhooks.ts` +
-  `apps/server/src/services/durable-webhook-delivery.ts`
-- DLQ admin operations: `apps/admin-panel/src/pages/webhook-dlq.astro`
-  — adds the `endpoint_id` drill-down filter
-- Stripe webhook signature (the inverse direction — Stripe → us):
-  `apps/server/src/lib/stripe-signing.ts` and
-  `docs/deployment/stripe-webhook-testing.md`
+- [Webhook endpoints](/webhooks/endpoints/)
+- [Replaying deliveries](/webhooks/replay/)
+- [Crypto order events](/webhooks/crypto-events/)

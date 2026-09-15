@@ -129,8 +129,9 @@ describe('W368.A marketing-site /faq page content parity', () => {
     expect(body).toMatch(
       /Every paid tier, including the Manual tiers, includes programmatic API\/SDK access with live keys/,
     );
+    // 2026-09-15 owner vocabulary: "plan family" / "API plans", not "ladder".
     expect(body).toMatch(
-      /The API ladder \(API Starter from \$149\/mo\) is the path built and sized for code-first workloads/,
+      /The API plans \(API Starter from \$149\/mo\) are built and sized for code-first workloads/,
     );
     expect(body).not.toMatch(/starts on the API ladder/);
     expect(body).not.toMatch(/within the free limits/);
@@ -151,24 +152,36 @@ describe('W368.A marketing-site /faq page content parity', () => {
 
   it('annual billing pinned: 20% off / Stripe proration / 30-day cancel-before-renewal', () => {
     expect(body).toMatch(/billed up front for 12 months at 20% off the monthly equivalent/);
-    expect(body).toMatch(/prorated automatically by Stripe/);
+    // 2026-09-15 plain words: proration explained, Stripe named elsewhere.
+    expect(body).toMatch(
+      /worked out automatically for the remaining days of your billing period \(prorated\)/,
+    );
     expect(body).toMatch(/auto-renew unless cancelled at least 30 days before renewal/);
   });
 
   it('billing truth stays with Stripe/NowPayments; cost remains an operational estimate', () => {
     expect(body).toMatch(/Stripe-issued invoices are payment truth for card subscriptions/);
     expect(body).toMatch(/crypto customers use their NowPayments order receipt/);
-    expect(body).toMatch(/operational cost-to-serve estimate for a UTC month, not your invoice/);
-    expect(body).toMatch(/only its compute estimate is populated/);
-    expect(body).toMatch(/storage, egress, email, and LLM are reserved zero fields/);
-    expect(body).toMatch(/recomputed on each request from lifecycle-derived session minutes/);
+    // 2026-09-15 plain words, same facts.
+    expect(body).toMatch(
+      /an estimate of what it costs Driftstack to serve your account in a calendar month \(UTC\) — not your invoice/,
+    );
+    expect(body).toMatch(/only the session-time part of that estimate is filled in/);
+    expect(body).toMatch(/storage, network traffic, email, and AI show zero for now/);
+    expect(body).toMatch(
+      /recalculated every time you look at it, from how many minutes your sessions have run/,
+    );
   });
 
   it('operator threshold and bundled LLM budget have no fictional invoice effect', () => {
-    expect(body).toMatch(/operator unit-economics signal, not a customer spending cap/);
-    expect(body).toMatch(/does not send a customer billing email, add an invoice item, rate-limit/);
-    expect(body).toMatch(/\$0\.10 included-service accounting value against the monthly budget/);
-    expect(body).toMatch(/budget is enforced but not separately itemized by Stripe today/);
+    expect(body).toMatch(/an internal signal for Driftstack, not a spending cap on your account/);
+    expect(body).toMatch(
+      /does not send you a billing email, add anything to your invoice, block a new session/,
+    );
+    expect(body).toMatch(/counts \$0\.10 against a monthly budget you control/);
+    expect(body).toMatch(
+      /the budget is enforced, but it is not a separate line on your invoice today/,
+    );
     expect(body).not.toMatch(/billed on one invoice|contracted custom rate|announced at launch/i);
   });
 
@@ -192,8 +205,9 @@ describe('W368.A marketing-site /faq page content parity', () => {
   it('"What if Driftstack goes away" two-protection answer pinned (portability + escrow)', () => {
     expect(body).toMatch(/Data portability:/);
     expect(body).toMatch(/Self-hosted option:/);
+    // 2026-09-15: "WebKit fork" / "control-plane code" are internal names.
     expect(body).toMatch(
-      /escrow agreement releases the browser engine \(the WebKit fork\) and the management software \(the control-plane code\)/,
+      /escrow agreement releases the browser engine and the management software/,
     );
   });
 

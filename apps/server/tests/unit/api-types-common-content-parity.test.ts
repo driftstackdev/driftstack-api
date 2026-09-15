@@ -299,7 +299,7 @@ describe('W436.A packages/api-types/src/common.ts content parity', () => {
     expect(body).toMatch(/export function isSelectableArchetypeId\(id: string\): boolean/);
     expect(body).toMatch(/export const SelectableArchetypeIdSchema = z/);
     expect(body).toContain(
-      "message: 'archetype must be a selectable id returned by GET /v1/archetypes'",
+      "message: 'Use a device profile id from the list returned by GET /v1/archetypes.'",
     );
   });
 

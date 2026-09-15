@@ -38,7 +38,7 @@ export function QuicReadout({
       <div
         data-component="sim-quic-readout"
         data-state="not-observed"
-        title="The device has not reported an HTTP/3 observation for this session. This is not a verdict about the proxy — it only says nothing was reported."
+        title="No HTTP/3 information has been reported for this session yet. This is not a result about the proxy — it only means nothing has been reported."
         className="mt-1 text-[10px] leading-snug text-white/50"
       >
         HTTP/3: not observed
@@ -50,7 +50,7 @@ export function QuicReadout({
       <div
         data-component="sim-quic-readout"
         data-state="none-yet"
-        title="The device counted this session's HTTP/3 connections and found none so far. The count rises once a site is reached over HTTP/3 through this egress."
+        title="No site has been reached over HTTP/3 in this session yet. The count rises once one is."
         className="mt-1 text-[10px] leading-snug text-white/50"
       >
         HTTP/3: none yet (0 connections)
