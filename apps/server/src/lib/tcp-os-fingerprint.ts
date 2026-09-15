@@ -109,6 +109,27 @@ function corroborated(sig: TcpSynSignature, layout: Layout): boolean {
   return false;
 }
 
+/**
+ * Darwin's COMPLETE layout: MSS, NOP, WS, NOP, NOP, TS, SACK-permitted, EOL —
+ * eight options in this exact order, with the two-NOP padding before the
+ * timestamp and the trailing end-of-list. No other mainstream stack emits it
+ * (Linux: MSS,SACK,TS,NOP,WS; Windows: MSS,NOP,WS,NOP,NOP,SACK; FreeBSD:
+ * MSS,NOP,WS,SACK,TS). Read together with wscale 6 and window 65535 it is as
+ * specific as a signature gets at this layer — specific enough that a
+ * contradicting TTL is far likelier to be a carrier rewrite than a Windows or
+ * Linux kernel emitting Darwin's exact byte layout. That is why it earns HIGH
+ * at TTL 128 where a merely corroborated layout earns medium.
+ */
+const DARWIN_EXACT_ORDER = [2, 1, 3, 1, 1, 8, 4, 0] as const;
+function isExactDarwin(sig: TcpSynSignature): boolean {
+  return (
+    sig.optionOrder.length === DARWIN_EXACT_ORDER.length &&
+    sig.optionOrder.every((k, i) => k === DARWIN_EXACT_ORDER[i]) &&
+    sig.windowScale === 6 &&
+    sig.windowSize === 65535
+  );
+}
+
 const TTL_REWRITE_NOTE =
   'a TTL rewritten in the path — mobile carriers normalise TTL, and no middlebox reorders TCP options';
 
@@ -202,10 +223,16 @@ export function fingerprintOs(sig: TcpSynSignature): OsFingerprintResult {
 
   if (ttl0 === 128) {
     if (layout === 'darwin' && backed) {
+      // MEASURED 2026-09-15: three T-Mobile proxies at TTL 114–117 carried
+      // Darwin's exact eight-option layout — the owner asked why that read as
+      // medium, and the answer is that nothing but the TTL argued against it.
+      const exact = isExactDarwin(sig);
       return {
         os: 'macos-or-ios',
-        confidence: 'medium',
-        reason: `Darwin option layout, wscale 6 and window 65535, at TTL ${sig.ttl} (initial 128) — ${TTL_REWRITE_NOTE}`,
+        confidence: exact ? 'high' : 'medium',
+        reason: exact
+          ? `Darwin’s complete option layout (MSS,NOP,WS,NOP,NOP,TS,SACK,EOL), wscale 6 and window 65535, at TTL ${sig.ttl} (initial 128) — ${TTL_REWRITE_NOTE}`
+          : `Darwin option layout, wscale 6 and window 65535, at TTL ${sig.ttl} (initial 128) — ${TTL_REWRITE_NOTE}`,
       };
     }
     if (layout === 'linux' && backed) {

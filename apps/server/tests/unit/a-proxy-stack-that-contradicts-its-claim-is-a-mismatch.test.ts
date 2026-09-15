@@ -134,11 +134,18 @@ describe('the option layout outranks a TTL the path rewrote', () => {
   const VERIZON_7791: TcpSynSignature = { ...TMOBILE_7791, ttl: 53 };
   const VERIZON_443: TcpSynSignature = { ...TMOBILE_443, ttl: 53 };
 
-  it('CRITICAL a Darwin layout at TTL 128 is Darwin, not Windows — the T-Mobile web-port reading', () => {
+  it('CRITICAL a Darwin layout at TTL 128 is Darwin, not Windows — the T-Mobile web-port reading — and its COMPLETE eight-option layout earns high: nothing but a rewritable TTL argues against a signature no other stack emits', () => {
     const r = fingerprintOs(TMOBILE_443);
     expect(r.os).toBe('macos-or-ios');
-    expect(r.confidence, 'an override is never high').toBe('medium');
+    expect(r.confidence).toBe('high');
     expect(r.reason).toMatch(/TTL rewritten in the path/);
+  });
+
+  it('CONTROL — a Darwin layout at TTL 128 that is corroborated but NOT the complete order stays medium — both a shorter layout and an eight-option one in a different order, so the check is on the ORDER and not the length', () => {
+    const shorter = { ...TMOBILE_443, optionOrder: [2, 1, 3, 8, 4] };
+    const reordered = { ...TMOBILE_443, optionOrder: [2, 1, 3, 1, 8, 1, 4, 0] };
+    expect(fingerprintOs(shorter)).toMatchObject({ os: 'macos-or-ios', confidence: 'medium' });
+    expect(fingerprintOs(reordered)).toMatchObject({ os: 'macos-or-ios', confidence: 'medium' });
   });
 
   it('CRITICAL a Linux layout at TTL 128 is Linux, not Windows — the T-Mobile observer-port reading', () => {
