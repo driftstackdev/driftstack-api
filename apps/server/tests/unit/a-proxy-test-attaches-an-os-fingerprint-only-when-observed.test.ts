@@ -187,6 +187,29 @@ describe('a fingerprint is reported only when a SYN was observed', () => {
     expect(asked).toEqual(['127.0.0.1']);
   });
 
+  // ⛔ (V-219) WHICH readings are about the path a WEBSITE gets. Measured on
+  // production 2026-09-15: four mobile proxies presented a Linux layout on the
+  // observer port and a Darwin layout on 443, and 443 agreed with an independent
+  // browserleaks reading. The web-port claim is only honest at an IP literal —
+  // a NAME on 443 can be a CDN edge, a stable fingerprint of Cloudflare.
+  it('CRITICAL a reading taken on 443 at an IP literal is a web-port vantage; the same port behind a NAME, or the observer port, is not', async () => {
+    const at = async (host: string, port: number) => {
+      const { dial } = await fakeSocks5(0x00);
+      const { lookup } = tableLookup({
+        '203.0.113.9': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() },
+      });
+      const probe = new ProxyConnectivityProbe({ dial, osObserver: { host, port, lookup } });
+      const r = await probe.observeOs(PROXY, '203.0.113.9');
+      if (!r.observed) throw new Error(`expected observed, got: ${r.reason}`);
+      return r;
+    };
+    const web = await at('198.51.100.4', 443);
+    expect(web.webPortVantage).toBe(true);
+    expect(web.observedPort).toBe(443);
+    expect((await at('fleet.example', 443)).webPortVantage, 'a name may be a CDN edge').toBe(false);
+    expect((await at('198.51.100.4', 7791)).webPortVantage, 'the observer port').toBe(false);
+  });
+
   it('reports NOT observed — naming both misses — when neither address has a record', async () => {
     const { dial } = await fakeSocks5(0x00);
     const { lookup } = tableLookup({});
@@ -294,6 +317,17 @@ describe('the loopback lookup', () => {
     };
     return { fetchImpl, urls };
   };
+
+  it('CRITICAL (V-219) the lookup reads the record for the port the probe DIALLED — the observer keys per (address, port), so a probe dialled on 443 that read the bare 7791 path would bind to a connection that was never made', async () => {
+    const web = fetchFor(404, { error: 'no' });
+    await makeOsObserverLookup('http://127.0.0.1:7792', web.fetchImpl, undefined, 443)('10.0.0.1');
+    expect(web.urls).toEqual(['http://127.0.0.1:7792/sig/10.0.0.1/443']);
+    // CONTROL — the default port asks the bare path byte for byte, so nothing
+    // already running asks a different question than it did.
+    const obs = fetchFor(404, { error: 'no' });
+    await makeOsObserverLookup('http://127.0.0.1:7792', obs.fetchImpl, undefined, 7791)('10.0.0.1');
+    expect(obs.urls).toEqual(['http://127.0.0.1:7792/sig/10.0.0.1']);
+  });
 
   it('404 is "absent", 200 is the parsed signature, anything else is an error', async () => {
     // `seen_at` is part of the observer's wire shape (observer.py writes

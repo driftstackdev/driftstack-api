@@ -2435,6 +2435,20 @@ function buildRegistry(): OpenAPIRegistry {
     reason: z.string(),
     observed_ip: z.string(),
     observed_via: z.enum(['proxy_host', 'exit_ip']),
+    // (V-219) The two vantage flags the route has sent since they were added, and
+    // this schema never listed — so every SDK generated from it dropped them, and
+    // an API consumer could not tell a web-port reading from an observer-port one
+    // or apply the withholding rule the desktop client applies.
+    single_host_vantage: z
+      .boolean()
+      .describe(
+        'True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it.',
+      ),
+    web_port_vantage: z
+      .boolean()
+      .describe(
+        'True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via "proxy_host" it is still not a verdict.',
+      ),
   });
   // (o) 2026-09-11 — WHY an ok result carries no `os_fingerprint`. ONE definition
   // spread into BOTH ok-bearing members, for the reason the block above states:

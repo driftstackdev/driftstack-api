@@ -107,14 +107,28 @@ export function makeOsObserverLookup(
   baseUrl: string = DEFAULT_OS_OBSERVER_LOOKUP,
   fetchImpl: typeof fetch = fetch,
   timeoutMs: number = OS_OBSERVER_LOOKUP_TIMEOUT_MS,
+  /**
+   * ⛔ (V-219) WHICH PORT'S RECORD to read — and it must be the port the probe
+   * DIALLED. The observer keys records per (address, port) and its bare
+   * `/sig/<ip>` answers only for its own observer port. `DS_OS_OBSERVER_PORT`
+   * has been configurable for as long as this lookup has existed, but the
+   * lookup always asked the bare path — so pointing the dial at any other port
+   * read a record for a connection that was never made, which the `seen_at`
+   * binding then refused, and the chip went quietly blank. Half a setting.
+   *
+   * The default port keeps the bare path byte for byte, so nothing that runs
+   * today asks a different question than it did.
+   */
+  port: number = DEFAULT_OS_OBSERVER_PORT,
 ): OsObserverLookup {
   const base = baseUrl.replace(/\/+$/, '');
+  const suffix = port === DEFAULT_OS_OBSERVER_PORT ? '' : `/${String(port)}`;
   return async (ip: string): Promise<OsObserverLookupResult> => {
     if (isIP(ip) === 0) return { kind: 'error', detail: 'lookup key is not an IP literal' };
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      const res = await fetchImpl(`${base}/sig/${ip}`, { signal: ctl.signal });
+      const res = await fetchImpl(`${base}/sig/${ip}${suffix}`, { signal: ctl.signal });
       if (res.status === 404) return { kind: 'absent' };
       if (res.status !== 200) return { kind: 'error', detail: `observer answered ${res.status}` };
       const raw = JSON.parse(

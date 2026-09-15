@@ -570,6 +570,7 @@ function cleanOsFingerprint(raw: unknown): CachedOsFingerprint | undefined {
     // the cautious direction: an old reading cannot promote itself into a
     // confident claim just by predating the check.
     ...(f.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
+    ...(f.webPortVantage === true ? { webPortVantage: true as const } : {}),
     ...(observedVia !== undefined ? { observedVia } : {}),
     ...(unavailable !== undefined ? { unavailable } : {}),
   };
@@ -924,6 +925,9 @@ export function saveOsFingerprint(
         at,
         ...(fp.observedVia !== undefined ? { observedVia: fp.observedVia } : {}),
         ...(fp.singleHostVantage === true ? { singleHostVantage: true as const } : {}),
+        // (V-219) Named beside its twin: a field-by-field rebuild that omits it
+        // discards it silently — the drop that happened twice to `observedVia`.
+        ...(fp.webPortVantage === true ? { webPortVantage: true as const } : {}),
         ...(fp.unavailable !== undefined ? { unavailable: fp.unavailable } : {}),
       },
     };

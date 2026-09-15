@@ -2097,7 +2097,15 @@ export async function createProductionDeps(
           osObserver: {
             host: osObserverHost,
             port: osObserverPort,
-            lookup: makeOsObserverLookup(process.env.DS_OS_OBSERVER_LOOKUP),
+            // The lookup reads the record for the port the probe DIALS; see
+            // `makeOsObserverLookup`'s port parameter for what happened when it
+            // did not.
+            lookup: makeOsObserverLookup(
+              process.env.DS_OS_OBSERVER_LOOKUP,
+              fetch,
+              undefined,
+              osObserverPort,
+            ),
           },
         }
       : {}),

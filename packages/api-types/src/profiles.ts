@@ -285,6 +285,21 @@ export const AccountProxyTestResultSchema = z.discriminatedUnion('ok', [
       .enum(['vpn_tunnel', 'not_observed', 'observer_off'])
       .nullable()
       .optional(),
+    // (V-219) The fingerprint itself, which the route has sent since N-2 and this
+    // schema never declared — zod strips unknown keys, so a consumer parsing the
+    // reply with it lost the whole object, vantage flags included. Optional: a
+    // result that observed nothing omits it and says why above.
+    os_fingerprint: z
+      .object({
+        os: z.enum(['macos-or-ios', 'windows', 'linux', 'bsd', 'unknown']),
+        confidence: z.enum(['high', 'medium', 'low', 'none']),
+        reason: z.string(),
+        observed_ip: z.string(),
+        observed_via: z.enum(['proxy_host', 'exit_ip']),
+        single_host_vantage: z.boolean(),
+        web_port_vantage: z.boolean(),
+      })
+      .optional(),
     // VPN exit parity — the exit identity the measuring fleet node observed
     // (vantage=fleet only; the only vantage that can see through an OpenVPN /
     // WireGuard tunnel). Present exactly when the node saw an exit IP; the geo

@@ -213,6 +213,10 @@ type OsFingerprintFields =
          *  `OsObservation.singleHostVantage`. The client withholds a match or
          *  mismatch CLAIM unless this is explicitly true. */
         single_host_vantage: boolean;
+        /** (V-219) Taken on the web port at an IP literal — see
+         *  `OsObservation.webPortVantage`. Absent/false means the client must
+         *  not treat the reading as the path a website gets. */
+        web_port_vantage: boolean;
       };
     }
   | { os_fingerprint_unavailable: 'vpn_tunnel' | 'not_observed' | 'observer_off' };
@@ -1179,6 +1183,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               // The client withholds a match/mismatch CLAIM when it is false —
               // see the owner's browserleaks measurement in the probe's comment.
               single_host_vantage: os.singleHostVantage,
+              web_port_vantage: os.webPortVantage,
             },
           };
         } catch (err) {

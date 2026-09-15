@@ -53,7 +53,10 @@ import {
   saveProbeResult,
 } from '../../src/lib/proxy-probe-cache';
 import { deriveProbeViewWithEndpointRows } from '../../src/lib/proxy-server-test';
-import { unavailableOsFingerprint } from '../../src/lib/os-fingerprint-verdict';
+import {
+  osFingerprintVerdict,
+  unavailableOsFingerprint,
+} from '../../src/lib/os-fingerprint-verdict';
 import { testAccountProxy } from '../../src/lib/account-proxies';
 
 const OK = {
@@ -309,6 +312,52 @@ describe('the wire', () => {
     const r = await testAccountProxy('https://api.example', 'ds_x', 'srv2');
     if (!r.ok) throw new Error('fixture is an ok reply');
     expect(r.os_fingerprint?.singleHostVantage).toBe(true);
+  });
+
+  // ⛔⛔ (V-219) THE WHOLE CHAIN, END TO END, for the web-port vantage. The field
+  // that preceded it — `observedVia` — was dropped at TWO hops on its way to the
+  // chip while every per-hop test stayed green, because no test followed one
+  // value from the wire to the verdict. This one does: server reply → wire parse
+  // → cache save → cache load → derivation → verdict. A drop at any hop turns
+  // the green into the neutral '?' and reds this arm.
+  const mobileReply = (webPort: boolean) =>
+    json(200, {
+      ok: true,
+      latency_ms: 5,
+      os_fingerprint: {
+        os: 'macos-or-ios',
+        confidence: 'high',
+        reason: 'TTL 64, window-scale before SACK-permitted — Darwin',
+        observed_ip: '1.2.3.4',
+        // A mobile proxy: dialled front door, device exit — never single-host.
+        observed_via: 'proxy_host',
+        single_host_vantage: false,
+        ...(webPort ? { web_port_vantage: true } : {}),
+      },
+    });
+  const verdictThroughTheChain = async (id: string, webPort: boolean) => {
+    nextResponse = () => mobileReply(webPort);
+    const r = await testAccountProxy('https://api.example', 'ds_x', id);
+    if (!r.ok || r.os_fingerprint === undefined)
+      throw new Error('fixture is an ok reply with a fingerprint');
+    const now = Date.now();
+    await saveProbeResult(id, OK, now);
+    await saveOsFingerprint(id, r.os_fingerprint, now);
+    const view = deriveProbeViewWithEndpointRows(await loadProbeCache(), now + 1);
+    return osFingerprintVerdict(view.osFingerprints[id]);
+  };
+
+  it("CRITICAL a web-port reading from a multi-host MOBILE proxy survives every hop and NAMES the stack — the owner's VerizonNY, labelled iOS/macOS where browserleaks read it — without asserting a verdict the vantage cannot support", async () => {
+    const v = await verdictThroughTheChain('mobile-web', true);
+    expect(v.label).toBe('iOS/macOS');
+    expect(v.tone, 'a front-door reading never asserts, even on 443').toBe('unknown');
+    expect(v.hint).toMatch(/web port \(443\)/);
+  });
+
+  it('CRITICAL CONTROL — the same reading WITHOUT the web-port vantage names nothing, so the arm above is about the vantage and not a relaxed label', async () => {
+    const v = await verdictThroughTheChain('mobile-obs', false);
+    expect(v.tone).toBe('unknown');
+    expect(v.label, 'the observer-port front door is the gateway: no stack name').toBe('OS');
   });
 
   it('CRITICAL an older server that sends NO vantage field defaults to withholding, never to asserting', async () => {

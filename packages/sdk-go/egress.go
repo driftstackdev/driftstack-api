@@ -143,6 +143,14 @@ type AccountProxyOsFingerprint struct {
 	Reason      string `json:"reason"`
 	ObservedIP  string `json:"observed_ip"`
 	ObservedVia string `json:"observed_via"`
+	// SingleHostVantage is true only when the dialled host, the SYN source and
+	// the exit are one machine, so the reading describes the path a website
+	// gets. When false, do not draw a match/mismatch conclusion from OS.
+	SingleHostVantage bool `json:"single_host_vantage"`
+	// WebPortVantage is true when the reading was taken on port 443 at an IP
+	// literal, the port a website connects on. With ObservedVia "proxy_host"
+	// it still names a stack rather than giving a verdict.
+	WebPortVantage bool `json:"web_port_vantage"`
 }
 
 // AttachToSession sets the proxy config for a session. The body's

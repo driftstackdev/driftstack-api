@@ -259,6 +259,24 @@ export type OsObservation =
        * to WITHHOLD a claim; it must never use it to strengthen one.
        */
       singleHostVantage: boolean;
+      /**
+       * (V-219) The reading was taken on the port a WEBSITE uses (443), at an IP
+       * literal — so no CDN edge stands in for us and no port-based routing in the
+       * provider's fabric can hand a site a different machine than it handed us.
+       *
+       * MEASURED 2026-09-15 on production with this dialer, same destination IP,
+       * only the port differing: four mobile proxies presented a Linux option
+       * layout on the observer port and a Darwin layout on 443, and 443 agreed
+       * with the owner's independent browserleaks reading. The observer port was
+       * reading the provider's gateway; the web port reads what sites see.
+       *
+       * ⚠️ Like `singleHostVantage`, a consumer may use it to decide whether a
+       * reading is ABOUT the web path. It says nothing about whether the stack is
+       * right.
+       */
+      webPortVantage: boolean;
+      /** The observer port this reading was taken on. */
+      observedPort: number;
       signature: TcpSynSignature;
     } & OsFingerprintResult)
   | { observed: false; reason: string };
@@ -637,6 +655,22 @@ export class ProxyConnectivityProbe {
         // processes run on the same host, so there is no skew to budget beyond
         // that quantisation.
         const notBeforeMs = Math.floor(dialStartedAtMs / 1000) * 1000 - 1000;
+        // ⚠️ (V-219) KNOWN RESIDUAL RISK, stated because a guard for it was written
+        // and withdrawn. The observer keeps only the LAST SYN per (address, port),
+        // and on 443 that slot is shared with every direct client of production
+        // nginx, not only our probes as 7791 was. A different machine behind the
+        // same exit address that connects to the origin between our dial and this
+        // lookup overwrites our record with a newer one, and nothing here can tell.
+        // An upper bound on `seen_at` looked like a fix and is not: any record that
+        // exists at lookup time is already no newer than now, so it never fires on
+        // that race — and it CAN fire on our own SYN when the single-threaded Python
+        // sniffer lags behind a burst of nginx traffic, blaming "another
+        // connection" for a legitimate reading. Both caught by adversarial review.
+        // The real fix binds the record to the connection (the observer keeping
+        // every SYN in the window and refusing an ambiguous address), which is an
+        // observer contract change. Until then the window is the dial-to-lookup
+        // span, a few seconds, and it takes a stranger on the same exit reaching
+        // our origin directly inside it.
         if (r.seenAtMs < notBeforeMs) {
           misses.push(
             `${ip}: a SYN is on record but it predates this connection ` +
@@ -682,6 +716,11 @@ export class ProxyConnectivityProbe {
           // absent the honest answer is `false` — "cannot tell" collapses into
           // "do not assert", never into "representative".
           singleHostVantage: exitIp !== undefined && ip === peerIp && peerIp === exitIp,
+          // An IP literal on 443 only. A NAME on 443 may resolve to a CDN edge
+          // (api.driftstack.dev does), and that reading would be a stable,
+          // confident fingerprint of Cloudflare labelled as the customer's proxy.
+          webPortVantage: port === 443 && isIP(host) !== 0,
+          observedPort: port,
           signature: r.signature,
           ...fingerprintOs(r.signature),
         };

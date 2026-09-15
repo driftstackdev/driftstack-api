@@ -566,6 +566,8 @@ function cleanWireFingerprint(raw: unknown): OsFingerprint | undefined {
     reason: f.reason,
     ...(observedVia !== undefined ? { observedVia } : {}),
     singleHostVantage: f.single_host_vantage === true,
+    // (V-219) Same cautious default: only an explicit `true` from the server.
+    webPortVantage: f.web_port_vantage === true,
   };
 }
 

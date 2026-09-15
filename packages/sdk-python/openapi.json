@@ -3468,9 +3468,25 @@
                   "observed_via": {
                     "type": "string",
                     "enum": ["proxy_host", "exit_ip"]
+                  },
+                  "single_host_vantage": {
+                    "type": "boolean",
+                    "description": "True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it."
+                  },
+                  "web_port_vantage": {
+                    "type": "boolean",
+                    "description": "True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via \"proxy_host\" it is still not a verdict."
                   }
                 },
-                "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
+                "required": [
+                  "os",
+                  "confidence",
+                  "reason",
+                  "observed_ip",
+                  "observed_via",
+                  "single_host_vantage",
+                  "web_port_vantage"
+                ]
               },
               "os_fingerprint_unavailable": {
                 "type": ["string", "null"],
@@ -3623,9 +3639,25 @@
                   "observed_via": {
                     "type": "string",
                     "enum": ["proxy_host", "exit_ip"]
+                  },
+                  "single_host_vantage": {
+                    "type": "boolean",
+                    "description": "True only when the dialled host, the SYN source and the exit address are one machine, so the reading describes the path a website gets. Absent or false: do not draw a match/mismatch conclusion from it."
+                  },
+                  "web_port_vantage": {
+                    "type": "boolean",
+                    "description": "True when the reading was taken on port 443 at an IP literal — the port a website connects on, with no CDN in front. It names the stack a site sees on that path; with observed_via \"proxy_host\" it is still not a verdict."
                   }
                 },
-                "required": ["os", "confidence", "reason", "observed_ip", "observed_via"]
+                "required": [
+                  "os",
+                  "confidence",
+                  "reason",
+                  "observed_ip",
+                  "observed_via",
+                  "single_host_vantage",
+                  "web_port_vantage"
+                ]
               },
               "os_fingerprint_unavailable": {
                 "type": ["string", "null"],

@@ -94,6 +94,12 @@ export interface OsFingerprint {
    * unlocks the match/mismatch arms.
    */
   singleHostVantage?: boolean;
+  /**
+   * (V-219) The control plane took this reading on port 443 at an IP literal —
+   * the port a website connects on, with no CDN in front. Absent means FALSE,
+   * for exactly the reasons `singleHostVantage` gives.
+   */
+  webPortVantage?: boolean;
   /** (o) O4 — set ONLY on `OS_FINGERPRINT_MEASURING`, the sentinel a view passes while
    *  a test THIS client started is in flight. "Measuring" is a claim about work in
    *  progress: it may be rendered from a running probe and from nothing else, never
@@ -231,9 +237,35 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
   // defect somebody can act on, and "your provider's gateway runs Windows" is
   // not one. `exit_ip` readings are untouched — there the claim is about the
   // address the site will see, which is what the verdict was always for.
+  // ⛔⛔ (V-219) ON THE WEB PORT THE CHIP NAMES THE STACK — AND STILL CLAIMS NOTHING.
+  //
+  // MEASURED on production 2026-09-15: every mobile proxy's 443 record was filed
+  // under the front-door address, yet carried a Darwin option layout no Linux
+  // gateway emits, and for VerizonNY it matched the owner's independent
+  // browserleaks reading; the same address on the observer port carried the
+  // gateway's Linux layout. So on 443 the address named a relay while the options
+  // named the author, and "? OS" hid a reading that agrees with what a website
+  // measures. The chip now says what the stack looks like.
+  //
+  // ⚠️ It does NOT assert a match or mismatch, and this first shipped as a full
+  // exemption that did. An adversarial review showed why that is not safe: `via`
+  // is `proxy_host` exactly when the exit echo — ALSO a port-443 connection, to a
+  // CDN name — left from a different address than our raw-IP SYN. That proves
+  // this provider routes by DESTINATION, so a site on a CDN name can reach a
+  // different machine than our IP-literal vantage did. One proxy agreeing with
+  // browserleaks is evidence the label is right, not proof the path is the one
+  // every site gets. Naming the stack is honest; judging it is not yet.
   if (fp.observedVia === 'proxy_host') {
     const looksLike =
       fp.os === 'unknown' ? 'could not be identified' : `looks like ${OS_LABEL[fp.os]}`;
+    if (fp.webPortVantage === true && fp.os !== 'unknown') {
+      return {
+        tone: 'unknown',
+        glyph: '?',
+        label: OS_LABEL[fp.os],
+        hint: `Stack looks like ${OS_LABEL[fp.os]} (${fp.confidence} confidence), read on the web port (443) — the port a website connects on. This proxy forwards through more than one machine and routes by destination, so a site may still reach a different machine than we did: this names the stack, it is not a verdict. ${fp.reason}`,
+      };
+    }
     return {
       tone: 'unknown',
       glyph: '?',
@@ -300,7 +332,16 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
   // website gets: dialled host, SYN emitter and destination-visible address are
   // one machine, so there is no fabric in between to route 443 differently.
   // Everything else states what was measured and claims nothing.
-  if (fp.singleHostVantage !== true) {
+  // ⛔ (V-219) THE VANTAGE THE COMMENT ABOVE ASKED FOR NOW EXISTS. The observer
+  // records SYNs on 443 at the origin's IP literal, with no CDN in front, and on
+  // 2026-09-15 a production diagnostic — same control-plane dialer, same
+  // destination, only the port differing — showed four mobile proxies presenting
+  // a Linux layout on the observer port and a Darwin layout on 443, the latter
+  // agreeing with the owner's independent browserleaks reading. A reading taken
+  // on the web port is about the path a website gets, by construction; that is
+  // the condition this function was waiting for, not a relaxation of it.
+  const websitePath = fp.singleHostVantage === true || fp.webPortVantage === true;
+  if (!websitePath) {
     return {
       tone: 'unknown',
       glyph: '?',
@@ -313,13 +354,21 @@ export function osFingerprintVerdict(fp: OsFingerprint | undefined): OsVerdict {
       tone: 'match',
       glyph: '✓',
       label,
-      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — matches the iOS device it fronts, and this proxy answers from a single host, so a website sees the same stack. ${fp.reason}`,
+      hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — matches the iOS device it fronts. ${vantageSentence(fp)} ${fp.reason}`,
     };
   }
   return {
     tone: 'mismatch',
     glyph: '✗',
     label,
-    hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — an iOS device behind a ${label} stack is a detectable mismatch. This proxy answers from a single host, so a website sees the same stack. ${fp.reason}`,
+    hint: `Proxy stack looks like ${label} (${fp.confidence} confidence) — an iOS device behind a ${label} stack is a detectable mismatch. ${vantageSentence(fp)} ${fp.reason}`,
   };
+}
+
+/** Why a verdict may be asserted, in the customer's terms — whichever vantage
+ *  unlocked it. */
+function vantageSentence(fp: OsFingerprint): string {
+  return fp.webPortVantage === true
+    ? 'Read on the web port (443), the same one a website connects on, so a site sees this stack.'
+    : 'This proxy answers from a single host, so a website sees the same stack.';
 }
