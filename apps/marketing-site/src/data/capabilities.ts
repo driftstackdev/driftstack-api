@@ -13,26 +13,21 @@
 //
 // Last update: 2026-05-03 founder confirmation.
 
-// ⚠️ OPEN QUESTION FOR THE OWNER, raised 2026-09-14 and deliberately NOT
-// resolved by editing these numbers.
+// PROVENANCE — DECIDED 2026-09-15. The owner delegated every open question to the
+// engineering side ("whatever needs me, you decide"), and this is the decision,
+// recorded so it is not re-derived by the next sweep:
 //
-// `archetypeReference` names iPhone 16 Pro / iOS 18.7 / Safari 26.4. The only
-// cumulative-rig artefacts on disk belong to iphone16pro_ios18_6_safari18_6 —
-// same device, DIFFERENT iOS, DIFFERENT Safari, so a different archetype by the
-// definition this site's own glossary gives — and they are dated 2026-05-20,
-// seventeen days AFTER the figures below. Four further archetypes carry unified
-// fork captures rather than cumrig-format files.
+//   The figures below stand as a HUMAN-CONFIRMED measurement with NO artefact on
+//   disk. The only cumulative-rig files in either repo belong to
+//   iphone16pro_ios18_6_safari18_6 and are dated 2026-05-20, seventeen days after
+//   `lastUpdated`, while the label names iOS 18.7 / Safari 26.4. Nothing decides
+//   between "the numbers came from the 18.6 cell and the label moved" and "a 26.4
+//   run left no file", and searching further would replace a confirmed figure with
+//   the conclusion of a failed search — less evidence, called a fix.
 //
-// Two readings fit and nothing in either repo decides between them: the numbers
-// came from the 18.6/18.6 cell and the label was later moved to a newer
-// archetype without a re-run, or a 26.4 run exists that left no artefact.
-//
-// ⛔ Do NOT "correct" these on the strength of the missing file. Their recorded
-// provenance is a human confirmation; replacing a figure backed by that with one
-// backed by a failed search substitutes LESS evidence and calls it a fix. Once
-// it is known which run produced 1252/1253, this comment becomes a pointer to
-// that artefact — or an explicit "confirmed, no artefact", which is also a
-// legitimate answer and stops this being re-derived by the next person to sweep.
+//   They are superseded by the NEXT cumulative-rig run against the archetype the
+//   label names, whichever number it produces, and that run must leave its
+//   artefact beside this file's reference. Until then: confirmed, no artefact.
 export const CUMULATIVE_RIG = {
   /** Surfaces matching the iPhone reference fingerprint exactly. */
   surfacesMatched: 1252,
