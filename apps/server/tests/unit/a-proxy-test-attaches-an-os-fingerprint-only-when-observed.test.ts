@@ -15,7 +15,7 @@
 //     from the CGNAT exit the echo reported — then the echo's exit IP.
 //   - Never a default. A miss says why; it does not say "linux".
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createServer, connect, type Server, type Socket } from 'node:net';
 import {
   ProxyConnectivityProbe,
@@ -208,6 +208,53 @@ describe('a fingerprint is reported only when a SYN was observed', () => {
     expect(web.observedPort).toBe(443);
     expect((await at('fleet.example', 443)).webPortVantage, 'a name may be a CDN edge').toBe(false);
     expect((await at('198.51.100.4', 7791)).webPortVantage, 'the observer port').toBe(false);
+  });
+
+  // ⛔ (V-219) A VPN row's stack. The control plane cannot bring a tunnel up, so
+  // it never dials; it reads the record a FLEET NODE caused by connecting to the
+  // observer through the tunnel, under the exit the node reported, bound to the
+  // dispatch instant exactly as a dialled reading is bound to its dial.
+  describe('observeOsAtExit — a reading another path caused', () => {
+    it("CRITICAL reads the exit's record without dialling, labels it exit_ip, never single-host, and carries the port vantage", async () => {
+      const dial = vi.fn(() => Promise.reject(new Error('must not dial')));
+      const { lookup, asked } = tableLookup({
+        '203.0.113.9': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() },
+      });
+      const probe = new ProxyConnectivityProbe({
+        dial,
+        osObserver: { host: '198.51.100.4', port: 443, lookup },
+      });
+      const r = await probe.observeOsAtExit('203.0.113.9', Date.now() - 5_000);
+      expect(dial).not.toHaveBeenCalled();
+      if (!r.observed) throw new Error(`expected observed, got: ${r.reason}`);
+      expect(asked).toEqual(['203.0.113.9']);
+      expect(r.via).toBe('exit_ip');
+      expect(r.singleHostVantage, 'a tunnel is more than one machine by definition').toBe(false);
+      expect(r.webPortVantage).toBe(true);
+      expect(r.os).toBe('macos-or-ios');
+    });
+
+    it('CRITICAL a record OLDER than the dispatch is refused — it is some earlier connection from the same exit, not the one the node just made', async () => {
+      const { lookup } = tableLookup({
+        '203.0.113.9': { kind: 'observed', signature: DARWIN, seenAtMs: Date.now() - 60_000 },
+      });
+      const probe = new ProxyConnectivityProbe({
+        dial: vi.fn(),
+        osObserver: { host: '198.51.100.4', port: 443, lookup },
+      });
+      const r = await probe.observeOsAtExit('203.0.113.9', Date.now() - 2_000);
+      expect(r.observed).toBe(false);
+      if (r.observed) return;
+      expect(r.reason).toMatch(/predates this connection/);
+    });
+
+    it('VACUITY CONTROL — with no observer configured it looks nothing up', async () => {
+      const probe = new ProxyConnectivityProbe({ dial: vi.fn() });
+      expect(await probe.observeOsAtExit('203.0.113.9', 0)).toEqual({
+        observed: false,
+        reason: 'observer not configured',
+      });
+    });
   });
 
   it('reports NOT observed — naming both misses — when neither address has a record', async () => {

@@ -465,6 +465,7 @@ export class FleetControlConnection {
       requestId: string;
       inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
       target: { host: string; port: number };
+      observerTarget?: { host: string; port: number } | undefined;
     },
     timeoutMs?: number,
   ): Promise<ProbeEgressOutcome> {
@@ -1218,6 +1219,7 @@ export class FleetControlRegistry {
   async probeEgress(args: {
     inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
     target: { host: string; port: number };
+    observerTarget?: { host: string; port: number } | undefined;
   }): Promise<ProbeEgressDispatch> {
     const conn = this.pickAnyUncordoned();
     if (conn === undefined) return { status: 'unavailable' };
@@ -1226,6 +1228,7 @@ export class FleetControlRegistry {
       requestId,
       inlineProxyConfig: args.inlineProxyConfig,
       target: args.target,
+      ...(args.observerTarget !== undefined ? { observerTarget: args.observerTarget } : {}),
     });
     // (e) — an error outcome carries the node that refused, so a route can label a
     // node's `could_not_run` refusal (node_busy, bad_config…) as the fleet's answer.

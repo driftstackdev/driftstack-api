@@ -443,12 +443,16 @@ export function serializeProbeEgress(args: {
   requestId: string;
   inlineProxyConfig: SocksProxyConfig | InlineVpnProxyWire;
   target: { host: string; port: number };
+  observerTarget?: { host: string; port: number } | undefined;
 }): ProbeEgressFrame {
   return ProbeEgressFrameSchema.parse({
     type: 'probeEgress',
     requestId: args.requestId,
     inlineProxyConfig: encodeInlineProxyConfig(args.inlineProxyConfig, 'probe'),
     target: { host: args.target.host, port: args.target.port },
+    ...(args.observerTarget !== undefined
+      ? { observerTarget: { host: args.observerTarget.host, port: args.observerTarget.port } }
+      : {}),
   });
 }
 

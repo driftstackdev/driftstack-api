@@ -2272,6 +2272,23 @@ export const ProbeEgressFrameSchema = z
         port: z.number().int().min(1).max(65535),
       })
       .strict(),
+    /**
+     * (V-219) The passive OS observer's address. When present the node opens ONE
+     * plain TCP connection to it THROUGH the proxy or tunnel, after `target`,
+     * and closes it: the SYN that arrives is the exit device's own, and the
+     * control plane reads the recorded stack back under the exit address the
+     * node reports. This is the only way an OpenVPN/WireGuard row's stack can be
+     * read — the control plane cannot bring a tunnel up itself. OPTIONAL and
+     * additive: a node that predates it ignores the key and the row keeps its
+     * "no stack to read through a tunnel" cause. Always an IP literal on 443.
+     */
+    observerTarget: z
+      .object({
+        host: z.string().min(1).max(253),
+        port: z.number().int().min(1).max(65535),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type ProbeEgressFrame = z.infer<typeof ProbeEgressFrameSchema>;

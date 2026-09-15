@@ -137,7 +137,10 @@ export interface AccountMeRoutesOptions {
    */
   /** The launch probe (and, N-2, its OS observation). Typed off the class so a
    *  new method on the probe cannot be silently unknown here. */
-  proxyConnectivityProbe?: Pick<ProxyConnectivityProbe, 'probe' | 'observeOs'>;
+  proxyConnectivityProbe?: Pick<
+    ProxyConnectivityProbe,
+    'probe' | 'observeOs' | 'observeOsAtExit' | 'observerTarget'
+  >;
   /**
    * Resolves the stored row to dispatch config (decrypts the password). Typed as
    * a Pick of the real service rather than a restated shape: `resolveForDispatch`
@@ -1145,6 +1148,52 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
       // produce a value for two of the three causes. `os_fingerprint_unavailable`
       // is the machine-readable cause a client branches on; the three values are
       // the three arms that already existed here, now reported instead of merged.
+      // (V-219) A VPN row's stack, read from the observer record the FLEET NODE
+      // caused by connecting to the observer through the tunnel it brought up
+      // (`observerTarget` on the probeEgress frame). No dial from here: the
+      // control plane cannot bring a tunnel up. Until a node connects, the lookup
+      // misses and the row keeps the `vpn_tunnel` cause it always had — a miss
+      // is never coerced into a reading, and the cause it falls back to is still
+      // true of every node that predates the contract.
+      const vpnOsFingerprintFields = async (
+        exitIp: string | null,
+        sinceMs: number,
+      ): Promise<OsFingerprintFields> => {
+        if (
+          proxyConnectivityProbe === undefined ||
+          typeof proxyConnectivityProbe.observeOsAtExit !== 'function' ||
+          exitIp === null
+        ) {
+          return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+        }
+        try {
+          const os = await proxyConnectivityProbe.observeOsAtExit(exitIp, sinceMs);
+          if (!os.observed) {
+            request.log.info(
+              { proxyId: row.id, reason: os.reason },
+              'proxy test: vpn os fingerprint not observed',
+            );
+            return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+          }
+          return {
+            os_fingerprint: {
+              os: os.os,
+              confidence: os.confidence,
+              reason: os.reason,
+              observed_ip: os.observedIp,
+              observed_via: os.via,
+              single_host_vantage: os.singleHostVantage,
+              web_port_vantage: os.webPortVantage,
+            },
+          };
+        } catch (err) {
+          request.log.info(
+            { proxyId: row.id, err },
+            'proxy test: vpn os fingerprint lookup failed',
+          );
+          return { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+        }
+      };
       const osFingerprintFields = async (
         descriptor: ProbeProxyDescriptor,
         exitIp: string | null | undefined,
@@ -1521,9 +1570,23 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
               ...(why?.detail !== undefined ? { detail: why.detail } : {}),
             } satisfies FleetMiss;
           }
+          // (V-219) Stamped BEFORE the dispatch: a SYN the node causes through a
+          // tunnel cannot predate it, so the observer lookup below refuses older
+          // records the same way `observeOs` refuses records older than its dial.
+          const dispatchedAtMs = Date.now();
           const dispatch = await fleetControlRegistry.probeEgress({
             inlineProxyConfig: resolved,
             target: FLEET_PROBE_TARGET,
+            // The node connects here once, through the tunnel, so a VPN row's
+            // device stack is on record under the exit it reports.
+            // Guarded on the METHOD, not only the object: the route's deps type is
+            // a Pick, and a caller wiring only `probe`/`observeOs` (every
+            // fixture, and any older composition root) must dispatch exactly as
+            // before rather than throw here and read as "no node was free".
+            observerTarget:
+              typeof proxyConnectivityProbe?.observerTarget === 'function'
+                ? proxyConnectivityProbe.observerTarget()
+                : undefined,
           });
           if (dispatch.status !== 'ok') {
             // (e) 2026-09-10 — a node that could not RUN the probe (node_busy,
@@ -1670,7 +1733,7 @@ export function registerAccountMeRoutes(app: FastifyInstance, opts: AccountMeRou
                     r.exit_ip,
                   )
                 : {}
-              : { os_fingerprint_unavailable: 'vpn_tunnel' as const };
+              : await vpnOsFingerprintFields(usable ? r.exit_ip : null, dispatchedAtMs);
           await persistOsFingerprintIfObserved(osFields);
           // VPN exit parity — persist the exit the NODE observed onto the proxy row
           // (`observed_via: 'probe'`, beside the relay's 'session' writes; latest

@@ -403,10 +403,20 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
   function registerGeoNode(
     nodeId: string,
     exit: Record<string, unknown>,
-    frames: Array<{ type: string; requestId: string; inlineProxyConfig?: string }>,
+    frames: Array<{
+      type: string;
+      requestId: string;
+      inlineProxyConfig?: string;
+      observerTarget?: unknown;
+    }>,
   ): void {
     const conn: FleetControlConnection = fx.fleetControlRegistry.register(nodeId, (data) => {
-      const f = JSON.parse(data) as { type: string; requestId: string; inlineProxyConfig?: string };
+      const f = JSON.parse(data) as {
+        type: string;
+        requestId: string;
+        inlineProxyConfig?: string;
+        observerTarget?: unknown;
+      };
       if (f.type !== 'probeEgress') return;
       frames.push(f);
       conn.handleInbound(
@@ -475,6 +485,86 @@ describe('POST /v1/account/me/proxies/:id/test?vantage=fleet — VPN rows dispat
     // A VPN wire has no SOCKS5 endpoint for the cp observer to dial, so no chip —
     // absent, never a placeholder.
     expect('os_fingerprint' in body).toBe(false);
+  });
+
+  // ⛔ (V-219) A VPN ROW'S STACK. The control plane cannot bring a tunnel up, so
+  // it asks the NODE to connect to the observer through the tunnel (the
+  // `observerTarget` on the frame) and then reads the record under the exit the
+  // node reported, bound to the dispatch instant. Until a node honours the
+  // target the lookup misses and the row keeps the `vpn_tunnel` cause it always
+  // had — the arms below pin both halves and the frame contract A3 implements.
+  // The stub refuses a `sinceMs` older than the test started, so a route that
+  // passed a stale or zero stamp — losing the dispatch binding — reads as a miss
+  // here, exactly as the real `observeOsAtExit` would refuse the record.
+  const vpnObservingProbeStub = (observed: boolean, notBeforeMs = Date.now()): never =>
+    ({
+      probe: () => Promise.resolve({ ok: true }),
+      observeOs: () => Promise.reject(new Error('a VPN row must never SOCKS5-dial')),
+      observerTarget: () => ({ host: '198.51.100.4', port: 443 }),
+      observeOsAtExit: (exitIp: string, sinceMs: number) =>
+        Promise.resolve(
+          observed && sinceMs >= notBeforeMs
+            ? {
+                observed: true,
+                observedIp: exitIp,
+                via: 'exit_ip',
+                singleHostVantage: false,
+                webPortVantage: true,
+                observedPort: 443,
+                signature: {},
+                os: 'macos-or-ios',
+                confidence: 'high',
+                reason: `Darwin layout, bound to a dispatch at ${String(sinceMs)}`,
+              }
+            : { observed: false, reason: '198.51.100.44: no SYN recorded' },
+        ),
+    }) as unknown as never;
+
+  it('CRITICAL a wireguard row carries the stack the NODE caused the observer to record, under the exit it reported, as a web-port exit_ip reading — and the frame told the node where to connect', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: vpnObservingProbeStub(true),
+    });
+    const frames: Array<{ type: string; requestId: string; observerTarget?: unknown }> = [];
+    registerGeoNode('mac-eu-001', GEO, frames);
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    expect(frames[0]?.observerTarget, 'the node is told where the observer is').toEqual({
+      host: '198.51.100.4',
+      port: 443,
+    });
+    const body = res.json<Record<string, unknown>>();
+    expect(body.os_fingerprint).toMatchObject({
+      os: 'macos-or-ios',
+      observed_ip: '198.51.100.44',
+      observed_via: 'exit_ip',
+      single_host_vantage: false,
+      web_port_vantage: true,
+    });
+    expect('os_fingerprint_unavailable' in body).toBe(false);
+  });
+
+  it('CRITICAL CONTROL — when the observer has no record under the exit (a node that predates the contract), the row keeps its vpn_tunnel cause and nothing is invented', async () => {
+    fx = await buildTestApp({
+      enableFleetControlPlane: true,
+      proxyConnectivityProbe: vpnObservingProbeStub(false),
+    });
+    registerGeoNode('mac-eu-001', GEO, []);
+    const id = await makeWireGuardProxy();
+    const res = await fx.app.inject({
+      method: 'POST',
+      url: `/v1/account/me/proxies/${id}/test?vantage=fleet`,
+      headers: auth(fx),
+    });
+    expect(res.statusCode, res.body).toBe(200);
+    const body = res.json<Record<string, unknown>>();
+    expect('os_fingerprint' in body).toBe(false);
+    expect(body.os_fingerprint_unavailable).toBe('vpn_tunnel');
   });
 
   it('CRITICAL an openvpn row dispatches too — the same path, the openvpn wire', async () => {

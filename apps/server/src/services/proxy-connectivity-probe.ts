@@ -583,7 +583,7 @@ export class ProxyConnectivityProbe {
     if (this.osObserver === undefined) {
       return { observed: false, reason: 'observer not configured' };
     }
-    const { host, port, lookup } = this.osObserver;
+    const { host, port } = this.osObserver;
     const msg = (err: unknown): string => (err instanceof Error ? err.message : String(err));
     // Stamped BEFORE the dial: every SYN our CONNECT causes is at or after this
     // instant, so a record older than it belongs to someone else. See the
@@ -630,8 +630,53 @@ export class ProxyConnectivityProbe {
     // for a residential provider it is shared infrastructure that many customers
     // sit behind — asking about it first means a hit there wins over the address
     // that describes this customer's proxy.
+    return this.lookupRecordedStack([exitIp, peerIp], dialStartedAtMs, { peerIp, exitIp });
+  }
+
+  /**
+   * (V-219) Read the observer for a SYN that ANOTHER path caused — a fleet Mac
+   * loading our origin through an OpenVPN/WireGuard tunnel it brought up, whose
+   * exit address the node then reported. The control plane cannot dial a tunnel,
+   * so for a VPN row this is the only way its device's stack can be read at all.
+   *
+   * `sinceMs` is the instant the node was DISPATCHED: a record older than that
+   * belongs to some earlier connection from the same address, exactly as the
+   * dial stamp rules in `observeOs`. There is no front door on this path — the
+   * exit is the only address — so `via` is `exit_ip` and `singleHostVantage`
+   * is false (a tunnel is by definition more than one machine).
+   *
+   * Answers "not observed" until the node actually connects to the observer
+   * host through the tunnel (see `ProbeEgressFrame.observerTarget`); nothing is
+   * inferred from the exit echo, which reaches a CDN edge and leaves no SYN here.
+   */
+  /** The observer's dial address, for a fleet node to connect to through a
+   *  tunnel (`ProbeEgressFrame.observerTarget`). Undefined when no observer is
+   *  configured, so nothing asks a node to connect to nowhere. */
+  observerTarget(): { host: string; port: number } | undefined {
+    return this.osObserver === undefined
+      ? undefined
+      : { host: this.osObserver.host, port: this.osObserver.port };
+  }
+
+  async observeOsAtExit(exitIp: string, sinceMs: number): Promise<OsObservation> {
+    if (this.osObserver === undefined) {
+      return { observed: false, reason: 'observer not configured' };
+    }
+    return this.lookupRecordedStack([exitIp], sinceMs, { exitIp });
+  }
+
+  private async lookupRecordedStack(
+    candidates: ReadonlyArray<string | undefined>,
+    dialStartedAtMs: number,
+    ctx: { peerIp?: string | undefined; exitIp?: string | undefined },
+  ): Promise<OsObservation> {
+    if (this.osObserver === undefined) {
+      return { observed: false, reason: 'observer not configured' };
+    }
+    const { host, port, lookup } = this.osObserver;
+    const { peerIp, exitIp } = ctx;
     const keys: string[] = [];
-    for (const ip of [exitIp, peerIp]) {
+    for (const ip of candidates) {
       if (typeof ip === 'string' && isIP(ip) !== 0 && !keys.includes(ip)) keys.push(ip);
     }
     const misses: string[] = [];
