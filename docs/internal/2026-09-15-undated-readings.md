@@ -183,6 +183,33 @@ Verified live after deploy through the deployed probe as the service wires it:
 VerizonNY → `macos-or-ios/high`, TMobileTX → `macos-or-ios/medium` (rewrite
 named), NMtest → `linux` via the exit itself.
 
+## Follow-through, same day — the owner's three asks
+
+1. **"If it's Apple it should be green."** Done. A Darwin stack read on 443 — the
+   port a website connects on, confirmed against the owner's browserleaks reading
+   of the same proxy — is now a green match even from a front-door address; the
+   mirror (Linux/Windows on 443 for an iPhone claim) is red. The review's caveat
+   (a front-door hit on 443 shows the provider routes by destination, so a CDN-
+   named site may reach a different machine) lives in the hint. The observer-port
+   front door — the provider's gateway — stays neutral.
+2. **"Medium confidence is strange."** It was the TTL-rewrite override capping at
+   medium. Darwin's COMPLETE eight-option layout (MSS,NOP,WS,NOP,NOP,TS,SACK,EOL)
+   with wscale 6 / window 65535 is emitted by no other mainstream stack, so a
+   contradicting TTL is far likelier a carrier rewrite than a foreign kernel
+   producing Darwin's exact bytes. That exact layout now earns HIGH at TTL 128;
+   a merely corroborated one stays medium. TMobileTX reads iOS/macOS · high.
+3. **OVPN/WireGuard rows: UDP, QUIC, OS.** UDP ("via tunnel") and QUIC (fleet
+   handshake or live session) were already rendered. OS was structurally
+   impossible — the control plane cannot bring a tunnel up — and is now wired:
+   the probeEgress frame carries an optional `observerTarget`; a node that
+   honours it opens one TCP connection to the observer THROUGH the tunnel, and
+   the CP reads the record under the exit the node reports, bound to the
+   dispatch instant. Until the node half lands (A3, harness), the row keeps its
+   `vpn_tunnel` cause — a miss is never coerced into a reading.
+
+**The owner's architecture question** — a check page of our own — is answered in
+`2026-09-15-proxy-check-page-design.md`: yes, and it is the right next arc.
+
 ## Open / handed over
 
 - ✅ ~~Two-port OS diagnostic — BLOCKED~~ Ran; see above.
