@@ -28,8 +28,23 @@
 
 import { spawn, spawnSync } from 'node:child_process';
 
-/** Files the node project is expected to collect. Raise when adding tests. */
-export const EXPECTED_TEST_FILES = 3179;
+/**
+ * Files the node project is expected to collect. Raise when adding tests.
+ *
+ * ⛔ WHICH PIN MOVES IS DECIDED BY THE FILE EXTENSION, NOT THE DIRECTORY, and
+ * getting that backwards cost two failed pushes in one night. The gui project
+ * collects `.test.tsx` under apps/gui-client/tests and nothing else
+ * (apps/gui-client/vitest.config.ts); the node project collects `.test.ts`
+ * across the whole repo — INCLUDING the ones under apps/gui-client/tests. So,
+ * for a new file:
+ *
+ *   a `.test.ts`  under apps/server      → BOTH pins +1
+ *   a `.test.ts`  under apps/gui-client  → BOTH pins +1  ← the one that looks gui-only
+ *   a `.test.tsx` under apps/gui-client  → EXPECTED_TEST_FILES_ALL only
+ *
+ * "It is under apps/gui-client" is not the question. The extension is.
+ */
+export const EXPECTED_TEST_FILES = 3180;
 
 /**
  * Files the ROOT config collects — both vitest projects, which is what CI's
