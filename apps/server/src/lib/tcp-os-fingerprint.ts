@@ -69,17 +69,85 @@ const TS = 8; // timestamps
 const WS = 3; // window scale
 const SACK_OK = 4;
 
+type Layout = 'darwin' | 'linux' | 'windows' | 'ws-sack-ts' | 'none';
+
+/**
+ * The stack family the TCP OPTION LAYOUT alone says, ignoring TTL.
+ *
+ *   Darwin   MSS,NOP,WS,NOP,NOP,TS,SACK,EOL  — window-scale BEFORE SACK, timestamps ON
+ *   Windows  MSS,NOP,WS,NOP,NOP,SACK         — window-scale BEFORE SACK, timestamps OFF
+ *   Linux    MSS,SACK,TS,NOP,WS              — SACK BEFORE window-scale
+ *
+ * Darwin and Windows share the WS-before-SACK order. What separates Darwin is
+ * WHERE the timestamp sits: Darwin puts it BEFORE SACK-permitted.
+ *
+ * ⛔ "timestamps present" is NOT enough to say Darwin, and an adversarial review
+ * caught that it was being used that way. FreeBSD 9+ (MSS,NOP,WS,SACK,TS, window
+ * 65535, wscale 6 — p0f) and Windows with RFC 1323 timestamps enabled
+ * (MSS,NOP,WS,SACK,TS) both carry timestamps AFTER SACK. Reading them as Darwin
+ * put a green "matches the iOS device" on a FreeBSD/pfSense relay, and turned a
+ * real timestamped Windows host into "unknown". That order is its own class,
+ * `ws-sack-ts`: genuinely ambiguous between those two, and never Darwin.
+ */
+function layoutOf(sig: TcpSynSignature): Layout {
+  const opts = sig.optionOrder;
+  const idxWs = opts.indexOf(WS);
+  const idxSack = opts.indexOf(SACK_OK);
+  const idxTs = opts.indexOf(TS);
+  if (idxWs === -1 || idxSack === -1) return 'none';
+  if (idxSack < idxWs) return 'linux';
+  if (idxTs === -1) return 'windows';
+  return idxTs < idxSack ? 'darwin' : 'ws-sack-ts';
+}
+
+/** The layout family together with the numeric values that stack actually
+ *  ships — enough to override a contradicting TTL, which layout alone is not. */
+function corroborated(sig: TcpSynSignature, layout: Layout): boolean {
+  if (layout === 'darwin') return sig.windowScale === 6 && sig.windowSize === 65535;
+  if (layout === 'linux') return sig.windowScale === 7 && sig.optionOrder.includes(TS);
+  if (layout === 'windows') return sig.windowScale === 8;
+  return false;
+}
+
+const TTL_REWRITE_NOTE =
+  'a TTL rewritten in the path — mobile carriers normalise TTL, and no middlebox reorders TCP options';
+
 /**
  * Classify a captured SYN.
  *
  * Deliberately conservative: it returns `unknown` rather than guessing, because
  * this drives a red/green cell an operator will act on and a confident wrong
- * answer is worse than an honest blank. The three families below are separated
- * by TTL first (64 vs 128 is a hard split) and then by option layout.
+ * answer is worse than an honest blank.
+ *
+ * ⛔⛔ (V-219) TTL DOES NOT OUTRANK THE OPTION LAYOUT, and it used to. This read
+ * TTL first ("64 vs 128 is a hard split") and, on 128, answered Windows without
+ * looking at the options at all. TTL is the ONE field of a SYN that the path is
+ * known to rewrite: mobile carriers normalise it (T-Mobile's network is the
+ * well-known case, for tethering detection). The option layout is written by the
+ * sending kernel and nothing between it and us reorders it.
+ *
+ * MEASURED 2026-09-15 on production, same control-plane dialer, same destination
+ * IP, only the port differing. Three T-Mobile proxies each presented TWO stacks —
+ * a Linux layout on 7791 and a Darwin layout on 443 — and BOTH arrived with TTL
+ * 114–117 (initial 128). Two different kernels cannot both have originated TTL
+ * 128; the path set it. This classifier called both of them Windows, which is the
+ * "TmobileTX shows Win" the owner reported, while a Verizon proxy with the same
+ * two layouts at TTL 53 (initial 64) was read correctly as Linux and Darwin.
+ *
+ * So: layout decides the family; TTL CORROBORATES. When they agree, confidence
+ * is as before. When they disagree, a layout backed by that stack's own numeric
+ * values wins at `medium` with the rewrite named in the reason; a bare layout
+ * that TTL contradicts is not enough to override anything, and reads `unknown`.
  */
 export function fingerprintOs(sig: TcpSynSignature): OsFingerprintResult {
   const ttl0 = initialTtl(sig.ttl);
-  if (ttl0 === null) {
+  const layout = layoutOf(sig);
+  const backed = corroborated(sig, layout);
+  const hasTs = sig.optionOrder.includes(TS);
+
+  // TTL 255 (BSD and a lot of network gear) keeps its old reading unless the
+  // layout is unambiguous and backed — the same override rule as 128.
+  if (ttl0 === null && layout === 'none') {
     return {
       os: 'unknown',
       confidence: 'none',
@@ -87,15 +155,77 @@ export function fingerprintOs(sig: TcpSynSignature): OsFingerprintResult {
     };
   }
 
-  const opts = sig.optionOrder;
-  const hasTs = opts.includes(TS);
-  const idxWs = opts.indexOf(WS);
-  const idxSack = opts.indexOf(SACK_OK);
+  if (ttl0 === 64) {
+    if (layout === 'darwin') {
+      return {
+        os: 'macos-or-ios',
+        confidence: backed ? 'high' : 'medium',
+        reason: backed
+          ? 'TTL 64, window-scale before SACK-permitted, wscale 6 and window 65535 — Darwin (macOS/iOS)'
+          : 'TTL 64 with window-scale ordered before SACK-permitted — Darwin option layout',
+      };
+    }
+    if (layout === 'linux') {
+      return {
+        os: 'linux',
+        confidence: backed ? 'high' : 'medium',
+        reason: backed
+          ? 'TTL 64, SACK-permitted before window-scale, wscale 7 with timestamps — Linux'
+          : 'TTL 64 with SACK-permitted ordered before window-scale — Linux option layout',
+      };
+    }
+    if (layout === 'windows' && backed) {
+      return {
+        os: 'windows',
+        confidence: 'medium',
+        reason: `Windows option layout (no timestamps, wscale 8) at TTL 64 — ${TTL_REWRITE_NOTE}`,
+      };
+    }
+    if (layout === 'windows' || layout === 'ws-sack-ts') {
+      // WS before SACK at TTL 64, but without Darwin's timestamp placement. This
+      // used to be read as Darwin; it is not Darwin's layout (no timestamp, or a
+      // timestamp after SACK — FreeBSD's). Nothing here names a family.
+      return {
+        os: 'unknown',
+        confidence: 'none',
+        reason:
+          'initial TTL 64 with window-scale before SACK-permitted but not Darwin’s timestamp placement — FreeBSD and tuned stacks share it',
+      };
+    }
+    return {
+      os: 'unknown',
+      confidence: 'none',
+      reason:
+        'initial TTL 64 (a unix family) but the option layout does not separate Darwin from Linux',
+    };
+  }
 
-  // Windows: initial TTL 128 is close to definitive — no mainstream unix uses
-  // it. Modern Windows also omits timestamps by default, which separates it
-  // from the rare unix configured to 128.
   if (ttl0 === 128) {
+    if (layout === 'darwin' && backed) {
+      return {
+        os: 'macos-or-ios',
+        confidence: 'medium',
+        reason: `Darwin option layout, wscale 6 and window 65535, at TTL ${sig.ttl} (initial 128) — ${TTL_REWRITE_NOTE}`,
+      };
+    }
+    if (layout === 'linux' && backed) {
+      return {
+        os: 'linux',
+        confidence: 'medium',
+        reason: `Linux option layout, wscale 7 with timestamps, at TTL ${sig.ttl} (initial 128) — ${TTL_REWRITE_NOTE}`,
+      };
+    }
+    if (layout === 'darwin' || layout === 'linux') {
+      // The layout contradicts TTL but nothing else backs it. Neither signal is
+      // strong enough alone to name a family, so say so. (`ws-sack-ts` is NOT
+      // here: at TTL 128 that is Windows with timestamps enabled, and it falls
+      // through to the Windows reading below, exactly as before this change.)
+      return {
+        os: 'unknown',
+        confidence: 'none',
+        reason: `initial TTL 128 says Windows but the option layout says ${layout === 'darwin' ? 'Darwin' : 'Linux'}, and neither is corroborated`,
+      };
+    }
     return {
       os: 'windows',
       confidence: hasTs ? 'medium' : 'high',
@@ -105,41 +235,32 @@ export function fingerprintOs(sig: TcpSynSignature): OsFingerprintResult {
     };
   }
 
-  if (ttl0 === 64) {
-    // Darwin (macOS/iOS) vs Linux, both TTL 64. The option LAYOUT separates
-    // them: Darwin emits window-scale before SACK-permitted, Linux emits
-    // SACK-permitted before window-scale. Window scale value corroborates
-    // (Darwin 6, Linux 7) but is not relied on alone — it is tunable.
-    const darwinOrder = idxWs !== -1 && idxSack !== -1 && idxWs < idxSack;
-    const linuxOrder = idxWs !== -1 && idxSack !== -1 && idxSack < idxWs;
+  if (ttl0 === 255 && (layout === 'darwin' || layout === 'linux') && backed) {
+    return {
+      os: layout === 'darwin' ? 'macos-or-ios' : 'linux',
+      confidence: 'medium',
+      reason: `${layout === 'darwin' ? 'Darwin' : 'Linux'} option layout, corroborated, at TTL ${sig.ttl} (initial 255) — ${TTL_REWRITE_NOTE}`,
+    };
+  }
 
-    if (darwinOrder) {
-      const corroborated = sig.windowScale === 6 && sig.windowSize === 65535;
-      return {
-        os: 'macos-or-ios',
-        confidence: corroborated ? 'high' : 'medium',
-        reason: corroborated
-          ? 'TTL 64, window-scale before SACK-permitted, wscale 6 and window 65535 — Darwin (macOS/iOS)'
-          : 'TTL 64 with window-scale ordered before SACK-permitted — Darwin option layout',
-      };
-    }
-    if (linuxOrder) {
-      const corroborated = sig.windowScale === 7 && hasTs;
-      return {
-        os: 'linux',
-        confidence: corroborated ? 'high' : 'medium',
-        reason: corroborated
-          ? 'TTL 64, SACK-permitted before window-scale, wscale 7 with timestamps — Linux'
-          : 'TTL 64 with SACK-permitted ordered before window-scale — Linux option layout',
-      };
-    }
-    // TTL 64 with no usable option ordering. A BSD without both options, or a
-    // stack that stripped them. Say TTL narrowed it and stop.
+  if (ttl0 === null) {
     return {
       os: 'unknown',
       confidence: 'none',
-      reason:
-        'initial TTL 64 (a unix family) but the option layout does not separate Darwin from Linux',
+      reason: `TTL ${sig.ttl} matches no common initial value`,
+    };
+  }
+
+  // ⛔ The same rule as TTL 128, and it was missing: a layout that contradicts
+  // TTL 255 without its own numeric values overrides nothing — but it also must
+  // not fall through to "bsd". An iPhone behind a TTL-255 rewriter with tuned
+  // window values read BSD, and a web-port reading turns BSD against an iOS claim
+  // into a red "detectable mismatch". The honest answer is the one TTL 128 gives.
+  if (layout === 'darwin' || layout === 'linux' || layout === 'windows') {
+    return {
+      os: 'unknown',
+      confidence: 'none',
+      reason: `initial TTL 255 but a ${layout === 'darwin' ? 'Darwin' : layout === 'linux' ? 'Linux' : 'Windows'} option layout, and neither is corroborated`,
     };
   }
 

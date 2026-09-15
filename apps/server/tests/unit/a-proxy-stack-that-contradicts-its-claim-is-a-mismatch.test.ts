@@ -101,6 +101,121 @@ describe('the three families separate on real signatures', () => {
   });
 });
 
+// ⛔⛔ (V-219) THE PATH REWRITES TTL; IT DOES NOT REORDER TCP OPTIONS.
+//
+// These signatures are REAL — captured on production 2026-09-15 by the deployed
+// control-plane dialer, same destination IP, only the port differing. They carry
+// no addresses. Each T-Mobile proxy presented a Linux layout on port 7791 and a
+// Darwin layout on port 443, and BOTH arrived at TTL 114–117 (initial 128). Two
+// different kernels cannot both originate TTL 128: the carrier's network set it.
+// The old classifier read TTL first and called both of them Windows — the
+// "TmobileTX shows Win" the owner reported from the profiles grid.
+//
+// The Verizon pair is the CONTROL: the same two layouts, but at TTL 53 (initial
+// 64), which the old classifier already read correctly. If a change here moved
+// those two, it would be fitting the new case by breaking the old one.
+describe('the option layout outranks a TTL the path rewrote', () => {
+  const TMOBILE_7791: TcpSynSignature = {
+    ttl: 115,
+    windowSize: 65535,
+    mss: 1460,
+    windowScale: 7,
+    optionOrder: [2, 4, 8, 1, 3],
+    df: true,
+  };
+  const TMOBILE_443: TcpSynSignature = {
+    ttl: 115,
+    windowSize: 65535,
+    mss: 1460,
+    windowScale: 6,
+    optionOrder: [2, 1, 3, 1, 1, 8, 4, 0],
+    df: true,
+  };
+  const VERIZON_7791: TcpSynSignature = { ...TMOBILE_7791, ttl: 53 };
+  const VERIZON_443: TcpSynSignature = { ...TMOBILE_443, ttl: 53 };
+
+  it('CRITICAL a Darwin layout at TTL 128 is Darwin, not Windows — the T-Mobile web-port reading', () => {
+    const r = fingerprintOs(TMOBILE_443);
+    expect(r.os).toBe('macos-or-ios');
+    expect(r.confidence, 'an override is never high').toBe('medium');
+    expect(r.reason).toMatch(/TTL rewritten in the path/);
+  });
+
+  it('CRITICAL a Linux layout at TTL 128 is Linux, not Windows — the T-Mobile observer-port reading', () => {
+    const r = fingerprintOs(TMOBILE_7791);
+    expect(r.os).toBe('linux');
+    expect(r.confidence).toBe('medium');
+  });
+
+  it('CRITICAL CONTROL — the Verizon pair, same layouts at TTL 64, reads exactly as it always did', () => {
+    expect(fingerprintOs(VERIZON_443)).toMatchObject({ os: 'macos-or-ios', confidence: 'high' });
+    expect(fingerprintOs(VERIZON_7791)).toMatchObject({ os: 'linux', confidence: 'high' });
+  });
+
+  it('CRITICAL CONTROL — a real Windows stack is still Windows at high confidence. The override needs a layout Windows does not ship.', () => {
+    expect(fingerprintOs(WINDOWS)).toMatchObject({ os: 'windows', confidence: 'high' });
+  });
+
+  it('a bare layout that TTL contradicts is NOT enough — without its own numeric values it overrides nothing and reads unknown', () => {
+    const bare = { ...TMOBILE_443, windowScale: 8, windowSize: 64240 };
+    expect(fingerprintOs(bare)).toMatchObject({ os: 'unknown', confidence: 'none' });
+  });
+});
+
+// ⛔ Three defects an adversarial review found in the layout-over-TTL change
+// before it shipped. Each one produced a CONFIDENT wrong answer, and two of them
+// became green or red chips once a web-port reading was allowed to assert.
+describe('the layout rule does not over-reach', () => {
+  it('CRITICAL FreeBSD is not Darwin. MSS,NOP,WS,SACK,TS with window 65535 / wscale 6 is p0f\'s FreeBSD 9+, and treating "timestamps present" as Darwin put a green "matches the iOS device" on a FreeBSD relay — Darwin puts the timestamp BEFORE SACK', () => {
+    const freebsd: TcpSynSignature = {
+      ttl: 64,
+      windowSize: 65535,
+      mss: 1460,
+      windowScale: 6,
+      optionOrder: [2, 1, 3, 4, 8],
+      df: true,
+    };
+    expect(fingerprintOs(freebsd).os).not.toBe('macos-or-ios');
+    expect(fingerprintOs(freebsd)).toMatchObject({ os: 'unknown', confidence: 'none' });
+  });
+
+  it('CRITICAL a real Windows host with timestamps ENABLED is still Windows at TTL 128 — the change must not trade one misread for another', () => {
+    const windowsTs: TcpSynSignature = {
+      ttl: 124,
+      windowSize: 8192,
+      mss: 1460,
+      windowScale: 8,
+      optionOrder: [2, 1, 3, 4, 8],
+      df: true,
+    };
+    expect(fingerprintOs(windowsTs)).toMatchObject({ os: 'windows', confidence: 'medium' });
+  });
+
+  it('CRITICAL an uncorroborated layout at TTL 255 is unknown, not BSD — the rule TTL 128 already applies. BSD against an iOS claim is a red mismatch', () => {
+    const tunedDarwin255: TcpSynSignature = {
+      ttl: 250,
+      windowSize: 131072,
+      mss: 1460,
+      windowScale: 5,
+      optionOrder: [2, 1, 3, 1, 1, 8, 4, 0],
+      df: true,
+    };
+    expect(fingerprintOs(tunedDarwin255)).toMatchObject({ os: 'unknown', confidence: 'none' });
+  });
+
+  it('CONTROL — TTL 255 with no usable layout is still the BSD/network-gear reading it always was', () => {
+    const gear: TcpSynSignature = {
+      ttl: 250,
+      windowSize: 4128,
+      mss: 536,
+      windowScale: null,
+      optionOrder: [2],
+      df: false,
+    };
+    expect(fingerprintOs(gear)).toMatchObject({ os: 'bsd', confidence: 'low' });
+  });
+});
+
 describe('a Darwin claim is checked against the observed stack', () => {
   it('GREEN when a Darwin stack backs an iOS claim', () => {
     expect(compareOsToClaim(fingerprintOs(DARWIN).os, 'ios')).toBe('match');
