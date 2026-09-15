@@ -968,6 +968,27 @@ export function saveServerProbeResult(
     // An explicit null erases the stored number so it cannot outlive the
     // measurement that failed to produce one. `undefined` deliberately does not.
     if (server.latencyMs === null) delete kept.serverLatencyMs;
+    // ⛔ (V-219) THE MIRROR of the rule in `saveObservedQuic`, and it has to be
+    // here or the same defect runs the other way: a NEWER relay measurement is
+    // masked by an OLDER live verdict, which outranks it in the chip, until that
+    // verdict expires half an hour later.
+    //
+    // Only when THIS result actually measured the relay (`server.quicProbe` a
+    // boolean -- a carried verdict re-measured nothing and retires nothing), only
+    // when this result does not itself carry a newer live verdict, and only when
+    // the stored live verdict is not NEWER than this test: a live observation
+    // that landed while the server test was in flight is the later evidence and
+    // must not be retired by it.
+    const liveContradicted =
+      quic === undefined &&
+      typeof server.quicProbe === 'boolean' &&
+      (kept.quicMeasuredAt === undefined || kept.quicMeasuredAt <= at) &&
+      ((server.quicProbe && kept.quicMeasured === 'h2-only') ||
+        (!server.quicProbe && kept.quicMeasured === 'h3'));
+    if (liveContradicted) {
+      delete kept.quicMeasured;
+      delete kept.quicMeasuredAt;
+    }
     all[proxyId] = {
       ...kept,
       ...(typeof server.latencyMs === 'number' ? { serverLatencyMs: server.latencyMs } : {}),
@@ -1203,7 +1224,50 @@ export function saveObservedQuic(
     const prior = all[proxyId];
     if (prior === undefined) return all;
     if (prior.quicMeasuredAt !== undefined && prior.quicMeasuredAt > at) return all;
-    all[proxyId] = { ...prior, quicMeasured: quic, quicMeasuredAt: at };
+    // ⛔⛔ (V-219) A LIVE MEASUREMENT RETIRES A RELAY VERDICT IT CONTRADICTS.
+    //
+    // `proxyCapabilities` collapses both into ONE chip, strongest evidence
+    // first: this verdict, then `quicProbe`. This one EXPIRES (W-30, thirty
+    // minutes) and `quicProbe` does not -- so a live `h2-only` measured through
+    // the customer's own browser would age out and an older relay `true`
+    // underneath it would resurface as a green "HTTP/3 works through this exit".
+    // The expiry of the strong signal was being undone by the immortality of the
+    // weak one, silently, half an hour later.
+    //
+    // ⚠️ NOT fixed with a TTL on the relay verdict, and the reason matters. A
+    // live verdict is re-emitted by a running session every ~300s; the relay
+    // verdict is written ONLY when someone presses Test. A thirty-minute window
+    // on it would mean the green chip is essentially never shown -- which is the
+    // owner's original complaint, reintroduced by a fix for a different one.
+    //
+    // The rule that needs no window: both are statements about the same MUTABLE
+    // property -- does HTTP/3 work through this exit -- so the later measurement
+    // wins and the earlier one it contradicts is retired, not kept as a second
+    // opinion. Strength only breaks ties at the same instant. Anything stored
+    // here necessarily predates this observation (we are inside the write lock,
+    // holding the map we just loaded), so no stamp is needed to order them.
+    //
+    // AGREEMENT is kept: two independent measurements that agree corroborate,
+    // and keeping the relay verdict is what leaves the chip green after this
+    // one expires -- correct, because nothing has contradicted it.
+    //
+    // ⚠️ KNOWN LIMIT, stated rather than papered over. Both verdicts are keyed on
+    // the PROXY ROW, and on a rotating residential proxy the live session and the
+    // relay probe may have gone out through different exits -- so strictly they
+    // can both be true of different machines and neither contradicts the other.
+    // We cannot tell: neither verdict records which exit produced it. Retiring
+    // the older one is still the better approximation, because the alternative is
+    // keeping a positive for ever that the customer's own browser has since
+    // failed to reproduce. Recording an exit alongside each verdict would settle
+    // it properly and is not in this change.
+    const { quicProbe: priorRelay, ...withoutRelay } = prior;
+    const relayContradicted =
+      (quic === 'h3' && priorRelay === false) || (quic === 'h2-only' && priorRelay === true);
+    all[proxyId] = {
+      ...(relayContradicted ? withoutRelay : prior),
+      quicMeasured: quic,
+      quicMeasuredAt: at,
+    };
     await getStore().set(KEY, all);
     await getStore().save();
     emitProbeCache(all);
