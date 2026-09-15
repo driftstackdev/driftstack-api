@@ -45,11 +45,15 @@ vi.mock('../../src/lib/fetch-with-deadline', () => ({
 }));
 
 import {
+  OS_FINGERPRINT_TTL_MS,
   deriveProbeViewState,
   loadProbeCache,
+  saveEndpointResult,
   saveOsFingerprint,
   saveProbeResult,
 } from '../../src/lib/proxy-probe-cache';
+import { deriveProbeViewWithEndpointRows } from '../../src/lib/proxy-server-test';
+import { unavailableOsFingerprint } from '../../src/lib/os-fingerprint-verdict';
 import { testAccountProxy } from '../../src/lib/account-proxies';
 
 const OK = {
@@ -124,16 +128,104 @@ describe('the cache', () => {
   });
 
   it('exposes the fingerprint to the views only while the proxy is usable', async () => {
+    // ⚠️ (V-219) `nowMs` is passed explicitly. The fixtures stamp readings at
+    // epoch ms 1-3 — 1970 — and readings now AGE OUT, so without it this arm
+    // would pass for the wrong reason: an empty map because the record is
+    // ancient, read as "the proxy is down". Freshness is pinned separately below.
     await saveProbeResult('p1', OK, 1);
     await saveOsFingerprint('p1', FP, 2);
-    expect(deriveProbeViewState(await loadProbeCache()).osFingerprints.p1).toEqual({
+    expect(deriveProbeViewState(await loadProbeCache(), 2).osFingerprints.p1).toEqual({
       ...FP,
       at: 2,
     });
     // A proxy that went DOWN keeps the record in the store but must not render
     // an OS verdict beside a red "unreachable" pill.
     await saveProbeResult('p1', DOWN, 3);
-    expect(deriveProbeViewState(await loadProbeCache()).osFingerprints).toEqual({});
+    expect(deriveProbeViewState(await loadProbeCache(), 3).osFingerprints).toEqual({});
+  });
+
+  // ⛔⛔ (V-219) THE READING NEVER EXPIRED, and the two fields either side of it
+  // did. `at` was written on every reading and read by NOBODY, so the grid showed
+  // a reading of unbounded age in bare present tense — and because a capability
+  // re-test carries the stored fingerprint forward while refreshing the visible
+  // "Tested" stamp, it showed it beside a timestamp saying we had just checked.
+  //
+  // Not hypothetical: the owner reported `linux` on a proxy whose probe has since
+  // failed every attempt, so what they were looking at could only have been a
+  // cached reading with no way to tell its age.
+  it('CRITICAL a reading older than its TTL is dropped, so a months-old stack cannot render as current', async () => {
+    await saveProbeResult('p1', OK, 1);
+    await saveOsFingerprint('p1', FP, 1);
+    const cache = await loadProbeCache();
+    const justInside = 1 + OS_FINGERPRINT_TTL_MS - 1;
+    const justOutside = 1 + OS_FINGERPRINT_TTL_MS;
+    expect(
+      deriveProbeViewState(cache, justInside).osFingerprints.p1,
+      'inside the TTL',
+    ).toBeDefined();
+    expect(
+      deriveProbeViewState(cache, justOutside).osFingerprints.p1,
+      'outside it',
+    ).toBeUndefined();
+  });
+
+  it('CRITICAL a CAUSE does not age. "A VPN tunnel has no SOCKS5 stack to fingerprint" is true however old it is, and expiring it would replace a true explanation with "never measured" — sending the customer to press Test on a row that can never produce a value.', async () => {
+    await saveProbeResult('p2', OK, 1);
+    await saveOsFingerprint('p2', unavailableOsFingerprint('vpn_tunnel'), 1);
+    const cache = await loadProbeCache();
+    const ancient = 1 + OS_FINGERPRINT_TTL_MS * 1000;
+    const kept = deriveProbeViewState(cache, ancient).osFingerprints.p2;
+    expect(kept, 'the cause survives any age').toBeDefined();
+    expect(kept?.unavailable).toBe('vpn_tunnel');
+  });
+
+  // ⛔ A VPN ROW TAKES A DIFFERENT DERIVATION. `deriveProbeViewState` gates every
+  // server-measured field on `isProxyUsable(result)`, which an endpoint row's
+  // fail-closed placeholder NEVER satisfies, so `deriveProbeViewWithEndpointRows`
+  // re-adds them under `serverVerdictUsable`. A TTL applied in only one of the two
+  // is true of SOCKS5 rows and false of VPN rows, with nothing in either function
+  // saying so — and the overlay is where the reading would survive, because it
+  // runs AFTER the drop and writes the field straight back.
+  //
+  // The asymmetry was already visible there: the line below the OS one has aged
+  // its QUIC verdict since W-30.
+  it('CRITICAL a VPN row ages its reading too — the overlay that re-adds a dropped field must re-add it under the same rule', async () => {
+    await saveEndpointResult('vpn1', { resolved: true, ip: '203.0.113.17', message: 'ok' }, 1);
+    await saveOsFingerprint('vpn1', FP, 1);
+    const cache = await loadProbeCache();
+    // The overlay is the ONLY path that surfaces it for this row — without it
+    // the arm below would pass on a row that never renders a chip at all.
+    expect(
+      deriveProbeViewState(cache, 2).osFingerprints.vpn1,
+      'the plain derivation drops every VPN server field by design',
+    ).toBeUndefined();
+    expect(
+      deriveProbeViewWithEndpointRows(cache, 1 + OS_FINGERPRINT_TTL_MS - 1).osFingerprints.vpn1,
+      'inside the TTL the overlay surfaces it',
+    ).toBeDefined();
+    expect(
+      deriveProbeViewWithEndpointRows(cache, 1 + OS_FINGERPRINT_TTL_MS).osFingerprints.vpn1,
+      'outside it the overlay must not put it back',
+    ).toBeUndefined();
+  });
+
+  it('CRITICAL and the VPN row KEEPS its cause — `vpn_tunnel` is the reading these rows normally carry, so an overlay that aged causes would blank the one surface that has an answer', async () => {
+    await saveEndpointResult('vpn2', { resolved: true, ip: '203.0.113.17', message: 'ok' }, 1);
+    await saveOsFingerprint('vpn2', unavailableOsFingerprint('vpn_tunnel'), 1);
+    const cache = await loadProbeCache();
+    const kept = deriveProbeViewWithEndpointRows(cache, 1 + OS_FINGERPRINT_TTL_MS * 1000)
+      .osFingerprints.vpn2;
+    expect(kept?.unavailable).toBe('vpn_tunnel');
+  });
+
+  it('CRITICAL an UNDATABLE reading is not fresh — a record with no timestamp cannot be shown as current, and absence must fail closed like its neighbours', async () => {
+    await saveProbeResult('p3', OK, 1);
+    await saveOsFingerprint('p3', FP, 1);
+    const cache = await loadProbeCache();
+    const entry = cache.p3;
+    if (entry?.osFingerprint === undefined) throw new Error('fixture did not store a reading');
+    delete (entry.osFingerprint as { at?: number }).at;
+    expect(deriveProbeViewState(cache, 2).osFingerprints.p3).toBeUndefined();
   });
 
   it('drops a stored fingerprint outside the closed set, keeping the rest of the entry', async () => {

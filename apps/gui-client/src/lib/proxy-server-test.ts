@@ -50,6 +50,7 @@ import { isSocks5Probeable, isVpnScheme } from './proxy-scheme';
 import {
   clearFleetFailure,
   deriveProbeViewState,
+  isOsFingerprintFresh,
   isQuicVerdictFresh,
   loadProbeCache,
   saveEndpointResult,
@@ -787,7 +788,17 @@ export function deriveProbeViewWithEndpointRows(
     endpointResults[id] = c.endpoint;
     delete view.testResults[id];
     if (!serverVerdictUsable(c)) continue;
-    if (c.osFingerprint !== undefined) view.osFingerprints[id] = c.osFingerprint;
+    // ⛔ (V-219) AGED HERE TOO. This overlay re-adds the fields
+    // `deriveProbeViewState` dropped for a VPN row, and it must re-add them
+    // under the SAME rules — an overlay that restores a field the TTL just
+    // removed makes the TTL true of SOCKS5 rows and false of VPN rows, with
+    // nothing in either function saying so. The asymmetry was visible on the
+    // very next line, which has aged its QUIC verdict since W-30.
+    //
+    // `isOsFingerprintFresh` keeps a CAUSE regardless of age, so the
+    // `vpn_tunnel` placeholder these rows normally carry still renders.
+    if (c.osFingerprint !== undefined && isOsFingerprintFresh(c.osFingerprint, nowMs))
+      view.osFingerprints[id] = c.osFingerprint;
     if (c.serverLatencyMs !== undefined) view.serverLatency[id] = c.serverLatencyMs;
     if (c.quicMeasured !== undefined && isQuicVerdictFresh(c.quicMeasuredAt, nowMs))
       view.quicMeasured[id] = c.quicMeasured;

@@ -233,6 +233,48 @@ export function isExitIdentityFresh(atMs: number | undefined, nowMs: number): bo
 }
 
 /**
+ * (V-219) How long a measured OS FINGERPRINT stays current.
+ *
+ * ⛔ It never expired, and the two fields either side of it did. `at` was
+ * written on every reading and read by NOBODY in the whole client, so the grid
+ * showed a reading of unbounded age in bare present tense — and because a
+ * capability re-test carries the stored fingerprint forward while refreshing the
+ * visible "Tested" stamp, it showed it beside a timestamp saying we had just
+ * checked. A reading taken through a provider configuration that no longer
+ * exists, presented as current.
+ *
+ * That is not hypothetical: the owner reported `linux` on a proxy whose probe
+ * has since failed on every attempt, so what they were looking at could only
+ * have been a cached reading with no way to tell its age.
+ *
+ * Thirty minutes, matching QUIC_VERDICT_TTL_MS and EXIT_IDENTITY_TTL_MS above,
+ * and for the reason their comment already gives: all three describe something
+ * measured THROUGH the proxy that the proxy can change underneath us. A stack
+ * fingerprint feels more permanent than a QUIC verdict, and that intuition is
+ * exactly the trap — a residential exit rotates to another machine entirely, and
+ * the reading is about the machine, not the row.
+ */
+export const OS_FINGERPRINT_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Is a measured OS fingerprint still current?
+ *
+ * ⛔ An ABSENT timestamp is NOT fresh, same as its neighbours: we cannot say when
+ * it was taken, and an undatable reading must not render as a current one.
+ *
+ * ⚠️ CAUSES DO NOT AGE. A placeholder carrying `unavailable` is not a
+ * measurement — "a VPN tunnel has no SOCKS5 stack to fingerprint" is true
+ * however old it is, and expiring it would replace a true explanation with
+ * "never measured", which is worse and sends the customer to press Test on a row
+ * that can never produce a value. Only real readings expire.
+ */
+export function isOsFingerprintFresh(fp: CachedOsFingerprint | undefined, nowMs: number): boolean {
+  if (fp === undefined) return false;
+  if (fp.unavailable !== undefined) return true;
+  return typeof fp.at === 'number' && nowMs - fp.at < OS_FINGERPRINT_TTL_MS;
+}
+
+/**
  * T-20 — the `result` stored beside an endpoint verdict.
  *
  * Every field that could read as a SOCKS5 pass is false, so `isProxyUsable`
@@ -281,7 +323,14 @@ export function deriveProbeViewState(
   for (const [id, c] of Object.entries(cache)) {
     testResults[id] = c.result;
     if (typeof c.at === 'number') testedAt[id] = c.at;
-    if (c.osFingerprint !== undefined && isProxyUsable(c.result))
+    // (V-219) Aged HERE, beside the QUIC verdict, for the reason that comment
+    // gives: every consumer must age identically, and dropping out of this map
+    // is what "not measured" already means downstream.
+    if (
+      c.osFingerprint !== undefined &&
+      isProxyUsable(c.result) &&
+      isOsFingerprintFresh(c.osFingerprint, nowMs)
+    )
       osFingerprints[id] = c.osFingerprint;
     if (c.serverLatencyMs !== undefined && isProxyUsable(c.result))
       serverLatency[id] = c.serverLatencyMs;
