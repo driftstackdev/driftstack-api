@@ -283,6 +283,10 @@ describe('login page — local integration', () => {
     });
     win = window;
     submitLogin(window, 'alice@example.com', 'hunter2');
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(() => fetchCalls.length >= 1, 'the login request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
@@ -342,6 +346,10 @@ describe('login page — local integration', () => {
     codeInput.value = '123456';
     faultLocalStorage(window, 'deny-all');
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(() => fetchCalls.length >= 1, 'the MFA verify request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
@@ -366,6 +374,10 @@ describe('login page — local integration', () => {
     codeInput.value = '123456';
     const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(() => fetchCalls.length >= 2, 'the MFA verify request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(2);
@@ -403,6 +415,13 @@ describe('login page — local integration', () => {
     const mfaForm = window.document.querySelector('[data-form="mfa"]') as HTMLFormElement;
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(
+      () => fetchCalls.some((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url)),
+      'the first MFA challenge to be issued',
+    );
     await flush();
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
     await flush();
@@ -453,6 +472,13 @@ describe('login page — local integration', () => {
     expect(bannerText(window)).not.toMatch(/auth\.internal/i);
     codeInput.value = '123456';
     mfaForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(
+      () => fetchCalls.filter((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url)).length >= 2,
+      'the second MFA challenge to be issued',
+    );
     await flush();
 
     const challengeCalls = fetchCalls.filter((c) => /\/v1\/auth\/mfa\/challenge$/.test(c.url));
@@ -515,6 +541,13 @@ describe('login page — local integration', () => {
     ) as HTMLButtonElement;
     resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(
+      () => fetchCalls.some((c) => /\/v1\/auth\/resend-verification$/.test(c.url)),
+      'the first resend to be issued',
+    );
     await flush();
     resendBtn.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     await flush();
@@ -587,6 +620,10 @@ describe('login page — local integration', () => {
     win = window;
     submitLogin(window, 'alice@example.com', 'secret-password');
     submitLogin(window, 'alice@example.com', 'secret-password');
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(() => fetchCalls.length >= 1, 'the first login request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
@@ -731,9 +768,28 @@ describe('login page — local integration', () => {
     expect(buttons.length).toBeGreaterThan(1);
     buttons[0]?.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
     buttons[1]?.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    // ⛔ BOTH WAITS, and they are not interchangeable — this arm needs each half.
+    //
+    // `until` establishes that the work STARTED: the first click's handler has to
+    // have issued its fetch before "exactly one start" means anything. Waiting a
+    // fixed four turns instead made machine load the verdict, and this arm failed
+    // CI on 2026-09-16 with `expected [] to have a length of 1` — ZERO calls, the
+    // handler simply had not run — while passing three times out of three in
+    // isolation straight afterwards. That is the identical message and identical
+    // cause this file's `until` helper was written for on 2026-09-14; this arm
+    // was never converted, so the fix was present and unapplied.
+    //
+    // `flush` then establishes that nothing FURTHER happened, which is the actual
+    // claim: the second provider's click must be swallowed by the in-flight
+    // group rather than issuing a second start. An `until` alone cannot express
+    // that — it returns the moment the first call lands and would pass against a
+    // page that fired both.
+    const oauthStarts = (): typeof fetchCalls =>
+      fetchCalls.filter((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    await until(() => oauthStarts().length >= 1, 'the first OAuth start to be issued');
     await flush();
 
-    const oauthCalls = fetchCalls.filter((c) => /\/v1\/auth\/oauth-client\/start$/.test(c.url));
+    const oauthCalls = oauthStarts();
     expect(oauthCalls).toHaveLength(1);
     expect(oauthCalls[0]?.init?.signal?.aborted).toBe(true);
     expect(buttons.every((button) => !button.disabled)).toBe(true);
@@ -749,6 +805,10 @@ describe('login page — local integration', () => {
     submitLogin(window, 'alice@example.com', 'secret-password');
     const oauth = window.document.querySelector('[data-oauth]') as HTMLButtonElement;
     oauth.dispatchEvent(new window.Event('click', { bubbles: true, cancelable: true }));
+    // Wait for the work to have STARTED before counting it; `flush` below still
+    // carries the 'and nothing further happened' half. A fixed wait alone makes
+    // machine load the verdict — see the `until` helper's own note.
+    await until(() => fetchCalls.length >= 1, 'the login request to be issued');
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
